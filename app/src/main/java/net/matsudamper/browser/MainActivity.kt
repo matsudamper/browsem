@@ -1,6 +1,7 @@
 package net.matsudamper.browser
 
 import android.os.Bundle
+import androidx.activity.compose.BackHandler
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Column
@@ -12,6 +13,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -41,9 +43,30 @@ class MainActivity : ComponentActivity() {
 private fun BrowserApp(runtime: GeckoRuntime) {
     var urlInput by remember { mutableStateOf("https://www.mozilla.org") }
     var loadedUrl by remember { mutableStateOf("https://www.mozilla.org") }
+    var canGoBack by remember { mutableStateOf(false) }
     val keyboardController = LocalSoftwareKeyboardController.current
     val session = remember {
         GeckoSession().also { it.open(runtime) }
+    }
+
+    DisposableEffect(session) {
+        val navigationDelegate = object : GeckoSession.NavigationDelegate {
+            override fun onCanGoBack(session: GeckoSession, value: Boolean) {
+                canGoBack = value
+            }
+        }
+        session.navigationDelegate = navigationDelegate
+
+        onDispose {
+            if (session.navigationDelegate === navigationDelegate) {
+                session.navigationDelegate = null
+            }
+            session.close()
+        }
+    }
+
+    BackHandler(enabled = canGoBack) {
+        session.goBack()
     }
 
     LaunchedEffect(loadedUrl) {
