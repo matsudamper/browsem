@@ -5,10 +5,12 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.text.KeyboardActions
@@ -25,6 +27,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.viewinterop.AndroidView
@@ -44,6 +47,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun BrowserApp(runtime: GeckoRuntime) {
     var urlInput by remember { mutableStateOf("https://www.mozilla.org") }
@@ -78,44 +82,70 @@ private fun BrowserApp(runtime: GeckoRuntime) {
         session.loadUri(loadedUrl)
     }
 
+    var isUrlInput by remember { mutableStateOf(false) }
+    val isImeVisible = WindowInsets.isImeVisible
+    LaunchedEffect(isImeVisible) {
+        if (isImeVisible.not()) {
+            isUrlInput = false
+        }
+    }
+
     MaterialTheme {
-        Surface(modifier = Modifier.fillMaxSize()) {
-            Scaffold(
-                modifier = Modifier.fillMaxSize(),
-                contentWindowInsets = WindowInsets.safeDrawing,
-            ) { innerPadding ->
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(innerPadding)
-                        .imePadding()
-                ) {
-                    TextField(
-                        value = urlInput,
-                        onValueChange = { urlInput = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions.Default.copy(imeAction = ImeAction.Go),
-                        keyboardActions = KeyboardActions(
-                            onGo = {
-                                val url = urlInput.trim().let {
-                                    if (!it.startsWith("http://") && !it.startsWith("https://")) "https://$it" else it
-                                }
-                                urlInput = url
-                                loadedUrl = url
-                                keyboardController?.hide()
-                            }
-                        )
+        Scaffold(
+            modifier = Modifier.fillMaxSize(),
+            contentWindowInsets = WindowInsets.safeDrawing
+        ) { innerPadding ->
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .then(
+                        if (isImeVisible) {
+                            Modifier
+                                .imePadding()
+                                .padding(top = innerPadding.calculateTopPadding())
+                        } else {
+                            Modifier.padding(innerPadding)
+
+                        }
                     )
-                    AndroidView(
-                        factory = { context ->
-                            GeckoView(context).also { geckoView ->
-                                geckoView.setSession(session)
+                    .imePadding()
+            ) {
+                TextField(
+                    value = urlInput,
+                    onValueChange = { urlInput = it },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .onFocusChanged {
+                            if (it.hasFocus) {
+                                isUrlInput = true
                             }
                         },
-                        modifier = Modifier.fillMaxSize()
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions.Default.copy(imeAction = ImeAction.Go),
+                    keyboardActions = KeyboardActions(
+                        onGo = {
+                            val url = urlInput.trim().let {
+                                if (!it.startsWith("http://") && !it.startsWith("https://")) "https://$it" else it
+                            }
+                            urlInput = url
+                            loadedUrl = url
+                            keyboardController?.hide()
+                        }
                     )
-                }
+                )
+                AndroidView(
+                    factory = { context ->
+                        GeckoView(context).also { geckoView ->
+                            geckoView.setSession(session)
+                        }
+                    },
+                    update = { geckoView ->
+                        val focus = isUrlInput.not()
+                        geckoView.isFocusable = focus
+                        geckoView.isFocusableInTouchMode = focus
+                    },
+                    modifier = Modifier.fillMaxSize()
+                )
             }
         }
     }
