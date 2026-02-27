@@ -3,6 +3,10 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
+def ciDebugKeystorePath = System.getenv("DEBUG_KEYSTORE_PATH")
+def ciDebugKeystoreFile = ciDebugKeystorePath ? file(ciDebugKeystorePath) : null
+def useCiDebugKeystore = ciDebugKeystoreFile != null && ciDebugKeystoreFile.exists()
+
 android {
     namespace 'net.matsudamper.browser'
     compileSdk 36
@@ -20,7 +24,24 @@ android {
         }
     }
 
+    signingConfigs {
+        if (useCiDebugKeystore) {
+            debugCi {
+                storeFile ciDebugKeystoreFile
+                storePassword System.getenv("DEBUG_KEYSTORE_PASSWORD") ?: "android"
+                keyAlias System.getenv("DEBUG_KEY_ALIAS") ?: "androiddebugkey"
+                keyPassword System.getenv("DEBUG_KEY_PASSWORD") ?: "android"
+            }
+        }
+    }
+
     buildTypes {
+        debug {
+            if (useCiDebugKeystore) {
+                signingConfig signingConfigs.debugCi
+            }
+        }
+
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
