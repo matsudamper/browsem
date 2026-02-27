@@ -31,10 +31,12 @@ jobs:
           gradle-version: 9.1.0
 
       - name: Decode debug keystore
-        if: ${{ secrets.DEBUG_KEYSTORE_BASE64 != '' }}
+        if: ${{ env.DEBUG_KEYSTORE_BASE64 != '' }}
+        env:
+          DEBUG_KEYSTORE_BASE64: ${{ secrets.DEBUG_KEYSTORE_BASE64 }}
         shell: bash
         run: |
-          echo "${{ secrets.DEBUG_KEYSTORE_BASE64 }}" | base64 --decode > "${RUNNER_TEMP}/debug.keystore"
+          echo "$DEBUG_KEYSTORE_BASE64" | base64 --decode > "${RUNNER_TEMP}/debug.keystore"
 
       - name: Build debug APK
         env:
