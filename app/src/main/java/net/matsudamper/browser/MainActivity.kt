@@ -5,11 +5,16 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
@@ -75,32 +80,42 @@ private fun BrowserApp(runtime: GeckoRuntime) {
 
     MaterialTheme {
         Surface(modifier = Modifier.fillMaxSize()) {
-            Column(modifier = Modifier.fillMaxSize()) {
-                TextField(
-                    value = urlInput,
-                    onValueChange = { urlInput = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions.Default.copy(imeAction = ImeAction.Go),
-                    keyboardActions = KeyboardActions(
-                        onGo = {
-                            val url = urlInput.trim().let {
-                                if (!it.startsWith("http://") && !it.startsWith("https://")) "https://$it" else it
+            Scaffold(
+                modifier = Modifier.fillMaxSize(),
+                contentWindowInsets = WindowInsets.safeDrawing,
+            ) { innerPadding ->
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(innerPadding)
+                        .imePadding()
+                ) {
+                    TextField(
+                        value = urlInput,
+                        onValueChange = { urlInput = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions.Default.copy(imeAction = ImeAction.Go),
+                        keyboardActions = KeyboardActions(
+                            onGo = {
+                                val url = urlInput.trim().let {
+                                    if (!it.startsWith("http://") && !it.startsWith("https://")) "https://$it" else it
+                                }
+                                urlInput = url
+                                loadedUrl = url
+                                keyboardController?.hide()
                             }
-                            urlInput = url
-                            loadedUrl = url
-                            keyboardController?.hide()
-                        }
+                        )
                     )
-                )
-                AndroidView(
-                    factory = { context ->
-                        GeckoView(context).also { geckoView ->
-                            geckoView.setSession(session)
-                        }
-                    },
-                    modifier = Modifier.fillMaxSize()
-                )
+                    AndroidView(
+                        factory = { context ->
+                            GeckoView(context).also { geckoView ->
+                                geckoView.setSession(session)
+                            }
+                        },
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
             }
         }
     }
