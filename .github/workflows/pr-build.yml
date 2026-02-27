@@ -31,7 +31,6 @@ jobs:
           gradle-version: 9.1.0
 
       - name: Decode debug keystore
-        if: ${{ secrets.DEBUG_KEYSTORE_BASE64 != '' }}
         shell: bash
         run: |
           echo "${{ secrets.DEBUG_KEYSTORE_BASE64 }}" | base64 --decode > "${RUNNER_TEMP}/debug.keystore"
