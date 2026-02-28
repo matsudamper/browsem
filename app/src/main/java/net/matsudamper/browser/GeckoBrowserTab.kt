@@ -14,11 +14,14 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
@@ -178,136 +181,143 @@ fun GeckoBrowserTab(
         val host = runCatching { Uri.parse(loadedUrl).host.orEmpty() }.getOrDefault("")
         val isSecure = loadedUrl.startsWith("https://")
 
-        Text(
-            text = if (isSecure) "🔒 $host" else "⚠️ $host",
-            style = MaterialTheme.typography.labelSmall,
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
-        )
-
-        if (pageTitle.isNotBlank()) {
-            Text(
-                text = pageTitle,
-                style = MaterialTheme.typography.titleSmall,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(horizontal = 12.dp)
-            )
-        }
-
-        BrowserUrlTextField(
-            value = urlInput,
-            onValueChange = { urlInput = it },
-            onSubmit = {
-                urlInput = it
-                loadedUrl = it
-                keyboardController?.hide()
-            },
-            onFocusChanged = { isUrlFocused = it }
-        )
-
-        if (isLoading) {
-            LinearProgressIndicator(
-                progress = { progress.coerceIn(0f, 1f) },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 6.dp)
-            )
-        }
-
-        FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.padding(8.dp)
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = 320.dp)
+                .verticalScroll(rememberScrollState())
         ) {
-            OutlinedButton(onClick = { session.goBack() }, enabled = canGoBack) { Text("戻る") }
-            OutlinedButton(onClick = { session.goForward() }, enabled = canGoForward) { Text("進む") }
-            OutlinedButton(onClick = {
-                if (isLoading) session.stop() else session.reload()
-            }) { Text(if (isLoading) "停止" else "再読込") }
-            OutlinedButton(onClick = {
-                loadedUrl = homeUrl
-                urlInput = homeUrl
-            }) { Text("ホーム") }
-            OutlinedButton(onClick = { homeUrl = loadedUrl }) { Text("ホーム設定") }
-            FilterChip(
-                selected = isDesktopMode,
-                onClick = {
-                    isDesktopMode = !isDesktopMode
-                    session.reload()
+            Text(
+                text = if (isSecure) "🔒 $host" else "⚠️ $host",
+                style = MaterialTheme.typography.labelSmall,
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
+            )
+
+            if (pageTitle.isNotBlank()) {
+                Text(
+                    text = pageTitle,
+                    style = MaterialTheme.typography.titleSmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(horizontal = 12.dp)
+                )
+            }
+
+            BrowserUrlTextField(
+                value = urlInput,
+                onValueChange = { urlInput = it },
+                onSubmit = {
+                    urlInput = it
+                    loadedUrl = it
+                    keyboardController?.hide()
                 },
-                label = { Text(if (isDesktopMode) "PC表示" else "モバイル表示") }
+                onFocusChanged = { isUrlFocused = it }
             )
-        }
 
-        FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.padding(horizontal = 8.dp)
-        ) {
-            val currentUrl = loadedUrl
-            val isBookmarked = bookmarks.contains(currentUrl)
-            OutlinedButton(onClick = {
-                if (isBookmarked) bookmarks.remove(currentUrl) else bookmarks.add(currentUrl)
-            }) { Text(if (isBookmarked) "★解除" else "★保存") }
-            OutlinedButton(onClick = {
-                copyToClipboard(context, currentUrl)
-            }) { Text("URLコピー") }
-            OutlinedButton(onClick = {
-                val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                    type = "text/plain"
-                    putExtra(Intent.EXTRA_TEXT, currentUrl)
-                }
-                context.startActivity(Intent.createChooser(shareIntent, "URLを共有"))
-            }) { Text("共有") }
-            OutlinedButton(onClick = {
-                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(currentUrl)))
-            }) { Text("外部で開く") }
-        }
+            if (isLoading) {
+                LinearProgressIndicator(
+                    progress = { progress.coerceIn(0f, 1f) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                )
+            }
 
-        if (bookmarks.isNotEmpty()) {
-            HorizontalDivider(modifier = Modifier.padding(top = 8.dp))
-            Text(
-                text = "ブックマーク (${bookmarks.size})",
-                style = MaterialTheme.typography.labelMedium,
-                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-            )
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.padding(8.dp)
+            ) {
+                OutlinedButton(onClick = { session.goBack() }, enabled = canGoBack) { Text("戻る") }
+                OutlinedButton(onClick = { session.goForward() }, enabled = canGoForward) { Text("進む") }
+                OutlinedButton(onClick = {
+                    if (isLoading) session.stop() else session.reload()
+                }) { Text(if (isLoading) "停止" else "再読込") }
+                OutlinedButton(onClick = {
+                    loadedUrl = homeUrl
+                    urlInput = homeUrl
+                }) { Text("ホーム") }
+                OutlinedButton(onClick = { homeUrl = loadedUrl }) { Text("ホーム設定") }
+                FilterChip(
+                    selected = isDesktopMode,
+                    onClick = {
+                        isDesktopMode = !isDesktopMode
+                        session.reload()
+                    },
+                    label = { Text(if (isDesktopMode) "PC表示" else "モバイル表示") }
+                )
+            }
+
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.padding(horizontal = 8.dp)
             ) {
-                bookmarks.take(10).forEach { bookmarkUrl ->
-                    OutlinedButton(onClick = {
-                        urlInput = bookmarkUrl
-                        loadedUrl = bookmarkUrl
-                    }) {
-                        Text(bookmarkUrl, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                val currentUrl = loadedUrl
+                val isBookmarked = bookmarks.contains(currentUrl)
+                OutlinedButton(onClick = {
+                    if (isBookmarked) bookmarks.remove(currentUrl) else bookmarks.add(currentUrl)
+                }) { Text(if (isBookmarked) "★解除" else "★保存") }
+                OutlinedButton(onClick = {
+                    copyToClipboard(context, currentUrl)
+                }) { Text("URLコピー") }
+                OutlinedButton(onClick = {
+                    val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                        type = "text/plain"
+                        putExtra(Intent.EXTRA_TEXT, currentUrl)
+                    }
+                    context.startActivity(Intent.createChooser(shareIntent, "URLを共有"))
+                }) { Text("共有") }
+                OutlinedButton(onClick = {
+                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(currentUrl)))
+                }) { Text("外部で開く") }
+            }
+
+            if (bookmarks.isNotEmpty()) {
+                HorizontalDivider(modifier = Modifier.padding(top = 8.dp))
+                Text(
+                    text = "ブックマーク (${bookmarks.size})",
+                    style = MaterialTheme.typography.labelMedium,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                )
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.padding(horizontal = 8.dp)
+                ) {
+                    bookmarks.take(10).forEach { bookmarkUrl ->
+                        OutlinedButton(onClick = {
+                            urlInput = bookmarkUrl
+                            loadedUrl = bookmarkUrl
+                        }) {
+                            Text(bookmarkUrl, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
                     }
                 }
             }
-        }
 
-        if (history.isNotEmpty()) {
-            HorizontalDivider(modifier = Modifier.padding(top = 8.dp))
-            Row(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
-                Text(
-                    text = "履歴 (${history.size})",
-                    style = MaterialTheme.typography.labelMedium,
-                    modifier = Modifier.weight(1f)
-                )
-                OutlinedButton(onClick = { history.clear() }) { Text("履歴削除") }
-            }
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.padding(horizontal = 8.dp)
-            ) {
-                history.take(10).forEach { historyUrl ->
-                    OutlinedButton(onClick = {
-                        urlInput = historyUrl
-                        loadedUrl = historyUrl
-                    }) {
-                        Text(historyUrl, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (history.isNotEmpty()) {
+                HorizontalDivider(modifier = Modifier.padding(top = 8.dp))
+                Row(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
+                    Text(
+                        text = "履歴 (${history.size})",
+                        style = MaterialTheme.typography.labelMedium,
+                        modifier = Modifier.weight(1f)
+                    )
+                    OutlinedButton(onClick = { history.clear() }) { Text("履歴削除") }
+                }
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.padding(horizontal = 8.dp)
+                ) {
+                    history.take(10).forEach { historyUrl ->
+                        OutlinedButton(onClick = {
+                            urlInput = historyUrl
+                            loadedUrl = historyUrl
+                        }) {
+                            Text(historyUrl, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
                     }
                 }
             }
@@ -324,7 +334,9 @@ fun GeckoBrowserTab(
                 geckoView.isFocusable = shouldFocusWebContent
                 geckoView.isFocusableInTouchMode = shouldFocusWebContent
             },
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
         )
     }
 }
