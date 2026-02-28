@@ -36,9 +36,16 @@ internal fun normalizeUrl(value: String): String {
     if (trimmed.isBlank()) {
         return "https://google.com" // TODO ホームページ設定
     }
+
+    if (trimmed.contains(' ')) {
+        return "https://www.google.com/search?q=${android.net.Uri.encode(trimmed)}"
+    }
+
     return if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
         trimmed
-    } else {
+    } else if (trimmed.contains('.')) {
         "https://$trimmed"
+    } else {
+        "https://www.google.com/search?q=${android.net.Uri.encode(trimmed)}"
     }
 }
