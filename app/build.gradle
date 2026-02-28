@@ -76,6 +76,15 @@ kotlin {
     }
 }
 
+tasks.withType(Test).configureEach {
+    def hasPaparazziTask = gradle.startParameter.taskNames.any {
+        it.toLowerCase().contains("paparazzi")
+    }
+    if (!hasPaparazziTask) {
+        exclude("**/PaparazziComposablePreviewTest*")
+    }
+}
+
 dependencies {
     implementation platform(libs.androidx.compose.bom)
     implementation libs.androidx.activity.compose
