@@ -2,6 +2,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
+    alias(libs.plugins.paparazzi)
 }
 
 def ciDebugKeystorePath = System.getenv("DEBUG_KEYSTORE_PATH")
@@ -91,6 +92,7 @@ dependencies {
     debugImplementation libs.androidx.compose.ui.test.manifest
 
     testImplementation libs.junit4
+    testImplementation libs.composable.preview.scanner
     androidTestImplementation platform(libs.androidx.compose.bom)
     androidTestImplementation libs.androidx.test.ext.junit
     androidTestImplementation libs.androidx.test.espresso.core
