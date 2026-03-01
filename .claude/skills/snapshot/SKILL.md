@@ -1,10 +1,14 @@
-Paparazzi で `@Preview` コンポーザブルのスクリーンショットを撮影するスキルです。
+---
+name: snapshot
+description: UI コンポーネントの実装・変更（@Preview の追加・修正を含む）が完了したタイミングで Paparazzi スクリーンショットを撮影します。
+context: fork
+agent: general-purpose
+argument-hint: "[フィルター文字列]"
+---
 
-UI コンポーネントの実装・変更（`@Preview` の追加・修正を含む）が完了したタイミングで積極的に使用してください。
+Paparazzi で `@Preview` コンポーザブルのスクリーンショットを撮影します。
 
-**Agent ツール（subagent_type=general-purpose）を使って以下のタスクをサブエージェントに委譲すること。**
-
-サブエージェントへの指示内容:
+## 手順
 
 1. `$ARGUMENTS` が空かどうかを確認する。
 2. 以下のコマンドを Bash ツールで実行する（引数が空の場合は `-Dpaparazzi.filter` を省略）:
@@ -13,8 +17,6 @@ UI コンポーネントの実装・変更（`@Preview` の追加・修正を含
 3. 実行結果を返す。
    - 成功時: `app/src/test/snapshots/images/` 以下に保存されたファイル一覧を含める。
    - 失敗時: エラーログの該当箇所を含める。
-
-サブエージェントの結果を受け取ったら、ユーザーに成否と保存先を伝える。
 
 ## フィルター仕様
 
