@@ -1,5 +1,6 @@
 package net.matsudamper.browser
 
+import android.content.Intent
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -18,6 +19,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.viewinterop.AndroidView
 import org.mozilla.geckoview.GeckoSession
@@ -35,10 +37,12 @@ fun GeckoBrowserTab(
 ) {
     var urlInput by rememberSaveable { mutableStateOf(homepageUrl) }
     var currentPageUrl by rememberSaveable { mutableStateOf(homepageUrl) }
+    var currentPageTitle by rememberSaveable { mutableStateOf("") }
     var canGoBack by remember { mutableStateOf(false) }
     var isUrlInputFocused by remember { mutableStateOf(false) }
     val keyboardController = LocalSoftwareKeyboardController.current
     val isImeVisible = WindowInsets.isImeVisible
+    val context = LocalContext.current
 
     DisposableEffect(session) {
         val navigationDelegate = object : GeckoSession.NavigationDelegate {
@@ -60,9 +64,19 @@ fun GeckoBrowserTab(
         }
         session.navigationDelegate = navigationDelegate
 
+        val contentDelegate = object : GeckoSession.ContentDelegate {
+            override fun onTitleChange(session: GeckoSession, title: String?) {
+                currentPageTitle = title.orEmpty()
+            }
+        }
+        session.contentDelegate = contentDelegate
+
         onDispose {
             if (session.navigationDelegate === navigationDelegate) {
                 session.navigationDelegate = null
+            }
+            if (session.contentDelegate === contentDelegate) {
+                session.contentDelegate = null
             }
         }
     }
@@ -99,6 +113,14 @@ fun GeckoBrowserTab(
                 onInstallExtensionRequest(currentPageUrl)
             },
             onOpenSettings = onOpenSettings,
+            onShare = {
+                val shareText = "$currentPageTitle\n$currentPageUrl"
+                val intent = Intent(Intent.ACTION_SEND).apply {
+                    type = "text/plain"
+                    putExtra(Intent.EXTRA_TEXT, shareText)
+                }
+                context.startActivity(Intent.createChooser(intent, null))
+            },
         )
 
         AndroidView(

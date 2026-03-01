@@ -41,6 +41,7 @@ internal fun BrowserToolBar(
     showInstallExtensionItem: Boolean,
     onInstallExtension: () -> Unit,
     onOpenSettings: () -> Unit,
+    onShare: () -> Unit,
 ) {
     Surface(
         color = MaterialTheme.colorScheme.primaryContainer
@@ -93,6 +94,15 @@ internal fun BrowserToolBar(
                     }
                     DropdownMenuItem(
                         text = {
+                            Text(text = "共有")
+                        },
+                        onClick = {
+                            visibleMenu = false
+                            onShare()
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = {
                             Text(text = "設定")
                         },
                         onClick = {
@@ -117,5 +127,6 @@ private fun Preview() {
         showInstallExtensionItem = true,
         onInstallExtension = {},
         onOpenSettings = {},
+        onShare = {},
     )
 }
