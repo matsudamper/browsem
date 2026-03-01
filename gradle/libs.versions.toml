@@ -10,7 +10,7 @@ espressoCore = "3.7.0"
 navigation3 = "1.0.0-alpha06"
 datastore = "1.1.1"
 protobuf = "3.25.3"
-protobufPlugin = "0.9.4"
+protobufPlugin = "0.9.6"
 
 [libraries]
 androidx-compose-bom = { module = "androidx.compose:compose-bom", version.ref = "composeBom" }

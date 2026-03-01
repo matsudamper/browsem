@@ -14,14 +14,6 @@ android {
         sourceCompatibility JavaVersion.VERSION_21
         targetCompatibility JavaVersion.VERSION_21
     }
-
-    sourceSets {
-        main {
-            java {
-                srcDirs += 'src/main/generated'
-            }
-        }
-    }
 }
 
 kotlin {
@@ -31,6 +23,6 @@ kotlin {
 }
 
 dependencies {
+    api project(':proto')
     implementation libs.androidx.datastore
-    api libs.protobuf.javalite
 }

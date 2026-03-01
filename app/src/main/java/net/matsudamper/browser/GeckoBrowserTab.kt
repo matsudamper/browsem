@@ -95,7 +95,7 @@ fun GeckoBrowserTab(
             value = urlInput,
             onValueChange = { urlInput = it },
             onSubmit = { rawInput ->
-                val resolved = resolveUrl(rawInput, homepageUrl, searchTemplate)
+                val resolved = buildUrlFromInput(rawInput, homepageUrl, searchTemplate)
                 urlInput = resolved
                 loadedUrl = resolved
                 keyboardController?.hide()
