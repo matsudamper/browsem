@@ -20,7 +20,36 @@ class SettingsRepository(context: Context) {
     suspend fun updateSettings(settings: BrowserSettings) {
         dataStore.updateData { settings }
     }
+
+    suspend fun updateTabStates(
+        tabs: List<PersistedTabState>,
+        selectedTabIndex: Int,
+    ) {
+        dataStore.updateData { current ->
+            val builder = current.toBuilder()
+            val currentTabs = current.tabStatesList.map { PersistedTabState(it.url, it.sessionState) }
+            if (currentTabs == tabs && current.selectedTabIndex == selectedTabIndex) {
+                return@updateData current
+            }
+            builder.clearTabStates()
+            tabs.forEach { tab ->
+                builder.addTabStates(
+                    BrowserTabState.newBuilder()
+                        .setUrl(tab.url)
+                        .setSessionState(tab.sessionState)
+                        .build()
+                )
+            }
+            builder.selectedTabIndex = selectedTabIndex
+            builder.build()
+        }
+    }
 }
+
+data class PersistedTabState(
+    val url: String,
+    val sessionState: String,
+)
 
 fun BrowserSettings.resolvedHomepageUrl(): String = when (homepageType) {
     HomepageType.HOMEPAGE_DUCKDUCKGO -> "https://duckduckgo.com"
