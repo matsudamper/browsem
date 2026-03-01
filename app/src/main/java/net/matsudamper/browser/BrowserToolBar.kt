@@ -47,6 +47,7 @@ internal fun BrowserToolBar(
     onOpenSettings: () -> Unit,
     tabCount: Int,
     onOpenTabs: () -> Unit,
+    onFindInPage: () -> Unit,
 ) {
     val latestOnOpenTabs by rememberUpdatedState(onOpenTabs)
     val swipeToOpenTabsModifier = modifier.pointerInput(Unit) {
@@ -118,6 +119,15 @@ internal fun BrowserToolBar(
                     }
                     DropdownMenuItem(
                         text = {
+                            Text(text = "ページ内検索")
+                        },
+                        onClick = {
+                            visibleMenu = false
+                            onFindInPage()
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = {
                             Text(text = "設定")
                         },
                         onClick = {
@@ -144,6 +154,7 @@ private fun Preview() {
         onOpenSettings = {},
         tabCount = 2,
         onOpenTabs = {},
+        onFindInPage = {},
     )
 }
 
