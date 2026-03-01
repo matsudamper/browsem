@@ -2,6 +2,7 @@ package net.matsudamper.browser
 
 import android.content.Intent
 import android.graphics.Bitmap
+import android.view.View
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -306,16 +307,22 @@ fun GeckoBrowserTab(
         AndroidView(
             factory = { context ->
                 GeckoView(context).also { geckoView ->
+                    geckoView.setAutofillEnabled(true)
+                    geckoView.importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_YES_EXCLUDE_DESCENDANTS
                     geckoView.setSession(session)
                     geckoViewRef = geckoView
                 }
             },
             update = { geckoView ->
+                geckoView.setAutofillEnabled(true)
+                geckoView.importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_YES_EXCLUDE_DESCENDANTS
                 geckoView.setSession(session)
                 geckoViewRef = geckoView
-                val shouldFocusWebContent = isUrlInputFocused.not()
-                geckoView.isFocusable = shouldFocusWebContent
-                geckoView.isFocusableInTouchMode = shouldFocusWebContent
+                geckoView.isFocusable = true
+                geckoView.isFocusableInTouchMode = true
+                if (!isUrlInputFocused && !geckoView.isFocused) {
+                    geckoView.requestFocus()
+                }
             },
             modifier = Modifier.fillMaxSize()
         )
