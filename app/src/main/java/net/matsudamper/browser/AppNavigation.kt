@@ -29,7 +29,6 @@ import com.google.protobuf.ByteString
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
-import net.matsudamper.browser.data.BrowserSettings
 import net.matsudamper.browser.data.PersistedTabState
 import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.resolvedHomepageUrl
@@ -56,17 +55,18 @@ internal fun BrowserApp(
     val context = LocalContext.current
     val settingsRepository = remember { SettingsRepository(context) }
     val settings by settingsRepository.settings
-        .collectAsState(initial = BrowserSettings.getDefaultInstance())
+        .collectAsState(initial = null)
+    val currentSettings = settings ?: return
     val browserSessionController = rememberBrowserSessionController(runtime)
-    val homepageUrl = settings.resolvedHomepageUrl()
-    val searchTemplate = settings.resolvedSearchTemplate()
+    val homepageUrl = currentSettings.resolvedHomepageUrl()
+    val searchTemplate = currentSettings.resolvedSearchTemplate()
 
     val scope = rememberCoroutineScope()
     val backStack = rememberNavBackStack(AppDestination.Browser)
     var tabPersistenceSignal by remember { mutableLongStateOf(0L) }
 
-    val persistedTabs = remember(settings.tabStatesList) {
-        settings.tabStatesList.map { tabState ->
+    val persistedTabs = remember(currentSettings.tabStatesList) {
+        currentSettings.tabStatesList.map { tabState ->
             PersistedBrowserTab(
                 url = tabState.url,
                 sessionState = tabState.sessionState,
@@ -94,11 +94,11 @@ internal fun BrowserApp(
         )
     }
 
-    LaunchedEffect(browserSessionController, homepageUrl, persistedTabs, settings.selectedTabIndex) {
+    LaunchedEffect(browserSessionController, homepageUrl, persistedTabs, currentSettings.selectedTabIndex) {
         browserSessionController.ensureInitialPageLoaded(
             homepageUrl = homepageUrl,
             persistedTabs = persistedTabs,
-            persistedSelectedTabIndex = settings.selectedTabIndex,
+            persistedSelectedTabIndex = currentSettings.selectedTabIndex,
         )
     }
 
@@ -106,7 +106,7 @@ internal fun BrowserApp(
         backStack.removeLastOrNull()
     }
 
-    BrowserTheme(themeMode = settings.themeMode) {
+    BrowserTheme(themeMode = currentSettings.themeMode) {
         NavDisplay(
             backStack = backStack,
             onBack = { backStack.removeLastOrNull() },
@@ -213,7 +213,7 @@ internal fun BrowserApp(
 
                     AppDestination.Settings -> NavEntry<NavKey>(key) {
                         SettingsScreen(
-                            settings = settings,
+                            settings = currentSettings,
                             onSettingsChange = { newSettings ->
                                 scope.launch { settingsRepository.updateSettings(newSettings) }
                             },
