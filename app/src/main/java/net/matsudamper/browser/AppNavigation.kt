@@ -196,9 +196,6 @@ internal fun BrowserApp(
                                             tabPersistenceSignal++
                                             tabsVisible = false
                                         },
-                                        onBack = {
-                                            tabsVisible = false
-                                        },
                                         modifier = Modifier
                                             .fillMaxSize()
                                             .background(MaterialTheme.colorScheme.surface),
