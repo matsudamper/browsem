@@ -20,14 +20,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.viewinterop.AndroidView
-import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.GeckoView
 
 @Composable
 @OptIn(ExperimentalLayoutApi::class)
 fun GeckoBrowserTab(
-    runtime: GeckoRuntime,
+    session: GeckoSession,
     homepageUrl: String,
     searchTemplate: String,
     modifier: Modifier = Modifier,
@@ -35,16 +34,11 @@ fun GeckoBrowserTab(
     onOpenSettings: () -> Unit,
 ) {
     var urlInput by rememberSaveable { mutableStateOf(homepageUrl) }
-    var loadedUrl by rememberSaveable { mutableStateOf(homepageUrl) }
     var currentPageUrl by rememberSaveable { mutableStateOf(homepageUrl) }
     var canGoBack by remember { mutableStateOf(false) }
     var isUrlInputFocused by remember { mutableStateOf(false) }
     val keyboardController = LocalSoftwareKeyboardController.current
     val isImeVisible = WindowInsets.isImeVisible
-
-    val session = remember(runtime) {
-        GeckoSession().also { it.open(runtime) }
-    }
 
     DisposableEffect(session) {
         val navigationDelegate = object : GeckoSession.NavigationDelegate {
@@ -70,16 +64,11 @@ fun GeckoBrowserTab(
             if (session.navigationDelegate === navigationDelegate) {
                 session.navigationDelegate = null
             }
-            session.close()
         }
     }
 
     BackHandler(enabled = canGoBack) {
         session.goBack()
-    }
-
-    LaunchedEffect(loadedUrl) {
-        session.loadUri(loadedUrl)
     }
 
     LaunchedEffect(isImeVisible) {
@@ -100,8 +89,8 @@ fun GeckoBrowserTab(
             onSubmit = { rawInput ->
                 val resolved = buildUrlFromInput(rawInput, homepageUrl, searchTemplate)
                 urlInput = resolved
-                loadedUrl = resolved
                 currentPageUrl = resolved
+                session.loadUri(resolved)
                 keyboardController?.hide()
             },
             onFocusChanged = { hasFocus -> isUrlInputFocused = hasFocus },
