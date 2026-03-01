@@ -9,6 +9,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -41,6 +42,8 @@ internal fun BrowserToolBar(
     showInstallExtensionItem: Boolean,
     onInstallExtension: () -> Unit,
     onOpenSettings: () -> Unit,
+    isPcMode: Boolean,
+    onPcModeToggle: () -> Unit,
 ) {
     Surface(
         color = MaterialTheme.colorScheme.primaryContainer
@@ -80,6 +83,16 @@ internal fun BrowserToolBar(
                         visibleMenu = false
                     }
                 ) {
+                    DropdownMenuItem(
+                        text = { Text(text = "PCページ") },
+                        leadingIcon = {
+                            Checkbox(
+                                checked = isPcMode,
+                                onCheckedChange = null,
+                            )
+                        },
+                        onClick = { onPcModeToggle() },
+                    )
                     if (showInstallExtensionItem) {
                         DropdownMenuItem(
                             text = {
@@ -117,5 +130,7 @@ private fun Preview() {
         showInstallExtensionItem = true,
         onInstallExtension = {},
         onOpenSettings = {},
+        isPcMode = false,
+        onPcModeToggle = {},
     )
 }

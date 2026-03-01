@@ -21,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.viewinterop.AndroidView
 import org.mozilla.geckoview.GeckoSession
+import org.mozilla.geckoview.GeckoSessionSettings
 import org.mozilla.geckoview.GeckoView
 
 @Composable
@@ -37,6 +38,7 @@ fun GeckoBrowserTab(
     var currentPageUrl by rememberSaveable { mutableStateOf(homepageUrl) }
     var canGoBack by remember { mutableStateOf(false) }
     var isUrlInputFocused by remember { mutableStateOf(false) }
+    var isPcMode by remember { mutableStateOf(false) }
     val keyboardController = LocalSoftwareKeyboardController.current
     val isImeVisible = WindowInsets.isImeVisible
 
@@ -99,6 +101,17 @@ fun GeckoBrowserTab(
                 onInstallExtensionRequest(currentPageUrl)
             },
             onOpenSettings = onOpenSettings,
+            isPcMode = isPcMode,
+            onPcModeToggle = {
+                val newMode = !isPcMode
+                isPcMode = newMode
+                session.settings.userAgentMode = if (newMode) {
+                    GeckoSessionSettings.USER_AGENT_MODE_DESKTOP
+                } else {
+                    GeckoSessionSettings.USER_AGENT_MODE_MOBILE
+                }
+                session.reload()
+            },
         )
 
         AndroidView(
