@@ -4,8 +4,6 @@ import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.dataStore
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.catch
-import java.io.IOException
 
 private val Context.browserSettingsDataStore: DataStore<BrowserSettings> by dataStore(
     fileName = "browser_settings.pb",
@@ -16,13 +14,6 @@ class SettingsRepository(context: Context) {
     private val dataStore = context.browserSettingsDataStore
 
     val settings: Flow<BrowserSettings> = dataStore.data
-        .catch { exception ->
-            if (exception is IOException) {
-                emit(BrowserSettings.getDefaultInstance())
-            } else {
-                throw exception
-            }
-        }
 
     suspend fun updateSettings(settings: BrowserSettings) {
         dataStore.updateData { settings }
