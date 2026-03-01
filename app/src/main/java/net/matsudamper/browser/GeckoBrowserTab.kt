@@ -42,6 +42,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.TextStyle
@@ -53,6 +54,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.GeckoSessionSettings
+import org.json.JSONObject
 import org.mozilla.geckoview.GeckoView
 
 @Composable
@@ -80,6 +82,7 @@ fun GeckoBrowserTab(
     var isUrlInputFocused by remember(tabId) { mutableStateOf(false) }
     var geckoViewRef by remember(tabId) { mutableStateOf<GeckoView?>(null) }
     var isPcMode by rememberSaveable(tabId) { mutableStateOf(false) }
+    var toolbarColor by remember(tabId) { mutableStateOf<Color?>(null) }
     val keyboardController = LocalSoftwareKeyboardController.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val isImeVisible = WindowInsets.isImeVisible
@@ -142,6 +145,7 @@ fun GeckoBrowserTab(
                 if (!isUrlInputFocused) {
                     urlInput = newUrl
                 }
+                toolbarColor = null
             }
         }
         val contentDelegate = object : GeckoSession.ContentDelegate {
@@ -149,6 +153,12 @@ fun GeckoBrowserTab(
                 val newTitle = title.orEmpty()
                 currentPageTitle = newTitle
                 onTabTitleChange(newTitle)
+            }
+
+            override fun onWebAppManifest(session: GeckoSession, manifest: JSONObject) {
+                val colorString = manifest.optString("theme_color").takeIf { it.isNotBlank() }
+                val parsedColor = colorString?.let { parseManifestColor(it) }
+                toolbarColor = parsedColor
             }
         }
         val progressDelegate = object : GeckoSession.ProgressDelegate {
@@ -283,6 +293,7 @@ fun GeckoBrowserTab(
                 onFindInPage = {
                     showFindInPage = true
                 },
+                toolbarColor = toolbarColor,
             )
         }
 
@@ -302,6 +313,15 @@ fun GeckoBrowserTab(
             },
             modifier = Modifier.fillMaxSize()
         )
+    }
+}
+
+
+private fun parseManifestColor(colorValue: String): Color? {
+    return try {
+        Color(android.graphics.Color.parseColor(colorValue))
+    } catch (_: IllegalArgumentException) {
+        null
     }
 }
 
