@@ -50,6 +50,7 @@ private sealed interface AppDestination : NavKey {
 @Composable
 internal fun BrowserApp(
     runtime: GeckoRuntime,
+    browserSessionController: BrowserSessionController,
     onInstallExtensionRequest: (String) -> Unit,
 ) {
     val context = LocalContext.current
@@ -57,7 +58,6 @@ internal fun BrowserApp(
     val settings by settingsRepository.settings
         .collectAsState(initial = null)
     val currentSettings = settings ?: return
-    val browserSessionController = rememberBrowserSessionController(runtime)
     val homepageUrl = currentSettings.resolvedHomepageUrl()
     val searchTemplate = currentSettings.resolvedSearchTemplate()
 
