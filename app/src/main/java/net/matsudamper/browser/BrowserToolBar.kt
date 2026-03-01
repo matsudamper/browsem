@@ -38,6 +38,8 @@ internal fun BrowserToolBar(
     onSubmit: (String) -> Unit,
     modifier: Modifier = Modifier,
     onFocusChanged: (Boolean) -> Unit,
+    showInstallExtensionItem: Boolean,
+    onInstallExtension: () -> Unit,
     onOpenSettings: () -> Unit,
 ) {
     Surface(
@@ -78,6 +80,17 @@ internal fun BrowserToolBar(
                         visibleMenu = false
                     }
                 ) {
+                    if (showInstallExtensionItem) {
+                        DropdownMenuItem(
+                            text = {
+                                Text(text = "拡張機能をインストール")
+                            },
+                            onClick = {
+                                visibleMenu = false
+                                onInstallExtension()
+                            },
+                        )
+                    }
                     DropdownMenuItem(
                         text = {
                             Text(text = "設定")
@@ -101,6 +114,8 @@ private fun Preview() {
         onValueChange = {},
         onSubmit = {},
         onFocusChanged = {},
+        showInstallExtensionItem = true,
+        onInstallExtension = {},
         onOpenSettings = {},
     )
 }
