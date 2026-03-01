@@ -1,7 +1,10 @@
 package net.matsudamper.browser
 
+import android.Manifest
 import android.content.Intent
 import android.content.IntentSender
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -14,7 +17,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.core.content.ContextCompat
 import org.mozilla.geckoview.GeckoResult
+import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.WebExtension
 import org.mozilla.geckoview.WebExtensionController
@@ -28,6 +33,21 @@ class MainActivity : ComponentActivity() {
     private var installFailureMessage by mutableStateOf<String?>(null)
     private var webExtensionWarmUpCompleted = false
     private var webExtensionWarmUpInProgress = false
+    private var pendingNotificationPermissionResult: GeckoResult<Int>? = null
+
+    private val requestNotificationPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        val pendingResult = pendingNotificationPermissionResult ?: return@registerForActivityResult
+        pendingNotificationPermissionResult = null
+        pendingResult.complete(
+            if (isGranted) {
+                GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW
+            } else {
+                GeckoSession.PermissionDelegate.ContentPermission.VALUE_DENY
+            }
+        )
+    }
 
     private val geckoActivityLauncher = registerForActivityResult(
         ActivityResultContracts.StartIntentSenderForResult()
@@ -115,7 +135,10 @@ class MainActivity : ComponentActivity() {
                 runtime = runtime,
                 onInstallExtensionRequest = { pageUrl ->
                     installFromCurrentPage(pageUrl)
-                }
+                },
+                onDesktopNotificationPermissionRequest = {
+                    requestNotificationPermissionIfNeeded()
+                },
             )
             installPromptState?.let { prompt ->
                 InstallPromptDialog(
@@ -137,6 +160,29 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun requestNotificationPermissionIfNeeded(): GeckoResult<Int> {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+            return GeckoResult.fromValue(GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW)
+        }
+        if (ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) == PackageManager.PERMISSION_GRANTED
+        ) {
+            return GeckoResult.fromValue(GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW)
+        }
+        pendingNotificationPermissionResult?.let {
+            return GeckoResult.fromException(
+                IllegalStateException("Another notification permission request is already pending.")
+            )
+        }
+
+        return GeckoResult<Int>().also { result ->
+            pendingNotificationPermissionResult = result
+            requestNotificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
+
     override fun onResume() {
         super.onResume()
         warmUpWebExtensionController()
@@ -152,6 +198,10 @@ class MainActivity : ComponentActivity() {
             CancellationException("Activity was destroyed before Gecko activity completed.")
         )
         pendingActivityResult = null
+        pendingNotificationPermissionResult?.completeExceptionally(
+            CancellationException("Activity was destroyed before notification permission completed.")
+        )
+        pendingNotificationPermissionResult = null
         if (::runtime.isInitialized && runtime.getActivityDelegate() === activityDelegate) {
             runtime.setActivityDelegate(null)
         }
