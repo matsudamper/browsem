@@ -21,7 +21,7 @@ class PaparazziComposablePreviewTest {
             .getPreviews()
             .filter { preview ->
                 filter.isEmpty() ||
-                    preview.declaringClass.simpleName.orEmpty().contains(filter, ignoreCase = true) ||
+                    preview.declaringClass.qualifiedName.orEmpty().contains(filter, ignoreCase = true) ||
                     preview.previewInfo.name.contains(filter, ignoreCase = true)
             }
             .forEach { preview ->
