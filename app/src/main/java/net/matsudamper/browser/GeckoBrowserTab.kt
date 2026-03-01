@@ -48,6 +48,17 @@ fun GeckoBrowserTab(
             override fun onCanGoBack(session: GeckoSession, value: Boolean) {
                 canGoBack = value
             }
+
+            override fun onLocationChange(
+                session: GeckoSession,
+                url: String?,
+                perms: MutableList<GeckoSession.PermissionDelegate.ContentPermission>,
+                hasUserGesture: Boolean
+            ) {
+                if (!isUrlInputFocused) {
+                    urlInput = url.orEmpty()
+                }
+            }
         }
         session.navigationDelegate = navigationDelegate
 
