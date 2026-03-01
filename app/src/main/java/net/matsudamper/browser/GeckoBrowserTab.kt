@@ -42,6 +42,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -84,6 +85,14 @@ fun GeckoBrowserTab(
     var findQuery by remember { mutableStateOf("") }
     var findMatchCurrent by remember { mutableIntStateOf(0) }
     var findMatchTotal by remember { mutableIntStateOf(0) }
+
+    fun closeFindInPage() {
+        showFindInPage = false
+        session.finder.clear()
+        findQuery = ""
+        findMatchCurrent = 0
+        findMatchTotal = 0
+    }
 
     fun captureCurrentTabPreview() {
         val view = geckoViewRef ?: return
@@ -162,11 +171,7 @@ fun GeckoBrowserTab(
     }
 
     BackHandler(enabled = showFindInPage) {
-        showFindInPage = false
-        session.finder.clear()
-        findQuery = ""
-        findMatchCurrent = 0
-        findMatchTotal = 0
+        closeFindInPage()
     }
 
     BackHandler(enabled = canGoBack) {
@@ -185,45 +190,6 @@ fun GeckoBrowserTab(
             .windowInsetsPadding(WindowInsets.safeDrawing)
             .imePadding()
     ) {
-        BrowserToolBar(
-            value = urlInput,
-            onValueChange = { urlInput = it },
-            onSubmit = { rawInput ->
-                val resolved = buildUrlFromInput(rawInput, homepageUrl, searchTemplate)
-                urlInput = resolved
-                currentPageUrl = resolved
-                onCurrentPageUrlChange(resolved)
-                session.loadUri(resolved)
-                keyboardController?.hide()
-            },
-            onFocusChanged = { hasFocus -> isUrlInputFocused = hasFocus },
-            showInstallExtensionItem = resolveAmoInstallUriFromPage(currentPageUrl) != null,
-            onInstallExtension = {
-                onInstallExtensionRequest(currentPageUrl)
-            },
-            onOpenSettings = onOpenSettings,
-            tabCount = tabCount,
-            onOpenTabs = {
-                session.flushSessionState()
-                captureCurrentTabPreview()
-                onOpenTabs()
-            },
-            onFindInPage = {
-                showFindInPage = true
-            },
-            isPcMode = isPcMode,
-            onPcModeToggle = {
-                val newMode = !isPcMode
-                isPcMode = newMode
-                session.settings.userAgentMode = if (newMode) {
-                    GeckoSessionSettings.USER_AGENT_MODE_DESKTOP
-                } else {
-                    GeckoSessionSettings.USER_AGENT_MODE_MOBILE
-                }
-                session.reload()
-            },
-        )
-
         if (showFindInPage) {
             FindInPageBar(
                 query = findQuery,
@@ -262,11 +228,47 @@ fun GeckoBrowserTab(
                     }
                 },
                 onClose = {
-                    showFindInPage = false
-                    session.finder.clear()
-                    findQuery = ""
-                    findMatchCurrent = 0
-                    findMatchTotal = 0
+                    closeFindInPage()
+                },
+            )
+        } else {
+            BrowserToolBar(
+                value = urlInput,
+                onValueChange = { urlInput = it },
+                onSubmit = { rawInput ->
+                    val resolved = buildUrlFromInput(rawInput, homepageUrl, searchTemplate)
+                    urlInput = resolved
+                    currentPageUrl = resolved
+                    onCurrentPageUrlChange(resolved)
+                    session.loadUri(resolved)
+                    keyboardController?.hide()
+                },
+                onFocusChanged = { hasFocus -> isUrlInputFocused = hasFocus },
+                showInstallExtensionItem = resolveAmoInstallUriFromPage(currentPageUrl) != null,
+                onInstallExtension = {
+                    onInstallExtensionRequest(currentPageUrl)
+                },
+                onOpenSettings = onOpenSettings,
+                tabCount = tabCount,
+                onOpenTabs = {
+                    session.flushSessionState()
+                    captureCurrentTabPreview()
+                    onOpenTabs()
+                },
+                onFindInPage = {
+                    isUrlInputFocused = false
+                    showFindInPage = true
+                },
+                isPcMode = isPcMode,
+                onPcModeToggle = {
+                    val newMode = !isPcMode
+                    isPcMode = newMode
+                    session.settings.userAgentMode = if (newMode) {
+                        GeckoSessionSettings.USER_AGENT_MODE_DESKTOP
+                    } else {
+                        GeckoSessionSettings.USER_AGENT_MODE_MOBILE
+                    }
+                    session.reload()
                 },
             )
         }
@@ -318,6 +320,7 @@ private fun FindInPageBar(
                     .background(MaterialTheme.colorScheme.surface)
                     .padding(horizontal = 12.dp, vertical = 8.dp),
                 singleLine = true,
+                textStyle = TextStyle(color = MaterialTheme.colorScheme.onSurface),
                 cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                 keyboardOptions = KeyboardOptions.Default.copy(imeAction = ImeAction.Search),
                 keyboardActions = KeyboardActions(onSearch = { onNext() }),
@@ -326,7 +329,7 @@ private fun FindInPageBar(
                         if (query.isEmpty()) {
                             Text(
                                 text = "ページ内を検索...",
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 style = MaterialTheme.typography.bodyMedium,
                             )
                         }
@@ -338,6 +341,7 @@ private fun FindInPageBar(
                 Text(
                     text = "$matchCurrent/$matchTotal",
                     modifier = Modifier.padding(horizontal = 8.dp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
