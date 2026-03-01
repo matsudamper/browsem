@@ -1,0 +1,115 @@
+package net.matsudamper.browser
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
+
+@Composable
+internal fun BrowserToolBar(
+    value: String,
+    onValueChange: (String) -> Unit,
+    onSubmit: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    onFocusChanged: (Boolean) -> Unit,
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.primaryContainer
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            BasicTextField(
+                value = value,
+                onValueChange = onValueChange,
+                modifier = modifier
+                    .weight(1f)
+                    .onFocusChanged { onFocusChanged(it.hasFocus) }
+                    .padding(4.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.surface)
+                    .padding(8.dp)
+                    .horizontalScroll(rememberScrollState()),
+                singleLine = true,
+                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                keyboardOptions = KeyboardOptions.Default.copy(imeAction = ImeAction.Go),
+                keyboardActions = KeyboardActions(
+                    onGo = { onSubmit(normalizeUrl(value)) }
+                )
+            )
+            var visibleMenu by remember { mutableStateOf(false) }
+            IconButton(
+                onClick = { visibleMenu = !visibleMenu }
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_more_vert_24dp),
+                    contentDescription = "Menu"
+                )
+                DropdownMenu(
+                    expanded = visibleMenu,
+                    onDismissRequest = {
+                        visibleMenu = false
+                    }
+                ) {
+                    DropdownMenuItem(
+                        text = {
+                            Text(text = "設定")
+                        },
+                        onClick = {
+
+                        },
+                    )
+                }
+            }
+        }
+    }
+}
+
+internal fun normalizeUrl(value: String): String {
+    val trimmed = value.trim()
+    if (trimmed.isBlank()) {
+        return "https://google.com" // TODO ホームページ設定
+    }
+    return if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+        trimmed
+    } else {
+        "https://$trimmed"
+    }
+}
+
+@Preview
+@Composable
+private fun Preview() {
+    BrowserToolBar(
+        value = "https://google.com",
+        onValueChange = {},
+        onSubmit = {},
+        onFocusChanged = {},
+    )
+}

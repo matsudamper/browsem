@@ -90,7 +90,7 @@ fun GeckoBrowserTab(
             .windowInsetsPadding(WindowInsets.safeDrawing)
             .imePadding()
     ) {
-        BrowserUrlTextField(
+        BrowserToolBar(
             value = urlInput,
             onValueChange = { urlInput = it },
             onSubmit = { submittedUrl ->
@@ -98,7 +98,7 @@ fun GeckoBrowserTab(
                 loadedUrl = submittedUrl
                 keyboardController?.hide()
             },
-            onFocusChanged = { hasFocus -> isUrlInputFocused = hasFocus }
+            onFocusChanged = { hasFocus -> isUrlInputFocused = hasFocus },
         )
 
         AndroidView(
