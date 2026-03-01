@@ -1,6 +1,7 @@
 package net.matsudamper.browser
 
 import android.content.Intent
+import android.graphics.Bitmap
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -22,27 +23,68 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import org.mozilla.geckoview.GeckoSession
+import org.mozilla.geckoview.GeckoSessionSettings
 import org.mozilla.geckoview.GeckoView
 
 @Composable
 @OptIn(ExperimentalLayoutApi::class)
 fun GeckoBrowserTab(
+    tabId: Long,
     session: GeckoSession,
+    initialUrl: String,
     homepageUrl: String,
     searchTemplate: String,
     modifier: Modifier = Modifier,
+    tabCount: Int,
     onInstallExtensionRequest: (String) -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenTabs: () -> Unit,
+    onCurrentPageUrlChange: (String) -> Unit,
+    onSessionStateChange: (String) -> Unit,
+    onTabPreviewCaptured: (Bitmap) -> Unit,
+    onTabTitleChange: (String) -> Unit,
 ) {
-    var urlInput by rememberSaveable { mutableStateOf(homepageUrl) }
-    var currentPageUrl by rememberSaveable { mutableStateOf(homepageUrl) }
-    var currentPageTitle by rememberSaveable { mutableStateOf("") }
-    var canGoBack by remember { mutableStateOf(false) }
-    var isUrlInputFocused by remember { mutableStateOf(false) }
+    var urlInput by rememberSaveable(tabId) { mutableStateOf(initialUrl) }
+    var currentPageUrl by rememberSaveable(tabId) { mutableStateOf(initialUrl) }
+    var currentPageTitle by rememberSaveable(tabId) { mutableStateOf("") }
+    var canGoBack by remember(tabId) { mutableStateOf(false) }
+    var isUrlInputFocused by remember(tabId) { mutableStateOf(false) }
+    var geckoViewRef by remember(tabId) { mutableStateOf<GeckoView?>(null) }
+    var isPcMode by rememberSaveable(tabId) { mutableStateOf(false) }
     val keyboardController = LocalSoftwareKeyboardController.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     val isImeVisible = WindowInsets.isImeVisible
     val context = LocalContext.current
+
+    fun captureCurrentTabPreview() {
+        val view = geckoViewRef ?: return
+        view.capturePixels().accept(
+            { bitmap ->
+                val previewBitmap = bitmap ?: return@accept
+                view.post {
+                    onTabPreviewCaptured(previewBitmap)
+                }
+            },
+            {},
+        )
+    }
+
+    DisposableEffect(lifecycleOwner, session) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP) {
+                session.flushSessionState()
+                captureCurrentTabPreview()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
 
     DisposableEffect(session) {
         val navigationDelegate = object : GeckoSession.NavigationDelegate {
@@ -56,20 +98,32 @@ fun GeckoBrowserTab(
                 perms: MutableList<GeckoSession.PermissionDelegate.ContentPermission>,
                 hasUserGesture: Boolean
             ) {
-                currentPageUrl = url.orEmpty()
+                val newUrl = url.orEmpty()
+                currentPageUrl = newUrl
+                onCurrentPageUrlChange(newUrl)
                 if (!isUrlInputFocused) {
-                    urlInput = url.orEmpty()
+                    urlInput = newUrl
                 }
             }
         }
-        session.navigationDelegate = navigationDelegate
-
         val contentDelegate = object : GeckoSession.ContentDelegate {
             override fun onTitleChange(session: GeckoSession, title: String?) {
-                currentPageTitle = title.orEmpty()
+                val newTitle = title.orEmpty()
+                currentPageTitle = newTitle
+                onTabTitleChange(newTitle)
             }
         }
+        val progressDelegate = object : GeckoSession.ProgressDelegate {
+            override fun onSessionStateChange(
+                session: GeckoSession,
+                sessionState: GeckoSession.SessionState
+            ) {
+                onSessionStateChange(sessionState.toString().orEmpty())
+            }
+        }
+        session.navigationDelegate = navigationDelegate
         session.contentDelegate = contentDelegate
+        session.progressDelegate = progressDelegate
 
         onDispose {
             if (session.navigationDelegate === navigationDelegate) {
@@ -77,6 +131,9 @@ fun GeckoBrowserTab(
             }
             if (session.contentDelegate === contentDelegate) {
                 session.contentDelegate = null
+            }
+            if (session.progressDelegate === progressDelegate) {
+                session.progressDelegate = null
             }
         }
     }
@@ -104,6 +161,7 @@ fun GeckoBrowserTab(
                 val resolved = buildUrlFromInput(rawInput, homepageUrl, searchTemplate)
                 urlInput = resolved
                 currentPageUrl = resolved
+                onCurrentPageUrlChange(resolved)
                 session.loadUri(resolved)
                 keyboardController?.hide()
             },
@@ -121,15 +179,35 @@ fun GeckoBrowserTab(
                 }
                 context.startActivity(Intent.createChooser(intent, null))
             },
+            tabCount = tabCount,
+            onOpenTabs = {
+                session.flushSessionState()
+                captureCurrentTabPreview()
+                onOpenTabs()
+            },
+            isPcMode = isPcMode,
+            onPcModeToggle = {
+                val newMode = !isPcMode
+                isPcMode = newMode
+                session.settings.userAgentMode = if (newMode) {
+                    GeckoSessionSettings.USER_AGENT_MODE_DESKTOP
+                } else {
+                    GeckoSessionSettings.USER_AGENT_MODE_MOBILE
+                }
+                session.reload()
+            },
         )
 
         AndroidView(
             factory = { context ->
                 GeckoView(context).also { geckoView ->
                     geckoView.setSession(session)
+                    geckoViewRef = geckoView
                 }
             },
             update = { geckoView ->
+                geckoView.setSession(session)
+                geckoViewRef = geckoView
                 val shouldFocusWebContent = isUrlInputFocused.not()
                 geckoView.isFocusable = shouldFocusWebContent
                 geckoView.isFocusableInTouchMode = shouldFocusWebContent

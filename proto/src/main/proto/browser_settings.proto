@@ -15,9 +15,24 @@ enum SearchProvider {
   CUSTOM = 2;
 }
 
+enum ThemeMode {
+  THEME_SYSTEM = 0;
+  THEME_LIGHT = 1;
+  THEME_DARK = 2;
+}
+
 message BrowserSettings {
   HomepageType homepage_type = 1;
   string custom_homepage_url = 2;
   SearchProvider search_provider = 3;
   string custom_search_url = 4;
+  repeated BrowserTabState tab_states = 5;
+  int32 selected_tab_index = 6;
+  ThemeMode theme_mode = 7;
+}
+
+message BrowserTabState {
+  string url = 1;
+  string session_state = 2;
+  string title = 3;
 }
