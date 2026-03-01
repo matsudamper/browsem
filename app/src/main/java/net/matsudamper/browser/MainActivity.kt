@@ -130,7 +130,8 @@ class MainActivity : ComponentActivity() {
             val browserSessionController = rememberBrowserSessionController(runtime)
             LaunchedEffect(Unit) {
                 createNewTabChannel.receiveAsFlow().collect { url ->
-                    browserSessionController.createTab(url)
+                    val newTab = browserSessionController.createTab(url)
+                    browserSessionController.selectTab(newTab.id)
                 }
             }
             Box(
