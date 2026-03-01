@@ -24,6 +24,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.GeckoSessionSettings
 import org.mozilla.geckoview.GeckoView
@@ -39,6 +40,7 @@ fun GeckoBrowserTab(
     modifier: Modifier = Modifier,
     tabCount: Int,
     onInstallExtensionRequest: (String) -> Unit,
+    onDesktopNotificationPermissionRequest: () -> GeckoResult<Int>,
     onOpenSettings: () -> Unit,
     onOpenTabs: () -> Unit,
     onCurrentPageUrlChange: (String) -> Unit,
@@ -83,6 +85,20 @@ fun GeckoBrowserTab(
     }
 
     DisposableEffect(session) {
+        val permissionDelegate = object : GeckoSession.PermissionDelegate {
+            override fun onContentPermissionRequest(
+                session: GeckoSession,
+                perm: GeckoSession.PermissionDelegate.ContentPermission
+            ): GeckoResult<Int> {
+                if (perm.permission != GeckoSession.PermissionDelegate.PERMISSION_DESKTOP_NOTIFICATION) {
+                    return GeckoResult.fromValue(
+                        GeckoSession.PermissionDelegate.ContentPermission.VALUE_PROMPT
+                    )
+                }
+                return onDesktopNotificationPermissionRequest()
+            }
+        }
+
         val navigationDelegate = object : GeckoSession.NavigationDelegate {
             override fun onCanGoBack(session: GeckoSession, value: Boolean) {
                 canGoBack = value
@@ -115,11 +131,15 @@ fun GeckoBrowserTab(
                 onSessionStateChange(sessionState.toString().orEmpty())
             }
         }
+        session.permissionDelegate = permissionDelegate
         session.navigationDelegate = navigationDelegate
         session.contentDelegate = contentDelegate
         session.progressDelegate = progressDelegate
 
         onDispose {
+            if (session.permissionDelegate === permissionDelegate) {
+                session.permissionDelegate = null
+            }
             if (session.navigationDelegate === navigationDelegate) {
                 session.navigationDelegate = null
             }
