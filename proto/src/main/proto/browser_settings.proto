@@ -35,4 +35,5 @@ message BrowserTabState {
   string url = 1;
   string session_state = 2;
   string title = 3;
+  bytes preview_image_png = 4;
 }

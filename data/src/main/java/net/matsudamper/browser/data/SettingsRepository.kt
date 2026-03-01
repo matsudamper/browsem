@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
 import androidx.datastore.dataStore
+import com.google.protobuf.ByteString
 import kotlinx.coroutines.flow.Flow
 
 private val Context.browserSettingsDataStore: DataStore<BrowserSettings> by dataStore(
@@ -32,6 +33,7 @@ class SettingsRepository(context: Context) {
                     url = it.url,
                     sessionState = it.sessionState,
                     title = it.title,
+                    previewImagePng = it.previewImagePng,
                 )
             }
             if (currentTabs == tabs && current.selectedTabIndex == selectedTabIndex) {
@@ -44,6 +46,7 @@ class SettingsRepository(context: Context) {
                         .setUrl(tab.url)
                         .setSessionState(tab.sessionState)
                         .setTitle(tab.title)
+                        .setPreviewImagePng(tab.previewImagePng)
                         .build()
                 )
             }
@@ -57,6 +60,7 @@ data class PersistedTabState(
     val url: String,
     val sessionState: String,
     val title: String,
+    val previewImagePng: ByteString = ByteString.EMPTY,
 )
 
 fun BrowserSettings.resolvedHomepageUrl(): String = when (homepageType) {

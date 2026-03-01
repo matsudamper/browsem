@@ -25,6 +25,8 @@ import androidx.navigation3.runtime.NavEntry
 import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.ui.NavDisplay
+import com.google.protobuf.ByteString
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import net.matsudamper.browser.data.BrowserSettings
@@ -33,7 +35,6 @@ import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.resolvedHomepageUrl
 import net.matsudamper.browser.data.resolvedSearchTemplate
 import org.mozilla.geckoview.GeckoRuntime
-import kotlinx.coroutines.delay
 
 @Serializable
 private sealed interface AppDestination : NavKey {
@@ -70,6 +71,7 @@ internal fun BrowserApp(
                 url = tabState.url,
                 sessionState = tabState.sessionState,
                 title = tabState.title,
+                previewImagePng = tabState.previewImagePng.toByteArray(),
             )
         }
     }
@@ -85,6 +87,7 @@ internal fun BrowserApp(
                     url = tab.url,
                     sessionState = tab.sessionState,
                     title = tab.title,
+                    previewImagePng = ByteString.copyFrom(tab.previewImagePng),
                 )
             },
             selectedTabIndex = browserSessionController.selectedTabIndex,
