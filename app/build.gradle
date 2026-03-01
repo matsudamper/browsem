@@ -80,8 +80,10 @@ tasks.withType(Test).configureEach {
     def hasPaparazziTask = gradle.startParameter.taskNames.any {
         it.toLowerCase().contains("paparazzi")
     }
-    if (!hasPaparazziTask) {
-        useJUnit {
+    useJUnit {
+        if (hasPaparazziTask) {
+            includeCategories "net.matsudamper.browser.PaparazziTestCategory"
+        } else {
             excludeCategories "net.matsudamper.browser.PaparazziTestCategory"
         }
     }
