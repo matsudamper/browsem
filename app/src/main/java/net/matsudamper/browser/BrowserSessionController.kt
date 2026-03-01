@@ -2,6 +2,7 @@ package net.matsudamper.browser
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.os.Build
 import java.io.ByteArrayOutputStream
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -50,7 +51,7 @@ internal class BrowserSessionController(runtime: GeckoRuntime) {
                 initialUrl = persistedTab.url.ifBlank { homepageUrl },
                 restoredSessionState = persistedTab.sessionState,
                 restoredTitle = persistedTab.title,
-                restoredPreviewImage = persistedTab.previewImagePng,
+                restoredPreviewImage = persistedTab.previewImageWebp,
             )
         }
         val index = persistedSelectedTabIndex.coerceIn(0, tabList.lastIndex)
@@ -132,7 +133,7 @@ internal class BrowserSessionController(runtime: GeckoRuntime) {
                 url = tab.currentUrl,
                 sessionState = tab.sessionState,
                 title = tab.title,
-                previewImagePng = tab.previewBitmap.toPngByteArray(),
+                previewImageWebp = tab.previewBitmap.toWebpByteArray(),
             )
         }
     }
@@ -164,13 +165,19 @@ internal data class PersistedBrowserTab(
     val url: String,
     val sessionState: String,
     val title: String,
-    val previewImagePng: ByteArray = byteArrayOf(),
+    val previewImageWebp: ByteArray = byteArrayOf(),
 )
 
-private fun Bitmap?.toPngByteArray(): ByteArray {
+private fun Bitmap?.toWebpByteArray(): ByteArray {
     val bitmap = this ?: return byteArrayOf()
     val outputStream = ByteArrayOutputStream()
-    bitmap.compress(Bitmap.CompressFormat.PNG, 100, outputStream)
+    val format = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+        Bitmap.CompressFormat.WEBP_LOSSY
+    } else {
+        @Suppress("DEPRECATION")
+        Bitmap.CompressFormat.WEBP
+    }
+    bitmap.compress(format, 80, outputStream)
     return outputStream.toByteArray()
 }
 

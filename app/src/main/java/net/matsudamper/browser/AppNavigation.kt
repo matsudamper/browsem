@@ -71,7 +71,7 @@ internal fun BrowserApp(
                 url = tabState.url,
                 sessionState = tabState.sessionState,
                 title = tabState.title,
-                previewImagePng = tabState.previewImagePng.toByteArray(),
+                previewImageWebp = tabState.previewImageWebp.toByteArray(),
             )
         }
     }
@@ -87,7 +87,7 @@ internal fun BrowserApp(
                     url = tab.url,
                     sessionState = tab.sessionState,
                     title = tab.title,
-                    previewImagePng = ByteString.copyFrom(tab.previewImagePng),
+                    previewImageWebp = ByteString.copyFrom(tab.previewImageWebp),
                 )
             },
             selectedTabIndex = browserSessionController.selectedTabIndex,
