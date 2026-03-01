@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.dp
 import net.matsudamper.browser.data.BrowserSettings
 import net.matsudamper.browser.data.HomepageType
 import net.matsudamper.browser.data.SearchProvider
+import net.matsudamper.browser.data.ThemeMode
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -200,6 +201,51 @@ internal fun SettingsScreen(
 
             Spacer(Modifier.height(24.dp))
 
+            // ── テーマ ─────────────────────────────────
+            Text(
+                text = "テーマ",
+                style = MaterialTheme.typography.titleMedium,
+            )
+            Spacer(Modifier.height(8.dp))
+
+            Column(Modifier.selectableGroup()) {
+                ThemeModeOption(
+                    label = "システム設定に合わせる",
+                    selected = settings.themeMode == ThemeMode.THEME_SYSTEM,
+                    onClick = {
+                        onSettingsChange(
+                            settings.toBuilder()
+                                .setThemeMode(ThemeMode.THEME_SYSTEM)
+                                .build(),
+                        )
+                    },
+                )
+                ThemeModeOption(
+                    label = "ライト",
+                    selected = settings.themeMode == ThemeMode.THEME_LIGHT,
+                    onClick = {
+                        onSettingsChange(
+                            settings.toBuilder()
+                                .setThemeMode(ThemeMode.THEME_LIGHT)
+                                .build(),
+                        )
+                    },
+                )
+                ThemeModeOption(
+                    label = "ダーク",
+                    selected = settings.themeMode == ThemeMode.THEME_DARK,
+                    onClick = {
+                        onSettingsChange(
+                            settings.toBuilder()
+                                .setThemeMode(ThemeMode.THEME_DARK)
+                                .build(),
+                        )
+                    },
+                )
+            }
+
+            Spacer(Modifier.height(24.dp))
+
             Text(
                 text = "拡張機能",
                 style = MaterialTheme.typography.titleMedium,
@@ -241,6 +287,28 @@ private fun HomepageOption(
 
 @Composable
 private fun SearchProviderOption(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .selectable(selected = selected, role = Role.RadioButton, onClick = onClick)
+            .padding(vertical = 4.dp),
+    ) {
+        RadioButton(selected = selected, onClick = null)
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyLarge,
+            modifier = Modifier.padding(start = 8.dp),
+        )
+    }
+}
+
+@Composable
+private fun ThemeModeOption(
     label: String,
     selected: Boolean,
     onClick: () -> Unit,
