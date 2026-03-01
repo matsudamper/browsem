@@ -30,6 +30,7 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Density
@@ -77,6 +78,7 @@ internal fun BrowserToolBar(
                     .padding(8.dp)
                     .horizontalScroll(rememberScrollState()),
                 singleLine = true,
+                textStyle = TextStyle(color = MaterialTheme.colorScheme.onSurface),
                 cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                 keyboardOptions = KeyboardOptions.Default.copy(imeAction = ImeAction.Go),
                 keyboardActions = KeyboardActions(
@@ -131,20 +133,23 @@ internal fun BrowserToolBar(
     }
 }
 
-@Preview
+@Preview(name = "Light")
+@Preview(name = "Dark", uiMode = android.content.res.Configuration.UI_MODE_NIGHT_YES)
 @Composable
 private fun Preview() {
-    BrowserToolBar(
-        value = "https://google.com",
-        onValueChange = {},
-        onSubmit = {},
-        onFocusChanged = {},
-        showInstallExtensionItem = true,
-        onInstallExtension = {},
-        onOpenSettings = {},
-        tabCount = 2,
-        onOpenTabs = {},
-    )
+    BrowserTheme(themeMode = net.matsudamper.browser.data.ThemeMode.THEME_SYSTEM) {
+        BrowserToolBar(
+            value = "https://google.com",
+            onValueChange = {},
+            onSubmit = {},
+            onFocusChanged = {},
+            showInstallExtensionItem = true,
+            onInstallExtension = {},
+            onOpenSettings = {},
+            tabCount = 2,
+            onOpenTabs = {},
+        )
+    }
 }
 
 private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.detectDownSwipe(

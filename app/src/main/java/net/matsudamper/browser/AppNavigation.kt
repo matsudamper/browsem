@@ -103,130 +103,132 @@ internal fun BrowserApp(
         backStack.removeLastOrNull()
     }
 
-    NavDisplay(
-        backStack = backStack,
-        onBack = { backStack.removeLastOrNull() },
-        entryProvider = { key: NavKey ->
-            when (key) {
-                AppDestination.Browser -> NavEntry<NavKey>(key) {
-                    val selectedTab = browserSessionController.selectedTab
-                    if (selectedTab != null) {
-                        var tabsVisible by rememberSaveable { mutableStateOf(false) }
-                        val tabs = browserSessionController.tabs
+    BrowserTheme(themeMode = settings.themeMode) {
+        NavDisplay(
+            backStack = backStack,
+            onBack = { backStack.removeLastOrNull() },
+            entryProvider = { key: NavKey ->
+                when (key) {
+                    AppDestination.Browser -> NavEntry<NavKey>(key) {
+                        val selectedTab = browserSessionController.selectedTab
+                        if (selectedTab != null) {
+                            var tabsVisible by rememberSaveable { mutableStateOf(false) }
+                            val tabs = browserSessionController.tabs
 
-                        BackHandler(enabled = tabsVisible) {
-                            tabsVisible = false
-                        }
+                            BackHandler(enabled = tabsVisible) {
+                                tabsVisible = false
+                            }
 
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                        ) {
-                            GeckoBrowserTab(
-                                tabId = selectedTab.id,
-                                session = selectedTab.session,
-                                initialUrl = selectedTab.currentUrl,
-                                homepageUrl = homepageUrl,
-                                searchTemplate = searchTemplate,
-                                tabCount = tabs.size,
-                                onInstallExtensionRequest = onInstallExtensionRequest,
-                                onOpenSettings = {
-                                    backStack.add(AppDestination.Settings)
-                                },
-                                onOpenTabs = {
-                                    tabsVisible = true
-                                },
-                                onCurrentPageUrlChange = { currentUrl ->
-                                    browserSessionController.updateTabUrl(
-                                        tabId = selectedTab.id,
-                                        url = currentUrl,
-                                    )
-                                    tabPersistenceSignal++
-                                },
-                                onSessionStateChange = { sessionState ->
-                                    browserSessionController.updateTabSessionState(
-                                        tabId = selectedTab.id,
-                                        sessionState = sessionState,
-                                    )
-                                    tabPersistenceSignal++
-                                },
-                                onTabPreviewCaptured = { previewBitmap ->
-                                    browserSessionController.updateTabPreview(
-                                        tabId = selectedTab.id,
-                                        previewBitmap = previewBitmap,
-                                    )
-                                },
-                                onTabTitleChange = { title ->
-                                    browserSessionController.updateTabTitle(
-                                        tabId = selectedTab.id,
-                                        title = title,
-                                    )
-                                    tabPersistenceSignal++
-                                },
-                            )
-
-                            AnimatedVisibility(
-                                visible = tabsVisible,
-                                enter = fadeIn(animationSpec = tween(durationMillis = 220)),
-                                exit = fadeOut(animationSpec = tween(durationMillis = 220)),
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
                             ) {
-                                TabsScreen(
-                                    tabs = tabs,
-                                    selectedTabId = selectedTab.id,
-                                    onSelectTab = { tabId ->
-                                        browserSessionController.selectTab(tabId)
-                                        tabPersistenceSignal++
-                                        tabsVisible = false
+                                GeckoBrowserTab(
+                                    tabId = selectedTab.id,
+                                    session = selectedTab.session,
+                                    initialUrl = selectedTab.currentUrl,
+                                    homepageUrl = homepageUrl,
+                                    searchTemplate = searchTemplate,
+                                    tabCount = tabs.size,
+                                    onInstallExtensionRequest = onInstallExtensionRequest,
+                                    onOpenSettings = {
+                                        backStack.add(AppDestination.Settings)
                                     },
-                                    onCloseTab = { tabId ->
-                                        browserSessionController.closeTab(tabId)
-                                        if (browserSessionController.tabs.isEmpty()) {
+                                    onOpenTabs = {
+                                        tabsVisible = true
+                                    },
+                                    onCurrentPageUrlChange = { currentUrl ->
+                                        browserSessionController.updateTabUrl(
+                                            tabId = selectedTab.id,
+                                            url = currentUrl,
+                                        )
+                                        tabPersistenceSignal++
+                                    },
+                                    onSessionStateChange = { sessionState ->
+                                        browserSessionController.updateTabSessionState(
+                                            tabId = selectedTab.id,
+                                            sessionState = sessionState,
+                                        )
+                                        tabPersistenceSignal++
+                                    },
+                                    onTabPreviewCaptured = { previewBitmap ->
+                                        browserSessionController.updateTabPreview(
+                                            tabId = selectedTab.id,
+                                            previewBitmap = previewBitmap,
+                                        )
+                                    },
+                                    onTabTitleChange = { title ->
+                                        browserSessionController.updateTabTitle(
+                                            tabId = selectedTab.id,
+                                            title = title,
+                                        )
+                                        tabPersistenceSignal++
+                                    },
+                                )
+
+                                AnimatedVisibility(
+                                    visible = tabsVisible,
+                                    enter = fadeIn(animationSpec = tween(durationMillis = 220)),
+                                    exit = fadeOut(animationSpec = tween(durationMillis = 220)),
+                                ) {
+                                    TabsScreen(
+                                        tabs = tabs,
+                                        selectedTabId = selectedTab.id,
+                                        onSelectTab = { tabId ->
+                                            browserSessionController.selectTab(tabId)
+                                            tabPersistenceSignal++
+                                            tabsVisible = false
+                                        },
+                                        onCloseTab = { tabId ->
+                                            browserSessionController.closeTab(tabId)
+                                            if (browserSessionController.tabs.isEmpty()) {
+                                                val newTab = browserSessionController.createTab(
+                                                    initialUrl = homepageUrl,
+                                                )
+                                                browserSessionController.selectTab(newTab.id)
+                                            }
+                                            tabPersistenceSignal++
+                                        },
+                                        onOpenNewTab = {
                                             val newTab = browserSessionController.createTab(
                                                 initialUrl = homepageUrl,
                                             )
                                             browserSessionController.selectTab(newTab.id)
-                                        }
-                                        tabPersistenceSignal++
-                                    },
-                                    onOpenNewTab = {
-                                        val newTab = browserSessionController.createTab(
-                                            initialUrl = homepageUrl,
-                                        )
-                                        browserSessionController.selectTab(newTab.id)
-                                        tabPersistenceSignal++
-                                        tabsVisible = false
-                                    },
-                                    onBack = {
-                                        tabsVisible = false
-                                    },
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .background(MaterialTheme.colorScheme.surface),
-                                )
+                                            tabPersistenceSignal++
+                                            tabsVisible = false
+                                        },
+                                        onBack = {
+                                            tabsVisible = false
+                                        },
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .background(MaterialTheme.colorScheme.surface),
+                                    )
+                                }
                             }
                         }
                     }
-                }
 
-                AppDestination.Settings -> NavEntry<NavKey>(key) {
-                    SettingsScreen(
-                        settings = settings,
-                        onSettingsChange = { newSettings ->
-                            scope.launch { settingsRepository.updateSettings(newSettings) }
-                        },
-                        onOpenExtensions = { backStack.add(AppDestination.Extensions) },
-                        onBack = { backStack.removeLastOrNull() },
-                    )
-                }
+                    AppDestination.Settings -> NavEntry<NavKey>(key) {
+                        SettingsScreen(
+                            settings = settings,
+                            onSettingsChange = { newSettings ->
+                                scope.launch { settingsRepository.updateSettings(newSettings) }
+                            },
+                            onOpenExtensions = { backStack.add(AppDestination.Extensions) },
+                            onBack = { backStack.removeLastOrNull() },
+                        )
+                    }
 
-                AppDestination.Extensions -> NavEntry<NavKey>(key) {
-                    ExtensionsScreen(
-                        runtime = runtime,
-                        onBack = { backStack.removeLastOrNull() },
-                    )
-                }
+                    AppDestination.Extensions -> NavEntry<NavKey>(key) {
+                        ExtensionsScreen(
+                            runtime = runtime,
+                            onBack = { backStack.removeLastOrNull() },
+                        )
+                    }
 
-                else -> error("Unknown destination: $key")
-            }
-        },
-    )
+                    else -> error("Unknown destination: $key")
+                }
+            },
+        )
+    }
 }
