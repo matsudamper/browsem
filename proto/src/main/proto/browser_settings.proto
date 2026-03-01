@@ -15,9 +15,16 @@ enum SearchProvider {
   CUSTOM = 2;
 }
 
+enum ThemeMode {
+  THEME_SYSTEM = 0;
+  THEME_LIGHT = 1;
+  THEME_DARK = 2;
+}
+
 message BrowserSettings {
   HomepageType homepage_type = 1;
   string custom_homepage_url = 2;
   SearchProvider search_provider = 3;
   string custom_search_url = 4;
+  ThemeMode theme_mode = 5;
 }

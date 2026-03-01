@@ -56,43 +56,45 @@ internal fun BrowserApp(
         backStack.removeLastOrNull()
     }
 
-    NavDisplay(
-        backStack = backStack,
-        onBack = { backStack.removeLastOrNull() },
-        entryProvider = { key: NavKey ->
-            when (key) {
-                AppDestination.Browser -> NavEntry<NavKey>(key) {
-                    GeckoBrowserTab(
-                        session = browserSessionController.session,
-                        homepageUrl = homepageUrl,
-                        searchTemplate = searchTemplate,
-                        onInstallExtensionRequest = onInstallExtensionRequest,
-                        onOpenSettings = {
-                            backStack.add(AppDestination.Settings)
-                        },
-                    )
-                }
+    BrowserTheme(themeMode = settings.themeMode) {
+        NavDisplay(
+            backStack = backStack,
+            onBack = { backStack.removeLastOrNull() },
+            entryProvider = { key: NavKey ->
+                when (key) {
+                    AppDestination.Browser -> NavEntry<NavKey>(key) {
+                        GeckoBrowserTab(
+                            session = browserSessionController.session,
+                            homepageUrl = homepageUrl,
+                            searchTemplate = searchTemplate,
+                            onInstallExtensionRequest = onInstallExtensionRequest,
+                            onOpenSettings = {
+                                backStack.add(AppDestination.Settings)
+                            },
+                        )
+                    }
 
-                AppDestination.Settings -> NavEntry<NavKey>(key) {
-                    SettingsScreen(
-                        settings = settings,
-                        onSettingsChange = { newSettings ->
-                            scope.launch { settingsRepository.updateSettings(newSettings) }
-                        },
-                        onOpenExtensions = { backStack.add(AppDestination.Extensions) },
-                        onBack = { backStack.removeLastOrNull() },
-                    )
-                }
+                    AppDestination.Settings -> NavEntry<NavKey>(key) {
+                        SettingsScreen(
+                            settings = settings,
+                            onSettingsChange = { newSettings ->
+                                scope.launch { settingsRepository.updateSettings(newSettings) }
+                            },
+                            onOpenExtensions = { backStack.add(AppDestination.Extensions) },
+                            onBack = { backStack.removeLastOrNull() },
+                        )
+                    }
 
-                AppDestination.Extensions -> NavEntry<NavKey>(key) {
-                    ExtensionsScreen(
-                        runtime = runtime,
-                        onBack = { backStack.removeLastOrNull() },
-                    )
-                }
+                    AppDestination.Extensions -> NavEntry<NavKey>(key) {
+                        ExtensionsScreen(
+                            runtime = runtime,
+                            onBack = { backStack.removeLastOrNull() },
+                        )
+                    }
 
-                else -> error("Unknown destination: $key")
-            }
-        },
-    )
+                    else -> error("Unknown destination: $key")
+                }
+            },
+        )
+    }
 }
