@@ -20,10 +20,16 @@
 
 ## 手順
 
+**Agent ツール（subagent_type=general-purpose）を使って以下のタスクをサブエージェントに委譲すること。**
+
+サブエージェントへの指示内容:
+
 1. `$ARGUMENTS` が空かどうかを確認する。
-2. 以下のコマンドを実行する（引数が空の場合は `-Dpaparazzi.filter` を省略）:
+2. 以下のコマンドを Bash ツールで実行する（引数が空の場合は `-Dpaparazzi.filter` を省略）:
    - 引数あり: `./gradlew recordPaparazziDebug -Dpaparazzi.filter=$ARGUMENTS`
    - 引数なし: `./gradlew recordPaparazziDebug`
-3. 実行結果をユーザーに伝える。
-   - 成功時: `app/src/test/snapshots/images/` 以下に保存されたことを伝える。
-   - 失敗時: エラーログを確認して原因を報告する。
+3. 実行結果を返す。
+   - 成功時: `app/src/test/snapshots/images/` 以下に保存されたファイル一覧を含める。
+   - 失敗時: エラーログの該当箇所を含める。
+
+サブエージェントの結果を受け取ったら、ユーザーに成否と保存先を伝える。
