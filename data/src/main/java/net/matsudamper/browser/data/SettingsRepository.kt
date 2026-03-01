@@ -2,12 +2,14 @@ package net.matsudamper.browser.data
 
 import android.content.Context
 import androidx.datastore.core.DataStore
+import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
 import androidx.datastore.dataStore
 import kotlinx.coroutines.flow.Flow
 
 private val Context.browserSettingsDataStore: DataStore<BrowserSettings> by dataStore(
     fileName = "browser_settings.pb",
     serializer = BrowserSettingsSerializer,
+    corruptionHandler = ReplaceFileCorruptionHandler { BrowserSettings.getDefaultInstance() },
 )
 
 class SettingsRepository(context: Context) {
