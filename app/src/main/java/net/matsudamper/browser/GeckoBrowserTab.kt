@@ -302,6 +302,7 @@ fun GeckoBrowserTab(
         AndroidView(
             factory = { context ->
                 GeckoView(context).also { geckoView ->
+                    geckoView.setAutofillEnabled(true)
                     geckoView.setSession(session)
                     geckoViewRef = geckoView
                 }
