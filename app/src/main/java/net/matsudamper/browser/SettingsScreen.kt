@@ -22,6 +22,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -39,6 +40,7 @@ import net.matsudamper.browser.data.SearchProvider
 internal fun SettingsScreen(
     settings: BrowserSettings,
     onSettingsChange: (BrowserSettings) -> Unit,
+    onOpenExtensions: () -> Unit,
     onBack: () -> Unit,
 ) {
     Scaffold(
@@ -196,7 +198,21 @@ internal fun SettingsScreen(
                 )
             }
 
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(24.dp))
+
+            Text(
+                text = "拡張機能",
+                style = MaterialTheme.typography.titleMedium,
+            )
+            Spacer(Modifier.height(8.dp))
+            TextButton(
+                onClick = onOpenExtensions,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("インストール済み拡張機能を管理")
+            }
+
+            Spacer(Modifier.height(8.dp))
         }
     }
 }
