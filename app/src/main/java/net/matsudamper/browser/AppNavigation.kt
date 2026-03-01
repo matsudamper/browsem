@@ -9,10 +9,15 @@ import androidx.navigation3.runtime.NavEntry
 import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.ui.NavDisplay
+import kotlinx.serialization.Serializable
 import org.mozilla.geckoview.GeckoRuntime
 
+@Serializable
 private sealed interface AppDestination : NavKey {
+    @Serializable
     data object Browser : AppDestination
+
+    @Serializable
     data object Settings : AppDestination
 }
 
