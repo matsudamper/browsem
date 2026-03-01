@@ -69,6 +69,7 @@ internal fun BrowserApp(
             PersistedBrowserTab(
                 url = tabState.url,
                 sessionState = tabState.sessionState,
+                title = tabState.title,
             )
         }
     }
@@ -83,6 +84,7 @@ internal fun BrowserApp(
                 PersistedTabState(
                     url = tab.url,
                     sessionState = tab.sessionState,
+                    title = tab.title,
                 )
             },
             selectedTabIndex = browserSessionController.selectedTabIndex,
@@ -153,6 +155,13 @@ internal fun BrowserApp(
                                         previewBitmap = previewBitmap,
                                     )
                                 },
+                                onTabTitleChange = { title ->
+                                    browserSessionController.updateTabTitle(
+                                        tabId = selectedTab.id,
+                                        title = title,
+                                    )
+                                    tabPersistenceSignal++
+                                },
                             )
 
                             AnimatedVisibility(
@@ -167,6 +176,16 @@ internal fun BrowserApp(
                                         browserSessionController.selectTab(tabId)
                                         tabPersistenceSignal++
                                         tabsVisible = false
+                                    },
+                                    onCloseTab = { tabId ->
+                                        browserSessionController.closeTab(tabId)
+                                        if (browserSessionController.tabs.isEmpty()) {
+                                            val newTab = browserSessionController.createTab(
+                                                initialUrl = homepageUrl,
+                                            )
+                                            browserSessionController.selectTab(newTab.id)
+                                        }
+                                        tabPersistenceSignal++
                                     },
                                     onOpenNewTab = {
                                         val newTab = browserSessionController.createTab(

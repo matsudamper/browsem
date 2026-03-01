@@ -47,6 +47,7 @@ internal class BrowserSessionController(runtime: GeckoRuntime) {
             createTab(
                 initialUrl = persistedTab.url.ifBlank { homepageUrl },
                 restoredSessionState = persistedTab.sessionState,
+                restoredTitle = persistedTab.title,
             )
         }
         val index = persistedSelectedTabIndex.coerceIn(0, tabList.lastIndex)
@@ -56,6 +57,7 @@ internal class BrowserSessionController(runtime: GeckoRuntime) {
     fun createTab(
         initialUrl: String,
         restoredSessionState: String? = null,
+        restoredTitle: String = "",
     ): BrowserTab {
         val session = GeckoSession().also { it.open(geckoRuntime) }
         val tab = BrowserTab(
@@ -63,6 +65,7 @@ internal class BrowserSessionController(runtime: GeckoRuntime) {
             session = session,
             currentUrl = initialUrl,
             sessionState = restoredSessionState.orEmpty(),
+            title = restoredTitle.ifBlank { initialUrl },
         )
         tabList += tab
         val restored = restoredSessionState
@@ -92,8 +95,30 @@ internal class BrowserSessionController(runtime: GeckoRuntime) {
         tabList.firstOrNull { it.id == tabId }?.sessionState = sessionState
     }
 
+    fun updateTabTitle(tabId: Long, title: String) {
+        val normalized = title.ifBlank { return }
+        tabList.firstOrNull { it.id == tabId }?.title = normalized
+    }
+
     fun updateTabPreview(tabId: Long, previewBitmap: Bitmap) {
         tabList.firstOrNull { it.id == tabId }?.previewBitmap = previewBitmap
+    }
+
+    fun closeTab(tabId: Long) {
+        val index = tabList.indexOfFirst { it.id == tabId }
+        if (index < 0) {
+            return
+        }
+        val removed = tabList.removeAt(index)
+        removed.session.close()
+        if (selectedTabId == tabId) {
+            if (tabList.isEmpty()) {
+                selectedTabId = -1L
+            } else {
+                val nextIndex = index.coerceAtMost(tabList.lastIndex)
+                selectedTabId = tabList[nextIndex].id
+            }
+        }
     }
 
     fun exportPersistedTabs(): List<PersistedBrowserTab> {
@@ -101,6 +126,7 @@ internal class BrowserSessionController(runtime: GeckoRuntime) {
             PersistedBrowserTab(
                 url = tab.currentUrl,
                 sessionState = tab.sessionState,
+                title = tab.title,
             )
         }
     }
@@ -119,15 +145,18 @@ internal class BrowserTab(
     val session: GeckoSession,
     currentUrl: String,
     sessionState: String,
+    title: String,
 ) {
     var currentUrl by mutableStateOf(currentUrl)
     var sessionState by mutableStateOf(sessionState)
+    var title by mutableStateOf(title)
     var previewBitmap: Bitmap? by mutableStateOf(null)
 }
 
 internal data class PersistedBrowserTab(
     val url: String,
     val sessionState: String,
+    val title: String,
 )
 
 @Composable

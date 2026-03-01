@@ -43,6 +43,7 @@ fun GeckoBrowserTab(
     onCurrentPageUrlChange: (String) -> Unit,
     onSessionStateChange: (String) -> Unit,
     onTabPreviewCaptured: (Bitmap) -> Unit,
+    onTabTitleChange: (String) -> Unit,
 ) {
     var urlInput by rememberSaveable(tabId) { mutableStateOf(initialUrl) }
     var currentPageUrl by rememberSaveable(tabId) { mutableStateOf(initialUrl) }
@@ -99,6 +100,11 @@ fun GeckoBrowserTab(
                 }
             }
         }
+        val contentDelegate = object : GeckoSession.ContentDelegate {
+            override fun onTitleChange(session: GeckoSession, title: String?) {
+                title?.let { onTabTitleChange(it) }
+            }
+        }
         val progressDelegate = object : GeckoSession.ProgressDelegate {
             override fun onSessionStateChange(
                 session: GeckoSession,
@@ -108,11 +114,15 @@ fun GeckoBrowserTab(
             }
         }
         session.navigationDelegate = navigationDelegate
+        session.contentDelegate = contentDelegate
         session.progressDelegate = progressDelegate
 
         onDispose {
             if (session.navigationDelegate === navigationDelegate) {
                 session.navigationDelegate = null
+            }
+            if (session.contentDelegate === contentDelegate) {
+                session.contentDelegate = null
             }
             if (session.progressDelegate === progressDelegate) {
                 session.progressDelegate = null

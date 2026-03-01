@@ -27,7 +27,13 @@ class SettingsRepository(context: Context) {
     ) {
         dataStore.updateData { current ->
             val builder = current.toBuilder()
-            val currentTabs = current.tabStatesList.map { PersistedTabState(it.url, it.sessionState) }
+            val currentTabs = current.tabStatesList.map {
+                PersistedTabState(
+                    url = it.url,
+                    sessionState = it.sessionState,
+                    title = it.title,
+                )
+            }
             if (currentTabs == tabs && current.selectedTabIndex == selectedTabIndex) {
                 return@updateData current
             }
@@ -37,6 +43,7 @@ class SettingsRepository(context: Context) {
                     BrowserTabState.newBuilder()
                         .setUrl(tab.url)
                         .setSessionState(tab.sessionState)
+                        .setTitle(tab.title)
                         .build()
                 )
             }
@@ -49,6 +56,7 @@ class SettingsRepository(context: Context) {
 data class PersistedTabState(
     val url: String,
     val sessionState: String,
+    val title: String,
 )
 
 fun BrowserSettings.resolvedHomepageUrl(): String = when (homepageType) {

@@ -27,4 +27,5 @@ message BrowserSettings {
 message BrowserTabState {
   string url = 1;
   string session_state = 2;
+  string title = 3;
 }

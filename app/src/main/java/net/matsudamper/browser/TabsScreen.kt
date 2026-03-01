@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
@@ -20,8 +21,10 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -32,6 +35,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -59,6 +63,7 @@ internal fun TabsScreen(
     tabs: List<BrowserTab>,
     selectedTabId: Long?,
     onSelectTab: (Long) -> Unit,
+    onCloseTab: (Long) -> Unit,
     onOpenNewTab: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
@@ -123,23 +128,57 @@ internal fun TabsScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .aspectRatio(TabsLayoutDefaults.cardAspectRatio),
+                        border = BorderStroke(
+                            width = if (selected) 2.dp else 1.dp,
+                            color = if (selected) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.outlineVariant
+                            },
+                        ),
                         colors = CardDefaults.cardColors(
                             containerColor = if (selected) {
-                                MaterialTheme.colorScheme.secondaryContainer
+                                MaterialTheme.colorScheme.primaryContainer
                             } else {
                                 MaterialTheme.colorScheme.surfaceVariant
                             }
                         ),
+                        elevation = CardDefaults.cardElevation(
+                            defaultElevation = if (selected) 8.dp else 1.dp
+                        ),
                     ) {
                         Column(
                             modifier = Modifier
-                                .fillMaxSize()
-                                .padding(12.dp),
+                                .fillMaxSize(),
                         ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(start = 12.dp, top = 8.dp, end = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    text = tab.title.ifBlank { "Untitled" },
+                                    style = MaterialTheme.typography.titleSmall,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f),
+                                )
+                                IconButton(
+                                    onClick = { onCloseTab(tab.id) },
+                                    modifier = Modifier.offset { IntOffset(4, -4) },
+                                ) {
+                                    Text(
+                                        text = "×",
+                                        style = MaterialTheme.typography.titleMedium,
+                                    )
+                                }
+                            }
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .weight(1f)
+                                    .padding(horizontal = 12.dp, vertical = 8.dp)
                                     .clip(RoundedCornerShape(8.dp)),
                                 contentAlignment = Alignment.Center,
                             ) {
@@ -158,20 +197,6 @@ internal fun TabsScreen(
                                     )
                                 }
                             }
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                text = "Tab ${tab.id}",
-                                style = MaterialTheme.typography.titleSmall,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                text = tab.currentUrl,
-                                style = MaterialTheme.typography.bodySmall,
-                                maxLines = 3,
-                                overflow = TextOverflow.Ellipsis,
-                            )
                         }
                     }
                 }
