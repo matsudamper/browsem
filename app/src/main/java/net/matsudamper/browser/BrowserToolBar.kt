@@ -17,6 +17,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
@@ -38,6 +39,7 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Density
@@ -53,12 +55,16 @@ internal fun BrowserToolBar(
     showInstallExtensionItem: Boolean,
     onInstallExtension: () -> Unit,
     onOpenSettings: () -> Unit,
+    onShare: () -> Unit,
     tabCount: Int,
     onOpenTabs: () -> Unit,
     onRefresh: () -> Unit,
     onHome: () -> Unit,
     onForward: () -> Unit,
     canGoForward: Boolean,
+    onFindInPage: () -> Unit,
+    isPcMode: Boolean,
+    onPcModeToggle: () -> Unit,
 ) {
     val latestOnOpenTabs by rememberUpdatedState(onOpenTabs)
     val swipeToOpenTabsModifier = modifier.pointerInput(Unit) {
@@ -89,6 +95,7 @@ internal fun BrowserToolBar(
                     .padding(8.dp)
                     .horizontalScroll(rememberScrollState()),
                 singleLine = true,
+                textStyle = TextStyle(color = MaterialTheme.colorScheme.onSurface),
                 cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                 keyboardOptions = KeyboardOptions.Default.copy(imeAction = ImeAction.Go),
                 keyboardActions = KeyboardActions(
@@ -177,6 +184,16 @@ internal fun BrowserToolBar(
                         }
                     }
                     HorizontalDivider()
+                    DropdownMenuItem(
+                        text = { Text(text = "PCページ") },
+                        leadingIcon = {
+                            Checkbox(
+                                checked = isPcMode,
+                                onCheckedChange = null,
+                            )
+                        },
+                        onClick = { onPcModeToggle() },
+                    )
                     if (showInstallExtensionItem) {
                         DropdownMenuItem(
                             text = {
@@ -188,6 +205,24 @@ internal fun BrowserToolBar(
                             },
                         )
                     }
+                    DropdownMenuItem(
+                        text = {
+                            Text(text = "共有")
+                        },
+                        onClick = {
+                            visibleMenu = false
+                            onShare()
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = {
+                            Text(text = "ページ内検索")
+                        },
+                        onClick = {
+                            visibleMenu = false
+                            onFindInPage()
+                        },
+                    )
                     DropdownMenuItem(
                         text = {
                             Text(text = "設定")
@@ -203,24 +238,31 @@ internal fun BrowserToolBar(
     }
 }
 
-@Preview
+@Preview(name = "Light")
+@Preview(name = "Dark", uiMode = android.content.res.Configuration.UI_MODE_NIGHT_YES)
 @Composable
 private fun Preview() {
-    BrowserToolBar(
-        value = "https://google.com",
-        onValueChange = {},
-        onSubmit = {},
-        onFocusChanged = {},
-        showInstallExtensionItem = true,
-        onInstallExtension = {},
-        onOpenSettings = {},
-        tabCount = 2,
-        onOpenTabs = {},
-        onRefresh = {},
-        onHome = {},
-        onForward = {},
-        canGoForward = false,
-    )
+    BrowserTheme(themeMode = net.matsudamper.browser.data.ThemeMode.THEME_SYSTEM) {
+        BrowserToolBar(
+            value = "https://google.com",
+            onValueChange = {},
+            onSubmit = {},
+            onFocusChanged = {},
+            showInstallExtensionItem = true,
+            onInstallExtension = {},
+            onOpenSettings = {},
+            onShare = {},
+            tabCount = 2,
+            onOpenTabs = {},
+            isPcMode = false,
+            onPcModeToggle = {},
+            onFindInPage = {},
+            onRefresh = {},
+            onHome = {},
+            onForward = {},
+            canGoForward = false,
+        )
+    }
 }
 
 private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.detectDownSwipe(
