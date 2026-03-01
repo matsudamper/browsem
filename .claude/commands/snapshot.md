@@ -1,24 +1,6 @@
-特定の `@Preview` コンポーザブルのスクリーンショットを Paparazzi で撮影します。
+Paparazzi で `@Preview` コンポーザブルのスクリーンショットを撮影するスキルです。
 
-## 使い方
-
-```
-/snapshot [フィルター文字列]
-```
-
-- 引数を省略すると **全 Preview を撮影** します。
-- フィルター文字列を指定すると、**クラスの完全修飾名**（パッケージ名を含む）または **Preview の `name` パラメータ** に対して大文字小文字を区別せず部分一致で絞り込みます。
-
-### 例
-
-| コマンド | 動作 |
-|---|---|
-| `/snapshot` | 全 Preview を撮影 |
-| `/snapshot BrowserToolBar` | `BrowserToolBarKt` クラスの Preview のみ撮影 |
-| `/snapshot settings` | `settings` パッケージ配下の Preview のみ撮影 |
-| `/snapshot net.matsudamper.browser.settings` | 完全修飾パッケージで絞り込み |
-
-## 手順
+ユーザーが「スクリーンショットを撮って」「Preview を撮影して」「snapshot を実行して」のように依頼したときに使用してください。フィルター対象（クラス名・パッケージ名・Preview の name）が指定された場合は絞り込みを行い、指定がなければ全件撮影します。
 
 **Agent ツール（subagent_type=general-purpose）を使って以下のタスクをサブエージェントに委譲すること。**
 
@@ -33,3 +15,8 @@
    - 失敗時: エラーログの該当箇所を含める。
 
 サブエージェントの結果を受け取ったら、ユーザーに成否と保存先を伝える。
+
+## フィルター仕様
+
+- クラスの完全修飾名（パッケージ名を含む）または Preview の `name` パラメータに対して大文字小文字を区別せず部分一致
+- 例: `BrowserToolBar` → `BrowserToolBarKt` クラスの Preview のみ、`settings` → settings パッケージ配下のみ
