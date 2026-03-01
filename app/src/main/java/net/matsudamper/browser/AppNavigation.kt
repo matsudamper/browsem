@@ -16,10 +16,15 @@ import net.matsudamper.browser.data.BrowserSettings
 import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.resolvedHomepageUrl
 import net.matsudamper.browser.data.resolvedSearchTemplate
+import kotlinx.serialization.Serializable
 import org.mozilla.geckoview.GeckoRuntime
 
+@Serializable
 private sealed interface AppDestination : NavKey {
+    @Serializable
     data object Browser : AppDestination
+
+    @Serializable
     data object Settings : AppDestination
 }
 
