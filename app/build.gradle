@@ -81,7 +81,9 @@ tasks.withType(Test).configureEach {
         it.toLowerCase().contains("paparazzi")
     }
     if (!hasPaparazziTask) {
-        exclude("**/PaparazziComposablePreviewTest*")
+        useJUnit {
+            excludeCategories "net.matsudamper.browser.PaparazziTestCategory"
+        }
     }
 }
 
