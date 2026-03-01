@@ -1,14 +1,21 @@
 package net.matsudamper.browser
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.platform.LocalContext
 import androidx.navigation3.runtime.NavEntry
 import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.ui.NavDisplay
+import kotlinx.coroutines.launch
+import net.matsudamper.browser.data.BrowserSettings
+import net.matsudamper.browser.data.SettingsRepository
+import net.matsudamper.browser.data.resolvedHomepageUrl
+import net.matsudamper.browser.data.resolvedSearchTemplate
 import kotlinx.serialization.Serializable
 import org.mozilla.geckoview.GeckoRuntime
 
@@ -25,6 +32,12 @@ private sealed interface AppDestination : NavKey {
 internal fun BrowserApp(
     runtime: GeckoRuntime,
 ) {
+    val context = LocalContext.current
+    val settingsRepository = remember { SettingsRepository(context) }
+    val settings by settingsRepository.settings
+        .collectAsState(initial = BrowserSettings.getDefaultInstance())
+
+    val scope = rememberCoroutineScope()
     val backStack = rememberNavBackStack(AppDestination.Browser)
 
     BackHandler(enabled = backStack.size > 1) {
@@ -39,28 +52,26 @@ internal fun BrowserApp(
                 AppDestination.Browser -> NavEntry<NavKey>(key) {
                     GeckoBrowserTab(
                         runtime = runtime,
+                        homepageUrl = settings.resolvedHomepageUrl(),
+                        searchTemplate = settings.resolvedSearchTemplate(),
                         onOpenSettings = {
                             backStack.add(AppDestination.Settings)
-                        }
+                        },
                     )
                 }
 
                 AppDestination.Settings -> NavEntry<NavKey>(key) {
-                    SettingsScreen()
+                    SettingsScreen(
+                        settings = settings,
+                        onSettingsChange = { newSettings ->
+                            scope.launch { settingsRepository.updateSettings(newSettings) }
+                        },
+                        onBack = { backStack.removeLastOrNull() },
+                    )
                 }
 
                 else -> error("Unknown destination: $key")
             }
         },
-    )
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun SettingsScreen() {
-    TopAppBar(
-        title = {
-            Text("設定")
-        }
     )
 }

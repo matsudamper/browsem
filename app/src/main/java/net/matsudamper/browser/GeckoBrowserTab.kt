@@ -24,17 +24,17 @@ import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.GeckoView
 
-private const val DEFAULT_URL = "https://webauthn.io"
-
 @Composable
 @OptIn(ExperimentalLayoutApi::class)
 fun GeckoBrowserTab(
     runtime: GeckoRuntime,
+    homepageUrl: String,
+    searchTemplate: String,
     modifier: Modifier = Modifier,
     onOpenSettings: () -> Unit,
 ) {
-    var urlInput by rememberSaveable { mutableStateOf(DEFAULT_URL) }
-    var loadedUrl by rememberSaveable { mutableStateOf(DEFAULT_URL) }
+    var urlInput by rememberSaveable { mutableStateOf(homepageUrl) }
+    var loadedUrl by rememberSaveable { mutableStateOf(homepageUrl) }
     var canGoBack by remember { mutableStateOf(false) }
     var isUrlInputFocused by remember { mutableStateOf(false) }
     val keyboardController = LocalSoftwareKeyboardController.current
@@ -94,9 +94,10 @@ fun GeckoBrowserTab(
         BrowserToolBar(
             value = urlInput,
             onValueChange = { urlInput = it },
-            onSubmit = { submittedUrl ->
-                urlInput = submittedUrl
-                loadedUrl = submittedUrl
+            onSubmit = { rawInput ->
+                val resolved = buildUrlFromInput(rawInput, homepageUrl, searchTemplate)
+                urlInput = resolved
+                loadedUrl = resolved
                 keyboardController?.hide()
             },
             onFocusChanged = { hasFocus -> isUrlInputFocused = hasFocus },

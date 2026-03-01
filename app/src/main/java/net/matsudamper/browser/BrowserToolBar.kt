@@ -61,7 +61,7 @@ internal fun BrowserToolBar(
                 cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                 keyboardOptions = KeyboardOptions.Default.copy(imeAction = ImeAction.Go),
                 keyboardActions = KeyboardActions(
-                    onGo = { onSubmit(normalizeUrl(value)) }
+                    onGo = { onSubmit(value) }
                 )
             )
             var visibleMenu by remember { mutableStateOf(false) }
@@ -90,18 +90,6 @@ internal fun BrowserToolBar(
                 }
             }
         }
-    }
-}
-
-internal fun normalizeUrl(value: String): String {
-    val trimmed = value.trim()
-    if (trimmed.isBlank()) {
-        return "https://google.com" // TODO ホームページ設定
-    }
-    return if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
-        trimmed
-    } else {
-        "https://$trimmed"
     }
 }
 

@@ -19,3 +19,5 @@ dependencyResolutionManagement {
 
 rootProject.name = 'browser'
 include ':app'
+include ':data'
+include ':proto'
