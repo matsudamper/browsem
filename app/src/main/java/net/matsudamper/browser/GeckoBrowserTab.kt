@@ -48,6 +48,7 @@ fun GeckoBrowserTab(
     var urlInput by rememberSaveable(tabId) { mutableStateOf(initialUrl) }
     var currentPageUrl by rememberSaveable(tabId) { mutableStateOf(initialUrl) }
     var canGoBack by remember(tabId) { mutableStateOf(false) }
+    var canGoForward by remember(tabId) { mutableStateOf(false) }
     var isUrlInputFocused by remember(tabId) { mutableStateOf(false) }
     var geckoViewRef by remember(tabId) { mutableStateOf<GeckoView?>(null) }
     val keyboardController = LocalSoftwareKeyboardController.current
@@ -84,6 +85,10 @@ fun GeckoBrowserTab(
         val navigationDelegate = object : GeckoSession.NavigationDelegate {
             override fun onCanGoBack(session: GeckoSession, value: Boolean) {
                 canGoBack = value
+            }
+
+            override fun onCanGoForward(session: GeckoSession, value: Boolean) {
+                canGoForward = value
             }
 
             override fun onLocationChange(
@@ -169,6 +174,14 @@ fun GeckoBrowserTab(
                 captureCurrentTabPreview()
                 onOpenTabs()
             },
+            onRefresh = { session.reload() },
+            onHome = {
+                urlInput = homepageUrl
+                currentPageUrl = homepageUrl
+                session.loadUri(homepageUrl)
+            },
+            onForward = { session.goForward() },
+            canGoForward = canGoForward,
         )
 
         AndroidView(

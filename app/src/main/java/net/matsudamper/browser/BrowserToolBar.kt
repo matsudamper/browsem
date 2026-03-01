@@ -1,17 +1,25 @@
 package net.matsudamper.browser
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -47,6 +55,10 @@ internal fun BrowserToolBar(
     onOpenSettings: () -> Unit,
     tabCount: Int,
     onOpenTabs: () -> Unit,
+    onRefresh: () -> Unit,
+    onHome: () -> Unit,
+    onForward: () -> Unit,
+    canGoForward: Boolean,
 ) {
     val latestOnOpenTabs by rememberUpdatedState(onOpenTabs)
     val swipeToOpenTabsModifier = modifier.pointerInput(Unit) {
@@ -105,6 +117,66 @@ internal fun BrowserToolBar(
                         visibleMenu = false
                     }
                 ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            IconButton(
+                                onClick = {
+                                    visibleMenu = false
+                                    onRefresh()
+                                }
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Refresh,
+                                    contentDescription = "更新",
+                                )
+                            }
+                            Text(
+                                text = "更新",
+                                style = MaterialTheme.typography.labelSmall,
+                            )
+                        }
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            IconButton(
+                                onClick = {
+                                    visibleMenu = false
+                                    onHome()
+                                }
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Home,
+                                    contentDescription = "ホーム",
+                                )
+                            }
+                            Text(
+                                text = "ホーム",
+                                style = MaterialTheme.typography.labelSmall,
+                            )
+                        }
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            IconButton(
+                                onClick = {
+                                    visibleMenu = false
+                                    onForward()
+                                },
+                                enabled = canGoForward,
+                            ) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                                    contentDescription = "進む",
+                                )
+                            }
+                            Text(
+                                text = "進む",
+                                style = MaterialTheme.typography.labelSmall,
+                            )
+                        }
+                    }
+                    HorizontalDivider()
                     if (showInstallExtensionItem) {
                         DropdownMenuItem(
                             text = {
@@ -144,6 +216,10 @@ private fun Preview() {
         onOpenSettings = {},
         tabCount = 2,
         onOpenTabs = {},
+        onRefresh = {},
+        onHome = {},
+        onForward = {},
+        canGoForward = false,
     )
 }
 
