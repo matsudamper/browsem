@@ -32,8 +32,11 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.viewinterop.AndroidView
 import org.mozilla.geckoview.GeckoRuntime
+import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.GeckoView
+import org.mozilla.geckoview.WebExtension
+import org.mozilla.geckoview.WebExtensionController
 
 class MainActivity : ComponentActivity() {
     private lateinit var runtime: GeckoRuntime
@@ -41,6 +44,24 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         runtime = GeckoRuntime.getDefault(this)
+        runtime.webExtensionController.setPromptDelegate(
+            object : WebExtensionController.PromptDelegate {
+                override fun onInstallPromptRequest(
+                    extension: WebExtension,
+                    permissions: Array<String>,
+                    origins: Array<String>,
+                    dataCollectionPermissions: Array<String>
+                ): GeckoResult<WebExtension.PermissionPromptResponse> {
+                    return GeckoResult.fromValue(
+                        WebExtension.PermissionPromptResponse(
+                            true,
+                            false,
+                            true,
+                        )
+                    )
+                }
+            }
+        )
         setContent {
             BrowserApp(runtime = runtime)
         }
