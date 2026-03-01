@@ -10,6 +10,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -47,6 +48,8 @@ internal fun BrowserToolBar(
     onOpenSettings: () -> Unit,
     tabCount: Int,
     onOpenTabs: () -> Unit,
+    isPcMode: Boolean,
+    onPcModeToggle: () -> Unit,
 ) {
     val latestOnOpenTabs by rememberUpdatedState(onOpenTabs)
     val swipeToOpenTabsModifier = modifier.pointerInput(Unit) {
@@ -105,6 +108,16 @@ internal fun BrowserToolBar(
                         visibleMenu = false
                     }
                 ) {
+                    DropdownMenuItem(
+                        text = { Text(text = "PCページ") },
+                        leadingIcon = {
+                            Checkbox(
+                                checked = isPcMode,
+                                onCheckedChange = null,
+                            )
+                        },
+                        onClick = { onPcModeToggle() },
+                    )
                     if (showInstallExtensionItem) {
                         DropdownMenuItem(
                             text = {
@@ -144,6 +157,8 @@ private fun Preview() {
         onOpenSettings = {},
         tabCount = 2,
         onOpenTabs = {},
+        isPcMode = false,
+        onPcModeToggle = {},
     )
 }
 

@@ -25,6 +25,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import org.mozilla.geckoview.GeckoSession
+import org.mozilla.geckoview.GeckoSessionSettings
 import org.mozilla.geckoview.GeckoView
 
 @Composable
@@ -50,6 +51,7 @@ fun GeckoBrowserTab(
     var canGoBack by remember(tabId) { mutableStateOf(false) }
     var isUrlInputFocused by remember(tabId) { mutableStateOf(false) }
     var geckoViewRef by remember(tabId) { mutableStateOf<GeckoView?>(null) }
+    var isPcMode by rememberSaveable(tabId) { mutableStateOf(false) }
     val keyboardController = LocalSoftwareKeyboardController.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val isImeVisible = WindowInsets.isImeVisible
@@ -168,6 +170,17 @@ fun GeckoBrowserTab(
                 session.flushSessionState()
                 captureCurrentTabPreview()
                 onOpenTabs()
+            },
+            isPcMode = isPcMode,
+            onPcModeToggle = {
+                val newMode = !isPcMode
+                isPcMode = newMode
+                session.settings.userAgentMode = if (newMode) {
+                    GeckoSessionSettings.USER_AGENT_MODE_DESKTOP
+                } else {
+                    GeckoSessionSettings.USER_AGENT_MODE_MOBILE
+                }
+                session.reload()
             },
         )
 
