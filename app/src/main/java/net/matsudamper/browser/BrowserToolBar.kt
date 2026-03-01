@@ -1,20 +1,22 @@
 package net.matsudamper.browser
 
+import android.text.Editable
+import android.text.InputType
+import android.text.TextWatcher
+import android.view.KeyEvent
+import android.view.View
+import android.widget.EditText
+import android.view.inputmethod.EditorInfo
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Home
@@ -37,16 +39,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
 
 @Composable
 internal fun BrowserToolBar(
@@ -86,24 +85,71 @@ internal fun BrowserToolBar(
         Row(
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            BasicTextField(
-                value = value,
-                onValueChange = onValueChange,
+            AndroidView(
+                factory = { context ->
+                    EditText(context).apply {
+                        id = R.id.url_bar
+                        setSingleLine(true)
+                        imeOptions = EditorInfo.IME_ACTION_GO
+                        inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
+                        hint = "Search or type URL"
+                        contentDescription = "Address bar"
+                        isFocusable = true
+                        isFocusableInTouchMode = true
+                        isClickable = true
+                        importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_YES
+                        importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO
+                        addTextChangedListener(
+                            object : TextWatcher {
+                                override fun beforeTextChanged(
+                                    s: CharSequence?,
+                                    start: Int,
+                                    count: Int,
+                                    after: Int
+                                ) {
+                                }
+
+                                override fun onTextChanged(
+                                    s: CharSequence?,
+                                    start: Int,
+                                    before: Int,
+                                    count: Int
+                                ) {
+                                    onValueChange(s?.toString().orEmpty())
+                                }
+
+                                override fun afterTextChanged(s: Editable?) {
+                                }
+                            }
+                        )
+                        setOnFocusChangeListener { _, hasFocus ->
+                            onFocusChanged(hasFocus)
+                        }
+                        setOnEditorActionListener { _, actionId, event ->
+                            val isSubmitAction = actionId == EditorInfo.IME_ACTION_GO ||
+                                actionId == EditorInfo.IME_ACTION_DONE ||
+                                (event?.keyCode == KeyEvent.KEYCODE_ENTER && event.action == KeyEvent.ACTION_DOWN)
+                            if (isSubmitAction) {
+                                onSubmit(text?.toString().orEmpty())
+                                true
+                            } else {
+                                false
+                            }
+                        }
+                    }
+                },
+                update = { editText ->
+                    if (editText.text.toString() != value) {
+                        editText.setText(value)
+                        editText.setSelection(editText.text.length)
+                    }
+                },
                 modifier = modifier
                     .weight(1f)
-                    .onFocusChanged { onFocusChanged(it.hasFocus) }
                     .padding(4.dp)
                     .clip(CircleShape)
                     .background(MaterialTheme.colorScheme.surface)
-                    .padding(8.dp)
-                    .horizontalScroll(rememberScrollState()),
-                singleLine = true,
-                textStyle = TextStyle(color = MaterialTheme.colorScheme.onSurface),
-                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                keyboardOptions = KeyboardOptions.Default.copy(imeAction = ImeAction.Go),
-                keyboardActions = KeyboardActions(
-                    onGo = { onSubmit(value) }
-                )
+                    .padding(horizontal = 8.dp, vertical = 2.dp),
             )
             IconButton(
                 onClick = onOpenTabs,

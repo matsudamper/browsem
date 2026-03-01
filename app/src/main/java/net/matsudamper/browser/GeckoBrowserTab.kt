@@ -2,6 +2,8 @@ package net.matsudamper.browser
 
 import android.content.Intent
 import android.graphics.Bitmap
+import android.os.Build
+import android.view.View
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -53,7 +55,6 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.GeckoSessionSettings
-import org.mozilla.geckoview.GeckoView
 
 @Composable
 @OptIn(ExperimentalLayoutApi::class)
@@ -79,7 +80,7 @@ fun GeckoBrowserTab(
     var canGoBack by remember(tabId) { mutableStateOf(false) }
     var canGoForward by remember(tabId) { mutableStateOf(false) }
     var isUrlInputFocused by remember(tabId) { mutableStateOf(false) }
-    var geckoViewRef by remember(tabId) { mutableStateOf<GeckoView?>(null) }
+    var geckoViewRef by remember(tabId) { mutableStateOf<AutofillAwareGeckoView?>(null) }
     var isPcMode by rememberSaveable(tabId) { mutableStateOf(false) }
     val keyboardController = LocalSoftwareKeyboardController.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -195,6 +196,13 @@ fun GeckoBrowserTab(
         }
     }
 
+    LaunchedEffect(currentPageUrl, isUrlInputFocused) {
+        geckoViewRef?.currentPageUrl = currentPageUrl
+        if (!isUrlInputFocused) {
+            geckoViewRef?.requestPlatformAutofill()
+        }
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -301,18 +309,35 @@ fun GeckoBrowserTab(
 
         AndroidView(
             factory = { context ->
-                GeckoView(context).also { geckoView ->
+                AutofillAwareGeckoView(context).also { geckoView ->
+                    geckoView.importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_YES
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                        geckoView.importantForContentCapture = View.IMPORTANT_FOR_CONTENT_CAPTURE_YES
+                    }
+                    geckoView.importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_YES
                     geckoView.setAutofillEnabled(true)
+                    geckoView.currentPageUrl = currentPageUrl
                     geckoView.setSession(session)
                     geckoViewRef = geckoView
                 }
             },
             update = { geckoView ->
+                geckoView.importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_YES
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    geckoView.importantForContentCapture = View.IMPORTANT_FOR_CONTENT_CAPTURE_YES
+                }
+                geckoView.importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_YES
+                geckoView.setAutofillEnabled(true)
+                geckoView.currentPageUrl = currentPageUrl
                 geckoView.setSession(session)
                 geckoViewRef = geckoView
                 val shouldFocusWebContent = isUrlInputFocused.not()
-                geckoView.isFocusable = shouldFocusWebContent
-                geckoView.isFocusableInTouchMode = shouldFocusWebContent
+                geckoView.isFocusable = true
+                geckoView.isFocusableInTouchMode = true
+                if (shouldFocusWebContent && !geckoView.isFocused) {
+                    geckoView.requestFocus()
+                    geckoView.requestPlatformAutofill()
+                }
             },
             modifier = Modifier.fillMaxSize()
         )
