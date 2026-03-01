@@ -32,6 +32,7 @@ import net.matsudamper.browser.data.PersistedTabState
 import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.resolvedHomepageUrl
 import net.matsudamper.browser.data.resolvedSearchTemplate
+import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoRuntime
 import kotlinx.coroutines.delay
 
@@ -51,6 +52,7 @@ private sealed interface AppDestination : NavKey {
 internal fun BrowserApp(
     runtime: GeckoRuntime,
     onInstallExtensionRequest: (String) -> Unit,
+    onDesktopNotificationPermissionRequest: () -> GeckoResult<Int>,
 ) {
     val context = LocalContext.current
     val settingsRepository = remember { SettingsRepository(context) }
@@ -129,6 +131,7 @@ internal fun BrowserApp(
                                 searchTemplate = searchTemplate,
                                 tabCount = tabs.size,
                                 onInstallExtensionRequest = onInstallExtensionRequest,
+                                onDesktopNotificationPermissionRequest = onDesktopNotificationPermissionRequest,
                                 onOpenSettings = {
                                     backStack.add(AppDestination.Settings)
                                 },

@@ -47,6 +47,16 @@ jobs:
           name: app-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
 
+      - name: Run Android Lint
+        run: gradle :app:lintDebug
+
+      - name: Upload lint report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-lint-report
+          path: app/build/reports/lint-results-debug.html
+
       - name: Comment APK download URL
         uses: marocchino/sticky-pull-request-comment@v2
         with:
