@@ -44,6 +44,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.autofill.ContentDataType
 import androidx.compose.ui.autofill.ContentType
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
@@ -54,6 +55,7 @@ import androidx.compose.ui.semantics.contentDataType
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.contentType
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -98,8 +100,10 @@ internal fun BrowserToolBar(
         color = MaterialTheme.colorScheme.primaryContainer,
         modifier = swipeToOpenTabsModifier,
     ) {
-        Column {
-            val enableAutoFill = true
+        Column(
+            modifier = Modifier.semantics { testTagsAsResourceId = true },
+        ) {
+            val enableAutoFill = false
             if (enableAutoFill) {
                 EditText(
                     text = value,
@@ -116,6 +120,7 @@ internal fun BrowserToolBar(
                         onValueChange = onValueChange,
                         modifier = modifier
                             .weight(1f)
+                            .testTag("url_bar")
                             .onFocusChanged { onFocusChanged(it.hasFocus) }
                             .semantics {
                                 contentDescription = "Address bar"
