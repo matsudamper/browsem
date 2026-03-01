@@ -14,10 +14,16 @@ class PaparazziComposablePreviewTest {
 
     @Test
     fun snapshot() {
+        val filter = System.getProperty("paparazzi.filter", "")
         AndroidComposablePreviewScanner()
             .scanPackageTrees("net.matsudamper.browser")
             .includePrivatePreviews()
             .getPreviews()
+            .filter { preview ->
+                filter.isEmpty() ||
+                    preview.declaringClass.simpleName.orEmpty().contains(filter, ignoreCase = true) ||
+                    preview.previewInfo.name.contains(filter, ignoreCase = true)
+            }
             .forEach { preview ->
                 paparazzi.snapshot { preview() }
             }

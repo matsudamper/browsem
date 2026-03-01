@@ -87,6 +87,7 @@ tasks.withType(Test).configureEach {
             excludeCategories "net.matsudamper.browser.PaparazziTestCategory"
         }
     }
+    systemProperty "paparazzi.filter", System.getProperty("paparazzi.filter", "")
 }
 
 dependencies {
