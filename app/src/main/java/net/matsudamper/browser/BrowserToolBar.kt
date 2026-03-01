@@ -38,6 +38,7 @@ internal fun BrowserToolBar(
     onSubmit: (String) -> Unit,
     modifier: Modifier = Modifier,
     onFocusChanged: (Boolean) -> Unit,
+    onOpenSettings: () -> Unit,
 ) {
     Surface(
         color = MaterialTheme.colorScheme.primaryContainer
@@ -82,7 +83,8 @@ internal fun BrowserToolBar(
                             Text(text = "設定")
                         },
                         onClick = {
-
+                            visibleMenu = false
+                            onOpenSettings()
                         },
                     )
                 }
@@ -111,5 +113,6 @@ private fun Preview() {
         onValueChange = {},
         onSubmit = {},
         onFocusChanged = {},
+        onOpenSettings = {},
     )
 }

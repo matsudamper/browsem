@@ -80,6 +80,8 @@ dependencies {
     implementation libs.androidx.compose.material3
     implementation libs.androidx.compose.ui
     implementation libs.androidx.compose.ui.tooling.preview
+    implementation libs.androidx.navigation3.runtime
+    implementation libs.androidx.navigation3.ui
     implementation libs.mozilla.geckoview
 
     debugImplementation libs.androidx.compose.ui.tooling

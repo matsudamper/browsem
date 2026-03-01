@@ -31,6 +31,7 @@ private const val DEFAULT_URL = "https://webauthn.io"
 fun GeckoBrowserTab(
     runtime: GeckoRuntime,
     modifier: Modifier = Modifier,
+    onOpenSettings: () -> Unit,
 ) {
     var urlInput by rememberSaveable { mutableStateOf(DEFAULT_URL) }
     var loadedUrl by rememberSaveable { mutableStateOf(DEFAULT_URL) }
@@ -99,6 +100,7 @@ fun GeckoBrowserTab(
                 keyboardController?.hide()
             },
             onFocusChanged = { hasFocus -> isUrlInputFocused = hasFocus },
+            onOpenSettings = onOpenSettings,
         )
 
         AndroidView(

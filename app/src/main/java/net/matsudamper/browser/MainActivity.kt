@@ -56,7 +56,7 @@ class MainActivity : ComponentActivity() {
         runtime = GeckoRuntime.getDefault(this)
         runtime.setActivityDelegate(activityDelegate)
         setContent {
-            GeckoBrowserTab(runtime = runtime)
+            BrowserApp(runtime = runtime)
         }
     }
 
