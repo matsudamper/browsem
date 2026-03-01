@@ -1,8 +1,8 @@
 package net.matsudamper.browser
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -47,6 +47,7 @@ internal fun BrowserToolBar(
     showInstallExtensionItem: Boolean,
     onInstallExtension: () -> Unit,
     onOpenSettings: () -> Unit,
+    onShare: () -> Unit,
     tabCount: Int,
     onOpenTabs: () -> Unit,
     onFindInPage: () -> Unit,
@@ -134,6 +135,15 @@ internal fun BrowserToolBar(
                     }
                     DropdownMenuItem(
                         text = {
+                            Text(text = "共有")
+                        },
+                        onClick = {
+                            visibleMenu = false
+                            onShare()
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = {
                             Text(text = "ページ内検索")
                         },
                         onClick = {
@@ -169,6 +179,7 @@ private fun Preview() {
             showInstallExtensionItem = true,
             onInstallExtension = {},
             onOpenSettings = {},
+            onShare = {},
             tabCount = 2,
             onOpenTabs = {},
             isPcMode = false,

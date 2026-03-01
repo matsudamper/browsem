@@ -1,5 +1,6 @@
 package net.matsudamper.browser
 
+import android.content.Intent
 import android.graphics.Bitmap
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
@@ -39,6 +40,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -73,6 +75,7 @@ fun GeckoBrowserTab(
 ) {
     var urlInput by rememberSaveable(tabId) { mutableStateOf(initialUrl) }
     var currentPageUrl by rememberSaveable(tabId) { mutableStateOf(initialUrl) }
+    var currentPageTitle by rememberSaveable(tabId) { mutableStateOf("") }
     var canGoBack by remember(tabId) { mutableStateOf(false) }
     var isUrlInputFocused by remember(tabId) { mutableStateOf(false) }
     var geckoViewRef by remember(tabId) { mutableStateOf<GeckoView?>(null) }
@@ -80,6 +83,7 @@ fun GeckoBrowserTab(
     val keyboardController = LocalSoftwareKeyboardController.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val isImeVisible = WindowInsets.isImeVisible
+    val context = LocalContext.current
 
     var showFindInPage by remember { mutableStateOf(false) }
     var findQuery by remember { mutableStateOf("") }
@@ -142,7 +146,9 @@ fun GeckoBrowserTab(
         }
         val contentDelegate = object : GeckoSession.ContentDelegate {
             override fun onTitleChange(session: GeckoSession, title: String?) {
-                title?.let { onTabTitleChange(it) }
+                val newTitle = title.orEmpty()
+                currentPageTitle = newTitle
+                onTabTitleChange(newTitle)
             }
         }
         val progressDelegate = object : GeckoSession.ProgressDelegate {
@@ -249,15 +255,19 @@ fun GeckoBrowserTab(
                     onInstallExtensionRequest(currentPageUrl)
                 },
                 onOpenSettings = onOpenSettings,
+                onShare = {
+                    val shareText = "$currentPageTitle\n$currentPageUrl"
+                    val intent = Intent(Intent.ACTION_SEND).apply {
+                        type = "text/plain"
+                        putExtra(Intent.EXTRA_TEXT, shareText)
+                    }
+                    context.startActivity(Intent.createChooser(intent, null))
+                },
                 tabCount = tabCount,
                 onOpenTabs = {
                     session.flushSessionState()
                     captureCurrentTabPreview()
                     onOpenTabs()
-                },
-                onFindInPage = {
-                    isUrlInputFocused = false
-                    showFindInPage = true
                 },
                 isPcMode = isPcMode,
                 onPcModeToggle = {
@@ -269,6 +279,9 @@ fun GeckoBrowserTab(
                         GeckoSessionSettings.USER_AGENT_MODE_MOBILE
                     }
                     session.reload()
+                },
+                onFindInPage = {
+                    showFindInPage = true
                 },
             )
         }
