@@ -30,6 +30,16 @@ jobs:
         with:
           gradle-version: 9.1.0
 
+      - name: Run Android Lint
+        run: gradle :app:lintDebug
+
+      - name: Upload lint report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-lint-report
+          path: app/build/reports/lint-results-debug.html
+
       - name: Decode debug keystore
         shell: bash
         run: |

@@ -29,6 +29,16 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
+      - name: Run Android Lint
+        run: gradle :app:lintDebug
+
+      - name: Upload lint report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-lint-report
+          path: app/build/reports/lint-results-debug.html
+
       - name: Decode debug keystore
         shell: bash
         run: |
