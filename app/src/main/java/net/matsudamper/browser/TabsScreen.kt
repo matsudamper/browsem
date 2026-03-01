@@ -1,5 +1,6 @@
 package net.matsudamper.browser
 
+import android.graphics.Bitmap
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -32,15 +33,30 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+
+internal data class TabsScreenTabData(
+    val id: Long,
+    val title: String,
+    val previewBitmap: Bitmap?,
+)
+
+internal fun BrowserTab.toTabsScreenTabData(): TabsScreenTabData = TabsScreenTabData(
+    id = id,
+    title = title,
+    previewBitmap = previewBitmap,
+)
 
 internal object TabsLayoutDefaults {
     val minCellWidth: Dp = 220.dp
@@ -63,6 +79,25 @@ internal object TabsLayoutDefaults {
 @Composable
 internal fun TabsScreen(
     tabs: List<BrowserTab>,
+    selectedTabId: Long?,
+    onSelectTab: (Long) -> Unit,
+    onCloseTab: (Long) -> Unit,
+    onOpenNewTab: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    TabsScreenContent(
+        tabs = tabs.map { it.toTabsScreenTabData() },
+        selectedTabId = selectedTabId,
+        onSelectTab = onSelectTab,
+        onCloseTab = onCloseTab,
+        onOpenNewTab = onOpenNewTab,
+        modifier = modifier,
+    )
+}
+
+@Composable
+private fun TabsScreenContent(
+    tabs: List<TabsScreenTabData>,
     selectedTabId: Long?,
     onSelectTab: (Long) -> Unit,
     onCloseTab: (Long) -> Unit,
@@ -152,7 +187,7 @@ internal fun TabsScreen(
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(start = 12.dp, top = 8.dp, end = 4.dp),
+                                        .padding(start = 12.dp, end = 4.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                 ) {
                                     Text(
@@ -166,9 +201,9 @@ internal fun TabsScreen(
                                         onClick = { onCloseTab(tab.id) },
                                         modifier = Modifier.offset { IntOffset(4, -4) },
                                     ) {
-                                        Text(
-                                            text = "×",
-                                            style = MaterialTheme.typography.titleMedium,
+                                        Icon(
+                                            painter = painterResource(R.drawable.close_24dp),
+                                            contentDescription = "close"
                                         )
                                     }
                                 }
@@ -176,7 +211,8 @@ internal fun TabsScreen(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .weight(1f)
-                                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                                        .padding(horizontal = 8.dp)
+                                        .padding(bottom = 8.dp)
                                         .clip(RoundedCornerShape(8.dp)),
                                     contentAlignment = Alignment.Center,
                                 ) {
@@ -214,4 +250,35 @@ internal fun TabsScreen(
             )
         }
     }
+}
+
+@Composable
+@Preview
+private fun Preview() {
+    val tabs = remember {
+        listOf(
+            TabsScreenTabData(
+                id = 1L,
+                title = "Example Domain",
+                previewBitmap = null,
+            ),
+            TabsScreenTabData(
+                id = 2L,
+                title = "Google",
+                previewBitmap = null,
+            ),
+            TabsScreenTabData(
+                id = 3L,
+                title = "GitHub: Let's build from here",
+                previewBitmap = null,
+            ),
+        )
+    }
+    TabsScreenContent(
+        tabs = tabs,
+        selectedTabId = 1L,
+        onSelectTab = {},
+        onCloseTab = {},
+        onOpenNewTab = {},
+    )
 }
