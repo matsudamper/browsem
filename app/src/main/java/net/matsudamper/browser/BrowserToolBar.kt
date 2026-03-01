@@ -50,6 +50,7 @@ internal fun BrowserToolBar(
     onShare: () -> Unit,
     tabCount: Int,
     onOpenTabs: () -> Unit,
+    onFindInPage: () -> Unit,
     isPcMode: Boolean,
     onPcModeToggle: () -> Unit,
 ) {
@@ -143,6 +144,15 @@ internal fun BrowserToolBar(
                     )
                     DropdownMenuItem(
                         text = {
+                            Text(text = "ページ内検索")
+                        },
+                        onClick = {
+                            visibleMenu = false
+                            onFindInPage()
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = {
                             Text(text = "設定")
                         },
                         onClick = {
@@ -174,6 +184,7 @@ private fun Preview() {
             onOpenTabs = {},
             isPcMode = false,
             onPcModeToggle = {},
+            onFindInPage = {},
         )
     }
 }
