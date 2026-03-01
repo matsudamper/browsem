@@ -53,6 +53,7 @@ private fun BrowserApp(runtime: GeckoRuntime) {
     var urlInput by remember { mutableStateOf("https://www.mozilla.org") }
     var loadedUrl by remember { mutableStateOf("https://www.mozilla.org") }
     var canGoBack by remember { mutableStateOf(false) }
+    var isUrlInput by remember { mutableStateOf(false) }
     val keyboardController = LocalSoftwareKeyboardController.current
     val session = remember {
         GeckoSession().also { it.open(runtime) }
@@ -62,6 +63,17 @@ private fun BrowserApp(runtime: GeckoRuntime) {
         val navigationDelegate = object : GeckoSession.NavigationDelegate {
             override fun onCanGoBack(session: GeckoSession, value: Boolean) {
                 canGoBack = value
+            }
+
+            override fun onLocationChange(
+                session: GeckoSession,
+                url: String?,
+                perms: MutableList<GeckoSession.PermissionDelegate.ContentPermission>,
+                hasUserGesture: Boolean
+            ) {
+                if (!isUrlInput) {
+                    urlInput = url ?: ""
+                }
             }
         }
         session.navigationDelegate = navigationDelegate
@@ -82,7 +94,6 @@ private fun BrowserApp(runtime: GeckoRuntime) {
         session.loadUri(loadedUrl)
     }
 
-    var isUrlInput by remember { mutableStateOf(false) }
     val isImeVisible = WindowInsets.isImeVisible
     LaunchedEffect(isImeVisible) {
         if (isImeVisible.not()) {
@@ -116,9 +127,7 @@ private fun BrowserApp(runtime: GeckoRuntime) {
                     modifier = Modifier
                         .fillMaxWidth()
                         .onFocusChanged {
-                            if (it.hasFocus) {
-                                isUrlInput = true
-                            }
+                            isUrlInput = it.hasFocus
                         },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions.Default.copy(imeAction = ImeAction.Go),
