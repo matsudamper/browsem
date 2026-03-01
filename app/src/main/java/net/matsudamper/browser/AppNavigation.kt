@@ -2,6 +2,7 @@ package net.matsudamper.browser
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -40,9 +41,16 @@ internal fun BrowserApp(
     val settingsRepository = remember { SettingsRepository(context) }
     val settings by settingsRepository.settings
         .collectAsState(initial = BrowserSettings.getDefaultInstance())
+    val browserSessionController = rememberBrowserSessionController(runtime)
+    val homepageUrl = settings.resolvedHomepageUrl()
+    val searchTemplate = settings.resolvedSearchTemplate()
 
     val scope = rememberCoroutineScope()
     val backStack = rememberNavBackStack(AppDestination.Browser)
+
+    LaunchedEffect(browserSessionController, homepageUrl) {
+        browserSessionController.ensureInitialPageLoaded(homepageUrl)
+    }
 
     BackHandler(enabled = backStack.size > 1) {
         backStack.removeLastOrNull()
@@ -55,9 +63,9 @@ internal fun BrowserApp(
             when (key) {
                 AppDestination.Browser -> NavEntry<NavKey>(key) {
                     GeckoBrowserTab(
-                        runtime = runtime,
-                        homepageUrl = settings.resolvedHomepageUrl(),
-                        searchTemplate = settings.resolvedSearchTemplate(),
+                        session = browserSessionController.session,
+                        homepageUrl = homepageUrl,
+                        searchTemplate = searchTemplate,
                         onInstallExtensionRequest = onInstallExtensionRequest,
                         onOpenSettings = {
                             backStack.add(AppDestination.Settings)
