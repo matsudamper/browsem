@@ -50,9 +50,6 @@ private sealed interface AppDestination : NavKey {
 @Composable
 internal fun BrowserApp(
     runtime: GeckoRuntime,
-    initialExternalUrl: String? = null,
-    onExternalUrlConsumed: (String) -> Unit = {},
-    onCurrentPageUrlForAssist: (String) -> Unit = {},
     onInstallExtensionRequest: (String) -> Unit,
 ) {
     val context = LocalContext.current
@@ -67,7 +64,6 @@ internal fun BrowserApp(
     val scope = rememberCoroutineScope()
     val backStack = rememberNavBackStack(AppDestination.Browser)
     var tabPersistenceSignal by remember { mutableLongStateOf(0L) }
-    var pendingExternalUrl by remember { mutableStateOf(initialExternalUrl) }
 
     val persistedTabs = remember(currentSettings.tabStatesList) {
         currentSettings.tabStatesList.map { tabState ->
@@ -104,29 +100,6 @@ internal fun BrowserApp(
             persistedTabs = persistedTabs,
             persistedSelectedTabIndex = currentSettings.selectedTabIndex,
         )
-    }
-
-    LaunchedEffect(initialExternalUrl) {
-        if (initialExternalUrl != null) {
-            pendingExternalUrl = initialExternalUrl
-        }
-    }
-
-    LaunchedEffect(pendingExternalUrl, browserSessionController.tabs.size) {
-        val externalUrl = pendingExternalUrl ?: return@LaunchedEffect
-        val selectedTab = browserSessionController.selectedTab
-        if (selectedTab == null) {
-            val newTab = browserSessionController.createTab(initialUrl = externalUrl)
-            browserSessionController.selectTab(newTab.id)
-            onCurrentPageUrlForAssist(externalUrl)
-        } else {
-            browserSessionController.updateTabUrl(selectedTab.id, externalUrl)
-            selectedTab.session.loadUri(externalUrl)
-            onCurrentPageUrlForAssist(externalUrl)
-        }
-        tabPersistenceSignal++
-        pendingExternalUrl = null
-        onExternalUrlConsumed(externalUrl)
     }
 
     BackHandler(enabled = backStack.size > 1) {
@@ -171,7 +144,6 @@ internal fun BrowserApp(
                                             tabId = selectedTab.id,
                                             url = currentUrl,
                                         )
-                                        onCurrentPageUrlForAssist(currentUrl)
                                         tabPersistenceSignal++
                                     },
                                     onSessionStateChange = { sessionState ->

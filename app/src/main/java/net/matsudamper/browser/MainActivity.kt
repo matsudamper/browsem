@@ -1,9 +1,7 @@
 package net.matsudamper.browser
 
-import android.app.assist.AssistContent
 import android.content.Intent
 import android.content.IntentSender
-import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -28,8 +26,6 @@ class MainActivity : ComponentActivity() {
     private var pendingActivityResult: GeckoResult<Intent>? = null
     private var installPromptState by mutableStateOf<InstallPromptState?>(null)
     private var installFailureMessage by mutableStateOf<String?>(null)
-    private var pendingExternalUrl by mutableStateOf<String?>(null)
-    private var latestAssistUrl by mutableStateOf<String?>(null)
     private var webExtensionWarmUpCompleted = false
     private var webExtensionWarmUpInProgress = false
 
@@ -108,27 +104,15 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        pendingExternalUrl = extractExternalUrl(intent)
-        latestAssistUrl = pendingExternalUrl
         runtime = GeckoRuntime.getDefault(this)
         runtime.setActivityDelegate(activityDelegate)
         runtime.settings.setExtensionsWebAPIEnabled(true)
-        runtime.settings.setLoginAutofillEnabled(true)
         runtime.webExtensionController.setPromptDelegate(webExtensionPromptDelegate)
         runtime.webExtensionController.setAddonManagerDelegate(addonManagerDelegate)
         warmUpWebExtensionController()
         setContent {
             BrowserApp(
                 runtime = runtime,
-                initialExternalUrl = pendingExternalUrl,
-                onExternalUrlConsumed = { consumedUrl ->
-                    if (pendingExternalUrl == consumedUrl) {
-                        pendingExternalUrl = null
-                    }
-                },
-                onCurrentPageUrlForAssist = { pageUrl ->
-                    latestAssistUrl = sanitizeAssistUrl(pageUrl)
-                },
                 onInstallExtensionRequest = { pageUrl ->
                     installFromCurrentPage(pageUrl)
                 }
@@ -153,30 +137,8 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    override fun onNewIntent(intent: Intent) {
-        super.onNewIntent(intent)
-        setIntent(intent)
-        val externalUrl = extractExternalUrl(intent) ?: return
-        pendingExternalUrl = externalUrl
-        latestAssistUrl = externalUrl
-    }
-
-    override fun onProvideAssistContent(outContent: AssistContent) {
-        super.onProvideAssistContent(outContent)
-        val assistUrl = sanitizeAssistUrl(latestAssistUrl) ?: return
-        outContent.webUri = Uri.parse(assistUrl)
-    }
-
-    override fun onProvideAssistData(data: Bundle) {
-        super.onProvideAssistData(data)
-        val assistUrl = sanitizeAssistUrl(latestAssistUrl) ?: return
-        data.putString("url", assistUrl)
-        data.putString("android.intent.extra.URL", assistUrl)
-    }
-
     override fun onResume() {
         super.onResume()
-        runtime.settings.setLoginAutofillEnabled(true)
         warmUpWebExtensionController()
     }
 
@@ -377,32 +339,6 @@ class MainActivity : ComponentActivity() {
                 }
             },
         )
-    }
-
-    private fun extractExternalUrl(intent: Intent?): String? {
-        val launchIntent = intent ?: return null
-        if (launchIntent.action != Intent.ACTION_VIEW) {
-            return null
-        }
-        val uri = launchIntent.data ?: return null
-        val scheme = uri.scheme?.lowercase() ?: return null
-        if (scheme != "http" && scheme != "https") {
-            return null
-        }
-        return uri.toString()
-    }
-
-    private fun sanitizeAssistUrl(url: String?): String? {
-        val value = url?.trim().orEmpty()
-        if (value.isBlank()) {
-            return null
-        }
-        val uri = runCatching { Uri.parse(value) }.getOrNull() ?: return null
-        val scheme = uri.scheme?.lowercase() ?: return null
-        if (scheme != "http" && scheme != "https") {
-            return null
-        }
-        return uri.toString()
     }
 }
 
