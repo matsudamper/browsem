@@ -16,6 +16,7 @@ class PaparazziComposablePreviewTest {
     fun snapshot() {
         AndroidComposablePreviewScanner()
             .scanPackageTrees("net.matsudamper.browser")
+            .includePrivatePreviews()
             .getPreviews()
             .forEach { preview ->
                 paparazzi.snapshot { preview() }
