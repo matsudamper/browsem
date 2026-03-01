@@ -39,6 +39,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
@@ -186,7 +187,7 @@ private fun TabsScreenContent(
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(start = 12.dp, top = 8.dp, end = 4.dp),
+                                        .padding(start = 12.dp, end = 4.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                 ) {
                                     Text(
@@ -200,9 +201,9 @@ private fun TabsScreenContent(
                                         onClick = { onCloseTab(tab.id) },
                                         modifier = Modifier.offset { IntOffset(4, -4) },
                                     ) {
-                                        Text(
-                                            text = "×",
-                                            style = MaterialTheme.typography.titleMedium,
+                                        Icon(
+                                            painter = painterResource(R.drawable.close_24dp),
+                                            contentDescription = "close"
                                         )
                                     }
                                 }
@@ -210,7 +211,8 @@ private fun TabsScreenContent(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .weight(1f)
-                                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                                        .padding(horizontal = 8.dp)
+                                        .padding(bottom = 8.dp)
                                         .clip(RoundedCornerShape(8.dp)),
                                     contentAlignment = Alignment.Center,
                                 ) {
