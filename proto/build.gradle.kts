@@ -1,5 +1,5 @@
 plugins {
-    id 'java-library'
+    id("java-library")
     alias(libs.plugins.protobuf)
 }
 
@@ -13,10 +13,10 @@ protobuf {
         artifact = "com.google.protobuf:protoc:${libs.versions.protobuf.get()}"
     }
     generateProtoTasks {
-        all().each { task ->
+        all().forEach { task ->
             task.builtins {
-                java {
-                    option 'lite'
+                named("java") {
+                    option("lite")
                 }
             }
         }
@@ -24,5 +24,5 @@ protobuf {
 }
 
 dependencies {
-    api libs.protobuf.javalite
+    api(libs.protobuf.javalite)
 }

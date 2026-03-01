@@ -12,12 +12,12 @@ dependencyResolutionManagement {
         google()
         mavenCentral()
         maven {
-            url "https://maven.mozilla.org/maven2"
+            url = uri("https://maven.mozilla.org/maven2")
         }
     }
 }
 
-rootProject.name = 'browser'
-include ':app'
-include ':data'
-include ':proto'
+rootProject.name = "browser"
+include(":app")
+include(":data")
+include(":proto")
