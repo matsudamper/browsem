@@ -31,10 +31,12 @@ fun GeckoBrowserTab(
     homepageUrl: String,
     searchTemplate: String,
     modifier: Modifier = Modifier,
+    onInstallExtensionRequest: (String) -> Unit,
     onOpenSettings: () -> Unit,
 ) {
     var urlInput by rememberSaveable { mutableStateOf(homepageUrl) }
     var loadedUrl by rememberSaveable { mutableStateOf(homepageUrl) }
+    var currentPageUrl by rememberSaveable { mutableStateOf(homepageUrl) }
     var canGoBack by remember { mutableStateOf(false) }
     var isUrlInputFocused by remember { mutableStateOf(false) }
     val keyboardController = LocalSoftwareKeyboardController.current
@@ -56,6 +58,7 @@ fun GeckoBrowserTab(
                 perms: MutableList<GeckoSession.PermissionDelegate.ContentPermission>,
                 hasUserGesture: Boolean
             ) {
+                currentPageUrl = url.orEmpty()
                 if (!isUrlInputFocused) {
                     urlInput = url.orEmpty()
                 }
@@ -98,9 +101,14 @@ fun GeckoBrowserTab(
                 val resolved = buildUrlFromInput(rawInput, homepageUrl, searchTemplate)
                 urlInput = resolved
                 loadedUrl = resolved
+                currentPageUrl = resolved
                 keyboardController?.hide()
             },
             onFocusChanged = { hasFocus -> isUrlInputFocused = hasFocus },
+            showInstallExtensionItem = resolveAmoInstallUriFromPage(currentPageUrl) != null,
+            onInstallExtension = {
+                onInstallExtensionRequest(currentPageUrl)
+            },
             onOpenSettings = onOpenSettings,
         )
 

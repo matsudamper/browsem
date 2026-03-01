@@ -26,11 +26,15 @@ private sealed interface AppDestination : NavKey {
 
     @Serializable
     data object Settings : AppDestination
+
+    @Serializable
+    data object Extensions : AppDestination
 }
 
 @Composable
 internal fun BrowserApp(
     runtime: GeckoRuntime,
+    onInstallExtensionRequest: (String) -> Unit,
 ) {
     val context = LocalContext.current
     val settingsRepository = remember { SettingsRepository(context) }
@@ -54,6 +58,7 @@ internal fun BrowserApp(
                         runtime = runtime,
                         homepageUrl = settings.resolvedHomepageUrl(),
                         searchTemplate = settings.resolvedSearchTemplate(),
+                        onInstallExtensionRequest = onInstallExtensionRequest,
                         onOpenSettings = {
                             backStack.add(AppDestination.Settings)
                         },
@@ -66,6 +71,14 @@ internal fun BrowserApp(
                         onSettingsChange = { newSettings ->
                             scope.launch { settingsRepository.updateSettings(newSettings) }
                         },
+                        onOpenExtensions = { backStack.add(AppDestination.Extensions) },
+                        onBack = { backStack.removeLastOrNull() },
+                    )
+                }
+
+                AppDestination.Extensions -> NavEntry<NavKey>(key) {
+                    ExtensionsScreen(
+                        runtime = runtime,
                         onBack = { backStack.removeLastOrNull() },
                     )
                 }
