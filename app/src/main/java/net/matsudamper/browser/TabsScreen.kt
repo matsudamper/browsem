@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
@@ -22,13 +21,16 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -65,142 +67,151 @@ internal fun TabsScreen(
     onSelectTab: (Long) -> Unit,
     onCloseTab: (Long) -> Unit,
     onOpenNewTab: () -> Unit,
-    onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Column(
+    Box(
         modifier = modifier
             .fillMaxSize()
             .windowInsetsPadding(WindowInsets.safeDrawing),
     ) {
-        Surface(
-            color = MaterialTheme.colorScheme.primaryContainer,
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(TabsLayoutDefaults.topBarHeight)
-                    .padding(horizontal = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                TextButton(onClick = onBack) {
-                    Text("戻る")
-                }
-                Text(
-                    text = "Tabs",
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.weight(1f),
-                )
-                TextButton(onClick = onOpenNewTab) {
-                    Text("新規")
-                }
-            }
-        }
-
-        if (tabs.isEmpty()) {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text("タブがありません")
-            }
-            return
-        }
-
-        BoxWithConstraints(
+        Column(
             modifier = Modifier.fillMaxSize(),
         ) {
-            val columns = TabsLayoutDefaults.calculateColumns(maxWidth)
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(columns),
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(TabsLayoutDefaults.gridPadding),
-                verticalArrangement = Arrangement.spacedBy(TabsLayoutDefaults.gridSpacing),
-                horizontalArrangement = Arrangement.spacedBy(TabsLayoutDefaults.gridSpacing),
+            Surface(
+                color = MaterialTheme.colorScheme.primaryContainer,
             ) {
-                items(
-                    items = tabs,
-                    key = { tab -> tab.id },
-                ) { tab ->
-                    val selected = tab.id == selectedTabId
-                    Card(
-                        onClick = { onSelectTab(tab.id) },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .aspectRatio(TabsLayoutDefaults.cardAspectRatio),
-                        border = BorderStroke(
-                            width = if (selected) 2.dp else 1.dp,
-                            color = if (selected) {
-                                MaterialTheme.colorScheme.primary
-                            } else {
-                                MaterialTheme.colorScheme.outlineVariant
-                            },
-                        ),
-                        colors = CardDefaults.cardColors(
-                            containerColor = if (selected) {
-                                MaterialTheme.colorScheme.primaryContainer
-                            } else {
-                                MaterialTheme.colorScheme.surfaceVariant
-                            }
-                        ),
-                        elevation = CardDefaults.cardElevation(
-                            defaultElevation = if (selected) 8.dp else 1.dp
-                        ),
-                    ) {
-                        Column(
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(TabsLayoutDefaults.topBarHeight)
+                        .padding(horizontal = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = "Tabs",
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
+
+            if (tabs.isEmpty()) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text("タブがありません")
+                }
+                return
+            }
+
+            BoxWithConstraints(
+                modifier = Modifier.fillMaxSize(),
+            ) {
+                val columns = TabsLayoutDefaults.calculateColumns(maxWidth)
+                LazyVerticalGrid(
+                    columns = GridCells.Fixed(columns),
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(TabsLayoutDefaults.gridPadding),
+                    verticalArrangement = Arrangement.spacedBy(TabsLayoutDefaults.gridSpacing),
+                    horizontalArrangement = Arrangement.spacedBy(TabsLayoutDefaults.gridSpacing),
+                ) {
+                    items(
+                        items = tabs,
+                        key = { tab -> tab.id },
+                    ) { tab ->
+                        val selected = tab.id == selectedTabId
+                        Card(
+                            onClick = { onSelectTab(tab.id) },
                             modifier = Modifier
-                                .fillMaxSize(),
+                                .fillMaxWidth()
+                                .aspectRatio(TabsLayoutDefaults.cardAspectRatio),
+                            border = BorderStroke(
+                                width = if (selected) 2.dp else 1.dp,
+                                color = if (selected) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.outlineVariant
+                                },
+                            ),
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (selected) {
+                                    MaterialTheme.colorScheme.primaryContainer
+                                } else {
+                                    MaterialTheme.colorScheme.surfaceVariant
+                                }
+                            ),
+                            elevation = CardDefaults.cardElevation(
+                                defaultElevation = if (selected) 8.dp else 1.dp
+                            ),
                         ) {
-                            Row(
+                            Column(
                                 modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(start = 12.dp, top = 8.dp, end = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically,
+                                    .fillMaxSize(),
                             ) {
-                                Text(
-                                    text = tab.title.ifBlank { "Untitled" },
-                                    style = MaterialTheme.typography.titleSmall,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.weight(1f),
-                                )
-                                IconButton(
-                                    onClick = { onCloseTab(tab.id) },
-                                    modifier = Modifier.offset { IntOffset(4, -4) },
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(start = 12.dp, top = 8.dp, end = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
                                 ) {
                                     Text(
-                                        text = "×",
-                                        style = MaterialTheme.typography.titleMedium,
+                                        text = tab.title.ifBlank { "Untitled" },
+                                        style = MaterialTheme.typography.titleSmall,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.weight(1f),
                                     )
+                                    IconButton(
+                                        onClick = { onCloseTab(tab.id) },
+                                        modifier = Modifier.offset { IntOffset(4, -4) },
+                                    ) {
+                                        Text(
+                                            text = "×",
+                                            style = MaterialTheme.typography.titleMedium,
+                                        )
+                                    }
                                 }
-                            }
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .weight(1f)
-                                    .padding(horizontal = 12.dp, vertical = 8.dp)
-                                    .clip(RoundedCornerShape(8.dp)),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                val preview = tab.previewBitmap
-                                if (preview != null) {
-                                    Image(
-                                        bitmap = preview.asImageBitmap(),
-                                        contentDescription = "Tab preview",
-                                        contentScale = ContentScale.Crop,
-                                        modifier = Modifier.fillMaxSize(),
-                                    )
-                                } else {
-                                    Text(
-                                        text = "No Preview",
-                                        style = MaterialTheme.typography.bodySmall,
-                                    )
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .weight(1f)
+                                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                                        .clip(RoundedCornerShape(8.dp)),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    val preview = tab.previewBitmap
+                                    if (preview != null) {
+                                        Image(
+                                            bitmap = preview.asImageBitmap(),
+                                            contentDescription = "Tab preview",
+                                            contentScale = ContentScale.Crop,
+                                            modifier = Modifier.fillMaxSize(),
+                                        )
+                                    } else {
+                                        Text(
+                                            text = "No Preview",
+                                            style = MaterialTheme.typography.bodySmall,
+                                        )
+                                    }
                                 }
                             }
                         }
                     }
                 }
             }
+        }
+
+        FloatingActionButton(
+            onClick = onOpenNewTab,
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(16.dp),
+        ) {
+            Icon(
+                imageVector = Icons.Default.Add,
+                contentDescription = "新規タブ",
+            )
         }
     }
 }
