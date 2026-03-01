@@ -68,6 +68,8 @@ fun GeckoBrowserTab(
     onInstallExtensionRequest: (String) -> Unit,
     onOpenSettings: () -> Unit,
     onOpenTabs: () -> Unit,
+    onSwipeToPreviousTab: () -> Unit,
+    onSwipeToNextTab: () -> Unit,
     onCurrentPageUrlChange: (String) -> Unit,
     onSessionStateChange: (String) -> Unit,
     onTabPreviewCaptured: (Bitmap) -> Unit,
@@ -296,6 +298,8 @@ fun GeckoBrowserTab(
                 onForward = { session.goForward() },
                 canGoForward = canGoForward,
                 onRefresh = { session.reload() },
+                onSwipeToPreviousTab = onSwipeToPreviousTab,
+                onSwipeToNextTab = onSwipeToNextTab,
             )
         }
 

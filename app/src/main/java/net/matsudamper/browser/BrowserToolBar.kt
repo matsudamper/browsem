@@ -1,7 +1,8 @@
 package net.matsudamper.browser
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -38,6 +39,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
@@ -65,14 +67,24 @@ internal fun BrowserToolBar(
     onFindInPage: () -> Unit,
     isPcMode: Boolean,
     onPcModeToggle: () -> Unit,
+    onSwipeToPreviousTab: () -> Unit,
+    onSwipeToNextTab: () -> Unit,
 ) {
     val latestOnOpenTabs by rememberUpdatedState(onOpenTabs)
+    val latestOnSwipeToPreviousTab by rememberUpdatedState(onSwipeToPreviousTab)
+    val latestOnSwipeToNextTab by rememberUpdatedState(onSwipeToNextTab)
     val swipeToOpenTabsModifier = modifier.pointerInput(Unit) {
-        detectDownSwipe(
+        detectToolbarGestures(
             density = this,
             onDownSwipe = {
                 latestOnOpenTabs()
-            }
+            },
+            onLeftSwipe = {
+                latestOnSwipeToNextTab()
+            },
+            onRightSwipe = {
+                latestOnSwipeToPreviousTab()
+            },
         )
     }
 
@@ -261,35 +273,54 @@ private fun Preview() {
             onHome = {},
             onForward = {},
             canGoForward = false,
+            onSwipeToPreviousTab = {},
+            onSwipeToNextTab = {},
         )
     }
 }
 
-private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.detectDownSwipe(
+private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.detectToolbarGestures(
     density: Density,
     onDownSwipe: () -> Unit,
+    onLeftSwipe: () -> Unit,
+    onRightSwipe: () -> Unit,
 ) {
     val triggerDistance = with(density) { 56.dp.toPx() }
-    var totalDrag = 0f
-    detectVerticalDragGestures(
-        onDragStart = {
-            totalDrag = 0f
-        },
-        onVerticalDrag = { _, dragAmount ->
-            if (dragAmount > 0f) {
-                totalDrag += dragAmount
-            } else {
-                totalDrag = 0f
+    awaitEachGesture {
+        val pointerId = awaitFirstDown().id
+        var totalHorizontalDrag = 0f
+        var totalVerticalDrag = 0f
+
+        while (true) {
+            val event = awaitPointerEvent()
+            val change = event.changes.firstOrNull { it.id == pointerId } ?: continue
+            val dragDelta = change.positionChange()
+
+            totalHorizontalDrag += dragDelta.x
+            totalVerticalDrag += dragDelta.y
+
+            if (dragDelta.x != 0f || dragDelta.y != 0f) {
+                change.consume()
             }
-        },
-        onDragEnd = {
-            if (totalDrag >= triggerDistance) {
-                onDownSwipe()
+
+            if (!change.pressed) {
+                val absoluteHorizontalDrag = kotlin.math.abs(totalHorizontalDrag)
+                val absoluteVerticalDrag = kotlin.math.abs(totalVerticalDrag)
+                when {
+                    absoluteHorizontalDrag >= triggerDistance && absoluteHorizontalDrag > absoluteVerticalDrag -> {
+                        if (totalHorizontalDrag < 0f) {
+                            onLeftSwipe()
+                        } else {
+                            onRightSwipe()
+                        }
+                    }
+
+                    totalVerticalDrag >= triggerDistance && absoluteVerticalDrag > absoluteHorizontalDrag -> {
+                        onDownSwipe()
+                    }
+                }
+                break
             }
-            totalDrag = 0f
-        },
-        onDragCancel = {
-            totalDrag = 0f
-        },
-    )
+        }
+    }
 }

@@ -136,6 +136,16 @@ internal fun BrowserApp(
                                     onOpenTabs = {
                                         tabsVisible = true
                                     },
+                                    onSwipeToPreviousTab = {
+                                        if (browserSessionController.selectPreviousTab()) {
+                                            tabPersistenceSignal++
+                                        }
+                                    },
+                                    onSwipeToNextTab = {
+                                        if (browserSessionController.selectNextTab()) {
+                                            tabPersistenceSignal++
+                                        }
+                                    },
                                     onCurrentPageUrlChange = { currentUrl ->
                                         browserSessionController.updateTabUrl(
                                             tabId = selectedTab.id,

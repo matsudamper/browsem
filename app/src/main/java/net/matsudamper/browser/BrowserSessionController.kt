@@ -87,6 +87,24 @@ internal class BrowserSessionController(runtime: GeckoRuntime) {
         }
     }
 
+    fun selectPreviousTab(): Boolean {
+        val currentIndex = tabList.indexOfFirst { it.id == selectedTabId }
+        if (currentIndex <= 0) {
+            return false
+        }
+        selectedTabId = tabList[currentIndex - 1].id
+        return true
+    }
+
+    fun selectNextTab(): Boolean {
+        val currentIndex = tabList.indexOfFirst { it.id == selectedTabId }
+        if (currentIndex < 0 || currentIndex >= tabList.lastIndex) {
+            return false
+        }
+        selectedTabId = tabList[currentIndex + 1].id
+        return true
+    }
+
     fun updateTabUrl(tabId: Long, url: String) {
         tabList.firstOrNull { it.id == tabId }?.currentUrl = url
     }
