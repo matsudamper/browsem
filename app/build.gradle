@@ -9,12 +9,13 @@ def useCiDebugKeystore = ciDebugKeystoreFile != null && ciDebugKeystoreFile.exis
 
 android {
     namespace 'net.matsudamper.browser'
-    compileSdk 36
+    compileSdk 34
+    buildToolsVersion "34.0.0"
 
     defaultConfig {
         applicationId "net.matsudamper.browser"
         minSdk 26
-        targetSdk 36
+        targetSdk 34
         versionCode 1
         versionName "1.0"
 

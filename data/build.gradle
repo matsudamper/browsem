@@ -1,12 +1,11 @@
 plugins {
-    alias(libs.plugins.android.library)
-    alias(libs.plugins.kotlin.android)
-    alias(libs.plugins.protobuf)
+    id 'com.android.library'
 }
 
 android {
     namespace 'net.matsudamper.browser.data'
-    compileSdk 36
+    compileSdk 34
+    buildToolsVersion "34.0.0"
 
     defaultConfig {
         minSdk 26
@@ -16,6 +15,14 @@ android {
         sourceCompatibility JavaVersion.VERSION_21
         targetCompatibility JavaVersion.VERSION_21
     }
+
+    sourceSets {
+        main {
+            java {
+                srcDirs += 'src/main/generated'
+            }
+        }
+    }
 }
 
 kotlin {
@@ -24,22 +31,70 @@ kotlin {
     }
 }
 
-protobuf {
-    protoc {
-        artifact = "com.google.protobuf:protoc:${libs.versions.protobuf.get()}"
-    }
-    generateProtoTasks {
-        all().each { task ->
-            task.builtins {
-                java {
-                    option 'lite'
-                }
-            }
+dependencies {
+    implementation libs.androidx.datastore
+    implementation libs.protobuf.javalite
+}
+
+// Proto code generation task - uses protoc from environment or downloads it
+task generateProtoClasses {
+    doLast {
+        def outputDir = new File(projectDir, 'src/main/generated')
+        def protoDir = new File(projectDir, 'src/main/proto')
+
+        if (!protoDir.exists()) return
+
+        outputDir.mkdirs()
+
+        // Find protoc - check PATH first, then check common install locations
+        def protocCmd = findProtoc()
+        if (protocCmd == null) {
+            println "Warning: protoc not found. Proto files will not be generated."
+            println "Install protobuf or run: .claude/hooks/session-start.sh"
+            return
+        }
+
+        def protoFiles = fileTree(protoDir).include('**/*.proto').collect { it.path }
+
+        if (protoFiles.isEmpty()) {
+            return
+        }
+
+        println "Generating proto classes with protoc..."
+        exec {
+            commandLine protocCmd,
+                    "--java_out=lite:${outputDir}",
+                    "-I${protoDir}",
+                    *protoFiles
         }
     }
 }
 
-dependencies {
-    implementation libs.androidx.datastore
-    implementation libs.protobuf.javalite
+static def findProtoc() {
+    // Check if protoc is in PATH
+    def processResult = "which protoc".execute().waitFor()
+    if (processResult == 0) {
+        return "protoc"
+    }
+
+    // Check common installation paths
+    def paths = [
+        '/usr/bin/protoc',
+        '/usr/local/bin/protoc',
+        System.getenv('HOME') + '/.gradle/protobuf-tools/bin/protoc'
+    ]
+
+    for (path in paths) {
+        if (new File(path).exists()) {
+            return path
+        }
+    }
+
+    return null
+}
+
+// Make sure proto classes are generated before compiling
+afterEvaluate {
+    compileDebugJavaWithJavac.dependsOn generateProtoClasses
+    compileReleaseJavaWithJavac.dependsOn generateProtoClasses
 }
