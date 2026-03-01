@@ -6,8 +6,6 @@ agent: general-purpose
 argument-hint: "[フィルター文字列]"
 ---
 
-Paparazzi で `@Preview` コンポーザブルのスクリーンショットを撮影します。
-
 ## 手順
 
 1. `$ARGUMENTS` が空かどうかを確認する。
