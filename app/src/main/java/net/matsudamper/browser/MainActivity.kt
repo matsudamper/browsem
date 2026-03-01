@@ -118,13 +118,13 @@ class MainActivity : ComponentActivity() {
             Box(
                 modifier = Modifier.semantics {
                     testTagsAsResourceId = true
-                }
+                },
             ) {
                 BrowserApp(
                     runtime = runtime,
                     onInstallExtensionRequest = { pageUrl ->
                         installFromCurrentPage(pageUrl)
-                    }
+                    },
                 )
             }
             installPromptState?.let { prompt ->
