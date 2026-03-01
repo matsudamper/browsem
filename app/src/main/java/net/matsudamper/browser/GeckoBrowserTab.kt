@@ -36,6 +36,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -51,6 +52,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import kotlinx.coroutines.launch
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.GeckoSessionSettings
 import org.mozilla.geckoview.GeckoView
@@ -85,6 +87,7 @@ fun GeckoBrowserTab(
     val lifecycleOwner = LocalLifecycleOwner.current
     val isImeVisible = WindowInsets.isImeVisible
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
 
     var showFindInPage by remember { mutableStateOf(false) }
     var findQuery by remember { mutableStateOf("") }
@@ -296,6 +299,11 @@ fun GeckoBrowserTab(
                 onForward = { session.goForward() },
                 canGoForward = canGoForward,
                 onRefresh = { session.reload() },
+                onTranslatePage = {
+                    scope.launch {
+                        runCatching { PageTranslator(session, currentPageUrl).translatePageToJapanese() }
+                    }
+                },
             )
         }
 

@@ -65,6 +65,7 @@ internal fun BrowserToolBar(
     onFindInPage: () -> Unit,
     isPcMode: Boolean,
     onPcModeToggle: () -> Unit,
+    onTranslatePage: () -> Unit,
 ) {
     val latestOnOpenTabs by rememberUpdatedState(onOpenTabs)
     val swipeToOpenTabsModifier = modifier.pointerInput(Unit) {
@@ -207,6 +208,15 @@ internal fun BrowserToolBar(
                     }
                     DropdownMenuItem(
                         text = {
+                            Text(text = "翻訳（ローカルAI）")
+                        },
+                        onClick = {
+                            visibleMenu = false
+                            onTranslatePage()
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = {
                             Text(text = "共有")
                         },
                         onClick = {
@@ -261,6 +271,7 @@ private fun Preview() {
             onHome = {},
             onForward = {},
             canGoForward = false,
+            onTranslatePage = {},
         )
     }
 }
