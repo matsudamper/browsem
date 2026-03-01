@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+option java_package = "net.matsudamper.browser.data";
+option java_multiple_files = true;
+
+enum HomepageType {
+  HOMEPAGE_GOOGLE = 0;
+  HOMEPAGE_DUCKDUCKGO = 1;
+  HOMEPAGE_CUSTOM = 2;
+}
+
+enum SearchProvider {
+  GOOGLE = 0;
+  DUCKDUCKGO = 1;
+  CUSTOM = 2;
+}
+
+message BrowserSettings {
+  HomepageType homepage_type = 1;
+  string custom_homepage_url = 2;
+  SearchProvider search_provider = 3;
+  string custom_search_url = 4;
+}
