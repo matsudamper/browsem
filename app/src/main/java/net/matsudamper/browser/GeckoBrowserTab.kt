@@ -1,8 +1,12 @@
 package net.matsudamper.browser
 
+import android.app.DownloadManager
 import android.content.Intent
 import android.graphics.Bitmap
+import android.net.Uri
 import android.view.View
+import android.webkit.URLUtil
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -27,9 +31,11 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -91,6 +97,7 @@ fun GeckoBrowserTab(
     var findQuery by remember { mutableStateOf("") }
     var findMatchCurrent by remember { mutableIntStateOf(0) }
     var findMatchTotal by remember { mutableIntStateOf(0) }
+    var imageContextMenuUrl by remember(tabId) { mutableStateOf<String?>(null) }
 
     fun closeFindInPage() {
         showFindInPage = false
@@ -155,6 +162,16 @@ fun GeckoBrowserTab(
                 val newTitle = title.orEmpty()
                 currentPageTitle = newTitle
                 onTabTitleChange(newTitle)
+            }
+
+            override fun onContextMenu(
+                session: GeckoSession,
+                screenX: Int,
+                screenY: Int,
+                element: GeckoSession.ContentDelegate.ContextElement
+            ) {
+                val imageUrl = element.srcUri ?: return
+                imageContextMenuUrl = imageUrl
             }
         }
         val progressDelegate = object : GeckoSession.ProgressDelegate {
@@ -322,6 +339,45 @@ fun GeckoBrowserTab(
             },
             modifier = Modifier.fillMaxSize()
         )
+
+        imageContextMenuUrl?.let { imageUrl ->
+            AlertDialog(
+                onDismissRequest = { imageContextMenuUrl = null },
+                title = {
+                    Text(text = "画像")
+                },
+                text = {
+                    Text(text = "この画像をダウンロードしますか？")
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            val request = DownloadManager.Request(Uri.parse(imageUrl)).apply {
+                                setTitle(URLUtil.guessFileName(imageUrl, null, null))
+                                setDescription(currentPageTitle.ifEmpty { currentPageUrl })
+                                setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                                setMimeType("image/*")
+                            }
+                            val downloadManager = context.getSystemService(DownloadManager::class.java)
+                            if (downloadManager != null) {
+                                downloadManager.enqueue(request)
+                                Toast.makeText(context, "画像のダウンロードを開始しました", Toast.LENGTH_SHORT).show()
+                            } else {
+                                Toast.makeText(context, "ダウンロードに失敗しました", Toast.LENGTH_SHORT).show()
+                            }
+                            imageContextMenuUrl = null
+                        },
+                    ) {
+                        Text(text = "ダウンロード")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { imageContextMenuUrl = null }) {
+                        Text(text = "キャンセル")
+                    }
+                },
+            )
+        }
     }
 }
 
