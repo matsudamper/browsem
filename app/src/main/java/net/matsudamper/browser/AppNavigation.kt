@@ -223,6 +223,10 @@ internal fun BrowserApp(
                         ExtensionsScreen(
                             runtime = runtime,
                             onBack = { backStack.removeLastOrNull() },
+                            onOpenExtensionSettings = { optionsPageUrl ->
+                                browserSessionController.selectedTab?.session?.loadUri(optionsPageUrl)
+                                backStack.removeLastOrNull()
+                            },
                         )
                     }
 
