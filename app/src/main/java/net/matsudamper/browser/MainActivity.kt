@@ -15,6 +15,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -22,6 +23,8 @@ import androidx.core.content.ContextCompat
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTagsAsResourceId
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.receiveAsFlow
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.GeckoRuntime
@@ -37,6 +40,7 @@ class MainActivity : ComponentActivity() {
     private var installFailureMessage by mutableStateOf<String?>(null)
     private var webExtensionWarmUpCompleted = false
     private var webExtensionWarmUpInProgress = false
+    private val createNewTabChannel = Channel<String>(Channel.UNLIMITED)
     private var pendingNotificationPermissionResult: GeckoResult<Int>? = null
 
     private val requestNotificationPermissionLauncher = registerForActivityResult(
@@ -134,7 +138,22 @@ class MainActivity : ComponentActivity() {
         runtime.webExtensionController.setPromptDelegate(webExtensionPromptDelegate)
         runtime.webExtensionController.setAddonManagerDelegate(addonManagerDelegate)
         warmUpWebExtensionController()
+
+        if (savedInstanceState != null) {
+            val url = intent.dataString
+            if (url != null) {
+                createNewTabChannel.trySend(url)
+            }
+        }
+
         setContent {
+            val browserSessionController = rememberBrowserSessionController(runtime)
+            LaunchedEffect(Unit) {
+                createNewTabChannel.receiveAsFlow().collect { url ->
+                    val newTab = browserSessionController.createTab(url)
+                    browserSessionController.selectTab(newTab.id)
+                }
+            }
             Box(
                 modifier = Modifier.semantics {
                     testTagsAsResourceId = true
@@ -142,6 +161,7 @@ class MainActivity : ComponentActivity() {
             ) {
                 BrowserApp(
                     runtime = runtime,
+                    browserSessionController = browserSessionController,
                     onInstallExtensionRequest = { pageUrl ->
                         installFromCurrentPage(pageUrl)
                     },
@@ -167,6 +187,15 @@ class MainActivity : ComponentActivity() {
                     onDismiss = { installFailureMessage = null }
                 )
             }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        val url = intent.dataString
+        if (url != null) {
+            createNewTabChannel.trySend(url)
         }
     }
 
