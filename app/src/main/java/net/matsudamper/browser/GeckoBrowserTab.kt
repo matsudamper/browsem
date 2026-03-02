@@ -157,6 +157,7 @@ fun GeckoBrowserTab(
 
             override fun onWebAppManifest(session: GeckoSession, manifest: JSONObject) {
                 val colorString = manifest.optString("theme_color").takeIf { it.isNotBlank() }
+                    ?: manifest.optString("theme-color").takeIf { it.isNotBlank() }
                 val parsedColor = colorString?.let { parseManifestColor(it) }
                 toolbarColor = parsedColor
             }
@@ -236,11 +237,12 @@ fun GeckoBrowserTab(
                 },
                 onPrevious = {
                     if (findQuery.isNotEmpty()) {
-                        session.finder.find(findQuery, GeckoSession.FINDER_FIND_BACKWARDS).then<Void?> { result ->
-                            findMatchCurrent = result?.current ?: 0
-                            findMatchTotal = result?.total ?: 0
-                            null
-                        }
+                        session.finder.find(findQuery, GeckoSession.FINDER_FIND_BACKWARDS)
+                            .then<Void?> { result ->
+                                findMatchCurrent = result?.current ?: 0
+                                findMatchTotal = result?.total ?: 0
+                                null
+                            }
                     }
                 },
                 onClose = {
