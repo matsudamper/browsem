@@ -25,15 +25,16 @@ import androidx.navigation3.runtime.NavEntry
 import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.ui.NavDisplay
+import com.google.protobuf.ByteString
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
-import net.matsudamper.browser.data.BrowserSettings
 import net.matsudamper.browser.data.PersistedTabState
 import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.resolvedHomepageUrl
 import net.matsudamper.browser.data.resolvedSearchTemplate
+import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoRuntime
-import kotlinx.coroutines.delay
 
 @Serializable
 private sealed interface AppDestination : NavKey {
@@ -51,25 +52,28 @@ private sealed interface AppDestination : NavKey {
 internal fun BrowserApp(
     runtime: GeckoRuntime,
     onInstallExtensionRequest: (String) -> Unit,
+    onDesktopNotificationPermissionRequest: () -> GeckoResult<Int>,
 ) {
     val context = LocalContext.current
     val settingsRepository = remember { SettingsRepository(context) }
     val settings by settingsRepository.settings
-        .collectAsState(initial = BrowserSettings.getDefaultInstance())
+        .collectAsState(initial = null)
+    val currentSettings = settings ?: return
     val browserSessionController = rememberBrowserSessionController(runtime)
-    val homepageUrl = settings.resolvedHomepageUrl()
-    val searchTemplate = settings.resolvedSearchTemplate()
+    val homepageUrl = currentSettings.resolvedHomepageUrl()
+    val searchTemplate = currentSettings.resolvedSearchTemplate()
 
     val scope = rememberCoroutineScope()
     val backStack = rememberNavBackStack(AppDestination.Browser)
     var tabPersistenceSignal by remember { mutableLongStateOf(0L) }
 
-    val persistedTabs = remember(settings.tabStatesList) {
-        settings.tabStatesList.map { tabState ->
+    val persistedTabs = remember(currentSettings.tabStatesList) {
+        currentSettings.tabStatesList.map { tabState ->
             PersistedBrowserTab(
                 url = tabState.url,
                 sessionState = tabState.sessionState,
                 title = tabState.title,
+                previewImageWebp = tabState.previewImageWebp.toByteArray(),
             )
         }
     }
@@ -85,17 +89,18 @@ internal fun BrowserApp(
                     url = tab.url,
                     sessionState = tab.sessionState,
                     title = tab.title,
+                    previewImageWebp = ByteString.copyFrom(tab.previewImageWebp),
                 )
             },
             selectedTabIndex = browserSessionController.selectedTabIndex,
         )
     }
 
-    LaunchedEffect(browserSessionController, homepageUrl, persistedTabs, settings.selectedTabIndex) {
+    LaunchedEffect(browserSessionController, homepageUrl, persistedTabs, currentSettings.selectedTabIndex) {
         browserSessionController.ensureInitialPageLoaded(
             homepageUrl = homepageUrl,
             persistedTabs = persistedTabs,
-            persistedSelectedTabIndex = settings.selectedTabIndex,
+            persistedSelectedTabIndex = currentSettings.selectedTabIndex,
         )
     }
 
@@ -103,7 +108,7 @@ internal fun BrowserApp(
         backStack.removeLastOrNull()
     }
 
-    BrowserTheme(themeMode = settings.themeMode) {
+    BrowserTheme(themeMode = currentSettings.themeMode) {
         NavDisplay(
             backStack = backStack,
             onBack = { backStack.removeLastOrNull() },
@@ -130,6 +135,7 @@ internal fun BrowserApp(
                                     searchTemplate = searchTemplate,
                                     tabCount = tabs.size,
                                     onInstallExtensionRequest = onInstallExtensionRequest,
+                                    onDesktopNotificationPermissionRequest = onDesktopNotificationPermissionRequest,
                                     onOpenSettings = {
                                         backStack.add(AppDestination.Settings)
                                     },
@@ -196,9 +202,6 @@ internal fun BrowserApp(
                                             tabPersistenceSignal++
                                             tabsVisible = false
                                         },
-                                        onBack = {
-                                            tabsVisible = false
-                                        },
                                         modifier = Modifier
                                             .fillMaxSize()
                                             .background(MaterialTheme.colorScheme.surface),
@@ -210,7 +213,7 @@ internal fun BrowserApp(
 
                     AppDestination.Settings -> NavEntry<NavKey>(key) {
                         SettingsScreen(
-                            settings = settings,
+                            settings = currentSettings,
                             onSettingsChange = { newSettings ->
                                 scope.launch { settingsRepository.updateSettings(newSettings) }
                             },
@@ -223,6 +226,10 @@ internal fun BrowserApp(
                         ExtensionsScreen(
                             runtime = runtime,
                             onBack = { backStack.removeLastOrNull() },
+                            onOpenExtensionSettings = { optionsPageUrl ->
+                                browserSessionController.selectedTab?.session?.loadUri(optionsPageUrl)
+                                backStack.removeLastOrNull()
+                            },
                         )
                     }
 
