@@ -3,6 +3,7 @@ package net.matsudamper.browser
 import android.content.Intent
 import android.graphics.Bitmap
 import android.view.View
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -27,9 +28,11 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -37,6 +40,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -52,6 +56,8 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import kotlinx.coroutines.launch
+import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.GeckoSessionSettings
@@ -88,11 +94,19 @@ fun GeckoBrowserTab(
     val lifecycleOwner = LocalLifecycleOwner.current
     val isImeVisible = WindowInsets.isImeVisible
     val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+    val geckoDownloadManager = remember(context) {
+        GeckoDownloadManager(
+            context = context,
+            runtime = GeckoRuntime.getDefault(context),
+        )
+    }
 
     var showFindInPage by remember { mutableStateOf(false) }
     var findQuery by remember { mutableStateOf("") }
     var findMatchCurrent by remember { mutableIntStateOf(0) }
     var findMatchTotal by remember { mutableIntStateOf(0) }
+    var imageContextMenuUrl by remember(tabId) { mutableStateOf<String?>(null) }
 
     fun closeFindInPage() {
         showFindInPage = false
@@ -171,6 +185,25 @@ fun GeckoBrowserTab(
                 val newTitle = title.orEmpty()
                 currentPageTitle = newTitle
                 onTabTitleChange(newTitle)
+            }
+
+            override fun onContextMenu(
+                session: GeckoSession,
+                screenX: Int,
+                screenY: Int,
+                element: GeckoSession.ContentDelegate.ContextElement
+            ) {
+
+                when (element.type) {
+                    GeckoSession.ContentDelegate.ContextElement.TYPE_NONE,
+                    GeckoSession.ContentDelegate.ContextElement.TYPE_VIDEO,
+                    GeckoSession.ContentDelegate.ContextElement.TYPE_AUDIO -> {
+                    }
+
+                    GeckoSession.ContentDelegate.ContextElement.TYPE_IMAGE -> {
+                        imageContextMenuUrl = element.srcUri
+                    }
+                }
             }
         }
         val progressDelegate = object : GeckoSession.ProgressDelegate {
@@ -252,11 +285,12 @@ fun GeckoBrowserTab(
                 },
                 onPrevious = {
                     if (findQuery.isNotEmpty()) {
-                        session.finder.find(findQuery, GeckoSession.FINDER_FIND_BACKWARDS).then<Void?> { result ->
-                            findMatchCurrent = result?.current ?: 0
-                            findMatchTotal = result?.total ?: 0
-                            null
-                        }
+                        session.finder.find(findQuery, GeckoSession.FINDER_FIND_BACKWARDS)
+                            .then<Void?> { result ->
+                                findMatchCurrent = result?.current ?: 0
+                                findMatchTotal = result?.total ?: 0
+                                null
+                            }
                     }
                 },
                 onClose = {
@@ -324,7 +358,8 @@ fun GeckoBrowserTab(
             factory = { context ->
                 GeckoView(context).also { geckoView ->
                     geckoView.setAutofillEnabled(true)
-                    geckoView.importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_YES_EXCLUDE_DESCENDANTS
+                    geckoView.importantForAutofill =
+                        View.IMPORTANT_FOR_AUTOFILL_YES_EXCLUDE_DESCENDANTS
                     geckoView.setSession(session)
                     geckoViewRef = geckoView
                 }
@@ -342,6 +377,46 @@ fun GeckoBrowserTab(
             },
             modifier = Modifier.fillMaxSize()
         )
+
+        imageContextMenuUrl?.let { imageUrl ->
+            AlertDialog(
+                onDismissRequest = { imageContextMenuUrl = null },
+                title = {
+                    Text(text = "画像")
+                },
+                text = {
+                    Text(text = "この画像をダウンロードしますか？")
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            imageContextMenuUrl = null
+                            coroutineScope.launch {
+                                val result = runCatching {
+                                    geckoDownloadManager.downloadImageWithSession(
+                                        imageUrl = imageUrl,
+                                        referrerUrl = currentPageUrl,
+                                    )
+                                }.onFailure { it.printStackTrace() }
+                                val message = if (result.isSuccess) {
+                                    "画像をダウンロードしました"
+                                } else {
+                                    "画像のダウンロードに失敗しました"
+                                }
+                                Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                    ) {
+                        Text(text = "ダウンロード")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { imageContextMenuUrl = null }) {
+                        Text(text = "キャンセル")
+                    }
+                },
+            )
+        }
     }
 }
 
