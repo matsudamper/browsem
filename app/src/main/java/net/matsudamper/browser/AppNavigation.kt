@@ -142,6 +142,14 @@ internal fun BrowserApp(
                                     onOpenTabs = {
                                         tabsVisible = true
                                     },
+                                    onOpenNewSessionRequest = { uri ->
+                                        val newTab = browserSessionController.createTabForNewSession(
+                                            initialUrl = uri,
+                                        )
+                                        browserSessionController.selectTab(newTab.id)
+                                        tabPersistenceSignal++
+                                        newTab.session
+                                    },
                                     onCurrentPageUrlChange = { currentUrl ->
                                         browserSessionController.updateTabUrl(
                                             tabId = selectedTab.id,

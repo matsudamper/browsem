@@ -77,6 +77,7 @@ fun GeckoBrowserTab(
     onDesktopNotificationPermissionRequest: () -> GeckoResult<Int>,
     onOpenSettings: () -> Unit,
     onOpenTabs: () -> Unit,
+    onOpenNewSessionRequest: (String) -> GeckoSession,
     onCurrentPageUrlChange: (String) -> Unit,
     onSessionStateChange: (String) -> Unit,
     onTabPreviewCaptured: (Bitmap) -> Unit,
@@ -164,6 +165,13 @@ fun GeckoBrowserTab(
 
             override fun onCanGoForward(session: GeckoSession, value: Boolean) {
                 canGoForward = value
+            }
+
+            override fun onNewSession(
+                session: GeckoSession,
+                uri: String
+            ): GeckoResult<GeckoSession> {
+                return GeckoResult.fromValue(onOpenNewSessionRequest(uri))
             }
 
             override fun onLocationChange(
