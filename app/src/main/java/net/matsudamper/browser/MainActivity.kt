@@ -1,20 +1,32 @@
 package net.matsudamper.browser
 
+import android.Manifest
 import android.content.Intent
 import android.content.IntentSender
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Box
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.core.content.ContextCompat
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTagsAsResourceId
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.receiveAsFlow
 import org.mozilla.geckoview.GeckoResult
+import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.WebExtension
 import org.mozilla.geckoview.WebExtensionController
@@ -28,6 +40,22 @@ class MainActivity : ComponentActivity() {
     private var installFailureMessage by mutableStateOf<String?>(null)
     private var webExtensionWarmUpCompleted = false
     private var webExtensionWarmUpInProgress = false
+    private val createNewTabChannel = Channel<String>(Channel.UNLIMITED)
+    private var pendingNotificationPermissionResult: GeckoResult<Int>? = null
+
+    private val requestNotificationPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        val pendingResult = pendingNotificationPermissionResult ?: return@registerForActivityResult
+        pendingNotificationPermissionResult = null
+        pendingResult.complete(
+            if (isGranted) {
+                GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW
+            } else {
+                GeckoSession.PermissionDelegate.ContentPermission.VALUE_DENY
+            }
+        )
+    }
 
     private val geckoActivityLauncher = registerForActivityResult(
         ActivityResultContracts.StartIntentSenderForResult()
@@ -110,13 +138,38 @@ class MainActivity : ComponentActivity() {
         runtime.webExtensionController.setPromptDelegate(webExtensionPromptDelegate)
         runtime.webExtensionController.setAddonManagerDelegate(addonManagerDelegate)
         warmUpWebExtensionController()
+
+        if (savedInstanceState != null) {
+            val url = intent.dataString
+            if (url != null) {
+                createNewTabChannel.trySend(url)
+            }
+        }
+
         setContent {
-            BrowserApp(
-                runtime = runtime,
-                onInstallExtensionRequest = { pageUrl ->
-                    installFromCurrentPage(pageUrl)
+            val browserSessionController = rememberBrowserSessionController(runtime)
+            LaunchedEffect(Unit) {
+                createNewTabChannel.receiveAsFlow().collect { url ->
+                    val newTab = browserSessionController.createTab(url)
+                    browserSessionController.selectTab(newTab.id)
                 }
-            )
+            }
+            Box(
+                modifier = Modifier.semantics {
+                    testTagsAsResourceId = true
+                },
+            ) {
+                BrowserApp(
+                    runtime = runtime,
+                    browserSessionController = browserSessionController,
+                    onInstallExtensionRequest = { pageUrl ->
+                        installFromCurrentPage(pageUrl)
+                    },
+                    onDesktopNotificationPermissionRequest = {
+                        requestNotificationPermissionIfNeeded()
+                    },
+                )
+            }
             installPromptState?.let { prompt ->
                 InstallPromptDialog(
                     prompt = prompt,
@@ -137,6 +190,38 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        val url = intent.dataString
+        if (url != null) {
+            createNewTabChannel.trySend(url)
+        }
+    }
+
+    private fun requestNotificationPermissionIfNeeded(): GeckoResult<Int> {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+            return GeckoResult.fromValue(GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW)
+        }
+        if (ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) == PackageManager.PERMISSION_GRANTED
+        ) {
+            return GeckoResult.fromValue(GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW)
+        }
+        pendingNotificationPermissionResult?.let {
+            return GeckoResult.fromException(
+                IllegalStateException("Another notification permission request is already pending.")
+            )
+        }
+
+        return GeckoResult<Int>().also { result ->
+            pendingNotificationPermissionResult = result
+            requestNotificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
+
     override fun onResume() {
         super.onResume()
         warmUpWebExtensionController()
@@ -152,6 +237,10 @@ class MainActivity : ComponentActivity() {
             CancellationException("Activity was destroyed before Gecko activity completed.")
         )
         pendingActivityResult = null
+        pendingNotificationPermissionResult?.completeExceptionally(
+            CancellationException("Activity was destroyed before notification permission completed.")
+        )
+        pendingNotificationPermissionResult = null
         if (::runtime.isInitialized && runtime.getActivityDelegate() === activityDelegate) {
             runtime.setActivityDelegate(null)
         }
