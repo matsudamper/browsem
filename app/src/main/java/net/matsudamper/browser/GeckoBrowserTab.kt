@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.os.Handler
 import android.os.Looper
 import android.view.View
+import android.view.ViewGroup
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
@@ -51,6 +52,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
@@ -59,6 +61,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import kotlinx.coroutines.launch
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoResult
@@ -115,6 +118,17 @@ fun GeckoBrowserTab(
     var findMatchCurrent by remember { mutableIntStateOf(0) }
     var findMatchTotal by remember { mutableIntStateOf(0) }
     var imageContextMenuUrl by remember(tabId) { mutableStateOf<String?>(null) }
+
+    // Pull to refresh state
+    val isRefreshingState = remember(tabId) { mutableStateOf(false) }
+    var isRefreshing by isRefreshingState
+    // Tracks GeckoView scroll position to enable/disable pull-to-refresh at page top
+    val geckoScrollYRef = remember(tabId) { intArrayOf(0) }
+    // Keeps latest session reference accessible from the SwipeRefreshLayout factory closure
+    val currentSessionHolder = remember(tabId) { arrayOf<GeckoSession?>(null) }
+    currentSessionHolder[0] = session
+
+    val primaryColor = MaterialTheme.colorScheme.primary.toArgb()
 
     fun closeFindInPage() {
         showFindInPage = false
@@ -235,6 +249,7 @@ fun GeckoBrowserTab(
             }
 
             override fun onPageStop(session: GeckoSession, success: Boolean) {
+                isRefreshingState.value = false
                 val pageUrl = currentPageUrl
                 updateThemeColorFromPage(pageUrl) { resolvedUrl, color ->
                     if (resolvedUrl == currentPageUrl) {
@@ -243,10 +258,16 @@ fun GeckoBrowserTab(
                 }
             }
         }
+        val scrollDelegate = object : GeckoSession.ScrollDelegate {
+            override fun onScrollChanged(session: GeckoSession, scrollX: Int, scrollY: Int) {
+                geckoScrollYRef[0] = scrollY
+            }
+        }
         session.permissionDelegate = permissionDelegate
         session.navigationDelegate = navigationDelegate
         session.contentDelegate = contentDelegate
         session.progressDelegate = progressDelegate
+        session.scrollDelegate = scrollDelegate
 
         onDispose {
             if (session.permissionDelegate === permissionDelegate) {
@@ -260,6 +281,9 @@ fun GeckoBrowserTab(
             }
             if (session.progressDelegate === progressDelegate) {
                 session.progressDelegate = null
+            }
+            if (session.scrollDelegate === scrollDelegate) {
+                session.scrollDelegate = null
             }
         }
     }
@@ -385,16 +409,33 @@ fun GeckoBrowserTab(
         }
 
         AndroidView(
-            factory = { context ->
-                GeckoView(context).also { geckoView ->
-                    geckoView.setAutofillEnabled(true)
-                    geckoView.importantForAutofill =
-                        View.IMPORTANT_FOR_AUTOFILL_YES_EXCLUDE_DESCENDANTS
-                    geckoView.setSession(session)
-                    geckoViewRef = geckoView
+            factory = { ctx ->
+                val geckoView = GeckoView(ctx).also { gv ->
+                    gv.setAutofillEnabled(true)
+                    gv.importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_YES_EXCLUDE_DESCENDANTS
+                    gv.setSession(session)
+                    geckoViewRef = gv
+                }
+                SwipeRefreshLayout(ctx).also { srl ->
+                    srl.addView(
+                        geckoView,
+                        ViewGroup.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                        ),
+                    )
+                    srl.setColorSchemeColors(primaryColor)
+                    // Allow pull-to-refresh only when the page is scrolled to the top
+                    srl.setOnChildScrollUpCallback { _, _ -> geckoScrollYRef[0] > 0 }
+                    srl.setOnRefreshListener {
+                        isRefreshingState.value = true
+                        currentSessionHolder[0]?.reload()
+                    }
                 }
             },
-            update = { geckoView ->
+            update = { srl ->
+                srl.isRefreshing = isRefreshing
+                val geckoView = srl.getChildAt(0) as GeckoView
                 geckoView.setAutofillEnabled(true)
                 geckoView.importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_YES_EXCLUDE_DESCENDANTS
                 geckoView.setSession(session)

@@ -100,6 +100,7 @@ dependencies {
     implementation(libs.androidx.navigation3.runtime)
     implementation(libs.androidx.navigation3.ui)
     implementation(libs.mozilla.geckoview)
+    implementation(libs.androidx.swiperefreshlayout)
     implementation(project(":data"))
 
     debugImplementation(libs.androidx.compose.ui.tooling)
