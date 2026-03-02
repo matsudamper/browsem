@@ -2,6 +2,8 @@ package net.matsudamper.browser
 
 import android.content.Intent
 import android.graphics.Bitmap
+import android.os.Handler
+import android.os.Looper
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -42,6 +44,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.TextStyle
@@ -54,6 +57,8 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.GeckoSessionSettings
 import org.mozilla.geckoview.GeckoView
+import java.net.URL
+import java.util.concurrent.Executors
 
 @Composable
 @OptIn(ExperimentalLayoutApi::class)
@@ -80,6 +85,7 @@ fun GeckoBrowserTab(
     var isUrlInputFocused by remember(tabId) { mutableStateOf(false) }
     var geckoViewRef by remember(tabId) { mutableStateOf<GeckoView?>(null) }
     var isPcMode by rememberSaveable(tabId) { mutableStateOf(false) }
+    var toolbarColor by remember(tabId) { mutableStateOf<Color?>(null) }
     val keyboardController = LocalSoftwareKeyboardController.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val isImeVisible = WindowInsets.isImeVisible
@@ -142,6 +148,7 @@ fun GeckoBrowserTab(
                 if (!isUrlInputFocused) {
                     urlInput = newUrl
                 }
+                toolbarColor = null
             }
         }
         val contentDelegate = object : GeckoSession.ContentDelegate {
@@ -150,6 +157,7 @@ fun GeckoBrowserTab(
                 currentPageTitle = newTitle
                 onTabTitleChange(newTitle)
             }
+
         }
         val progressDelegate = object : GeckoSession.ProgressDelegate {
             override fun onSessionStateChange(
@@ -157,6 +165,15 @@ fun GeckoBrowserTab(
                 sessionState: GeckoSession.SessionState
             ) {
                 onSessionStateChange(sessionState.toString().orEmpty())
+            }
+
+            override fun onPageStop(session: GeckoSession, success: Boolean) {
+                val pageUrl = currentPageUrl
+                updateThemeColorFromPage(pageUrl) { resolvedUrl, color ->
+                    if (resolvedUrl == currentPageUrl) {
+                        toolbarColor = color
+                    }
+                }
             }
         }
         session.navigationDelegate = navigationDelegate
@@ -283,6 +300,7 @@ fun GeckoBrowserTab(
                 onFindInPage = {
                     showFindInPage = true
                 },
+                toolbarColor = toolbarColor,
             )
         }
 
@@ -302,6 +320,55 @@ fun GeckoBrowserTab(
             },
             modifier = Modifier.fillMaxSize()
         )
+    }
+}
+
+
+private val themeColorHandler = Handler(Looper.getMainLooper())
+private val themeColorExecutor = Executors.newSingleThreadExecutor()
+
+private fun updateThemeColorFromPage(
+    pageUrl: String,
+    onColorResolved: (String, Color?) -> Unit,
+) {
+    if (pageUrl.isBlank()) {
+        onColorResolved(pageUrl, null)
+        return
+    }
+
+    themeColorExecutor.execute {
+        val colorText = runCatching {
+            URL(pageUrl).openConnection().getInputStream().bufferedReader().use { reader ->
+                reader.readText()
+            }
+        }.getOrNull()?.let(::findThemeColorMetaContent)
+
+        val parsedColor = colorText?.let(::parseManifestColor)
+        themeColorHandler.post {
+            onColorResolved(pageUrl, parsedColor)
+        }
+    }
+}
+
+private fun findThemeColorMetaContent(html: String): String? {
+    val metaTagRegex = Regex("""<meta\b[^>]*>""", setOf(RegexOption.IGNORE_CASE))
+    val nameRegex = Regex("""\bname\s*=\s*(["'])theme-color\1""", setOf(RegexOption.IGNORE_CASE))
+    val contentRegex = Regex("""\bcontent\s*=\s*(["'])(.*?)\1""", setOf(RegexOption.IGNORE_CASE))
+
+    return metaTagRegex.findAll(html).firstNotNullOfOrNull { matchResult ->
+        val tag = matchResult.value
+        if (nameRegex.containsMatchIn(tag).not()) {
+            return@firstNotNullOfOrNull null
+        }
+        contentRegex.find(tag)?.groupValues?.getOrNull(2)?.trim()?.takeIf { it.isNotEmpty() }
+    }
+}
+
+private fun parseManifestColor(colorValue: String): Color? {
+    return try {
+        Color(android.graphics.Color.parseColor(colorValue))
+    } catch (_: IllegalArgumentException) {
+        null
     }
 }
 
