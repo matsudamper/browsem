@@ -4,11 +4,14 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Refresh
@@ -40,6 +43,7 @@ import org.mozilla.geckoview.WebExtension
 internal fun ExtensionsScreen(
     runtime: GeckoRuntime,
     onBack: () -> Unit,
+    onOpenExtensionSettings: (String) -> Unit,
 ) {
     var extensions by remember { mutableStateOf<List<WebExtension>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
@@ -125,6 +129,14 @@ internal fun ExtensionsScreen(
                         extension = extension,
                         isUninstalling = uninstallingId == extension.id,
                         uninstallEnabled = uninstallingId == null,
+                        onOpenSettings = {
+                            extension.metaData.optionsPageUrl
+                                ?.takeIf { it.isNotBlank() }
+                                ?.let(onOpenExtensionSettings)
+                                ?: run {
+                                    errorMessage = "この拡張機能には設定画面がありません。"
+                                }
+                        },
                         onUninstall = {
                             uninstallingId = extension.id
                             runtime.webExtensionController.uninstall(extension).accept(
@@ -166,6 +178,7 @@ private fun ExtensionRow(
     extension: WebExtension,
     isUninstalling: Boolean,
     uninstallEnabled: Boolean,
+    onOpenSettings: () -> Unit,
     onUninstall: () -> Unit,
 ) {
     val displayName = extension.metaData.name?.takeIf { it.isNotBlank() } ?: extension.id
@@ -174,6 +187,10 @@ private fun ExtensionRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .selectable(
+                selected = false,
+                onClick = onOpenSettings,
+            )
             .padding(horizontal = 16.dp, vertical = 12.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
@@ -202,6 +219,7 @@ private fun ExtensionRow(
                 overflow = TextOverflow.Ellipsis,
             )
         }
+        Spacer(modifier = Modifier.width(8.dp))
         TextButton(
             onClick = onUninstall,
             enabled = uninstallEnabled,

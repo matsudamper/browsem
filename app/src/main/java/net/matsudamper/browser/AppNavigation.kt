@@ -25,16 +25,16 @@ import androidx.navigation3.runtime.NavEntry
 import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.ui.NavDisplay
+import com.google.protobuf.ByteString
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
-import net.matsudamper.browser.data.BrowserSettings
 import net.matsudamper.browser.data.PersistedTabState
 import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.resolvedHomepageUrl
 import net.matsudamper.browser.data.resolvedSearchTemplate
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoRuntime
-import kotlinx.coroutines.delay
 
 @Serializable
 private sealed interface AppDestination : NavKey {
@@ -57,21 +57,23 @@ internal fun BrowserApp(
     val context = LocalContext.current
     val settingsRepository = remember { SettingsRepository(context) }
     val settings by settingsRepository.settings
-        .collectAsState(initial = BrowserSettings.getDefaultInstance())
+        .collectAsState(initial = null)
+    val currentSettings = settings ?: return
     val browserSessionController = rememberBrowserSessionController(runtime)
-    val homepageUrl = settings.resolvedHomepageUrl()
-    val searchTemplate = settings.resolvedSearchTemplate()
+    val homepageUrl = currentSettings.resolvedHomepageUrl()
+    val searchTemplate = currentSettings.resolvedSearchTemplate()
 
     val scope = rememberCoroutineScope()
     val backStack = rememberNavBackStack(AppDestination.Browser)
     var tabPersistenceSignal by remember { mutableLongStateOf(0L) }
 
-    val persistedTabs = remember(settings.tabStatesList) {
-        settings.tabStatesList.map { tabState ->
+    val persistedTabs = remember(currentSettings.tabStatesList) {
+        currentSettings.tabStatesList.map { tabState ->
             PersistedBrowserTab(
                 url = tabState.url,
                 sessionState = tabState.sessionState,
                 title = tabState.title,
+                previewImageWebp = tabState.previewImageWebp.toByteArray(),
             )
         }
     }
@@ -87,17 +89,18 @@ internal fun BrowserApp(
                     url = tab.url,
                     sessionState = tab.sessionState,
                     title = tab.title,
+                    previewImageWebp = ByteString.copyFrom(tab.previewImageWebp),
                 )
             },
             selectedTabIndex = browserSessionController.selectedTabIndex,
         )
     }
 
-    LaunchedEffect(browserSessionController, homepageUrl, persistedTabs, settings.selectedTabIndex) {
+    LaunchedEffect(browserSessionController, homepageUrl, persistedTabs, currentSettings.selectedTabIndex) {
         browserSessionController.ensureInitialPageLoaded(
             homepageUrl = homepageUrl,
             persistedTabs = persistedTabs,
-            persistedSelectedTabIndex = settings.selectedTabIndex,
+            persistedSelectedTabIndex = currentSettings.selectedTabIndex,
         )
     }
 
@@ -105,131 +108,134 @@ internal fun BrowserApp(
         backStack.removeLastOrNull()
     }
 
-    NavDisplay(
-        backStack = backStack,
-        onBack = { backStack.removeLastOrNull() },
-        entryProvider = { key: NavKey ->
-            when (key) {
-                AppDestination.Browser -> NavEntry<NavKey>(key) {
-                    val selectedTab = browserSessionController.selectedTab
-                    if (selectedTab != null) {
-                        var tabsVisible by rememberSaveable { mutableStateOf(false) }
-                        val tabs = browserSessionController.tabs
+    BrowserTheme(themeMode = currentSettings.themeMode) {
+        NavDisplay(
+            backStack = backStack,
+            onBack = { backStack.removeLastOrNull() },
+            entryProvider = { key: NavKey ->
+                when (key) {
+                    AppDestination.Browser -> NavEntry<NavKey>(key) {
+                        val selectedTab = browserSessionController.selectedTab
+                        if (selectedTab != null) {
+                            var tabsVisible by rememberSaveable { mutableStateOf(false) }
+                            val tabs = browserSessionController.tabs
 
-                        BackHandler(enabled = tabsVisible) {
-                            tabsVisible = false
-                        }
+                            BackHandler(enabled = tabsVisible) {
+                                tabsVisible = false
+                            }
 
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                        ) {
-                            GeckoBrowserTab(
-                                tabId = selectedTab.id,
-                                session = selectedTab.session,
-                                initialUrl = selectedTab.currentUrl,
-                                homepageUrl = homepageUrl,
-                                searchTemplate = searchTemplate,
-                                tabCount = tabs.size,
-                                onInstallExtensionRequest = onInstallExtensionRequest,
-                                onDesktopNotificationPermissionRequest = onDesktopNotificationPermissionRequest,
-                                onOpenSettings = {
-                                    backStack.add(AppDestination.Settings)
-                                },
-                                onOpenTabs = {
-                                    tabsVisible = true
-                                },
-                                onCurrentPageUrlChange = { currentUrl ->
-                                    browserSessionController.updateTabUrl(
-                                        tabId = selectedTab.id,
-                                        url = currentUrl,
-                                    )
-                                    tabPersistenceSignal++
-                                },
-                                onSessionStateChange = { sessionState ->
-                                    browserSessionController.updateTabSessionState(
-                                        tabId = selectedTab.id,
-                                        sessionState = sessionState,
-                                    )
-                                    tabPersistenceSignal++
-                                },
-                                onTabPreviewCaptured = { previewBitmap ->
-                                    browserSessionController.updateTabPreview(
-                                        tabId = selectedTab.id,
-                                        previewBitmap = previewBitmap,
-                                    )
-                                },
-                                onTabTitleChange = { title ->
-                                    browserSessionController.updateTabTitle(
-                                        tabId = selectedTab.id,
-                                        title = title,
-                                    )
-                                    tabPersistenceSignal++
-                                },
-                            )
-
-                            AnimatedVisibility(
-                                visible = tabsVisible,
-                                enter = fadeIn(animationSpec = tween(durationMillis = 220)),
-                                exit = fadeOut(animationSpec = tween(durationMillis = 220)),
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
                             ) {
-                                TabsScreen(
-                                    tabs = tabs,
-                                    selectedTabId = selectedTab.id,
-                                    onSelectTab = { tabId ->
-                                        browserSessionController.selectTab(tabId)
-                                        tabPersistenceSignal++
-                                        tabsVisible = false
+                                GeckoBrowserTab(
+                                    tabId = selectedTab.id,
+                                    session = selectedTab.session,
+                                    initialUrl = selectedTab.currentUrl,
+                                    homepageUrl = homepageUrl,
+                                    searchTemplate = searchTemplate,
+                                    tabCount = tabs.size,
+                                    onInstallExtensionRequest = onInstallExtensionRequest,
+                                    onDesktopNotificationPermissionRequest = onDesktopNotificationPermissionRequest,
+                                    onOpenSettings = {
+                                        backStack.add(AppDestination.Settings)
                                     },
-                                    onCloseTab = { tabId ->
-                                        browserSessionController.closeTab(tabId)
-                                        if (browserSessionController.tabs.isEmpty()) {
+                                    onOpenTabs = {
+                                        tabsVisible = true
+                                    },
+                                    onCurrentPageUrlChange = { currentUrl ->
+                                        browserSessionController.updateTabUrl(
+                                            tabId = selectedTab.id,
+                                            url = currentUrl,
+                                        )
+                                        tabPersistenceSignal++
+                                    },
+                                    onSessionStateChange = { sessionState ->
+                                        browserSessionController.updateTabSessionState(
+                                            tabId = selectedTab.id,
+                                            sessionState = sessionState,
+                                        )
+                                        tabPersistenceSignal++
+                                    },
+                                    onTabPreviewCaptured = { previewBitmap ->
+                                        browserSessionController.updateTabPreview(
+                                            tabId = selectedTab.id,
+                                            previewBitmap = previewBitmap,
+                                        )
+                                    },
+                                    onTabTitleChange = { title ->
+                                        browserSessionController.updateTabTitle(
+                                            tabId = selectedTab.id,
+                                            title = title,
+                                        )
+                                        tabPersistenceSignal++
+                                    },
+                                )
+
+                                AnimatedVisibility(
+                                    visible = tabsVisible,
+                                    enter = fadeIn(animationSpec = tween(durationMillis = 220)),
+                                    exit = fadeOut(animationSpec = tween(durationMillis = 220)),
+                                ) {
+                                    TabsScreen(
+                                        tabs = tabs,
+                                        selectedTabId = selectedTab.id,
+                                        onSelectTab = { tabId ->
+                                            browserSessionController.selectTab(tabId)
+                                            tabPersistenceSignal++
+                                            tabsVisible = false
+                                        },
+                                        onCloseTab = { tabId ->
+                                            browserSessionController.closeTab(tabId)
+                                            if (browserSessionController.tabs.isEmpty()) {
+                                                val newTab = browserSessionController.createTab(
+                                                    initialUrl = homepageUrl,
+                                                )
+                                                browserSessionController.selectTab(newTab.id)
+                                            }
+                                            tabPersistenceSignal++
+                                        },
+                                        onOpenNewTab = {
                                             val newTab = browserSessionController.createTab(
                                                 initialUrl = homepageUrl,
                                             )
                                             browserSessionController.selectTab(newTab.id)
-                                        }
-                                        tabPersistenceSignal++
-                                    },
-                                    onOpenNewTab = {
-                                        val newTab = browserSessionController.createTab(
-                                            initialUrl = homepageUrl,
-                                        )
-                                        browserSessionController.selectTab(newTab.id)
-                                        tabPersistenceSignal++
-                                        tabsVisible = false
-                                    },
-                                    onBack = {
-                                        tabsVisible = false
-                                    },
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .background(MaterialTheme.colorScheme.surface),
-                                )
+                                            tabPersistenceSignal++
+                                            tabsVisible = false
+                                        },
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .background(MaterialTheme.colorScheme.surface),
+                                    )
+                                }
                             }
                         }
                     }
-                }
 
-                AppDestination.Settings -> NavEntry<NavKey>(key) {
-                    SettingsScreen(
-                        settings = settings,
-                        onSettingsChange = { newSettings ->
-                            scope.launch { settingsRepository.updateSettings(newSettings) }
-                        },
-                        onOpenExtensions = { backStack.add(AppDestination.Extensions) },
-                        onBack = { backStack.removeLastOrNull() },
-                    )
-                }
+                    AppDestination.Settings -> NavEntry<NavKey>(key) {
+                        SettingsScreen(
+                            settings = currentSettings,
+                            onSettingsChange = { newSettings ->
+                                scope.launch { settingsRepository.updateSettings(newSettings) }
+                            },
+                            onOpenExtensions = { backStack.add(AppDestination.Extensions) },
+                            onBack = { backStack.removeLastOrNull() },
+                        )
+                    }
 
-                AppDestination.Extensions -> NavEntry<NavKey>(key) {
-                    ExtensionsScreen(
-                        runtime = runtime,
-                        onBack = { backStack.removeLastOrNull() },
-                    )
-                }
+                    AppDestination.Extensions -> NavEntry<NavKey>(key) {
+                        ExtensionsScreen(
+                            runtime = runtime,
+                            onBack = { backStack.removeLastOrNull() },
+                            onOpenExtensionSettings = { optionsPageUrl ->
+                                browserSessionController.selectedTab?.session?.loadUri(optionsPageUrl)
+                                backStack.removeLastOrNull()
+                            },
+                        )
+                    }
 
-                else -> error("Unknown destination: $key")
-            }
-        },
-    )
+                    else -> error("Unknown destination: $key")
+                }
+            },
+        )
+    }
 }
