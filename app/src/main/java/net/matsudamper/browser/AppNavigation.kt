@@ -35,6 +35,7 @@ import net.matsudamper.browser.data.resolvedHomepageUrl
 import net.matsudamper.browser.data.resolvedSearchTemplate
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoRuntime
+import org.mozilla.geckoview.GeckoSession
 
 @Serializable
 private sealed interface AppDestination : NavKey {
@@ -46,6 +47,9 @@ private sealed interface AppDestination : NavKey {
 
     @Serializable
     data object Extensions : AppDestination
+
+    @Serializable
+    data object NotificationPermissions : AppDestination
 }
 
 @Composable
@@ -66,6 +70,21 @@ internal fun BrowserApp(
     val scope = rememberCoroutineScope()
     val backStack = rememberNavBackStack(AppDestination.Browser)
     var tabPersistenceSignal by remember { mutableLongStateOf(0L) }
+
+    val handleNotificationPermission: (uri: String) -> GeckoResult<Int> = { uri ->
+        val allowedOrigins = currentSettings.notificationAllowedOriginsList
+        if (allowedOrigins.contains(uri)) {
+            GeckoResult.fromValue(GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW)
+        } else {
+            val androidResult = onDesktopNotificationPermissionRequest()
+            androidResult.then { value ->
+                if (value == GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW) {
+                    scope.launch { settingsRepository.addNotificationAllowedOrigin(uri) }
+                }
+                GeckoResult.fromValue(value)
+            }
+        }
+    }
 
     val persistedTabs = remember(currentSettings.tabStatesList) {
         currentSettings.tabStatesList.map { tabState ->
@@ -135,7 +154,7 @@ internal fun BrowserApp(
                                     searchTemplate = searchTemplate,
                                     tabCount = tabs.size,
                                     onInstallExtensionRequest = onInstallExtensionRequest,
-                                    onDesktopNotificationPermissionRequest = onDesktopNotificationPermissionRequest,
+                                    onDesktopNotificationPermissionRequest = handleNotificationPermission,
                                     onOpenSettings = {
                                         backStack.add(AppDestination.Settings)
                                     },
@@ -218,6 +237,9 @@ internal fun BrowserApp(
                                 scope.launch { settingsRepository.updateSettings(newSettings) }
                             },
                             onOpenExtensions = { backStack.add(AppDestination.Extensions) },
+                            onOpenNotificationPermissions = {
+                                backStack.add(AppDestination.NotificationPermissions)
+                            },
                             onBack = { backStack.removeLastOrNull() },
                         )
                     }
@@ -230,6 +252,18 @@ internal fun BrowserApp(
                                 browserSessionController.selectedTab?.session?.loadUri(optionsPageUrl)
                                 backStack.removeLastOrNull()
                             },
+                        )
+                    }
+
+                    AppDestination.NotificationPermissions -> NavEntry<NavKey>(key) {
+                        NotificationPermissionsScreen(
+                            allowedOrigins = currentSettings.notificationAllowedOriginsList,
+                            onRevokeOrigin = { origin ->
+                                scope.launch {
+                                    settingsRepository.removeNotificationAllowedOrigin(origin)
+                                }
+                            },
+                            onBack = { backStack.removeLastOrNull() },
                         )
                     }
 

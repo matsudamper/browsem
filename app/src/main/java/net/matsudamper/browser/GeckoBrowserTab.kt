@@ -68,7 +68,7 @@ fun GeckoBrowserTab(
     modifier: Modifier = Modifier,
     tabCount: Int,
     onInstallExtensionRequest: (String) -> Unit,
-    onDesktopNotificationPermissionRequest: () -> GeckoResult<Int>,
+    onDesktopNotificationPermissionRequest: (uri: String) -> GeckoResult<Int>,
     onOpenSettings: () -> Unit,
     onOpenTabs: () -> Unit,
     onCurrentPageUrlChange: (String) -> Unit,
@@ -139,7 +139,7 @@ fun GeckoBrowserTab(
                         GeckoSession.PermissionDelegate.ContentPermission.VALUE_PROMPT
                     )
                 }
-                return onDesktopNotificationPermissionRequest()
+                return onDesktopNotificationPermissionRequest(perm.uri)
             }
         }
 

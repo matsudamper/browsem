@@ -42,6 +42,7 @@ internal fun SettingsScreen(
     settings: BrowserSettings,
     onSettingsChange: (BrowserSettings) -> Unit,
     onOpenExtensions: () -> Unit,
+    onOpenNotificationPermissions: () -> Unit,
     onBack: () -> Unit,
 ) {
     Scaffold(
@@ -256,6 +257,20 @@ internal fun SettingsScreen(
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text("インストール済み拡張機能を管理")
+            }
+
+            Spacer(Modifier.height(24.dp))
+
+            Text(
+                text = "通知",
+                style = MaterialTheme.typography.titleMedium,
+            )
+            Spacer(Modifier.height(8.dp))
+            TextButton(
+                onClick = onOpenNotificationPermissions,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("通知を許可したサイト")
             }
 
             Spacer(Modifier.height(8.dp))
