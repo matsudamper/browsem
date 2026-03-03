@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.os.Handler
 import android.os.Looper
 import android.view.View
+import android.view.ViewGroup
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
@@ -44,12 +45,14 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -70,6 +73,7 @@ import org.mozilla.geckoview.GeckoView
 import java.net.URL
 import java.util.concurrent.Executors
 import androidx.core.graphics.toColorInt
+import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 
 private enum class TranslationState { Idle, Loading, Translated, Error }
 
@@ -108,7 +112,6 @@ fun GeckoBrowserTab(
     val isImeVisible = WindowInsets.isImeVisible
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
-    val scope = coroutineScope
     val geckoDownloadManager = remember(context) {
         GeckoDownloadManager(
             context = context,
@@ -346,6 +349,7 @@ fun GeckoBrowserTab(
             )
         } else {
             BrowserToolBar(
+                modifier = Modifier.fillMaxWidth(),
                 value = urlInput,
                 onValueChange = { urlInput = it },
                 onSubmit = { rawInput ->
@@ -401,11 +405,13 @@ fun GeckoBrowserTab(
                 onRefresh = { session.reload() },
                 onTranslatePage = {
                     if (translationState != TranslationState.Loading) {
-                        scope.launch {
+                        coroutineScope.launch {
                             originalPageUrlForRevert = currentPageUrl
                             translationState = TranslationState.Loading
                             val result = runCatching {
-                                PageTranslator(session, currentPageUrl).translatePageToJapanese(translationProvider)
+                                PageTranslator(session, currentPageUrl).translatePageToJapanese(
+                                    translationProvider
+                                )
                             }
                             translationState = if (result.isSuccess) {
                                 TranslationState.Translated
@@ -433,17 +439,67 @@ fun GeckoBrowserTab(
             )
         }
 
+        var isRefreshing by remember { mutableStateOf(false) }
+        var scrollY by remember { mutableIntStateOf(0) }
+        val latestOnRefresh by rememberUpdatedState {
+            session.reload()
+            isRefreshing = false
+        }
+
+        DisposableEffect(session) {
+            val delegate = object : GeckoSession.ScrollDelegate {
+                override fun onScrollChanged(
+                    session: GeckoSession,
+                    scrollX: Int,
+                    scrollYValue: Int,
+                ) {
+                    scrollY = scrollYValue
+                }
+            }
+            session.scrollDelegate = delegate
+            onDispose {
+                if (session.scrollDelegate === delegate) {
+                    session.scrollDelegate = null
+                }
+            }
+        }
+
+        val id = rememberSaveable { View.generateViewId() }
         AndroidView(
+            modifier = Modifier
+                .fillMaxSize()
+                .clipToBounds(),
             factory = { context ->
-                GeckoView(context).also { geckoView ->
-                    geckoView.setAutofillEnabled(true)
-                    geckoView.importantForAutofill =
-                        View.IMPORTANT_FOR_AUTOFILL_YES_EXCLUDE_DESCENDANTS
-                    geckoView.setSession(session)
-                    geckoViewRef = geckoView
+                SwipeRefreshLayout(context).also { swipeRefreshLayout ->
+                    val gecko = GeckoView(context).also { geckoView ->
+                        geckoView.id = id
+                        geckoView.isNestedScrollingEnabled = true
+                        geckoView.setAutofillEnabled(true)
+                        geckoView.importantForAutofill =
+                            View.IMPORTANT_FOR_AUTOFILL_YES_EXCLUDE_DESCENDANTS
+                        geckoView.setSession(session)
+                        geckoViewRef = geckoView
+                    }
+
+                    swipeRefreshLayout.addView(
+                        gecko,
+                        ViewGroup.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                        )
+                    )
+                    swipeRefreshLayout.setOnChildScrollUpCallback { _, _ ->
+                        scrollY > 0
+                    }
+                    swipeRefreshLayout.setOnRefreshListener {
+                        isRefreshing = true
+                        latestOnRefresh()
+                    }
                 }
             },
-            update = { geckoView ->
+            update = { swipeRefreshLayout ->
+                swipeRefreshLayout.isRefreshing = isRefreshing
+                val geckoView = swipeRefreshLayout.findViewById<GeckoView>(id)
                 geckoView.setAutofillEnabled(true)
                 geckoView.importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_YES_EXCLUDE_DESCENDANTS
                 geckoView.setSession(session)
@@ -454,7 +510,6 @@ fun GeckoBrowserTab(
                     geckoView.requestFocus()
                 }
             },
-            modifier = Modifier.fillMaxSize()
         )
 
         imageContextMenuUrl?.let { imageUrl ->
@@ -560,6 +615,7 @@ private fun TranslationStatusBar(
     val backgroundColor = when (state) {
         TranslationState.Loading,
         TranslationState.Translated -> MaterialTheme.colorScheme.secondaryContainer
+
         TranslationState.Error -> MaterialTheme.colorScheme.errorContainer
         TranslationState.Idle -> return
     }
@@ -598,6 +654,7 @@ private fun TranslationStatusBar(
                             Text(text = "元に戻す")
                         }
                     }
+
                     TranslationState.Error -> {
                         IconButton(onClick = onDismissError) {
                             Icon(
@@ -606,6 +663,7 @@ private fun TranslationStatusBar(
                             )
                         }
                     }
+
                     else -> {}
                 }
             }
