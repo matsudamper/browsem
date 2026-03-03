@@ -188,8 +188,8 @@ class MainActivity : ComponentActivity() {
             val browserSessionController = rememberBrowserSessionController(runtime)
             LaunchedEffect(Unit) {
                 createNewTabChannel.receiveAsFlow().collect { url ->
-                    val newTab = browserSessionController.createTab(url)
-                    browserSessionController.selectTab(newTab.id)
+                    val newTab = browserSessionController.createTab(initialUrl = url)
+                    browserSessionController.selectTab(newTab.tabId)
                 }
             }
             Box(
@@ -449,23 +449,21 @@ class MainActivity : ComponentActivity() {
     private fun extractDomain(url: String): String {
         return try {
             URI(url).host?.takeIf { it.isNotBlank() } ?: url
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             url
         }
     }
 
     private fun ensureNotificationChannel(domain: String): String {
         val channelId = "notification_$domain"
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val notificationManager = getSystemService(NotificationManager::class.java)
-            if (notificationManager.getNotificationChannel(channelId) == null) {
-                val channel = NotificationChannel(
-                    channelId,
-                    domain,
-                    NotificationManager.IMPORTANCE_DEFAULT,
-                )
-                notificationManager.createNotificationChannel(channel)
-            }
+        val notificationManager = getSystemService(NotificationManager::class.java)
+        if (notificationManager.getNotificationChannel(channelId) == null) {
+            val channel = NotificationChannel(
+                channelId,
+                domain,
+                NotificationManager.IMPORTANCE_DEFAULT,
+            )
+            notificationManager.createNotificationChannel(channel)
         }
         return channelId
     }

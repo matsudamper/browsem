@@ -31,7 +31,7 @@ import androidx.navigation3.ui.defaultTransitionSpec
 import com.google.protobuf.ByteString
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.serialization.Serializable
+import net.matsudamper.browser.data.BrowserSettings
 import net.matsudamper.browser.data.PersistedTabState
 import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.resolvedHomepageUrl
@@ -39,24 +39,7 @@ import net.matsudamper.browser.data.resolvedSearchTemplate
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoSession
-
-@Serializable
-private sealed interface AppDestination : NavKey, java.io.Serializable {
-    @Serializable
-    data object Browser : AppDestination, java.io.Serializable
-
-    @Serializable
-    data object Settings : AppDestination, java.io.Serializable
-
-    @Serializable
-    data object Extensions : AppDestination, java.io.Serializable
-
-    @Serializable
-    data object NotificationPermissions : AppDestination, java.io.Serializable
-
-    @Serializable
-    data object Tabs : AppDestination, java.io.Serializable
-}
+import java.util.UUID
 
 @Composable
 internal fun BrowserApp(
@@ -67,18 +50,16 @@ internal fun BrowserApp(
 ) {
     val context = LocalContext.current
     val settingsRepository = remember { SettingsRepository(context) }
-    val settings by settingsRepository.settings
-        .collectAsState(initial = null)
+    val settings by settingsRepository.settings.collectAsState(initial = null)
     val currentSettings = settings ?: return
     val homepageUrl = currentSettings.resolvedHomepageUrl()
-    val searchTemplate = currentSettings.resolvedSearchTemplate()
 
     LaunchedEffect(runtime, currentSettings.enableThirdPartyCa) {
         runtime.settings.setEnterpriseRootsEnabled(currentSettings.enableThirdPartyCa)
     }
 
     val scope = rememberCoroutineScope()
-    val backStack = rememberNavBackStack(AppDestination.Browser)
+    val backStack = rememberNavBackStack(AppDestination.Browser(UUID.randomUUID().toString()))
     var tabPersistenceSignal by remember { mutableLongStateOf(0L) }
 
     val handleNotificationPermission: (uri: String) -> GeckoResult<Int> = { uri ->
@@ -178,66 +159,18 @@ internal fun BrowserApp(
             predictivePopTransitionSpec = { popTransition { height -> -height / 2 } },
             entryProvider = { key: NavKey ->
                 when (key) {
-                    AppDestination.Browser -> navEntry(
+                    is AppDestination.Browser -> navEntry(
                         key = key,
                     ) {
-                        val selectedTab = browserSessionController.selectedTab
-                        if (selectedTab != null) {
-                            val tabs = browserSessionController.tabs
-
-                            GeckoBrowserTab(
-                                tabId = selectedTab.id,
-                                session = selectedTab.session,
-                                initialUrl = selectedTab.currentUrl,
-                                homepageUrl = homepageUrl,
-                                searchTemplate = searchTemplate,
-                                translationProvider = currentSettings.translationProvider,
-                                tabCount = tabs.size,
-                                onInstallExtensionRequest = onInstallExtensionRequest,
-                                onDesktopNotificationPermissionRequest = handleNotificationPermission,
-                                onOpenSettings = {
-                                    backStack.add(AppDestination.Settings)
-                                },
-                                onOpenTabs = {
-                                    backStack.add(AppDestination.Tabs)
-                                },
-                                onOpenNewSessionRequest = { uri ->
-                                    val newTab = browserSessionController.createTabForNewSession(
-                                        initialUrl = uri,
-                                    )
-                                    browserSessionController.selectTab(newTab.id)
-                                    tabPersistenceSignal++
-                                    newTab.session
-                                },
-                                onCurrentPageUrlChange = { currentUrl ->
-                                    browserSessionController.updateTabUrl(
-                                        tabId = selectedTab.id,
-                                        url = currentUrl,
-                                    )
-                                    tabPersistenceSignal++
-                                },
-                                onSessionStateChange = { sessionState ->
-                                    browserSessionController.updateTabSessionState(
-                                        tabId = selectedTab.id,
-                                        sessionState = sessionState,
-                                    )
-                                    tabPersistenceSignal++
-                                },
-                                onTabPreviewCaptured = { previewBitmap ->
-                                    browserSessionController.updateTabPreview(
-                                        tabId = selectedTab.id,
-                                        previewBitmap = previewBitmap,
-                                    )
-                                },
-                                onTabTitleChange = { title ->
-                                    browserSessionController.updateTabTitle(
-                                        tabId = selectedTab.id,
-                                        title = title,
-                                    )
-                                    tabPersistenceSignal++
-                                },
-                            )
-                        }
+                        Browser(
+                            key = key,
+                            homepageUrl = homepageUrl,
+                            backStack = backStack,
+                            browserSessionController = browserSessionController,
+                            currentSettings = currentSettings,
+                            onInstallExtensionRequest = onInstallExtensionRequest,
+                            handleNotificationPermission = handleNotificationPermission,
+                        )
                     }
 
                     AppDestination.Settings -> navEntry(key) {
@@ -269,7 +202,7 @@ internal fun BrowserApp(
                         )
                     }
 
-                    AppDestination.NotificationPermissions -> NavEntry<NavKey>(key) {
+                    AppDestination.NotificationPermissions -> navEntry(key) {
                         NotificationPermissionsScreen(
                             allowedOrigins = currentSettings.notificationAllowedOriginsList,
                             onRevokeOrigin = { origin ->
@@ -284,7 +217,7 @@ internal fun BrowserApp(
                     AppDestination.Tabs -> navEntry(key) {
                         TabsScreen(
                             tabs = browserSessionController.tabs,
-                            selectedTabId = browserSessionController.selectedTab?.id,
+                            selectedTabId = browserSessionController.selectedTab?.tabId,
                             onSelectTab = { tabId ->
                                 browserSessionController.selectTab(tabId)
                                 tabPersistenceSignal++
@@ -296,7 +229,7 @@ internal fun BrowserApp(
                                     val newTab = browserSessionController.createTab(
                                         initialUrl = homepageUrl,
                                     )
-                                    browserSessionController.selectTab(newTab.id)
+                                    browserSessionController.selectTab(newTab.tabId)
                                 }
                                 tabPersistenceSignal++
                             },
@@ -304,7 +237,7 @@ internal fun BrowserApp(
                                 val newTab = browserSessionController.createTab(
                                     initialUrl = homepageUrl,
                                 )
-                                browserSessionController.selectTab(newTab.id)
+                                browserSessionController.selectTab(newTab.tabId)
                                 tabPersistenceSignal++
                                 backStack.removeLastOrNull()
                             },
@@ -329,6 +262,73 @@ private fun navEntry(
         key = key,
         contentKey = key,
         content = content,
+    )
+}
+
+@Composable
+private fun Browser(
+    key: AppDestination.Browser,
+    homepageUrl: String,
+    backStack: MutableList<NavKey>,
+    browserSessionController: BrowserSessionController,
+    currentSettings: BrowserSettings,
+    onInstallExtensionRequest: (String) -> Unit,
+    handleNotificationPermission: (uri: String) -> GeckoResult<Int>,
+) {
+    val searchTemplate = currentSettings.resolvedSearchTemplate()
+    val selectedTab = remember(key.tabId) {
+        browserSessionController.getOrCreateTab(
+            tabId = key.tabId,
+            homepageUrl = homepageUrl,
+        )
+    }
+    val tabs = browserSessionController.tabs
+    GeckoBrowserTab(
+        session = selectedTab.session,
+        initialUrl = selectedTab.currentUrl,
+        homepageUrl = homepageUrl,
+        searchTemplate = searchTemplate,
+        translationProvider = currentSettings.translationProvider,
+        tabCount = tabs.size,
+        onInstallExtensionRequest = onInstallExtensionRequest,
+        onDesktopNotificationPermissionRequest = handleNotificationPermission,
+        onOpenSettings = {
+            backStack.add(AppDestination.Settings)
+        },
+        onOpenTabs = {
+            backStack.add(AppDestination.Tabs)
+        },
+        onOpenNewSessionRequest = { uri ->
+            val newTab = browserSessionController.createTabForNewSession(
+                initialUrl = uri,
+            )
+            browserSessionController.selectTab(newTab.tabId)
+            newTab.session
+        },
+        onCurrentPageUrlChange = { currentUrl ->
+            browserSessionController.updateTabUrl(
+                tabId = selectedTab.tabId,
+                url = currentUrl,
+            )
+        },
+        onSessionStateChange = { sessionState ->
+            browserSessionController.updateTabSessionState(
+                tabId = selectedTab.tabId,
+                sessionState = sessionState,
+            )
+        },
+        onTabPreviewCaptured = { previewBitmap ->
+            browserSessionController.updateTabPreview(
+                tabId = selectedTab.tabId,
+                previewBitmap = previewBitmap,
+            )
+        },
+        onTabTitleChange = { title ->
+            browserSessionController.updateTabTitle(
+                tabId = selectedTab.tabId,
+                title = title,
+            )
+        },
     )
 }
 

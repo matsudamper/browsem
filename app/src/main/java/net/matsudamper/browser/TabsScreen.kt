@@ -47,13 +47,13 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 internal data class TabsScreenTabData(
-    val id: Long,
+    val id: String,
     val title: String,
     val previewBitmap: Bitmap?,
 )
 
 internal fun BrowserTab.toTabsScreenTabData(): TabsScreenTabData = TabsScreenTabData(
-    id = id,
+    id = tabId,
     title = title,
     previewBitmap = previewBitmap,
 )
@@ -79,9 +79,9 @@ internal object TabsLayoutDefaults {
 @Composable
 internal fun TabsScreen(
     tabs: List<BrowserTab>,
-    selectedTabId: Long?,
-    onSelectTab: (Long) -> Unit,
-    onCloseTab: (Long) -> Unit,
+    selectedTabId: String?,
+    onSelectTab: (String) -> Unit,
+    onCloseTab: (String) -> Unit,
     onOpenNewTab: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -98,9 +98,9 @@ internal fun TabsScreen(
 @Composable
 private fun TabsScreenContent(
     tabs: List<TabsScreenTabData>,
-    selectedTabId: Long?,
-    onSelectTab: (Long) -> Unit,
-    onCloseTab: (Long) -> Unit,
+    selectedTabId: String?,
+    onSelectTab: (String) -> Unit,
+    onCloseTab: (String) -> Unit,
     onOpenNewTab: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -258,17 +258,17 @@ private fun Preview() {
     val tabs = remember {
         listOf(
             TabsScreenTabData(
-                id = 1L,
+                id = 1L.toString(),
                 title = "Example Domain",
                 previewBitmap = null,
             ),
             TabsScreenTabData(
-                id = 2L,
+                id = 2L.toString(),
                 title = "Google",
                 previewBitmap = null,
             ),
             TabsScreenTabData(
-                id = 3L,
+                id = 3L.toString(),
                 title = "GitHub: Let's build from here",
                 previewBitmap = null,
             ),
@@ -276,7 +276,7 @@ private fun Preview() {
     }
     TabsScreenContent(
         tabs = tabs,
-        selectedTabId = 1L,
+        selectedTabId = 1L.toString(),
         onSelectTab = {},
         onCloseTab = {},
         onOpenNewTab = {},
