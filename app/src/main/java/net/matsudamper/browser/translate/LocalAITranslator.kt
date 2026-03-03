@@ -37,13 +37,15 @@ class LocalAITranslator(
             targetLanguage = TranslateLanguage.JAPANESE,
         )
         val html = """
-            <html><body style=\"font-family:sans-serif;padding:16px;line-height:1.6;\">
+            <html>
+            <head><meta charset="utf-8"></head>
+            <body style="font-family:sans-serif;padding:16px;line-height:1.6;">
             <h2>翻訳（ローカルAI）</h2>
             <p>${escapeHtml(translated)}</p>
             </body></html>
         """.trimIndent()
         val encoded = Base64.encodeToString(html.toByteArray(Charsets.UTF_8), Base64.NO_WRAP)
-        session.loadUri("data:text/html;base64,$encoded")
+        session.loadUri("data:text/html;charset=utf-8;base64,$encoded")
     }
 
 
