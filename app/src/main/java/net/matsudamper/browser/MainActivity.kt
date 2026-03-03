@@ -38,6 +38,9 @@ import org.mozilla.geckoview.WebNotification
 import org.mozilla.geckoview.WebNotificationDelegate
 import java.net.URI
 import java.util.concurrent.CancellationException
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewmodel.compose.viewModel
 
 class MainActivity : ComponentActivity() {
 
@@ -185,7 +188,15 @@ class MainActivity : ComponentActivity() {
         }
 
         setContent {
-            val browserSessionController = rememberBrowserSessionController(runtime)
+            val browserViewModel = viewModel<BrowserViewModel>(
+                factory = object : ViewModelProvider.Factory {
+                    @Suppress("UNCHECKED_CAST")
+                    override fun <T : ViewModel> create(modelClass: Class<T>): T {
+                        return BrowserViewModel(runtime) as T
+                    }
+                }
+            )
+            val browserSessionController = browserViewModel.browserSessionController
             LaunchedEffect(Unit) {
                 createNewTabChannel.receiveAsFlow().collect { url ->
                     val newTab = browserSessionController.createAndAppendTab(initialUrl = url)

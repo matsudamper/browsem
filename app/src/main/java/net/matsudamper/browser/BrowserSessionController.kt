@@ -3,15 +3,12 @@ package net.matsudamper.browser
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.util.Log
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoSession
@@ -231,13 +228,4 @@ private fun ByteArray.toBitmapOrNull(): Bitmap? {
     return BitmapFactory.decodeByteArray(this, 0, size)
 }
 
-@Composable
-internal fun rememberBrowserSessionController(runtime: GeckoRuntime): BrowserSessionController {
-    val controller = remember(runtime) { BrowserSessionController(runtime) }
-    DisposableEffect(controller) {
-        onDispose {
-            controller.close()
-        }
-    }
-    return controller
-}
+
