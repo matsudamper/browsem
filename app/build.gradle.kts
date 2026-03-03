@@ -101,6 +101,9 @@ dependencies {
     implementation(libs.androidx.navigation3.ui)
     implementation(libs.mozilla.geckoview)
     implementation(libs.androidx.swiperefreshlayout)
+    implementation(libs.mlkit.translate)
+    implementation(libs.mlkit.language.id)
+    implementation(libs.kotlinx.coroutines.play.services)
     implementation(project(":data"))
 
     debugImplementation(libs.androidx.compose.ui.tooling)

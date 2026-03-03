@@ -1,4 +1,17 @@
 {
+  "permissions": {
+    "allow": [
+      "Bash(./gradlew:*)",
+      "Bash(unzip:*)",
+      "Bash(git:log:*)",
+      "Bash(git:diff:*)",
+      "Bash(git:mv:*)",
+      "Bash(git:show:*)",
+      "Bash(xargs grep:*)",
+      "Read(./**)",
+      "mcp__ide__getDiagnostics"
+    ]
+  },
   "hooks": {
     "SessionStart": [
       {

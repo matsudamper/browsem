@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -62,6 +63,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+import net.matsudamper.browser.data.TranslationProvider
 import kotlinx.coroutines.launch
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoResult
@@ -72,6 +74,8 @@ import java.net.URL
 import java.util.concurrent.Executors
 import androidx.core.graphics.toColorInt
 
+private enum class TranslationState { Idle, Loading, Translated, Error }
+
 @Composable
 @OptIn(ExperimentalLayoutApi::class)
 fun GeckoBrowserTab(
@@ -80,6 +84,7 @@ fun GeckoBrowserTab(
     initialUrl: String,
     homepageUrl: String,
     searchTemplate: String,
+    translationProvider: TranslationProvider,
     modifier: Modifier = Modifier,
     tabCount: Int,
     onInstallExtensionRequest: (String) -> Unit,
@@ -106,12 +111,16 @@ fun GeckoBrowserTab(
     val isImeVisible = WindowInsets.isImeVisible
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
+    val scope = coroutineScope
     val geckoDownloadManager = remember(context) {
         GeckoDownloadManager(
             context = context,
             runtime = GeckoRuntime.getDefault(context),
         )
     }
+
+    var translationState by remember(tabId) { mutableStateOf(TranslationState.Idle) }
+    var originalPageUrlForRevert by remember(tabId) { mutableStateOf<String?>(null) }
 
     var showFindInPage by remember { mutableStateOf(false) }
     var findQuery by remember { mutableStateOf("") }
@@ -212,6 +221,15 @@ fun GeckoBrowserTab(
                     urlInput = newUrl
                 }
                 toolbarColor = null
+                // ユーザーが別ページへ手動遷移した場合、翻訳状態をリセット
+                val revertUrl = originalPageUrlForRevert
+                if (translationState != TranslationState.Idle &&
+                    !newUrl.startsWith("data:") &&
+                    newUrl != revertUrl
+                ) {
+                    translationState = TranslationState.Idle
+                    originalPageUrlForRevert = null
+                }
             }
         }
         val contentDelegate = object : GeckoSession.ContentDelegate {
@@ -405,6 +423,37 @@ fun GeckoBrowserTab(
                 onForward = { session.goForward() },
                 canGoForward = canGoForward,
                 onRefresh = { session.reload() },
+                onTranslatePage = {
+                    if (translationState != TranslationState.Loading) {
+                        scope.launch {
+                            originalPageUrlForRevert = currentPageUrl
+                            translationState = TranslationState.Loading
+                            val result = runCatching {
+                                PageTranslator(session, currentPageUrl).translatePageToJapanese(translationProvider)
+                            }
+                            translationState = if (result.isSuccess) {
+                                TranslationState.Translated
+                            } else {
+                                TranslationState.Error
+                            }
+                        }
+                    }
+                },
+            )
+            TranslationStatusBar(
+                state = translationState,
+                onRevert = {
+                    val savedUrl = originalPageUrlForRevert
+                    translationState = TranslationState.Idle
+                    originalPageUrlForRevert = null
+                    if (savedUrl != null) {
+                        session.loadUri(savedUrl)
+                    }
+                },
+                onDismissError = {
+                    translationState = TranslationState.Idle
+                    originalPageUrlForRevert = null
+                },
             )
         }
 
@@ -537,6 +586,71 @@ private fun parseManifestColor(colorValue: String): Color? {
         Color(colorValue.toColorInt())
     } catch (_: IllegalArgumentException) {
         null
+    }
+}
+
+@Composable
+private fun TranslationStatusBar(
+    state: TranslationState,
+    onRevert: () -> Unit,
+    onDismissError: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    if (state == TranslationState.Idle) return
+
+    val backgroundColor = when (state) {
+        TranslationState.Loading,
+        TranslationState.Translated -> MaterialTheme.colorScheme.secondaryContainer
+        TranslationState.Error -> MaterialTheme.colorScheme.errorContainer
+        TranslationState.Idle -> return
+    }
+
+    Surface(
+        color = backgroundColor,
+        modifier = modifier.fillMaxWidth(),
+    ) {
+        Column {
+            if (state == TranslationState.Loading) {
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            }
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(horizontal = 8.dp),
+            ) {
+                Text(
+                    text = when (state) {
+                        TranslationState.Loading -> "翻訳中..."
+                        TranslationState.Translated -> "翻訳済み"
+                        TranslationState.Error -> "翻訳に失敗しました"
+                        TranslationState.Idle -> ""
+                    },
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(vertical = 8.dp),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = when (state) {
+                        TranslationState.Error -> MaterialTheme.colorScheme.onErrorContainer
+                        else -> MaterialTheme.colorScheme.onSecondaryContainer
+                    },
+                )
+                when (state) {
+                    TranslationState.Translated -> {
+                        TextButton(onClick = onRevert) {
+                            Text(text = "元に戻す")
+                        }
+                    }
+                    TranslationState.Error -> {
+                        IconButton(onClick = onDismissError) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "閉じる",
+                            )
+                        }
+                    }
+                    else -> {}
+                }
+            }
+        }
     }
 }
 

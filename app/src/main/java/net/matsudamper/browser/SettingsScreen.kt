@@ -35,6 +35,7 @@ import net.matsudamper.browser.data.BrowserSettings
 import net.matsudamper.browser.data.HomepageType
 import net.matsudamper.browser.data.SearchProvider
 import net.matsudamper.browser.data.ThemeMode
+import net.matsudamper.browser.data.TranslationProvider
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -128,8 +129,6 @@ internal fun SettingsScreen(
                     }
                 }
             }
-
-
 
             Spacer(Modifier.height(24.dp))
 
@@ -239,6 +238,38 @@ internal fun SettingsScreen(
                     )
                 }
             }
+
+            Spacer(Modifier.height(24.dp))
+
+            SettingSection(
+                title = "翻訳プロバイダー",
+            ) {
+                Column(Modifier.selectableGroup()) {
+                    TranslationProviderOption(
+                        label = "Gecko",
+                        selected = settings.translationProvider == TranslationProvider.TRANSLATION_PROVIDER_GECKO,
+                        onClick = {
+                            onSettingsChange(
+                                settings.toBuilder()
+                                    .setTranslationProvider(TranslationProvider.TRANSLATION_PROVIDER_GECKO)
+                                    .build(),
+                            )
+                        },
+                    )
+                    TranslationProviderOption(
+                        label = "ローカルAI (Android)",
+                        selected = settings.translationProvider == TranslationProvider.TRANSLATION_PROVIDER_LOCAL_AI,
+                        onClick = {
+                            onSettingsChange(
+                                settings.toBuilder()
+                                    .setTranslationProvider(TranslationProvider.TRANSLATION_PROVIDER_LOCAL_AI)
+                                    .build(),
+                            )
+                        },
+                    )
+                }
+            }
+
             Spacer(Modifier.height(24.dp))
 
             SettingSection(
@@ -318,6 +349,29 @@ private fun SearchProviderOption(
 
 @Composable
 private fun ThemeModeOption(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .selectable(selected = selected, role = Role.RadioButton, onClick = onClick)
+            .padding(vertical = 4.dp),
+    ) {
+        RadioButton(selected = selected, onClick = null)
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyLarge,
+            modifier = Modifier.padding(start = 8.dp),
+        )
+    }
+}
+
+
+@Composable
+private fun TranslationProviderOption(
     label: String,
     selected: Boolean,
     onClick: () -> Unit,

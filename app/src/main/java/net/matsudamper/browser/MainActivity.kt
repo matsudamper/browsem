@@ -139,7 +139,7 @@ class MainActivity : ComponentActivity() {
         runtime.webExtensionController.setAddonManagerDelegate(addonManagerDelegate)
         warmUpWebExtensionController()
 
-        if (savedInstanceState != null) {
+        if (savedInstanceState == null) {
             val url = intent.dataString
             if (url != null) {
                 createNewTabChannel.trySend(url)

@@ -79,6 +79,7 @@ internal fun BrowserToolBar(
     onFindInPage: () -> Unit,
     isPcMode: Boolean,
     onPcModeToggle: () -> Unit,
+    onTranslatePage: () -> Unit,
     toolbarColor: Color?,
 ) {
     val latestOnOpenTabs by rememberUpdatedState(onOpenTabs)
@@ -263,6 +264,15 @@ internal fun BrowserToolBar(
                     }
                     DropdownMenuItem(
                         text = {
+                            Text(text = "翻訳")
+                        },
+                        onClick = {
+                            visibleMenu = false
+                            onTranslatePage()
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = {
                             Text(text = "共有")
                         },
                         onClick = {
@@ -318,6 +328,7 @@ private fun Preview() {
             onHome = {},
             onForward = {},
             canGoForward = false,
+            onTranslatePage = {},
         )
     }
 }
