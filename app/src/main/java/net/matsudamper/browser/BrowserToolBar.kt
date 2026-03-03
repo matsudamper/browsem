@@ -40,6 +40,7 @@ import androidx.compose.ui.autofill.ContentDataType
 import androidx.compose.ui.autofill.ContentType
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.ComposeView
@@ -78,6 +79,8 @@ internal fun BrowserToolBar(
     onFindInPage: () -> Unit,
     isPcMode: Boolean,
     onPcModeToggle: () -> Unit,
+    onTranslatePage: () -> Unit,
+    toolbarColor: Color?,
 ) {
     val latestOnOpenTabs by rememberUpdatedState(onOpenTabs)
     val swipeToOpenTabsModifier = modifier.pointerInput(Unit) {
@@ -90,53 +93,62 @@ internal fun BrowserToolBar(
     }
 
     Surface(
-        color = MaterialTheme.colorScheme.primaryContainer,
+        color = toolbarColor ?: MaterialTheme.colorScheme.primaryContainer,
         modifier = swipeToOpenTabsModifier,
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            // 一度AndroidViewを経由しな意図Bitwardenが認識しない
+            // setContentはfactoryで一度だけ呼ぶ。updateで毎回呼ぶとCompose階層が再生成されIME接続がリセットされる。
+            val latestValue by rememberUpdatedState(value)
+            val latestOnValueChange by rememberUpdatedState(onValueChange)
+            val latestOnSubmit by rememberUpdatedState(onSubmit)
+            val latestOnFocusChanged by rememberUpdatedState(onFocusChanged)
+
+            // 一度AndroidViewを経由しないとBitwardenが認識しない
             AndroidView(
                 modifier = Modifier.weight(1f),
-                factory = {
-                    ComposeView(it)
-                },
-                update = {
-                    it.setContent {
-                        BasicTextField(
-                            value = value,
-                            onValueChange = onValueChange,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("url_bar")
-                                .onFocusChanged { onFocusChanged(it.hasFocus) }
-                                .semantics {
-                                    contentDescription = "Address bar"
-                                    contentType = ContentType("url")
-                                    contentDataType = ContentDataType.Text
-                                }
-                                .padding(4.dp)
-                                .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.surface)
-                                .padding(8.dp)
-                                .horizontalScroll(rememberScrollState()),
-                            singleLine = true,
-                            textStyle = TextStyle(color = MaterialTheme.colorScheme.onSurface),
-                            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                            keyboardOptions = KeyboardOptions.Default.copy(
-                                imeAction = ImeAction.Go,
-                                keyboardType = KeyboardType.Uri,
-                                autoCorrectEnabled = false,
-                            ),
-                            keyboardActions = KeyboardActions(
-                                onGo = { onSubmit(value) },
-                                onDone = { onSubmit(value) },
-                                onSearch = { onSubmit(value) },
-                            ),
-                        )
+                factory = { context ->
+                    ComposeView(context).apply {
+                        setContent {
+                            val currentValue by rememberUpdatedState(latestValue)
+                            val currentOnValueChange by rememberUpdatedState(latestOnValueChange)
+                            val currentOnSubmit by rememberUpdatedState(latestOnSubmit)
+                            val currentOnFocusChanged by rememberUpdatedState(latestOnFocusChanged)
+                            BasicTextField(
+                                value = currentValue,
+                                onValueChange = { currentOnValueChange(it) },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("url_bar")
+                                    .onFocusChanged { currentOnFocusChanged(it.hasFocus) }
+                                    .semantics {
+                                        contentDescription = "Address bar"
+                                        contentType = ContentType("url")
+                                        contentDataType = ContentDataType.Text
+                                    }
+                                    .padding(4.dp)
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.surface)
+                                    .padding(8.dp)
+                                    .horizontalScroll(rememberScrollState()),
+                                singleLine = true,
+                                textStyle = TextStyle(color = MaterialTheme.colorScheme.onSurface),
+                                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                                keyboardOptions = KeyboardOptions.Default.copy(
+                                    imeAction = ImeAction.Go,
+                                    keyboardType = KeyboardType.Uri,
+                                    autoCorrectEnabled = false,
+                                ),
+                                keyboardActions = KeyboardActions(
+                                    onGo = { currentOnSubmit(currentValue) },
+                                    onDone = { currentOnSubmit(currentValue) },
+                                    onSearch = { currentOnSubmit(currentValue) },
+                                ),
+                            )
+                        }
                     }
-                }
+                },
             )
             IconButton(
                 onClick = onOpenTabs,
@@ -252,6 +264,15 @@ internal fun BrowserToolBar(
                     }
                     DropdownMenuItem(
                         text = {
+                            Text(text = "翻訳")
+                        },
+                        onClick = {
+                            visibleMenu = false
+                            onTranslatePage()
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = {
                             Text(text = "共有")
                         },
                         onClick = {
@@ -302,10 +323,12 @@ private fun Preview() {
             isPcMode = false,
             onPcModeToggle = {},
             onFindInPage = {},
+            toolbarColor = null,
             onRefresh = {},
             onHome = {},
             onForward = {},
             canGoForward = false,
+            onTranslatePage = {},
         )
     }
 }

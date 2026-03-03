@@ -2,7 +2,11 @@ package net.matsudamper.browser
 
 import android.content.Intent
 import android.graphics.Bitmap
+import android.os.Handler
+import android.os.Looper
 import android.view.View
+import android.view.ViewGroup
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -27,9 +31,12 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -37,12 +44,16 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.TextStyle
@@ -52,10 +63,20 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import net.matsudamper.browser.data.TranslationProvider
+import kotlinx.coroutines.launch
+import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.GeckoSessionSettings
 import org.mozilla.geckoview.GeckoView
+import org.mozilla.geckoview.TranslationsController
+import java.net.URL
+import java.util.concurrent.Executors
+import androidx.core.graphics.toColorInt
+import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+
+private enum class TranslationState { Idle, Loading, Translated, Error }
 
 @Composable
 @OptIn(ExperimentalLayoutApi::class)
@@ -65,12 +86,14 @@ fun GeckoBrowserTab(
     initialUrl: String,
     homepageUrl: String,
     searchTemplate: String,
+    translationProvider: TranslationProvider,
     modifier: Modifier = Modifier,
     tabCount: Int,
     onInstallExtensionRequest: (String) -> Unit,
     onDesktopNotificationPermissionRequest: (uri: String) -> GeckoResult<Int>,
     onOpenSettings: () -> Unit,
     onOpenTabs: () -> Unit,
+    onOpenNewSessionRequest: (String) -> GeckoSession,
     onCurrentPageUrlChange: (String) -> Unit,
     onSessionStateChange: (String) -> Unit,
     onTabPreviewCaptured: (Bitmap) -> Unit,
@@ -84,15 +107,28 @@ fun GeckoBrowserTab(
     var isUrlInputFocused by remember(tabId) { mutableStateOf(false) }
     var geckoViewRef by remember(tabId) { mutableStateOf<GeckoView?>(null) }
     var isPcMode by rememberSaveable(tabId) { mutableStateOf(false) }
+    var toolbarColor by remember(tabId) { mutableStateOf<Color?>(null) }
     val keyboardController = LocalSoftwareKeyboardController.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val isImeVisible = WindowInsets.isImeVisible
     val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+    val geckoDownloadManager = remember(context) {
+        GeckoDownloadManager(
+            context = context,
+            runtime = GeckoRuntime.getDefault(context),
+        )
+    }
+
+    var translationState by remember(tabId) { mutableStateOf(TranslationState.Idle) }
+    var originalPageUrlForRevert by remember(tabId) { mutableStateOf<String?>(null) }
+    var detectedPageLanguage by remember(tabId) { mutableStateOf<String?>(null) }
 
     var showFindInPage by remember { mutableStateOf(false) }
     var findQuery by remember { mutableStateOf("") }
     var findMatchCurrent by remember { mutableIntStateOf(0) }
     var findMatchTotal by remember { mutableIntStateOf(0) }
+    var imageContextMenuUrl by remember(tabId) { mutableStateOf<String?>(null) }
 
     fun closeFindInPage() {
         showFindInPage = false
@@ -152,6 +188,13 @@ fun GeckoBrowserTab(
                 canGoForward = value
             }
 
+            override fun onNewSession(
+                session: GeckoSession,
+                uri: String
+            ): GeckoResult<GeckoSession> {
+                return GeckoResult.fromValue(onOpenNewSessionRequest(uri))
+            }
+
             override fun onLocationChange(
                 session: GeckoSession,
                 url: String?,
@@ -159,10 +202,27 @@ fun GeckoBrowserTab(
                 hasUserGesture: Boolean
             ) {
                 val newUrl = url.orEmpty()
+                if (newUrl == "about:blank" && currentPageUrl != "about:blank") {
+                    // セッション再アタッチ時の一時的な about:blank をスキップ
+                    return
+                }
                 currentPageUrl = newUrl
                 onCurrentPageUrlChange(newUrl)
                 if (!isUrlInputFocused) {
                     urlInput = newUrl
+                }
+                toolbarColor = null
+                // ユーザーが別ページへ手動遷移した場合、翻訳状態をリセット
+                val revertUrl = originalPageUrlForRevert
+                if (translationState != TranslationState.Idle &&
+                    !newUrl.startsWith("data:") &&
+                    newUrl != revertUrl
+                ) {
+                    translationState = TranslationState.Idle
+                    originalPageUrlForRevert = null
+                }
+                if (!newUrl.startsWith("data:")) {
+                    detectedPageLanguage = null
                 }
             }
         }
@@ -172,6 +232,25 @@ fun GeckoBrowserTab(
                 currentPageTitle = newTitle
                 onTabTitleChange(newTitle)
             }
+
+            override fun onContextMenu(
+                session: GeckoSession,
+                screenX: Int,
+                screenY: Int,
+                element: GeckoSession.ContentDelegate.ContextElement
+            ) {
+
+                when (element.type) {
+                    GeckoSession.ContentDelegate.ContextElement.TYPE_NONE,
+                    GeckoSession.ContentDelegate.ContextElement.TYPE_VIDEO,
+                    GeckoSession.ContentDelegate.ContextElement.TYPE_AUDIO -> {
+                    }
+
+                    GeckoSession.ContentDelegate.ContextElement.TYPE_IMAGE -> {
+                        imageContextMenuUrl = element.srcUri
+                    }
+                }
+            }
         }
         val progressDelegate = object : GeckoSession.ProgressDelegate {
             override fun onSessionStateChange(
@@ -180,11 +259,31 @@ fun GeckoBrowserTab(
             ) {
                 onSessionStateChange(sessionState.toString().orEmpty())
             }
+
+            override fun onPageStop(session: GeckoSession, success: Boolean) {
+                val pageUrl = currentPageUrl
+                updateThemeColorFromPage(pageUrl) { resolvedUrl, color ->
+                    if (resolvedUrl == currentPageUrl) {
+                        toolbarColor = color
+                    }
+                }
+            }
         }
+        val translationsDelegate = object : TranslationsController.SessionTranslation.Delegate {
+            override fun onTranslationStateChange(
+                session: GeckoSession,
+                translationState: TranslationsController.SessionTranslation.TranslationState?
+            ) {
+                val lang = translationState?.detectedLanguages?.docLangTag ?: return
+                detectedPageLanguage = lang
+            }
+        }
+
         session.permissionDelegate = permissionDelegate
         session.navigationDelegate = navigationDelegate
         session.contentDelegate = contentDelegate
         session.progressDelegate = progressDelegate
+        session.translationsSessionDelegate = translationsDelegate
 
         onDispose {
             if (session.permissionDelegate === permissionDelegate) {
@@ -198,6 +297,9 @@ fun GeckoBrowserTab(
             }
             if (session.progressDelegate === progressDelegate) {
                 session.progressDelegate = null
+            }
+            if (session.translationsSessionDelegate === translationsDelegate) {
+                session.translationsSessionDelegate = null
             }
         }
     }
@@ -252,11 +354,12 @@ fun GeckoBrowserTab(
                 },
                 onPrevious = {
                     if (findQuery.isNotEmpty()) {
-                        session.finder.find(findQuery, GeckoSession.FINDER_FIND_BACKWARDS).then<Void?> { result ->
-                            findMatchCurrent = result?.current ?: 0
-                            findMatchTotal = result?.total ?: 0
-                            null
-                        }
+                        session.finder.find(findQuery, GeckoSession.FINDER_FIND_BACKWARDS)
+                            .then<Void?> { result ->
+                                findMatchCurrent = result?.current ?: 0
+                                findMatchTotal = result?.total ?: 0
+                                null
+                            }
                     }
                 },
                 onClose = {
@@ -265,6 +368,7 @@ fun GeckoBrowserTab(
             )
         } else {
             BrowserToolBar(
+                modifier = Modifier.fillMaxWidth(),
                 value = urlInput,
                 onValueChange = { urlInput = it },
                 onSubmit = { rawInput ->
@@ -309,6 +413,7 @@ fun GeckoBrowserTab(
                 onFindInPage = {
                     showFindInPage = true
                 },
+                toolbarColor = toolbarColor,
                 onHome = {
                     urlInput = homepageUrl
                     currentPageUrl = homepageUrl
@@ -317,19 +422,104 @@ fun GeckoBrowserTab(
                 onForward = { session.goForward() },
                 canGoForward = canGoForward,
                 onRefresh = { session.reload() },
+                onTranslatePage = {
+                    if (translationState != TranslationState.Loading) {
+                        coroutineScope.launch {
+                            originalPageUrlForRevert = currentPageUrl
+                            translationState = TranslationState.Loading
+                            val result = runCatching {
+                                PageTranslator(session, currentPageUrl).translatePageToJapanese(
+                                    translationProvider,
+                                    detectedPageLanguage,
+                                )
+                            }
+                            translationState = if (result.isSuccess) {
+                                TranslationState.Translated
+                            } else {
+                                TranslationState.Error
+                            }
+                        }
+                    }
+                },
+            )
+            TranslationStatusBar(
+                state = translationState,
+                onRevert = {
+                    val savedUrl = originalPageUrlForRevert
+                    translationState = TranslationState.Idle
+                    originalPageUrlForRevert = null
+                    if (savedUrl != null) {
+                        session.loadUri(savedUrl)
+                    }
+                },
+                onDismissError = {
+                    translationState = TranslationState.Idle
+                    originalPageUrlForRevert = null
+                },
             )
         }
 
+        var isRefreshing by remember { mutableStateOf(false) }
+        var scrollY by remember { mutableIntStateOf(0) }
+        val latestOnRefresh by rememberUpdatedState {
+            session.reload()
+            isRefreshing = false
+        }
+
+        DisposableEffect(session) {
+            val delegate = object : GeckoSession.ScrollDelegate {
+                override fun onScrollChanged(
+                    session: GeckoSession,
+                    scrollX: Int,
+                    scrollYValue: Int,
+                ) {
+                    scrollY = scrollYValue
+                }
+            }
+            session.scrollDelegate = delegate
+            onDispose {
+                if (session.scrollDelegate === delegate) {
+                    session.scrollDelegate = null
+                }
+            }
+        }
+
+        val id = rememberSaveable { View.generateViewId() }
         AndroidView(
+            modifier = Modifier
+                .fillMaxSize()
+                .clipToBounds(),
             factory = { context ->
-                GeckoView(context).also { geckoView ->
-                    geckoView.setAutofillEnabled(true)
-                    geckoView.importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_YES_EXCLUDE_DESCENDANTS
-                    geckoView.setSession(session)
-                    geckoViewRef = geckoView
+                SwipeRefreshLayout(context).also { swipeRefreshLayout ->
+                    val gecko = GeckoView(context).also { geckoView ->
+                        geckoView.id = id
+                        geckoView.isNestedScrollingEnabled = true
+                        geckoView.setAutofillEnabled(true)
+                        geckoView.importantForAutofill =
+                            View.IMPORTANT_FOR_AUTOFILL_YES_EXCLUDE_DESCENDANTS
+                        geckoView.setSession(session)
+                        geckoViewRef = geckoView
+                    }
+
+                    swipeRefreshLayout.addView(
+                        gecko,
+                        ViewGroup.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                        )
+                    )
+                    swipeRefreshLayout.setOnChildScrollUpCallback { _, _ ->
+                        scrollY > 0
+                    }
+                    swipeRefreshLayout.setOnRefreshListener {
+                        isRefreshing = true
+                        latestOnRefresh()
+                    }
                 }
             },
-            update = { geckoView ->
+            update = { swipeRefreshLayout ->
+                swipeRefreshLayout.isRefreshing = isRefreshing
+                val geckoView = swipeRefreshLayout.findViewById<GeckoView>(id)
                 geckoView.setAutofillEnabled(true)
                 geckoView.importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_YES_EXCLUDE_DESCENDANTS
                 geckoView.setSession(session)
@@ -340,8 +530,164 @@ fun GeckoBrowserTab(
                     geckoView.requestFocus()
                 }
             },
-            modifier = Modifier.fillMaxSize()
         )
+
+        imageContextMenuUrl?.let { imageUrl ->
+            AlertDialog(
+                onDismissRequest = { imageContextMenuUrl = null },
+                title = {
+                    Text(text = "画像")
+                },
+                text = {
+                    Text(text = "この画像をダウンロードしますか？")
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            imageContextMenuUrl = null
+                            coroutineScope.launch {
+                                val result = runCatching {
+                                    geckoDownloadManager.downloadImageWithSession(
+                                        imageUrl = imageUrl,
+                                        referrerUrl = currentPageUrl,
+                                    )
+                                }.onFailure { it.printStackTrace() }
+                                val message = if (result.isSuccess) {
+                                    "画像をダウンロードしました"
+                                } else {
+                                    "画像のダウンロードに失敗しました"
+                                }
+                                Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                    ) {
+                        Text(text = "ダウンロード")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { imageContextMenuUrl = null }) {
+                        Text(text = "キャンセル")
+                    }
+                },
+            )
+        }
+    }
+}
+
+
+private val themeColorHandler = Handler(Looper.getMainLooper())
+private val themeColorExecutor = Executors.newSingleThreadExecutor()
+
+private fun updateThemeColorFromPage(
+    pageUrl: String,
+    onColorResolved: (String, Color?) -> Unit,
+) {
+    if (pageUrl.isBlank()) {
+        onColorResolved(pageUrl, null)
+        return
+    }
+
+    themeColorExecutor.execute {
+        val colorText = runCatching {
+            URL(pageUrl).openConnection().getInputStream().bufferedReader().use { reader ->
+                reader.readText()
+            }
+        }.getOrNull()?.let(::findThemeColorMetaContent)
+
+        val parsedColor = colorText?.let(::parseManifestColor)
+        themeColorHandler.post {
+            onColorResolved(pageUrl, parsedColor)
+        }
+    }
+}
+
+private fun findThemeColorMetaContent(html: String): String? {
+    val metaTagRegex = Regex("""<meta\b[^>]*>""", setOf(RegexOption.IGNORE_CASE))
+    val nameRegex = Regex("""\bname\s*=\s*(["'])theme-color\1""", setOf(RegexOption.IGNORE_CASE))
+    val contentRegex = Regex("""\bcontent\s*=\s*(["'])(.*?)\1""", setOf(RegexOption.IGNORE_CASE))
+
+    return metaTagRegex.findAll(html).firstNotNullOfOrNull { matchResult ->
+        val tag = matchResult.value
+        if (nameRegex.containsMatchIn(tag).not()) {
+            return@firstNotNullOfOrNull null
+        }
+        contentRegex.find(tag)?.groupValues?.getOrNull(2)?.trim()?.takeIf { it.isNotEmpty() }
+    }
+}
+
+private fun parseManifestColor(colorValue: String): Color? {
+    return try {
+        Color(colorValue.toColorInt())
+    } catch (_: IllegalArgumentException) {
+        null
+    }
+}
+
+@Composable
+private fun TranslationStatusBar(
+    state: TranslationState,
+    onRevert: () -> Unit,
+    onDismissError: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    if (state == TranslationState.Idle) return
+
+    val backgroundColor = when (state) {
+        TranslationState.Loading,
+        TranslationState.Translated -> MaterialTheme.colorScheme.secondaryContainer
+
+        TranslationState.Error -> MaterialTheme.colorScheme.errorContainer
+        TranslationState.Idle -> return
+    }
+
+    Surface(
+        color = backgroundColor,
+        modifier = modifier.fillMaxWidth(),
+    ) {
+        Column {
+            if (state == TranslationState.Loading) {
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            }
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(horizontal = 8.dp),
+            ) {
+                Text(
+                    text = when (state) {
+                        TranslationState.Loading -> "翻訳中..."
+                        TranslationState.Translated -> "翻訳済み"
+                        TranslationState.Error -> "翻訳に失敗しました"
+                        TranslationState.Idle -> ""
+                    },
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(vertical = 8.dp),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = when (state) {
+                        TranslationState.Error -> MaterialTheme.colorScheme.onErrorContainer
+                        else -> MaterialTheme.colorScheme.onSecondaryContainer
+                    },
+                )
+                when (state) {
+                    TranslationState.Translated -> {
+                        TextButton(onClick = onRevert) {
+                            Text(text = "元に戻す")
+                        }
+                    }
+
+                    TranslationState.Error -> {
+                        IconButton(onClick = onDismissError) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "閉じる",
+                            )
+                        }
+                    }
+
+                    else -> {}
+                }
+            }
+        }
     }
 }
 

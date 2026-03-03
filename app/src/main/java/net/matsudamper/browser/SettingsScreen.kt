@@ -21,6 +21,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -35,6 +36,7 @@ import net.matsudamper.browser.data.BrowserSettings
 import net.matsudamper.browser.data.HomepageType
 import net.matsudamper.browser.data.SearchProvider
 import net.matsudamper.browser.data.ThemeMode
+import net.matsudamper.browser.data.TranslationProvider
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -67,196 +69,249 @@ internal fun SettingsScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp, vertical = 8.dp),
         ) {
-            // ── ホームページ ──────────────────────────────
-            Text(
-                text = "ホームページ",
-                style = MaterialTheme.typography.titleMedium,
-            )
-            Spacer(Modifier.height(8.dp))
-
-            Column(Modifier.selectableGroup()) {
-                HomepageOption(
-                    label = "Google",
-                    selected = settings.homepageType == HomepageType.HOMEPAGE_GOOGLE,
-                    onClick = {
-                        onSettingsChange(
-                            settings.toBuilder()
-                                .setHomepageType(HomepageType.HOMEPAGE_GOOGLE)
-                                .build(),
-                        )
-                    },
-                )
-                HomepageOption(
-                    label = "DuckDuckGo",
-                    selected = settings.homepageType == HomepageType.HOMEPAGE_DUCKDUCKGO,
-                    onClick = {
-                        onSettingsChange(
-                            settings.toBuilder()
-                                .setHomepageType(HomepageType.HOMEPAGE_DUCKDUCKGO)
-                                .build(),
-                        )
-                    },
-                )
-                HomepageOption(
-                    label = "カスタム",
-                    selected = settings.homepageType == HomepageType.HOMEPAGE_CUSTOM,
-                    onClick = {
-                        onSettingsChange(
-                            settings.toBuilder()
-                                .setHomepageType(HomepageType.HOMEPAGE_CUSTOM)
-                                .build(),
-                        )
-                    },
-                )
-            }
-
-            if (settings.homepageType == HomepageType.HOMEPAGE_CUSTOM) {
-                Spacer(Modifier.height(4.dp))
-                OutlinedTextField(
-                    value = settings.customHomepageUrl,
-                    onValueChange = { url ->
-                        onSettingsChange(
-                            settings.toBuilder()
-                                .setCustomHomepageUrl(url)
-                                .build(),
-                        )
-                    },
-                    label = { Text("ホームページ URL") },
-                    placeholder = { Text("https://example.com") },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(
-                        keyboardType = KeyboardType.Uri,
-                        imeAction = ImeAction.Done,
-                    ),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
-
-            Spacer(Modifier.height(24.dp))
-
-            // ── 検索プロバイダー ─────────────────────────
-            Text(
-                text = "検索プロバイダー",
-                style = MaterialTheme.typography.titleMedium,
-            )
-            Spacer(Modifier.height(8.dp))
-
-            Column(Modifier.selectableGroup()) {
-                SearchProviderOption(
-                    label = "Google",
-                    selected = settings.searchProvider == SearchProvider.GOOGLE,
-                    onClick = {
-                        onSettingsChange(
-                            settings.toBuilder()
-                                .setSearchProvider(SearchProvider.GOOGLE)
-                                .build(),
-                        )
-                    },
-                )
-                SearchProviderOption(
-                    label = "DuckDuckGo",
-                    selected = settings.searchProvider == SearchProvider.DUCKDUCKGO,
-                    onClick = {
-                        onSettingsChange(
-                            settings.toBuilder()
-                                .setSearchProvider(SearchProvider.DUCKDUCKGO)
-                                .build(),
-                        )
-                    },
-                )
-                SearchProviderOption(
-                    label = "カスタム",
-                    selected = settings.searchProvider == SearchProvider.CUSTOM,
-                    onClick = {
-                        onSettingsChange(
-                            settings.toBuilder()
-                                .setSearchProvider(SearchProvider.CUSTOM)
-                                .build(),
-                        )
-                    },
-                )
-            }
-
-            if (settings.searchProvider == SearchProvider.CUSTOM) {
-                Spacer(Modifier.height(4.dp))
-                OutlinedTextField(
-                    value = settings.customSearchUrl,
-                    onValueChange = { url ->
-                        onSettingsChange(
-                            settings.toBuilder()
-                                .setCustomSearchUrl(url)
-                                .build(),
-                        )
-                    },
-                    label = { Text("検索 URL") },
-                    placeholder = { Text("https://example.com/search?q=%s") },
-                    supportingText = { Text("%s に検索ワードが入ります") },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(
-                        keyboardType = KeyboardType.Uri,
-                        imeAction = ImeAction.Done,
-                    ),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
-
-            Spacer(Modifier.height(24.dp))
-
-            // ── テーマ ─────────────────────────────────
-            Text(
-                text = "テーマ",
-                style = MaterialTheme.typography.titleMedium,
-            )
-            Spacer(Modifier.height(8.dp))
-
-            Column(Modifier.selectableGroup()) {
-                ThemeModeOption(
-                    label = "システム設定に合わせる",
-                    selected = settings.themeMode == ThemeMode.THEME_SYSTEM,
-                    onClick = {
-                        onSettingsChange(
-                            settings.toBuilder()
-                                .setThemeMode(ThemeMode.THEME_SYSTEM)
-                                .build(),
-                        )
-                    },
-                )
-                ThemeModeOption(
-                    label = "ライト",
-                    selected = settings.themeMode == ThemeMode.THEME_LIGHT,
-                    onClick = {
-                        onSettingsChange(
-                            settings.toBuilder()
-                                .setThemeMode(ThemeMode.THEME_LIGHT)
-                                .build(),
-                        )
-                    },
-                )
-                ThemeModeOption(
-                    label = "ダーク",
-                    selected = settings.themeMode == ThemeMode.THEME_DARK,
-                    onClick = {
-                        onSettingsChange(
-                            settings.toBuilder()
-                                .setThemeMode(ThemeMode.THEME_DARK)
-                                .build(),
-                        )
-                    },
-                )
-            }
-
-            Spacer(Modifier.height(24.dp))
-
-            Text(
-                text = "拡張機能",
-                style = MaterialTheme.typography.titleMedium,
-            )
-            Spacer(Modifier.height(8.dp))
-            TextButton(
-                onClick = onOpenExtensions,
-                modifier = Modifier.fillMaxWidth(),
+            SettingSection(
+                title = "ホームページ",
             ) {
-                Text("インストール済み拡張機能を管理")
+                Column {
+                    Column(Modifier.selectableGroup()) {
+                        HomepageOption(
+                            label = "Google",
+                            selected = settings.homepageType == HomepageType.HOMEPAGE_GOOGLE,
+                            onClick = {
+                                onSettingsChange(
+                                    settings.toBuilder()
+                                        .setHomepageType(HomepageType.HOMEPAGE_GOOGLE)
+                                        .build(),
+                                )
+                            },
+                        )
+                        HomepageOption(
+                            label = "DuckDuckGo",
+                            selected = settings.homepageType == HomepageType.HOMEPAGE_DUCKDUCKGO,
+                            onClick = {
+                                onSettingsChange(
+                                    settings.toBuilder()
+                                        .setHomepageType(HomepageType.HOMEPAGE_DUCKDUCKGO)
+                                        .build(),
+                                )
+                            },
+                        )
+                        HomepageOption(
+                            label = "カスタム",
+                            selected = settings.homepageType == HomepageType.HOMEPAGE_CUSTOM,
+                            onClick = {
+                                onSettingsChange(
+                                    settings.toBuilder()
+                                        .setHomepageType(HomepageType.HOMEPAGE_CUSTOM)
+                                        .build(),
+                                )
+                            },
+                        )
+                    }
+                    if (settings.homepageType == HomepageType.HOMEPAGE_CUSTOM) {
+                        Spacer(Modifier.height(4.dp))
+                        OutlinedTextField(
+                            value = settings.customHomepageUrl,
+                            onValueChange = { url ->
+                                onSettingsChange(
+                                    settings.toBuilder()
+                                        .setCustomHomepageUrl(url)
+                                        .build(),
+                                )
+                            },
+                            label = { Text("ホームページ URL") },
+                            placeholder = { Text("https://example.com") },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(
+                                keyboardType = KeyboardType.Uri,
+                                imeAction = ImeAction.Done,
+                            ),
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(24.dp))
+
+            SettingSection(
+                title = "検索プロバイダー",
+            ) {
+                Column {
+                    Column(Modifier.selectableGroup()) {
+                        SearchProviderOption(
+                            label = "Google",
+                            selected = settings.searchProvider == SearchProvider.GOOGLE,
+                            onClick = {
+                                onSettingsChange(
+                                    settings.toBuilder()
+                                        .setSearchProvider(SearchProvider.GOOGLE)
+                                        .build(),
+                                )
+                            },
+                        )
+                        SearchProviderOption(
+                            label = "DuckDuckGo",
+                            selected = settings.searchProvider == SearchProvider.DUCKDUCKGO,
+                            onClick = {
+                                onSettingsChange(
+                                    settings.toBuilder()
+                                        .setSearchProvider(SearchProvider.DUCKDUCKGO)
+                                        .build(),
+                                )
+                            },
+                        )
+                        SearchProviderOption(
+                            label = "カスタム",
+                            selected = settings.searchProvider == SearchProvider.CUSTOM,
+                            onClick = {
+                                onSettingsChange(
+                                    settings.toBuilder()
+                                        .setSearchProvider(SearchProvider.CUSTOM)
+                                        .build(),
+                                )
+                            },
+                        )
+                    }
+
+                    if (settings.searchProvider == SearchProvider.CUSTOM) {
+                        Spacer(Modifier.height(4.dp))
+                        OutlinedTextField(
+                            value = settings.customSearchUrl,
+                            onValueChange = { url ->
+                                onSettingsChange(
+                                    settings.toBuilder()
+                                        .setCustomSearchUrl(url)
+                                        .build(),
+                                )
+                            },
+                            label = { Text("検索 URL") },
+                            placeholder = { Text("https://example.com/search?q=%s") },
+                            supportingText = { Text("%s に検索ワードが入ります") },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(
+                                keyboardType = KeyboardType.Uri,
+                                imeAction = ImeAction.Done,
+                            ),
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(24.dp))
+
+            SettingSection(
+                title = "テーマ",
+            ) {
+                Column(Modifier.selectableGroup()) {
+                    ThemeModeOption(
+                        label = "システム設定に合わせる",
+                        selected = settings.themeMode == ThemeMode.THEME_SYSTEM,
+                        onClick = {
+                            onSettingsChange(
+                                settings.toBuilder()
+                                    .setThemeMode(ThemeMode.THEME_SYSTEM)
+                                    .build(),
+                            )
+                        },
+                    )
+                    ThemeModeOption(
+                        label = "ライト",
+                        selected = settings.themeMode == ThemeMode.THEME_LIGHT,
+                        onClick = {
+                            onSettingsChange(
+                                settings.toBuilder()
+                                    .setThemeMode(ThemeMode.THEME_LIGHT)
+                                    .build(),
+                            )
+                        },
+                    )
+                    ThemeModeOption(
+                        label = "ダーク",
+                        selected = settings.themeMode == ThemeMode.THEME_DARK,
+                        onClick = {
+                            onSettingsChange(
+                                settings.toBuilder()
+                                    .setThemeMode(ThemeMode.THEME_DARK)
+                                    .build(),
+                            )
+                        },
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(24.dp))
+
+            SettingSection(
+                title = "翻訳プロバイダー",
+            ) {
+                Column(Modifier.selectableGroup()) {
+                    TranslationProviderOption(
+                        label = "Gecko",
+                        selected = settings.translationProvider == TranslationProvider.TRANSLATION_PROVIDER_GECKO,
+                        onClick = {
+                            onSettingsChange(
+                                settings.toBuilder()
+                                    .setTranslationProvider(TranslationProvider.TRANSLATION_PROVIDER_GECKO)
+                                    .build(),
+                            )
+                        },
+                    )
+                    TranslationProviderOption(
+                        label = "ローカルAI (Android)",
+                        selected = settings.translationProvider == TranslationProvider.TRANSLATION_PROVIDER_LOCAL_AI,
+                        onClick = {
+                            onSettingsChange(
+                                settings.toBuilder()
+                                    .setTranslationProvider(TranslationProvider.TRANSLATION_PROVIDER_LOCAL_AI)
+                                    .build(),
+                            )
+                        },
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(24.dp))
+
+            SettingSection(
+                title = "セキュリティ",
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp),
+                ) {
+                    Text(
+                        text = "サードパーティーCAを有効化",
+                        style = MaterialTheme.typography.bodyLarge,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Switch(
+                        checked = settings.enableThirdPartyCa,
+                        onCheckedChange = { enabled ->
+                            onSettingsChange(
+                                settings.toBuilder()
+                                    .setEnableThirdPartyCa(enabled)
+                                    .build(),
+                            )
+                        },
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(24.dp))
+
+            SettingSection(
+                title = "拡張機能",
+            ) {
+                TextButton(
+                    onClick = onOpenExtensions,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("インストール済み拡張機能を管理")
+                }
             }
 
             Spacer(Modifier.height(24.dp))
@@ -275,6 +330,21 @@ internal fun SettingsScreen(
 
             Spacer(Modifier.height(8.dp))
         }
+    }
+}
+
+@Composable
+private fun SettingSection(
+    title: String,
+    content: @Composable () -> Unit,
+) {
+    Column {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleMedium,
+        )
+        Spacer(Modifier.height(8.dp))
+        content()
     }
 }
 
@@ -324,6 +394,29 @@ private fun SearchProviderOption(
 
 @Composable
 private fun ThemeModeOption(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .selectable(selected = selected, role = Role.RadioButton, onClick = onClick)
+            .padding(vertical = 4.dp),
+    ) {
+        RadioButton(selected = selected, onClick = null)
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyLarge,
+            modifier = Modifier.padding(start = 8.dp),
+        )
+    }
+}
+
+
+@Composable
+private fun TranslationProviderOption(
     label: String,
     selected: Boolean,
     onClick: () -> Unit,
