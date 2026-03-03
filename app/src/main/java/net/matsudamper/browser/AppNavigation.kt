@@ -69,6 +69,10 @@ internal fun BrowserApp(
     val homepageUrl = currentSettings.resolvedHomepageUrl()
     val searchTemplate = currentSettings.resolvedSearchTemplate()
 
+    LaunchedEffect(runtime, currentSettings.enableThirdPartyCa) {
+        runtime.settings.setEnterpriseRootsEnabled(currentSettings.enableThirdPartyCa)
+    }
+
     val scope = rememberCoroutineScope()
     val backStack = rememberNavBackStack(AppDestination.Browser)
     var tabPersistenceSignal by remember { mutableLongStateOf(0L) }

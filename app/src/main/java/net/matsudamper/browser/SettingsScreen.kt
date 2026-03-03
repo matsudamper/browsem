@@ -21,6 +21,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -263,6 +264,35 @@ internal fun SettingsScreen(
                             onSettingsChange(
                                 settings.toBuilder()
                                     .setTranslationProvider(TranslationProvider.TRANSLATION_PROVIDER_LOCAL_AI)
+                                    .build(),
+                            )
+                        },
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(24.dp))
+
+            SettingSection(
+                title = "セキュリティ",
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp),
+                ) {
+                    Text(
+                        text = "サードパーティーCAを有効化",
+                        style = MaterialTheme.typography.bodyLarge,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Switch(
+                        checked = settings.enableThirdPartyCa,
+                        onCheckedChange = { enabled ->
+                            onSettingsChange(
+                                settings.toBuilder()
+                                    .setEnableThirdPartyCa(enabled)
                                     .build(),
                             )
                         },

@@ -35,6 +35,7 @@ message BrowserSettings {
   int32 selected_tab_index = 6;
   ThemeMode theme_mode = 7;
   TranslationProvider translation_provider = 8;
+  bool enable_third_party_ca = 9;
 }
 
 message BrowserTabState {
