@@ -11,6 +11,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -201,10 +202,9 @@ internal fun BrowserApp(
                             runtime = runtime,
                             onBack = { backStack.removeLastOrNull() },
                             onOpenExtensionSettings = { optionsPageUrl ->
-                                browserSessionController.selectedTab?.session?.loadUri(
-                                    optionsPageUrl
-                                )
-                                backStack.removeLastOrNull()
+                                val tab =
+                                    browserSessionController.createTab(initialUrl = optionsPageUrl)
+                                navController.selectTab(tab.tabId)
                             },
                         )
                     }
@@ -222,9 +222,14 @@ internal fun BrowserApp(
                     }
 
                     AppDestination.Tabs -> navEntry(key) {
+                        DisposableEffect(Unit) {
+                            onDispose {
+                                navController.disposeTabs()
+                            }
+                        }
                         TabsScreen(
                             tabs = browserSessionController.tabs,
-                            selectedTabId = browserSessionController.selectedTab?.tabId,
+                            selectedTabId = navController.getSelectedTab(),
                             onSelectTab = { tabId ->
                                 val tab = browserSessionController.selectTab(tabId)
                                 tabPersistenceSignal++

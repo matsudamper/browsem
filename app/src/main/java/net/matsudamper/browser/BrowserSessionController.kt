@@ -2,21 +2,17 @@ package net.matsudamper.browser
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.os.Build
-import android.util.Log
-import java.io.ByteArrayOutputStream
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoSession
+import java.io.ByteArrayOutputStream
 import java.util.UUID
-import kotlin.toString
 
 internal class BrowserSessionController(runtime: GeckoRuntime) {
     private val geckoRuntime = runtime
@@ -25,9 +21,6 @@ internal class BrowserSessionController(runtime: GeckoRuntime) {
 
     val tabs: List<BrowserTab>
         get() = tabList
-
-    val selectedTab: BrowserTab?
-        get() = tabList.firstOrNull { it.tabId == selectedTabId }
 
     val selectedTabIndex: Int
         get() = tabList.indexOfFirst { it.tabId == selectedTabId }
