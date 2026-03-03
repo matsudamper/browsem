@@ -1,6 +1,11 @@
 package net.matsudamper.browser
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.ContentTransform
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.slideIn
+import androidx.compose.animation.slideOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
@@ -14,10 +19,13 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.IntOffset
 import androidx.navigation3.runtime.NavEntry
 import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.ui.NavDisplay
+import androidx.navigation3.ui.defaultPopTransitionSpec
+import androidx.navigation3.ui.defaultTransitionSpec
 import com.google.protobuf.ByteString
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -30,18 +38,18 @@ import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoRuntime
 
 @Serializable
-private sealed interface AppDestination : NavKey {
+private sealed interface AppDestination : NavKey, java.io.Serializable {
     @Serializable
-    data object Browser : AppDestination
+    data object Browser : AppDestination, java.io.Serializable
 
     @Serializable
-    data object Settings : AppDestination
+    data object Settings : AppDestination, java.io.Serializable
 
     @Serializable
-    data object Extensions : AppDestination
+    data object Extensions : AppDestination, java.io.Serializable
 
     @Serializable
-    data object Tabs : AppDestination
+    data object Tabs : AppDestination, java.io.Serializable
 }
 
 @Composable
@@ -92,7 +100,12 @@ internal fun BrowserApp(
         )
     }
 
-    LaunchedEffect(browserSessionController, homepageUrl, persistedTabs, currentSettings.selectedTabIndex) {
+    LaunchedEffect(
+        browserSessionController,
+        homepageUrl,
+        persistedTabs,
+        currentSettings.selectedTabIndex
+    ) {
         browserSessionController.ensureInitialPageLoaded(
             homepageUrl = homepageUrl,
             persistedTabs = persistedTabs,
@@ -108,9 +121,67 @@ internal fun BrowserApp(
         NavDisplay(
             backStack = backStack,
             onBack = { backStack.removeLastOrNull() },
+            transitionSpec = {
+                val default = defaultTransitionSpec<NavKey>()(this)
+                val initial = initialState.entries.lastOrNull()
+                    ?: return@NavDisplay default
+                val target = targetState.entries.lastOrNull()
+                    ?: return@NavDisplay default
+
+                if (target.contentKey is AppDestination.Tabs && initial.contentKey is AppDestination.Browser) {
+                    return@NavDisplay ContentTransform(
+                        initialContentExit = ExitTransition.None,
+                        targetContentEnter = slideIn {
+                            IntOffset(
+                                x = 0,
+                                y = -it.height / 2,
+                            )
+                        },
+                    )
+                }
+
+                if (initial.contentKey is AppDestination.Browser) {
+                    return@NavDisplay ContentTransform(
+                        initialContentExit = ExitTransition.None,
+                        targetContentEnter = EnterTransition.None,
+                    )
+                }
+
+                default
+            },
+            popTransitionSpec = {
+                val default = defaultPopTransitionSpec<NavKey>()(this)
+                val initial = initialState.entries.lastOrNull()
+                    ?: return@NavDisplay default
+                val target = targetState.entries.lastOrNull()
+                    ?: return@NavDisplay default
+
+                if (initial.contentKey is AppDestination.Tabs && target.contentKey is AppDestination.Browser) {
+                    return@NavDisplay ContentTransform(
+                        initialContentExit = slideOut {
+                            IntOffset(
+                                x = 0,
+                                y = -it.height,
+                            )
+                        },
+                        targetContentEnter = EnterTransition.None,
+                    )
+                }
+
+                if (target.contentKey is AppDestination.Browser) {
+                    return@NavDisplay ContentTransform(
+                        initialContentExit = ExitTransition.None,
+                        targetContentEnter = EnterTransition.None,
+                    )
+                }
+
+                default
+            },
             entryProvider = { key: NavKey ->
                 when (key) {
-                    AppDestination.Browser -> NavEntry<NavKey>(key) {
+                    AppDestination.Browser -> navEntry(
+                        key = key,
+                    ) {
                         val selectedTab = browserSessionController.selectedTab
                         if (selectedTab != null) {
                             val tabs = browserSessionController.tabs
@@ -169,7 +240,7 @@ internal fun BrowserApp(
                         }
                     }
 
-                    AppDestination.Settings -> NavEntry<NavKey>(key) {
+                    AppDestination.Settings -> navEntry(key) {
                         SettingsScreen(
                             settings = currentSettings,
                             onSettingsChange = { newSettings ->
@@ -180,18 +251,20 @@ internal fun BrowserApp(
                         )
                     }
 
-                    AppDestination.Extensions -> NavEntry<NavKey>(key) {
+                    AppDestination.Extensions -> navEntry(key) {
                         ExtensionsScreen(
                             runtime = runtime,
                             onBack = { backStack.removeLastOrNull() },
                             onOpenExtensionSettings = { optionsPageUrl ->
-                                browserSessionController.selectedTab?.session?.loadUri(optionsPageUrl)
+                                browserSessionController.selectedTab?.session?.loadUri(
+                                    optionsPageUrl
+                                )
                                 backStack.removeLastOrNull()
                             },
                         )
                     }
 
-                    AppDestination.Tabs -> NavEntry<NavKey>(key) {
+                    AppDestination.Tabs -> navEntry(key) {
                         TabsScreen(
                             tabs = browserSessionController.tabs,
                             selectedTabId = browserSessionController.selectedTab?.id,
@@ -229,4 +302,15 @@ internal fun BrowserApp(
             },
         )
     }
+}
+
+private fun navEntry(
+    key: NavKey,
+    content: @Composable (NavKey) -> Unit,
+): NavEntry<NavKey> {
+    return NavEntry(
+        key = key,
+        contentKey = key,
+        content = content,
+    )
 }
