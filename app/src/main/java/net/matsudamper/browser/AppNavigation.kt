@@ -36,6 +36,8 @@ import net.matsudamper.browser.data.PersistedTabState
 import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.resolvedHomepageUrl
 import net.matsudamper.browser.data.resolvedSearchTemplate
+import net.matsudamper.browser.navigation.AppDestination
+import net.matsudamper.browser.navigation.NavController
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoSession
@@ -60,6 +62,11 @@ internal fun BrowserApp(
 
     val scope = rememberCoroutineScope()
     val backStack = rememberNavBackStack(AppDestination.Browser(UUID.randomUUID().toString()))
+    val navController = remember(backStack) {
+        NavController(
+            backStack = backStack,
+        )
+    }
     var tabPersistenceSignal by remember { mutableLongStateOf(0L) }
 
     val handleNotificationPermission: (uri: String) -> GeckoResult<Int> = { uri ->
@@ -219,9 +226,9 @@ internal fun BrowserApp(
                             tabs = browserSessionController.tabs,
                             selectedTabId = browserSessionController.selectedTab?.tabId,
                             onSelectTab = { tabId ->
-                                browserSessionController.selectTab(tabId)
+                                val tab = browserSessionController.selectTab(tabId)
                                 tabPersistenceSignal++
-                                backStack.removeLastOrNull()
+                                navController.selectTab(tab.tabId)
                             },
                             onCloseTab = { tabId ->
                                 browserSessionController.closeTab(tabId)

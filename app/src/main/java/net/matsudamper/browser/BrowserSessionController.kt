@@ -111,9 +111,14 @@ internal class BrowserSessionController(runtime: GeckoRuntime) {
         )
     }
 
-    fun selectTab(tabId: String) {
-        if (tabList.any { it.tabId == tabId }) {
+    fun selectTab(tabId: String): BrowserTab {
+        val targetTab = tabList.firstOrNull { it.tabId == tabId }
+        return if (targetTab != null) {
             selectedTabId = tabId
+            targetTab
+        } else {
+            // TODO homepage
+            createTab(initialUrl = "")
         }
     }
 
