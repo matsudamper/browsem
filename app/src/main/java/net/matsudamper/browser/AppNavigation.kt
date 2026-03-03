@@ -242,8 +242,10 @@ internal fun BrowserApp(
                     }
 
                     AppDestination.Settings -> navEntry(key) {
+                        val latestSettings by settingsRepository.settings
+                            .collectAsState(initial = currentSettings)
                         SettingsScreen(
-                            settings = currentSettings,
+                            settings = latestSettings,
                             onSettingsChange = { newSettings ->
                                 scope.launch { settingsRepository.updateSettings(newSettings) }
                             },
