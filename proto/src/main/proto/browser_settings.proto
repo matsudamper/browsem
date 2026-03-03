@@ -21,6 +21,11 @@ enum ThemeMode {
   THEME_DARK = 2;
 }
 
+enum TranslationProvider {
+  TRANSLATION_PROVIDER_GECKO = 0;
+  TRANSLATION_PROVIDER_LOCAL_AI = 1;
+}
+
 message BrowserSettings {
   HomepageType homepage_type = 1;
   string custom_homepage_url = 2;
@@ -29,6 +34,7 @@ message BrowserSettings {
   repeated BrowserTabState tab_states = 5;
   int32 selected_tab_index = 6;
   ThemeMode theme_mode = 7;
+  TranslationProvider translation_provider = 8;
 }
 
 message BrowserTabState {
