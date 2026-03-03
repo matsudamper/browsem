@@ -58,6 +58,7 @@ internal fun BrowserApp(
     browserSessionController: BrowserSessionController,
     onInstallExtensionRequest: (String) -> Unit,
     onDesktopNotificationPermissionRequest: () -> GeckoResult<Int>,
+    onManualCertificateInstallRequest: () -> Unit,
 ) {
     val context = LocalContext.current
     val settingsRepository = remember { SettingsRepository(context) }
@@ -250,6 +251,7 @@ internal fun BrowserApp(
                                 scope.launch { settingsRepository.updateSettings(newSettings) }
                             },
                             onOpenExtensions = { backStack.add(AppDestination.Extensions) },
+                            onOpenCertificateInstall = onManualCertificateInstallRequest,
                             onBack = { backStack.removeLastOrNull() },
                         )
                     }

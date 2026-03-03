@@ -43,6 +43,7 @@ internal fun SettingsScreen(
     settings: BrowserSettings,
     onSettingsChange: (BrowserSettings) -> Unit,
     onOpenExtensions: () -> Unit,
+    onOpenCertificateInstall: () -> Unit,
     onBack: () -> Unit,
 ) {
     Scaffold(
@@ -280,6 +281,19 @@ internal fun SettingsScreen(
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text("インストール済み拡張機能を管理")
+                }
+            }
+
+            Spacer(Modifier.height(24.dp))
+
+            SettingSection(
+                title = "セキュリティ",
+            ) {
+                TextButton(
+                    onClick = onOpenCertificateInstall,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("セキュリティ証明書の手動インストール")
                 }
             }
 

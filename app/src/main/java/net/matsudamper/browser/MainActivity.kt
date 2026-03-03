@@ -1,9 +1,11 @@
 package net.matsudamper.browser
 
 import android.Manifest
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.IntentSender
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -29,6 +31,7 @@ import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.WebExtension
+import android.security.KeyChain
 import org.mozilla.geckoview.WebExtensionController
 import java.util.concurrent.CancellationException
 
@@ -38,6 +41,7 @@ class MainActivity : ComponentActivity() {
     private var pendingActivityResult: GeckoResult<Intent>? = null
     private var installPromptState by mutableStateOf<InstallPromptState?>(null)
     private var installFailureMessage by mutableStateOf<String?>(null)
+    private var certificateInstallMessage by mutableStateOf<String?>(null)
     private var webExtensionWarmUpCompleted = false
     private var webExtensionWarmUpInProgress = false
     private val createNewTabChannel = Channel<String>(Channel.UNLIMITED)
@@ -70,6 +74,15 @@ class MainActivity : ComponentActivity() {
                 CancellationException("Gecko activity cancelled. resultCode=${result.resultCode}")
             )
         }
+    }
+
+    private val pickCertificateLauncher = registerForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri == null) {
+            return@registerForActivityResult
+        }
+        installCertificateFromUri(uri)
     }
 
     private val activityDelegate = GeckoRuntime.ActivityDelegate { pendingIntent ->
@@ -112,6 +125,7 @@ class MainActivity : ComponentActivity() {
         override fun onInstalling(extension: WebExtension) {
             runOnUiThread {
                 installFailureMessage = null
+                certificateInstallMessage = null
             }
         }
 
@@ -168,6 +182,9 @@ class MainActivity : ComponentActivity() {
                     onDesktopNotificationPermissionRequest = {
                         requestNotificationPermissionIfNeeded()
                     },
+                    onManualCertificateInstallRequest = {
+                        openManualCertificateInstall()
+                    },
                 )
             }
             installPromptState?.let { prompt ->
@@ -185,6 +202,12 @@ class MainActivity : ComponentActivity() {
                 InstallFailureDialog(
                     message = message,
                     onDismiss = { installFailureMessage = null }
+                )
+            }
+            certificateInstallMessage?.let { message ->
+                CertificateInstallDialog(
+                    message = message,
+                    onDismiss = { certificateInstallMessage = null },
                 )
             }
         }
@@ -233,6 +256,7 @@ class MainActivity : ComponentActivity() {
         )
         installPromptState = null
         installFailureMessage = null
+        certificateInstallMessage = null
         pendingActivityResult?.completeExceptionally(
             CancellationException("Activity was destroyed before Gecko activity completed.")
         )
@@ -283,6 +307,7 @@ class MainActivity : ComponentActivity() {
             )
             installPromptState = null
             installFailureMessage = null
+            certificateInstallMessage = null
         }
     }
 
@@ -374,6 +399,7 @@ class MainActivity : ComponentActivity() {
 
     private fun installFromCurrentPage(pageUrl: String) {
         installFailureMessage = null
+        certificateInstallMessage = null
         val installUri = resolveAmoInstallUriFromPage(pageUrl)
         if (installUri == null) {
             installFailureMessage =
@@ -408,6 +434,52 @@ class MainActivity : ComponentActivity() {
             )
     }
 
+    private fun openManualCertificateInstall() {
+        certificateInstallMessage = null
+        pickCertificateLauncher.launch(
+            arrayOf(
+                "application/x-pem-file",
+                "application/x-x509-ca-cert",
+                "application/x-x509-user-cert",
+                "application/pkix-cert",
+                "application/octet-stream",
+            )
+        )
+    }
+
+    private fun installCertificateFromUri(uri: Uri) {
+        val certificateBytes = try {
+            contentResolver.openInputStream(uri)?.use { it.readBytes() }
+        } catch (e: Exception) {
+            certificateInstallMessage = "証明書ファイルの読み込みに失敗しました。\n\n${e.message ?: e::class.java.simpleName}"
+            null
+        }
+
+        if (certificateBytes == null || certificateBytes.isEmpty()) {
+            if (certificateInstallMessage == null) {
+                certificateInstallMessage = "証明書ファイルを読み込めませんでした。"
+            }
+            return
+        }
+
+        val name = uri.lastPathSegment
+            ?.substringAfterLast('/')
+            ?.takeIf { it.isNotBlank() }
+            ?: "manual-certificate"
+
+        try {
+            startActivity(
+                KeyChain.createInstallIntent().apply {
+                    putExtra(KeyChain.EXTRA_CERTIFICATE, certificateBytes)
+                    putExtra(KeyChain.EXTRA_NAME, name)
+                }
+            )
+        } catch (e: ActivityNotFoundException) {
+            certificateInstallMessage =
+                "この端末では証明書インストーラーを起動できませんでした。"
+        }
+    }
+
     private fun warmUpWebExtensionController() {
         if (webExtensionWarmUpCompleted || webExtensionWarmUpInProgress) {
             return
@@ -430,7 +502,6 @@ class MainActivity : ComponentActivity() {
         )
     }
 }
-
 
 @Composable
 private fun InstallPromptDialog(
@@ -468,6 +539,27 @@ private data class InstallPromptState(
     val message: String,
     val result: GeckoResult<WebExtension.PermissionPromptResponse>,
 )
+
+@Composable
+private fun CertificateInstallDialog(
+    message: String,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text("証明書インストール")
+        },
+        text = {
+            Text(message)
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("OK")
+            }
+        }
+    )
+}
 
 @Composable
 private fun InstallFailureDialog(
