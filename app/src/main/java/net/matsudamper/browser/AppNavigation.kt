@@ -33,6 +33,7 @@ import net.matsudamper.browser.data.PersistedTabState
 import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.resolvedHomepageUrl
 import net.matsudamper.browser.data.resolvedSearchTemplate
+import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoRuntime
 
 @Serializable
@@ -50,14 +51,15 @@ private sealed interface AppDestination : NavKey {
 @Composable
 internal fun BrowserApp(
     runtime: GeckoRuntime,
+    browserSessionController: BrowserSessionController,
     onInstallExtensionRequest: (String) -> Unit,
+    onDesktopNotificationPermissionRequest: () -> GeckoResult<Int>,
 ) {
     val context = LocalContext.current
     val settingsRepository = remember { SettingsRepository(context) }
     val settings by settingsRepository.settings
         .collectAsState(initial = null)
     val currentSettings = settings ?: return
-    val browserSessionController = rememberBrowserSessionController(runtime)
     val homepageUrl = currentSettings.resolvedHomepageUrl()
     val searchTemplate = currentSettings.resolvedSearchTemplate()
 
@@ -133,11 +135,20 @@ internal fun BrowserApp(
                                     searchTemplate = searchTemplate,
                                     tabCount = tabs.size,
                                     onInstallExtensionRequest = onInstallExtensionRequest,
+                                    onDesktopNotificationPermissionRequest = onDesktopNotificationPermissionRequest,
                                     onOpenSettings = {
                                         backStack.add(AppDestination.Settings)
                                     },
                                     onOpenTabs = {
                                         tabsVisible = true
+                                    },
+                                    onOpenNewSessionRequest = { uri ->
+                                        val newTab = browserSessionController.createTabForNewSession(
+                                            initialUrl = uri,
+                                        )
+                                        browserSessionController.selectTab(newTab.id)
+                                        tabPersistenceSignal++
+                                        newTab.session
                                     },
                                     onCurrentPageUrlChange = { currentUrl ->
                                         browserSessionController.updateTabUrl(

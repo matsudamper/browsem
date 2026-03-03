@@ -64,16 +64,15 @@ internal class BrowserSessionController(runtime: GeckoRuntime) {
         restoredTitle: String = "",
         restoredPreviewImage: ByteArray = byteArrayOf(),
     ): BrowserTab {
+        val normalizedInitialUrl = initialUrl.ifBlank { "about:blank" }
         val session = GeckoSession().also { it.open(geckoRuntime) }
-        val tab = BrowserTab(
-            id = nextTabId++,
+        val tab = appendTab(
             session = session,
-            currentUrl = initialUrl,
+            initialUrl = normalizedInitialUrl,
             sessionState = restoredSessionState.orEmpty(),
-            title = restoredTitle.ifBlank { initialUrl },
+            title = restoredTitle,
             previewBitmap = restoredPreviewImage.toBitmapOrNull(),
         )
-        tabList += tab
         val restored = restoredSessionState
             ?.takeIf { it.isNotBlank() }
             ?.let { sessionState ->
@@ -82,9 +81,20 @@ internal class BrowserSessionController(runtime: GeckoRuntime) {
                 true
             } == true
         if (!restored) {
-            session.loadUri(initialUrl)
+            session.loadUri(normalizedInitialUrl)
         }
         return tab
+    }
+
+    fun createTabForNewSession(initialUrl: String): BrowserTab {
+        val normalizedInitialUrl = initialUrl.ifBlank { "about:blank" }
+        return appendTab(
+            session = GeckoSession(),
+            initialUrl = normalizedInitialUrl,
+            sessionState = "",
+            title = normalizedInitialUrl,
+            previewBitmap = null,
+        )
     }
 
     fun selectTab(tabId: Long) {
@@ -116,7 +126,9 @@ internal class BrowserSessionController(runtime: GeckoRuntime) {
             return
         }
         val removed = tabList.removeAt(index)
-        removed.session.close()
+        if (removed.session.isOpen) {
+            removed.session.close()
+        }
         if (selectedTabId == tabId) {
             if (tabList.isEmpty()) {
                 selectedTabId = -1L
@@ -140,10 +152,31 @@ internal class BrowserSessionController(runtime: GeckoRuntime) {
 
     fun close() {
         tabList.forEach { tab ->
-            tab.session.close()
+            if (tab.session.isOpen) {
+                tab.session.close()
+            }
         }
         tabList.clear()
         selectedTabId = -1L
+    }
+
+    private fun appendTab(
+        session: GeckoSession,
+        initialUrl: String,
+        sessionState: String,
+        title: String,
+        previewBitmap: Bitmap?,
+    ): BrowserTab {
+        val tab = BrowserTab(
+            id = nextTabId++,
+            session = session,
+            currentUrl = initialUrl,
+            sessionState = sessionState,
+            title = title.ifBlank { initialUrl },
+            previewBitmap = previewBitmap,
+        )
+        tabList += tab
+        return tab
     }
 }
 
