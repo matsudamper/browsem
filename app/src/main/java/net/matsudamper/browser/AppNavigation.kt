@@ -1,5 +1,6 @@
 package net.matsudamper.browser
 
+import android.util.Log
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.ContentTransform
@@ -11,6 +12,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -18,6 +20,7 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntOffset
@@ -29,17 +32,18 @@ import androidx.navigation3.ui.NavDisplay
 import androidx.navigation3.ui.defaultPopTransitionSpec
 import androidx.navigation3.ui.defaultTransitionSpec
 import com.google.protobuf.ByteString
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import net.matsudamper.browser.data.BrowserSettings
 import net.matsudamper.browser.data.PersistedTabState
 import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.resolvedHomepageUrl
 import net.matsudamper.browser.data.resolvedSearchTemplate
+import net.matsudamper.browser.navigation.AppDestination
+import net.matsudamper.browser.navigation.NavController
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoSession
-import java.util.UUID
 
 @Composable
 internal fun BrowserApp(
@@ -59,7 +63,12 @@ internal fun BrowserApp(
     }
 
     val scope = rememberCoroutineScope()
-    val backStack = rememberNavBackStack(AppDestination.Browser(UUID.randomUUID().toString()))
+    val backStack = rememberNavBackStack(AppDestination.Setup)
+    val navController = remember(backStack) {
+        NavController(
+            backStack = backStack,
+        )
+    }
     var tabPersistenceSignal by remember { mutableLongStateOf(0L) }
 
     val handleNotificationPermission: (uri: String) -> GeckoResult<Int> = { uri ->
@@ -88,35 +97,25 @@ internal fun BrowserApp(
         }
     }
 
-    LaunchedEffect(tabPersistenceSignal) {
-        if (tabPersistenceSignal == 0L) {
-            return@LaunchedEffect
+    val coroutineScope = rememberCoroutineScope()
+    DisposableEffect(browserSessionController) {
+        coroutineScope.launch {
+            snapshotFlow { browserSessionController.stateChanged }
+                .collectLatest {
+                    settingsRepository.updateTabStates(
+                        tabs = browserSessionController.exportPersistedTabs().map { tab ->
+                            PersistedTabState(
+                                url = tab.url,
+                                sessionState = tab.sessionState,
+                                title = tab.title,
+                                previewImageWebp = ByteString.copyFrom(tab.previewImageWebp),
+                            )
+                        },
+                        selectedTabIndex = browserSessionController.selectedTabIndex,
+                    )
+                }
         }
-        delay(250L)
-        settingsRepository.updateTabStates(
-            tabs = browserSessionController.exportPersistedTabs().map { tab ->
-                PersistedTabState(
-                    url = tab.url,
-                    sessionState = tab.sessionState,
-                    title = tab.title,
-                    previewImageWebp = ByteString.copyFrom(tab.previewImageWebp),
-                )
-            },
-            selectedTabIndex = browserSessionController.selectedTabIndex,
-        )
-    }
-
-    LaunchedEffect(
-        browserSessionController,
-        homepageUrl,
-        persistedTabs,
-        currentSettings.selectedTabIndex
-    ) {
-        browserSessionController.ensureInitialPageLoaded(
-            homepageUrl = homepageUrl,
-            persistedTabs = persistedTabs,
-            persistedSelectedTabIndex = currentSettings.selectedTabIndex,
-        )
+        onDispose { }
     }
 
     BackHandler(enabled = backStack.size > 1) {
@@ -159,6 +158,23 @@ internal fun BrowserApp(
             predictivePopTransitionSpec = { popTransition { height -> -height / 2 } },
             entryProvider = { key: NavKey ->
                 when (key) {
+                    is AppDestination.Setup -> navEntry(
+                        key = key
+                    ) {
+                        DisposableEffect(Unit) {
+                            browserSessionController.restoreTabs(
+                                homepageUrl = homepageUrl,
+                                persistedTabs = persistedTabs,
+                                persistedSelectedTabIndex = currentSettings.selectedTabIndex,
+                            )
+
+                            val tab =
+                                browserSessionController.tabs.getOrNull(browserSessionController.selectedTabIndex)!!
+                            navController.selectTab(tab.tabId)
+                            onDispose { }
+                        }
+                    }
+
                     is AppDestination.Browser -> navEntry(
                         key = key,
                     ) {
@@ -194,10 +210,9 @@ internal fun BrowserApp(
                             runtime = runtime,
                             onBack = { backStack.removeLastOrNull() },
                             onOpenExtensionSettings = { optionsPageUrl ->
-                                browserSessionController.selectedTab?.session?.loadUri(
-                                    optionsPageUrl
-                                )
-                                backStack.removeLastOrNull()
+                                val tab =
+                                    browserSessionController.createAndAppendTab(initialUrl = optionsPageUrl)
+                                navController.selectTab(tab.tabId)
                             },
                         )
                     }
@@ -215,18 +230,23 @@ internal fun BrowserApp(
                     }
 
                     AppDestination.Tabs -> navEntry(key) {
+                        DisposableEffect(Unit) {
+                            onDispose {
+                                navController.disposeTabs()
+                            }
+                        }
                         TabsScreen(
                             tabs = browserSessionController.tabs,
-                            selectedTabId = browserSessionController.selectedTab?.tabId,
+                            selectedTabId = navController.getSelectedTab(),
                             onSelectTab = { tabId ->
-                                browserSessionController.selectTab(tabId)
+                                val tab = browserSessionController.selectTab(tabId)
                                 tabPersistenceSignal++
-                                backStack.removeLastOrNull()
+                                navController.selectTab(tab.tabId)
                             },
                             onCloseTab = { tabId ->
                                 browserSessionController.closeTab(tabId)
                                 if (browserSessionController.tabs.isEmpty()) {
-                                    val newTab = browserSessionController.createTab(
+                                    val newTab = browserSessionController.createAndAppendTab(
                                         initialUrl = homepageUrl,
                                     )
                                     browserSessionController.selectTab(newTab.tabId)
@@ -234,7 +254,7 @@ internal fun BrowserApp(
                                 tabPersistenceSignal++
                             },
                             onOpenNewTab = {
-                                val newTab = browserSessionController.createTab(
+                                val newTab = browserSessionController.createAndAppendTab(
                                     initialUrl = homepageUrl,
                                 )
                                 browserSessionController.selectTab(newTab.tabId)
@@ -284,8 +304,7 @@ private fun Browser(
     }
     val tabs = browserSessionController.tabs
     GeckoBrowserTab(
-        session = selectedTab.session,
-        initialUrl = selectedTab.currentUrl,
+        browserTab = selectedTab,
         homepageUrl = homepageUrl,
         searchTemplate = searchTemplate,
         translationProvider = currentSettings.translationProvider,
@@ -304,30 +323,6 @@ private fun Browser(
             )
             browserSessionController.selectTab(newTab.tabId)
             newTab.session
-        },
-        onCurrentPageUrlChange = { currentUrl ->
-            browserSessionController.updateTabUrl(
-                tabId = selectedTab.tabId,
-                url = currentUrl,
-            )
-        },
-        onSessionStateChange = { sessionState ->
-            browserSessionController.updateTabSessionState(
-                tabId = selectedTab.tabId,
-                sessionState = sessionState,
-            )
-        },
-        onTabPreviewCaptured = { previewBitmap ->
-            browserSessionController.updateTabPreview(
-                tabId = selectedTab.tabId,
-                previewBitmap = previewBitmap,
-            )
-        },
-        onTabTitleChange = { title ->
-            browserSessionController.updateTabTitle(
-                tabId = selectedTab.tabId,
-                title = title,
-            )
         },
     )
 }

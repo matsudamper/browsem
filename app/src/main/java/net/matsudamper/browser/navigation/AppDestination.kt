@@ -1,11 +1,13 @@
-package net.matsudamper.browser
+package net.matsudamper.browser.navigation
 
 import androidx.navigation3.runtime.NavKey
 import kotlinx.serialization.Serializable
 
-
 @Serializable
 sealed interface AppDestination : NavKey, java.io.Serializable {
+    @Serializable
+    data object Setup : NavKey, java.io.Serializable
+
     @Serializable
     data class Browser(val tabId: String) : AppDestination, java.io.Serializable
 

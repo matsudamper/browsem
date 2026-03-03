@@ -2,62 +2,72 @@ package net.matsudamper.browser
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.os.Build
 import android.util.Log
-import java.io.ByteArrayOutputStream
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.Stable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoSession
+import java.io.ByteArrayOutputStream
 import java.util.UUID
-import kotlin.toString
 
+@Stable
 internal class BrowserSessionController(runtime: GeckoRuntime) {
     private val geckoRuntime = runtime
     private val tabList = mutableStateListOf<BrowserTab>()
     private var selectedTabId: String? by mutableStateOf(null)
 
+    val stateChanged by derivedStateOf {
+        mutableIntStateOf(
+            tabList.map {
+                it.currentUrl
+                it.sessionState
+                it.title
+                it.previewBitmap
+            }.hashCode()
+        )
+    }
+
     val tabs: List<BrowserTab>
         get() = tabList
-
-    val selectedTab: BrowserTab?
-        get() = tabList.firstOrNull { it.tabId == selectedTabId }
 
     val selectedTabIndex: Int
         get() = tabList.indexOfFirst { it.tabId == selectedTabId }
             .takeIf { it >= 0 }
             ?: 0
 
+    val currentTab: BrowserTab?
+        get() = tabList.firstOrNull { it.tabId == selectedTabId }
+
     fun getOrCreateTab(tabId: String, homepageUrl: String): BrowserTab {
+        Log.d("LOG", "getOrCreateTab: tabList=${tabList.size}")
         val alreadyCreatedTab = tabList.firstOrNull { it.tabId == tabId }
         if (alreadyCreatedTab != null) return alreadyCreatedTab
 
-        val newTab = createTab(tabId = tabId, initialUrl = homepageUrl)
+        val newTab = createAndAppendTab(tabId = tabId, initialUrl = homepageUrl)
         return newTab
     }
 
-    fun ensureInitialPageLoaded(
+    fun restoreTabs(
         homepageUrl: String,
-        persistedTabs: List<PersistedBrowserTab> = emptyList(),
-        persistedSelectedTabIndex: Int = 0,
+        persistedTabs: List<PersistedBrowserTab>,
+        persistedSelectedTabIndex: Int,
     ) {
         if (tabList.isNotEmpty()) return
         if (persistedTabs.isEmpty()) {
             val tabId = UUID.randomUUID().toString()
-            val initialTab = createTab(tabId = tabId, initialUrl = homepageUrl)
+            val initialTab = createAndAppendTab(tabId = tabId, initialUrl = homepageUrl)
             selectedTabId = initialTab.tabId
             return
         }
 
         persistedTabs.forEach { persistedTab ->
             val tabId = UUID.randomUUID().toString()
-            createTab(
+            createAndAppendTab(
                 tabId = tabId,
                 initialUrl = persistedTab.url.ifBlank { homepageUrl },
                 restoredSessionState = persistedTab.sessionState,
@@ -69,7 +79,7 @@ internal class BrowserSessionController(runtime: GeckoRuntime) {
         selectedTabId = tabList[index].tabId
     }
 
-    fun createTab(
+    fun createAndAppendTab(
         tabId: String = UUID.randomUUID().toString(),
         initialUrl: String,
         restoredSessionState: String? = null,
@@ -84,7 +94,7 @@ internal class BrowserSessionController(runtime: GeckoRuntime) {
             initialUrl = normalizedInitialUrl,
             sessionState = restoredSessionState.orEmpty(),
             title = restoredTitle,
-            previewBitmap = restoredPreviewImage.toBitmapOrNull(),
+            previewBitmapArray = restoredPreviewImage,
         )
         val restored = restoredSessionState
             ?.takeIf { it.isNotBlank() }
@@ -107,31 +117,19 @@ internal class BrowserSessionController(runtime: GeckoRuntime) {
             initialUrl = normalizedInitialUrl,
             sessionState = "",
             title = normalizedInitialUrl,
-            previewBitmap = null,
+            previewBitmapArray = null,
         )
     }
 
-    fun selectTab(tabId: String) {
-        if (tabList.any { it.tabId == tabId }) {
+    fun selectTab(tabId: String): BrowserTab {
+        val targetTab = tabList.firstOrNull { it.tabId == tabId }
+        return if (targetTab != null) {
             selectedTabId = tabId
+            targetTab
+        } else {
+            // TODO homepage
+            createAndAppendTab(initialUrl = "")
         }
-    }
-
-    fun updateTabUrl(tabId: String, url: String) {
-        tabList.firstOrNull { it.tabId == tabId }?.currentUrl = url
-    }
-
-    fun updateTabSessionState(tabId: String, sessionState: String) {
-        tabList.firstOrNull { it.tabId == tabId }?.sessionState = sessionState
-    }
-
-    fun updateTabTitle(tabId: String, title: String) {
-        val normalized = title.ifBlank { return }
-        tabList.firstOrNull { it.tabId == tabId }?.title = normalized
-    }
-
-    fun updateTabPreview(tabId: String, previewBitmap: Bitmap) {
-        tabList.firstOrNull { it.tabId == tabId }?.previewBitmap = previewBitmap
     }
 
     fun closeTab(tabId: String) {
@@ -159,7 +157,7 @@ internal class BrowserSessionController(runtime: GeckoRuntime) {
                 url = tab.currentUrl,
                 sessionState = tab.sessionState,
                 title = tab.title,
-                previewImageWebp = tab.previewBitmap.toWebpByteArray(),
+                previewImageWebp = tab.previewBitmap ?: byteArrayOf(),
             )
         }
     }
@@ -180,7 +178,7 @@ internal class BrowserSessionController(runtime: GeckoRuntime) {
         initialUrl: String,
         sessionState: String,
         title: String,
-        previewBitmap: Bitmap?,
+        previewBitmapArray: ByteArray?,
     ): BrowserTab {
         val tab = BrowserTab(
             tabId = tabId,
@@ -188,25 +186,26 @@ internal class BrowserSessionController(runtime: GeckoRuntime) {
             currentUrl = initialUrl,
             sessionState = sessionState,
             title = title.ifBlank { initialUrl },
-            previewBitmap = previewBitmap,
+            previewBitmap = previewBitmapArray ?: byteArrayOf(),
         )
         tabList += tab
         return tab
     }
 }
 
-internal class BrowserTab(
+@Stable
+class BrowserTab(
     val tabId: String,
     val session: GeckoSession,
     currentUrl: String,
     sessionState: String,
     title: String,
-    previewBitmap: Bitmap?,
+    previewBitmap: ByteArray?,
 ) {
     var currentUrl by mutableStateOf(currentUrl)
     var sessionState by mutableStateOf(sessionState)
     var title by mutableStateOf(title)
-    var previewBitmap: Bitmap? by mutableStateOf(previewBitmap)
+    var previewBitmap: ByteArray? by mutableStateOf(previewBitmap)
 }
 
 internal data class PersistedBrowserTab(
@@ -229,13 +228,4 @@ private fun ByteArray.toBitmapOrNull(): Bitmap? {
     return BitmapFactory.decodeByteArray(this, 0, size)
 }
 
-@Composable
-internal fun rememberBrowserSessionController(runtime: GeckoRuntime): BrowserSessionController {
-    val controller = remember(runtime) { BrowserSessionController(runtime) }
-    DisposableEffect(controller) {
-        onDispose {
-            controller.close()
-        }
-    }
-    return controller
-}
+

@@ -105,6 +105,7 @@ dependencies {
     implementation(libs.kotlinx.coroutines.play.services)
     implementation(project(":data"))
     implementation(libs.androidx.swiperefreshlayout)
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
 
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)

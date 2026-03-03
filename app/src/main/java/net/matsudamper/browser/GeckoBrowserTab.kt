@@ -48,6 +48,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -75,31 +76,30 @@ import java.net.URL
 import java.util.concurrent.Executors
 import androidx.core.graphics.toColorInt
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.runBlocking
+import java.io.ByteArrayOutputStream
 
 private enum class TranslationState { Idle, Loading, Translated, Error }
 
 @Composable
 @OptIn(ExperimentalLayoutApi::class)
 fun GeckoBrowserTab(
-    session: GeckoSession,
-    initialUrl: String,
+    browserTab: BrowserTab,
     homepageUrl: String,
     searchTemplate: String,
     translationProvider: TranslationProvider,
     modifier: Modifier = Modifier,
     tabCount: Int,
     onInstallExtensionRequest: (String) -> Unit,
-    onDesktopNotificationPermissionRequest: (uri: String) -> GeckoResult<Int>,
+    onDesktopNotificationPermissionRequest: (String) -> GeckoResult<Int>,
     onOpenSettings: () -> Unit,
     onOpenTabs: () -> Unit,
     onOpenNewSessionRequest: (String) -> GeckoSession,
-    onCurrentPageUrlChange: (String) -> Unit,
-    onSessionStateChange: (String) -> Unit,
-    onTabPreviewCaptured: (Bitmap) -> Unit,
-    onTabTitleChange: (String) -> Unit,
 ) {
-    var urlInput by rememberSaveable { mutableStateOf(initialUrl) }
-    var currentPageUrl by rememberSaveable { mutableStateOf(initialUrl) }
+    val session = browserTab.session
+    var urlInput by rememberSaveable { mutableStateOf(browserTab.currentUrl) }
+    var currentPageUrl by rememberSaveable { mutableStateOf(browserTab.currentUrl) }
     var currentPageTitle by rememberSaveable { mutableStateOf("") }
     var canGoBack by remember { mutableStateOf(false) }
     var canGoForward by remember { mutableStateOf(false) }
@@ -118,6 +118,16 @@ fun GeckoBrowserTab(
             runtime = GeckoRuntime.getDefault(context),
         )
     }
+    LaunchedEffect(Unit) {
+        snapshotFlow { currentPageTitle }
+            .collectLatest {
+                browserTab.title = it
+            }
+        snapshotFlow { currentPageUrl }
+            .collectLatest {
+                browserTab.currentUrl = it
+            }
+    }
 
     var translationState by remember { mutableStateOf(TranslationState.Idle) }
     var originalPageUrlForRevert by remember { mutableStateOf<String?>(null) }
@@ -128,8 +138,16 @@ fun GeckoBrowserTab(
     var findMatchCurrent by remember { mutableIntStateOf(0) }
     var findMatchTotal by remember { mutableIntStateOf(0) }
     var imageContextMenuUrl by remember { mutableStateOf<String?>(null) }
-    var pendingAlertPrompt by remember { mutableStateOf<GeckoSession.PromptDelegate.AlertPrompt?>(null) }
-    var pendingAlertResult by remember { mutableStateOf<GeckoResult<GeckoSession.PromptDelegate.PromptResponse>?>(null) }
+    var pendingAlertPrompt by remember {
+        mutableStateOf<GeckoSession.PromptDelegate.AlertPrompt?>(
+            null
+        )
+    }
+    var pendingAlertResult by remember {
+        mutableStateOf<GeckoResult<GeckoSession.PromptDelegate.PromptResponse>?>(
+            null
+        )
+    }
 
     fun closeFindInPage() {
         showFindInPage = false
@@ -139,24 +157,16 @@ fun GeckoBrowserTab(
         findMatchTotal = 0
     }
 
-    fun captureCurrentTabPreview() {
-        val view = geckoViewRef ?: return
-        view.capturePixels().accept(
-            { bitmap ->
-                val previewBitmap = bitmap ?: return@accept
-                view.post {
-                    onTabPreviewCaptured(previewBitmap)
-                }
-            },
-            {},
-        )
-    }
-
     DisposableEffect(lifecycleOwner, session) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_STOP) {
                 session.flushSessionState()
-                captureCurrentTabPreview()
+                val geckoViewRef = geckoViewRef
+                if (geckoViewRef != null) {
+                    captureCurrentTabPreview(geckoViewRef) {
+                        browserTab.previewBitmap = it
+                    }
+                }
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -208,7 +218,6 @@ fun GeckoBrowserTab(
                     return
                 }
                 currentPageUrl = newUrl
-                onCurrentPageUrlChange(newUrl)
                 if (!isUrlInputFocused) {
                     urlInput = newUrl
                 }
@@ -231,7 +240,6 @@ fun GeckoBrowserTab(
             override fun onTitleChange(session: GeckoSession, title: String?) {
                 val newTitle = title.orEmpty()
                 currentPageTitle = newTitle
-                onTabTitleChange(newTitle)
             }
 
             override fun onContextMenu(
@@ -258,7 +266,7 @@ fun GeckoBrowserTab(
                 session: GeckoSession,
                 sessionState: GeckoSession.SessionState
             ) {
-                onSessionStateChange(sessionState.toString().orEmpty())
+                browserTab.sessionState = sessionState.toString().orEmpty()
             }
 
             override fun onPageStop(session: GeckoSession, success: Boolean) {
@@ -391,7 +399,6 @@ fun GeckoBrowserTab(
                     val resolved = buildUrlFromInput(rawInput, homepageUrl, searchTemplate)
                     urlInput = resolved
                     currentPageUrl = resolved
-                    onCurrentPageUrlChange(resolved)
                     session.loadUri(resolved)
                     keyboardController?.hide()
                 },
@@ -412,7 +419,12 @@ fun GeckoBrowserTab(
                 tabCount = tabCount,
                 onOpenTabs = {
                     session.flushSessionState()
-                    captureCurrentTabPreview()
+                    val geckoViewRef = geckoViewRef
+                    if (geckoViewRef != null) {
+                        captureCurrentTabPreview(geckoViewRef) {
+                            browserTab.previewBitmap = it
+                        }
+                    }
                     onOpenTabs()
                 },
                 isPcMode = isPcMode,
@@ -805,4 +817,22 @@ private fun FindInPageBar(
             }
         }
     }
+}
+
+
+private fun captureCurrentTabPreview(
+    view: GeckoView,
+    capturedBitmap: (ByteArray) -> Unit,
+) {
+    view.capturePixels().accept(
+        { bitmap ->
+            val previewBitmap = bitmap ?: return@accept
+            val stream = ByteArrayOutputStream()
+            runBlocking {
+                previewBitmap.compress(Bitmap.CompressFormat.WEBP_LOSSY, 0, stream)
+                capturedBitmap(stream.toByteArray())
+            }
+        },
+        {},
+    )
 }
