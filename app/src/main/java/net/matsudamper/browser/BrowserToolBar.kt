@@ -114,36 +114,11 @@ internal fun BrowserToolBar(
                             val currentOnValueChange by rememberUpdatedState(latestOnValueChange)
                             val currentOnSubmit by rememberUpdatedState(latestOnSubmit)
                             val currentOnFocusChanged by rememberUpdatedState(latestOnFocusChanged)
-                            BasicTextField(
-                                value = currentValue,
-                                onValueChange = { currentOnValueChange(it) },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .testTag("url_bar")
-                                    .onFocusChanged { currentOnFocusChanged(it.hasFocus) }
-                                    .semantics {
-                                        contentDescription = "Address bar"
-                                        contentType = ContentType("url")
-                                        contentDataType = ContentDataType.Text
-                                    }
-                                    .padding(4.dp)
-                                    .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.surface)
-                                    .padding(8.dp)
-                                    .horizontalScroll(rememberScrollState()),
-                                singleLine = true,
-                                textStyle = TextStyle(color = MaterialTheme.colorScheme.onSurface),
-                                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                                keyboardOptions = KeyboardOptions.Default.copy(
-                                    imeAction = ImeAction.Go,
-                                    keyboardType = KeyboardType.Uri,
-                                    autoCorrectEnabled = false,
-                                ),
-                                keyboardActions = KeyboardActions(
-                                    onGo = { currentOnSubmit(currentValue) },
-                                    onDone = { currentOnSubmit(currentValue) },
-                                    onSearch = { currentOnSubmit(currentValue) },
-                                ),
+                            UrlTextField(
+                                currentValue = currentValue,
+                                currentOnValueChange = currentOnValueChange,
+                                currentOnSubmit = currentOnSubmit,
+                                currentOnFocusChanged = currentOnFocusChanged,
                             )
                         }
                     }
@@ -292,6 +267,47 @@ internal fun BrowserToolBar(
             }
         }
     }
+}
+
+@Composable
+private fun UrlTextField(
+    currentValue: String,
+    currentOnValueChange: (String) -> Unit,
+    currentOnSubmit: (String) -> Unit,
+    currentOnFocusChanged: (Boolean) -> Unit,
+) {
+    BasicTextField(
+        value = currentValue,
+        onValueChange = { currentOnValueChange(it) },
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("url_bar")
+            .onFocusChanged { currentOnFocusChanged(it.hasFocus) }
+            .semantics {
+                contentDescription = "Address bar"
+                contentType = ContentType("url")
+                contentDataType = ContentDataType.Text
+            }
+            .padding(4.dp)
+            .clip(CircleShape)
+            .background(MaterialTheme.colorScheme.surface)
+            .padding(8.dp)
+            .horizontalScroll(rememberScrollState()),
+        singleLine = true,
+        textStyle = TextStyle(color = MaterialTheme.colorScheme.onSurface),
+        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+        keyboardOptions = KeyboardOptions.Default.copy(
+            imeAction = ImeAction.Go,
+            keyboardType = KeyboardType.Uri,
+            autoCorrectEnabled = false,
+        ),
+        keyboardActions = KeyboardActions(
+            onGo = { currentOnSubmit(currentValue) },
+            onDone = { currentOnSubmit(currentValue) },
+            onSearch = { currentOnSubmit(currentValue) },
+        ),
+    )
+
 }
 
 @Preview(name = "Light")
