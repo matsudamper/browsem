@@ -2,6 +2,10 @@ package net.matsudamper.browser
 
 import android.content.Intent
 import android.graphics.Bitmap
+import android.os.Handler
+import android.os.Looper
+import android.view.View
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -26,9 +30,11 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -43,6 +49,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.TextStyle
@@ -54,9 +61,14 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import net.matsudamper.browser.data.TranslationProvider
 import kotlinx.coroutines.launch
+import org.mozilla.geckoview.GeckoRuntime
+import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.GeckoSessionSettings
 import org.mozilla.geckoview.GeckoView
+import java.net.URL
+import java.util.concurrent.Executors
+import androidx.core.graphics.toColorInt
 
 @Composable
 @OptIn(ExperimentalLayoutApi::class)
@@ -70,8 +82,10 @@ fun GeckoBrowserTab(
     modifier: Modifier = Modifier,
     tabCount: Int,
     onInstallExtensionRequest: (String) -> Unit,
+    onDesktopNotificationPermissionRequest: () -> GeckoResult<Int>,
     onOpenSettings: () -> Unit,
     onOpenTabs: () -> Unit,
+    onOpenNewSessionRequest: (String) -> GeckoSession,
     onCurrentPageUrlChange: (String) -> Unit,
     onSessionStateChange: (String) -> Unit,
     onTabPreviewCaptured: (Bitmap) -> Unit,
@@ -85,16 +99,25 @@ fun GeckoBrowserTab(
     var isUrlInputFocused by remember(tabId) { mutableStateOf(false) }
     var geckoViewRef by remember(tabId) { mutableStateOf<GeckoView?>(null) }
     var isPcMode by rememberSaveable(tabId) { mutableStateOf(false) }
+    var toolbarColor by remember(tabId) { mutableStateOf<Color?>(null) }
     val keyboardController = LocalSoftwareKeyboardController.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val isImeVisible = WindowInsets.isImeVisible
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
+    val coroutineScope = rememberCoroutineScope()
+    val scope = coroutineScope
+    val geckoDownloadManager = remember(context) {
+        GeckoDownloadManager(
+            context = context,
+            runtime = GeckoRuntime.getDefault(context),
+        )
+    }
 
     var showFindInPage by remember { mutableStateOf(false) }
     var findQuery by remember { mutableStateOf("") }
     var findMatchCurrent by remember { mutableIntStateOf(0) }
     var findMatchTotal by remember { mutableIntStateOf(0) }
+    var imageContextMenuUrl by remember(tabId) { mutableStateOf<String?>(null) }
 
     fun closeFindInPage() {
         showFindInPage = false
@@ -131,6 +154,20 @@ fun GeckoBrowserTab(
     }
 
     DisposableEffect(session) {
+        val permissionDelegate = object : GeckoSession.PermissionDelegate {
+            override fun onContentPermissionRequest(
+                session: GeckoSession,
+                perm: GeckoSession.PermissionDelegate.ContentPermission
+            ): GeckoResult<Int> {
+                if (perm.permission != GeckoSession.PermissionDelegate.PERMISSION_DESKTOP_NOTIFICATION) {
+                    return GeckoResult.fromValue(
+                        GeckoSession.PermissionDelegate.ContentPermission.VALUE_PROMPT
+                    )
+                }
+                return onDesktopNotificationPermissionRequest()
+            }
+        }
+
         val navigationDelegate = object : GeckoSession.NavigationDelegate {
             override fun onCanGoBack(session: GeckoSession, value: Boolean) {
                 canGoBack = value
@@ -138,6 +175,13 @@ fun GeckoBrowserTab(
 
             override fun onCanGoForward(session: GeckoSession, value: Boolean) {
                 canGoForward = value
+            }
+
+            override fun onNewSession(
+                session: GeckoSession,
+                uri: String
+            ): GeckoResult<GeckoSession> {
+                return GeckoResult.fromValue(onOpenNewSessionRequest(uri))
             }
 
             override fun onLocationChange(
@@ -152,6 +196,7 @@ fun GeckoBrowserTab(
                 if (!isUrlInputFocused) {
                     urlInput = newUrl
                 }
+                toolbarColor = null
             }
         }
         val contentDelegate = object : GeckoSession.ContentDelegate {
@@ -159,6 +204,25 @@ fun GeckoBrowserTab(
                 val newTitle = title.orEmpty()
                 currentPageTitle = newTitle
                 onTabTitleChange(newTitle)
+            }
+
+            override fun onContextMenu(
+                session: GeckoSession,
+                screenX: Int,
+                screenY: Int,
+                element: GeckoSession.ContentDelegate.ContextElement
+            ) {
+
+                when (element.type) {
+                    GeckoSession.ContentDelegate.ContextElement.TYPE_NONE,
+                    GeckoSession.ContentDelegate.ContextElement.TYPE_VIDEO,
+                    GeckoSession.ContentDelegate.ContextElement.TYPE_AUDIO -> {
+                    }
+
+                    GeckoSession.ContentDelegate.ContextElement.TYPE_IMAGE -> {
+                        imageContextMenuUrl = element.srcUri
+                    }
+                }
             }
         }
         val progressDelegate = object : GeckoSession.ProgressDelegate {
@@ -168,12 +232,25 @@ fun GeckoBrowserTab(
             ) {
                 onSessionStateChange(sessionState.toString().orEmpty())
             }
+
+            override fun onPageStop(session: GeckoSession, success: Boolean) {
+                val pageUrl = currentPageUrl
+                updateThemeColorFromPage(pageUrl) { resolvedUrl, color ->
+                    if (resolvedUrl == currentPageUrl) {
+                        toolbarColor = color
+                    }
+                }
+            }
         }
+        session.permissionDelegate = permissionDelegate
         session.navigationDelegate = navigationDelegate
         session.contentDelegate = contentDelegate
         session.progressDelegate = progressDelegate
 
         onDispose {
+            if (session.permissionDelegate === permissionDelegate) {
+                session.permissionDelegate = null
+            }
             if (session.navigationDelegate === navigationDelegate) {
                 session.navigationDelegate = null
             }
@@ -236,11 +313,12 @@ fun GeckoBrowserTab(
                 },
                 onPrevious = {
                     if (findQuery.isNotEmpty()) {
-                        session.finder.find(findQuery, GeckoSession.FINDER_FIND_BACKWARDS).then<Void?> { result ->
-                            findMatchCurrent = result?.current ?: 0
-                            findMatchTotal = result?.total ?: 0
-                            null
-                        }
+                        session.finder.find(findQuery, GeckoSession.FINDER_FIND_BACKWARDS)
+                            .then<Void?> { result ->
+                                findMatchCurrent = result?.current ?: 0
+                                findMatchTotal = result?.total ?: 0
+                                null
+                            }
                     }
                 },
                 onClose = {
@@ -293,6 +371,7 @@ fun GeckoBrowserTab(
                 onFindInPage = {
                     showFindInPage = true
                 },
+                toolbarColor = toolbarColor,
                 onHome = {
                     urlInput = homepageUrl
                     currentPageUrl = homepageUrl
@@ -312,19 +391,115 @@ fun GeckoBrowserTab(
         AndroidView(
             factory = { context ->
                 GeckoView(context).also { geckoView ->
+                    geckoView.setAutofillEnabled(true)
+                    geckoView.importantForAutofill =
+                        View.IMPORTANT_FOR_AUTOFILL_YES_EXCLUDE_DESCENDANTS
                     geckoView.setSession(session)
                     geckoViewRef = geckoView
                 }
             },
             update = { geckoView ->
+                geckoView.setAutofillEnabled(true)
+                geckoView.importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_YES_EXCLUDE_DESCENDANTS
                 geckoView.setSession(session)
                 geckoViewRef = geckoView
-                val shouldFocusWebContent = isUrlInputFocused.not()
-                geckoView.isFocusable = shouldFocusWebContent
-                geckoView.isFocusableInTouchMode = shouldFocusWebContent
+                geckoView.isFocusable = true
+                geckoView.isFocusableInTouchMode = true
+                if (!isUrlInputFocused && !geckoView.isFocused) {
+                    geckoView.requestFocus()
+                }
             },
             modifier = Modifier.fillMaxSize()
         )
+
+        imageContextMenuUrl?.let { imageUrl ->
+            AlertDialog(
+                onDismissRequest = { imageContextMenuUrl = null },
+                title = {
+                    Text(text = "画像")
+                },
+                text = {
+                    Text(text = "この画像をダウンロードしますか？")
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            imageContextMenuUrl = null
+                            coroutineScope.launch {
+                                val result = runCatching {
+                                    geckoDownloadManager.downloadImageWithSession(
+                                        imageUrl = imageUrl,
+                                        referrerUrl = currentPageUrl,
+                                    )
+                                }.onFailure { it.printStackTrace() }
+                                val message = if (result.isSuccess) {
+                                    "画像をダウンロードしました"
+                                } else {
+                                    "画像のダウンロードに失敗しました"
+                                }
+                                Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                    ) {
+                        Text(text = "ダウンロード")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { imageContextMenuUrl = null }) {
+                        Text(text = "キャンセル")
+                    }
+                },
+            )
+        }
+    }
+}
+
+
+private val themeColorHandler = Handler(Looper.getMainLooper())
+private val themeColorExecutor = Executors.newSingleThreadExecutor()
+
+private fun updateThemeColorFromPage(
+    pageUrl: String,
+    onColorResolved: (String, Color?) -> Unit,
+) {
+    if (pageUrl.isBlank()) {
+        onColorResolved(pageUrl, null)
+        return
+    }
+
+    themeColorExecutor.execute {
+        val colorText = runCatching {
+            URL(pageUrl).openConnection().getInputStream().bufferedReader().use { reader ->
+                reader.readText()
+            }
+        }.getOrNull()?.let(::findThemeColorMetaContent)
+
+        val parsedColor = colorText?.let(::parseManifestColor)
+        themeColorHandler.post {
+            onColorResolved(pageUrl, parsedColor)
+        }
+    }
+}
+
+private fun findThemeColorMetaContent(html: String): String? {
+    val metaTagRegex = Regex("""<meta\b[^>]*>""", setOf(RegexOption.IGNORE_CASE))
+    val nameRegex = Regex("""\bname\s*=\s*(["'])theme-color\1""", setOf(RegexOption.IGNORE_CASE))
+    val contentRegex = Regex("""\bcontent\s*=\s*(["'])(.*?)\1""", setOf(RegexOption.IGNORE_CASE))
+
+    return metaTagRegex.findAll(html).firstNotNullOfOrNull { matchResult ->
+        val tag = matchResult.value
+        if (nameRegex.containsMatchIn(tag).not()) {
+            return@firstNotNullOfOrNull null
+        }
+        contentRegex.find(tag)?.groupValues?.getOrNull(2)?.trim()?.takeIf { it.isNotEmpty() }
+    }
+}
+
+private fun parseManifestColor(colorValue: String): Color? {
+    return try {
+        Color(colorValue.toColorInt())
+    } catch (_: IllegalArgumentException) {
+        null
     }
 }
 

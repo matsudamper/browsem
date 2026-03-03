@@ -1,6 +1,7 @@
 package net.matsudamper.browser
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -10,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -34,16 +36,28 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.autofill.ContentDataType
+import androidx.compose.ui.autofill.ContentType
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.contentDataType
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.contentType
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
 
 @Composable
 internal fun BrowserToolBar(
@@ -66,6 +80,7 @@ internal fun BrowserToolBar(
     isPcMode: Boolean,
     onPcModeToggle: () -> Unit,
     onTranslatePage: () -> Unit,
+    toolbarColor: Color?,
 ) {
     val latestOnOpenTabs by rememberUpdatedState(onOpenTabs)
     val swipeToOpenTabsModifier = modifier.pointerInput(Unit) {
@@ -78,30 +93,53 @@ internal fun BrowserToolBar(
     }
 
     Surface(
-        color = MaterialTheme.colorScheme.primaryContainer,
+        color = toolbarColor ?: MaterialTheme.colorScheme.primaryContainer,
         modifier = swipeToOpenTabsModifier,
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            BasicTextField(
-                value = value,
-                onValueChange = onValueChange,
-                modifier = modifier
-                    .weight(1f)
-                    .onFocusChanged { onFocusChanged(it.hasFocus) }
-                    .padding(4.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.surface)
-                    .padding(8.dp)
-                    .horizontalScroll(rememberScrollState()),
-                singleLine = true,
-                textStyle = TextStyle(color = MaterialTheme.colorScheme.onSurface),
-                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                keyboardOptions = KeyboardOptions.Default.copy(imeAction = ImeAction.Go),
-                keyboardActions = KeyboardActions(
-                    onGo = { onSubmit(value) }
-                )
+            // 一度AndroidViewを経由しな意図Bitwardenが認識しない
+            AndroidView(
+                modifier = Modifier.weight(1f),
+                factory = {
+                    ComposeView(it)
+                },
+                update = {
+                    it.setContent {
+                        BasicTextField(
+                            value = value,
+                            onValueChange = onValueChange,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("url_bar")
+                                .onFocusChanged { onFocusChanged(it.hasFocus) }
+                                .semantics {
+                                    contentDescription = "Address bar"
+                                    contentType = ContentType("url")
+                                    contentDataType = ContentDataType.Text
+                                }
+                                .padding(4.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.surface)
+                                .padding(8.dp)
+                                .horizontalScroll(rememberScrollState()),
+                            singleLine = true,
+                            textStyle = TextStyle(color = MaterialTheme.colorScheme.onSurface),
+                            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                            keyboardOptions = KeyboardOptions.Default.copy(
+                                imeAction = ImeAction.Go,
+                                keyboardType = KeyboardType.Uri,
+                                autoCorrectEnabled = false,
+                            ),
+                            keyboardActions = KeyboardActions(
+                                onGo = { onSubmit(value) },
+                                onDone = { onSubmit(value) },
+                                onSearch = { onSubmit(value) },
+                            ),
+                        )
+                    }
+                }
             )
             IconButton(
                 onClick = onOpenTabs,
@@ -109,6 +147,15 @@ internal fun BrowserToolBar(
                 Text(
                     text = "$tabCount",
                     style = MaterialTheme.typography.titleMedium,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .border(
+                            width = 1.dp,
+                            color = MaterialTheme.colorScheme.outline,
+                            shape = RoundedCornerShape(8.dp),
+                        )
+                        .padding(horizontal = 8.dp, vertical = 2.dp),
                 )
             }
             var visibleMenu by remember { mutableStateOf(false) }
@@ -267,6 +314,7 @@ private fun Preview() {
             isPcMode = false,
             onPcModeToggle = {},
             onFindInPage = {},
+            toolbarColor = null,
             onRefresh = {},
             onHome = {},
             onForward = {},
