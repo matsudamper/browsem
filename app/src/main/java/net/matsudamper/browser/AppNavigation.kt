@@ -1,6 +1,5 @@
 package net.matsudamper.browser
 
-import android.util.Log
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.ContentTransform
@@ -16,13 +15,9 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntOffset
 import androidx.navigation3.runtime.NavEntry
 import androidx.navigation3.runtime.NavKey
@@ -31,116 +26,65 @@ import androidx.navigation3.scene.Scene
 import androidx.navigation3.ui.NavDisplay
 import androidx.navigation3.ui.defaultPopTransitionSpec
 import androidx.navigation3.ui.defaultTransitionSpec
-import com.google.protobuf.ByteString
 import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.launch
-import net.matsudamper.browser.data.BrowserSettings
-import net.matsudamper.browser.data.PersistedTabState
-import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.resolvedHomepageUrl
 import net.matsudamper.browser.data.resolvedSearchTemplate
 import net.matsudamper.browser.navigation.AppDestination
 import net.matsudamper.browser.navigation.NavController
 import org.mozilla.geckoview.GeckoResult
-import org.mozilla.geckoview.GeckoRuntime
-import org.mozilla.geckoview.GeckoSession
 
 @Composable
 internal fun BrowserApp(
-    runtime: GeckoRuntime,
-    browserSessionController: BrowserSessionController,
+    viewModel: BrowserViewModel,
     onInstallExtensionRequest: (String) -> Unit,
     onDesktopNotificationPermissionRequest: () -> GeckoResult<Int>,
 ) {
-    val context = LocalContext.current
-    val settingsRepository = remember { SettingsRepository(context) }
-    val settings by settingsRepository.settings.collectAsState(initial = null)
-    val currentSettings = settings ?: return
-    val homepageUrl = currentSettings.resolvedHomepageUrl()
+    val currentSettings by viewModel.settings.collectAsState()
+    val settings = currentSettings ?: return
 
-    LaunchedEffect(runtime, currentSettings.enableThirdPartyCa) {
-        runtime.settings.setEnterpriseRootsEnabled(currentSettings.enableThirdPartyCa)
+    val homepageUrl = settings.resolvedHomepageUrl()
+    val searchTemplate = settings.resolvedSearchTemplate()
+    val browserSessionController = viewModel.browserSessionController
+
+    LaunchedEffect(settings.enableThirdPartyCa) {
+        viewModel.applyRuntimeSettings(settings)
     }
 
-    val scope = rememberCoroutineScope()
     val backStack = rememberNavBackStack(AppDestination.Setup)
-    val navController = remember(backStack) {
-        NavController(
-            backStack = backStack,
-        )
+    val navController = remember(backStack) { NavController(backStack = backStack) }
+
+    // Tab state persistence
+    LaunchedEffect(browserSessionController) {
+        snapshotFlow { browserSessionController.stateChanged }
+            .collectLatest { viewModel.persistTabStates() }
     }
-    var tabPersistenceSignal by remember { mutableLongStateOf(0L) }
 
     val handleNotificationPermission: (uri: String) -> GeckoResult<Int> = { uri ->
-        val allowedOrigins = currentSettings.notificationAllowedOriginsList
-        if (allowedOrigins.contains(uri)) {
-            GeckoResult.fromValue(GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW)
-        } else {
-            val androidResult = onDesktopNotificationPermissionRequest()
-            androidResult.then { value ->
-                if (value == GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW) {
-                    scope.launch { settingsRepository.addNotificationAllowedOrigin(uri) }
-                }
-                GeckoResult.fromValue(value)
-            }
-        }
-    }
-
-    val persistedTabs = remember(currentSettings.tabStatesList) {
-        currentSettings.tabStatesList.map { tabState ->
-            PersistedBrowserTab(
-                url = tabState.url,
-                sessionState = tabState.sessionState,
-                title = tabState.title,
-                previewImageWebp = tabState.previewImageWebp.toByteArray(),
-            )
-        }
-    }
-
-    val coroutineScope = rememberCoroutineScope()
-    DisposableEffect(browserSessionController) {
-        coroutineScope.launch {
-            snapshotFlow { browserSessionController.stateChanged }
-                .collectLatest {
-                    settingsRepository.updateTabStates(
-                        tabs = browserSessionController.exportPersistedTabs().map { tab ->
-                            PersistedTabState(
-                                url = tab.url,
-                                sessionState = tab.sessionState,
-                                title = tab.title,
-                                previewImageWebp = ByteString.copyFrom(tab.previewImageWebp),
-                            )
-                        },
-                        selectedTabIndex = browserSessionController.selectedTabIndex,
-                    )
-                }
-        }
-        onDispose { }
+        viewModel.handleNotificationPermission(
+            uri = uri,
+            currentSettings = settings,
+            onDesktopNotificationPermissionRequest = onDesktopNotificationPermissionRequest,
+        )
     }
 
     BackHandler(enabled = backStack.size > 1) {
         backStack.removeLastOrNull()
     }
 
-    BrowserTheme(themeMode = currentSettings.themeMode) {
+    BrowserTheme(themeMode = settings.themeMode) {
         NavDisplay(
             backStack = backStack,
             onBack = { backStack.removeLastOrNull() },
             transitionSpec = {
                 val default = defaultTransitionSpec<NavKey>()(this)
-                val initial = initialState.entries.lastOrNull()
-                    ?: return@NavDisplay default
-                val target = targetState.entries.lastOrNull()
-                    ?: return@NavDisplay default
+                val initial = initialState.entries.lastOrNull() ?: return@NavDisplay default
+                val target = targetState.entries.lastOrNull() ?: return@NavDisplay default
 
                 if (target.contentKey is AppDestination.Tabs && initial.contentKey is AppDestination.Browser) {
                     return@NavDisplay ContentTransform(
                         initialContentExit = ExitTransition.None,
                         targetContentEnter = slideIn {
-                            IntOffset(
-                                x = 0,
-                                y = -it.height / 2,
-                            )
+                            IntOffset(x = 0, y = -it.height / 2)
                         },
                     )
                 }
@@ -158,45 +102,35 @@ internal fun BrowserApp(
             predictivePopTransitionSpec = { popTransition { height -> -height / 2 } },
             entryProvider = { key: NavKey ->
                 when (key) {
-                    is AppDestination.Setup -> navEntry(
-                        key = key
-                    ) {
+                    is AppDestination.Setup -> navEntry(key) {
                         DisposableEffect(Unit) {
-                            browserSessionController.restoreTabs(
-                                homepageUrl = homepageUrl,
-                                persistedTabs = persistedTabs,
-                                persistedSelectedTabIndex = currentSettings.selectedTabIndex,
-                            )
-
-                            val tab =
-                                browserSessionController.tabs.getOrNull(browserSessionController.selectedTabIndex)!!
+                            viewModel.restoreTabs(settings)
+                            val tab = browserSessionController.tabs
+                                .getOrNull(browserSessionController.selectedTabIndex)!!
                             navController.selectTab(tab.tabId)
                             onDispose { }
                         }
                     }
 
-                    is AppDestination.Browser -> navEntry(
-                        key = key,
-                    ) {
+                    is AppDestination.Browser -> navEntry(key) {
                         Browser(
                             key = key,
                             homepageUrl = homepageUrl,
+                            searchTemplate = searchTemplate,
                             backStack = backStack,
                             browserSessionController = browserSessionController,
-                            currentSettings = currentSettings,
+                            viewModel = viewModel,
                             onInstallExtensionRequest = onInstallExtensionRequest,
                             handleNotificationPermission = handleNotificationPermission,
                         )
                     }
 
                     AppDestination.Settings -> navEntry(key) {
-                        val latestSettings by settingsRepository.settings
-                            .collectAsState(initial = currentSettings)
+                        val latestSettings by viewModel.settingsRepository.settings
+                            .collectAsState(initial = settings)
                         SettingsScreen(
                             settings = latestSettings,
-                            onSettingsChange = { newSettings ->
-                                scope.launch { settingsRepository.updateSettings(newSettings) }
-                            },
+                            onSettingsChange = viewModel::updateSettings,
                             onOpenExtensions = { backStack.add(AppDestination.Extensions) },
                             onOpenNotificationPermissions = {
                                 backStack.add(AppDestination.NotificationPermissions)
@@ -207,11 +141,12 @@ internal fun BrowserApp(
 
                     AppDestination.Extensions -> navEntry(key) {
                         ExtensionsScreen(
-                            runtime = runtime,
+                            runtime = viewModel.runtime,
                             onBack = { backStack.removeLastOrNull() },
                             onOpenExtensionSettings = { optionsPageUrl ->
-                                val tab =
-                                    browserSessionController.createAndAppendTab(initialUrl = optionsPageUrl)
+                                val tab = browserSessionController.createAndAppendTab(
+                                    initialUrl = optionsPageUrl,
+                                )
                                 navController.selectTab(tab.tabId)
                             },
                         )
@@ -219,28 +154,22 @@ internal fun BrowserApp(
 
                     AppDestination.NotificationPermissions -> navEntry(key) {
                         NotificationPermissionsScreen(
-                            allowedOrigins = currentSettings.notificationAllowedOriginsList,
-                            onRevokeOrigin = { origin ->
-                                scope.launch {
-                                    settingsRepository.removeNotificationAllowedOrigin(origin)
-                                }
-                            },
+                            allowedOrigins = settings.notificationAllowedOriginsList,
+                            onRevokeOrigin = viewModel::removeNotificationAllowedOrigin,
                             onBack = { backStack.removeLastOrNull() },
                         )
                     }
 
                     AppDestination.Tabs -> navEntry(key) {
                         DisposableEffect(Unit) {
-                            onDispose {
-                                navController.disposeTabs()
-                            }
+                            onDispose { navController.disposeTabs() }
                         }
                         TabsScreen(
                             tabs = browserSessionController.tabs,
                             selectedTabId = navController.getSelectedTab(),
                             onSelectTab = { tabId ->
                                 val tab = browserSessionController.selectTab(tabId)
-                                tabPersistenceSignal++
+                                viewModel.bumpTabPersistence()
                                 navController.selectTab(tab.tabId)
                             },
                             onCloseTab = { tabId ->
@@ -251,14 +180,14 @@ internal fun BrowserApp(
                                     )
                                     browserSessionController.selectTab(newTab.tabId)
                                 }
-                                tabPersistenceSignal++
+                                viewModel.bumpTabPersistence()
                             },
                             onOpenNewTab = {
                                 val newTab = browserSessionController.createAndAppendTab(
                                     initialUrl = homepageUrl,
                                 )
                                 browserSessionController.selectTab(newTab.tabId)
-                                tabPersistenceSignal++
+                                viewModel.bumpTabPersistence()
                                 backStack.removeLastOrNull()
                             },
                             modifier = Modifier
@@ -289,13 +218,16 @@ private fun navEntry(
 private fun Browser(
     key: AppDestination.Browser,
     homepageUrl: String,
+    searchTemplate: String,
     backStack: MutableList<NavKey>,
     browserSessionController: BrowserSessionController,
-    currentSettings: BrowserSettings,
+    viewModel: BrowserViewModel,
     onInstallExtensionRequest: (String) -> Unit,
     handleNotificationPermission: (uri: String) -> GeckoResult<Int>,
 ) {
-    val searchTemplate = currentSettings.resolvedSearchTemplate()
+    val currentSettings by viewModel.settings.collectAsState()
+    val settings = currentSettings ?: return
+
     val selectedTab = remember(key.tabId) {
         browserSessionController.getOrCreateTab(
             tabId = key.tabId,
@@ -307,40 +239,31 @@ private fun Browser(
         browserTab = selectedTab,
         homepageUrl = homepageUrl,
         searchTemplate = searchTemplate,
-        translationProvider = currentSettings.translationProvider,
+        translationProvider = settings.translationProvider,
         tabCount = tabs.size,
         onInstallExtensionRequest = onInstallExtensionRequest,
         onDesktopNotificationPermissionRequest = handleNotificationPermission,
-        onOpenSettings = {
-            backStack.add(AppDestination.Settings)
-        },
-        onOpenTabs = {
-            backStack.add(AppDestination.Tabs)
-        },
+        onOpenSettings = { backStack.add(AppDestination.Settings) },
+        onOpenTabs = { backStack.add(AppDestination.Tabs) },
         onOpenNewSessionRequest = { uri ->
-            val newTab = browserSessionController.createTabForNewSession(
-                initialUrl = uri,
-            )
+            val newTab = browserSessionController.createTabForNewSession(initialUrl = uri)
             browserSessionController.selectTab(newTab.tabId)
             newTab.session
         },
     )
 }
 
-private fun <T : NavKey> AnimatedContentTransitionScope<Scene<T>>.popTransition(heightProvider: (Int) -> Int): ContentTransform {
+private fun <T : NavKey> AnimatedContentTransitionScope<Scene<T>>.popTransition(
+    heightProvider: (Int) -> Int,
+): ContentTransform {
     val default = defaultPopTransitionSpec<T>()(this)
-    val initial = initialState.entries.lastOrNull()
-        ?: return default
-    val target = targetState.entries.lastOrNull()
-        ?: return default
+    val initial = initialState.entries.lastOrNull() ?: return default
+    val target = targetState.entries.lastOrNull() ?: return default
 
     if (initial.contentKey is AppDestination.Tabs && target.contentKey is AppDestination.Browser) {
         return ContentTransform(
             initialContentExit = slideOut {
-                IntOffset(
-                    x = 0,
-                    y = heightProvider(it.height),
-                )
+                IntOffset(x = 0, y = heightProvider(it.height))
             },
             targetContentEnter = EnterTransition.None,
         )

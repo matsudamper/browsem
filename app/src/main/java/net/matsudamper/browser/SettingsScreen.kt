@@ -69,12 +69,10 @@ internal fun SettingsScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp, vertical = 8.dp),
         ) {
-            SettingSection(
-                title = "ホームページ",
-            ) {
+            SettingSection(title = "ホームページ") {
                 Column {
                     Column(Modifier.selectableGroup()) {
-                        HomepageOption(
+                        SettingsRadioOption(
                             label = "Google",
                             selected = settings.homepageType == HomepageType.HOMEPAGE_GOOGLE,
                             onClick = {
@@ -85,7 +83,7 @@ internal fun SettingsScreen(
                                 )
                             },
                         )
-                        HomepageOption(
+                        SettingsRadioOption(
                             label = "DuckDuckGo",
                             selected = settings.homepageType == HomepageType.HOMEPAGE_DUCKDUCKGO,
                             onClick = {
@@ -96,7 +94,7 @@ internal fun SettingsScreen(
                                 )
                             },
                         )
-                        HomepageOption(
+                        SettingsRadioOption(
                             label = "カスタム",
                             selected = settings.homepageType == HomepageType.HOMEPAGE_CUSTOM,
                             onClick = {
@@ -134,12 +132,10 @@ internal fun SettingsScreen(
 
             Spacer(Modifier.height(24.dp))
 
-            SettingSection(
-                title = "検索プロバイダー",
-            ) {
+            SettingSection(title = "検索プロバイダー") {
                 Column {
                     Column(Modifier.selectableGroup()) {
-                        SearchProviderOption(
+                        SettingsRadioOption(
                             label = "Google",
                             selected = settings.searchProvider == SearchProvider.GOOGLE,
                             onClick = {
@@ -150,7 +146,7 @@ internal fun SettingsScreen(
                                 )
                             },
                         )
-                        SearchProviderOption(
+                        SettingsRadioOption(
                             label = "DuckDuckGo",
                             selected = settings.searchProvider == SearchProvider.DUCKDUCKGO,
                             onClick = {
@@ -161,7 +157,7 @@ internal fun SettingsScreen(
                                 )
                             },
                         )
-                        SearchProviderOption(
+                        SettingsRadioOption(
                             label = "カスタム",
                             selected = settings.searchProvider == SearchProvider.CUSTOM,
                             onClick = {
@@ -201,11 +197,9 @@ internal fun SettingsScreen(
 
             Spacer(Modifier.height(24.dp))
 
-            SettingSection(
-                title = "テーマ",
-            ) {
+            SettingSection(title = "テーマ") {
                 Column(Modifier.selectableGroup()) {
-                    ThemeModeOption(
+                    SettingsRadioOption(
                         label = "システム設定に合わせる",
                         selected = settings.themeMode == ThemeMode.THEME_SYSTEM,
                         onClick = {
@@ -216,7 +210,7 @@ internal fun SettingsScreen(
                             )
                         },
                     )
-                    ThemeModeOption(
+                    SettingsRadioOption(
                         label = "ライト",
                         selected = settings.themeMode == ThemeMode.THEME_LIGHT,
                         onClick = {
@@ -227,7 +221,7 @@ internal fun SettingsScreen(
                             )
                         },
                     )
-                    ThemeModeOption(
+                    SettingsRadioOption(
                         label = "ダーク",
                         selected = settings.themeMode == ThemeMode.THEME_DARK,
                         onClick = {
@@ -243,11 +237,9 @@ internal fun SettingsScreen(
 
             Spacer(Modifier.height(24.dp))
 
-            SettingSection(
-                title = "翻訳プロバイダー",
-            ) {
+            SettingSection(title = "翻訳プロバイダー") {
                 Column(Modifier.selectableGroup()) {
-                    TranslationProviderOption(
+                    SettingsRadioOption(
                         label = "Gecko",
                         selected = settings.translationProvider == TranslationProvider.TRANSLATION_PROVIDER_GECKO,
                         onClick = {
@@ -258,7 +250,7 @@ internal fun SettingsScreen(
                             )
                         },
                     )
-                    TranslationProviderOption(
+                    SettingsRadioOption(
                         label = "ローカルAI (Android)",
                         selected = settings.translationProvider == TranslationProvider.TRANSLATION_PROVIDER_LOCAL_AI,
                         onClick = {
@@ -274,9 +266,7 @@ internal fun SettingsScreen(
 
             Spacer(Modifier.height(24.dp))
 
-            SettingSection(
-                title = "セキュリティ",
-            ) {
+            SettingSection(title = "セキュリティ") {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
@@ -303,9 +293,7 @@ internal fun SettingsScreen(
 
             Spacer(Modifier.height(24.dp))
 
-            SettingSection(
-                title = "拡張機能",
-            ) {
+            SettingSection(title = "拡張機能") {
                 TextButton(
                     onClick = onOpenExtensions,
                     modifier = Modifier.fillMaxWidth(),
@@ -349,74 +337,7 @@ private fun SettingSection(
 }
 
 @Composable
-private fun HomepageOption(
-    label: String,
-    selected: Boolean,
-    onClick: () -> Unit,
-) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-            .fillMaxWidth()
-            .selectable(selected = selected, role = Role.RadioButton, onClick = onClick)
-            .padding(vertical = 4.dp),
-    ) {
-        RadioButton(selected = selected, onClick = null)
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodyLarge,
-            modifier = Modifier.padding(start = 8.dp),
-        )
-    }
-}
-
-@Composable
-private fun SearchProviderOption(
-    label: String,
-    selected: Boolean,
-    onClick: () -> Unit,
-) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-            .fillMaxWidth()
-            .selectable(selected = selected, role = Role.RadioButton, onClick = onClick)
-            .padding(vertical = 4.dp),
-    ) {
-        RadioButton(selected = selected, onClick = null)
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodyLarge,
-            modifier = Modifier.padding(start = 8.dp),
-        )
-    }
-}
-
-@Composable
-private fun ThemeModeOption(
-    label: String,
-    selected: Boolean,
-    onClick: () -> Unit,
-) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-            .fillMaxWidth()
-            .selectable(selected = selected, role = Role.RadioButton, onClick = onClick)
-            .padding(vertical = 4.dp),
-    ) {
-        RadioButton(selected = selected, onClick = null)
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodyLarge,
-            modifier = Modifier.padding(start = 8.dp),
-        )
-    }
-}
-
-
-@Composable
-private fun TranslationProviderOption(
+private fun SettingsRadioOption(
     label: String,
     selected: Boolean,
     onClick: () -> Unit,

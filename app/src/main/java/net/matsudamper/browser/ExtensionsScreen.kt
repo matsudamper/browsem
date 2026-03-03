@@ -26,11 +26,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
@@ -45,30 +40,7 @@ internal fun ExtensionsScreen(
     onBack: () -> Unit,
     onOpenExtensionSettings: (String) -> Unit,
 ) {
-    var extensions by remember { mutableStateOf<List<WebExtension>>(emptyList()) }
-    var isLoading by remember { mutableStateOf(true) }
-    var uninstallingId by remember { mutableStateOf<String?>(null) }
-    var errorMessage by remember { mutableStateOf<String?>(null) }
-
-    fun refreshExtensions() {
-        isLoading = true
-        runtime.webExtensionController.list().accept(
-            { list ->
-                extensions = (list ?: emptyList()).sortedBy { extension ->
-                    (extension.metaData.name?.takeIf { it.isNotBlank() } ?: extension.id).lowercase()
-                }
-                isLoading = false
-            },
-            { error ->
-                errorMessage = error?.message ?: "拡張機能一覧の取得に失敗しました。"
-                isLoading = false
-            },
-        )
-    }
-
-    LaunchedEffect(Unit) {
-        refreshExtensions()
-    }
+    val state = rememberExtensionsScreenState(runtime)
 
     Scaffold(
         topBar = {
@@ -84,8 +56,8 @@ internal fun ExtensionsScreen(
                 },
                 actions = {
                     IconButton(
-                        onClick = { refreshExtensions() },
-                        enabled = uninstallingId == null,
+                        onClick = { state.refreshExtensions() },
+                        enabled = state.uninstallingId == null,
                     ) {
                         Icon(
                             imageVector = Icons.Filled.Refresh,
@@ -96,7 +68,7 @@ internal fun ExtensionsScreen(
             )
         },
     ) { paddingValues ->
-        if (isLoading) {
+        if (state.isLoading) {
             Box(
                 modifier = Modifier
                     .padding(paddingValues)
@@ -105,7 +77,7 @@ internal fun ExtensionsScreen(
             ) {
                 CircularProgressIndicator()
             }
-        } else if (extensions.isEmpty()) {
+        } else if (state.extensions.isEmpty()) {
             Box(
                 modifier = Modifier
                     .padding(paddingValues)
@@ -122,50 +94,30 @@ internal fun ExtensionsScreen(
                     .fillMaxSize(),
             ) {
                 items(
-                    items = extensions,
+                    items = state.extensions,
                     key = { extension -> extension.id },
                 ) { extension ->
                     ExtensionRow(
                         extension = extension,
-                        isUninstalling = uninstallingId == extension.id,
-                        uninstallEnabled = uninstallingId == null,
+                        isUninstalling = state.uninstallingId == extension.id,
+                        uninstallEnabled = state.uninstallingId == null,
                         onOpenSettings = {
-                            extension.metaData.optionsPageUrl
-                                ?.takeIf { it.isNotBlank() }
-                                ?.let(onOpenExtensionSettings)
-                                ?: run {
-                                    errorMessage = "この拡張機能には設定画面がありません。"
-                                }
+                            state.openExtensionSettings(extension, onOpenExtensionSettings)
                         },
-                        onUninstall = {
-                            uninstallingId = extension.id
-                            runtime.webExtensionController.uninstall(extension).accept(
-                                {
-                                    uninstallingId = null
-                                    refreshExtensions()
-                                },
-                                { error ->
-                                    uninstallingId = null
-                                    errorMessage =
-                                        error?.message ?: "拡張機能のアンインストールに失敗しました。"
-                                },
-                            )
-                        },
+                        onUninstall = { state.uninstallExtension(extension) },
                     )
                 }
             }
         }
     }
 
-    errorMessage?.let { message ->
+    state.errorMessage?.let { message ->
         AlertDialog(
-            onDismissRequest = { errorMessage = null },
+            onDismissRequest = state::dismissError,
             title = { Text("エラー") },
             text = { Text(message) },
             confirmButton = {
-                TextButton(
-                    onClick = { errorMessage = null },
-                ) {
+                TextButton(onClick = state::dismissError) {
                     Text("OK")
                 }
             },

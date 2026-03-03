@@ -18,36 +18,30 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
-import androidx.core.app.NotificationCompat
-import androidx.core.app.NotificationManagerCompat
-import androidx.core.content.ContextCompat
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTagsAsResourceId
+import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.receiveAsFlow
 import org.mozilla.geckoview.GeckoResult
-import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.GeckoRuntime
-import org.mozilla.geckoview.WebExtension
-import org.mozilla.geckoview.WebExtensionController
+import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.WebNotification
 import org.mozilla.geckoview.WebNotificationDelegate
 import java.net.URI
 import java.util.concurrent.CancellationException
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
-import androidx.lifecycle.viewmodel.compose.viewModel
 
 class MainActivity : ComponentActivity() {
 
     private lateinit var runtime: GeckoRuntime
+    private lateinit var extensionInstaller: WebExtensionInstaller
     private var pendingActivityResult: GeckoResult<Intent>? = null
-    private var installPromptState by mutableStateOf<InstallPromptState?>(null)
-    private var installFailureMessage by mutableStateOf<String?>(null)
     private var webExtensionWarmUpCompleted = false
     private var webExtensionWarmUpInProgress = false
     private val createNewTabChannel = Channel<String>(Channel.UNLIMITED)
@@ -108,7 +102,8 @@ class MainActivity : ComponentActivity() {
             val domain = extractDomain(source)
             val channelId = ensureNotificationChannel(domain)
 
-            val notificationId = (notification.tag.takeIf { it.isNotBlank() } ?: source).hashCode()
+            val notificationId =
+                (notification.tag.takeIf { it.isNotBlank() } ?: source).hashCode()
             val builder = NotificationCompat.Builder(this@MainActivity, channelId)
                 .setSmallIcon(android.R.drawable.ic_dialog_info)
                 .setContentTitle(notification.title)
@@ -127,56 +122,21 @@ class MainActivity : ComponentActivity() {
 
         override fun onCloseNotification(notification: WebNotification) {
             val source = notification.source ?: return
-            val notificationId = (notification.tag.takeIf { it.isNotBlank() } ?: source).hashCode()
+            val notificationId =
+                (notification.tag.takeIf { it.isNotBlank() } ?: source).hashCode()
             NotificationManagerCompat.from(this@MainActivity).cancel(notificationId)
-        }
-    }
-
-    private val webExtensionPromptDelegate = object : WebExtensionController.PromptDelegate {
-        override fun onInstallPromptRequest(
-            extension: WebExtension,
-            permissions: Array<String>,
-            origins: Array<String>,
-            dataCollectionPermissions: Array<String>
-        ): GeckoResult<WebExtension.PermissionPromptResponse> {
-            return createInstallPromptResult(
-                extension = extension,
-                permissions = permissions,
-                origins = origins,
-                dataCollectionPermissions = dataCollectionPermissions,
-            )
-        }
-    }
-
-    private val addonManagerDelegate = object : WebExtensionController.AddonManagerDelegate {
-        override fun onInstalling(extension: WebExtension) {
-            runOnUiThread {
-                installFailureMessage = null
-            }
-        }
-
-        override fun onInstallationFailed(
-            extension: WebExtension?,
-            installException: WebExtension.InstallException
-        ) {
-            runOnUiThread {
-                installPromptState?.result?.complete(buildInstallPromptResponse(allow = false))
-                installPromptState = null
-                installFailureMessage = buildInstallFailureMessage(
-                    extension = extension,
-                    installException = installException,
-                )
-            }
         }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         runtime = GeckoRuntime.getDefault(this)
+        extensionInstaller = WebExtensionInstaller(runtime)
+
         runtime.setActivityDelegate(activityDelegate)
         runtime.settings.setExtensionsWebAPIEnabled(true)
-        runtime.webExtensionController.setPromptDelegate(webExtensionPromptDelegate)
-        runtime.webExtensionController.setAddonManagerDelegate(addonManagerDelegate)
+        runtime.webExtensionController.setPromptDelegate(extensionInstaller.promptDelegate)
+        runtime.webExtensionController.setAddonManagerDelegate(extensionInstaller.addonManagerDelegate)
         runtime.webNotificationDelegate = webNotificationDelegate
         warmUpWebExtensionController()
 
@@ -192,14 +152,15 @@ class MainActivity : ComponentActivity() {
                 factory = object : ViewModelProvider.Factory {
                     @Suppress("UNCHECKED_CAST")
                     override fun <T : ViewModel> create(modelClass: Class<T>): T {
-                        return BrowserViewModel(runtime) as T
+                        return BrowserViewModel(runtime, applicationContext) as T
                     }
                 }
             )
             val browserSessionController = browserViewModel.browserSessionController
             LaunchedEffect(Unit) {
                 createNewTabChannel.receiveAsFlow().collect { url ->
-                    val newTab = browserSessionController.createAndAppendTab(initialUrl = url)
+                    val newTab =
+                        browserSessionController.createAndAppendTab(initialUrl = url)
                     browserSessionController.selectTab(newTab.tabId)
                 }
             }
@@ -209,31 +170,25 @@ class MainActivity : ComponentActivity() {
                 },
             ) {
                 BrowserApp(
-                    runtime = runtime,
-                    browserSessionController = browserSessionController,
+                    viewModel = browserViewModel,
                     onInstallExtensionRequest = { pageUrl ->
-                        installFromCurrentPage(pageUrl)
+                        extensionInstaller.installFromCurrentPage(pageUrl)
                     },
                     onDesktopNotificationPermissionRequest = {
                         requestNotificationPermissionIfNeeded()
                     },
                 )
             }
-            installPromptState?.let { prompt ->
+            extensionInstaller.installPromptState?.let { prompt ->
                 InstallPromptDialog(
                     prompt = prompt,
-                    resolveInstallPrompt = { allow ->
-                        val pendingPrompt = installPromptState ?: return@InstallPromptDialog
-                        installPromptState = null
-                        pendingPrompt.result.complete(buildInstallPromptResponse(allow = allow))
-
-                    }
+                    resolveInstallPrompt = extensionInstaller::resolveInstallPrompt,
                 )
             }
-            installFailureMessage?.let { message ->
+            extensionInstaller.installFailureMessage?.let { message ->
                 InstallFailureDialog(
                     message = message,
-                    onDismiss = { installFailureMessage = null }
+                    onDismiss = extensionInstaller::dismissInstallFailure,
                 )
             }
         }
@@ -277,11 +232,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
-        installPromptState?.result?.completeExceptionally(
-            CancellationException("Activity was destroyed before extension prompt completed.")
-        )
-        installPromptState = null
-        installFailureMessage = null
+        extensionInstaller.cleanup()
         pendingActivityResult?.completeExceptionally(
             CancellationException("Activity was destroyed before Gecko activity completed.")
         )
@@ -294,7 +245,7 @@ class MainActivity : ComponentActivity() {
             runtime.setActivityDelegate(null)
         }
         if (::runtime.isInitialized &&
-            runtime.webExtensionController.getPromptDelegate() === webExtensionPromptDelegate
+            runtime.webExtensionController.getPromptDelegate() === extensionInstaller.promptDelegate
         ) {
             runtime.webExtensionController.setPromptDelegate(null)
         }
@@ -302,159 +253,11 @@ class MainActivity : ComponentActivity() {
         super.onDestroy()
     }
 
-    private fun createInstallPromptResult(
-        extension: WebExtension,
-        permissions: Array<String>,
-        origins: Array<String>,
-        dataCollectionPermissions: Array<String>
-    ): GeckoResult<WebExtension.PermissionPromptResponse> {
-        val result = GeckoResult<WebExtension.PermissionPromptResponse>()
-        runOnUiThread {
-            installPromptState?.result?.complete(buildInstallPromptResponse(allow = false))
-            installPromptState = InstallPromptState(
-                message = buildInstallPromptMessage(
-                    extension = extension,
-                    permissions = permissions,
-                    origins = origins,
-                    dataCollectionPermissions = dataCollectionPermissions,
-                ),
-                result = result,
-            )
-        }
-        return result
-    }
-
     override fun onStop() {
         super.onStop()
         if (isFinishing) {
-            installPromptState?.result?.complete(
-                buildInstallPromptResponse(allow = false)
-            )
-            installPromptState = null
-            installFailureMessage = null
+            extensionInstaller.cleanup()
         }
-    }
-
-    private fun buildInstallPromptResponse(allow: Boolean): WebExtension.PermissionPromptResponse {
-        return WebExtension.PermissionPromptResponse(
-            allow,
-            false,
-            allow,
-        )
-    }
-
-    private fun buildInstallPromptMessage(
-        extension: WebExtension,
-        permissions: Array<String>,
-        origins: Array<String>,
-        dataCollectionPermissions: Array<String>
-    ): String {
-        val extensionName = extension.metaData.name?.takeIf { it.isNotBlank() } ?: extension.id
-        val details = listOfNotNull(
-            formatPromptSection("Permissions", permissions),
-            formatPromptSection("Site access", origins),
-            formatPromptSection("Data collection", dataCollectionPermissions),
-        )
-        return buildString {
-            append("Install \"")
-            append(extensionName)
-            append("\"?")
-            if (details.isNotEmpty()) {
-                append("\n\n")
-                append(details.joinToString("\n\n"))
-            }
-        }
-    }
-
-    private fun formatPromptSection(title: String, items: Array<String>): String? {
-        if (items.isEmpty()) {
-            return null
-        }
-        return buildString {
-            append(title)
-            append(":\n")
-            items.forEachIndexed { index, item ->
-                append("- ")
-                append(item)
-                if (index != items.lastIndex) {
-                    append('\n')
-                }
-            }
-        }
-    }
-
-    private fun buildInstallFailureMessage(
-        extension: WebExtension?,
-        installException: WebExtension.InstallException
-    ): String {
-        val extensionName = extension?.metaData?.name?.takeIf { it.isNotBlank() }
-            ?: installException.extensionName
-            ?: extension?.id
-            ?: installException.extensionId
-            ?: "Unknown extension"
-        val reason = when (installException.code) {
-            WebExtension.InstallException.ErrorCodes.ERROR_INCOMPATIBLE ->
-                "This extension is not compatible with GeckoView."
-
-            WebExtension.InstallException.ErrorCodes.ERROR_UNSUPPORTED_ADDON_TYPE ->
-                "This extension type is not supported."
-
-            WebExtension.InstallException.ErrorCodes.ERROR_SIGNEDSTATE_REQUIRED ->
-                "Only signed extensions can be installed."
-
-            WebExtension.InstallException.ErrorCodes.ERROR_BLOCKLISTED ->
-                "This extension is blocklisted."
-
-            WebExtension.InstallException.ErrorCodes.ERROR_SOFT_BLOCKED ->
-                "This extension is soft-blocked for safety."
-
-            WebExtension.InstallException.ErrorCodes.ERROR_USER_CANCELED ->
-                "Installation was canceled."
-
-            else -> "Installation failed (code: ${installException.code})."
-        }
-        return buildString {
-            append("Failed to install \"")
-            append(extensionName)
-            append("\".\n\n")
-            append(reason)
-        }
-    }
-
-    private fun installFromCurrentPage(pageUrl: String) {
-        installFailureMessage = null
-        val installUri = resolveAmoInstallUriFromPage(pageUrl)
-        if (installUri == null) {
-            installFailureMessage =
-                "Extension install is available on AMO add-on pages.\n\nCurrent URL:\n$pageUrl"
-            return
-        }
-        runtime.webExtensionController
-            .install(
-                installUri,
-                WebExtensionController.INSTALLATION_METHOD_MANAGER,
-            )
-            .accept(
-                {},
-                { throwable ->
-                    val error = throwable ?: RuntimeException("Unknown install error.")
-                    runOnUiThread {
-                        when (error) {
-                            is WebExtension.InstallException -> {
-                                installFailureMessage = buildInstallFailureMessage(
-                                    extension = null,
-                                    installException = error,
-                                )
-                            }
-
-                            else -> {
-                                installFailureMessage =
-                                    "Extension install failed.\n\n${error.message ?: error::class.java.name}"
-                            }
-                        }
-                    }
-                },
-            )
     }
 
     private fun extractDomain(url: String): String {
@@ -502,43 +305,27 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-
 @Composable
 private fun InstallPromptDialog(
     prompt: InstallPromptState,
     resolveInstallPrompt: (allow: Boolean) -> Unit,
 ) {
     AlertDialog(
-        onDismissRequest = {
-            resolveInstallPrompt(false)
-        },
-        title = {
-            Text("Install extension")
-        },
-        text = {
-            Text(prompt.message)
-        },
+        onDismissRequest = { resolveInstallPrompt(false) },
+        title = { Text("Install extension") },
+        text = { Text(prompt.message) },
         confirmButton = {
-            TextButton(
-                onClick = { resolveInstallPrompt(true) }
-            ) {
+            TextButton(onClick = { resolveInstallPrompt(true) }) {
                 Text("Install")
             }
         },
         dismissButton = {
-            TextButton(
-                onClick = { resolveInstallPrompt(false) }
-            ) {
+            TextButton(onClick = { resolveInstallPrompt(false) }) {
                 Text("Cancel")
             }
         }
     )
 }
-
-private data class InstallPromptState(
-    val message: String,
-    val result: GeckoResult<WebExtension.PermissionPromptResponse>,
-)
 
 @Composable
 private fun InstallFailureDialog(
@@ -547,12 +334,8 @@ private fun InstallFailureDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = {
-            Text("Extension install failed")
-        },
-        text = {
-            Text(message)
-        },
+        title = { Text("Extension install failed") },
+        text = { Text(message) },
         confirmButton = {
             TextButton(onClick = onDismiss) {
                 Text("OK")
