@@ -1,6 +1,7 @@
 package net.matsudamper.browser
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.ContentTransform
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
@@ -23,6 +24,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.navigation3.runtime.NavEntry
 import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.rememberNavBackStack
+import androidx.navigation3.scene.Scene
 import androidx.navigation3.ui.NavDisplay
 import androidx.navigation3.ui.defaultPopTransitionSpec
 import androidx.navigation3.ui.defaultTransitionSpec
@@ -149,34 +151,8 @@ internal fun BrowserApp(
 
                 default
             },
-            popTransitionSpec = {
-                val default = defaultPopTransitionSpec<NavKey>()(this)
-                val initial = initialState.entries.lastOrNull()
-                    ?: return@NavDisplay default
-                val target = targetState.entries.lastOrNull()
-                    ?: return@NavDisplay default
-
-                if (initial.contentKey is AppDestination.Tabs && target.contentKey is AppDestination.Browser) {
-                    return@NavDisplay ContentTransform(
-                        initialContentExit = slideOut {
-                            IntOffset(
-                                x = 0,
-                                y = -it.height,
-                            )
-                        },
-                        targetContentEnter = EnterTransition.None,
-                    )
-                }
-
-                if (target.contentKey is AppDestination.Browser) {
-                    return@NavDisplay ContentTransform(
-                        initialContentExit = ExitTransition.None,
-                        targetContentEnter = EnterTransition.None,
-                    )
-                }
-
-                default
-            },
+            popTransitionSpec = { popTransition { height -> -height } },
+            predictivePopTransitionSpec = { popTransition { height -> -height / 2 } },
             entryProvider = { key: NavKey ->
                 when (key) {
                     AppDestination.Browser -> navEntry(
@@ -316,4 +292,33 @@ private fun navEntry(
         contentKey = key,
         content = content,
     )
+}
+
+private fun <T : NavKey> AnimatedContentTransitionScope<Scene<T>>.popTransition(heightProvider: (Int) -> Int): ContentTransform {
+    val default = defaultPopTransitionSpec<T>()(this)
+    val initial = initialState.entries.lastOrNull()
+        ?: return default
+    val target = targetState.entries.lastOrNull()
+        ?: return default
+
+    if (initial.contentKey is AppDestination.Tabs && target.contentKey is AppDestination.Browser) {
+        return ContentTransform(
+            initialContentExit = slideOut {
+                IntOffset(
+                    x = 0,
+                    y = heightProvider(it.height),
+                )
+            },
+            targetContentEnter = EnterTransition.None,
+        )
+    }
+
+    if (target.contentKey is AppDestination.Browser) {
+        return ContentTransform(
+            initialContentExit = ExitTransition.None,
+            targetContentEnter = EnterTransition.None,
+        )
+    }
+
+    return default
 }

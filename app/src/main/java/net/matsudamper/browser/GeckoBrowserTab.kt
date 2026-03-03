@@ -70,6 +70,7 @@ import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.GeckoSessionSettings
 import org.mozilla.geckoview.GeckoView
+import org.mozilla.geckoview.TranslationsController
 import java.net.URL
 import java.util.concurrent.Executors
 import androidx.core.graphics.toColorInt
@@ -121,6 +122,7 @@ fun GeckoBrowserTab(
 
     var translationState by remember(tabId) { mutableStateOf(TranslationState.Idle) }
     var originalPageUrlForRevert by remember(tabId) { mutableStateOf<String?>(null) }
+    var detectedPageLanguage by remember(tabId) { mutableStateOf<String?>(null) }
 
     var showFindInPage by remember { mutableStateOf(false) }
     var findQuery by remember { mutableStateOf("") }
@@ -230,6 +232,9 @@ fun GeckoBrowserTab(
                     translationState = TranslationState.Idle
                     originalPageUrlForRevert = null
                 }
+                if (!newUrl.startsWith("data:")) {
+                    detectedPageLanguage = null
+                }
             }
         }
         val contentDelegate = object : GeckoSession.ContentDelegate {
@@ -281,11 +286,22 @@ fun GeckoBrowserTab(
                 geckoScrollYRef[0] = scrollY
             }
         }
+        val translationsDelegate = object : TranslationsController.SessionTranslation.Delegate {
+            override fun onTranslationStateChange(
+                session: GeckoSession,
+                translationState: TranslationsController.SessionTranslation.TranslationState?
+            ) {
+                val lang = translationState?.detectedLanguages?.docLangTag ?: return
+                detectedPageLanguage = lang
+            }
+        }
+
         session.permissionDelegate = permissionDelegate
         session.navigationDelegate = navigationDelegate
         session.contentDelegate = contentDelegate
         session.progressDelegate = progressDelegate
         session.scrollDelegate = scrollDelegate
+        session.translationsSessionDelegate = translationsDelegate
 
         onDispose {
             if (session.permissionDelegate === permissionDelegate) {
@@ -302,6 +318,9 @@ fun GeckoBrowserTab(
             }
             if (session.scrollDelegate === scrollDelegate) {
                 session.scrollDelegate = null
+            }
+            if (session.translationsSessionDelegate === translationsDelegate) {
+                session.translationsSessionDelegate = null
             }
         }
     }
@@ -429,7 +448,7 @@ fun GeckoBrowserTab(
                             originalPageUrlForRevert = currentPageUrl
                             translationState = TranslationState.Loading
                             val result = runCatching {
-                                PageTranslator(session, currentPageUrl).translatePageToJapanese(translationProvider)
+                                PageTranslator(session, currentPageUrl).translatePageToJapanese(translationProvider, detectedPageLanguage)
                             }
                             translationState = if (result.isSuccess) {
                                 TranslationState.Translated
