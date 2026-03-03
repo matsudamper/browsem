@@ -192,6 +192,7 @@ internal fun BrowserApp(
                                 initialUrl = selectedTab.currentUrl,
                                 homepageUrl = homepageUrl,
                                 searchTemplate = searchTemplate,
+                                translationProvider = currentSettings.translationProvider,
                                 tabCount = tabs.size,
                                 onInstallExtensionRequest = onInstallExtensionRequest,
                                 onDesktopNotificationPermissionRequest = onDesktopNotificationPermissionRequest,
