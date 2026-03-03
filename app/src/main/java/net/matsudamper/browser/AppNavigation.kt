@@ -40,7 +40,7 @@ import org.mozilla.geckoview.GeckoRuntime
 @Serializable
 private sealed interface AppDestination : NavKey, java.io.Serializable {
     @Serializable
-    data object Browser : AppDestination, java.io.Serializable
+    data class Browser(val tabId: Long) : AppDestination, java.io.Serializable
 
     @Serializable
     data object Settings : AppDestination, java.io.Serializable
@@ -56,6 +56,8 @@ private sealed interface AppDestination : NavKey, java.io.Serializable {
 internal fun BrowserApp(
     runtime: GeckoRuntime,
     browserSessionController: BrowserSessionController,
+    externalNewTabUrl: String?,
+    onExternalNewTabConsumed: () -> Unit,
     onInstallExtensionRequest: (String) -> Unit,
     onDesktopNotificationPermissionRequest: () -> GeckoResult<Int>,
 ) {
@@ -68,8 +70,6 @@ internal fun BrowserApp(
     val searchTemplate = currentSettings.resolvedSearchTemplate()
 
     val scope = rememberCoroutineScope()
-    val backStack = rememberNavBackStack(AppDestination.Browser)
-    var tabPersistenceSignal by remember { mutableLongStateOf(0L) }
 
     val persistedTabs = remember(currentSettings.tabStatesList) {
         currentSettings.tabStatesList.map { tabState ->
@@ -82,13 +82,30 @@ internal fun BrowserApp(
         }
     }
 
+    // 初期タブを同期的に確保し、backStack の初期値として使用する
+    val initialTabId = remember(browserSessionController, homepageUrl, persistedTabs, currentSettings.selectedTabIndex) {
+        browserSessionController.ensureInitialPageLoaded(
+            homepageUrl = homepageUrl,
+            persistedTabs = persistedTabs,
+            persistedSelectedTabIndex = currentSettings.selectedTabIndex,
+        )
+    }
+
+    var tabPersistenceSignal by remember { mutableLongStateOf(0L) }
+    val backStack = rememberNavBackStack(AppDestination.Browser(initialTabId))
+
+    // backStack から現在表示中のタブIDを取得するヘルパー
+    fun currentBrowserTabId(): Long? =
+        backStack.filterIsInstance<AppDestination.Browser>().lastOrNull()?.tabId
+
     LaunchedEffect(tabPersistenceSignal) {
         if (tabPersistenceSignal == 0L) {
             return@LaunchedEffect
         }
         delay(250L)
+        val currentTabId = currentBrowserTabId() ?: return@LaunchedEffect
         settingsRepository.updateTabStates(
-            tabs = browserSessionController.exportPersistedTabs().map { tab ->
+            tabs = browserSessionController.exportPersistedTabs(currentTabId).map { tab ->
                 PersistedTabState(
                     url = tab.url,
                     sessionState = tab.sessionState,
@@ -96,21 +113,17 @@ internal fun BrowserApp(
                     previewImageWebp = ByteString.copyFrom(tab.previewImageWebp),
                 )
             },
-            selectedTabIndex = browserSessionController.selectedTabIndex,
+            selectedTabIndex = browserSessionController.selectedTabIndex(currentTabId),
         )
     }
 
-    LaunchedEffect(
-        browserSessionController,
-        homepageUrl,
-        persistedTabs,
-        currentSettings.selectedTabIndex
-    ) {
-        browserSessionController.ensureInitialPageLoaded(
-            homepageUrl = homepageUrl,
-            persistedTabs = persistedTabs,
-            persistedSelectedTabIndex = currentSettings.selectedTabIndex,
-        )
+    // 外部URL（Intent など）から新タブを開く要求を処理する
+    LaunchedEffect(externalNewTabUrl) {
+        val url = externalNewTabUrl ?: return@LaunchedEffect
+        val newTab = browserSessionController.createTab(url)
+        backStack.removeAll { it is AppDestination.Browser }
+        backStack.add(AppDestination.Browser(newTab.id))
+        onExternalNewTabConsumed()
     }
 
     BackHandler(enabled = backStack.size > 1) {
@@ -178,18 +191,16 @@ internal fun BrowserApp(
                 default
             },
             entryProvider = { key: NavKey ->
-                when (key) {
-                    AppDestination.Browser -> navEntry(
-                        key = key,
-                    ) {
-                        val selectedTab = browserSessionController.selectedTab
-                        if (selectedTab != null) {
+                when {
+                    key is AppDestination.Browser -> navEntry(key) {
+                        val tab = browserSessionController.tabs.firstOrNull { it.id == key.tabId }
+                        if (tab != null) {
                             val tabs = browserSessionController.tabs
 
                             GeckoBrowserTab(
-                                tabId = selectedTab.id,
-                                session = selectedTab.session,
-                                initialUrl = selectedTab.currentUrl,
+                                tabId = tab.id,
+                                session = tab.session,
+                                initialUrl = tab.currentUrl,
                                 homepageUrl = homepageUrl,
                                 searchTemplate = searchTemplate,
                                 tabCount = tabs.size,
@@ -205,33 +216,35 @@ internal fun BrowserApp(
                                     val newTab = browserSessionController.createTabForNewSession(
                                         initialUrl = uri,
                                     )
-                                    browserSessionController.selectTab(newTab.id)
+                                    // 現在の Browser エントリを新しいタブで置き換える
+                                    backStack.removeAll { it is AppDestination.Browser }
+                                    backStack.add(AppDestination.Browser(newTab.id))
                                     tabPersistenceSignal++
                                     newTab.session
                                 },
                                 onCurrentPageUrlChange = { currentUrl ->
                                     browserSessionController.updateTabUrl(
-                                        tabId = selectedTab.id,
+                                        tabId = tab.id,
                                         url = currentUrl,
                                     )
                                     tabPersistenceSignal++
                                 },
                                 onSessionStateChange = { sessionState ->
                                     browserSessionController.updateTabSessionState(
-                                        tabId = selectedTab.id,
+                                        tabId = tab.id,
                                         sessionState = sessionState,
                                     )
                                     tabPersistenceSignal++
                                 },
                                 onTabPreviewCaptured = { previewBitmap ->
                                     browserSessionController.updateTabPreview(
-                                        tabId = selectedTab.id,
+                                        tabId = tab.id,
                                         previewBitmap = previewBitmap,
                                     )
                                 },
                                 onTabTitleChange = { title ->
                                     browserSessionController.updateTabTitle(
-                                        tabId = selectedTab.id,
+                                        tabId = tab.id,
                                         title = title,
                                     )
                                     tabPersistenceSignal++
@@ -240,7 +253,7 @@ internal fun BrowserApp(
                         }
                     }
 
-                    AppDestination.Settings -> navEntry(key) {
+                    key == AppDestination.Settings -> navEntry(key) {
                         val latestSettings by settingsRepository.settings
                             .collectAsState(initial = currentSettings)
                         SettingsScreen(
@@ -253,35 +266,45 @@ internal fun BrowserApp(
                         )
                     }
 
-                    AppDestination.Extensions -> navEntry(key) {
+                    key == AppDestination.Extensions -> navEntry(key) {
                         ExtensionsScreen(
                             runtime = runtime,
                             onBack = { backStack.removeLastOrNull() },
                             onOpenExtensionSettings = { optionsPageUrl ->
-                                browserSessionController.selectedTab?.session?.loadUri(
-                                    optionsPageUrl
-                                )
+                                // 現在表示中の Browser タブのセッションで開く
+                                val currentTabId = currentBrowserTabId()
+                                val currentTab = browserSessionController.tabs.firstOrNull { it.id == currentTabId }
+                                currentTab?.session?.loadUri(optionsPageUrl)
                                 backStack.removeLastOrNull()
                             },
                         )
                     }
 
-                    AppDestination.Tabs -> navEntry(key) {
+                    key == AppDestination.Tabs -> navEntry(key) {
+                        val currentTabId = currentBrowserTabId()
                         TabsScreen(
                             tabs = browserSessionController.tabs,
-                            selectedTabId = browserSessionController.selectedTab?.id,
+                            selectedTabId = currentTabId,
                             onSelectTab = { tabId ->
-                                browserSessionController.selectTab(tabId)
+                                // Browser エントリを選択タブで置き換えて Tabs を閉じる
+                                backStack.removeAll { it is AppDestination.Browser }
+                                backStack.add(AppDestination.Browser(tabId))
+                                backStack.removeAll { it == AppDestination.Tabs }
                                 tabPersistenceSignal++
-                                backStack.removeLastOrNull()
                             },
                             onCloseTab = { tabId ->
-                                browserSessionController.closeTab(tabId)
-                                if (browserSessionController.tabs.isEmpty()) {
+                                val nextTabId = browserSessionController.closeTab(tabId)
+                                if (nextTabId == null) {
+                                    // タブが空になったので新規タブを作成
                                     val newTab = browserSessionController.createTab(
                                         initialUrl = homepageUrl,
                                     )
-                                    browserSessionController.selectTab(newTab.id)
+                                    backStack.removeAll { it is AppDestination.Browser }
+                                    backStack.add(AppDestination.Browser(newTab.id))
+                                } else if (tabId == currentTabId) {
+                                    // 表示中のタブが閉じられた場合は次のタブに切り替え
+                                    backStack.removeAll { it is AppDestination.Browser }
+                                    backStack.add(AppDestination.Browser(nextTabId))
                                 }
                                 tabPersistenceSignal++
                             },
@@ -289,9 +312,10 @@ internal fun BrowserApp(
                                 val newTab = browserSessionController.createTab(
                                     initialUrl = homepageUrl,
                                 )
-                                browserSessionController.selectTab(newTab.id)
+                                backStack.removeAll { it is AppDestination.Browser }
+                                backStack.add(AppDestination.Browser(newTab.id))
+                                backStack.removeAll { it == AppDestination.Tabs }
                                 tabPersistenceSignal++
-                                backStack.removeLastOrNull()
                             },
                             modifier = Modifier
                                 .fillMaxSize()

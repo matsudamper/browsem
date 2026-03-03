@@ -7,7 +7,6 @@ import java.io.ByteArrayOutputStream
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -19,31 +18,25 @@ internal class BrowserSessionController(runtime: GeckoRuntime) {
     private val geckoRuntime = runtime
     private var nextTabId = 1L
     private val tabList = mutableStateListOf<BrowserTab>()
-    private var selectedTabId by mutableLongStateOf(-1L)
 
     val tabs: List<BrowserTab>
         get() = tabList
 
-    val selectedTab: BrowserTab?
-        get() = tabList.firstOrNull { it.id == selectedTabId }
-
-    val selectedTabIndex: Int
-        get() = tabList.indexOfFirst { it.id == selectedTabId }
-            .takeIf { it >= 0 }
-            ?: 0
-
+    /**
+     * タブが未作成の場合のみ初期タブを生成する。
+     * @return 最初に表示すべきタブの ID
+     */
     fun ensureInitialPageLoaded(
         homepageUrl: String,
         persistedTabs: List<PersistedBrowserTab> = emptyList(),
         persistedSelectedTabIndex: Int = 0,
-    ) {
+    ): Long {
         if (tabList.isNotEmpty()) {
-            return
+            return tabList[persistedSelectedTabIndex.coerceIn(0, tabList.lastIndex)].id
         }
         if (persistedTabs.isEmpty()) {
             val initialTab = createTab(initialUrl = homepageUrl)
-            selectedTabId = initialTab.id
-            return
+            return initialTab.id
         }
 
         persistedTabs.forEach { persistedTab ->
@@ -55,7 +48,7 @@ internal class BrowserSessionController(runtime: GeckoRuntime) {
             )
         }
         val index = persistedSelectedTabIndex.coerceIn(0, tabList.lastIndex)
-        selectedTabId = tabList[index].id
+        return tabList[index].id
     }
 
     fun createTab(
@@ -97,11 +90,6 @@ internal class BrowserSessionController(runtime: GeckoRuntime) {
         )
     }
 
-    fun selectTab(tabId: Long) {
-        if (tabList.any { it.id == tabId }) {
-            selectedTabId = tabId
-        }
-    }
 
     fun updateTabUrl(tabId: Long, url: String) {
         tabList.firstOrNull { it.id == tabId }?.currentUrl = url
@@ -120,26 +108,25 @@ internal class BrowserSessionController(runtime: GeckoRuntime) {
         tabList.firstOrNull { it.id == tabId }?.previewBitmap = previewBitmap
     }
 
-    fun closeTab(tabId: Long) {
+    /**
+     * タブを閉じる。
+     * @return 次に選択すべきタブID、タブが空になった場合は null
+     */
+    fun closeTab(tabId: Long): Long? {
         val index = tabList.indexOfFirst { it.id == tabId }
         if (index < 0) {
-            return
+            return tabList.firstOrNull()?.id
         }
         val removed = tabList.removeAt(index)
         if (removed.session.isOpen) {
             removed.session.close()
         }
-        if (selectedTabId == tabId) {
-            if (tabList.isEmpty()) {
-                selectedTabId = -1L
-            } else {
-                val nextIndex = index.coerceAtMost(tabList.lastIndex)
-                selectedTabId = tabList[nextIndex].id
-            }
-        }
+        if (tabList.isEmpty()) return null
+        val nextIndex = index.coerceAtMost(tabList.lastIndex)
+        return tabList[nextIndex].id
     }
 
-    fun exportPersistedTabs(): List<PersistedBrowserTab> {
+    fun exportPersistedTabs(currentTabId: Long): List<PersistedBrowserTab> {
         return tabList.map { tab ->
             PersistedBrowserTab(
                 url = tab.currentUrl,
@@ -150,6 +137,10 @@ internal class BrowserSessionController(runtime: GeckoRuntime) {
         }
     }
 
+    fun selectedTabIndex(currentTabId: Long): Int {
+        return tabList.indexOfFirst { it.id == currentTabId }.takeIf { it >= 0 } ?: 0
+    }
+
     fun close() {
         tabList.forEach { tab ->
             if (tab.session.isOpen) {
@@ -157,7 +148,6 @@ internal class BrowserSessionController(runtime: GeckoRuntime) {
             }
         }
         tabList.clear()
-        selectedTabId = -1L
     }
 
     private fun appendTab(

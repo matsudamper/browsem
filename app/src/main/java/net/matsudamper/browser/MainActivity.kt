@@ -18,6 +18,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
 import androidx.compose.ui.Modifier
@@ -148,10 +149,10 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             val browserSessionController = rememberBrowserSessionController(runtime)
+            var externalNewTabUrl by remember { mutableStateOf<String?>(null) }
             LaunchedEffect(Unit) {
                 createNewTabChannel.receiveAsFlow().collect { url ->
-                    val newTab = browserSessionController.createTab(url)
-                    browserSessionController.selectTab(newTab.id)
+                    externalNewTabUrl = url
                 }
             }
             Box(
@@ -162,6 +163,8 @@ class MainActivity : ComponentActivity() {
                 BrowserApp(
                     runtime = runtime,
                     browserSessionController = browserSessionController,
+                    externalNewTabUrl = externalNewTabUrl,
+                    onExternalNewTabConsumed = { externalNewTabUrl = null },
                     onInstallExtensionRequest = { pageUrl ->
                         installFromCurrentPage(pageUrl)
                     },
