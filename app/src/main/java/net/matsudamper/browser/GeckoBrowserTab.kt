@@ -188,6 +188,10 @@ fun GeckoBrowserTab(
                 hasUserGesture: Boolean
             ) {
                 val newUrl = url.orEmpty()
+                if (newUrl == "about:blank" && currentPageUrl != "about:blank") {
+                    // セッション再アタッチ時の一時的な about:blank をスキップ
+                    return
+                }
                 currentPageUrl = newUrl
                 onCurrentPageUrlChange(newUrl)
                 if (!isUrlInputFocused) {
