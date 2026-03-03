@@ -1,7 +1,6 @@
 package net.matsudamper.browser.translate
 
 import android.text.Html
-import android.util.Base64
 import com.google.mlkit.common.model.DownloadConditions
 import com.google.mlkit.nl.languageid.LanguageIdentification
 import com.google.mlkit.nl.translate.TranslateLanguage
@@ -19,41 +18,63 @@ class LocalAITranslator(
     private val currentPageUrl: String,
 ) : Translator {
     override suspend fun translate() {
-        val plainText = withContext(Dispatchers.IO) {
-            val raw = URL(currentPageUrl).readText()
-            Html.fromHtml(raw, Html.FROM_HTML_MODE_COMPACT).toString()
-        }.take(4500)
-        if (plainText.isBlank()) {
-            return
+        // 1. HTMLを取得
+        val rawHtml = withContext(Dispatchers.IO) {
+            URL(currentPageUrl).readText()
         }
+
+        // 2. <script>/<style>/<noscript>/<template> を除去してJSON-LD汚染を防ぐ
+        val cleanedHtml = rawHtml
+            .replace(Regex("<script[^>]*>[\\s\\S]*?</script>", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("<style[^>]*>[\\s\\S]*?</style>", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("<noscript[^>]*>[\\s\\S]*?</noscript>", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("<template[^>]*>[\\s\\S]*?</template>", RegexOption.IGNORE_CASE), "")
+
+        val plainText = Html.fromHtml(cleanedHtml, Html.FROM_HTML_MODE_COMPACT)
+            .toString()
+            .take(4500)
+        if (plainText.isBlank()) return
+
+        // 3. 言語検出
         val sourceLang = detectLanguage(plainText)
         val sourceTranslateLang = toTranslateLanguageTag(sourceLang) ?: return
-        if (sourceTranslateLang == TranslateLanguage.JAPANESE) {
-            return
-        }
+        if (sourceTranslateLang == TranslateLanguage.JAPANESE) return
+
+        // 4. 翻訳
         val translated = translateWithLocalAi(
             text = plainText,
             sourceLanguage = sourceTranslateLang,
             targetLanguage = TranslateLanguage.JAPANESE,
         )
-        val html = """
-            <html>
-            <head><meta charset="utf-8"></head>
-            <body style="font-family:sans-serif;padding:16px;line-height:1.6;">
-            <h2>翻訳（ローカルAI）</h2>
-            <p>${escapeHtml(translated)}</p>
-            </body></html>
-        """.trimIndent()
-        val encoded = Base64.encodeToString(html.toByteArray(Charsets.UTF_8), Base64.NO_WRAP)
-        session.loadUri("data:text/html;charset=utf-8;base64,$encoded")
-    }
 
-
-    private fun escapeHtml(input: String): String {
-        return input
-            .replace("&", "&amp;")
-            .replace("<", "&lt;")
-            .replace(">", "&gt;")
+        // 5. javascript: URI でURLを変えずにDOMを置換
+        //    各文字をUnicode エスケープにすることで単引用符・制御文字の問題を回避
+        val escapedText = translated.asSequence()
+            .joinToString("") { c ->
+                when {
+                    c == '\\' -> "\\\\"
+                    c.code < 0x20 || c.code > 0x7E -> "\\u${c.code.toString(16).padStart(4, '0')}"
+                    c == '\'' -> "\\'"
+                    else -> c.toString()
+                }
+            }
+        // 翻訳（ローカルAI） の各文字をUnicodeエスケープ済みリテラル
+        val title = "\\u7ffb\\u8a33\\uff08\\u30ed\\u30fc\\u30ab\\u30ebAI\\uff09"
+        val script = "javascript:void((function(){" +
+            "var d=document;" +
+            "var div=d.createElement('div');" +
+            "div.style='font-family:sans-serif;padding:16px;line-height:1.6';" +
+            "var h=d.createElement('h2');" +
+            "h.textContent='$title';" +
+            "var p=d.createElement('p');" +
+            "p.style='white-space:pre-wrap';" +
+            "p.textContent='$escapedText';" +
+            "div.appendChild(h);" +
+            "div.appendChild(p);" +
+            "d.body.innerHTML='';" +
+            "d.body.appendChild(div);" +
+            "})())"
+        session.loadUri(script)
     }
 
     private suspend fun detectLanguage(text: String): String = withContext(Dispatchers.IO) {
