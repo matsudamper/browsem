@@ -30,7 +30,7 @@ import androidx.navigation3.ui.NavDisplay
 import androidx.navigation3.ui.defaultPopTransitionSpec
 import androidx.navigation3.ui.defaultTransitionSpec
 import com.google.protobuf.ByteString
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
 import net.matsudamper.browser.data.BrowserSettings
 import net.matsudamper.browser.data.PersistedTabState
@@ -96,22 +96,23 @@ internal fun BrowserApp(
         }
     }
 
-    LaunchedEffect(tabPersistenceSignal) {
-        if (tabPersistenceSignal == 0L) {
-            return@LaunchedEffect
-        }
-        delay(250L)
-        settingsRepository.updateTabStates(
-            tabs = browserSessionController.exportPersistedTabs().map { tab ->
-                PersistedTabState(
-                    url = tab.url,
-                    sessionState = tab.sessionState,
-                    title = tab.title,
-                    previewImageWebp = ByteString.copyFrom(tab.previewImageWebp),
+    DisposableEffect(Unit) {
+        onDispose {
+            @Suppress("OPT_IN_USAGE")
+            GlobalScope.launch {
+                settingsRepository.updateTabStates(
+                    tabs = browserSessionController.exportPersistedTabs().map { tab ->
+                        PersistedTabState(
+                            url = tab.url,
+                            sessionState = tab.sessionState,
+                            title = tab.title,
+                            previewImageWebp = ByteString.copyFrom(tab.previewImageWebp),
+                        )
+                    },
+                    selectedTabIndex = browserSessionController.selectedTabIndex,
                 )
-            },
-            selectedTabIndex = browserSessionController.selectedTabIndex,
-        )
+            }
+        }
     }
 
     LaunchedEffect(
@@ -296,8 +297,7 @@ private fun Browser(
     }
     val tabs = browserSessionController.tabs
     GeckoBrowserTab(
-        session = selectedTab.session,
-        initialUrl = selectedTab.currentUrl,
+        browserTab = selectedTab,
         homepageUrl = homepageUrl,
         searchTemplate = searchTemplate,
         translationProvider = currentSettings.translationProvider,
@@ -316,30 +316,6 @@ private fun Browser(
             )
             browserSessionController.selectTab(newTab.tabId)
             newTab.session
-        },
-        onCurrentPageUrlChange = { currentUrl ->
-            browserSessionController.updateTabUrl(
-                tabId = selectedTab.tabId,
-                url = currentUrl,
-            )
-        },
-        onSessionStateChange = { sessionState ->
-            browserSessionController.updateTabSessionState(
-                tabId = selectedTab.tabId,
-                sessionState = sessionState,
-            )
-        },
-        onTabPreviewCaptured = { previewBitmap ->
-            browserSessionController.updateTabPreview(
-                tabId = selectedTab.tabId,
-                previewBitmap = previewBitmap,
-            )
-        },
-        onTabTitleChange = { title ->
-            browserSessionController.updateTabTitle(
-                tabId = selectedTab.tabId,
-                title = title,
-            )
         },
     )
 }

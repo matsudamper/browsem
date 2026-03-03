@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -193,7 +194,8 @@ internal class BrowserSessionController(runtime: GeckoRuntime) {
     }
 }
 
-internal class BrowserTab(
+@Stable
+class BrowserTab(
     val tabId: String,
     val session: GeckoSession,
     currentUrl: String,
