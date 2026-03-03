@@ -1,4 +1,11 @@
 {
+  "permissions": {
+    "allow": [
+      "Bash(./gradlew:*)",
+      "Bash(unzip:*)",
+      "mcp__ide__getDiagnostics"
+    ]
+  },
   "hooks": {
     "SessionStart": [
       {
