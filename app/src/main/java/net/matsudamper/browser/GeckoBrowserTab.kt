@@ -67,6 +67,7 @@ import org.mozilla.geckoview.GeckoSessionSettings
 import org.mozilla.geckoview.GeckoView
 import java.net.URL
 import java.util.concurrent.Executors
+import androidx.core.graphics.toColorInt
 
 @Composable
 @OptIn(ExperimentalLayoutApi::class)
@@ -488,7 +489,7 @@ private fun findThemeColorMetaContent(html: String): String? {
 
 private fun parseManifestColor(colorValue: String): Color? {
     return try {
-        Color(android.graphics.Color.parseColor(colorValue))
+        Color(colorValue.toColorInt())
     } catch (_: IllegalArgumentException) {
         null
     }
