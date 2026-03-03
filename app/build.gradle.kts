@@ -104,6 +104,7 @@ dependencies {
     implementation(libs.mlkit.language.id)
     implementation(libs.kotlinx.coroutines.play.services)
     implementation(project(":data"))
+    implementation(libs.androidx.swiperefreshlayout)
 
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
