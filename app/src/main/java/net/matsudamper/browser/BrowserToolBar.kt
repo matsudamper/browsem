@@ -40,6 +40,7 @@ import androidx.compose.ui.autofill.ContentDataType
 import androidx.compose.ui.autofill.ContentType
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.ComposeView
@@ -78,6 +79,7 @@ internal fun BrowserToolBar(
     onFindInPage: () -> Unit,
     isPcMode: Boolean,
     onPcModeToggle: () -> Unit,
+    toolbarColor: Color?,
 ) {
     val latestOnOpenTabs by rememberUpdatedState(onOpenTabs)
     val swipeToOpenTabsModifier = modifier.pointerInput(Unit) {
@@ -90,7 +92,7 @@ internal fun BrowserToolBar(
     }
 
     Surface(
-        color = MaterialTheme.colorScheme.primaryContainer,
+        color = toolbarColor ?: MaterialTheme.colorScheme.primaryContainer,
         modifier = swipeToOpenTabsModifier,
     ) {
         Row(
@@ -302,6 +304,7 @@ private fun Preview() {
             isPcMode = false,
             onPcModeToggle = {},
             onFindInPage = {},
+            toolbarColor = null,
             onRefresh = {},
             onHome = {},
             onForward = {},
