@@ -22,6 +22,30 @@ class SettingsRepository(context: Context) {
         dataStore.updateData { settings }
     }
 
+    suspend fun addNotificationAllowedOrigin(origin: String) {
+        dataStore.updateData { current ->
+            if (current.notificationAllowedOriginsList.contains(origin)) {
+                current
+            } else {
+                current.toBuilder().addNotificationAllowedOrigins(origin).build()
+            }
+        }
+    }
+
+    suspend fun removeNotificationAllowedOrigin(origin: String) {
+        dataStore.updateData { current ->
+            if (!current.notificationAllowedOriginsList.contains(origin)) {
+                current
+            } else {
+                val newList = current.notificationAllowedOriginsList.filter { it != origin }
+                current.toBuilder()
+                    .clearNotificationAllowedOrigins()
+                    .addAllNotificationAllowedOrigins(newList)
+                    .build()
+            }
+        }
+    }
+
     suspend fun updateTabStates(
         tabs: List<PersistedTabState>,
         selectedTabIndex: Int,

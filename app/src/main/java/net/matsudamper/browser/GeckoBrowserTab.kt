@@ -81,7 +81,6 @@ private enum class TranslationState { Idle, Loading, Translated, Error }
 @Composable
 @OptIn(ExperimentalLayoutApi::class)
 fun GeckoBrowserTab(
-    tabId: Long,
     session: GeckoSession,
     initialUrl: String,
     homepageUrl: String,
@@ -90,7 +89,7 @@ fun GeckoBrowserTab(
     modifier: Modifier = Modifier,
     tabCount: Int,
     onInstallExtensionRequest: (String) -> Unit,
-    onDesktopNotificationPermissionRequest: () -> GeckoResult<Int>,
+    onDesktopNotificationPermissionRequest: (uri: String) -> GeckoResult<Int>,
     onOpenSettings: () -> Unit,
     onOpenTabs: () -> Unit,
     onOpenNewSessionRequest: (String) -> GeckoSession,
@@ -99,15 +98,15 @@ fun GeckoBrowserTab(
     onTabPreviewCaptured: (Bitmap) -> Unit,
     onTabTitleChange: (String) -> Unit,
 ) {
-    var urlInput by rememberSaveable(tabId) { mutableStateOf(initialUrl) }
-    var currentPageUrl by rememberSaveable(tabId) { mutableStateOf(initialUrl) }
-    var currentPageTitle by rememberSaveable(tabId) { mutableStateOf("") }
-    var canGoBack by remember(tabId) { mutableStateOf(false) }
-    var canGoForward by remember(tabId) { mutableStateOf(false) }
-    var isUrlInputFocused by remember(tabId) { mutableStateOf(false) }
-    var geckoViewRef by remember(tabId) { mutableStateOf<GeckoView?>(null) }
-    var isPcMode by rememberSaveable(tabId) { mutableStateOf(false) }
-    var toolbarColor by remember(tabId) { mutableStateOf<Color?>(null) }
+    var urlInput by rememberSaveable { mutableStateOf(initialUrl) }
+    var currentPageUrl by rememberSaveable { mutableStateOf(initialUrl) }
+    var currentPageTitle by rememberSaveable { mutableStateOf("") }
+    var canGoBack by remember { mutableStateOf(false) }
+    var canGoForward by remember { mutableStateOf(false) }
+    var isUrlInputFocused by remember { mutableStateOf(false) }
+    var geckoViewRef by remember { mutableStateOf<GeckoView?>(null) }
+    var isPcMode by rememberSaveable { mutableStateOf(false) }
+    var toolbarColor by remember { mutableStateOf<Color?>(null) }
     val keyboardController = LocalSoftwareKeyboardController.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val isImeVisible = WindowInsets.isImeVisible
@@ -120,15 +119,17 @@ fun GeckoBrowserTab(
         )
     }
 
-    var translationState by remember(tabId) { mutableStateOf(TranslationState.Idle) }
-    var originalPageUrlForRevert by remember(tabId) { mutableStateOf<String?>(null) }
-    var detectedPageLanguage by remember(tabId) { mutableStateOf<String?>(null) }
+    var translationState by remember { mutableStateOf(TranslationState.Idle) }
+    var originalPageUrlForRevert by remember { mutableStateOf<String?>(null) }
+    var detectedPageLanguage by remember { mutableStateOf<String?>(null) }
 
     var showFindInPage by remember { mutableStateOf(false) }
     var findQuery by remember { mutableStateOf("") }
     var findMatchCurrent by remember { mutableIntStateOf(0) }
     var findMatchTotal by remember { mutableIntStateOf(0) }
-    var imageContextMenuUrl by remember(tabId) { mutableStateOf<String?>(null) }
+    var imageContextMenuUrl by remember { mutableStateOf<String?>(null) }
+    var pendingAlertPrompt by remember { mutableStateOf<GeckoSession.PromptDelegate.AlertPrompt?>(null) }
+    var pendingAlertResult by remember { mutableStateOf<GeckoResult<GeckoSession.PromptDelegate.PromptResponse>?>(null) }
 
     fun closeFindInPage() {
         showFindInPage = false
@@ -175,7 +176,7 @@ fun GeckoBrowserTab(
                         GeckoSession.PermissionDelegate.ContentPermission.VALUE_PROMPT
                     )
                 }
-                return onDesktopNotificationPermissionRequest()
+                return onDesktopNotificationPermissionRequest(perm.uri)
             }
         }
 
@@ -278,12 +279,24 @@ fun GeckoBrowserTab(
                 detectedPageLanguage = lang
             }
         }
+        val promptDelegate = object : GeckoSession.PromptDelegate {
+            override fun onAlertPrompt(
+                session: GeckoSession,
+                prompt: GeckoSession.PromptDelegate.AlertPrompt
+            ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse> {
+                val result = GeckoResult<GeckoSession.PromptDelegate.PromptResponse>()
+                pendingAlertPrompt = prompt
+                pendingAlertResult = result
+                return result
+            }
+        }
 
         session.permissionDelegate = permissionDelegate
         session.navigationDelegate = navigationDelegate
         session.contentDelegate = contentDelegate
         session.progressDelegate = progressDelegate
         session.translationsSessionDelegate = translationsDelegate
+        session.promptDelegate = promptDelegate
 
         onDispose {
             if (session.permissionDelegate === permissionDelegate) {
@@ -300,6 +313,9 @@ fun GeckoBrowserTab(
             }
             if (session.translationsSessionDelegate === translationsDelegate) {
                 session.translationsSessionDelegate = null
+            }
+            if (session.promptDelegate === promptDelegate) {
+                session.promptDelegate = null
             }
         }
     }
@@ -567,6 +583,25 @@ fun GeckoBrowserTab(
                 dismissButton = {
                     TextButton(onClick = { imageContextMenuUrl = null }) {
                         Text(text = "キャンセル")
+                    }
+                },
+            )
+        }
+        pendingAlertPrompt?.let { prompt ->
+            AlertDialog(
+                onDismissRequest = {
+                    pendingAlertResult?.complete(prompt.dismiss())
+                    pendingAlertPrompt = null
+                    pendingAlertResult = null
+                },
+                text = { Text(prompt.message ?: "") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        pendingAlertResult?.complete(prompt.dismiss())
+                        pendingAlertPrompt = null
+                        pendingAlertResult = null
+                    }) {
+                        Text("OK")
                     }
                 },
             )

@@ -1,6 +1,8 @@
 package net.matsudamper.browser
 
 import android.Manifest
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.content.Intent
 import android.content.IntentSender
 import android.content.pm.PackageManager
@@ -19,6 +21,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.semantics
@@ -30,6 +34,9 @@ import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.WebExtension
 import org.mozilla.geckoview.WebExtensionController
+import org.mozilla.geckoview.WebNotification
+import org.mozilla.geckoview.WebNotificationDelegate
+import java.net.URI
 import java.util.concurrent.CancellationException
 
 class MainActivity : ComponentActivity() {
@@ -92,6 +99,36 @@ class MainActivity : ComponentActivity() {
         result
     }
 
+    private val webNotificationDelegate = object : WebNotificationDelegate {
+        override fun onShowNotification(notification: WebNotification) {
+            val source = notification.source ?: return
+            val domain = extractDomain(source)
+            val channelId = ensureNotificationChannel(domain)
+
+            val notificationId = (notification.tag.takeIf { it.isNotBlank() } ?: source).hashCode()
+            val builder = NotificationCompat.Builder(this@MainActivity, channelId)
+                .setSmallIcon(android.R.drawable.ic_dialog_info)
+                .setContentTitle(notification.title)
+                .setContentText(notification.text)
+                .setAutoCancel(true)
+
+            if (ContextCompat.checkSelfPermission(
+                    this@MainActivity,
+                    Manifest.permission.POST_NOTIFICATIONS,
+                ) == PackageManager.PERMISSION_GRANTED
+            ) {
+                NotificationManagerCompat.from(this@MainActivity)
+                    .notify(notificationId, builder.build())
+            }
+        }
+
+        override fun onCloseNotification(notification: WebNotification) {
+            val source = notification.source ?: return
+            val notificationId = (notification.tag.takeIf { it.isNotBlank() } ?: source).hashCode()
+            NotificationManagerCompat.from(this@MainActivity).cancel(notificationId)
+        }
+    }
+
     private val webExtensionPromptDelegate = object : WebExtensionController.PromptDelegate {
         override fun onInstallPromptRequest(
             extension: WebExtension,
@@ -137,6 +174,7 @@ class MainActivity : ComponentActivity() {
         runtime.settings.setExtensionsWebAPIEnabled(true)
         runtime.webExtensionController.setPromptDelegate(webExtensionPromptDelegate)
         runtime.webExtensionController.setAddonManagerDelegate(addonManagerDelegate)
+        runtime.webNotificationDelegate = webNotificationDelegate
         warmUpWebExtensionController()
 
         if (savedInstanceState == null) {
@@ -150,8 +188,8 @@ class MainActivity : ComponentActivity() {
             val browserSessionController = rememberBrowserSessionController(runtime)
             LaunchedEffect(Unit) {
                 createNewTabChannel.receiveAsFlow().collect { url ->
-                    val newTab = browserSessionController.createTab(url)
-                    browserSessionController.selectTab(newTab.id)
+                    val newTab = browserSessionController.createTab(initialUrl = url)
+                    browserSessionController.selectTab(newTab.tabId)
                 }
             }
             Box(
@@ -406,6 +444,28 @@ class MainActivity : ComponentActivity() {
                     }
                 },
             )
+    }
+
+    private fun extractDomain(url: String): String {
+        return try {
+            URI(url).host?.takeIf { it.isNotBlank() } ?: url
+        } catch (_: Exception) {
+            url
+        }
+    }
+
+    private fun ensureNotificationChannel(domain: String): String {
+        val channelId = "notification_$domain"
+        val notificationManager = getSystemService(NotificationManager::class.java)
+        if (notificationManager.getNotificationChannel(channelId) == null) {
+            val channel = NotificationChannel(
+                channelId,
+                domain,
+                NotificationManager.IMPORTANCE_DEFAULT,
+            )
+            notificationManager.createNotificationChannel(channel)
+        }
+        return channelId
     }
 
     private fun warmUpWebExtensionController() {

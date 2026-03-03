@@ -34,8 +34,9 @@ message BrowserSettings {
   repeated BrowserTabState tab_states = 5;
   int32 selected_tab_index = 6;
   ThemeMode theme_mode = 7;
-  TranslationProvider translation_provider = 8;
-  bool enable_third_party_ca = 9;
+  repeated string notification_allowed_origins = 8;
+  TranslationProvider translation_provider = 9;
+  bool enable_third_party_ca = 10;
 }
 
 message BrowserTabState {
