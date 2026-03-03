@@ -97,7 +97,7 @@ internal class BrowserSessionController(runtime: GeckoRuntime) {
             initialUrl = normalizedInitialUrl,
             sessionState = restoredSessionState.orEmpty(),
             title = restoredTitle,
-            previewBitmap = restoredPreviewImage.toBitmapOrNull(),
+            previewBitmapArray = restoredPreviewImage,
         )
         val restored = restoredSessionState
             ?.takeIf { it.isNotBlank() }
@@ -120,7 +120,7 @@ internal class BrowserSessionController(runtime: GeckoRuntime) {
             initialUrl = normalizedInitialUrl,
             sessionState = "",
             title = normalizedInitialUrl,
-            previewBitmap = null,
+            previewBitmapArray = null,
         )
     }
 
@@ -160,7 +160,7 @@ internal class BrowserSessionController(runtime: GeckoRuntime) {
                 url = tab.currentUrl,
                 sessionState = tab.sessionState,
                 title = tab.title,
-                previewImageWebp = tab.previewBitmap.toWebpByteArray(),
+                previewImageWebp = tab.previewBitmap ?: byteArrayOf(),
             )
         }
     }
@@ -181,7 +181,7 @@ internal class BrowserSessionController(runtime: GeckoRuntime) {
         initialUrl: String,
         sessionState: String,
         title: String,
-        previewBitmap: Bitmap?,
+        previewBitmapArray: ByteArray?,
     ): BrowserTab {
         val tab = BrowserTab(
             tabId = tabId,
@@ -189,7 +189,7 @@ internal class BrowserSessionController(runtime: GeckoRuntime) {
             currentUrl = initialUrl,
             sessionState = sessionState,
             title = title.ifBlank { initialUrl },
-            previewBitmap = previewBitmap,
+            previewBitmap = previewBitmapArray ?: byteArrayOf(),
         )
         tabList += tab
         return tab
@@ -203,12 +203,12 @@ class BrowserTab(
     currentUrl: String,
     sessionState: String,
     title: String,
-    previewBitmap: Bitmap?,
+    previewBitmap: ByteArray?,
 ) {
     var currentUrl by mutableStateOf(currentUrl)
     var sessionState by mutableStateOf(sessionState)
     var title by mutableStateOf(title)
-    var previewBitmap: Bitmap? by mutableStateOf(previewBitmap)
+    var previewBitmap: ByteArray? by mutableStateOf(previewBitmap)
 }
 
 internal data class PersistedBrowserTab(

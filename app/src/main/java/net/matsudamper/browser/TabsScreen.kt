@@ -1,6 +1,7 @@
 package net.matsudamper.browser
 
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -33,7 +34,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -49,13 +54,13 @@ import androidx.compose.ui.unit.dp
 internal data class TabsScreenTabData(
     val id: String,
     val title: String,
-    val previewBitmap: Bitmap?,
+    val previewBitmapArray: ByteArray?,
 )
 
 internal fun BrowserTab.toTabsScreenTabData(): TabsScreenTabData = TabsScreenTabData(
     id = tabId,
     title = title,
-    previewBitmap = previewBitmap,
+    previewBitmapArray = previewBitmap,
 )
 
 internal object TabsLayoutDefaults {
@@ -216,10 +221,16 @@ private fun TabsScreenContent(
                                         .clip(RoundedCornerShape(8.dp)),
                                     contentAlignment = Alignment.Center,
                                 ) {
-                                    val preview = tab.previewBitmap
+                                    var bitmap: Bitmap? by remember { mutableStateOf(null) }
+                                    LaunchedEffect(tab.previewBitmapArray) {
+                                        val array = tab.previewBitmapArray ?: return@LaunchedEffect
+                                        bitmap = BitmapFactory.decodeByteArray(array, 0, array.size)
+                                    }
+
+                                    val preview = bitmap?.asImageBitmap()
                                     if (preview != null) {
                                         Image(
-                                            bitmap = preview.asImageBitmap(),
+                                            bitmap = preview,
                                             contentDescription = "Tab preview",
                                             contentScale = ContentScale.Crop,
                                             modifier = Modifier.fillMaxSize(),
@@ -260,17 +271,17 @@ private fun Preview() {
             TabsScreenTabData(
                 id = 1L.toString(),
                 title = "Example Domain",
-                previewBitmap = null,
+                previewBitmapArray = null,
             ),
             TabsScreenTabData(
                 id = 2L.toString(),
                 title = "Google",
-                previewBitmap = null,
+                previewBitmapArray = null,
             ),
             TabsScreenTabData(
                 id = 3L.toString(),
                 title = "GitHub: Let's build from here",
-                previewBitmap = null,
+                previewBitmapArray = null,
             ),
         )
     }

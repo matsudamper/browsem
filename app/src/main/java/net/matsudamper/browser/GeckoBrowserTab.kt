@@ -77,6 +77,8 @@ import java.util.concurrent.Executors
 import androidx.core.graphics.toColorInt
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.runBlocking
+import java.io.ByteArrayOutputStream
 
 private enum class TranslationState { Idle, Loading, Translated, Error }
 
@@ -820,13 +822,15 @@ private fun FindInPageBar(
 
 private fun captureCurrentTabPreview(
     view: GeckoView,
-    bitmap: (Bitmap) -> Unit,
+    capturedBitmap: (ByteArray) -> Unit,
 ) {
     view.capturePixels().accept(
         { bitmap ->
             val previewBitmap = bitmap ?: return@accept
-            view.post {
-                bitmap(previewBitmap)
+            val stream = ByteArrayOutputStream()
+            runBlocking {
+                previewBitmap.compress(Bitmap.CompressFormat.WEBP_LOSSY, 0, stream)
+                capturedBitmap(stream.toByteArray())
             }
         },
         {},
