@@ -2,10 +2,13 @@ package net.matsudamper.browser
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.util.Log
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Stable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -15,10 +18,22 @@ import org.mozilla.geckoview.GeckoSession
 import java.io.ByteArrayOutputStream
 import java.util.UUID
 
+@Stable
 internal class BrowserSessionController(runtime: GeckoRuntime) {
     private val geckoRuntime = runtime
     private val tabList = mutableStateListOf<BrowserTab>()
     private var selectedTabId: String? by mutableStateOf(null)
+
+    val stateChanged by derivedStateOf {
+        mutableIntStateOf(
+            tabList.map {
+                it.currentUrl
+                it.sessionState
+                it.title
+                it.previewBitmap
+            }.hashCode()
+        )
+    }
 
     val tabs: List<BrowserTab>
         get() = tabList
@@ -28,30 +43,34 @@ internal class BrowserSessionController(runtime: GeckoRuntime) {
             .takeIf { it >= 0 }
             ?: 0
 
+    val currentTab: BrowserTab?
+        get() = tabList.firstOrNull { it.tabId == selectedTabId }
+
     fun getOrCreateTab(tabId: String, homepageUrl: String): BrowserTab {
+        Log.d("LOG", "getOrCreateTab: tabList=${tabList.size}")
         val alreadyCreatedTab = tabList.firstOrNull { it.tabId == tabId }
         if (alreadyCreatedTab != null) return alreadyCreatedTab
 
-        val newTab = createTab(tabId = tabId, initialUrl = homepageUrl)
+        val newTab = createAndAppendTab(tabId = tabId, initialUrl = homepageUrl)
         return newTab
     }
 
-    fun ensureInitialPageLoaded(
+    fun restoreTabs(
         homepageUrl: String,
-        persistedTabs: List<PersistedBrowserTab> = emptyList(),
-        persistedSelectedTabIndex: Int = 0,
+        persistedTabs: List<PersistedBrowserTab>,
+        persistedSelectedTabIndex: Int,
     ) {
         if (tabList.isNotEmpty()) return
         if (persistedTabs.isEmpty()) {
             val tabId = UUID.randomUUID().toString()
-            val initialTab = createTab(tabId = tabId, initialUrl = homepageUrl)
+            val initialTab = createAndAppendTab(tabId = tabId, initialUrl = homepageUrl)
             selectedTabId = initialTab.tabId
             return
         }
 
         persistedTabs.forEach { persistedTab ->
             val tabId = UUID.randomUUID().toString()
-            createTab(
+            createAndAppendTab(
                 tabId = tabId,
                 initialUrl = persistedTab.url.ifBlank { homepageUrl },
                 restoredSessionState = persistedTab.sessionState,
@@ -63,7 +82,7 @@ internal class BrowserSessionController(runtime: GeckoRuntime) {
         selectedTabId = tabList[index].tabId
     }
 
-    fun createTab(
+    fun createAndAppendTab(
         tabId: String = UUID.randomUUID().toString(),
         initialUrl: String,
         restoredSessionState: String? = null,
@@ -112,25 +131,8 @@ internal class BrowserSessionController(runtime: GeckoRuntime) {
             targetTab
         } else {
             // TODO homepage
-            createTab(initialUrl = "")
+            createAndAppendTab(initialUrl = "")
         }
-    }
-
-    fun updateTabUrl(tabId: String, url: String) {
-        tabList.firstOrNull { it.tabId == tabId }?.currentUrl = url
-    }
-
-    fun updateTabSessionState(tabId: String, sessionState: String) {
-        tabList.firstOrNull { it.tabId == tabId }?.sessionState = sessionState
-    }
-
-    fun updateTabTitle(tabId: String, title: String) {
-        val normalized = title.ifBlank { return }
-        tabList.firstOrNull { it.tabId == tabId }?.title = normalized
-    }
-
-    fun updateTabPreview(tabId: String, previewBitmap: Bitmap) {
-        tabList.firstOrNull { it.tabId == tabId }?.previewBitmap = previewBitmap
     }
 
     fun closeTab(tabId: String) {
