@@ -52,6 +52,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import net.matsudamper.browser.data.TranslationProvider
 import kotlinx.coroutines.launch
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.GeckoSessionSettings
@@ -65,6 +66,7 @@ fun GeckoBrowserTab(
     initialUrl: String,
     homepageUrl: String,
     searchTemplate: String,
+    translationProvider: TranslationProvider,
     modifier: Modifier = Modifier,
     tabCount: Int,
     onInstallExtensionRequest: (String) -> Unit,
@@ -301,7 +303,7 @@ fun GeckoBrowserTab(
                 onRefresh = { session.reload() },
                 onTranslatePage = {
                     scope.launch {
-                        runCatching { PageTranslator(session, currentPageUrl).translatePageToJapanese() }
+                        runCatching { PageTranslator(session, currentPageUrl).translatePageToJapanese(translationProvider) }
                     }
                 },
             )

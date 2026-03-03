@@ -208,7 +208,7 @@ internal fun BrowserToolBar(
                     }
                     DropdownMenuItem(
                         text = {
-                            Text(text = "翻訳（ローカルAI）")
+                            Text(text = "翻訳")
                         },
                         onClick = {
                             visibleMenu = false

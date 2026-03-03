@@ -5,12 +5,13 @@ import android.util.Base64
 import com.google.mlkit.common.model.DownloadConditions
 import com.google.mlkit.nl.languageid.LanguageIdentification
 import com.google.mlkit.nl.translate.TranslateLanguage
-import com.google.mlkit.nl.translate.TranslatorOptions
 import com.google.mlkit.nl.translate.Translation
+import com.google.mlkit.nl.translate.TranslatorOptions
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
+import net.matsudamper.browser.data.TranslationProvider
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.TranslationsController
@@ -23,15 +24,21 @@ internal class PageTranslator(
     private val session: GeckoSession,
     private val currentPageUrl: String,
 ) {
-    suspend fun translatePageToJapanese() {
-        val geckoSucceeded = runCatching { translateByGecko() }.getOrDefault(false)
-        if (geckoSucceeded) {
-            return
+    suspend fun translatePageToJapanese(provider: TranslationProvider) {
+        when (provider) {
+            TranslationProvider.TRANSLATION_PROVIDER_GECKO,
+            TranslationProvider.UNRECOGNIZED,
+            -> {
+                translateByGecko()
+            }
+
+            TranslationProvider.TRANSLATION_PROVIDER_LOCAL_AI -> {
+                translateByLocalAi()
+            }
         }
-        translateByLocalAiFallback()
     }
 
-    private suspend fun translateByGecko(): Boolean {
+    private suspend fun translateByGecko() {
         val state = suspendCancellableCoroutine<TranslationsController.SessionTranslation.TranslationState?> { cont ->
             val delegate = object : TranslationsController.SessionTranslation.Delegate {
                 override fun onTranslationStateChange(
@@ -49,22 +56,21 @@ internal class PageTranslator(
                 session.setTranslationsSessionDelegate(null)
             }
         }
-        val source = state?.detectedLanguages?.docLangTag ?: return false
+        val source = state?.detectedLanguages?.docLangTag ?: return
         val sourceTag = source.substringBefore('-').lowercase(Locale.ROOT)
         if (sourceTag == "ja") {
-            return true
+            return
         }
         val options = TranslationsController.SessionTranslation.TranslationOptions.Builder()
             .downloadModel(true)
             .build()
-        val sessionTranslation = session.sessionTranslation ?: return false
+        val sessionTranslation = session.sessionTranslation ?: return
         sessionTranslation
             .translate(sourceTag, "ja", options)
             .awaitGecko()
-        return true
     }
 
-    private suspend fun translateByLocalAiFallback() {
+    private suspend fun translateByLocalAi() {
         val plainText = withContext(Dispatchers.IO) {
             val raw = URL(currentPageUrl).readText()
             Html.fromHtml(raw, Html.FROM_HTML_MODE_COMPACT).toString()
@@ -84,7 +90,7 @@ internal class PageTranslator(
         )
         val html = """
             <html><body style=\"font-family:sans-serif;padding:16px;line-height:1.6;\">
-            <h2>翻訳（ローカルAIフォールバック）</h2>
+            <h2>翻訳（ローカルAI）</h2>
             <p>${escapeHtml(translated)}</p>
             </body></html>
         """.trimIndent()
@@ -148,6 +154,6 @@ private suspend fun <T> GeckoResult<T>.awaitGecko(): T? = suspendCancellableCoro
             if (cont.isActive) {
                 cont.resumeWithException(throwable ?: RuntimeException("Unknown Gecko error"))
             }
-        }
+        },
     )
 }
