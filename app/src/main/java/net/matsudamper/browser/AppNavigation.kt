@@ -236,7 +236,8 @@ internal fun BrowserApp(
                             onBack = { backStack.removeLastOrNull() },
                             onOpenExtensionSettings = { optionsPageUrl ->
                                 browserSessionController.selectedTab?.session?.loadUri(optionsPageUrl)
-                                backStack.removeLastOrNull()
+                                backStack.clear()
+                                backStack.add(AppDestination.Browser)
                             },
                         )
                     }
