@@ -10,12 +10,13 @@ import androidx.lifecycle.viewModelScope
 import com.google.protobuf.ByteString
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import net.matsudamper.browser.data.BrowserTabData
 import net.matsudamper.browser.data.BrowserSettings
 import net.matsudamper.browser.data.PersistedTabState
 import net.matsudamper.browser.data.SettingsRepository
+import net.matsudamper.browser.data.TabRepository
 import net.matsudamper.browser.data.resolvedHomepageUrl
 import net.matsudamper.browser.data.resolvedSearchTemplate
 import org.mozilla.geckoview.GeckoResult
@@ -29,8 +30,11 @@ internal class BrowserViewModel(
 ) : ViewModel() {
     val browserSessionController = BrowserSessionController(runtime)
     val settingsRepository = SettingsRepository(context)
+    val tabRepository = TabRepository(context)
 
     val settings: StateFlow<BrowserSettings?> = settingsRepository.settings
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+    val tabData: StateFlow<BrowserTabData?> = tabRepository.tabs
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     var tabPersistenceSignal by mutableLongStateOf(0L)
@@ -46,9 +50,12 @@ internal class BrowserViewModel(
     val searchTemplate: String
         get() = settings.value?.resolvedSearchTemplate() ?: "https://www.google.com/search?q=%s"
 
-    fun restoreTabs(currentSettings: BrowserSettings) {
+    fun restoreTabs(
+        currentSettings: BrowserSettings,
+        currentTabData: BrowserTabData,
+    ) {
         val homepageUrl = currentSettings.resolvedHomepageUrl()
-        val persistedTabs = currentSettings.tabStatesList.map { tabState ->
+        val persistedTabs = currentTabData.tabStatesList.map { tabState ->
             PersistedBrowserTab(
                 url = tabState.url,
                 sessionState = tabState.sessionState,
@@ -61,13 +68,13 @@ internal class BrowserViewModel(
         browserSessionController.restoreTabs(
             homepageUrl = homepageUrl,
             persistedTabs = persistedTabs,
-            persistedSelectedTabIndex = currentSettings.selectedTabIndex,
+            persistedSelectedTabIndex = currentTabData.selectedTabIndex,
         )
     }
 
     fun persistTabStates() {
         viewModelScope.launch {
-            settingsRepository.updateTabStates(
+            tabRepository.updateTabStates(
                 tabs = browserSessionController.exportPersistedTabs().map { tab ->
                     PersistedTabState(
                         url = tab.url,

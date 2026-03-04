@@ -32,6 +32,7 @@ import net.matsudamper.browser.data.resolvedHomepageUrl
 import net.matsudamper.browser.data.resolvedSearchTemplate
 import net.matsudamper.browser.navigation.AppDestination
 import net.matsudamper.browser.navigation.NavController
+import net.matsudamper.browser.screen.tab.TabsScreen
 import org.mozilla.geckoview.GeckoResult
 
 @Composable
@@ -43,6 +44,8 @@ internal fun BrowserApp(
 ) {
     val currentSettings by viewModel.settings.collectAsState()
     val settings = currentSettings ?: return
+    val currentTabData by viewModel.tabData.collectAsState()
+    val tabData = currentTabData ?: return
 
     val homepageUrl = settings.resolvedHomepageUrl()
     val searchTemplate = settings.resolvedSearchTemplate()
@@ -114,7 +117,7 @@ internal fun BrowserApp(
                 when (key) {
                     is AppDestination.Setup -> navEntry(key) {
                         DisposableEffect(Unit) {
-                            viewModel.restoreTabs(settings)
+                            viewModel.restoreTabs(settings, tabData)
                             val tab = browserSessionController.tabs
                                 .getOrNull(browserSessionController.selectedTabIndex)!!
                             navController.selectTab(tab.tabId)
@@ -176,7 +179,7 @@ internal fun BrowserApp(
                             onDispose { navController.disposeTabs() }
                         }
                         TabsScreen(
-                            tabs = browserSessionController.tabs,
+                            browserSessionController = browserSessionController,
                             selectedTabId = navController.getSelectedTab(),
                             onSelectTab = { tabId ->
                                 val tab = browserSessionController.selectTab(tabId)

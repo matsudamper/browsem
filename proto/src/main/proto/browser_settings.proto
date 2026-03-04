@@ -31,19 +31,10 @@ message BrowserSettings {
   string custom_homepage_url = 2;
   SearchProvider search_provider = 3;
   string custom_search_url = 4;
-  repeated BrowserTabState tab_states = 5;
-  int32 selected_tab_index = 6;
+  reserved 5, 6;
+  reserved "tab_states", "selected_tab_index";
   ThemeMode theme_mode = 7;
   repeated string notification_allowed_origins = 8;
   TranslationProvider translation_provider = 9;
   bool enable_third_party_ca = 10;
-}
-
-message BrowserTabState {
-  string url = 1;
-  string session_state = 2;
-  string title = 3;
-  bytes preview_image_webp = 4;
-  string tab_id = 5;
-  string opener_tab_id = 6;
 }
