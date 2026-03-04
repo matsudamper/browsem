@@ -82,14 +82,14 @@ internal fun BrowserApp(
         )
     }
 
-    BackHandler(enabled = backStack.size > 1) {
-        backStack.removeLastOrNull()
+    BackHandler(enabled = navController.isLastBackHandled) {
+        navController.back()
     }
 
     BrowserTheme(themeMode = settingsUiState.themeMode) {
         NavDisplay(
             backStack = backStack,
-            onBack = { backStack.removeLastOrNull() },
+            onBack = { navController.back() },
             transitionSpec = {
                 val default = defaultTransitionSpec<NavKey>()(this)
                 val initial = initialState.entries.lastOrNull() ?: return@NavDisplay default

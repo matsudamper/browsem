@@ -105,10 +105,8 @@ fun GeckoBrowserTab(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    // Attach session delegates
     DisposableEffect(session, state) {
-        val permissionDelegate =
-            state.createPermissionDelegate(onDesktopNotificationPermissionRequest)
+        val permissionDelegate = state.createPermissionDelegate(onDesktopNotificationPermissionRequest)
         val navigationDelegate = state.createNavigationDelegate(onOpenNewSessionRequest)
         val contentDelegate = state.createContentDelegate(onClose = onCloseTab)
         val progressDelegate = state.createProgressDelegate()
@@ -123,14 +121,6 @@ fun GeckoBrowserTab(
         session.promptDelegate = promptDelegate
 
         onDispose {
-            if (session.permissionDelegate === permissionDelegate) session.permissionDelegate = null
-            if (session.navigationDelegate === navigationDelegate) session.navigationDelegate =
-                null
-            if (session.contentDelegate === contentDelegate) session.contentDelegate = null
-            if (session.progressDelegate === progressDelegate) session.progressDelegate = null
-            if (session.translationsSessionDelegate === translationsDelegate) session.translationsSessionDelegate =
-                null
-            if (session.promptDelegate === promptDelegate) session.promptDelegate = null
         }
     }
 

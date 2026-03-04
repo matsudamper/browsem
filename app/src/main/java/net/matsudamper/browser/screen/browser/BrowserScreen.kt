@@ -48,7 +48,7 @@ internal fun BrowserScreen(
                 initialUrl = uri,
                 openerTabId = key.tabId,
             )
-            navController.selectTab(newTab.tabId)
+            navController.selectTab(newTab.tabId, key)
             newTab.session
         },
         onCloseTab = {
