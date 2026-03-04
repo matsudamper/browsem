@@ -30,6 +30,14 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collectLatest
 import net.matsudamper.browser.navigation.AppDestination
 import net.matsudamper.browser.navigation.NavController
+import net.matsudamper.browser.screen.browser.BrowserScreen
+import net.matsudamper.browser.screen.browser.BrowserScreenViewModel
+import net.matsudamper.browser.screen.extensions.ExtensionsScreen
+import net.matsudamper.browser.screen.extensions.ExtensionsScreenViewModel
+import net.matsudamper.browser.screen.notificationpermissions.NotificationPermissionsScreen
+import net.matsudamper.browser.screen.notificationpermissions.NotificationPermissionsScreenViewModel
+import net.matsudamper.browser.screen.settings.SettingsScreen
+import net.matsudamper.browser.screen.settings.SettingsScreenViewModel
 import net.matsudamper.browser.screen.tab.TabsScreen
 import org.mozilla.geckoview.GeckoResult
 
@@ -129,7 +137,7 @@ internal fun BrowserApp(
                         val browserScreenViewModel = remember(viewModel) {
                             BrowserScreenViewModel(viewModel)
                         }
-                        Browser(
+                        BrowserScreen(
                             key = key,
                             homepageUrl = homepageUrl,
                             searchTemplate = searchTemplate,
@@ -235,62 +243,6 @@ private fun navEntry(
         key = key,
         contentKey = key,
         content = content,
-    )
-}
-
-@Composable
-private fun Browser(
-    key: AppDestination.Browser,
-    homepageUrl: String,
-    searchTemplate: String,
-    backStack: MutableList<NavKey>,
-    browserSessionController: BrowserSessionController,
-    viewModel: BrowserScreenViewModel,
-    navController: NavController,
-    onInstallExtensionRequest: (String) -> Unit,
-    handleNotificationPermission: (uri: String) -> GeckoResult<Int>,
-) {
-    val currentSettings by viewModel.settingsUiState.collectAsState()
-    val settingsUiState = currentSettings ?: return
-
-    val selectedTab = remember(key.tabId) {
-        browserSessionController.getOrCreateTab(
-            tabId = key.tabId,
-            homepageUrl = homepageUrl,
-        )
-    }
-    val tabs = browserSessionController.tabs
-    GeckoBrowserTab(
-        browserTab = selectedTab,
-        homepageUrl = homepageUrl,
-        searchTemplate = searchTemplate,
-        translationProvider = settingsUiState.translationProvider,
-        tabCount = tabs.size,
-        onInstallExtensionRequest = onInstallExtensionRequest,
-        onDesktopNotificationPermissionRequest = handleNotificationPermission,
-        onOpenSettings = { backStack.add(AppDestination.Settings) },
-        onOpenTabs = { backStack.add(AppDestination.Tabs) },
-        onOpenNewSessionRequest = { uri ->
-            val newTab = browserSessionController.createTabForNewSession(
-                initialUrl = uri,
-                openerTabId = key.tabId,
-            )
-            browserSessionController.selectTab(newTab.tabId)
-            navController.selectTab(newTab.tabId)
-            newTab.session
-        },
-        onCloseTab = {
-            val openerTabId = selectedTab.openerTabId
-            browserSessionController.closeTab(key.tabId)
-            viewModel.bumpTabPersistence()
-            val targetTabId = openerTabId?.takeIf { id ->
-                browserSessionController.tabs.any { it.tabId == id }
-            } ?: browserSessionController.tabs.lastOrNull()?.tabId
-            if (targetTabId != null) {
-                browserSessionController.selectTab(targetTabId)
-                navController.selectTab(targetTabId)
-            }
-        },
     )
 }
 

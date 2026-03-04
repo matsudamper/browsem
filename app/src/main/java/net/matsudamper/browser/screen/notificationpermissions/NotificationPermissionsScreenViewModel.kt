@@ -1,4 +1,4 @@
-package net.matsudamper.browser
+package net.matsudamper.browser.screen.notificationpermissions
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -6,6 +6,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import net.matsudamper.browser.BrowserViewModel
 
 internal class NotificationPermissionsScreenViewModel(
     private val browserViewModel: BrowserViewModel,

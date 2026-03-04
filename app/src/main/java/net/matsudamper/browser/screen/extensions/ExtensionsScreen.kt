@@ -1,4 +1,4 @@
-package net.matsudamper.browser
+package net.matsudamper.browser.screen.extensions
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -28,6 +28,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import net.matsudamper.browser.R
+import net.matsudamper.browser.rememberExtensionsScreenState
 import org.mozilla.geckoview.WebExtension
 
 @OptIn(ExperimentalMaterial3Api::class)

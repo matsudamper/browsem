@@ -1,7 +1,9 @@
-package net.matsudamper.browser
+package net.matsudamper.browser.screen.settings
 
 import androidx.lifecycle.ViewModel
 import kotlinx.coroutines.flow.StateFlow
+import net.matsudamper.browser.BrowserViewModel
+import net.matsudamper.browser.SettingsUiState
 import net.matsudamper.browser.data.HomepageType
 import net.matsudamper.browser.data.SearchProvider
 import net.matsudamper.browser.data.ThemeMode

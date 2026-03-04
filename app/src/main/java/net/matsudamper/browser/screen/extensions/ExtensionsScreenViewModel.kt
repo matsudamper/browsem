@@ -1,4 +1,4 @@
-package net.matsudamper.browser
+package net.matsudamper.browser.screen.extensions
 
 import androidx.lifecycle.ViewModel
 import org.mozilla.geckoview.GeckoRuntime

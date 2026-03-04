@@ -1,4 +1,4 @@
-package net.matsudamper.browser
+package net.matsudamper.browser.screen.notificationpermissions
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -24,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import net.matsudamper.browser.R
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
