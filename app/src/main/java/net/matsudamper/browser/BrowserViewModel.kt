@@ -54,6 +54,8 @@ internal class BrowserViewModel(
                 sessionState = tabState.sessionState,
                 title = tabState.title,
                 previewImageWebp = tabState.previewImageWebp.toByteArray(),
+                tabId = tabState.tabId.ifBlank { java.util.UUID.randomUUID().toString() },
+                openerTabId = tabState.openerTabId.ifBlank { null },
             )
         }
         browserSessionController.restoreTabs(
@@ -72,6 +74,8 @@ internal class BrowserViewModel(
                         sessionState = tab.sessionState,
                         title = tab.title,
                         previewImageWebp = ByteString.copyFrom(tab.previewImageWebp),
+                        tabId = tab.tabId,
+                        openerTabId = tab.openerTabId.orEmpty(),
                     )
                 },
                 selectedTabIndex = browserSessionController.selectedTabIndex,

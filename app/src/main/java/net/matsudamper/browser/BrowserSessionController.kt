@@ -66,13 +66,13 @@ internal class BrowserSessionController(runtime: GeckoRuntime) {
         }
 
         persistedTabs.forEach { persistedTab ->
-            val tabId = UUID.randomUUID().toString()
             createAndAppendTab(
-                tabId = tabId,
+                tabId = persistedTab.tabId,
                 initialUrl = persistedTab.url.ifBlank { homepageUrl },
                 restoredSessionState = persistedTab.sessionState,
                 restoredTitle = persistedTab.title,
                 restoredPreviewImage = persistedTab.previewImageWebp,
+                openerTabId = persistedTab.openerTabId,
             )
         }
         val index = persistedSelectedTabIndex.coerceIn(0, tabList.lastIndex)
@@ -85,6 +85,7 @@ internal class BrowserSessionController(runtime: GeckoRuntime) {
         restoredSessionState: String? = null,
         restoredTitle: String = "",
         restoredPreviewImage: ByteArray = byteArrayOf(),
+        openerTabId: String? = null,
     ): BrowserTab {
         val normalizedInitialUrl = initialUrl.ifBlank { "about:blank" }
         val session = GeckoSession().also { it.open(geckoRuntime) }
@@ -95,6 +96,7 @@ internal class BrowserSessionController(runtime: GeckoRuntime) {
             sessionState = restoredSessionState.orEmpty(),
             title = restoredTitle,
             previewBitmapArray = restoredPreviewImage,
+            openerTabId = openerTabId,
         )
         val restored = restoredSessionState
             ?.takeIf { it.isNotBlank() }
@@ -109,7 +111,7 @@ internal class BrowserSessionController(runtime: GeckoRuntime) {
         return tab
     }
 
-    fun createTabForNewSession(initialUrl: String): BrowserTab {
+    fun createTabForNewSession(initialUrl: String, openerTabId: String? = null): BrowserTab {
         val normalizedInitialUrl = initialUrl.ifBlank { "about:blank" }
         val session = GeckoSession().also { it.open(geckoRuntime) }
         return appendTab(
@@ -119,6 +121,7 @@ internal class BrowserSessionController(runtime: GeckoRuntime) {
             sessionState = "",
             title = normalizedInitialUrl,
             previewBitmapArray = null,
+            openerTabId = openerTabId,
         )
     }
 
@@ -159,6 +162,8 @@ internal class BrowserSessionController(runtime: GeckoRuntime) {
                 sessionState = tab.sessionState,
                 title = tab.title,
                 previewImageWebp = tab.previewBitmap ?: byteArrayOf(),
+                tabId = tab.tabId,
+                openerTabId = tab.openerTabId,
             )
         }
     }
@@ -180,6 +185,7 @@ internal class BrowserSessionController(runtime: GeckoRuntime) {
         sessionState: String,
         title: String,
         previewBitmapArray: ByteArray?,
+        openerTabId: String? = null,
     ): BrowserTab {
         val tab = BrowserTab(
             tabId = tabId,
@@ -188,6 +194,7 @@ internal class BrowserSessionController(runtime: GeckoRuntime) {
             sessionState = sessionState,
             title = title.ifBlank { initialUrl },
             previewBitmap = previewBitmapArray ?: byteArrayOf(),
+            openerTabId = openerTabId,
         )
         tabList += tab
         return tab
@@ -202,6 +209,7 @@ class BrowserTab(
     sessionState: String,
     title: String,
     previewBitmap: ByteArray?,
+    val openerTabId: String? = null,
 ) {
     var currentUrl by mutableStateOf(currentUrl)
     var sessionState by mutableStateOf(sessionState)
@@ -214,6 +222,8 @@ internal data class PersistedBrowserTab(
     val sessionState: String,
     val title: String,
     val previewImageWebp: ByteArray = byteArrayOf(),
+    val tabId: String = UUID.randomUUID().toString(),
+    val openerTabId: String? = null,
 ) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
@@ -221,7 +231,9 @@ internal data class PersistedBrowserTab(
         return url == other.url &&
             sessionState == other.sessionState &&
             title == other.title &&
-            previewImageWebp.contentEquals(other.previewImageWebp)
+            previewImageWebp.contentEquals(other.previewImageWebp) &&
+            tabId == other.tabId &&
+            openerTabId == other.openerTabId
     }
 
     override fun hashCode(): Int {
@@ -229,6 +241,8 @@ internal data class PersistedBrowserTab(
         result = 31 * result + sessionState.hashCode()
         result = 31 * result + title.hashCode()
         result = 31 * result + previewImageWebp.contentHashCode()
+        result = 31 * result + tabId.hashCode()
+        result = 31 * result + openerTabId.hashCode()
         return result
     }
 }
