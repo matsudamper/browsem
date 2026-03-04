@@ -17,7 +17,6 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTagsAsResourceId
@@ -156,14 +155,6 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             )
-            val browserSessionController = browserViewModel.browserSessionController
-            LaunchedEffect(Unit) {
-                createNewTabChannel.receiveAsFlow().collect { url ->
-                    val newTab =
-                        browserSessionController.createAndAppendTab(initialUrl = url)
-                    browserSessionController.selectTab(newTab.tabId)
-                }
-            }
             Box(
                 modifier = Modifier.semantics {
                     testTagsAsResourceId = true
@@ -171,6 +162,7 @@ class MainActivity : ComponentActivity() {
             ) {
                 BrowserApp(
                     viewModel = browserViewModel,
+                    newTabUrlFlow = createNewTabChannel.receiveAsFlow(),
                     onInstallExtensionRequest = { pageUrl ->
                         extensionInstaller.installFromCurrentPage(pageUrl)
                     },
