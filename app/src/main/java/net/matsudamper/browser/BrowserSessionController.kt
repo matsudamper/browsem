@@ -111,9 +111,10 @@ internal class BrowserSessionController(runtime: GeckoRuntime) {
 
     fun createTabForNewSession(initialUrl: String): BrowserTab {
         val normalizedInitialUrl = initialUrl.ifBlank { "about:blank" }
+        val session = GeckoSession().also { it.open(geckoRuntime) }
         return appendTab(
             tabId = UUID.randomUUID().toString(),
-            session = GeckoSession(),
+            session = session,
             initialUrl = normalizedInitialUrl,
             sessionState = "",
             title = normalizedInitialUrl,
