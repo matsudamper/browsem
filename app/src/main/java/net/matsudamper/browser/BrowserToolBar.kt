@@ -2,11 +2,17 @@ package net.matsudamper.browser
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -21,11 +27,15 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -39,7 +49,9 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDataType
@@ -79,25 +91,34 @@ internal fun BrowserToolBar(
     onTranslatePage: () -> Unit,
     toolbarColor: Color?,
 ) {
+    var heightCache by remember { mutableIntStateOf(0) }
     val latestOnOpenTabs by rememberUpdatedState(onOpenTabs)
-    val swipeToOpenTabsModifier = modifier.pointerInput(Unit) {
-        detectDownSwipe(
-            density = this,
-            onDownSwipe = {
-                latestOnOpenTabs()
-            }
-        )
-    }
 
     Surface(
         color = toolbarColor ?: MaterialTheme.colorScheme.primaryContainer,
-        modifier = swipeToOpenTabsModifier,
+        modifier = modifier
+            .pointerInput(Unit) {
+                detectDownSwipe(
+                    density = this,
+                    onDownSwipe = {
+                        latestOnOpenTabs()
+                    }
+                )
+            }
+            .onSizeChanged {
+                heightCache = it.height.coerceAtLeast(heightCache)
+            }
+            .defaultMinSize(
+                minHeight = with(LocalDensity.current) { heightCache.toDp() }
+            ),
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Row(
                 modifier = Modifier
+                    .height(IntrinsicSize.Min)
+                    .weight(1f)
                     .padding(4.dp)
                     .clip(CircleShape)
                     .background(MaterialTheme.colorScheme.surface)
@@ -118,8 +139,18 @@ internal fun BrowserToolBar(
                 )
 
                 if (isFocused) {
-                    IconButton(onClick = { onValueChange("") }) {
+                    CompositionLocalProvider(
+                        LocalMinimumInteractiveComponentSize provides 0.dp
+                    ) {
                         Icon(
+                            modifier = Modifier
+                                .fillMaxHeight()
+                                .aspectRatio(1f)
+                                .clickable(
+                                    indication = ripple(),
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    onClick = { onValueChange("") }
+                                ),
                             painter = painterResource(R.drawable.close_24dp),
                             contentDescription = "クリア",
                         )
@@ -207,7 +238,10 @@ fun UrlTextInput(
                                 contentDataType = ContentDataType.Text
                             },
                         singleLine = true,
-                        textStyle = TextStyle(color = MaterialTheme.colorScheme.onSurface),
+                        textStyle = MaterialTheme.typography.bodyLarge
+                            .merge(
+                                color = MaterialTheme.colorScheme.onSurface,
+                            ),
                         cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                         keyboardOptions = KeyboardOptions.Default.copy(
                             imeAction = ImeAction.Go,
