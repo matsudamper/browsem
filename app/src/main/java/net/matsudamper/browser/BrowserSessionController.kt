@@ -111,7 +111,11 @@ internal class BrowserSessionController(runtime: GeckoRuntime) {
 
     fun createTabForNewSession(initialUrl: String): BrowserTab {
         val normalizedInitialUrl = initialUrl.ifBlank { "about:blank" }
-        val session = GeckoSession().also { it.open(geckoRuntime) }
+        // NOTE: Do NOT open the session here.
+        // When this session is returned from NavigationDelegate.onNewSession(),
+        // GeckoView requires an unopened session and will open it internally.
+        // Opening it beforehand causes: AssertionError: Must use an unopened GeckoSession instance
+        val session = GeckoSession()
         return appendTab(
             tabId = UUID.randomUUID().toString(),
             session = session,
