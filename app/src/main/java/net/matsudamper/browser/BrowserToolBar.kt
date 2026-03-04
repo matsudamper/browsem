@@ -3,13 +3,12 @@ package net.matsudamper.browser
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -107,6 +106,8 @@ internal fun BrowserToolBar(
             val latestOnValueChange by rememberUpdatedState(onValueChange)
             val latestOnSubmit by rememberUpdatedState(onSubmit)
             val latestOnFocusChanged by rememberUpdatedState(onFocusChanged)
+            val latestIsFocused by rememberUpdatedState(isFocused)
+            val latestOnClearInput by rememberUpdatedState(onClearInput)
 
             // 一度AndroidViewを経由しないとBitwardenが認識しない
             AndroidView(
@@ -118,6 +119,8 @@ internal fun BrowserToolBar(
                             val currentOnValueChange by rememberUpdatedState(latestOnValueChange)
                             val currentOnSubmit by rememberUpdatedState(latestOnSubmit)
                             val currentOnFocusChanged by rememberUpdatedState(latestOnFocusChanged)
+                            val currentIsFocused by rememberUpdatedState(latestIsFocused)
+                            val currentOnClearInput by rememberUpdatedState(latestOnClearInput)
                             BasicTextField(
                                 value = currentValue,
                                 onValueChange = { currentOnValueChange(it) },
@@ -132,9 +135,7 @@ internal fun BrowserToolBar(
                                     }
                                     .padding(4.dp)
                                     .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.surface)
-                                    .padding(8.dp)
-                                    .horizontalScroll(rememberScrollState()),
+                                    .background(MaterialTheme.colorScheme.surface),
                                 singleLine = true,
                                 textStyle = TextStyle(color = MaterialTheme.colorScheme.onSurface),
                                 cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
@@ -148,19 +149,30 @@ internal fun BrowserToolBar(
                                     onDone = { currentOnSubmit(currentValue) },
                                     onSearch = { currentOnSubmit(currentValue) },
                                 ),
+                                decorationBox = { innerTextField ->
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.padding(start = 8.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
+                                    ) {
+                                        Box(modifier = Modifier.weight(1f)) {
+                                            innerTextField()
+                                        }
+                                        if (currentIsFocused) {
+                                            IconButton(onClick = { currentOnClearInput() }) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Clear,
+                                                    contentDescription = "クリア",
+                                                )
+                                            }
+                                        }
+                                    }
+                                },
                             )
                         }
                     }
                 },
             )
-            if (isFocused) {
-                IconButton(onClick = onClearInput) {
-                    Icon(
-                        imageVector = Icons.Default.Clear,
-                        contentDescription = "クリア",
-                    )
-                }
-            } else {
+            if (!isFocused) {
             IconButton(
                 onClick = onOpenTabs,
             ) {
@@ -311,7 +323,7 @@ internal fun BrowserToolBar(
                     )
                 }
             }
-            } // end else (not focused)
+            } // end if (!isFocused)
         }
     }
 }
