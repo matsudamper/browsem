@@ -19,7 +19,17 @@ class SettingsRepository(context: Context) {
     val settings: Flow<BrowserSettings> = dataStore.data
 
     suspend fun updateSettings(settings: BrowserSettings) {
-        dataStore.updateData { settings }
+        dataStore.updateData { current ->
+            current.toBuilder()
+                .setHomepageType(settings.homepageType)
+                .setCustomHomepageUrl(settings.customHomepageUrl)
+                .setSearchProvider(settings.searchProvider)
+                .setCustomSearchUrl(settings.customSearchUrl)
+                .setThemeMode(settings.themeMode)
+                .setTranslationProvider(settings.translationProvider)
+                .setEnableThirdPartyCa(settings.enableThirdPartyCa)
+                .build()
+        }
     }
 
     suspend fun addNotificationAllowedOrigin(origin: String) {
