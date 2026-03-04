@@ -19,7 +19,6 @@ import java.util.UUID
 internal class BrowserSessionController(runtime: GeckoRuntime) {
     private val geckoRuntime = runtime
     private val tabList = mutableStateListOf<BrowserTab>()
-    private var selectedTabId: String? by mutableStateOf(null)
 
     val stateChanged by derivedStateOf {
         mutableIntStateOf(
@@ -35,14 +34,6 @@ internal class BrowserSessionController(runtime: GeckoRuntime) {
     val tabs: List<BrowserTab>
         get() = tabList
 
-    val selectedTabIndex: Int
-        get() = tabList.indexOfFirst { it.tabId == selectedTabId }
-            .takeIf { it >= 0 }
-            ?: 0
-
-    val currentTab: BrowserTab?
-        get() = tabList.firstOrNull { it.tabId == selectedTabId }
-
     fun getOrCreateTab(tabId: String, homepageUrl: String): BrowserTab {
         Log.d("LOG", "getOrCreateTab: tabList=${tabList.size}")
         val alreadyCreatedTab = tabList.firstOrNull { it.tabId == tabId }
@@ -56,13 +47,11 @@ internal class BrowserSessionController(runtime: GeckoRuntime) {
         homepageUrl: String,
         persistedTabs: List<PersistedBrowserTab>,
         persistedSelectedTabIndex: Int,
-    ) {
-        if (tabList.isNotEmpty()) return
+    ) : String {
         if (persistedTabs.isEmpty()) {
             val tabId = UUID.randomUUID().toString()
             val initialTab = createAndAppendTab(tabId = tabId, initialUrl = homepageUrl)
-            selectedTabId = initialTab.tabId
-            return
+            return initialTab.tabId
         }
 
         persistedTabs.forEach { persistedTab ->
@@ -76,7 +65,7 @@ internal class BrowserSessionController(runtime: GeckoRuntime) {
             )
         }
         val index = persistedSelectedTabIndex.coerceIn(0, tabList.lastIndex)
-        selectedTabId = tabList[index].tabId
+        return tabs[index].tabId
     }
 
     fun createAndAppendTab(
@@ -129,17 +118,6 @@ internal class BrowserSessionController(runtime: GeckoRuntime) {
         )
     }
 
-    fun selectTab(tabId: String): BrowserTab {
-        val targetTab = tabList.firstOrNull { it.tabId == tabId }
-        return if (targetTab != null) {
-            selectedTabId = tabId
-            targetTab
-        } else {
-            // TODO homepage
-            createAndAppendTab(initialUrl = "")
-        }
-    }
-
     fun closeTab(tabId: String) {
         val index = tabList.indexOfFirst { it.tabId == tabId }
         if (index < 0) {
@@ -148,14 +126,6 @@ internal class BrowserSessionController(runtime: GeckoRuntime) {
         val removed = tabList.removeAt(index)
         if (removed.session.isOpen) {
             removed.session.close()
-        }
-        if (selectedTabId == tabId) {
-            if (tabList.isEmpty()) {
-                selectedTabId = null
-            } else {
-                val nextIndex = index.coerceAtMost(tabList.lastIndex)
-                selectedTabId = tabList[nextIndex].tabId
-            }
         }
     }
 
@@ -179,7 +149,6 @@ internal class BrowserSessionController(runtime: GeckoRuntime) {
             }
         }
         tabList.clear()
-        selectedTabId = null
     }
 
     private fun appendTab(

@@ -48,7 +48,6 @@ internal fun BrowserScreen(
                 initialUrl = uri,
                 openerTabId = key.tabId,
             )
-            browserSessionController.selectTab(newTab.tabId)
             navController.selectTab(newTab.tabId)
             newTab.session
         },
@@ -60,7 +59,6 @@ internal fun BrowserScreen(
                 browserSessionController.tabs.any { it.tabId == id }
             } ?: browserSessionController.tabs.lastOrNull()?.tabId
             if (targetTabId != null) {
-                browserSessionController.selectTab(targetTabId)
                 navController.selectTab(targetTabId)
             }
         },
