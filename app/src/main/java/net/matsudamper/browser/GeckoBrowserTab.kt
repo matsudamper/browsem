@@ -1,5 +1,6 @@
 package net.matsudamper.browser
 
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import androidx.activity.compose.BackHandler
@@ -52,6 +53,7 @@ import net.matsudamper.browser.data.TranslationProvider
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.GeckoView
+import org.mozilla.geckoview.PanZoomController
 
 @Composable
 @OptIn(ExperimentalLayoutApi::class)
@@ -211,6 +213,11 @@ fun GeckoBrowserTab(
                 .clipToBounds(),
             factory = { context ->
                 SwipeRefreshLayout(context).also { swipeRefreshLayout ->
+                    // Tracks whether the content at the last touch-down point can scroll upward.
+                    // Updated asynchronously via PanZoomController.onTouchEventForDetailResult.
+                    // SCROLLABLE_FLAG_TOP means content CANNOT scroll upward (is at top limit),
+                    // so the absence of this flag means content CAN scroll up.
+                    var geckoCanScrollUp = false
                     val gecko = GeckoView(context).also { geckoView ->
                         geckoView.id = id
                         geckoView.isNestedScrollingEnabled = true
@@ -219,6 +226,26 @@ fun GeckoBrowserTab(
                             View.IMPORTANT_FOR_AUTOFILL_YES_EXCLUDE_DESCENDANTS
                         geckoView.setSession(session)
                         state.geckoViewRef = geckoView
+                        // On ACTION_DOWN, probe GeckoView's scrollability at the touch point.
+                        // Using onTouchEventForDetailResult for DOWN and returning true prevents
+                        // GeckoView.onTouchEvent from double-processing the same DOWN event.
+                        geckoView.setOnTouchListener { view, event ->
+                            if (event.actionMasked == MotionEvent.ACTION_DOWN) {
+                                (view as GeckoView).onTouchEventForDetailResult(event).then { detail ->
+                                    if (detail != null) {
+                                        // If SCROLLABLE_FLAG_TOP is NOT set, content can still
+                                        // scroll upward (e.g. inner element has scrolled down),
+                                        // so SwipeToRefresh should not activate.
+                                        geckoCanScrollUp = (detail.scrollableDirections() and
+                                            PanZoomController.SCROLLABLE_FLAG_TOP) == 0
+                                    }
+                                    GeckoResult.fromValue<Void>(null)
+                                }
+                                true // Consumed here; prevents double-processing in onTouchEvent
+                            } else {
+                                false // Let GeckoView handle MOVE / UP / CANCEL normally
+                            }
+                        }
                     }
                     swipeRefreshLayout.addView(
                         gecko,
@@ -228,7 +255,10 @@ fun GeckoBrowserTab(
                         )
                     )
                     swipeRefreshLayout.setOnChildScrollUpCallback { _, _ ->
-                        state.scrollY > 0
+                        // Prevent SwipeToRefresh when either:
+                        // - The main page has scrolled down (state.scrollY > 0), or
+                        // - An inner scrollable element at the touch point can scroll upward
+                        geckoCanScrollUp || state.scrollY > 0
                     }
                     swipeRefreshLayout.setOnRefreshListener {
                         state.isRefreshing = true
