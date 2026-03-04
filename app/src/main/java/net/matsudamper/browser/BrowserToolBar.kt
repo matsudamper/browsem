@@ -101,230 +101,282 @@ internal fun BrowserToolBar(
         Row(
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            // setContentはfactoryで一度だけ呼ぶ。updateで毎回呼ぶとCompose階層が再生成されIME接続がリセットされる。
-            val latestValue by rememberUpdatedState(value)
-            val latestOnValueChange by rememberUpdatedState(onValueChange)
-            val latestOnSubmit by rememberUpdatedState(onSubmit)
-            val latestOnFocusChanged by rememberUpdatedState(onFocusChanged)
-            val latestIsFocused by rememberUpdatedState(isFocused)
-            val latestOnClearInput by rememberUpdatedState(onClearInput)
-
-            // 一度AndroidViewを経由しないとBitwardenが認識しない
-            AndroidView(
+            UrlBar(
                 modifier = Modifier.weight(1f),
-                factory = { context ->
-                    ComposeView(context).apply {
-                        setContent {
-                            val currentValue by rememberUpdatedState(latestValue)
-                            val currentOnValueChange by rememberUpdatedState(latestOnValueChange)
-                            val currentOnSubmit by rememberUpdatedState(latestOnSubmit)
-                            val currentOnFocusChanged by rememberUpdatedState(latestOnFocusChanged)
-                            val currentIsFocused by rememberUpdatedState(latestIsFocused)
-                            val currentOnClearInput by rememberUpdatedState(latestOnClearInput)
-                            BasicTextField(
-                                value = currentValue,
-                                onValueChange = { currentOnValueChange(it) },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .testTag("url_bar")
-                                    .onFocusChanged { currentOnFocusChanged(it.hasFocus) }
-                                    .semantics {
-                                        contentDescription = "Address bar"
-                                        contentType = ContentType("url")
-                                        contentDataType = ContentDataType.Text
-                                    }
-                                    .padding(4.dp)
-                                    .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.surface),
-                                singleLine = true,
-                                textStyle = TextStyle(color = MaterialTheme.colorScheme.onSurface),
-                                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                                keyboardOptions = KeyboardOptions.Default.copy(
-                                    imeAction = ImeAction.Go,
-                                    keyboardType = KeyboardType.Uri,
-                                    autoCorrectEnabled = false,
-                                ),
-                                keyboardActions = KeyboardActions(
-                                    onGo = { currentOnSubmit(currentValue) },
-                                    onDone = { currentOnSubmit(currentValue) },
-                                    onSearch = { currentOnSubmit(currentValue) },
-                                ),
-                                decorationBox = { innerTextField ->
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        modifier = Modifier.padding(start = 8.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
-                                    ) {
-                                        Box(modifier = Modifier.weight(1f)) {
-                                            innerTextField()
-                                        }
-                                        if (currentIsFocused) {
-                                            IconButton(onClick = { currentOnClearInput() }) {
-                                                Icon(
-                                                    imageVector = Icons.Default.Clear,
-                                                    contentDescription = "クリア",
-                                                )
-                                            }
-                                        }
-                                    }
-                                },
-                            )
-                        }
-                    }
-                },
+                value = value,
+                onValueChange = onValueChange,
+                onSubmit = onSubmit,
+                onFocusChanged = onFocusChanged,
+                isFocused = isFocused,
+                onClearInput = onClearInput,
             )
             if (!isFocused) {
-            IconButton(
-                onClick = onOpenTabs,
-            ) {
-                Text(
-                    text = "$tabCount",
-                    style = MaterialTheme.typography.titleMedium,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .border(
-                            width = 1.dp,
-                            color = MaterialTheme.colorScheme.outline,
-                            shape = RoundedCornerShape(8.dp),
-                        )
-                        .padding(horizontal = 8.dp, vertical = 2.dp),
-                )
-            }
-            var visibleMenu by remember { mutableStateOf(false) }
-            IconButton(
-                onClick = { visibleMenu = !visibleMenu }
-            ) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_more_vert_24dp),
-                    contentDescription = "Menu"
-                )
-                DropdownMenu(
-                    expanded = visibleMenu,
-                    onDismissRequest = {
-                        visibleMenu = false
-                    }
+                IconButton(
+                    onClick = onOpenTabs,
                 ) {
-                    Row(
+                    Text(
+                        text = "$tabCount",
+                        style = MaterialTheme.typography.titleMedium,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .border(
+                                width = 1.dp,
+                                color = MaterialTheme.colorScheme.outline,
+                                shape = RoundedCornerShape(8.dp),
+                            )
+                            .padding(horizontal = 8.dp, vertical = 2.dp),
+                    )
+                }
+                var visibleMenu by remember { mutableStateOf(false) }
+                IconButton(
+                    onClick = { visibleMenu = !visibleMenu }
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_more_vert_24dp),
+                        contentDescription = "Menu"
+                    )
+                    ToolbarMenu(
+                        visibleMenu = visibleMenu,
+                        onDismissRequest = { visibleMenu = false },
+                        onRefresh = onRefresh,
+                        onHome = onHome,
+                        onForward = onForward,
+                        canGoForward = canGoForward,
+                        isPcMode = isPcMode,
+                        onPcModeToggle = onPcModeToggle,
+                        showInstallExtensionItem = showInstallExtensionItem,
+                        onInstallExtension = onInstallExtension,
+                        onTranslatePage = onTranslatePage,
+                        onShare = onShare,
+                        onFindInPage = onFindInPage,
+                        onOpenSettings = onOpenSettings,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun UrlBar(
+    value: String,
+    onValueChange: (String) -> Unit,
+    onSubmit: (String) -> Unit,
+    onFocusChanged: (Boolean) -> Unit,
+    isFocused: Boolean,
+    onClearInput: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val currentValue by rememberUpdatedState(value)
+    val currentOnValueChange by rememberUpdatedState(onValueChange)
+    val currentOnSubmit by rememberUpdatedState(onSubmit)
+    val currentOnFocusChanged by rememberUpdatedState(onFocusChanged)
+    val currentIsFocused by rememberUpdatedState(isFocused)
+    val currentOnClearInput by rememberUpdatedState(onClearInput)
+
+    // 一度AndroidViewを経由しないとBitwardenが認識しない
+    AndroidView(
+        modifier = modifier,
+        factory = { context ->
+            ComposeView(context).apply {
+                setContent {
+                    BasicTextField(
+                        value = currentValue,
+                        onValueChange = { currentOnValueChange(it) },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 8.dp, vertical = 4.dp),
-                        horizontalArrangement = Arrangement.SpaceEvenly,
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            IconButton(
-                                onClick = {
-                                    visibleMenu = false
-                                    onRefresh()
+                            .testTag("url_bar")
+                            .onFocusChanged { currentOnFocusChanged(it.hasFocus) }
+                            .semantics {
+                                contentDescription = "Address bar"
+                                contentType = ContentType("url")
+                                contentDataType = ContentDataType.Text
+                            }
+                            .padding(4.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.surface),
+                        singleLine = true,
+                        textStyle = TextStyle(color = MaterialTheme.colorScheme.onSurface),
+                        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                        keyboardOptions = KeyboardOptions.Default.copy(
+                            imeAction = ImeAction.Go,
+                            keyboardType = KeyboardType.Uri,
+                            autoCorrectEnabled = false,
+                        ),
+                        keyboardActions = KeyboardActions(
+                            onGo = { currentOnSubmit(currentValue) },
+                            onDone = { currentOnSubmit(currentValue) },
+                            onSearch = { currentOnSubmit(currentValue) },
+                        ),
+                        decorationBox = { innerTextField ->
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(
+                                    start = 8.dp,
+                                    end = 4.dp,
+                                    top = 4.dp,
+                                    bottom = 4.dp
+                                ),
+                            ) {
+                                Box(modifier = Modifier.weight(1f)) {
+                                    innerTextField()
                                 }
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Refresh,
-                                    contentDescription = "更新",
-                                )
-                            }
-                            Text(
-                                text = "更新",
-                                style = MaterialTheme.typography.labelSmall,
-                            )
-                        }
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            IconButton(
-                                onClick = {
-                                    visibleMenu = false
-                                    onHome()
+                                if (currentIsFocused) {
+                                    IconButton(onClick = { currentOnClearInput() }) {
+                                        Icon(
+                                            imageVector = Icons.Default.Clear,
+                                            contentDescription = "クリア",
+                                        )
+                                    }
                                 }
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Home,
-                                    contentDescription = "ホーム",
-                                )
                             }
-                            Text(
-                                text = "ホーム",
-                                style = MaterialTheme.typography.labelSmall,
-                            )
-                        }
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            IconButton(
-                                onClick = {
-                                    visibleMenu = false
-                                    onForward()
-                                },
-                                enabled = canGoForward,
-                            ) {
-                                Icon(
-                                    imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                                    contentDescription = "進む",
-                                )
-                            }
-                            Text(
-                                text = "進む",
-                                style = MaterialTheme.typography.labelSmall,
-                            )
-                        }
-                    }
-                    HorizontalDivider()
-                    DropdownMenuItem(
-                        text = { Text(text = "PCページ") },
-                        leadingIcon = {
-                            Checkbox(
-                                checked = isPcMode,
-                                onCheckedChange = null,
-                            )
-                        },
-                        onClick = { onPcModeToggle() },
-                    )
-                    if (showInstallExtensionItem) {
-                        DropdownMenuItem(
-                            text = {
-                                Text(text = "拡張機能をインストール")
-                            },
-                            onClick = {
-                                visibleMenu = false
-                                onInstallExtension()
-                            },
-                        )
-                    }
-                    DropdownMenuItem(
-                        text = {
-                            Text(text = "翻訳")
-                        },
-                        onClick = {
-                            visibleMenu = false
-                            onTranslatePage()
-                        },
-                    )
-                    DropdownMenuItem(
-                        text = {
-                            Text(text = "共有")
-                        },
-                        onClick = {
-                            visibleMenu = false
-                            onShare()
-                        },
-                    )
-                    DropdownMenuItem(
-                        text = {
-                            Text(text = "ページ内検索")
-                        },
-                        onClick = {
-                            visibleMenu = false
-                            onFindInPage()
-                        },
-                    )
-                    DropdownMenuItem(
-                        text = {
-                            Text(text = "設定")
-                        },
-                        onClick = {
-                            visibleMenu = false
-                            onOpenSettings()
                         },
                     )
                 }
             }
-            } // end if (!isFocused)
+        },
+    )
+}
+
+@Composable
+private fun ToolbarMenu(
+    visibleMenu: Boolean,
+    onDismissRequest: () -> Unit,
+    onRefresh: () -> Unit,
+    onHome: () -> Unit,
+    onForward: () -> Unit,
+    canGoForward: Boolean,
+    isPcMode: Boolean,
+    onPcModeToggle: () -> Unit,
+    showInstallExtensionItem: Boolean,
+    onInstallExtension: () -> Unit,
+    onTranslatePage: () -> Unit,
+    onShare: () -> Unit,
+    onFindInPage: () -> Unit,
+    onOpenSettings: () -> Unit,
+) {
+    DropdownMenu(
+        expanded = visibleMenu,
+        onDismissRequest = { onDismissRequest() }
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                IconButton(
+                    onClick = {
+                        onDismissRequest()
+                        onRefresh()
+                    }
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Refresh,
+                        contentDescription = "更新",
+                    )
+                }
+                Text(
+                    text = "更新",
+                    style = MaterialTheme.typography.labelSmall,
+                )
+            }
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                IconButton(
+                    onClick = {
+                        onDismissRequest()
+                        onHome()
+                    }
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Home,
+                        contentDescription = "ホーム",
+                    )
+                }
+                Text(
+                    text = "ホーム",
+                    style = MaterialTheme.typography.labelSmall,
+                )
+            }
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                IconButton(
+                    onClick = {
+                        onDismissRequest()
+                        onForward()
+                    },
+                    enabled = canGoForward,
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                        contentDescription = "進む",
+                    )
+                }
+                Text(
+                    text = "進む",
+                    style = MaterialTheme.typography.labelSmall,
+                )
+            }
         }
+        HorizontalDivider()
+        DropdownMenuItem(
+            text = { Text(text = "PCページ") },
+            leadingIcon = {
+                Checkbox(
+                    checked = isPcMode,
+                    onCheckedChange = null,
+                )
+            },
+            onClick = { onPcModeToggle() },
+        )
+        if (showInstallExtensionItem) {
+            DropdownMenuItem(
+                text = {
+                    Text(text = "拡張機能をインストール")
+                },
+                onClick = {
+                    onDismissRequest()
+                    onInstallExtension()
+                },
+            )
+        }
+        DropdownMenuItem(
+            text = {
+                Text(text = "翻訳")
+            },
+            onClick = {
+                onDismissRequest()
+                onTranslatePage()
+            },
+        )
+        DropdownMenuItem(
+            text = {
+                Text(text = "共有")
+            },
+            onClick = {
+                onDismissRequest()
+                onShare()
+            },
+        )
+        DropdownMenuItem(
+            text = {
+                Text(text = "ページ内検索")
+            },
+            onClick = {
+                onDismissRequest()
+                onFindInPage()
+            },
+        )
+        DropdownMenuItem(
+            text = {
+                Text(text = "設定")
+            },
+            onClick = {
+                onDismissRequest()
+                onOpenSettings()
+            },
+        )
     }
 }
 
