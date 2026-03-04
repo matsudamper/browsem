@@ -231,13 +231,14 @@ fun GeckoBrowserTab(
                         // GeckoView.onTouchEvent from double-processing the same DOWN event.
                         geckoView.setOnTouchListener { view, event ->
                             if (event.actionMasked == MotionEvent.ACTION_DOWN) {
+                                geckoCanScrollUp = false // Reset: allow SwipeToRefresh by default
                                 (view as GeckoView).onTouchEventForDetailResult(event).then { detail ->
                                     if (detail != null) {
-                                        // If SCROLLABLE_FLAG_TOP is NOT set, content can still
-                                        // scroll upward (e.g. inner element has scrolled down),
-                                        // so SwipeToRefresh should not activate.
+                                        // SCROLLABLE_FLAG_TOP IS SET = content can scroll toward top
+                                        // (there is content above current view position).
+                                        // In that case, block SwipeToRefresh.
                                         geckoCanScrollUp = (detail.scrollableDirections() and
-                                            PanZoomController.SCROLLABLE_FLAG_TOP) == 0
+                                            PanZoomController.SCROLLABLE_FLAG_TOP) != 0
                                     }
                                     GeckoResult.fromValue<Void>(null)
                                 }
