@@ -113,6 +113,7 @@ fun GeckoBrowserTab(
         val translationsDelegate = state.createTranslationsDelegate()
         val promptDelegate = state.createPromptDelegate()
 
+        state.startThemeColorObservation()
         session.permissionDelegate = permissionDelegate
         session.navigationDelegate = navigationDelegate
         session.contentDelegate = contentDelegate
@@ -121,6 +122,7 @@ fun GeckoBrowserTab(
         session.promptDelegate = promptDelegate
 
         onDispose {
+            state.stopThemeColorObservation()
         }
     }
 

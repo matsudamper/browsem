@@ -137,6 +137,7 @@ class MainActivity : ComponentActivity() {
         runtime.webExtensionController.setPromptDelegate(extensionInstaller.promptDelegate)
         runtime.webExtensionController.setAddonManagerDelegate(extensionInstaller.addonManagerDelegate)
         runtime.webNotificationDelegate = webNotificationDelegate
+        ThemeColorWebExtension.install(runtime)
         warmUpWebExtensionController()
 
         if (savedInstanceState == null) {

@@ -1,0 +1,22 @@
+{
+  "manifest_version": 2,
+  "name": "Browsem Theme Color",
+  "version": "1.0",
+  "applications": {
+    "gecko": {
+      "id": "theme-color@browsem"
+    }
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "theme-color.js"
+      ],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ]
+}
