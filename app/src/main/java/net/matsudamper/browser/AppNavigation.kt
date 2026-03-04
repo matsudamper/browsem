@@ -32,6 +32,7 @@ import net.matsudamper.browser.data.resolvedHomepageUrl
 import net.matsudamper.browser.data.resolvedSearchTemplate
 import net.matsudamper.browser.navigation.AppDestination
 import net.matsudamper.browser.navigation.NavController
+import net.matsudamper.browser.screen.tab.TabsScreen
 import org.mozilla.geckoview.GeckoResult
 
 @Composable
@@ -176,7 +177,7 @@ internal fun BrowserApp(
                             onDispose { navController.disposeTabs() }
                         }
                         TabsScreen(
-                            tabs = browserSessionController.tabs,
+                            browserSessionController = browserSessionController,
                             selectedTabId = navController.getSelectedTab(),
                             onSelectTab = { tabId ->
                                 val tab = browserSessionController.selectTab(tabId)

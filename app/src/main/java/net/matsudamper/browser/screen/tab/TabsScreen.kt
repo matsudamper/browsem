@@ -1,7 +1,8 @@
-package net.matsudamper.browser
+package net.matsudamper.browser.screen.tab
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -22,7 +23,6 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FloatingActionButton
@@ -43,23 +43,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-
-internal data class TabsScreenTabData(
-    val id: String,
-    val title: String,
-    val previewBitmapArray: ByteArray?,
-)
-
-internal fun BrowserTab.toTabsScreenTabData(): TabsScreenTabData = TabsScreenTabData(
-    id = tabId,
-    title = title,
-    previewBitmapArray = previewBitmap,
-)
+import androidx.lifecycle.viewmodel.compose.viewModel
+import net.matsudamper.browser.BrowserSessionController
+import net.matsudamper.browser.R
 
 internal object TabsLayoutDefaults {
     val minCellWidth: Dp = 220.dp
@@ -81,15 +72,20 @@ internal object TabsLayoutDefaults {
 
 @Composable
 internal fun TabsScreen(
-    tabs: List<BrowserTab>,
+    browserSessionController: BrowserSessionController,
     selectedTabId: String?,
     onSelectTab: (String) -> Unit,
     onCloseTab: (String) -> Unit,
     onOpenNewTab: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val viewModel = viewModel(initializer = {
+        TabsScreenViewModel(
+            browserSessionController = browserSessionController,
+        )
+    })
     TabsScreenContent(
-        tabs = tabs.map { it.toTabsScreenTabData() },
+        tabs = viewModel.tabs,
         selectedTabId = selectedTabId,
         onSelectTab = onSelectTab,
         onCloseTab = onCloseTab,
