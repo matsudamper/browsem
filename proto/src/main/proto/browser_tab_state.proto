@@ -16,8 +16,3 @@ message BrowserTabState {
   string tab_id = 5;
   string opener_tab_id = 6;
 }
-
-message LegacyBrowserSettingsTabSnapshot {
-  repeated BrowserTabState tab_states = 5;
-  int32 selected_tab_index = 6;
-}
