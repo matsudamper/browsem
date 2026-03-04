@@ -44,7 +44,7 @@ internal fun rememberBrowserTabScreenState(
             runtime = GeckoRuntime.getDefault(context),
         )
     }
-    return remember(browserTab) {
+    val state = remember(browserTab) {
         BrowserTabScreenState(
             browserTab = browserTab,
             homepageUrl = homepageUrl,
@@ -54,17 +54,23 @@ internal fun rememberBrowserTabScreenState(
             context = context,
         )
     }
+    // Keep homepage/search template in sync when settings change
+    state.homepageUrl = homepageUrl
+    state.searchTemplate = searchTemplate
+    return state
 }
 
 @Stable
 internal class BrowserTabScreenState(
     val browserTab: BrowserTab,
-    private val homepageUrl: String,
-    private val searchTemplate: String,
+    homepageUrl: String,
+    searchTemplate: String,
     private val coroutineScope: CoroutineScope,
     private val geckoDownloadManager: GeckoDownloadManager,
     private val context: Context,
 ) {
+    var homepageUrl by mutableStateOf(homepageUrl)
+    var searchTemplate by mutableStateOf(searchTemplate)
     val session: GeckoSession get() = browserTab.session
 
     // --- URL / Navigation state ---
