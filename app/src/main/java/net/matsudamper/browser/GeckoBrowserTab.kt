@@ -184,7 +184,6 @@ fun GeckoBrowserTab(
                     }
                     state.isUrlInputFocused = hasFocus
                 },
-                onClearInput = { state.urlInput = "" },
                 showInstallExtensionItem = state.showInstallExtensionItem,
                 onInstallExtension = { onInstallExtensionRequest(state.currentPageUrl) },
                 onOpenSettings = onOpenSettings,
@@ -456,7 +455,7 @@ private fun ChoicePromptDialog(
                     } else {
                         val isSelected = choice.id in selectedIds.value
                         ListItem(
-                            headlineContent = { Text(choice.label ?: "") },
+                            headlineContent = { Text(choice.label) },
                             leadingContent = {
                                 if (isMultiple) {
                                     Checkbox(checked = isSelected, onCheckedChange = null)

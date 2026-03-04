@@ -23,8 +23,6 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FloatingActionButton
@@ -256,7 +254,7 @@ private fun TabsScreenContent(
                 .padding(16.dp),
         ) {
             Icon(
-                imageVector = Icons.Default.Add,
+                painter = painterResource(R.drawable.ic_add_24dp),
                 contentDescription = "新規タブ",
             )
         }

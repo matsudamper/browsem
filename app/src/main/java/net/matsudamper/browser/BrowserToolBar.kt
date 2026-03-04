@@ -4,21 +4,17 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.filled.Clear
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -67,7 +63,6 @@ internal fun BrowserToolBar(
     modifier: Modifier = Modifier,
     isFocused: Boolean,
     onFocusChanged: (Boolean) -> Unit,
-    onClearInput: () -> Unit,
     showInstallExtensionItem: Boolean,
     onInstallExtension: () -> Unit,
     onOpenSettings: () -> Unit,
@@ -101,15 +96,37 @@ internal fun BrowserToolBar(
         Row(
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            UrlBar(
-                modifier = Modifier.weight(1f),
-                value = value,
-                onValueChange = onValueChange,
-                onSubmit = onSubmit,
-                onFocusChanged = onFocusChanged,
-                isFocused = isFocused,
-                onClearInput = onClearInput,
-            )
+            Row(
+                modifier = Modifier
+                    .padding(4.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.surface)
+                    .padding(
+                        start = 8.dp,
+                        end = 4.dp,
+                        top = 4.dp,
+                        bottom = 4.dp
+                    ),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                UrlTextInput(
+                    modifier = Modifier.weight(1f),
+                    value = value,
+                    onValueChange = onValueChange,
+                    onSubmit = onSubmit,
+                    onFocusChanged = onFocusChanged,
+                )
+
+                if (isFocused) {
+                    IconButton(onClick = { onValueChange("") }) {
+                        Icon(
+                            painter = painterResource(R.drawable.close_24dp),
+                            contentDescription = "クリア",
+                        )
+                    }
+                }
+            }
+
             if (!isFocused) {
                 IconButton(
                     onClick = onOpenTabs,
@@ -159,21 +176,17 @@ internal fun BrowserToolBar(
 }
 
 @Composable
-fun UrlBar(
+fun UrlTextInput(
     value: String,
     onValueChange: (String) -> Unit,
     onSubmit: (String) -> Unit,
     onFocusChanged: (Boolean) -> Unit,
-    isFocused: Boolean,
-    onClearInput: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val currentValue by rememberUpdatedState(value)
     val currentOnValueChange by rememberUpdatedState(onValueChange)
     val currentOnSubmit by rememberUpdatedState(onSubmit)
     val currentOnFocusChanged by rememberUpdatedState(onFocusChanged)
-    val currentIsFocused by rememberUpdatedState(isFocused)
-    val currentOnClearInput by rememberUpdatedState(onClearInput)
 
     // 一度AndroidViewを経由しないとBitwardenが認識しない
     AndroidView(
@@ -192,10 +205,7 @@ fun UrlBar(
                                 contentDescription = "Address bar"
                                 contentType = ContentType("url")
                                 contentDataType = ContentDataType.Text
-                            }
-                            .padding(4.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.surface),
+                            },
                         singleLine = true,
                         textStyle = TextStyle(color = MaterialTheme.colorScheme.onSurface),
                         cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
@@ -209,29 +219,6 @@ fun UrlBar(
                             onDone = { currentOnSubmit(currentValue) },
                             onSearch = { currentOnSubmit(currentValue) },
                         ),
-                        decorationBox = { innerTextField ->
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.padding(
-                                    start = 8.dp,
-                                    end = 4.dp,
-                                    top = 4.dp,
-                                    bottom = 4.dp
-                                ),
-                            ) {
-                                Box(modifier = Modifier.weight(1f)) {
-                                    innerTextField()
-                                }
-                                if (currentIsFocused) {
-                                    IconButton(onClick = { currentOnClearInput() }) {
-                                        Icon(
-                                            imageVector = Icons.Default.Clear,
-                                            contentDescription = "クリア",
-                                        )
-                                    }
-                                }
-                            }
-                        },
                     )
                 }
             }
@@ -274,7 +261,7 @@ private fun ToolbarMenu(
                     }
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Refresh,
+                        painter = painterResource(R.drawable.ic_refresh_24dp),
                         contentDescription = "更新",
                     )
                 }
@@ -291,7 +278,7 @@ private fun ToolbarMenu(
                     }
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Home,
+                        painter = painterResource(R.drawable.ic_home_24dp),
                         contentDescription = "ホーム",
                     )
                 }
@@ -309,7 +296,7 @@ private fun ToolbarMenu(
                     enabled = canGoForward,
                 ) {
                     Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                        painter = painterResource(R.drawable.ic_arrow_forward_24dp),
                         contentDescription = "進む",
                     )
                 }
@@ -385,29 +372,33 @@ private fun ToolbarMenu(
 @Composable
 private fun Preview() {
     BrowserTheme(themeMode = net.matsudamper.browser.data.ThemeMode.THEME_SYSTEM) {
-        BrowserToolBar(
-            value = "https://google.com",
-            onValueChange = {},
-            onSubmit = {},
-            isFocused = false,
-            onFocusChanged = {},
-            onClearInput = {},
-            showInstallExtensionItem = true,
-            onInstallExtension = {},
-            onOpenSettings = {},
-            onShare = {},
-            tabCount = 2,
-            onOpenTabs = {},
-            isPcMode = false,
-            onPcModeToggle = {},
-            onFindInPage = {},
-            toolbarColor = null,
-            onRefresh = {},
-            onHome = {},
-            onForward = {},
-            canGoForward = false,
-            onTranslatePage = {},
-        )
+        Column {
+            for (isFocused in listOf(true, false)) {
+                BrowserToolBar(
+                    value = "https://google.com",
+                    onValueChange = {},
+                    onSubmit = {},
+                    isFocused = isFocused,
+                    onFocusChanged = {},
+                    showInstallExtensionItem = true,
+                    onInstallExtension = {},
+                    onOpenSettings = {},
+                    onShare = {},
+                    tabCount = 2,
+                    onOpenTabs = {},
+                    isPcMode = false,
+                    onPcModeToggle = {},
+                    onFindInPage = {},
+                    toolbarColor = null,
+                    onRefresh = {},
+                    onHome = {},
+                    onForward = {},
+                    canGoForward = false,
+                    onTranslatePage = {},
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+            }
+        }
     }
 }
 
