@@ -67,6 +67,7 @@ fun GeckoBrowserTab(
     onOpenSettings: () -> Unit,
     onOpenTabs: () -> Unit,
     onOpenNewSessionRequest: (String) -> GeckoSession,
+    onCloseTab: (() -> Unit)? = null,
 ) {
     val state = rememberBrowserTabScreenState(
         browserTab = browserTab,
@@ -106,7 +107,7 @@ fun GeckoBrowserTab(
         val permissionDelegate =
             state.createPermissionDelegate(onDesktopNotificationPermissionRequest)
         val navigationDelegate = state.createNavigationDelegate(onOpenNewSessionRequest)
-        val contentDelegate = state.createContentDelegate()
+        val contentDelegate = state.createContentDelegate(onClose = onCloseTab)
         val progressDelegate = state.createProgressDelegate()
         val translationsDelegate = state.createTranslationsDelegate()
         val promptDelegate = state.createPromptDelegate()
