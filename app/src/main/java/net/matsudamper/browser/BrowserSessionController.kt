@@ -111,9 +111,10 @@ internal class BrowserSessionController(runtime: GeckoRuntime) {
 
     fun createTabForNewSession(initialUrl: String): BrowserTab {
         val normalizedInitialUrl = initialUrl.ifBlank { "about:blank" }
+        val session = GeckoSession().also { it.open(geckoRuntime) }
         return appendTab(
             tabId = UUID.randomUUID().toString(),
-            session = GeckoSession(),
+            session = session,
             initialUrl = normalizedInitialUrl,
             sessionState = "",
             title = normalizedInitialUrl,
@@ -213,7 +214,24 @@ internal data class PersistedBrowserTab(
     val sessionState: String,
     val title: String,
     val previewImageWebp: ByteArray = byteArrayOf(),
-)
+) {
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is PersistedBrowserTab) return false
+        return url == other.url &&
+            sessionState == other.sessionState &&
+            title == other.title &&
+            previewImageWebp.contentEquals(other.previewImageWebp)
+    }
+
+    override fun hashCode(): Int {
+        var result = url.hashCode()
+        result = 31 * result + sessionState.hashCode()
+        result = 31 * result + title.hashCode()
+        result = 31 * result + previewImageWebp.contentHashCode()
+        return result
+    }
+}
 
 private fun Bitmap?.toWebpByteArray(): ByteArray {
     val bitmap = this ?: return byteArrayOf()
