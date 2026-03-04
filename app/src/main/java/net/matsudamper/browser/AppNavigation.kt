@@ -65,15 +65,14 @@ internal fun BrowserApp(
     LaunchedEffect(newTabUrlFlow) {
         newTabUrlFlow.collect { url ->
             val newTab = browserSessionController.createAndAppendTab(initialUrl = url)
-            browserSessionController.selectTab(newTab.tabId)
             navController.selectTab(newTab.tabId)
         }
     }
 
-    // Tab state persistence
     LaunchedEffect(browserSessionController) {
+        val currentTab = navController.getSelectedTab()
         snapshotFlow { browserSessionController.stateChanged }
-            .collectLatest { viewModel.persistTabStates() }
+            .collectLatest { viewModel.saveTabStates(currentTab) }
     }
 
     val handleNotificationPermission: (uri: String) -> GeckoResult<Int> = { uri ->
@@ -119,17 +118,9 @@ internal fun BrowserApp(
             entryProvider = { key: NavKey ->
                 when (key) {
                     is AppDestination.Setup -> navEntry(key) {
-                        DisposableEffect(Unit) {
-                            viewModel.restoreTabs()
-                            val tab = browserSessionController.tabs
-                                .getOrNull(browserSessionController.selectedTabIndex)
-                                ?: browserSessionController.createAndAppendTab(
-                                    initialUrl = homepageUrl,
-                                ).also { newTab ->
-                                    browserSessionController.selectTab(newTab.tabId)
-                                }
-                            navController.selectTab(tab.tabId)
-                            onDispose { }
+                        LaunchedEffect(Unit) {
+                            val tabId = viewModel.restoreTabs()!!
+                            navController.selectTab(tabId)
                         }
                     }
 
@@ -200,9 +191,8 @@ internal fun BrowserApp(
                             browserSessionController = browserSessionController,
                             selectedTabId = navController.getSelectedTab(),
                             onSelectTab = { tabId ->
-                                val tab = browserSessionController.selectTab(tabId)
                                 viewModel.bumpTabPersistence()
-                                navController.selectTab(tab.tabId)
+                                navController.selectTab(tabId)
                             },
                             onCloseTab = { tabId ->
                                 browserSessionController.closeTab(tabId)
@@ -210,7 +200,7 @@ internal fun BrowserApp(
                                     val newTab = browserSessionController.createAndAppendTab(
                                         initialUrl = homepageUrl,
                                     )
-                                    browserSessionController.selectTab(newTab.tabId)
+                                    navController.selectTab(newTab.tabId)
                                 }
                                 viewModel.bumpTabPersistence()
                             },
@@ -218,9 +208,8 @@ internal fun BrowserApp(
                                 val newTab = browserSessionController.createAndAppendTab(
                                     initialUrl = homepageUrl,
                                 )
-                                browserSessionController.selectTab(newTab.tabId)
+                                navController.selectTab(newTab.tabId)
                                 viewModel.bumpTabPersistence()
-                                backStack.removeLastOrNull()
                             },
                             modifier = Modifier
                                 .fillMaxSize()

@@ -10,6 +10,7 @@ import androidx.lifecycle.viewModelScope
 import com.google.protobuf.ByteString
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -65,9 +66,9 @@ internal class BrowserViewModel(
         tabPersistenceSignal++
     }
 
-    fun restoreTabs() {
-        val currentSettings = settings.value ?: return
-        val currentTabData = tabData.value ?: return
+    suspend fun restoreTabs(): String? {
+        val currentSettings = settings.first() ?: return null
+        val currentTabData = tabData.first() ?: return null
         val homepageUrl = currentSettings.resolvedHomepageUrl()
         val persistedTabs = currentTabData.tabStatesList.map { tabState ->
             PersistedBrowserTab(
@@ -79,17 +80,19 @@ internal class BrowserViewModel(
                 openerTabId = tabState.openerTabId.ifBlank { null },
             )
         }
-        browserSessionController.restoreTabs(
+        val tabId = browserSessionController.restoreTabs(
             homepageUrl = homepageUrl,
             persistedTabs = persistedTabs,
             persistedSelectedTabIndex = currentTabData.selectedTabIndex,
         )
+        return tabId
     }
 
-    fun persistTabStates() {
+    fun saveTabStates(selectedTabId: String?) {
         viewModelScope.launch {
+            val tabs = browserSessionController.exportPersistedTabs()
             tabRepository.updateTabStates(
-                tabs = browserSessionController.exportPersistedTabs().map { tab ->
+                tabs = tabs.map { tab ->
                     PersistedTabState(
                         url = tab.url,
                         sessionState = tab.sessionState,
@@ -99,7 +102,12 @@ internal class BrowserViewModel(
                         openerTabId = tab.openerTabId.orEmpty(),
                     )
                 },
-                selectedTabIndex = browserSessionController.selectedTabIndex,
+                selectedTabIndex = if (selectedTabId == null) {
+                    null
+                } else {
+                    tabs.indexOfFirst { it.tabId == selectedTabId }
+                        .takeIf { it >= 0 }
+                } ?: tabs.lastIndex,
             )
         }
     }
