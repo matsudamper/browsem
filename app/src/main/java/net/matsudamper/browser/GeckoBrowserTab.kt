@@ -1,5 +1,7 @@
 package net.matsudamper.browser
 
+import android.annotation.SuppressLint
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import androidx.activity.compose.BackHandler
@@ -52,6 +54,7 @@ import net.matsudamper.browser.data.TranslationProvider
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.GeckoView
+import org.mozilla.geckoview.PanZoomController
 
 @Composable
 @OptIn(ExperimentalLayoutApi::class)
@@ -218,6 +221,7 @@ fun GeckoBrowserTab(
                 .clipToBounds(),
             factory = { context ->
                 SwipeRefreshLayout(context).also { swipeRefreshLayout ->
+                    var swipeRefreshScrollEnabled = false
                     val gecko = GeckoView(context).also { geckoView ->
                         geckoView.id = id
                         geckoView.isNestedScrollingEnabled = true
@@ -226,6 +230,28 @@ fun GeckoBrowserTab(
                             View.IMPORTANT_FOR_AUTOFILL_YES_EXCLUDE_DESCENDANTS
                         geckoView.setSession(session)
                         state.geckoViewRef = geckoView
+                        @SuppressLint("ClickableViewAccessibility")
+                        geckoView.setOnTouchListener { view, event ->
+                            if (event.actionMasked == MotionEvent.ACTION_DOWN) {
+                                swipeRefreshScrollEnabled = false
+                                (view as GeckoView).onTouchEventForDetailResult(event).then { detail ->
+                                    if (detail != null) {
+                                        val handledResult = detail.handledResult()
+                                        // コンテンツ側でのhandleを試みたが、動かないのでブラウザ側に渡している
+                                        val isUnhandled = handledResult == PanZoomController.INPUT_RESULT_UNHANDLED
+                                        // ブラウザ側のジェスチャーがhandleしている
+                                        val isHandled = handledResult == PanZoomController.INPUT_RESULT_HANDLED
+                                        // コンテンツ側でhandleしている
+                                        // val isContentHandled = handledResult == PanZoomController.INPUT_RESULT_HANDLED_CONTENT
+                                        swipeRefreshScrollEnabled = isHandled || isUnhandled
+                                    }
+                                    GeckoResult.fromValue<Void>(null)
+                                }
+                                true
+                            } else {
+                                false
+                            }
+                        }
                     }
                     swipeRefreshLayout.addView(
                         gecko,
@@ -235,7 +261,7 @@ fun GeckoBrowserTab(
                         )
                     )
                     swipeRefreshLayout.setOnChildScrollUpCallback { _, _ ->
-                        state.scrollY > 0
+                        !swipeRefreshScrollEnabled || state.scrollY > 0
                     }
                     swipeRefreshLayout.setOnRefreshListener {
                         state.isRefreshing = true
@@ -397,14 +423,19 @@ fun GeckoBrowserTab(
             val (title, hint) = when (prompt.type) {
                 GeckoSession.PromptDelegate.DateTimePrompt.Type.DATE ->
                     "日付を選択" to "YYYY-MM-DD"
+
                 GeckoSession.PromptDelegate.DateTimePrompt.Type.TIME ->
                     "時刻を選択" to "HH:MM"
+
                 GeckoSession.PromptDelegate.DateTimePrompt.Type.MONTH ->
                     "年月を選択" to "YYYY-MM"
+
                 GeckoSession.PromptDelegate.DateTimePrompt.Type.WEEK ->
                     "週を選択" to "YYYY-Www"
+
                 GeckoSession.PromptDelegate.DateTimePrompt.Type.DATETIME_LOCAL ->
                     "日時を選択" to "YYYY-MM-DDTHH:MM"
+
                 else -> "値を入力" to ""
             }
             AlertDialog(
