@@ -9,10 +9,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -23,6 +19,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
@@ -85,7 +82,7 @@ internal fun FindInPageBar(
                 enabled = query.isNotEmpty(),
             ) {
                 Icon(
-                    imageVector = Icons.Default.KeyboardArrowUp,
+                    painter = painterResource(R.drawable.ic_keyboard_arrow_up_24dp),
                     contentDescription = "前へ",
                 )
             }
@@ -94,13 +91,13 @@ internal fun FindInPageBar(
                 enabled = query.isNotEmpty(),
             ) {
                 Icon(
-                    imageVector = Icons.Default.KeyboardArrowDown,
+                    painter = painterResource(R.drawable.ic_keyboard_arrow_down_24dp),
                     contentDescription = "次へ",
                 )
             }
             IconButton(onClick = onClose) {
                 Icon(
-                    imageVector = Icons.Default.Close,
+                    painter = painterResource(R.drawable.close_24dp),
                     contentDescription = "閉じる",
                 )
             }
