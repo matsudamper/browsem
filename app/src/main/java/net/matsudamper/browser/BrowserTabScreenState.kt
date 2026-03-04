@@ -18,6 +18,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.graphics.toColorInt
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import net.matsudamper.browser.data.TranslationProvider
 import org.mozilla.geckoview.GeckoResult
@@ -275,9 +276,11 @@ internal class BrowserTabScreenState(
         geckoView.capturePixels().accept(
             { bitmap ->
                 val previewBitmap = bitmap ?: return@accept
-                val stream = ByteArrayOutputStream()
-                previewBitmap.compress(Bitmap.CompressFormat.WEBP_LOSSY, 0, stream)
-                browserTab.previewBitmap = stream.toByteArray()
+                coroutineScope.launch(Dispatchers.IO) {
+                    val stream = ByteArrayOutputStream()
+                    previewBitmap.compress(Bitmap.CompressFormat.WEBP_LOSSY, 0, stream)
+                    browserTab.previewBitmap = stream.toByteArray()
+                }
             },
             {},
         )
