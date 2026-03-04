@@ -26,6 +26,7 @@ import androidx.navigation3.scene.Scene
 import androidx.navigation3.ui.NavDisplay
 import androidx.navigation3.ui.defaultPopTransitionSpec
 import androidx.navigation3.ui.defaultTransitionSpec
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collectLatest
 import net.matsudamper.browser.data.resolvedHomepageUrl
 import net.matsudamper.browser.data.resolvedSearchTemplate
@@ -36,6 +37,7 @@ import org.mozilla.geckoview.GeckoResult
 @Composable
 internal fun BrowserApp(
     viewModel: BrowserViewModel,
+    newTabUrlFlow: Flow<String>,
     onInstallExtensionRequest: (String) -> Unit,
     onDesktopNotificationPermissionRequest: () -> GeckoResult<Int>,
 ) {
@@ -52,6 +54,14 @@ internal fun BrowserApp(
 
     val backStack = rememberNavBackStack(AppDestination.Setup)
     val navController = remember(backStack) { NavController(backStack = backStack) }
+
+    LaunchedEffect(newTabUrlFlow) {
+        newTabUrlFlow.collect { url ->
+            val newTab = browserSessionController.createAndAppendTab(initialUrl = url)
+            browserSessionController.selectTab(newTab.tabId)
+            navController.selectTab(newTab.tabId)
+        }
+    }
 
     // Tab state persistence
     LaunchedEffect(browserSessionController) {
