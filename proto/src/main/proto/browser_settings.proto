@@ -44,4 +44,6 @@ message BrowserTabState {
   string session_state = 2;
   string title = 3;
   bytes preview_image_webp = 4;
+  string tab_id = 5;
+  string opener_tab_id = 6;
 }

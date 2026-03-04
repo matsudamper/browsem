@@ -456,7 +456,7 @@ internal class BrowserTabScreenState(
         }
     }
 
-    fun createContentDelegate(): GeckoSession.ContentDelegate =
+    fun createContentDelegate(onClose: (() -> Unit)? = null): GeckoSession.ContentDelegate =
         object : GeckoSession.ContentDelegate {
             override fun onTitleChange(session: GeckoSession, title: String?) {
                 currentPageTitle = title.orEmpty()
@@ -473,6 +473,10 @@ internal class BrowserTabScreenState(
                         imageContextMenuUrl = element.srcUri
                     }
                 }
+            }
+
+            override fun onCloseRequest(session: GeckoSession) {
+                onClose?.invoke()
             }
         }
 

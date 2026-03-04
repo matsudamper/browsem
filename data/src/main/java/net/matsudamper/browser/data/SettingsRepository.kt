@@ -68,6 +68,8 @@ class SettingsRepository(context: Context) {
                     sessionState = it.sessionState,
                     title = it.title,
                     previewImageWebp = it.previewImageWebp,
+                    tabId = it.tabId,
+                    openerTabId = it.openerTabId,
                 )
             }
             if (currentTabs == tabs && current.selectedTabIndex == selectedTabIndex) {
@@ -81,6 +83,8 @@ class SettingsRepository(context: Context) {
                         .setSessionState(tab.sessionState)
                         .setTitle(tab.title)
                         .setPreviewImageWebp(tab.previewImageWebp)
+                        .setTabId(tab.tabId)
+                        .setOpenerTabId(tab.openerTabId)
                         .build()
                 )
             }
@@ -95,6 +99,8 @@ data class PersistedTabState(
     val sessionState: String,
     val title: String,
     val previewImageWebp: ByteString = ByteString.EMPTY,
+    val tabId: String = "",
+    val openerTabId: String = "",
 )
 
 fun BrowserSettings.resolvedHomepageUrl(): String = when (homepageType) {

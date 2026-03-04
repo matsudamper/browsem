@@ -130,6 +130,7 @@ internal fun BrowserApp(
                             backStack = backStack,
                             browserSessionController = browserSessionController,
                             viewModel = viewModel,
+                            navController = navController,
                             onInstallExtensionRequest = onInstallExtensionRequest,
                             handleNotificationPermission = handleNotificationPermission,
                         )
@@ -232,6 +233,7 @@ private fun Browser(
     backStack: MutableList<NavKey>,
     browserSessionController: BrowserSessionController,
     viewModel: BrowserViewModel,
+    navController: NavController,
     onInstallExtensionRequest: (String) -> Unit,
     handleNotificationPermission: (uri: String) -> GeckoResult<Int>,
 ) {
@@ -256,9 +258,25 @@ private fun Browser(
         onOpenSettings = { backStack.add(AppDestination.Settings) },
         onOpenTabs = { backStack.add(AppDestination.Tabs) },
         onOpenNewSessionRequest = { uri ->
-            val newTab = browserSessionController.createTabForNewSession(initialUrl = uri)
+            val newTab = browserSessionController.createTabForNewSession(
+                initialUrl = uri,
+                openerTabId = key.tabId,
+            )
             browserSessionController.selectTab(newTab.tabId)
+            navController.selectTab(newTab.tabId)
             newTab.session
+        },
+        onCloseTab = {
+            val openerTabId = selectedTab.openerTabId
+            browserSessionController.closeTab(key.tabId)
+            viewModel.bumpTabPersistence()
+            val targetTabId = openerTabId?.takeIf { id ->
+                browserSessionController.tabs.any { it.tabId == id }
+            } ?: browserSessionController.tabs.lastOrNull()?.tabId
+            if (targetTabId != null) {
+                browserSessionController.selectTab(targetTabId)
+                navController.selectTab(targetTabId)
+            }
         },
     )
 }
