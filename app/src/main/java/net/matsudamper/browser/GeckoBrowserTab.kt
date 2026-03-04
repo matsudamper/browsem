@@ -176,7 +176,9 @@ fun GeckoBrowserTab(
                     state.onUrlSubmit(rawInput)
                     keyboardController?.hide()
                 },
+                isFocused = state.isUrlInputFocused,
                 onFocusChanged = { hasFocus -> state.isUrlInputFocused = hasFocus },
+                onClearInput = { state.urlInput = "" },
                 showInstallExtensionItem = state.showInstallExtensionItem,
                 onInstallExtension = { onInstallExtensionRequest(state.currentPageUrl) },
                 onOpenSettings = onOpenSettings,

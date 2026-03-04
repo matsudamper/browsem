@@ -17,6 +17,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Checkbox
@@ -65,7 +66,9 @@ internal fun BrowserToolBar(
     onValueChange: (String) -> Unit,
     onSubmit: (String) -> Unit,
     modifier: Modifier = Modifier,
+    isFocused: Boolean,
     onFocusChanged: (Boolean) -> Unit,
+    onClearInput: () -> Unit,
     showInstallExtensionItem: Boolean,
     onInstallExtension: () -> Unit,
     onOpenSettings: () -> Unit,
@@ -150,6 +153,14 @@ internal fun BrowserToolBar(
                     }
                 },
             )
+            if (isFocused) {
+                IconButton(onClick = onClearInput) {
+                    Icon(
+                        imageVector = Icons.Default.Clear,
+                        contentDescription = "クリア",
+                    )
+                }
+            } else {
             IconButton(
                 onClick = onOpenTabs,
             ) {
@@ -300,6 +311,7 @@ internal fun BrowserToolBar(
                     )
                 }
             }
+            } // end else (not focused)
         }
     }
 }
@@ -313,7 +325,9 @@ private fun Preview() {
             value = "https://google.com",
             onValueChange = {},
             onSubmit = {},
+            isFocused = false,
             onFocusChanged = {},
+            onClearInput = {},
             showInstallExtensionItem = true,
             onInstallExtension = {},
             onOpenSettings = {},
