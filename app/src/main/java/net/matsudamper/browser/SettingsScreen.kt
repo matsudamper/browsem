@@ -24,6 +24,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
@@ -31,7 +33,6 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import net.matsudamper.browser.data.BrowserSettings
 import net.matsudamper.browser.data.HomepageType
 import net.matsudamper.browser.data.SearchProvider
 import net.matsudamper.browser.data.ThemeMode
@@ -40,12 +41,14 @@ import net.matsudamper.browser.data.TranslationProvider
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun SettingsScreen(
-    settings: BrowserSettings,
-    onSettingsChange: (BrowserSettings) -> Unit,
+    viewModel: SettingsScreenViewModel,
     onOpenExtensions: () -> Unit,
     onOpenNotificationPermissions: () -> Unit,
     onBack: () -> Unit,
 ) {
+    val currentUiState by viewModel.uiState.collectAsState()
+    val uiState = currentUiState ?: return
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -73,49 +76,25 @@ internal fun SettingsScreen(
                     Column(Modifier.selectableGroup()) {
                         SettingsRadioOption(
                             label = "Google",
-                            selected = settings.homepageType == HomepageType.HOMEPAGE_GOOGLE,
-                            onClick = {
-                                onSettingsChange(
-                                    settings.toBuilder()
-                                        .setHomepageType(HomepageType.HOMEPAGE_GOOGLE)
-                                        .build(),
-                                )
-                            },
+                            selected = uiState.homepageType == HomepageType.HOMEPAGE_GOOGLE,
+                            onClick = { viewModel.setHomepageType(HomepageType.HOMEPAGE_GOOGLE) },
                         )
                         SettingsRadioOption(
                             label = "DuckDuckGo",
-                            selected = settings.homepageType == HomepageType.HOMEPAGE_DUCKDUCKGO,
-                            onClick = {
-                                onSettingsChange(
-                                    settings.toBuilder()
-                                        .setHomepageType(HomepageType.HOMEPAGE_DUCKDUCKGO)
-                                        .build(),
-                                )
-                            },
+                            selected = uiState.homepageType == HomepageType.HOMEPAGE_DUCKDUCKGO,
+                            onClick = { viewModel.setHomepageType(HomepageType.HOMEPAGE_DUCKDUCKGO) },
                         )
                         SettingsRadioOption(
                             label = "カスタム",
-                            selected = settings.homepageType == HomepageType.HOMEPAGE_CUSTOM,
-                            onClick = {
-                                onSettingsChange(
-                                    settings.toBuilder()
-                                        .setHomepageType(HomepageType.HOMEPAGE_CUSTOM)
-                                        .build(),
-                                )
-                            },
+                            selected = uiState.homepageType == HomepageType.HOMEPAGE_CUSTOM,
+                            onClick = { viewModel.setHomepageType(HomepageType.HOMEPAGE_CUSTOM) },
                         )
                     }
-                    if (settings.homepageType == HomepageType.HOMEPAGE_CUSTOM) {
+                    if (uiState.homepageType == HomepageType.HOMEPAGE_CUSTOM) {
                         Spacer(Modifier.height(4.dp))
                         OutlinedTextField(
-                            value = settings.customHomepageUrl,
-                            onValueChange = { url ->
-                                onSettingsChange(
-                                    settings.toBuilder()
-                                        .setCustomHomepageUrl(url)
-                                        .build(),
-                                )
-                            },
+                            value = uiState.customHomepageUrl,
+                            onValueChange = viewModel::setCustomHomepageUrl,
                             label = { Text("ホームページ URL") },
                             placeholder = { Text("https://example.com") },
                             singleLine = true,
@@ -136,50 +115,26 @@ internal fun SettingsScreen(
                     Column(Modifier.selectableGroup()) {
                         SettingsRadioOption(
                             label = "Google",
-                            selected = settings.searchProvider == SearchProvider.GOOGLE,
-                            onClick = {
-                                onSettingsChange(
-                                    settings.toBuilder()
-                                        .setSearchProvider(SearchProvider.GOOGLE)
-                                        .build(),
-                                )
-                            },
+                            selected = uiState.searchProvider == SearchProvider.GOOGLE,
+                            onClick = { viewModel.setSearchProvider(SearchProvider.GOOGLE) },
                         )
                         SettingsRadioOption(
                             label = "DuckDuckGo",
-                            selected = settings.searchProvider == SearchProvider.DUCKDUCKGO,
-                            onClick = {
-                                onSettingsChange(
-                                    settings.toBuilder()
-                                        .setSearchProvider(SearchProvider.DUCKDUCKGO)
-                                        .build(),
-                                )
-                            },
+                            selected = uiState.searchProvider == SearchProvider.DUCKDUCKGO,
+                            onClick = { viewModel.setSearchProvider(SearchProvider.DUCKDUCKGO) },
                         )
                         SettingsRadioOption(
                             label = "カスタム",
-                            selected = settings.searchProvider == SearchProvider.CUSTOM,
-                            onClick = {
-                                onSettingsChange(
-                                    settings.toBuilder()
-                                        .setSearchProvider(SearchProvider.CUSTOM)
-                                        .build(),
-                                )
-                            },
+                            selected = uiState.searchProvider == SearchProvider.CUSTOM,
+                            onClick = { viewModel.setSearchProvider(SearchProvider.CUSTOM) },
                         )
                     }
 
-                    if (settings.searchProvider == SearchProvider.CUSTOM) {
+                    if (uiState.searchProvider == SearchProvider.CUSTOM) {
                         Spacer(Modifier.height(4.dp))
                         OutlinedTextField(
-                            value = settings.customSearchUrl,
-                            onValueChange = { url ->
-                                onSettingsChange(
-                                    settings.toBuilder()
-                                        .setCustomSearchUrl(url)
-                                        .build(),
-                                )
-                            },
+                            value = uiState.customSearchUrl,
+                            onValueChange = viewModel::setCustomSearchUrl,
                             label = { Text("検索 URL") },
                             placeholder = { Text("https://example.com/search?q=%s") },
                             supportingText = { Text("%s に検索ワードが入ります") },
@@ -200,36 +155,18 @@ internal fun SettingsScreen(
                 Column(Modifier.selectableGroup()) {
                     SettingsRadioOption(
                         label = "システム設定に合わせる",
-                        selected = settings.themeMode == ThemeMode.THEME_SYSTEM,
-                        onClick = {
-                            onSettingsChange(
-                                settings.toBuilder()
-                                    .setThemeMode(ThemeMode.THEME_SYSTEM)
-                                    .build(),
-                            )
-                        },
+                        selected = uiState.themeMode == ThemeMode.THEME_SYSTEM,
+                        onClick = { viewModel.setThemeMode(ThemeMode.THEME_SYSTEM) },
                     )
                     SettingsRadioOption(
                         label = "ライト",
-                        selected = settings.themeMode == ThemeMode.THEME_LIGHT,
-                        onClick = {
-                            onSettingsChange(
-                                settings.toBuilder()
-                                    .setThemeMode(ThemeMode.THEME_LIGHT)
-                                    .build(),
-                            )
-                        },
+                        selected = uiState.themeMode == ThemeMode.THEME_LIGHT,
+                        onClick = { viewModel.setThemeMode(ThemeMode.THEME_LIGHT) },
                     )
                     SettingsRadioOption(
                         label = "ダーク",
-                        selected = settings.themeMode == ThemeMode.THEME_DARK,
-                        onClick = {
-                            onSettingsChange(
-                                settings.toBuilder()
-                                    .setThemeMode(ThemeMode.THEME_DARK)
-                                    .build(),
-                            )
-                        },
+                        selected = uiState.themeMode == ThemeMode.THEME_DARK,
+                        onClick = { viewModel.setThemeMode(ThemeMode.THEME_DARK) },
                     )
                 }
             }
@@ -240,23 +177,19 @@ internal fun SettingsScreen(
                 Column(Modifier.selectableGroup()) {
                     SettingsRadioOption(
                         label = "Gecko",
-                        selected = settings.translationProvider == TranslationProvider.TRANSLATION_PROVIDER_GECKO,
+                        selected = uiState.translationProvider == TranslationProvider.TRANSLATION_PROVIDER_GECKO,
                         onClick = {
-                            onSettingsChange(
-                                settings.toBuilder()
-                                    .setTranslationProvider(TranslationProvider.TRANSLATION_PROVIDER_GECKO)
-                                    .build(),
+                            viewModel.setTranslationProvider(
+                                TranslationProvider.TRANSLATION_PROVIDER_GECKO,
                             )
                         },
                     )
                     SettingsRadioOption(
                         label = "ローカルAI (Android)",
-                        selected = settings.translationProvider == TranslationProvider.TRANSLATION_PROVIDER_LOCAL_AI,
+                        selected = uiState.translationProvider == TranslationProvider.TRANSLATION_PROVIDER_LOCAL_AI,
                         onClick = {
-                            onSettingsChange(
-                                settings.toBuilder()
-                                    .setTranslationProvider(TranslationProvider.TRANSLATION_PROVIDER_LOCAL_AI)
-                                    .build(),
+                            viewModel.setTranslationProvider(
+                                TranslationProvider.TRANSLATION_PROVIDER_LOCAL_AI,
                             )
                         },
                     )
@@ -278,14 +211,8 @@ internal fun SettingsScreen(
                         modifier = Modifier.weight(1f),
                     )
                     Switch(
-                        checked = settings.enableThirdPartyCa,
-                        onCheckedChange = { enabled ->
-                            onSettingsChange(
-                                settings.toBuilder()
-                                    .setEnableThirdPartyCa(enabled)
-                                    .build(),
-                            )
-                        },
+                        checked = uiState.enableThirdPartyCa,
+                        onCheckedChange = viewModel::setEnableThirdPartyCa,
                     )
                 }
             }

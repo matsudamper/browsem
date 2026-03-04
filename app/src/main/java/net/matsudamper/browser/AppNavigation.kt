@@ -28,8 +28,6 @@ import androidx.navigation3.ui.defaultPopTransitionSpec
 import androidx.navigation3.ui.defaultTransitionSpec
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collectLatest
-import net.matsudamper.browser.data.resolvedHomepageUrl
-import net.matsudamper.browser.data.resolvedSearchTemplate
 import net.matsudamper.browser.navigation.AppDestination
 import net.matsudamper.browser.navigation.NavController
 import net.matsudamper.browser.screen.tab.TabsScreen
@@ -42,17 +40,15 @@ internal fun BrowserApp(
     onInstallExtensionRequest: (String) -> Unit,
     onDesktopNotificationPermissionRequest: () -> GeckoResult<Int>,
 ) {
-    val currentSettings by viewModel.settings.collectAsState()
-    val settings = currentSettings ?: return
-    val currentTabData by viewModel.tabData.collectAsState()
-    val tabData = currentTabData ?: return
+    val currentSettings by viewModel.settingsUiState.collectAsState()
+    val settingsUiState = currentSettings ?: return
 
-    val homepageUrl = settings.resolvedHomepageUrl()
-    val searchTemplate = settings.resolvedSearchTemplate()
+    val homepageUrl = settingsUiState.homepageUrl
+    val searchTemplate = settingsUiState.searchTemplate
     val browserSessionController = viewModel.browserSessionController
 
-    LaunchedEffect(settings.enableThirdPartyCa) {
-        viewModel.applyRuntimeSettings(settings)
+    LaunchedEffect(settingsUiState.enableThirdPartyCa) {
+        viewModel.applyRuntimeSettings()
     }
 
     val backStack = rememberNavBackStack(AppDestination.Setup)
@@ -75,7 +71,6 @@ internal fun BrowserApp(
     val handleNotificationPermission: (uri: String) -> GeckoResult<Int> = { uri ->
         viewModel.handleNotificationPermission(
             uri = uri,
-            currentSettings = settings,
             onDesktopNotificationPermissionRequest = onDesktopNotificationPermissionRequest,
         )
     }
@@ -84,7 +79,7 @@ internal fun BrowserApp(
         backStack.removeLastOrNull()
     }
 
-    BrowserTheme(themeMode = settings.themeMode) {
+    BrowserTheme(themeMode = settingsUiState.themeMode) {
         NavDisplay(
             backStack = backStack,
             onBack = { backStack.removeLastOrNull() },
@@ -117,22 +112,30 @@ internal fun BrowserApp(
                 when (key) {
                     is AppDestination.Setup -> navEntry(key) {
                         DisposableEffect(Unit) {
-                            viewModel.restoreTabs(settings, tabData)
+                            viewModel.restoreTabs()
                             val tab = browserSessionController.tabs
-                                .getOrNull(browserSessionController.selectedTabIndex)!!
+                                .getOrNull(browserSessionController.selectedTabIndex)
+                                ?: browserSessionController.createAndAppendTab(
+                                    initialUrl = homepageUrl,
+                                ).also { newTab ->
+                                    browserSessionController.selectTab(newTab.tabId)
+                                }
                             navController.selectTab(tab.tabId)
                             onDispose { }
                         }
                     }
 
                     is AppDestination.Browser -> navEntry(key) {
+                        val browserScreenViewModel = remember(viewModel) {
+                            BrowserScreenViewModel(viewModel)
+                        }
                         Browser(
                             key = key,
                             homepageUrl = homepageUrl,
                             searchTemplate = searchTemplate,
                             backStack = backStack,
                             browserSessionController = browserSessionController,
-                            viewModel = viewModel,
+                            viewModel = browserScreenViewModel,
                             navController = navController,
                             onInstallExtensionRequest = onInstallExtensionRequest,
                             handleNotificationPermission = handleNotificationPermission,
@@ -140,11 +143,11 @@ internal fun BrowserApp(
                     }
 
                     AppDestination.Settings -> navEntry(key) {
-                        val latestSettings by viewModel.settingsRepository.settings
-                            .collectAsState(initial = settings)
+                        val settingsViewModel = remember(viewModel) {
+                            SettingsScreenViewModel(viewModel)
+                        }
                         SettingsScreen(
-                            settings = latestSettings,
-                            onSettingsChange = viewModel::updateSettings,
+                            viewModel = settingsViewModel,
                             onOpenExtensions = { backStack.add(AppDestination.Extensions) },
                             onOpenNotificationPermissions = {
                                 backStack.add(AppDestination.NotificationPermissions)
@@ -154,22 +157,29 @@ internal fun BrowserApp(
                     }
 
                     AppDestination.Extensions -> navEntry(key) {
+                        val extensionsViewModel = remember(viewModel, browserSessionController) {
+                            ExtensionsScreenViewModel(
+                                runtime = viewModel.runtime,
+                                onOpenExtensionSettingsRequest = { optionsPageUrl ->
+                                    val tab = browserSessionController.createAndAppendTab(
+                                        initialUrl = optionsPageUrl,
+                                    )
+                                    navController.selectTab(tab.tabId)
+                                },
+                            )
+                        }
                         ExtensionsScreen(
-                            runtime = viewModel.runtime,
+                            viewModel = extensionsViewModel,
                             onBack = { backStack.removeLastOrNull() },
-                            onOpenExtensionSettings = { optionsPageUrl ->
-                                val tab = browserSessionController.createAndAppendTab(
-                                    initialUrl = optionsPageUrl,
-                                )
-                                navController.selectTab(tab.tabId)
-                            },
                         )
                     }
 
                     AppDestination.NotificationPermissions -> navEntry(key) {
+                        val notificationPermissionsViewModel = remember(viewModel) {
+                            NotificationPermissionsScreenViewModel(viewModel)
+                        }
                         NotificationPermissionsScreen(
-                            allowedOrigins = settings.notificationAllowedOriginsList,
-                            onRevokeOrigin = viewModel::removeNotificationAllowedOrigin,
+                            viewModel = notificationPermissionsViewModel,
                             onBack = { backStack.removeLastOrNull() },
                         )
                     }
@@ -235,13 +245,13 @@ private fun Browser(
     searchTemplate: String,
     backStack: MutableList<NavKey>,
     browserSessionController: BrowserSessionController,
-    viewModel: BrowserViewModel,
+    viewModel: BrowserScreenViewModel,
     navController: NavController,
     onInstallExtensionRequest: (String) -> Unit,
     handleNotificationPermission: (uri: String) -> GeckoResult<Int>,
 ) {
-    val currentSettings by viewModel.settings.collectAsState()
-    val settings = currentSettings ?: return
+    val currentSettings by viewModel.settingsUiState.collectAsState()
+    val settingsUiState = currentSettings ?: return
 
     val selectedTab = remember(key.tabId) {
         browserSessionController.getOrCreateTab(
@@ -254,7 +264,7 @@ private fun Browser(
         browserTab = selectedTab,
         homepageUrl = homepageUrl,
         searchTemplate = searchTemplate,
-        translationProvider = settings.translationProvider,
+        translationProvider = settingsUiState.translationProvider,
         tabCount = tabs.size,
         onInstallExtensionRequest = onInstallExtensionRequest,
         onDesktopNotificationPermissionRequest = handleNotificationPermission,
