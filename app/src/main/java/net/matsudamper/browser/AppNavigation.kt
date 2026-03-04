@@ -44,6 +44,8 @@ internal fun BrowserApp(
 ) {
     val currentSettings by viewModel.settings.collectAsState()
     val settings = currentSettings ?: return
+    val currentTabData by viewModel.tabData.collectAsState()
+    val tabData = currentTabData ?: return
 
     val homepageUrl = settings.resolvedHomepageUrl()
     val searchTemplate = settings.resolvedSearchTemplate()
@@ -115,7 +117,7 @@ internal fun BrowserApp(
                 when (key) {
                     is AppDestination.Setup -> navEntry(key) {
                         DisposableEffect(Unit) {
-                            viewModel.restoreTabs(settings)
+                            viewModel.restoreTabs(settings, tabData)
                             val tab = browserSessionController.tabs
                                 .getOrNull(browserSessionController.selectedTabIndex)!!
                             navController.selectTab(tab.tabId)
