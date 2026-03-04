@@ -1,4 +1,4 @@
-package net.matsudamper.browser
+package net.matsudamper.browser.screen.extensions
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -28,17 +28,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import org.mozilla.geckoview.GeckoRuntime
+import net.matsudamper.browser.R
+import net.matsudamper.browser.rememberExtensionsScreenState
 import org.mozilla.geckoview.WebExtension
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun ExtensionsScreen(
-    runtime: GeckoRuntime,
+    viewModel: ExtensionsScreenViewModel,
     onBack: () -> Unit,
-    onOpenExtensionSettings: (String) -> Unit,
 ) {
-    val state = rememberExtensionsScreenState(runtime)
+    val state = rememberExtensionsScreenState(viewModel.runtime)
 
     Scaffold(
         topBar = {
@@ -100,7 +100,10 @@ internal fun ExtensionsScreen(
                         isUninstalling = state.uninstallingId == extension.id,
                         uninstallEnabled = state.uninstallingId == null,
                         onOpenSettings = {
-                            state.openExtensionSettings(extension, onOpenExtensionSettings)
+                            state.openExtensionSettings(
+                                extension = extension,
+                                onOpenExtensionSettings = viewModel::onOpenExtensionSettings,
+                            )
                         },
                         onUninstall = { state.uninstallExtension(extension) },
                     )

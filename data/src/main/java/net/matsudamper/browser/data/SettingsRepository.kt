@@ -31,6 +31,62 @@ class SettingsRepository(context: Context) {
         }
     }
 
+    suspend fun setHomepageType(type: HomepageType) {
+        dataStore.updateData { current ->
+            current.toBuilder()
+                .setHomepageType(type)
+                .build()
+        }
+    }
+
+    suspend fun setCustomHomepageUrl(url: String) {
+        dataStore.updateData { current ->
+            current.toBuilder()
+                .setCustomHomepageUrl(url)
+                .build()
+        }
+    }
+
+    suspend fun setSearchProvider(provider: SearchProvider) {
+        dataStore.updateData { current ->
+            current.toBuilder()
+                .setSearchProvider(provider)
+                .build()
+        }
+    }
+
+    suspend fun setCustomSearchUrl(url: String) {
+        dataStore.updateData { current ->
+            current.toBuilder()
+                .setCustomSearchUrl(url)
+                .build()
+        }
+    }
+
+    suspend fun setThemeMode(mode: ThemeMode) {
+        dataStore.updateData { current ->
+            current.toBuilder()
+                .setThemeMode(mode)
+                .build()
+        }
+    }
+
+    suspend fun setTranslationProvider(provider: TranslationProvider) {
+        dataStore.updateData { current ->
+            current.toBuilder()
+                .setTranslationProvider(provider)
+                .build()
+        }
+    }
+
+    suspend fun setEnableThirdPartyCa(enabled: Boolean) {
+        dataStore.updateData { current ->
+            current.toBuilder()
+                .setEnableThirdPartyCa(enabled)
+                .build()
+        }
+    }
+
     suspend fun addNotificationAllowedOrigin(origin: String) {
         dataStore.updateData { current ->
             if (current.notificationAllowedOriginsList.contains(origin)) {

@@ -10,18 +10,36 @@ import androidx.lifecycle.viewModelScope
 import com.google.protobuf.ByteString
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import net.matsudamper.browser.data.BrowserTabData
 import net.matsudamper.browser.data.BrowserSettings
+import net.matsudamper.browser.data.HomepageType
 import net.matsudamper.browser.data.PersistedTabState
+import net.matsudamper.browser.data.SearchProvider
 import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.TabRepository
+import net.matsudamper.browser.data.ThemeMode
+import net.matsudamper.browser.data.TranslationProvider
 import net.matsudamper.browser.data.resolvedHomepageUrl
 import net.matsudamper.browser.data.resolvedSearchTemplate
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoSession
+
+internal data class SettingsUiState(
+    val homepageType: HomepageType,
+    val customHomepageUrl: String,
+    val searchProvider: SearchProvider,
+    val customSearchUrl: String,
+    val themeMode: ThemeMode,
+    val translationProvider: TranslationProvider,
+    val enableThirdPartyCa: Boolean,
+    val notificationAllowedOrigins: List<String>,
+    val homepageUrl: String,
+    val searchTemplate: String,
+)
 
 @Stable
 internal class BrowserViewModel(
@@ -29,12 +47,15 @@ internal class BrowserViewModel(
     context: Context,
 ) : ViewModel() {
     val browserSessionController = BrowserSessionController(runtime)
-    val settingsRepository = SettingsRepository(context)
-    val tabRepository = TabRepository(context)
+    private val settingsRepository = SettingsRepository(context)
+    private val tabRepository = TabRepository(context)
 
-    val settings: StateFlow<BrowserSettings?> = settingsRepository.settings
+    private val settings: StateFlow<BrowserSettings?> = settingsRepository.settings
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
-    val tabData: StateFlow<BrowserTabData?> = tabRepository.tabs
+    private val tabData: StateFlow<BrowserTabData?> = tabRepository.tabs
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+    val settingsUiState: StateFlow<SettingsUiState?> = settings
+        .map { current -> current?.toUiState() }
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     var tabPersistenceSignal by mutableLongStateOf(0L)
@@ -44,16 +65,9 @@ internal class BrowserViewModel(
         tabPersistenceSignal++
     }
 
-    val homepageUrl: String
-        get() = settings.value?.resolvedHomepageUrl() ?: "https://www.google.com"
-
-    val searchTemplate: String
-        get() = settings.value?.resolvedSearchTemplate() ?: "https://www.google.com/search?q=%s"
-
-    fun restoreTabs(
-        currentSettings: BrowserSettings,
-        currentTabData: BrowserTabData,
-    ) {
+    fun restoreTabs() {
+        val currentSettings = settings.value ?: return
+        val currentTabData = tabData.value ?: return
         val homepageUrl = currentSettings.resolvedHomepageUrl()
         val persistedTabs = currentTabData.tabStatesList.map { tabState ->
             PersistedBrowserTab(
@@ -90,9 +104,45 @@ internal class BrowserViewModel(
         }
     }
 
-    fun updateSettings(newSettings: BrowserSettings) {
+    fun setHomepageType(type: HomepageType) {
         viewModelScope.launch {
-            settingsRepository.updateSettings(newSettings)
+            settingsRepository.setHomepageType(type)
+        }
+    }
+
+    fun setCustomHomepageUrl(url: String) {
+        viewModelScope.launch {
+            settingsRepository.setCustomHomepageUrl(url)
+        }
+    }
+
+    fun setSearchProvider(provider: SearchProvider) {
+        viewModelScope.launch {
+            settingsRepository.setSearchProvider(provider)
+        }
+    }
+
+    fun setCustomSearchUrl(url: String) {
+        viewModelScope.launch {
+            settingsRepository.setCustomSearchUrl(url)
+        }
+    }
+
+    fun setThemeMode(mode: ThemeMode) {
+        viewModelScope.launch {
+            settingsRepository.setThemeMode(mode)
+        }
+    }
+
+    fun setTranslationProvider(provider: TranslationProvider) {
+        viewModelScope.launch {
+            settingsRepository.setTranslationProvider(provider)
+        }
+    }
+
+    fun setEnableThirdPartyCa(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsRepository.setEnableThirdPartyCa(enabled)
         }
     }
 
@@ -110,10 +160,9 @@ internal class BrowserViewModel(
 
     fun handleNotificationPermission(
         uri: String,
-        currentSettings: BrowserSettings,
         onDesktopNotificationPermissionRequest: () -> GeckoResult<Int>,
     ): GeckoResult<Int> {
-        val allowedOrigins = currentSettings.notificationAllowedOriginsList
+        val allowedOrigins = settings.value?.notificationAllowedOriginsList ?: emptyList()
         if (allowedOrigins.contains(uri)) {
             return GeckoResult.fromValue(GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW)
         }
@@ -126,8 +175,8 @@ internal class BrowserViewModel(
         }
     }
 
-    fun applyRuntimeSettings(currentSettings: BrowserSettings) {
-        runtime.settings.setEnterpriseRootsEnabled(currentSettings.enableThirdPartyCa)
+    fun applyRuntimeSettings() {
+        runtime.settings.setEnterpriseRootsEnabled(settings.value?.enableThirdPartyCa ?: false)
     }
 
     override fun onCleared() {
@@ -135,3 +184,16 @@ internal class BrowserViewModel(
         browserSessionController.close()
     }
 }
+
+private fun BrowserSettings.toUiState(): SettingsUiState = SettingsUiState(
+    homepageType = homepageType,
+    customHomepageUrl = customHomepageUrl,
+    searchProvider = searchProvider,
+    customSearchUrl = customSearchUrl,
+    themeMode = themeMode,
+    translationProvider = translationProvider,
+    enableThirdPartyCa = enableThirdPartyCa,
+    notificationAllowedOrigins = notificationAllowedOriginsList,
+    homepageUrl = resolvedHomepageUrl(),
+    searchTemplate = resolvedSearchTemplate(),
+)

@@ -7,13 +7,14 @@ import net.matsudamper.browser.BrowserSessionController
 internal class TabsScreenViewModel(
     private val browserSessionController: BrowserSessionController,
 ) : ViewModel() {
-    val tabs = browserSessionController.tabs.map {
-        TabsScreenTabData(
-            id = it.tabId,
-            title = it.title,
-            previewBitmapArray = it.previewBitmap,
-        )
-    }
+    val tabs: List<TabsScreenTabData>
+        get() = browserSessionController.tabs.map {
+            TabsScreenTabData(
+                id = it.tabId,
+                title = it.title,
+                previewBitmapArray = it.previewBitmap,
+            )
+        }
 }
 
 internal data class TabsScreenTabData(
