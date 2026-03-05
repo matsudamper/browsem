@@ -27,6 +27,7 @@ import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.GeckoSessionSettings
 import org.mozilla.geckoview.GeckoView
 import org.mozilla.geckoview.TranslationsController
+import org.mozilla.geckoview.WebResponse
 import java.io.ByteArrayOutputStream
 import java.net.URL
 import java.util.concurrent.Executors
@@ -275,6 +276,21 @@ internal class BrowserTabScreenState(
         }
     }
 
+    // GeckoViewがレンダリングできないレスポンス（ダウンロードリンク等）を受け取った際に呼ばれる
+    fun downloadFileFromResponse(response: WebResponse) {
+        coroutineScope.launch {
+            val result = runCatching {
+                geckoDownloadManager.saveFileFromResponse(response)
+            }.onFailure { it.printStackTrace() }
+            val message = if (result.isSuccess) {
+                "ダウンロードしました"
+            } else {
+                "ダウンロードに失敗しました"
+            }
+            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+        }
+    }
+
     fun dismissAlertPrompt() {
         val prompt = pendingAlertPrompt ?: return
         pendingAlertResult?.complete(prompt.dismiss())
@@ -477,6 +493,11 @@ internal class BrowserTabScreenState(
 
             override fun onCloseRequest(session: GeckoSession) {
                 onClose?.invoke()
+            }
+
+            // GeckoViewがレンダリングできないコンテンツ（ダウンロード対象ファイル等）を受け取った際に呼ばれる
+            override fun onExternalResponse(session: GeckoSession, response: WebResponse) {
+                downloadFileFromResponse(response)
             }
         }
 

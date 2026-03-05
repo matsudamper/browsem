@@ -12,6 +12,7 @@ import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoWebExecutor
 import org.mozilla.geckoview.WebRequest
+import org.mozilla.geckoview.WebResponse
 import java.io.IOException
 import java.io.InputStream
 
@@ -19,6 +20,30 @@ internal class GeckoDownloadManager(
     private val context: Context,
     private val runtime: GeckoRuntime,
 ) {
+    // GeckoViewからのWebResponseを直接保存する（ダウンロードリンクのクリック時に使用）
+    suspend fun saveFileFromResponse(response: WebResponse) {
+        withContext(Dispatchers.IO) {
+            val body = response.body ?: throw IOException("Response body is empty.")
+            val contentDisposition = response.headers["Content-Disposition"]
+            val mimeType = response.headers["Content-Type"]
+                ?.substringBefore(';')
+                ?.trim()
+                ?.takeIf { it.isNotEmpty() }
+                ?: "application/octet-stream"
+            val fileName = URLUtil
+                .guessFileName(response.uri, contentDisposition, mimeType)
+                .ifBlank { "download-${System.currentTimeMillis()}" }
+            body.use { input ->
+                saveFileToDownloads(
+                    inputStream = input,
+                    fileName = fileName,
+                    mimeType = mimeType,
+                )
+            }
+        }
+    }
+
+    // 画像URLを指定してダウンロードする（コンテキストメニュー経由の画像保存時に使用）
     suspend fun downloadImageWithSession(
         imageUrl: String,
         referrerUrl: String,
@@ -49,7 +74,7 @@ internal class GeckoDownloadManager(
                 val fileName = URLUtil
                     .guessFileName(imageUrl, contentDisposition, mimeType)
                     .ifBlank { "image-${System.currentTimeMillis()}" }
-                saveImageToDownloads(
+                saveFileToDownloads(
                     inputStream = input,
                     fileName = fileName,
                     mimeType = mimeType,
@@ -58,7 +83,7 @@ internal class GeckoDownloadManager(
         }
     }
 
-    private fun saveImageToDownloads(
+    private fun saveFileToDownloads(
         inputStream: InputStream,
         fileName: String,
         mimeType: String,
