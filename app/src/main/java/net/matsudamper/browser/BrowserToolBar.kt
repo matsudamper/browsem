@@ -104,9 +104,9 @@ internal fun BrowserToolBar(
         color = toolbarColor ?: MaterialTheme.colorScheme.primaryContainer,
         modifier = modifier
             .pointerInput(isFocused) {
-                // フォーカス中のみURLバーの水平スワイプでタブ切り替え
-                // フォーカスなし時はタッチを奪わないようにする
-                if (!isFocused) return@pointerInput
+                // 非フォーカス時のみURLバーの水平スワイプでタブ切り替え
+                // フォーカス中はテキスト入力を邪魔しないようにする
+                if (isFocused) return@pointerInput
                 detectHorizontalDragGestures(
                     onHorizontalDrag = { _, dragAmount ->
                         latestOnHorizontalDrag(dragAmount)
@@ -116,8 +116,8 @@ internal fun BrowserToolBar(
                 )
             }
             .pointerInput(isFocused) {
-                // フォーカス中のみ下スワイプでタブ一覧を開く
-                if (!isFocused) return@pointerInput
+                // 非フォーカス時のみ下スワイプでタブ一覧を開く
+                if (isFocused) return@pointerInput
                 detectDownSwipe(
                     density = this,
                     onDownSwipe = {
