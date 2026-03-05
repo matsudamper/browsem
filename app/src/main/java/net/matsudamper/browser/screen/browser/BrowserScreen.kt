@@ -46,10 +46,12 @@ internal fun BrowserScreen(
     val settingsUiState = currentSettings ?: return
 
     val selectedTab = remember(key.tabId) {
-        browserSessionController.getOrCreateTab(
+        val tab = browserSessionController.getOrCreateTab(
             tabId = key.tabId,
             homepageUrl = homepageUrl,
         )
+        browserSessionController.ensureSessionOpen(tab)
+        tab
     }
     val tabs = browserSessionController.tabs
 
