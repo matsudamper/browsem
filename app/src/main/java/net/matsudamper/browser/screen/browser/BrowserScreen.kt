@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -165,22 +167,23 @@ private fun TabPreviewPage(
     tab: BrowserTab,
     modifier: Modifier = Modifier,
 ) {
-    val previewBitmap = tab.previewBitmap
-    if (previewBitmap != null && previewBitmap.isNotEmpty()) {
-        val bitmap = remember(previewBitmap) {
-            BitmapFactory.decodeByteArray(previewBitmap, 0, previewBitmap.size)
-        }
-        if (bitmap != null) {
-            Image(
-                bitmap = bitmap.asImageBitmap(),
-                contentDescription = null,
-                modifier = modifier,
-                contentScale = ContentScale.FillWidth,
-                // URLバーの高さ分ズレるため、画像は下固定にする
-                alignment = Alignment.BottomCenter,
-            )
-            return
+    Box(modifier = modifier.safeDrawingPadding()) {
+        val previewBitmap = tab.previewBitmap
+        if (previewBitmap != null && previewBitmap.isNotEmpty()) {
+            val bitmap = remember(previewBitmap) {
+                BitmapFactory.decodeByteArray(previewBitmap, 0, previewBitmap.size)
+            }
+            if (bitmap != null) {
+                Image(
+                    modifier = Modifier.fillMaxSize(),
+                    bitmap = bitmap.asImageBitmap(),
+                    contentDescription = null,
+                    contentScale = ContentScale.FillWidth,
+                    // URLバーの高さ分ズレるため、画像は下固定にする
+                    alignment = Alignment.BottomCenter,
+                )
+                return
+            }
         }
     }
-    Box(modifier = modifier)
 }

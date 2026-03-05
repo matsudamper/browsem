@@ -99,6 +99,7 @@ internal class BrowserTabScreenState(
 
     // --- Context menu / dialog state ---
     var imageContextMenuUrl by mutableStateOf<String?>(null)
+    var linkContextMenuUrl by mutableStateOf<String?>(null)
     var pendingAlertPrompt by mutableStateOf<GeckoSession.PromptDelegate.AlertPrompt?>(null)
     var pendingAlertResult by mutableStateOf<GeckoResult<GeckoSession.PromptDelegate.PromptResponse>?>(null)
     var pendingButtonPrompt by mutableStateOf<GeckoSession.PromptDelegate.ButtonPrompt?>(null)
@@ -273,6 +274,14 @@ internal class BrowserTabScreenState(
             }
             Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
         }
+    }
+
+    fun copyLinkUrl(url: String) {
+        val clipboard =
+            context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+        clipboard.setPrimaryClip(android.content.ClipData.newPlainText("URL", url))
+        linkContextMenuUrl = null
+        Toast.makeText(context, "URLをコピーしました", Toast.LENGTH_SHORT).show()
     }
 
     fun dismissAlertPrompt() {
@@ -468,6 +477,11 @@ internal class BrowserTabScreenState(
                 screenY: Int,
                 element: GeckoSession.ContentDelegate.ContextElement,
             ) {
+                val linkUri = element.linkUri
+                if (linkUri != null) {
+                    linkContextMenuUrl = linkUri
+                    return
+                }
                 when (element.type) {
                     GeckoSession.ContentDelegate.ContextElement.TYPE_IMAGE -> {
                         imageContextMenuUrl = element.srcUri
