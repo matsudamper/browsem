@@ -3,6 +3,7 @@ package net.matsudamper.browser
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -90,13 +91,28 @@ internal fun BrowserToolBar(
     onPcModeToggle: () -> Unit,
     onTranslatePage: () -> Unit,
     toolbarColor: Color?,
+    onHorizontalDrag: (Float) -> Unit = {},
+    onHorizontalDragEnd: () -> Unit = {},
 ) {
     var heightCache by remember { mutableIntStateOf(0) }
     val latestOnOpenTabs by rememberUpdatedState(onOpenTabs)
 
+    val latestOnHorizontalDrag by rememberUpdatedState(onHorizontalDrag)
+    val latestOnHorizontalDragEnd by rememberUpdatedState(onHorizontalDragEnd)
+
     Surface(
         color = toolbarColor ?: MaterialTheme.colorScheme.primaryContainer,
         modifier = modifier
+            .pointerInput(Unit) {
+                // URLバーの水平スワイプでタブ切り替え
+                detectHorizontalDragGestures(
+                    onHorizontalDrag = { _, dragAmount ->
+                        latestOnHorizontalDrag(dragAmount)
+                    },
+                    onDragEnd = { latestOnHorizontalDragEnd() },
+                    onDragCancel = { latestOnHorizontalDragEnd() },
+                )
+            }
             .pointerInput(Unit) {
                 detectDownSwipe(
                     density = this,

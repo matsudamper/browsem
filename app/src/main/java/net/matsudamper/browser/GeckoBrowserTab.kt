@@ -71,6 +71,8 @@ fun GeckoBrowserTab(
     onOpenTabs: () -> Unit,
     onOpenNewSessionRequest: (String) -> GeckoSession,
     onCloseTab: (() -> Unit)? = null,
+    onToolbarHorizontalDrag: (Float) -> Unit = {},
+    onToolbarDragEnd: () -> Unit = {},
 ) {
     val state = rememberBrowserTabScreenState(
         browserTab = browserTab,
@@ -205,6 +207,8 @@ fun GeckoBrowserTab(
                 canGoForward = state.canGoForward,
                 onRefresh = state::onRefresh,
                 onTranslatePage = { state.onTranslate(translationProvider) },
+                onHorizontalDrag = onToolbarHorizontalDrag,
+                onHorizontalDragEnd = onToolbarDragEnd,
             )
             TranslationStatusBar(
                 state = state.translationState,
