@@ -134,12 +134,18 @@ internal fun BrowserScreen(
                 val threshold = pageWidthPx * 0.3f
                 when {
                     swipeOffset.value > threshold && prevTab != null -> {
-                        // 前のタブへ即座に切り替え（アニメーションなし）
-                        navController.selectTab(prevTab.tabId)
+                        // 端までアニメーション完了後に前のタブへ切り替え
+                        coroutineScope.launch {
+                            swipeOffset.animateTo(pageWidthPx)
+                            navController.selectTab(prevTab.tabId)
+                        }
                     }
                     swipeOffset.value < -threshold && nextTab != null -> {
-                        // 次のタブへ即座に切り替え（アニメーションなし）
-                        navController.selectTab(nextTab.tabId)
+                        // 端までアニメーション完了後に次のタブへ切り替え
+                        coroutineScope.launch {
+                            swipeOffset.animateTo(-pageWidthPx)
+                            navController.selectTab(nextTab.tabId)
+                        }
                     }
                     else -> {
                         // しきい値未満の場合は元の位置へスナップバック
