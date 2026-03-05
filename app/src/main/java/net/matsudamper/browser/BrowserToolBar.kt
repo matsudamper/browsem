@@ -7,6 +7,7 @@ import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
@@ -150,13 +151,32 @@ internal fun BrowserToolBar(
                     ),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                UrlTextInput(
-                    modifier = Modifier.weight(1f),
-                    value = value,
-                    onValueChange = onValueChange,
-                    onSubmit = onSubmit,
-                    onFocusChanged = onFocusChanged,
-                )
+                // 非フォーカス時はテキストフィールド上にオーバーレイを置き、
+                // AndroidView内部の水平スクロールを無効化してスワイプでタブ切り替えを可能にする
+                Box(modifier = Modifier.weight(1f)) {
+                    UrlTextInput(
+                        modifier = Modifier.fillMaxWidth(),
+                        value = value,
+                        onValueChange = onValueChange,
+                        onSubmit = onSubmit,
+                        onFocusChanged = onFocusChanged,
+                    )
+                    if (!isFocused) {
+                        Box(
+                            modifier = Modifier
+                                .matchParentSize()
+                                .pointerInput(Unit) {
+                                    detectHorizontalDragGestures(
+                                        onHorizontalDrag = { _, dragAmount ->
+                                            latestOnHorizontalDrag(dragAmount)
+                                        },
+                                        onDragEnd = { latestOnHorizontalDragEnd() },
+                                        onDragCancel = { latestOnHorizontalDragEnd() },
+                                    )
+                                },
+                        )
+                    }
+                }
 
                 if (isFocused) {
                     CompositionLocalProvider(
