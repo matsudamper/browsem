@@ -42,6 +42,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.graphics.toColorInt
@@ -72,6 +73,8 @@ internal fun GeckoBrowserTab(
     onOpenTabs: () -> Unit,
     onOpenNewSessionRequest: (String) -> GeckoSession,
     onCloseTab: (() -> Unit)? = null,
+    onToolbarHorizontalDrag: (Float) -> Unit = {},
+    onToolbarDragEnd: () -> Unit = {},
 ) {
     val state = rememberBrowserTabScreenState(
         browserTab = browserTab,
@@ -206,6 +209,8 @@ internal fun GeckoBrowserTab(
                 canGoForward = state.canGoForward,
                 onRefresh = state::onRefresh,
                 onTranslatePage = { state.onTranslate(translationProvider) },
+                onHorizontalDrag = onToolbarHorizontalDrag,
+                onHorizontalDragEnd = onToolbarDragEnd,
             )
             TranslationStatusBar(
                 state = state.translationState,
@@ -300,6 +305,41 @@ internal fun GeckoBrowserTab(
                 dismissButton = {
                     TextButton(onClick = { state.imageContextMenuUrl = null }) {
                         Text(text = "キャンセル")
+                    }
+                },
+            )
+        }
+
+        // Link context menu dialog
+        state.linkContextMenuUrl?.let { linkUrl ->
+            AlertDialog(
+                onDismissRequest = { state.linkContextMenuUrl = null },
+                title = { Text(text = "リンク") },
+                text = {
+                    Text(
+                        text = linkUrl,
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                },
+                confirmButton = {
+                    TextButton(onClick = { state.copyLinkUrl(linkUrl) }) {
+                        Text("URLをコピー")
+                    }
+                },
+                dismissButton = {
+                    Column {
+                        TextButton(
+                            onClick = {
+                                onOpenNewSessionRequest(linkUrl)
+                                state.linkContextMenuUrl = null
+                            },
+                        ) {
+                            Text("新しいタブで開く")
+                        }
+                        TextButton(onClick = { state.linkContextMenuUrl = null }) {
+                            Text("キャンセル")
+                        }
                     }
                 },
             )
