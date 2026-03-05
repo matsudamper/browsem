@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">Browser</string>
+    <string name="download_notification_starting">ダウンロード中...</string>
 </resources>

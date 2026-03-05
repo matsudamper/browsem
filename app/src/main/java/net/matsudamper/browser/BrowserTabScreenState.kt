@@ -5,7 +5,6 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.os.Handler
 import android.os.Looper
-import android.widget.Toast
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
@@ -260,34 +259,20 @@ internal class BrowserTabScreenState(
 
     fun downloadImage(imageUrl: String) {
         imageContextMenuUrl = null
-        coroutineScope.launch {
-            val result = runCatching {
-                geckoDownloadManager.downloadImageWithSession(
-                    imageUrl = imageUrl,
-                    referrerUrl = currentPageUrl,
-                )
-            }.onFailure { it.printStackTrace() }
-            val message = if (result.isSuccess) {
-                "画像をダウンロードしました"
-            } else {
-                "画像のダウンロードに失敗しました"
-            }
-            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
-        }
+        // WorkManagerにエンキューして通知で進捗表示
+        geckoDownloadManager.enqueueImageDownload(
+            imageUrl = imageUrl,
+            referrerUrl = currentPageUrl,
+        )
     }
 
     // GeckoViewがレンダリングできないレスポンス（ダウンロードリンク等）を受け取った際に呼ばれる
+    // 通知による進捗表示はsaveFileFromResponse内で処理される
     fun downloadFileFromResponse(response: WebResponse) {
         coroutineScope.launch {
-            val result = runCatching {
+            runCatching {
                 geckoDownloadManager.saveFileFromResponse(response)
             }.onFailure { it.printStackTrace() }
-            val message = if (result.isSuccess) {
-                "ダウンロードしました"
-            } else {
-                "ダウンロードに失敗しました"
-            }
-            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
         }
     }
 
