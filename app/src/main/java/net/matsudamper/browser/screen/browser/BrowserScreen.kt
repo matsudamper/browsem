@@ -12,6 +12,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.asImageBitmap
@@ -175,6 +176,8 @@ private fun TabPreviewPage(
                 contentDescription = null,
                 modifier = modifier,
                 contentScale = ContentScale.FillWidth,
+                // URLバーの高さ分ズレるため、画像は下固定にする
+                alignment = Alignment.BottomCenter,
             )
             return
         }
