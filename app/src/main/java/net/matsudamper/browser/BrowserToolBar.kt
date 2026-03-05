@@ -3,7 +3,10 @@ package net.matsudamper.browser
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.gestures.rememberScrollableState
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -16,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -90,14 +94,33 @@ internal fun BrowserToolBar(
     onPcModeToggle: () -> Unit,
     onTranslatePage: () -> Unit,
     toolbarColor: Color?,
+    onHorizontalDrag: (Float) -> Unit = {},
+    onHorizontalDragEnd: () -> Unit = {},
 ) {
     var heightCache by remember { mutableIntStateOf(0) }
     val latestOnOpenTabs by rememberUpdatedState(onOpenTabs)
 
+    val latestOnHorizontalDrag by rememberUpdatedState(onHorizontalDrag)
+    val latestOnHorizontalDragEnd by rememberUpdatedState(onHorizontalDragEnd)
+
     Surface(
         color = toolbarColor ?: MaterialTheme.colorScheme.primaryContainer,
         modifier = modifier
-            .pointerInput(Unit) {
+            .pointerInput(isFocused) {
+                // 非フォーカス時のみURLバーの水平スワイプでタブ切り替え
+                // フォーカス中はテキスト入力を邪魔しないようにする
+                if (isFocused) return@pointerInput
+                detectHorizontalDragGestures(
+                    onHorizontalDrag = { _, dragAmount ->
+                        latestOnHorizontalDrag(dragAmount)
+                    },
+                    onDragEnd = { latestOnHorizontalDragEnd() },
+                    onDragCancel = { latestOnHorizontalDragEnd() },
+                )
+            }
+            .pointerInput(isFocused) {
+                // 非フォーカス時のみ下スワイプでタブ一覧を開く
+                if (isFocused) return@pointerInput
                 detectDownSwipe(
                     density = this,
                     onDownSwipe = {
@@ -131,7 +154,12 @@ internal fun BrowserToolBar(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 UrlTextInput(
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier
+                        .weight(1f)
+                        .horizontalScroll(
+                            state = rememberScrollState(),
+                            enabled = isFocused,
+                        ),
                     value = value,
                     onValueChange = onValueChange,
                     onSubmit = onSubmit,
