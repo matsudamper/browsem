@@ -77,7 +77,7 @@ internal class BrowserTabScreenState(
     // --- URL / Navigation state ---
     var urlInput by mutableStateOf(browserTab.currentUrl)
     var currentPageUrl by mutableStateOf(browserTab.currentUrl)
-    var currentPageTitle by mutableStateOf("")
+    var currentPageTitle by mutableStateOf(browserTab.title)
     var canGoBack by mutableStateOf(false)
     var canGoForward by mutableStateOf(false)
     var isUrlInputFocused by mutableStateOf(false)
