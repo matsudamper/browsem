@@ -54,6 +54,7 @@ internal fun BrowserApp(
     val homepageUrl = settingsUiState.homepageUrl
     val searchTemplate = settingsUiState.searchTemplate
     val browserSessionController = viewModel.browserSessionController
+    val themeColorExtension = viewModel.themeColorExtension
 
     LaunchedEffect(settingsUiState.enableThirdPartyCa) {
         viewModel.applyRuntimeSettings()
@@ -136,6 +137,7 @@ internal fun BrowserApp(
                             browserSessionController = browserSessionController,
                             viewModel = browserScreenViewModel,
                             navController = navController,
+                            themeColorExtension = themeColorExtension,
                             onInstallExtensionRequest = onInstallExtensionRequest,
                             handleNotificationPermission = handleNotificationPermission,
                         )

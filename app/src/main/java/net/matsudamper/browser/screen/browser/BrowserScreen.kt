@@ -7,6 +7,7 @@ import androidx.compose.runtime.remember
 import androidx.navigation3.runtime.NavKey
 import net.matsudamper.browser.BrowserSessionController
 import net.matsudamper.browser.GeckoBrowserTab
+import net.matsudamper.browser.ThemeColorWebExtension
 import net.matsudamper.browser.navigation.AppDestination
 import net.matsudamper.browser.navigation.NavController
 import org.mozilla.geckoview.GeckoResult
@@ -20,6 +21,7 @@ internal fun BrowserScreen(
     browserSessionController: BrowserSessionController,
     viewModel: BrowserScreenViewModel,
     navController: NavController,
+    themeColorExtension: ThemeColorWebExtension,
     onInstallExtensionRequest: (String) -> Unit,
     handleNotificationPermission: (uri: String) -> GeckoResult<Int>,
 ) {
@@ -38,6 +40,7 @@ internal fun BrowserScreen(
         homepageUrl = homepageUrl,
         searchTemplate = searchTemplate,
         translationProvider = settingsUiState.translationProvider,
+        themeColorExtension = themeColorExtension,
         tabCount = tabs.size,
         onInstallExtensionRequest = onInstallExtensionRequest,
         onDesktopNotificationPermissionRequest = handleNotificationPermission,
