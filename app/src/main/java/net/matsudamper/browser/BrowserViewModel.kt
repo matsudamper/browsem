@@ -10,6 +10,7 @@ import androidx.lifecycle.viewModelScope
 import com.google.protobuf.ByteString
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -66,9 +67,9 @@ internal class BrowserViewModel(
         tabPersistenceSignal++
     }
 
-    suspend fun restoreTabs(): String? {
-        val currentSettings = settings.first() ?: return null
-        val currentTabData = tabData.first() ?: return null
+    suspend fun restoreTabs(): String {
+        val currentSettings = settings.filterNotNull().first()
+        val currentTabData = tabData.filterNotNull().first()
         val homepageUrl = currentSettings.resolvedHomepageUrl()
         val persistedTabs = currentTabData.tabStatesList.map { tabState ->
             PersistedBrowserTab(
