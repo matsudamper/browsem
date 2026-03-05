@@ -119,7 +119,7 @@ internal fun BrowserApp(
                 when (key) {
                     is AppDestination.Setup -> navEntry(key) {
                         LaunchedEffect(Unit) {
-                            val tabId = viewModel.restoreTabs()!!
+                            val tabId = viewModel.restoreTabs()
                             navController.selectTab(tabId)
                         }
                     }
