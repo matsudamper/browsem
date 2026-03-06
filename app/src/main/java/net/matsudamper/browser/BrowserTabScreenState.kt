@@ -522,7 +522,6 @@ internal class BrowserTabScreenState(
             }
 
             override fun onPageStart(session: GeckoSession, url: String) {
-                renderReady = false
             }
 
             override fun onPageStop(session: GeckoSession, success: Boolean) {
