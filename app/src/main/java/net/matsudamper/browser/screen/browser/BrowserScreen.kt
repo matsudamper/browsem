@@ -42,6 +42,7 @@ internal fun BrowserScreen(
     themeColorExtension: ThemeColorWebExtension,
     onInstallExtensionRequest: (String) -> Unit,
     handleNotificationPermission: (uri: String) -> GeckoResult<Int>,
+    onSelectTab: (tabId: String, beforeTab: AppDestination.Browser?) -> Unit,
 ) {
     val currentSettings by viewModel.settingsUiState.collectAsState()
     val settingsUiState = currentSettings ?: return
@@ -112,18 +113,17 @@ internal fun BrowserScreen(
                     initialUrl = uri,
                     openerTabId = key.tabId,
                 )
-                navController.selectTab(newTab.tabId, key)
+                onSelectTab(newTab.tabId, key)
                 newTab.session
             },
             onCloseTab = {
                 val openerTabId = selectedTab.openerTabId
                 browserSessionController.closeTab(key.tabId)
-                viewModel.bumpTabPersistence()
                 val targetTabId = openerTabId?.takeIf { id ->
                     browserSessionController.tabs.any { it.tabId == id }
                 } ?: browserSessionController.tabs.lastOrNull()?.tabId
                 if (targetTabId != null) {
-                    navController.selectTab(targetTabId)
+                    onSelectTab(targetTabId, null)
                 }
             },
             onToolbarHorizontalDrag = { delta ->
@@ -144,14 +144,14 @@ internal fun BrowserScreen(
                         // 端までアニメーション完了後に前のタブへ切り替え
                         coroutineScope.launch {
                             swipeOffset.animateTo(pageWidthPx)
-                            navController.selectTab(prevTab.tabId)
+                            onSelectTab(prevTab.tabId, null)
                         }
                     }
                     swipeOffset.value < -threshold && nextTab != null -> {
                         // 端までアニメーション完了後に次のタブへ切り替え
                         coroutineScope.launch {
                             swipeOffset.animateTo(-pageWidthPx)
-                            navController.selectTab(nextTab.tabId)
+                            onSelectTab(nextTab.tabId, null)
                         }
                     }
                     else -> {

@@ -6,7 +6,7 @@ import android.util.Log
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -20,15 +20,30 @@ class BrowserSessionController(runtime: GeckoRuntime) {
     private val geckoRuntime = runtime
     private val tabList = mutableStateListOf<BrowserTab>()
 
-    val stateChanged by derivedStateOf {
-        mutableIntStateOf(
-            tabList.map {
-                it.currentUrl
-                it.sessionState
-                it.title
-                it.previewBitmap
-            }.hashCode()
-        )
+    /**
+     * タブコンテンツの変更バージョン。
+     * Compose snapshotシステムにより、tabList内の各プロパティ変更を自動追跡する。
+     */
+    val contentVersion by derivedStateOf {
+        tabList.fold(0) { acc, tab ->
+            var h = acc
+            h = 31 * h + tab.currentUrl.hashCode()
+            h = 31 * h + tab.sessionState.hashCode()
+            h = 31 * h + tab.title.hashCode()
+            h = 31 * h + (tab.previewBitmap?.contentHashCode() ?: 0)
+            h
+        }
+    }
+
+    /**
+     * タブ構造変更（追加・削除・並べ替え）や選択タブ変更時に手動インクリメントするカウンター。
+     * [contentVersion] が検出しない変更（選択タブの変更等）を補完する。
+     */
+    var structuralVersion by mutableLongStateOf(0L)
+        private set
+
+    fun notifyStructuralChange() {
+        structuralVersion++
     }
 
     val tabs: List<BrowserTab>

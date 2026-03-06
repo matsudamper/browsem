@@ -6,11 +6,7 @@ import net.matsudamper.browser.BrowserViewModel
 import net.matsudamper.browser.SettingsUiState
 
 internal class BrowserScreenViewModel(
-    private val browserViewModel: BrowserViewModel,
+    browserViewModel: BrowserViewModel,
 ) : ViewModel() {
     val settingsUiState: StateFlow<SettingsUiState?> = browserViewModel.settingsUiState
-
-    fun bumpTabPersistence() {
-        browserViewModel.bumpTabPersistence()
-    }
 }

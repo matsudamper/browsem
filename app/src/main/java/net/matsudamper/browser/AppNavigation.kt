@@ -20,7 +20,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.IntOffset
 import androidx.navigation3.runtime.NavEntry
@@ -32,7 +31,6 @@ import androidx.navigation3.ui.defaultPopTransitionSpec
 import androidx.navigation3.ui.defaultTransitionSpec
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.collectLatest
 import net.matsudamper.browser.navigation.AppDestination
 import net.matsudamper.browser.navigation.NavController
 import net.matsudamper.browser.screen.browser.BrowserScreen
@@ -70,23 +68,20 @@ internal fun BrowserApp(
     // タブ復元完了を待機するためのシグナル
     val setupComplete = remember { CompletableDeferred<Unit>() }
 
+    // ナビゲーションとViewModelの両方にタブ選択を通知するヘルパー
+    val selectTab: (String, AppDestination.Browser?) -> Unit = remember(navController, viewModel) {
+        { tabId, beforeTab ->
+            navController.selectTab(tabId, beforeTab)
+            viewModel.selectTab(tabId)
+        }
+    }
+
     LaunchedEffect(newTabUrlFlow) {
         // タブ復元完了を待ってから外部URLを処理する（レースコンディション防止）
         setupComplete.await()
         newTabUrlFlow.collect { url ->
             val newTab = browserSessionController.createAndAppendTab(initialUrl = url)
-            navController.selectTab(newTab.tabId)
-        }
-    }
-
-    LaunchedEffect(browserSessionController) {
-        snapshotFlow {
-            browserSessionController.stateChanged
-            viewModel.tabPersistenceSignal
-        }.collectLatest {
-            // 保存時に最新の選択タブIDを取得する
-            val currentTab = navController.getSelectedTab()
-            viewModel.saveTabStates(currentTab)
+            selectTab(newTab.tabId, null)
         }
     }
 
@@ -142,7 +137,7 @@ internal fun BrowserApp(
                     is AppDestination.Setup -> navEntry(key) {
                         LaunchedEffect(Unit) {
                             val tabId = viewModel.restoreTabs()
-                            navController.selectTab(tabId)
+                            selectTab(tabId, null)
                             setupComplete.complete(Unit) // 復元完了を通知
                         }
                     }
@@ -162,6 +157,9 @@ internal fun BrowserApp(
                             themeColorExtension = themeColorExtension,
                             onInstallExtensionRequest = onInstallExtensionRequest,
                             handleNotificationPermission = handleNotificationPermission,
+                            onSelectTab = { tabId, beforeTab ->
+                                selectTab(tabId, beforeTab)
+                            },
                         )
                     }
 
@@ -187,7 +185,7 @@ internal fun BrowserApp(
                                     val tab = browserSessionController.createAndAppendTab(
                                         initialUrl = optionsPageUrl,
                                     )
-                                    navController.selectTab(tab.tabId)
+                                    selectTab(tab.tabId, null)
                                 },
                             )
                         }
@@ -215,8 +213,7 @@ internal fun BrowserApp(
                             browserSessionController = browserSessionController,
                             selectedTabId = navController.getSelectedTab(),
                             onSelectTab = { tabId ->
-                                viewModel.bumpTabPersistence()
-                                navController.selectTab(tabId)
+                                selectTab(tabId, null)
                             },
                             onCloseTab = { tabId ->
                                 browserSessionController.closeTab(tabId)
@@ -224,16 +221,14 @@ internal fun BrowserApp(
                                     val newTab = browserSessionController.createAndAppendTab(
                                         initialUrl = homepageUrl,
                                     )
-                                    navController.selectTab(newTab.tabId)
+                                    selectTab(newTab.tabId, null)
                                 }
-                                viewModel.bumpTabPersistence()
                             },
                             onOpenNewTab = {
                                 val newTab = browserSessionController.createAndAppendTab(
                                     initialUrl = homepageUrl,
                                 )
-                                navController.selectTab(newTab.tabId)
-                                viewModel.bumpTabPersistence()
+                                selectTab(newTab.tabId, null)
                             },
                             modifier = Modifier
                                 .fillMaxSize()

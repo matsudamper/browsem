@@ -1,15 +1,19 @@
 package net.matsudamper.browser
 
 import android.content.Context
+import android.util.Log
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.protobuf.ByteString
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -61,11 +65,20 @@ internal class BrowserViewModel(
         .map { current -> current?.toUiState() }
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
-    var tabPersistenceSignal by mutableLongStateOf(0L)
+    // 復元完了フラグ。これがtrueになるまで保存を行わない
+    private var restorationComplete = false
+
+    // 現在選択中のタブID（永続化用）
+    var selectedTabId: String? by mutableStateOf(null)
         private set
 
-    fun bumpTabPersistence() {
-        tabPersistenceSignal++
+    /**
+     * 選択タブを更新する。
+     * NavController での画面遷移とは別に、永続化のためにViewModelにも通知する。
+     */
+    fun selectTab(tabId: String) {
+        selectedTabId = tabId
+        browserSessionController.notifyStructuralChange()
     }
 
     suspend fun restoreTabs(): String {
@@ -87,31 +100,61 @@ internal class BrowserViewModel(
             persistedTabs = persistedTabs,
             persistedSelectedTabIndex = currentTabData.selectedTabIndex,
         )
+        selectedTabId = tabId
+        restorationComplete = true
+        startTabPersistence()
         return tabId
     }
 
-    fun saveTabStates(selectedTabId: String?) {
+    /**
+     * タブ状態の自動保存を開始する。
+     * snapshotFlow で BrowserSessionController の変更を監視し、デバウンス付きで保存する。
+     * restoreTabs() 完了後に呼ばれるため、復元前に空リストを保存するレースコンディションを防止する。
+     */
+    private fun startTabPersistence() {
         viewModelScope.launch {
-            val tabs = browserSessionController.exportPersistedTabs()
-            tabRepository.updateTabStates(
-                tabs = tabs.map { tab ->
-                    PersistedTabState(
-                        url = tab.url,
-                        sessionState = tab.sessionState,
-                        title = tab.title,
-                        previewImageWebp = ByteString.copyFrom(tab.previewImageWebp),
-                        tabId = tab.tabId,
-                        openerTabId = tab.openerTabId.orEmpty(),
-                    )
-                },
-                selectedTabIndex = if (selectedTabId == null) {
-                    null
-                } else {
-                    tabs.indexOfFirst { it.tabId == selectedTabId }
-                        .takeIf { it >= 0 }
-                } ?: tabs.lastIndex,
-            )
+            snapshotFlow {
+                // コンテンツ変更（URL、タイトル、セッション状態、プレビュー画像）を自動追跡
+                val content = browserSessionController.contentVersion
+                // 構造変更（タブ追加・削除・並べ替え）と選択タブ変更を追跡
+                val structural = browserSessionController.structuralVersion
+                val selected = selectedTabId
+                Triple(content, structural, selected)
+            }.collectLatest {
+                // デバウンス: 連続的な変更をまとめて1回の保存にする
+                delay(500)
+                saveTabStatesInternal()
+            }
         }
+    }
+
+    private suspend fun saveTabStatesInternal() {
+        if (!restorationComplete) return
+        val tabs = browserSessionController.exportPersistedTabs()
+        if (tabs.isEmpty()) {
+            Log.w("BrowserViewModel", "タブリストが空のため保存をスキップ")
+            return
+        }
+        val currentSelectedTabId = selectedTabId
+        val selectedIndex = if (currentSelectedTabId != null) {
+            tabs.indexOfFirst { it.tabId == currentSelectedTabId }
+                .takeIf { it >= 0 }
+        } else {
+            null
+        } ?: tabs.lastIndex
+        tabRepository.updateTabStates(
+            tabs = tabs.map { tab ->
+                PersistedTabState(
+                    url = tab.url,
+                    sessionState = tab.sessionState,
+                    title = tab.title,
+                    previewImageWebp = ByteString.copyFrom(tab.previewImageWebp),
+                    tabId = tab.tabId,
+                    openerTabId = tab.openerTabId.orEmpty(),
+                )
+            },
+            selectedTabIndex = selectedIndex,
+        )
     }
 
     fun setHomepageType(type: HomepageType) {
