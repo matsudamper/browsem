@@ -63,6 +63,23 @@ android {
         compose = true
     }
 
+    testOptions {
+        managedDevices {
+            localDevices {
+                maybeCreate("pixel6Api30").apply {
+                    device = "Pixel 6"
+                    apiLevel = 30
+                    systemImageSource = "aosp-atd"
+                }
+            }
+            groups {
+                maybeCreate("gmd").apply {
+                    targetDevices.add(localDevices["pixel6Api30"])
+                }
+            }
+        }
+    }
+
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
