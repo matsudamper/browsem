@@ -125,25 +125,23 @@ internal class BrowserTabScreenState(
     fun onUrlSubmit(rawInput: String) {
         val resolved = buildUrlFromInput(rawInput, homepageUrl, searchTemplate)
         urlInput = resolved
+        maybeResetToolbarColor(currentPageUrl, resolved)
         currentPageUrl = resolved
-        toolbarColor = null
         session.loadUri(resolved)
     }
 
     fun onHome() {
         urlInput = homepageUrl
+        maybeResetToolbarColor(currentPageUrl, homepageUrl)
         currentPageUrl = homepageUrl
-        toolbarColor = null
         session.loadUri(homepageUrl)
     }
 
     fun onRefresh() {
-        toolbarColor = null
         session.reload()
     }
 
     fun onRefreshFromSwipe() {
-        toolbarColor = null
         session.reload()
         isRefreshing = false
     }
@@ -164,7 +162,6 @@ internal class BrowserTabScreenState(
         } else {
             GeckoSessionSettings.USER_AGENT_MODE_MOBILE
         }
-        toolbarColor = null
         session.reload()
     }
 
@@ -442,6 +439,7 @@ internal class BrowserTabScreenState(
             hasUserGesture: Boolean,
         ) {
             val newUrl = url.orEmpty()
+            val previousUrl = currentPageUrl
             if (newUrl == "about:blank" && currentPageUrl != "about:blank") {
                 return
             }
@@ -449,7 +447,7 @@ internal class BrowserTabScreenState(
             if (!isUrlInputFocused) {
                 urlInput = newUrl
             }
-            if (hasUserGesture) {
+            if (hasUserGesture && shouldResetToolbarColor(previousUrl, newUrl)) {
                 toolbarColor = null
             }
             val revertUrl = originalPageUrlForRevert
@@ -615,4 +613,20 @@ internal class BrowserTabScreenState(
                 scrollY = scrollYValue
             }
         }
+
+    private fun maybeResetToolbarColor(fromUrl: String, toUrl: String) {
+        if (shouldResetToolbarColor(fromUrl, toUrl)) {
+            toolbarColor = null
+        }
+    }
+
+    private fun shouldResetToolbarColor(fromUrl: String, toUrl: String): Boolean {
+        return normalizedToolbarUrlKey(fromUrl) != normalizedToolbarUrlKey(toUrl)
+    }
+
+    private fun normalizedToolbarUrlKey(url: String): String {
+        return url
+            .substringBefore("#")
+            .removeSuffix("/")
+    }
 }
