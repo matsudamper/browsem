@@ -117,6 +117,8 @@ internal class BrowserTabScreenState(
 
     // --- Scroll / Refresh state ---
     var isRefreshing by mutableStateOf(false)
+    // ページのリフレッシュ中かどうか（初期ロードと区別するため）
+    var isPageRefreshing by mutableStateOf(false)
     var scrollY by mutableIntStateOf(0)
 
     // --- GeckoView reference ---
@@ -143,10 +145,12 @@ internal class BrowserTabScreenState(
     }
 
     fun onRefresh() {
+        isPageRefreshing = true
         session.reload()
     }
 
     fun onRefreshFromSwipe() {
+        isPageRefreshing = true
         session.reload()
         isRefreshing = false
     }
@@ -167,6 +171,7 @@ internal class BrowserTabScreenState(
         } else {
             GeckoSessionSettings.USER_AGENT_MODE_MOBILE
         }
+        isPageRefreshing = true
         session.reload()
     }
 
@@ -511,6 +516,7 @@ internal class BrowserTabScreenState(
 
             override fun onPageStop(session: GeckoSession, success: Boolean) {
                 isContentReady = true
+                isPageRefreshing = false
                 val pageUrl = currentPageUrl
                 resolveThemeColor(pageUrl) { resolvedUrl, color ->
                     if (resolvedUrl == currentPageUrl) {

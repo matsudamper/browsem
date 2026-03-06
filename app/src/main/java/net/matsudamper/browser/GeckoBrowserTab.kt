@@ -6,8 +6,6 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -297,20 +295,15 @@ fun GeckoBrowserTab(
                     null
                 }
             }
-            androidx.compose.animation.AnimatedVisibility(
-                visible = !state.isContentReady && previewBitmap != null,
-                enter = fadeIn(),
-                exit = fadeOut(),
-            ) {
-                previewBitmap?.let { bmp ->
-                    Image(
-                        modifier = Modifier.fillMaxSize(),
-                        bitmap = bmp.asImageBitmap(),
-                        contentDescription = null,
-                        contentScale = ContentScale.FillWidth,
-                        alignment = Alignment.TopStart,
-                    )
-                }
+            // リフレッシュ時はサムネイルを表示しない（初期ロード時のみ表示）
+            if (!state.isContentReady && !state.isPageRefreshing && previewBitmap != null) {
+                Image(
+                    modifier = Modifier.fillMaxSize(),
+                    bitmap = previewBitmap.asImageBitmap(),
+                    contentDescription = null,
+                    contentScale = ContentScale.FillWidth,
+                    alignment = Alignment.TopStart,
+                )
             }
         }
 
