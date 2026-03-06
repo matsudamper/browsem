@@ -11,13 +11,16 @@ import androidx.core.app.NotificationCompat
 import androidx.work.CoroutineWorker
 import androidx.work.ForegroundInfo
 import androidx.work.WorkerParameters
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import org.mozilla.geckoview.GeckoRuntime
+import org.mozilla.geckoview.GeckoWebExecutor
+import org.mozilla.geckoview.WebRequest
 import java.io.IOException
-import java.net.HttpURLConnection
-import java.net.URL
 
 /**
  * WorkManagerを使った進捗通知付きダウンロードWorker。
- * 画像URLなどをバックグラウンドでダウンロードしてDownloadsに保存する。
+ * GeckoWebExecutorを使用してダウンロードすることで、GeckoViewのCookie/セッション情報が共有される。
  */
 internal class DownloadWorker(
     private val context: Context,
@@ -41,70 +44,84 @@ internal class DownloadWorker(
     }
 
     private suspend fun downloadFile(urlString: String, referrerUrl: String) {
-        val connection = (URL(urlString).openConnection() as HttpURLConnection).apply {
-            connectTimeout = 30_000
-            readTimeout = 60_000
-            if (referrerUrl.isNotBlank()) {
-                setRequestProperty("Referer", referrerUrl)
-            }
-            connect()
+        // GeckoRuntime.getDefault() はUIスレッドでのみ呼び出し可能
+        val executor = withContext(Dispatchers.Main) {
+            val runtime = GeckoRuntime.getDefault(context)
+            GeckoWebExecutor(runtime)
         }
+
+        val request = WebRequest.Builder(urlString)
+            .apply {
+                if (referrerUrl.isNotBlank()) {
+                    addHeader("Referer", referrerUrl)
+                }
+            }
+            .build()
+
+        val response = try {
+            executor.fetch(request).poll(60_000)
+                ?: throw IOException("レスポンスがnullです。")
+        } catch (e: IOException) {
+            throw e
+        } catch (e: Throwable) {
+            throw IOException("Geckoリクエスト失敗", e)
+        }
+
+        val statusCode = response.statusCode
+        if (statusCode !in 200..299) {
+            response.body?.close()
+            throw IOException("HTTP エラー: $statusCode")
+        }
+
+        val body = response.body ?: throw IOException("レスポンスボディが空です。")
+
+        val contentLength = response.headers["Content-Length"]?.toLongOrNull() ?: -1L
+        val mimeType = response.headers["Content-Type"]
+            ?.substringBefore(';')?.trim()
+            ?.takeIf { it.isNotEmpty() }
+            ?: "application/octet-stream"
+        val contentDisposition = response.headers["Content-Disposition"]
+        val fileName = URLUtil.guessFileName(urlString, contentDisposition, mimeType)
+            .ifBlank { "download-${System.currentTimeMillis()}" }
+
+        setForeground(createForegroundInfo(0, contentLength <= 0, fileName, 0L, contentLength))
+
+        val resolver = context.contentResolver
+        val values = ContentValues().apply {
+            put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+            put(MediaStore.MediaColumns.MIME_TYPE, mimeType)
+            put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+            put(MediaStore.Downloads.IS_PENDING, 1)
+        }
+        val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+            ?: throw IOException("ダウンロードエントリの作成に失敗しました。")
+
         try {
-            val responseCode = connection.responseCode
-            if (responseCode !in 200..299) {
-                throw IOException("HTTP エラー: $responseCode")
-            }
-            val contentLength = connection.contentLengthLong
-            val mimeType = connection.contentType
-                ?.substringBefore(';')?.trim()
-                ?.takeIf { it.isNotEmpty() }
-                ?: "application/octet-stream"
-            val contentDisposition = connection.getHeaderField("Content-Disposition")
-            val fileName = URLUtil.guessFileName(urlString, contentDisposition, mimeType)
-                .ifBlank { "download-${System.currentTimeMillis()}" }
-
-            setForeground(createForegroundInfo(0, contentLength <= 0, fileName, 0L, contentLength))
-
-            val resolver = context.contentResolver
-            val values = ContentValues().apply {
-                put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
-                put(MediaStore.MediaColumns.MIME_TYPE, mimeType)
-                put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
-                put(MediaStore.Downloads.IS_PENDING, 1)
-            }
-            val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
-                ?: throw IOException("ダウンロードエントリの作成に失敗しました。")
-
-            try {
-                resolver.openOutputStream(uri)?.use { outputStream ->
-                    connection.inputStream.use { inputStream ->
-                        val buffer = ByteArray(8192)
-                        var bytesRead: Int
-                        var totalRead = 0L
-                        while (inputStream.read(buffer).also { bytesRead = it } != -1) {
-                            outputStream.write(buffer, 0, bytesRead)
-                            totalRead += bytesRead
-                            // コンテンツ長が既知の場合のみ進捗を更新
-                            if (contentLength > 0) {
-                                val progress = (totalRead * 100 / contentLength).toInt()
-                                setForeground(createForegroundInfo(progress, false, fileName, totalRead, contentLength))
-                            } else {
-                                setForeground(createForegroundInfo(0, true, fileName, totalRead, contentLength))
-                            }
+            resolver.openOutputStream(uri)?.use { outputStream ->
+                body.use { inputStream ->
+                    val buffer = ByteArray(8192)
+                    var bytesRead: Int
+                    var totalRead = 0L
+                    while (inputStream.read(buffer).also { bytesRead = it } != -1) {
+                        outputStream.write(buffer, 0, bytesRead)
+                        totalRead += bytesRead
+                        if (contentLength > 0) {
+                            val progress = (totalRead * 100 / contentLength).toInt()
+                            setForeground(createForegroundInfo(progress, false, fileName, totalRead, contentLength))
+                        } else {
+                            setForeground(createForegroundInfo(0, true, fileName, totalRead, contentLength))
                         }
                     }
-                } ?: throw IOException("出力ストリームを開けませんでした。")
-
-                val completeValues = ContentValues().apply {
-                    put(MediaStore.Downloads.IS_PENDING, 0)
                 }
-                resolver.update(uri, completeValues, null, null)
-            } catch (e: Throwable) {
-                resolver.delete(uri, null, null)
-                throw e
+            } ?: throw IOException("出力ストリームを開けませんでした。")
+
+            val completeValues = ContentValues().apply {
+                put(MediaStore.Downloads.IS_PENDING, 0)
             }
-        } finally {
-            connection.disconnect()
+            resolver.update(uri, completeValues, null, null)
+        } catch (e: Throwable) {
+            resolver.delete(uri, null, null)
+            throw e
         }
     }
 
@@ -124,7 +141,11 @@ internal class DownloadWorker(
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .build()
-        return ForegroundInfo(NOTIFICATION_ID, notification)
+        return ForegroundInfo(
+            NOTIFICATION_ID,
+            notification,
+            android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC,
+        )
     }
 
     companion object {
