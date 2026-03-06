@@ -7,7 +7,6 @@ import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
@@ -75,13 +74,7 @@ class GmdSmokeTest {
             var resolved = false
             composeRule.runOnIdle {
                 resolved = runCatching {
-                    val browserViewModelClass = Class.forName(
-                        "net.matsudamper.browser.BrowserViewModel"
-                    ).asSubclass(ViewModel::class.java)
-                    val browserViewModel = ViewModelProvider(composeRule.activity)
-                        .get(browserViewModelClass)
-                    val getter = browserViewModel.javaClass.getMethod("getBrowserSessionController")
-                    controller = getter.invoke(browserViewModel) as BrowserSessionController
+                    controller = getBrowserViewModel().browserSessionController
                 }.isSuccess
             }
             resolved
@@ -108,21 +101,15 @@ class GmdSmokeTest {
         composeRule.waitUntil(timeoutMillis = 20_000) {
             var installed = false
             composeRule.runOnIdle {
-                installed = runCatching {
-                    val browserViewModelClass = Class.forName(
-                        "net.matsudamper.browser.BrowserViewModel"
-                    ).asSubclass(ViewModel::class.java)
-                    val browserViewModel = ViewModelProvider(composeRule.activity)
-                        .get(browserViewModelClass)
-                    val extensionGetter =
-                        browserViewModel.javaClass.getMethod("getThemeColorExtension")
-                    val extension = extensionGetter.invoke(browserViewModel)
-                    val installedGetter = extension.javaClass.getMethod("isInstalled")
-                    installedGetter.invoke(extension) as Boolean
-                }.getOrDefault(false)
+                installed = runCatching { getBrowserViewModel().themeColorExtension.isInstalled() }
+                    .getOrDefault(false)
             }
             installed
         }
+    }
+
+    private fun getBrowserViewModel(): BrowserViewModel {
+        return ViewModelProvider(composeRule.activity)[BrowserViewModel::class.java]
     }
 
     private fun waitForToolbarState(): ToolbarState {

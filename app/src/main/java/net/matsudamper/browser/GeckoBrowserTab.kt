@@ -120,7 +120,7 @@ internal fun GeckoBrowserTab(
 
     // theme-color WebExtensionのコールバック登録
     DisposableEffect(session, state, themeColorExtension) {
-        themeColorExtension.registerSession(session) { color, url ->
+        themeColorExtension.registerSession(session) { color, _ ->
             if (color != null) {
                 state.toolbarColor = color
             }
