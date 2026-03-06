@@ -113,14 +113,11 @@ internal class BrowserTabScreenState(
     var pendingDateTimePrompt by mutableStateOf<GeckoSession.PromptDelegate.DateTimePrompt?>(null)
     var pendingDateTimeResult by mutableStateOf<GeckoResult<GeckoSession.PromptDelegate.PromptResponse>?>(null)
 
-    var isContentReady by mutableStateOf(false)
+    var renderReady by mutableStateOf(false)
 
     // --- Scroll / Refresh state ---
     var isRefreshing by mutableStateOf(false)
     var scrollY by mutableIntStateOf(0)
-
-    // --- GeckoView reference ---
-    var geckoViewRef by mutableStateOf<GeckoView?>(null)
 
     val showInstallExtensionItem: Boolean
         get() = resolveAmoInstallUriFromPage(currentPageUrl) != null
@@ -297,7 +294,7 @@ internal class BrowserTabScreenState(
     fun confirmButtonPrompt(positive: Boolean) {
         val prompt = pendingButtonPrompt ?: return
         val type = if (positive) GeckoSession.PromptDelegate.ButtonPrompt.Type.POSITIVE
-                   else GeckoSession.PromptDelegate.ButtonPrompt.Type.NEGATIVE
+        else GeckoSession.PromptDelegate.ButtonPrompt.Type.NEGATIVE
         pendingButtonResult?.complete(prompt.confirm(type))
         pendingButtonPrompt = null
         pendingButtonResult = null
@@ -387,10 +384,9 @@ internal class BrowserTabScreenState(
         )
     }
 
-    fun flushAndCaptureForTabSwitch() {
+    fun flushAndCaptureForTabSwitch(geckoViewRef: GeckoView) {
         session.flushSessionState()
-        val view = geckoViewRef ?: return
-        captureTabPreview(view)
+        captureTabPreview(geckoViewRef)
     }
 
     fun syncTitleToTab() {
@@ -489,11 +485,25 @@ internal class BrowserTabScreenState(
                     GeckoSession.ContentDelegate.ContextElement.TYPE_IMAGE -> {
                         imageContextMenuUrl = element.srcUri
                     }
+
+                    GeckoSession.ContentDelegate.ContextElement.TYPE_AUDIO,
+                    GeckoSession.ContentDelegate.ContextElement.TYPE_NONE,
+                    GeckoSession.ContentDelegate.ContextElement.TYPE_VIDEO -> {
+                        // TODO
+                    }
                 }
             }
 
             override fun onCloseRequest(session: GeckoSession) {
                 onClose?.invoke()
+            }
+
+            override fun onFirstContentfulPaint(session: GeckoSession) {
+                renderReady = true
+            }
+
+            override fun onFirstComposite(session: GeckoSession) {
+                renderReady = true
             }
 
             // GeckoViewがレンダリングできないコンテンツ（ダウンロード対象ファイル等）を受け取った際に呼ばれる
@@ -512,11 +522,11 @@ internal class BrowserTabScreenState(
             }
 
             override fun onPageStart(session: GeckoSession, url: String) {
-                isContentReady = false
+                renderReady = false
             }
 
             override fun onPageStop(session: GeckoSession, success: Boolean) {
-                isContentReady = true
+                renderReady = true
                 val pageUrl = currentPageUrl
                 resolveThemeColor(pageUrl) { resolvedUrl, color ->
                     if (resolvedUrl == currentPageUrl) {
