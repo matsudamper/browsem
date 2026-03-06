@@ -145,9 +145,8 @@ private fun TabsScreenContent(
             ) {
                 val columns = TabsLayoutDefaults.calculateColumns(maxWidth)
                 val gridState = rememberLazyGridState()
-                // アクティブタブが表示されるよう初期スクロール位置を設定
-                val selectedIndex = tabs.indexOfFirst { it.id == selectedTabId }
                 LaunchedEffect(Unit) {
+                    val selectedIndex = tabs.indexOfFirst { it.id == selectedTabId }
                     if (selectedIndex >= 0) {
                         val targetRow = selectedIndex / columns
                         gridState.scrollToItem(targetRow * columns)
