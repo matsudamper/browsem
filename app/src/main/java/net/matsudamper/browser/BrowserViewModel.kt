@@ -8,6 +8,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.protobuf.ByteString
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.filterNotNull
@@ -24,6 +25,8 @@ import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.TabRepository
 import net.matsudamper.browser.data.ThemeMode
 import net.matsudamper.browser.data.TranslationProvider
+import net.matsudamper.browser.data.history.HistoryEntry
+import net.matsudamper.browser.data.history.HistoryRepository
 import net.matsudamper.browser.data.resolvedHomepageUrl
 import net.matsudamper.browser.data.resolvedSearchTemplate
 import org.mozilla.geckoview.GeckoResult
@@ -51,6 +54,7 @@ internal class BrowserViewModel(
     val browserSessionController = BrowserSessionController(runtime)
     private val settingsRepository = SettingsRepository(context)
     private val tabRepository = TabRepository(context)
+    private val historyRepository = HistoryRepository(context)
 
     private val settings: StateFlow<BrowserSettings?> = settingsRepository.settings
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
@@ -181,6 +185,36 @@ internal class BrowserViewModel(
                 addNotificationAllowedOrigin(uri)
             }
             GeckoResult.fromValue(value)
+        }
+    }
+
+    // --- 履歴 ---
+
+    suspend fun recordHistory(url: String, title: String): Long {
+        return historyRepository.recordVisit(url, title)
+    }
+
+    suspend fun updateHistoryTitle(id: Long, title: String) {
+        historyRepository.updateTitle(id, title)
+    }
+
+    fun searchHistory(query: String): Flow<List<HistoryEntry>> {
+        return if (query.isBlank()) {
+            historyRepository.getRecent()
+        } else {
+            historyRepository.search(query)
+        }
+    }
+
+    fun deleteAllHistory() {
+        viewModelScope.launch {
+            historyRepository.deleteAll()
+        }
+    }
+
+    fun deleteHistoryEntry(id: Long) {
+        viewModelScope.launch {
+            historyRepository.deleteById(id)
         }
     }
 

@@ -81,11 +81,17 @@ fun GeckoBrowserTab(
     onCloseTab: (() -> Unit)? = null,
     onToolbarHorizontalDrag: (Float) -> Unit = {},
     onToolbarDragEnd: () -> Unit = {},
+    onHistoryRecord: (suspend (url: String, title: String) -> Long)? = null,
+    onHistoryTitleUpdate: (suspend (id: Long, title: String) -> Unit)? = null,
+    historySuggestions: List<net.matsudamper.browser.data.history.HistoryEntry> = emptyList(),
+    onUrlInputChanged: ((String) -> Unit)? = null,
 ) {
     val state = rememberBrowserTabScreenState(
         browserTab = browserTab,
         homepageUrl = homepageUrl,
         searchTemplate = searchTemplate,
+        onHistoryRecord = onHistoryRecord,
+        onHistoryTitleUpdate = onHistoryTitleUpdate,
     )
     val session = state.session
     val keyboardController = LocalSoftwareKeyboardController.current
@@ -101,6 +107,16 @@ fun GeckoBrowserTab(
     LaunchedEffect(state) {
         snapshotFlow { state.currentPageUrl }
             .collectLatest { state.syncUrlToTab() }
+    }
+
+    // URLバー入力変更時にサジェスト検索を発火
+    LaunchedEffect(state, onUrlInputChanged) {
+        snapshotFlow { state.urlInput to state.isUrlInputFocused }
+            .collectLatest { (input, focused) ->
+                if (focused) {
+                    onUrlInputChanged?.invoke(input)
+                }
+            }
     }
 
     // Lifecycle observer for tab preview capture
@@ -227,6 +243,18 @@ fun GeckoBrowserTab(
                 onRevert = state::onRevertTranslation,
                 onDismissError = state::onDismissTranslationError,
             )
+
+            // URLバーフォーカス中にサジェストを表示
+            if (state.isUrlInputFocused && historySuggestions.isNotEmpty()) {
+                HistorySuggestionList(
+                    suggestions = historySuggestions,
+                    onSuggestionClick = { entry ->
+                        state.onUrlSubmit(entry.url)
+                        keyboardController?.hide()
+                    },
+                    modifier = Modifier.weight(1f),
+                )
+            }
         }
 
         val latestOnRefresh by rememberUpdatedState { state.onRefreshFromSwipe() }
@@ -620,6 +648,37 @@ private fun ChoicePromptDialog(
             }
         },
     )
+}
+
+@Composable
+private fun HistorySuggestionList(
+    suggestions: List<net.matsudamper.browser.data.history.HistoryEntry>,
+    onSuggestionClick: (net.matsudamper.browser.data.history.HistoryEntry) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    LazyColumn(modifier = modifier.fillMaxWidth()) {
+        items(suggestions, key = { it.id }) { entry ->
+            ListItem(
+                headlineContent = {
+                    Text(
+                        text = entry.title.ifBlank { entry.url },
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                },
+                supportingContent = {
+                    if (entry.title.isNotBlank()) {
+                        Text(
+                            text = entry.url,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                },
+                modifier = Modifier.clickable { onSuggestionClick(entry) },
+            )
+        }
+    }
 }
 
 private fun flattenChoices(

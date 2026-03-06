@@ -11,8 +11,10 @@ import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
@@ -21,10 +23,12 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.IntOffset
 import androidx.navigation3.runtime.NavKey
 import kotlin.math.roundToInt
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import net.matsudamper.browser.BrowserSessionController
 import net.matsudamper.browser.BrowserTab
 import net.matsudamper.browser.GeckoBrowserTab
+import net.matsudamper.browser.data.history.HistoryEntry
 import net.matsudamper.browser.navigation.AppDestination
 import net.matsudamper.browser.navigation.NavController
 import org.mozilla.geckoview.GeckoResult
@@ -61,6 +65,9 @@ internal fun BrowserScreen(
     val coroutineScope = rememberCoroutineScope()
     // URLバースワイプのオフセット（ピクセル単位）タブ切替時にリセット
     val swipeOffset = remember(key.tabId) { Animatable(0f) }
+
+    // 履歴サジェスト
+    var historySuggestions by remember { mutableStateOf<List<HistoryEntry>>(emptyList()) }
 
     BoxWithConstraints(
         modifier = Modifier
@@ -121,6 +128,16 @@ internal fun BrowserScreen(
                 } ?: browserSessionController.tabs.lastOrNull()?.tabId
                 if (targetTabId != null) {
                     navController.selectTab(targetTabId)
+                }
+            },
+            onHistoryRecord = { url, title -> viewModel.recordHistory(url, title) },
+            onHistoryTitleUpdate = { id, title -> viewModel.updateHistoryTitle(id, title) },
+            historySuggestions = historySuggestions,
+            onUrlInputChanged = { query ->
+                coroutineScope.launch {
+                    viewModel.searchHistory(query).collectLatest { entries ->
+                        historySuggestions = entries.take(8)
+                    }
                 }
             },
             onToolbarHorizontalDrag = { delta ->
