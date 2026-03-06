@@ -2,9 +2,11 @@ package net.matsudamper.browser.media
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.content.Intent
 import android.graphics.Bitmap
 import android.os.Looper
 import androidx.annotation.OptIn
+import androidx.core.app.NotificationCompat
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
@@ -50,6 +52,20 @@ class MediaPlaybackService : MediaSessionService() {
         }
     }
 
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // Media3の通知が準備される前にタイムアウトしないよう、
+        // 即座にプレースホルダー通知でstartForegroundを呼ぶ
+        ensureMediaNotificationChannel()
+        val notification = NotificationCompat.Builder(this, CHANNEL_ID)
+            .setSmallIcon(androidx.media3.session.R.drawable.media3_icon_circular_play)
+            .setContentTitle("メディア再生")
+            .setSilent(true)
+            .build()
+        startForeground(NOTIFICATION_ID, notification)
+
+        return super.onStartCommand(intent, flags, startId)
+    }
+
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? {
         return mediaSession
     }
@@ -76,6 +92,7 @@ class MediaPlaybackService : MediaSessionService() {
 
     companion object {
         const val CHANNEL_ID = "media_playback"
+        private const val NOTIFICATION_ID = 1001
     }
 }
 
