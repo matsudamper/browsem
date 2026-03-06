@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -70,6 +71,13 @@ internal fun BrowserScreen(
 
     // 履歴サジェスト
     var historySuggestions by remember { mutableStateOf<List<HistoryEntry>>(emptyList()) }
+    var historySuggestionQuery by remember { mutableStateOf("") }
+
+    LaunchedEffect(historySuggestionQuery) {
+        viewModel.searchHistory(historySuggestionQuery).collectLatest { entries ->
+            historySuggestions = entries.take(8)
+        }
+    }
 
     BoxWithConstraints(
         modifier = Modifier
@@ -137,11 +145,7 @@ internal fun BrowserScreen(
             onHistoryTitleUpdate = { id, title -> viewModel.updateHistoryTitle(id, title) },
             historySuggestions = historySuggestions,
             onUrlInputChanged = { query ->
-                coroutineScope.launch {
-                    viewModel.searchHistory(query).collectLatest { entries ->
-                        historySuggestions = entries.take(8)
-                    }
-                }
+                historySuggestionQuery = query
             },
             onToolbarHorizontalDrag = { delta ->
                 // URLバーの水平ドラッグをスワイプオフセットに反映

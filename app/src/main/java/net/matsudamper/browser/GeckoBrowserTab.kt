@@ -28,6 +28,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ListItem
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
@@ -48,6 +49,7 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -98,6 +100,7 @@ internal fun GeckoBrowserTab(
     val keyboardController = LocalSoftwareKeyboardController.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val isImeVisible = WindowInsets.isImeVisible
+    var imeWasVisibleDuringUrlFocus by remember { mutableStateOf(false) }
     var geckoView: GeckoView? by remember { mutableStateOf(null) }
 
     // Sync title/url changes to BrowserTab for persistence
@@ -190,10 +193,21 @@ internal fun GeckoBrowserTab(
     BackHandler(enabled = state.showFindInPage) { state.closeFindInPage() }
     BackHandler(enabled = state.canGoBack) { state.onGoBack() }
 
-    // IME visibility tracking
-    LaunchedEffect(isImeVisible) {
-        if (!isImeVisible) {
+    // IME visibility tracking:
+    // URLバーにフォーカスした直後はIMEがまだ非表示のことがあるため、
+    // 一度でもIME表示を確認した後の「非表示化」のみをフォーカス解除トリガーにする。
+    LaunchedEffect(state.isUrlInputFocused, isImeVisible) {
+        if (!state.isUrlInputFocused) {
+            imeWasVisibleDuringUrlFocus = false
+            return@LaunchedEffect
+        }
+        if (isImeVisible) {
+            imeWasVisibleDuringUrlFocus = true
+            return@LaunchedEffect
+        }
+        if (imeWasVisibleDuringUrlFocus) {
             state.isUrlInputFocused = false
+            imeWasVisibleDuringUrlFocus = false
         }
     }
 
@@ -220,6 +234,7 @@ internal fun GeckoBrowserTab(
                 onValueChange = { state.urlInput = it },
                 onSubmit = { rawInput ->
                     state.onUrlSubmit(rawInput)
+                    state.isUrlInputFocused = false
                     keyboardController?.hide()
                 },
                 isFocused = state.isUrlInputFocused,
@@ -257,33 +272,43 @@ internal fun GeckoBrowserTab(
                 onRevert = state::onRevertTranslation,
                 onDismissError = state::onDismissTranslationError,
             )
-
-            // URLバーフォーカス中にサジェストを表示
-            if (state.isUrlInputFocused && historySuggestions.isNotEmpty()) {
-                HistorySuggestionList(
-                    suggestions = historySuggestions,
-                    onSuggestionClick = { entry ->
-                        state.onUrlSubmit(entry.url)
-                        keyboardController?.hide()
-                    },
-                    modifier = Modifier.weight(1f),
-                )
-            }
         }
 
         val latestOnRefresh by rememberUpdatedState { state.onRefreshFromSwipe() }
         val id = rememberSaveable { View.generateViewId() }
-        GeckoView(
-            modifier = Modifier.fillMaxSize(),
-            state = state,
-            id = id,
-            session = session,
-            latestOnRefresh = latestOnRefresh,
-            browserTab = browserTab,
-            updateGeckoView = {
-                geckoView = it
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .testTag(TEST_TAG_GECKO_CONTAINER),
+        ) {
+            GeckoView(
+                modifier = Modifier.fillMaxSize(),
+                state = state,
+                id = id,
+                session = session,
+                latestOnRefresh = latestOnRefresh,
+                browserTab = browserTab,
+                updateGeckoView = {
+                    geckoView = it
+                }
+            )
+
+            // URLバーフォーカス中にサジェストを表示
+            if (!state.showFindInPage && state.isUrlInputFocused && historySuggestions.isNotEmpty()) {
+                HistorySuggestionList(
+                    suggestions = historySuggestions,
+                    onSuggestionClick = { entry ->
+                        state.onUrlSubmit(entry.url)
+                        state.isUrlInputFocused = false
+                        keyboardController?.hide()
+                    },
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .testTag(TEST_TAG_HISTORY_SUGGESTION_LIST)
+                        .background(MaterialTheme.colorScheme.surface),
+                )
             }
-        )
+        }
 
         // Image context menu dialog
         state.imageContextMenuUrl?.let { imageUrl ->
@@ -713,3 +738,6 @@ private fun flattenChoices(
         if (choice.items != null) choice.items!!.toList() else listOf(choice)
     }
 }
+
+const val TEST_TAG_GECKO_CONTAINER = "gecko_container"
+const val TEST_TAG_HISTORY_SUGGESTION_LIST = "history_suggestion_list"
