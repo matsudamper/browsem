@@ -6,6 +6,7 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -298,6 +299,7 @@ fun GeckoBrowserTab(
             }
             androidx.compose.animation.AnimatedVisibility(
                 visible = !state.isContentReady && previewBitmap != null,
+                enter = fadeIn(),
                 exit = fadeOut(),
             ) {
                 previewBitmap?.let { bmp ->
