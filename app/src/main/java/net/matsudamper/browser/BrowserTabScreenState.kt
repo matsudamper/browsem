@@ -260,20 +260,19 @@ internal class BrowserTabScreenState(
     fun downloadImage(imageUrl: String) {
         imageContextMenuUrl = null
         // WorkManagerにエンキューして通知で進捗表示
-        geckoDownloadManager.enqueueImageDownload(
-            imageUrl = imageUrl,
+        geckoDownloadManager.enqueueDownload(
+            url = imageUrl,
             referrerUrl = currentPageUrl,
         )
     }
 
     // GeckoViewがレンダリングできないレスポンス（ダウンロードリンク等）を受け取った際に呼ばれる
-    // 通知による進捗表示はsaveFileFromResponse内で処理される
+    // WorkManagerにエンキューするため、アプリが終了してもダウンロードが継続される
     fun downloadFileFromResponse(response: WebResponse) {
-        coroutineScope.launch {
-            runCatching {
-                geckoDownloadManager.saveFileFromResponse(response)
-            }.onFailure { it.printStackTrace() }
-        }
+        geckoDownloadManager.enqueueDownloadFromResponse(
+            response = response,
+            referrerUrl = currentPageUrl,
+        )
     }
 
     fun copyLinkUrl(url: String) {
