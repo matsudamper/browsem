@@ -30,6 +30,7 @@ import androidx.navigation3.scene.Scene
 import androidx.navigation3.ui.NavDisplay
 import androidx.navigation3.ui.defaultPopTransitionSpec
 import androidx.navigation3.ui.defaultTransitionSpec
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collectLatest
 import net.matsudamper.browser.navigation.AppDestination
@@ -66,8 +67,12 @@ internal fun BrowserApp(
 
     val backStack = rememberNavBackStack(AppDestination.Setup)
     val navController = remember(backStack) { NavController(backStack = backStack) }
+    // タブ復元完了を待機するためのシグナル
+    val setupComplete = remember { CompletableDeferred<Unit>() }
 
     LaunchedEffect(newTabUrlFlow) {
+        // タブ復元完了を待ってから外部URLを処理する（レースコンディション防止）
+        setupComplete.await()
         newTabUrlFlow.collect { url ->
             val newTab = browserSessionController.createAndAppendTab(initialUrl = url)
             navController.selectTab(newTab.tabId)
@@ -75,9 +80,14 @@ internal fun BrowserApp(
     }
 
     LaunchedEffect(browserSessionController) {
-        val currentTab = navController.getSelectedTab()
-        snapshotFlow { browserSessionController.stateChanged }
-            .collectLatest { viewModel.saveTabStates(currentTab) }
+        snapshotFlow {
+            browserSessionController.stateChanged
+            viewModel.tabPersistenceSignal
+        }.collectLatest {
+            // 保存時に最新の選択タブIDを取得する
+            val currentTab = navController.getSelectedTab()
+            viewModel.saveTabStates(currentTab)
+        }
     }
 
     val handleNotificationPermission: (uri: String) -> GeckoResult<Int> = { uri ->
@@ -133,6 +143,7 @@ internal fun BrowserApp(
                         LaunchedEffect(Unit) {
                             val tabId = viewModel.restoreTabs()
                             navController.selectTab(tabId)
+                            setupComplete.complete(Unit) // 復元完了を通知
                         }
                     }
 
