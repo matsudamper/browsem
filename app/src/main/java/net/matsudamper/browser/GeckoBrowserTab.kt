@@ -364,6 +364,31 @@ internal fun GeckoBrowserTab(
             )
         }
 
+        // ファイルダウンロード確認ダイアログ
+        state.pendingDownloadResponse?.let { response ->
+            AlertDialog(
+                onDismissRequest = state::dismissPendingDownload,
+                title = { Text("ダウンロード") },
+                text = {
+                    Text(
+                        text = response.uri,
+                        maxLines = 4,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                },
+                confirmButton = {
+                    TextButton(onClick = state::confirmPendingDownload) {
+                        Text("ダウンロード")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = state::dismissPendingDownload) {
+                        Text("キャンセル")
+                    }
+                },
+            )
+        }
+
         // Alert prompt dialog
         state.pendingAlertPrompt?.let { prompt ->
             AlertDialog(
