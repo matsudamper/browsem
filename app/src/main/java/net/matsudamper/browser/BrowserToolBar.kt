@@ -51,6 +51,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.ComposeView
@@ -61,6 +62,7 @@ import androidx.compose.ui.semantics.contentDataType
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.contentType
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -100,10 +102,16 @@ internal fun BrowserToolBar(
 
     val latestOnHorizontalDrag by rememberUpdatedState(onHorizontalDrag)
     val latestOnHorizontalDragEnd by rememberUpdatedState(onHorizontalDragEnd)
+    val resolvedToolbarColor = toolbarColor ?: MaterialTheme.colorScheme.primaryContainer
+    val colorSource = if (toolbarColor == null) "default" else "theme"
 
     Surface(
-        color = toolbarColor ?: MaterialTheme.colorScheme.primaryContainer,
+        color = resolvedToolbarColor,
         modifier = modifier
+            .testTag(TEST_TAG_TOOLBAR)
+            .semantics {
+                stateDescription = "toolbarColor|$colorSource|${resolvedToolbarColor.toArgbHex()}"
+            }
             .pointerInput(isFocused) {
                 // 非フォーカス時のみURLバーの水平スワイプでタブ切り替え
                 // フォーカス中はテキスト入力を邪魔しないようにする
@@ -284,6 +292,13 @@ fun UrlTextInput(
             }
         },
     )
+}
+
+internal const val TEST_TAG_TOOLBAR = "browser_toolbar"
+
+private fun Color.toArgbHex(): String {
+    val raw = toArgb().toUInt().toString(16).padStart(8, '0')
+    return "#${raw.uppercase()}"
 }
 
 @Composable

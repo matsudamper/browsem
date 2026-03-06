@@ -15,6 +15,10 @@ internal class TabsScreenViewModel(
                 previewBitmapArray = it.previewBitmap,
             )
         }
+
+    fun reorderTabs(fromIndex: Int, toIndex: Int) {
+        browserSessionController.moveTab(fromIndex, toIndex)
+    }
 }
 
 internal data class TabsScreenTabData(

@@ -52,6 +52,7 @@ internal class BrowserViewModel(
     context: Context,
 ) : ViewModel() {
     val browserSessionController = BrowserSessionController(runtime)
+    val themeColorExtension = ThemeColorWebExtension().also { it.install(runtime) }
     private val settingsRepository = SettingsRepository(context)
     private val tabRepository = TabRepository(context)
     private val historyRepository = HistoryRepository(context)

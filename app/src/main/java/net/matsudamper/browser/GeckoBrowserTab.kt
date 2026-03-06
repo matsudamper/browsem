@@ -65,11 +65,12 @@ import org.mozilla.geckoview.PanZoomController
 
 @Composable
 @OptIn(ExperimentalLayoutApi::class)
-fun GeckoBrowserTab(
+internal fun GeckoBrowserTab(
     browserTab: BrowserTab,
     homepageUrl: String,
     searchTemplate: String,
     translationProvider: TranslationProvider,
+    themeColorExtension: ThemeColorWebExtension,
     browserSessionController: BrowserSessionController,
     modifier: Modifier = Modifier,
     tabCount: Int,
@@ -131,6 +132,19 @@ fun GeckoBrowserTab(
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    // theme-color WebExtensionのコールバック登録
+    DisposableEffect(session, state, themeColorExtension) {
+        themeColorExtension.registerSession(session) { color, reportedUrl ->
+            if (!isThemeColorForCurrentPage(state.currentPageUrl, reportedUrl)) {
+                return@registerSession
+            }
+            state.toolbarColor = color
+        }
+        onDispose {
+            themeColorExtension.unregisterSession(session)
+        }
     }
 
     DisposableEffect(
@@ -483,6 +497,17 @@ fun GeckoBrowserTab(
             )
         }
     }
+}
+
+private fun isThemeColorForCurrentPage(currentPageUrl: String, reportedUrl: String): Boolean {
+    if (reportedUrl.isBlank()) return false
+    return normalizedThemeColorUrlKey(currentPageUrl) == normalizedThemeColorUrlKey(reportedUrl)
+}
+
+private fun normalizedThemeColorUrlKey(url: String): String {
+    return url
+        .substringBefore("#")
+        .removeSuffix("/")
 }
 
 @Composable
