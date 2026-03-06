@@ -70,6 +70,8 @@ android {
                     device = "Pixel 6"
                     apiLevel = 30
                     systemImageSource = "aosp-atd"
+                    require64Bit = true
+                    testedAbi = "x86_64"
                 }
             }
             groups {

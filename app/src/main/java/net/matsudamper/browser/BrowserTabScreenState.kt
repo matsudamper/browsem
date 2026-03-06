@@ -3,8 +3,6 @@ package net.matsudamper.browser
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
-import android.os.Handler
-import android.os.Looper
 import android.widget.Toast
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
@@ -16,7 +14,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.core.graphics.toColorInt
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -29,8 +26,7 @@ import org.mozilla.geckoview.GeckoView
 import org.mozilla.geckoview.TranslationsController
 import org.mozilla.geckoview.WebResponse
 import java.io.ByteArrayOutputStream
-import java.net.URL
-import java.util.concurrent.Executors
+
 
 @Composable
 internal fun rememberBrowserTabScreenState(
@@ -130,20 +126,24 @@ internal class BrowserTabScreenState(
         val resolved = buildUrlFromInput(rawInput, homepageUrl, searchTemplate)
         urlInput = resolved
         currentPageUrl = resolved
+        toolbarColor = null
         session.loadUri(resolved)
     }
 
     fun onHome() {
         urlInput = homepageUrl
         currentPageUrl = homepageUrl
+        toolbarColor = null
         session.loadUri(homepageUrl)
     }
 
     fun onRefresh() {
+        toolbarColor = null
         session.reload()
     }
 
     fun onRefreshFromSwipe() {
+        toolbarColor = null
         session.reload()
         isRefreshing = false
     }
@@ -164,6 +164,7 @@ internal class BrowserTabScreenState(
         } else {
             GeckoSessionSettings.USER_AGENT_MODE_MOBILE
         }
+        toolbarColor = null
         session.reload()
     }
 
@@ -448,7 +449,9 @@ internal class BrowserTabScreenState(
             if (!isUrlInputFocused) {
                 urlInput = newUrl
             }
-            toolbarColor = null
+            if (hasUserGesture) {
+                toolbarColor = null
+            }
             val revertUrl = originalPageUrlForRevert
             if (translationState != TranslationState.Idle &&
                 !newUrl.startsWith("data:") &&
@@ -525,12 +528,6 @@ internal class BrowserTabScreenState(
 
             override fun onPageStop(session: GeckoSession, success: Boolean) {
                 renderReady = true
-                val pageUrl = currentPageUrl
-                resolveThemeColor(pageUrl) { resolvedUrl, color ->
-                    if (resolvedUrl == currentPageUrl) {
-                        toolbarColor = color
-                    }
-                }
             }
         }
 
@@ -618,57 +615,4 @@ internal class BrowserTabScreenState(
                 scrollY = scrollYValue
             }
         }
-
-    companion object {
-        private val themeColorHandler = Handler(Looper.getMainLooper())
-        private val themeColorExecutor = Executors.newSingleThreadExecutor()
-
-        private fun resolveThemeColor(
-            pageUrl: String,
-            onColorResolved: (String, Color?) -> Unit,
-        ) {
-            if (pageUrl.isBlank()) {
-                onColorResolved(pageUrl, null)
-                return
-            }
-            themeColorExecutor.execute {
-                val colorText = runCatching {
-                    URL(pageUrl).openConnection().getInputStream().bufferedReader().use { reader ->
-                        reader.readText()
-                    }
-                }.getOrNull()?.let(::findThemeColorMetaContent)
-
-                val parsedColor = colorText?.let(::parseManifestColor)
-                themeColorHandler.post {
-                    onColorResolved(pageUrl, parsedColor)
-                }
-            }
-        }
-
-        private fun findThemeColorMetaContent(html: String): String? {
-            val metaTagRegex =
-                Regex("""<meta\b[^>]*>""", setOf(RegexOption.IGNORE_CASE))
-            val nameRegex =
-                Regex("""\bname\s*=\s*(["'])theme-color\1""", setOf(RegexOption.IGNORE_CASE))
-            val contentRegex =
-                Regex("""\bcontent\s*=\s*(["'])(.*?)\1""", setOf(RegexOption.IGNORE_CASE))
-
-            return metaTagRegex.findAll(html).firstNotNullOfOrNull { matchResult ->
-                val tag = matchResult.value
-                if (!nameRegex.containsMatchIn(tag)) {
-                    return@firstNotNullOfOrNull null
-                }
-                contentRegex.find(tag)?.groupValues?.getOrNull(2)?.trim()
-                    ?.takeIf { it.isNotEmpty() }
-            }
-        }
-
-        private fun parseManifestColor(colorValue: String): Color? {
-            return try {
-                Color(colorValue.toColorInt())
-            } catch (_: IllegalArgumentException) {
-                null
-            }
-        }
-    }
 }
