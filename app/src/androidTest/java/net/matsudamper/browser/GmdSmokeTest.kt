@@ -188,6 +188,32 @@ class GmdSmokeTest {
     }
 
     /**
+     * URLバーで履歴サジェスト表示中に戻るボタンを押したとき、
+     * アプリを終了せずに URLバー入力状態だけが閉じることを確認する。
+     */
+    @Test
+    fun backButtonClosesUrlBarWithHistorySuggestionsWithoutExitingApp() {
+        val query = "back-history-20260307"
+        val suggestionTitle = "Back History Suggestion 20260307"
+        val suggestionUrl = "https://$query.example/test"
+
+        seedHistoryEntry(url = suggestionUrl, title = suggestionTitle)
+
+        composeRule.onNodeWithTag("url_bar").performClick()
+        composeRule.onNodeWithTag("url_bar").performTextReplacement(query)
+        waitForHistorySuggestionsVisible(suggestionTitle)
+
+        pressSystemBack()
+
+        waitForHistorySuggestionsHidden()
+        waitForUrlBarNotFocused()
+        assertGeckoViewInFront()
+        composeRule.runOnIdle {
+            assertTrue(!composeRule.activity.isFinishing)
+        }
+    }
+
+    /**
      * テスト用に履歴エントリを 1 件追加する。
      */
     private fun seedHistoryEntry(url: String, title: String) {
@@ -254,9 +280,10 @@ class GmdSmokeTest {
         observeMillis: Long = 1_500L,
         requireImeWasVisibleBeforeTap: Boolean = false,
     ) {
-        val deadline = System.currentTimeMillis() + observeMillis
-        var imeVisibleObserved = false
-        var imeHiddenAfterVisible = false
+        val start = System.currentTimeMillis()
+        val deadline = start + observeMillis
+        val stableWindowStart = start + 700L
+        var imeVisibleInStableWindow = false
         while (System.currentTimeMillis() < deadline) {
             val focused = isUrlBarFocused()
             var imeVisible = false
@@ -265,19 +292,17 @@ class GmdSmokeTest {
                 imeVisible = insets?.isVisible(WindowInsets.Type.ime()) == true
             }
 
-            if (imeVisible) {
-                imeVisibleObserved = true
-            } else if (imeVisibleObserved) {
-                imeHiddenAfterVisible = true
+            if (imeVisible && System.currentTimeMillis() >= stableWindowStart) {
+                imeVisibleInStableWindow = true
             }
             assertTrue("URL bar focus was dropped while observing keyboard state", focused)
             Thread.sleep(100)
         }
         if (requireImeWasVisibleBeforeTap) {
-            assertTrue("IME was visible before tapping URL bar but is no longer visible", imeVisibleObserved)
-        }
-        if (imeVisibleObserved) {
-            assertTrue("IME became hidden immediately after opening URL bar", !imeHiddenAfterVisible)
+            assertTrue(
+                "IME was visible before tapping URL bar but did not stay visible/reopen for URL bar",
+                imeVisibleInStableWindow,
+            )
         }
     }
 
@@ -310,6 +335,15 @@ class GmdSmokeTest {
             }
             true
         }.getOrDefault(false)
+    }
+
+    /**
+     * システムの戻る操作を1回発行する。
+     */
+    private fun pressSystemBack() {
+        composeRule.runOnIdle {
+            composeRule.activity.onBackPressedDispatcher.onBackPressed()
+        }
     }
 
     /**

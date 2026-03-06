@@ -3,6 +3,7 @@ package net.matsudamper.browser
 import android.annotation.SuppressLint
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.os.SystemClock
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
@@ -101,6 +102,7 @@ internal fun GeckoBrowserTab(
     val lifecycleOwner = LocalLifecycleOwner.current
     val isImeVisible = WindowInsets.isImeVisible
     var imeWasVisibleDuringUrlFocus by remember { mutableStateOf(false) }
+    var urlBarFocusStartedAtMs by remember { mutableStateOf(0L) }
     var geckoView: GeckoView? by remember { mutableStateOf(null) }
 
     // Sync title/url changes to BrowserTab for persistence
@@ -191,7 +193,15 @@ internal fun GeckoBrowserTab(
 
     // Back handlers
     BackHandler(enabled = state.showFindInPage) { state.closeFindInPage() }
-    BackHandler(enabled = state.canGoBack) { state.onGoBack() }
+    BackHandler(enabled = state.canGoBack && !state.isUrlInputFocused) { state.onGoBack() }
+    BackHandler(enabled = state.isUrlInputFocused) {
+        state.isUrlInputFocused = false
+        state.urlInput = state.currentPageUrl
+        imeWasVisibleDuringUrlFocus = false
+        keyboardController?.hide()
+        runCatching { session.setFocused(true) }
+        geckoView?.requestFocus()
+    }
 
     // IME visibility tracking:
     // URLバーにフォーカスした直後はIMEがまだ非表示のことがあるため、
@@ -205,7 +215,9 @@ internal fun GeckoBrowserTab(
             imeWasVisibleDuringUrlFocus = true
             return@LaunchedEffect
         }
-        if (imeWasVisibleDuringUrlFocus) {
+        val inGracePeriod = SystemClock.elapsedRealtime() - urlBarFocusStartedAtMs <
+            URL_BAR_IME_HIDE_GRACE_MS
+        if (imeWasVisibleDuringUrlFocus && !inGracePeriod) {
             state.isUrlInputFocused = false
             imeWasVisibleDuringUrlFocus = false
         }
@@ -240,7 +252,10 @@ internal fun GeckoBrowserTab(
                 isFocused = state.isUrlInputFocused,
                 onFocusChanged = { hasFocus ->
                     if (hasFocus) {
+                        urlBarFocusStartedAtMs = SystemClock.elapsedRealtime()
+                        runCatching { session.setFocused(false) }
                         geckoView?.clearFocus()
+                        keyboardController?.show()
                     } else {
                         state.urlInput = state.currentPageUrl
                     }
@@ -768,3 +783,4 @@ private fun flattenChoices(
 
 const val TEST_TAG_GECKO_CONTAINER = "gecko_container"
 const val TEST_TAG_HISTORY_SUGGESTION_LIST = "history_suggestion_list"
+private const val URL_BAR_IME_HIDE_GRACE_MS = 700L
