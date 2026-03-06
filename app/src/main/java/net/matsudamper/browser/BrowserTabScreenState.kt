@@ -113,6 +113,8 @@ internal class BrowserTabScreenState(
     var pendingDateTimePrompt by mutableStateOf<GeckoSession.PromptDelegate.DateTimePrompt?>(null)
     var pendingDateTimeResult by mutableStateOf<GeckoResult<GeckoSession.PromptDelegate.PromptResponse>?>(null)
 
+    var isContentReady by mutableStateOf(false)
+
     // --- Scroll / Refresh state ---
     var isRefreshing by mutableStateOf(false)
     var scrollY by mutableIntStateOf(0)
@@ -503,7 +505,12 @@ internal class BrowserTabScreenState(
                 browserTab.sessionState = sessionState.toString().orEmpty()
             }
 
+            override fun onPageStart(session: GeckoSession, url: String) {
+                isContentReady = false
+            }
+
             override fun onPageStop(session: GeckoSession, success: Boolean) {
+                isContentReady = true
                 val pageUrl = currentPageUrl
                 resolveThemeColor(pageUrl) { resolvedUrl, color ->
                     if (resolvedUrl == currentPageUrl) {
