@@ -90,11 +90,13 @@ internal class GeckoDownloadManager(
         ) == PackageManager.PERMISSION_GRANTED
         val notificationManager = NotificationManagerCompat.from(context)
 
-        fun postNotification(progress: Int, indeterminate: Boolean) {
+        fun postNotification(progress: Int, indeterminate: Boolean, totalRead: Long) {
             if (!canPostNotification) return
+            val sizeText = DownloadWorker.buildSizeText(totalRead, contentLength)
             val notification = NotificationCompat.Builder(context, DownloadWorker.CHANNEL_ID)
                 .setSmallIcon(android.R.drawable.stat_sys_download)
                 .setContentTitle(fileName)
+                .setContentText(sizeText)
                 .setProgress(100, progress, indeterminate)
                 .setOngoing(true)
                 .setOnlyAlertOnce(true)
@@ -103,7 +105,7 @@ internal class GeckoDownloadManager(
         }
 
         // 進捗不明の場合はインジケータ表示
-        postNotification(0, contentLength <= 0)
+        postNotification(0, contentLength <= 0, 0L)
 
         val resolver = context.contentResolver
         val values = ContentValues().apply {
@@ -124,7 +126,9 @@ internal class GeckoDownloadManager(
                     totalRead += bytesRead
                     if (contentLength > 0) {
                         val progress = (totalRead * 100 / contentLength).toInt()
-                        postNotification(progress, false)
+                        postNotification(progress, false, totalRead)
+                    } else {
+                        postNotification(0, true, totalRead)
                     }
                 }
             } ?: throw IOException("Failed to open output stream.")
