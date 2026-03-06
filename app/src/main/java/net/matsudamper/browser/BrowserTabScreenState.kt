@@ -27,6 +27,7 @@ import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.GeckoSessionSettings
 import org.mozilla.geckoview.GeckoView
 import org.mozilla.geckoview.TranslationsController
+import org.mozilla.geckoview.WebResponse
 import java.io.ByteArrayOutputStream
 import java.net.URL
 import java.util.concurrent.Executors
@@ -55,7 +56,6 @@ internal fun rememberBrowserTabScreenState(
             context = context,
         )
     }
-    // Keep homepage/search template in sync when settings change
     state.homepageUrl = homepageUrl
     state.searchTemplate = searchTemplate
     return state
@@ -267,19 +267,20 @@ internal class BrowserTabScreenState(
 
     fun downloadImage(imageUrl: String) {
         imageContextMenuUrl = null
+        // WorkManagerにエンキューして通知で進捗表示
+        geckoDownloadManager.enqueueImageDownload(
+            imageUrl = imageUrl,
+            referrerUrl = currentPageUrl,
+        )
+    }
+
+    // GeckoViewがレンダリングできないレスポンス（ダウンロードリンク等）を受け取った際に呼ばれる
+    // 通知による進捗表示はsaveFileFromResponse内で処理される
+    fun downloadFileFromResponse(response: WebResponse) {
         coroutineScope.launch {
-            val result = runCatching {
-                geckoDownloadManager.downloadImageWithSession(
-                    imageUrl = imageUrl,
-                    referrerUrl = currentPageUrl,
-                )
+            runCatching {
+                geckoDownloadManager.saveFileFromResponse(response)
             }.onFailure { it.printStackTrace() }
-            val message = if (result.isSuccess) {
-                "画像をダウンロードしました"
-            } else {
-                "画像のダウンロードに失敗しました"
-            }
-            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -498,6 +499,11 @@ internal class BrowserTabScreenState(
 
             override fun onCloseRequest(session: GeckoSession) {
                 onClose?.invoke()
+            }
+
+            // GeckoViewがレンダリングできないコンテンツ（ダウンロード対象ファイル等）を受け取った際に呼ばれる
+            override fun onExternalResponse(session: GeckoSession, response: WebResponse) {
+                downloadFileFromResponse(response)
             }
         }
 
