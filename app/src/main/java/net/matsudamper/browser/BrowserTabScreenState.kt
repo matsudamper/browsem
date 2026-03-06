@@ -594,6 +594,11 @@ internal class BrowserTabScreenState(
             }
         }
 
+    // メディアセッションデリゲートを作成
+    fun createMediaSessionDelegate(): org.mozilla.geckoview.MediaSession.Delegate {
+        return net.matsudamper.browser.media.GeckoMediaSessionDelegate(context)
+    }
+
     fun createScrollDelegate(): GeckoSession.ScrollDelegate =
         object : GeckoSession.ScrollDelegate {
             override fun onScrollChanged(

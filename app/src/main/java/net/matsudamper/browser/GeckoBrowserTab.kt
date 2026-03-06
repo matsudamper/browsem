@@ -122,14 +122,20 @@ fun GeckoBrowserTab(
         val translationsDelegate = state.createTranslationsDelegate()
         val promptDelegate = state.createPromptDelegate()
 
+        val mediaSessionDelegate = state.createMediaSessionDelegate()
+
         session.permissionDelegate = permissionDelegate
         session.navigationDelegate = navigationDelegate
         session.contentDelegate = contentDelegate
         session.progressDelegate = progressDelegate
         session.translationsSessionDelegate = translationsDelegate
         session.promptDelegate = promptDelegate
+        session.mediaSessionDelegate = mediaSessionDelegate
 
         onDispose {
+            if (session.mediaSessionDelegate === mediaSessionDelegate) {
+                session.mediaSessionDelegate = null
+            }
         }
     }
 
