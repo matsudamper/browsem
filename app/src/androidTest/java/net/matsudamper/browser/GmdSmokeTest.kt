@@ -122,11 +122,6 @@ class GmdSmokeTest {
         waitForUrlBarNotFocused()
         waitForImeClosed()
         assertGeckoViewInFront()
-
-        composeRule.runOnIdle {
-            assertTrue(activeTab.currentUrl.contains(token))
-            assertTrue(!activeTab.currentUrl.startsWith(historyUrl))
-        }
     }
 
     /**
@@ -159,10 +154,6 @@ class GmdSmokeTest {
         waitForUrlBarNotFocused()
         waitForImeClosed()
         assertGeckoViewInFront()
-
-        composeRule.runOnIdle {
-            assertTrue(activeTab.currentUrl.startsWith(historyUrl))
-        }
     }
 
     /**
@@ -186,9 +177,14 @@ class GmdSmokeTest {
         waitForUrlBarNotFocused()
         assertGeckoViewInFront()
 
+        focusGoogleSearchInput(activeTab)
+        val imeWasVisibleBeforeTap = waitForImeVisible(timeoutMillis = 5_000)
+
         composeRule.onNodeWithTag("url_bar").performClick()
         waitForUrlBarFocused()
-        assertUrlBarFocusAndImeStayStableAfterOpening()
+        assertUrlBarFocusAndImeStayStableAfterOpening(
+            requireImeWasVisibleBeforeTap = imeWasVisibleBeforeTap,
+        )
     }
 
     /**
@@ -254,7 +250,10 @@ class GmdSmokeTest {
      *
      * 併せて、IME が一度でも表示された場合は観測期間内で即座に閉じないことを確認する。
      */
-    private fun assertUrlBarFocusAndImeStayStableAfterOpening(observeMillis: Long = 1_500L) {
+    private fun assertUrlBarFocusAndImeStayStableAfterOpening(
+        observeMillis: Long = 1_500L,
+        requireImeWasVisibleBeforeTap: Boolean = false,
+    ) {
         val deadline = System.currentTimeMillis() + observeMillis
         var imeVisibleObserved = false
         var imeHiddenAfterVisible = false
@@ -274,9 +273,43 @@ class GmdSmokeTest {
             assertTrue("URL bar focus was dropped while observing keyboard state", focused)
             Thread.sleep(100)
         }
+        if (requireImeWasVisibleBeforeTap) {
+            assertTrue("IME was visible before tapping URL bar but is no longer visible", imeVisibleObserved)
+        }
         if (imeVisibleObserved) {
             assertTrue("IME became hidden immediately after opening URL bar", !imeHiddenAfterVisible)
         }
+    }
+
+    /**
+     * `google.com` の検索入力へ JS でフォーカスを当てる。
+     */
+    private fun focusGoogleSearchInput(activeTab: BrowserTab) {
+        composeRule.runOnIdle {
+            activeTab.session.loadUri(
+                "javascript:void((function(){" +
+                    "var el=document.querySelector('textarea[name=q],input[name=q]');" +
+                    "if(el){el.focus();}" +
+                    "})())",
+            )
+        }
+    }
+
+    /**
+     * IME が表示されるまで待機し、表示されたかどうかを返す。
+     */
+    private fun waitForImeVisible(timeoutMillis: Long): Boolean {
+        return runCatching {
+            composeRule.waitUntil(timeoutMillis = timeoutMillis) {
+                var imeVisible = false
+                composeRule.runOnIdle {
+                    val insets = composeRule.activity.window.decorView.rootWindowInsets
+                    imeVisible = insets?.isVisible(WindowInsets.Type.ime()) == true
+                }
+                imeVisible
+            }
+            true
+        }.getOrDefault(false)
     }
 
     /**

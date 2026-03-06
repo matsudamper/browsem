@@ -239,7 +239,9 @@ internal fun GeckoBrowserTab(
                 },
                 isFocused = state.isUrlInputFocused,
                 onFocusChanged = { hasFocus ->
-                    if (!hasFocus) {
+                    if (hasFocus) {
+                        geckoView?.clearFocus()
+                    } else {
                         state.urlInput = state.currentPageUrl
                     }
                     state.isUrlInputFocused = hasFocus
