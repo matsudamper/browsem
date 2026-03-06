@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -143,8 +144,17 @@ private fun TabsScreenContent(
                 modifier = Modifier.fillMaxSize(),
             ) {
                 val columns = TabsLayoutDefaults.calculateColumns(maxWidth)
+                val gridState = rememberLazyGridState()
+                LaunchedEffect(Unit) {
+                    val selectedIndex = tabs.indexOfFirst { it.id == selectedTabId }
+                    if (selectedIndex >= 0) {
+                        val targetRow = selectedIndex / columns
+                        gridState.scrollToItem(targetRow * columns)
+                    }
+                }
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(columns),
+                    state = gridState,
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(TabsLayoutDefaults.gridPadding),
                     verticalArrangement = Arrangement.spacedBy(TabsLayoutDefaults.gridSpacing),

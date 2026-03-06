@@ -16,7 +16,7 @@ import java.io.ByteArrayOutputStream
 import java.util.UUID
 
 @Stable
-internal class BrowserSessionController(runtime: GeckoRuntime) {
+class BrowserSessionController(runtime: GeckoRuntime) {
     private val geckoRuntime = runtime
     private val tabList = mutableStateListOf<BrowserTab>()
 
@@ -43,7 +43,7 @@ internal class BrowserSessionController(runtime: GeckoRuntime) {
         return newTab
     }
 
-    fun restoreTabs(
+    internal fun restoreTabs(
         homepageUrl: String,
         persistedTabs: List<PersistedBrowserTab>,
         persistedSelectedTabIndex: Int,
@@ -92,7 +92,7 @@ internal class BrowserSessionController(runtime: GeckoRuntime) {
         return tab
     }
 
-    fun ensureSessionOpen(tab: BrowserTab) {
+    fun restoreSession(tab: BrowserTab) {
         if (tab.session.isOpen) return
         tab.session.open(geckoRuntime)
         val state = tab.pendingSessionState
@@ -132,7 +132,7 @@ internal class BrowserSessionController(runtime: GeckoRuntime) {
         }
     }
 
-    fun exportPersistedTabs(): List<PersistedBrowserTab> {
+    internal fun exportPersistedTabs(): List<PersistedBrowserTab> {
         return tabList.map { tab ->
             PersistedBrowserTab(
                 url = tab.currentUrl,
