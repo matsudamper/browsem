@@ -1,10 +1,13 @@
 package net.matsudamper.browser
 
 import android.annotation.SuppressLint
+import android.graphics.BitmapFactory
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -39,9 +42,13 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.graphics.toColorInt
@@ -209,75 +216,101 @@ fun GeckoBrowserTab(
 
         val latestOnRefresh by rememberUpdatedState { state.onRefreshFromSwipe() }
         val id = rememberSaveable { View.generateViewId() }
-        AndroidView(
-            modifier = Modifier
-                .fillMaxSize()
-                .clipToBounds(),
-            factory = { context ->
-                SwipeRefreshLayout(context).also { swipeRefreshLayout ->
-                    var swipeRefreshScrollEnabled = false
-                    val gecko = GeckoView(context).also { geckoView ->
-                        geckoView.id = id
-                        geckoView.isNestedScrollingEnabled = true
-                        geckoView.setAutofillEnabled(true)
-                        geckoView.importantForAutofill =
-                            View.IMPORTANT_FOR_AUTOFILL_YES_EXCLUDE_DESCENDANTS
-                        geckoView.setSession(session)
-                        state.geckoViewRef = geckoView
-                        @SuppressLint("ClickableViewAccessibility")
-                        geckoView.setOnTouchListener { view, event ->
-                            if (event.actionMasked == MotionEvent.ACTION_DOWN) {
-                                swipeRefreshScrollEnabled = false
-                                (view as GeckoView).onTouchEventForDetailResult(event).then { detail ->
-                                    if (detail != null) {
-                                        val handledResult = detail.handledResult()
-                                        // コンテンツ側でのhandleを試みたが、動かないのでブラウザ側に渡している
-                                        val isUnhandled = handledResult == PanZoomController.INPUT_RESULT_UNHANDLED
-                                        // ブラウザ側のジェスチャーがhandleしている
-                                        val isHandled = handledResult == PanZoomController.INPUT_RESULT_HANDLED
-                                        // コンテンツ側でhandleしている
-                                        // val isContentHandled = handledResult == PanZoomController.INPUT_RESULT_HANDLED_CONTENT
-                                        swipeRefreshScrollEnabled = isHandled || isUnhandled
+        Box(modifier = Modifier.fillMaxSize()) {
+            AndroidView(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clipToBounds(),
+                factory = { context ->
+                    SwipeRefreshLayout(context).also { swipeRefreshLayout ->
+                        var swipeRefreshScrollEnabled = false
+                        val gecko = GeckoView(context).also { geckoView ->
+                            geckoView.id = id
+                            geckoView.isNestedScrollingEnabled = true
+                            geckoView.setAutofillEnabled(true)
+                            geckoView.importantForAutofill =
+                                View.IMPORTANT_FOR_AUTOFILL_YES_EXCLUDE_DESCENDANTS
+                            geckoView.setSession(session)
+                            state.geckoViewRef = geckoView
+                            @SuppressLint("ClickableViewAccessibility")
+                            geckoView.setOnTouchListener { view, event ->
+                                if (event.actionMasked == MotionEvent.ACTION_DOWN) {
+                                    swipeRefreshScrollEnabled = false
+                                    (view as GeckoView).onTouchEventForDetailResult(event).then { detail ->
+                                        if (detail != null) {
+                                            val handledResult = detail.handledResult()
+                                            // コンテンツ側でのhandleを試みたが、動かないのでブラウザ側に渡している
+                                            val isUnhandled = handledResult == PanZoomController.INPUT_RESULT_UNHANDLED
+                                            // ブラウザ側のジェスチャーがhandleしている
+                                            val isHandled = handledResult == PanZoomController.INPUT_RESULT_HANDLED
+                                            // コンテンツ側でhandleしている
+                                            // val isContentHandled = handledResult == PanZoomController.INPUT_RESULT_HANDLED_CONTENT
+                                            swipeRefreshScrollEnabled = isHandled || isUnhandled
+                                        }
+                                        GeckoResult.fromValue<Void>(null)
                                     }
-                                    GeckoResult.fromValue<Void>(null)
+                                    true
+                                } else {
+                                    false
                                 }
-                                true
-                            } else {
-                                false
                             }
                         }
-                    }
-                    swipeRefreshLayout.addView(
-                        gecko,
-                        ViewGroup.LayoutParams(
-                            ViewGroup.LayoutParams.MATCH_PARENT,
-                            ViewGroup.LayoutParams.MATCH_PARENT,
+                        swipeRefreshLayout.addView(
+                            gecko,
+                            ViewGroup.LayoutParams(
+                                ViewGroup.LayoutParams.MATCH_PARENT,
+                                ViewGroup.LayoutParams.MATCH_PARENT,
+                            )
                         )
+                        swipeRefreshLayout.setOnChildScrollUpCallback { _, _ ->
+                            !swipeRefreshScrollEnabled || state.scrollY > 0
+                        }
+                        swipeRefreshLayout.setOnRefreshListener {
+                            state.isRefreshing = true
+                            latestOnRefresh()
+                        }
+                    }
+                },
+                update = { swipeRefreshLayout ->
+                    swipeRefreshLayout.isRefreshing = state.isRefreshing
+                    val geckoView = swipeRefreshLayout.findViewById<GeckoView>(id)
+                    geckoView.setAutofillEnabled(true)
+                    geckoView.importantForAutofill =
+                        View.IMPORTANT_FOR_AUTOFILL_YES_EXCLUDE_DESCENDANTS
+                    geckoView.setSession(session)
+                    state.geckoViewRef = geckoView
+                    geckoView.isFocusable = true
+                    geckoView.isFocusableInTouchMode = true
+                    if (!state.isUrlInputFocused && !geckoView.isFocused) {
+                        geckoView.requestFocus()
+                    }
+                },
+            )
+
+            // サムネイルオーバーレイ: GeckoViewの読み込みが完了するまでプレビュー画像を表示
+            val previewBytes = browserTab.previewBitmap
+            val previewBitmap = remember(previewBytes) {
+                if (previewBytes != null && previewBytes.isNotEmpty()) {
+                    BitmapFactory.decodeByteArray(previewBytes, 0, previewBytes.size)
+                } else {
+                    null
+                }
+            }
+            androidx.compose.animation.AnimatedVisibility(
+                visible = !state.isContentReady && previewBitmap != null,
+                exit = fadeOut(),
+            ) {
+                previewBitmap?.let { bmp ->
+                    Image(
+                        modifier = Modifier.fillMaxSize(),
+                        bitmap = bmp.asImageBitmap(),
+                        contentDescription = null,
+                        contentScale = ContentScale.FillWidth,
+                        alignment = Alignment.TopStart,
                     )
-                    swipeRefreshLayout.setOnChildScrollUpCallback { _, _ ->
-                        !swipeRefreshScrollEnabled || state.scrollY > 0
-                    }
-                    swipeRefreshLayout.setOnRefreshListener {
-                        state.isRefreshing = true
-                        latestOnRefresh()
-                    }
                 }
-            },
-            update = { swipeRefreshLayout ->
-                swipeRefreshLayout.isRefreshing = state.isRefreshing
-                val geckoView = swipeRefreshLayout.findViewById<GeckoView>(id)
-                geckoView.setAutofillEnabled(true)
-                geckoView.importantForAutofill =
-                    View.IMPORTANT_FOR_AUTOFILL_YES_EXCLUDE_DESCENDANTS
-                geckoView.setSession(session)
-                state.geckoViewRef = geckoView
-                geckoView.isFocusable = true
-                geckoView.isFocusableInTouchMode = true
-                if (!state.isUrlInputFocused && !geckoView.isFocused) {
-                    geckoView.requestFocus()
-                }
-            },
-        )
+            }
+        }
 
         // Image context menu dialog
         state.imageContextMenuUrl?.let { imageUrl ->
@@ -293,6 +326,41 @@ fun GeckoBrowserTab(
                 dismissButton = {
                     TextButton(onClick = { state.imageContextMenuUrl = null }) {
                         Text(text = "キャンセル")
+                    }
+                },
+            )
+        }
+
+        // Link context menu dialog
+        state.linkContextMenuUrl?.let { linkUrl ->
+            AlertDialog(
+                onDismissRequest = { state.linkContextMenuUrl = null },
+                title = { Text(text = "リンク") },
+                text = {
+                    Text(
+                        text = linkUrl,
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                },
+                confirmButton = {
+                    TextButton(onClick = { state.copyLinkUrl(linkUrl) }) {
+                        Text("URLをコピー")
+                    }
+                },
+                dismissButton = {
+                    Column {
+                        TextButton(
+                            onClick = {
+                                onOpenNewSessionRequest(linkUrl)
+                                state.linkContextMenuUrl = null
+                            },
+                        ) {
+                            Text("新しいタブで開く")
+                        }
+                        TextButton(onClick = { state.linkContextMenuUrl = null }) {
+                            Text("キャンセル")
+                        }
                     }
                 },
             )

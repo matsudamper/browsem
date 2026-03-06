@@ -77,7 +77,7 @@ internal class BrowserSessionController(runtime: GeckoRuntime) {
         openerTabId: String? = null,
     ): BrowserTab {
         val normalizedInitialUrl = initialUrl.ifBlank { "about:blank" }
-        val session = GeckoSession().also { it.open(geckoRuntime) }
+        val session = GeckoSession()  // open() はここでは呼ばない（遅延ロード）
         val tab = appendTab(
             tabId = tabId,
             session = session,
@@ -87,17 +87,24 @@ internal class BrowserSessionController(runtime: GeckoRuntime) {
             previewBitmapArray = restoredPreviewImage,
             openerTabId = openerTabId,
         )
-        val restored = restoredSessionState
-            ?.takeIf { it.isNotBlank() }
-            ?.let { sessionState ->
-                val parsed = GeckoSession.SessionState.fromString(sessionState) ?: return@let false
-                session.restoreState(parsed)
-                true
-            } == true
-        if (!restored) {
-            session.loadUri(normalizedInitialUrl)
-        }
+        // 復元情報を保持（ensureSessionOpen で使用）
+        tab.pendingSessionState = restoredSessionState?.takeIf { it.isNotBlank() }
         return tab
+    }
+
+    fun ensureSessionOpen(tab: BrowserTab) {
+        if (tab.session.isOpen) return
+        tab.session.open(geckoRuntime)
+        val state = tab.pendingSessionState
+        if (state != null) {
+            tab.pendingSessionState = null
+            val parsed = GeckoSession.SessionState.fromString(state)
+            if (parsed != null) {
+                tab.session.restoreState(parsed)
+                return
+            }
+        }
+        tab.session.loadUri(tab.currentUrl.ifBlank { "about:blank" })
     }
 
     fun createTabForNewSession(initialUrl: String, openerTabId: String? = null): BrowserTab {
@@ -184,6 +191,8 @@ class BrowserTab(
     var sessionState by mutableStateOf(sessionState)
     var title by mutableStateOf(title)
     var previewBitmap: ByteArray? by mutableStateOf(previewBitmap)
+    // 未オープンタブのセッション復元情報を保持
+    internal var pendingSessionState: String? by mutableStateOf(null)
 }
 
 internal data class PersistedBrowserTab(
