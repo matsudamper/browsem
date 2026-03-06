@@ -110,6 +110,9 @@ internal class BrowserTabScreenState(
     var pendingDateTimePrompt by mutableStateOf<GeckoSession.PromptDelegate.DateTimePrompt?>(null)
     var pendingDateTimeResult by mutableStateOf<GeckoResult<GeckoSession.PromptDelegate.PromptResponse>?>(null)
 
+    // --- ファイルダウンロード確認ダイアログ用state ---
+    var pendingDownloadResponse by mutableStateOf<WebResponse?>(null)
+
     var renderReady by mutableStateOf(false)
 
     // --- Scroll / Refresh state ---
@@ -266,12 +269,23 @@ internal class BrowserTabScreenState(
     }
 
     // GeckoViewがレンダリングできないレスポンス（ダウンロードリンク等）を受け取った際に呼ばれる
-    // WorkManagerにエンキューするため、アプリが終了してもダウンロードが継続される
+    // ユーザーに確認ダイアログを表示するため、pendingDownloadResponseに保持する
     fun downloadFileFromResponse(response: WebResponse) {
+        pendingDownloadResponse = response
+    }
+
+    fun confirmPendingDownload() {
+        val response = pendingDownloadResponse ?: return
+        pendingDownloadResponse = null
         geckoDownloadManager.enqueueDownloadFromResponse(
             response = response,
             referrerUrl = currentPageUrl,
         )
+    }
+
+    fun dismissPendingDownload() {
+        pendingDownloadResponse?.body?.close()
+        pendingDownloadResponse = null
     }
 
     fun copyLinkUrl(url: String) {
