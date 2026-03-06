@@ -313,30 +313,15 @@ internal fun GeckoBrowserTab(
 
         // ファイルダウンロード確認ダイアログ
         state.pendingDownloadResponse?.let { response ->
-            val fileName = response.uri
-                .substringBefore("?")
-                .substringAfterLast("/")
-                .takeIf { it.isNotEmpty() }
             AlertDialog(
                 onDismissRequest = state::dismissPendingDownload,
                 title = { Text("ダウンロード") },
                 text = {
-                    Column {
-                        // ファイル名が取得できた場合は別行に表示
-                        if (fileName != null) {
-                            Text(
-                                text = fileName,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                        }
-                        Text(
-                            text = response.uri,
-                            maxLines = 4,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
+                    Text(
+                        text = response.uri,
+                        maxLines = 4,
+                        overflow = TextOverflow.Ellipsis,
+                    )
                 },
                 confirmButton = {
                     TextButton(onClick = state::confirmPendingDownload) {
