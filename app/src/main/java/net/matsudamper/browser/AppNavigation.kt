@@ -5,6 +5,7 @@ import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.ContentTransform
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -100,8 +101,8 @@ internal fun BrowserApp(
 
                 if (target.contentKey is AppDestination.Browser && initial.contentKey is AppDestination.Browser) {
                     return@NavDisplay ContentTransform(
-                        initialContentExit = fadeOut(),
-                        targetContentEnter = fadeIn(),
+                        initialContentExit = fadeOut(snap(100)),
+                        targetContentEnter = fadeIn(snap(100)),
                     )
                 }
 

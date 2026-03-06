@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -50,7 +49,6 @@ internal fun BrowserScreen(
             tabId = key.tabId,
             homepageUrl = homepageUrl,
         )
-        browserSessionController.ensureSessionOpen(tab)
         tab
     }
     val tabs = browserSessionController.tabs
@@ -105,6 +103,7 @@ internal fun BrowserScreen(
             onDesktopNotificationPermissionRequest = handleNotificationPermission,
             onOpenSettings = { backStack.add(AppDestination.Settings) },
             onOpenTabs = { backStack.add(AppDestination.Tabs) },
+            browserSessionController = browserSessionController,
             onOpenNewSessionRequest = { uri ->
                 val newTab = browserSessionController.createTabForNewSession(
                     initialUrl = uri,
