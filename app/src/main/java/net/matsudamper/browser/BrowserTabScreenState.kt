@@ -5,6 +5,7 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.os.Handler
 import android.os.Looper
+import android.widget.Toast
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
@@ -55,7 +56,6 @@ internal fun rememberBrowserTabScreenState(
             context = context,
         )
     }
-    // Keep homepage/search template in sync when settings change
     state.homepageUrl = homepageUrl
     state.searchTemplate = searchTemplate
     return state
