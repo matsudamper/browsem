@@ -297,6 +297,36 @@ fun GeckoBrowserTab(
             )
         }
 
+        // ファイルダウンロード確認ダイアログ
+        state.pendingDownloadResponse?.let { response ->
+            val fileName = response.uri
+                .substringBefore("?")
+                .substringAfterLast("/")
+                .takeIf { it.isNotEmpty() }
+                ?: response.uri
+            AlertDialog(
+                onDismissRequest = state::dismissPendingDownload,
+                title = { Text("ダウンロード") },
+                text = {
+                    Text(
+                        text = fileName,
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                },
+                confirmButton = {
+                    TextButton(onClick = state::confirmPendingDownload) {
+                        Text("ダウンロード")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = state::dismissPendingDownload) {
+                        Text("キャンセル")
+                    }
+                },
+            )
+        }
+
         // Alert prompt dialog
         state.pendingAlertPrompt?.let { prompt ->
             AlertDialog(
