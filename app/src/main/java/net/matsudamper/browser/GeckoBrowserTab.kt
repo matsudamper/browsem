@@ -317,16 +317,26 @@ internal fun GeckoBrowserTab(
                 .substringBefore("?")
                 .substringAfterLast("/")
                 .takeIf { it.isNotEmpty() }
-                ?: response.uri
             AlertDialog(
                 onDismissRequest = state::dismissPendingDownload,
                 title = { Text("ダウンロード") },
                 text = {
-                    Text(
-                        text = fileName,
-                        maxLines = 3,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                    Column {
+                        // ファイル名が取得できた場合は別行に表示
+                        if (fileName != null) {
+                            Text(
+                                text = fileName,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                        }
+                        Text(
+                            text = response.uri,
+                            maxLines = 4,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 },
                 confirmButton = {
                     TextButton(onClick = state::confirmPendingDownload) {
