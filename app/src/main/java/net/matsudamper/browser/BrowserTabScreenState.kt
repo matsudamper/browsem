@@ -81,6 +81,7 @@ internal class BrowserTabScreenState(
     // --- Display state ---
     var isPcMode by mutableStateOf(false)
     var toolbarColor by mutableStateOf<Color?>(null)
+    private var lastPageStartUrlKey: String = normalizedToolbarUrlKey(browserTab.currentUrl)
 
     // --- Translation state ---
     var translationState by mutableStateOf(TranslationState.Idle)
@@ -439,16 +440,12 @@ internal class BrowserTabScreenState(
             hasUserGesture: Boolean,
         ) {
             val newUrl = url.orEmpty()
-            val previousUrl = currentPageUrl
             if (newUrl == "about:blank" && currentPageUrl != "about:blank") {
                 return
             }
             currentPageUrl = newUrl
             if (!isUrlInputFocused) {
                 urlInput = newUrl
-            }
-            if (hasUserGesture && shouldResetToolbarColor(previousUrl, newUrl)) {
-                toolbarColor = null
             }
             val revertUrl = originalPageUrlForRevert
             if (translationState != TranslationState.Idle &&
@@ -522,6 +519,7 @@ internal class BrowserTabScreenState(
             }
 
             override fun onPageStart(session: GeckoSession, url: String) {
+                maybeResetToolbarColorOnPageStart(url)
             }
 
             override fun onPageStop(session: GeckoSession, success: Boolean) {
@@ -618,6 +616,13 @@ internal class BrowserTabScreenState(
         if (shouldResetToolbarColor(fromUrl, toUrl)) {
             toolbarColor = null
         }
+    }
+
+    private fun maybeResetToolbarColorOnPageStart(url: String) {
+        val nextKey = normalizedToolbarUrlKey(url)
+        if (nextKey == lastPageStartUrlKey) return
+        toolbarColor = null
+        lastPageStartUrlKey = nextKey
     }
 
     private fun shouldResetToolbarColor(fromUrl: String, toUrl: String): Boolean {

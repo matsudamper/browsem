@@ -120,10 +120,11 @@ internal fun GeckoBrowserTab(
 
     // theme-color WebExtensionのコールバック登録
     DisposableEffect(session, state, themeColorExtension) {
-        themeColorExtension.registerSession(session) { color, _ ->
-            if (color != null) {
-                state.toolbarColor = color
+        themeColorExtension.registerSession(session) { color, reportedUrl ->
+            if (!isThemeColorForCurrentPage(state.currentPageUrl, reportedUrl)) {
+                return@registerSession
             }
+            state.toolbarColor = color
         }
         onDispose {
             themeColorExtension.unregisterSession(session)
@@ -468,6 +469,17 @@ internal fun GeckoBrowserTab(
             )
         }
     }
+}
+
+private fun isThemeColorForCurrentPage(currentPageUrl: String, reportedUrl: String): Boolean {
+    if (reportedUrl.isBlank()) return false
+    return normalizedThemeColorUrlKey(currentPageUrl) == normalizedThemeColorUrlKey(reportedUrl)
+}
+
+private fun normalizedThemeColorUrlKey(url: String): String {
+    return url
+        .substringBefore("#")
+        .removeSuffix("/")
 }
 
 @Composable
