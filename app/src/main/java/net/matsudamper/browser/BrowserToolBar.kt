@@ -33,6 +33,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
@@ -51,6 +52,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
@@ -102,11 +104,21 @@ internal fun BrowserToolBar(
 
     val latestOnHorizontalDrag by rememberUpdatedState(onHorizontalDrag)
     val latestOnHorizontalDragEnd by rememberUpdatedState(onHorizontalDragEnd)
+    val isSystemDarkTheme = isSystemInDarkTheme()
     val resolvedToolbarColor = toolbarColor ?: MaterialTheme.colorScheme.primaryContainer
+    val isBrightThemeColor = toolbarColor?.luminance()?.let { it >= 0.5f } ?: !isSystemDarkTheme
+    val urlBarBackgroundColor = if (isBrightThemeColor) {
+        Color.Black
+    } else {
+        Color(0xFFF2F2F2)
+    }
+    val urlBarTextColor = if (isBrightThemeColor) Color.White else Color.Black
+    val toolbarContentColor = if (resolvedToolbarColor.luminance() < 0.3f) Color.White else Color.Black
     val colorSource = if (toolbarColor == null) "default" else "theme"
 
     Surface(
         color = resolvedToolbarColor,
+        contentColor = toolbarContentColor,
         modifier = modifier
             .testTag(TEST_TAG_TOOLBAR)
             .semantics {
@@ -150,7 +162,7 @@ internal fun BrowserToolBar(
                     .weight(1f)
                     .padding(4.dp)
                     .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.surface)
+                    .background(urlBarBackgroundColor)
                     .padding(
                         start = 8.dp,
                         end = 4.dp,
@@ -170,6 +182,7 @@ internal fun BrowserToolBar(
                     onValueChange = onValueChange,
                     onSubmit = onSubmit,
                     onFocusChanged = onFocusChanged,
+                    textColor = urlBarTextColor,
                 )
 
                 if (isFocused) {
@@ -187,6 +200,7 @@ internal fun BrowserToolBar(
                                 ),
                             painter = painterResource(R.drawable.close_24dp),
                             contentDescription = "クリア",
+                            tint = urlBarTextColor,
                         )
                     }
                 }
@@ -246,6 +260,7 @@ fun UrlTextInput(
     onValueChange: (String) -> Unit,
     onSubmit: (String) -> Unit,
     onFocusChanged: (Boolean) -> Unit,
+    textColor: Color,
     modifier: Modifier = Modifier,
 ) {
     val currentValue by rememberUpdatedState(value)
@@ -274,7 +289,8 @@ fun UrlTextInput(
                         singleLine = true,
                         textStyle = MaterialTheme.typography.bodyLarge
                             .merge(
-                                color = MaterialTheme.colorScheme.onSurface,
+                                color = textColor,
+                                textAlign = TextAlign.Start,
                             ),
                         cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                         keyboardOptions = KeyboardOptions.Default.copy(
