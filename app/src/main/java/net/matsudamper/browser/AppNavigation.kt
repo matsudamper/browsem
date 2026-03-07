@@ -37,6 +37,8 @@ import net.matsudamper.browser.screen.browser.BrowserScreen
 import net.matsudamper.browser.screen.browser.BrowserScreenViewModel
 import net.matsudamper.browser.screen.extensions.ExtensionsScreen
 import net.matsudamper.browser.screen.extensions.ExtensionsScreenViewModel
+import net.matsudamper.browser.screen.history.HistoryScreen
+import net.matsudamper.browser.screen.history.HistoryScreenViewModel
 import net.matsudamper.browser.screen.notificationpermissions.NotificationPermissionsScreen
 import net.matsudamper.browser.screen.notificationpermissions.NotificationPermissionsScreenViewModel
 import net.matsudamper.browser.screen.settings.SettingsScreen
@@ -172,6 +174,23 @@ internal fun BrowserApp(
                             onOpenExtensions = { backStack.add(AppDestination.Extensions) },
                             onOpenNotificationPermissions = {
                                 backStack.add(AppDestination.NotificationPermissions)
+                            },
+                            onOpenHistory = { backStack.add(AppDestination.History) },
+                            onBack = { backStack.removeLastOrNull() },
+                        )
+                    }
+
+                    AppDestination.History -> navEntry(key) {
+                        val historyViewModel = remember(viewModel) {
+                            HistoryScreenViewModel(viewModel)
+                        }
+                        HistoryScreen(
+                            viewModel = historyViewModel,
+                            onNavigateToUrl = { url ->
+                                val newTab = browserSessionController.createAndAppendTab(
+                                    initialUrl = url,
+                                )
+                                navController.selectTab(newTab.tabId)
                             },
                             onBack = { backStack.removeLastOrNull() },
                         )

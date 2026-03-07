@@ -33,6 +33,8 @@ internal fun rememberBrowserTabScreenState(
     browserTab: BrowserTab,
     homepageUrl: String,
     searchTemplate: String,
+    onHistoryRecord: (suspend (url: String, title: String) -> Long)? = null,
+    onHistoryTitleUpdate: (suspend (id: Long, title: String) -> Unit)? = null,
 ): BrowserTabScreenState {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -50,10 +52,14 @@ internal fun rememberBrowserTabScreenState(
             coroutineScope = coroutineScope,
             geckoDownloadManager = geckoDownloadManager,
             context = context,
+            onHistoryRecord = onHistoryRecord,
+            onHistoryTitleUpdate = onHistoryTitleUpdate,
         )
     }
     state.homepageUrl = homepageUrl
     state.searchTemplate = searchTemplate
+    state.onHistoryRecord = onHistoryRecord
+    state.onHistoryTitleUpdate = onHistoryTitleUpdate
     return state
 }
 
@@ -65,7 +71,11 @@ internal class BrowserTabScreenState(
     private val coroutineScope: CoroutineScope,
     private val geckoDownloadManager: GeckoDownloadManager,
     private val context: Context,
+    var onHistoryRecord: (suspend (url: String, title: String) -> Long)? = null,
+    var onHistoryTitleUpdate: (suspend (id: Long, title: String) -> Unit)? = null,
 ) {
+    // 現在のページの履歴エントリID（タイトル更新に使用）
+    private var currentHistoryEntryId: Long? = null
     var homepageUrl by mutableStateOf(homepageUrl)
     var searchTemplate by mutableStateOf(searchTemplate)
     val session: GeckoSession get() = browserTab.session
@@ -472,13 +482,32 @@ internal class BrowserTabScreenState(
             if (!newUrl.startsWith("data:")) {
                 detectedPageLanguage = null
             }
+            // 履歴を記録（about:blank や data: URL は除外）
+            if (newUrl.isNotBlank() && !newUrl.startsWith("about:") && !newUrl.startsWith("data:")) {
+                currentHistoryEntryId = null
+                val callback = onHistoryRecord
+                if (callback != null) {
+                    coroutineScope.launch {
+                        currentHistoryEntryId = callback(newUrl, currentPageTitle)
+                    }
+                }
+            }
         }
     }
 
     fun createContentDelegate(onClose: (() -> Unit)? = null): GeckoSession.ContentDelegate =
         object : GeckoSession.ContentDelegate {
             override fun onTitleChange(session: GeckoSession, title: String?) {
-                currentPageTitle = title.orEmpty()
+                val newTitle = title.orEmpty()
+                currentPageTitle = newTitle
+                // 履歴エントリのタイトルを更新
+                val entryId = currentHistoryEntryId
+                val callback = onHistoryTitleUpdate
+                if (entryId != null && newTitle.isNotBlank() && callback != null) {
+                    coroutineScope.launch {
+                        callback(entryId, newTitle)
+                    }
+                }
             }
 
             override fun onContextMenu(
