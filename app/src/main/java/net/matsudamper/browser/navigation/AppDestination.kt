@@ -22,4 +22,7 @@ sealed interface AppDestination : NavKey, java.io.Serializable {
 
     @Serializable
     data object Tabs : AppDestination, java.io.Serializable
+
+    @Serializable
+    data object History : AppDestination, java.io.Serializable
 }
