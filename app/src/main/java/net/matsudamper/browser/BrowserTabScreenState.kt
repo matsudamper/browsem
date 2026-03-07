@@ -442,6 +442,7 @@ internal class BrowserTabScreenState(
     fun createNavigationDelegate(
         onOpenNewSessionRequest: (String) -> GeckoSession,
     ): GeckoSession.NavigationDelegate = object : GeckoSession.NavigationDelegate {
+
         override fun onCanGoBack(session: GeckoSession, value: Boolean) {
             canGoBack = value
         }
