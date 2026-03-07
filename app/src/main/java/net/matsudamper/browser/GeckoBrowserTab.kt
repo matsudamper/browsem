@@ -182,6 +182,17 @@ internal fun GeckoBrowserTab(
         }
     }
 
+    // メディアセッションデリゲートは不安定なラムダキーの影響を受けないよう独立して管理
+    DisposableEffect(session, state) {
+        val mediaSessionDelegate = state.createMediaSessionDelegate()
+        session.mediaSessionDelegate = mediaSessionDelegate
+        onDispose {
+            if (session.mediaSessionDelegate === mediaSessionDelegate) {
+                session.mediaSessionDelegate = null
+            }
+        }
+    }
+
     // Attach scroll delegate
     DisposableEffect(session, state) {
         val scrollDelegate = state.createScrollDelegate()

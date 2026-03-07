@@ -9,6 +9,7 @@
       "Bash(git:show:*)",
       "Bash(xargs grep:*)",
       "Bash(find:*)",
+      "Bash(javap:*)",
       "Read(./**)",
       "mcp__ide__getDiagnostics"
     ]

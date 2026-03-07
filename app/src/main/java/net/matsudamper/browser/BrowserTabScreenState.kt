@@ -442,6 +442,7 @@ internal class BrowserTabScreenState(
     fun createNavigationDelegate(
         onOpenNewSessionRequest: (String) -> GeckoSession,
     ): GeckoSession.NavigationDelegate = object : GeckoSession.NavigationDelegate {
+
         override fun onCanGoBack(session: GeckoSession, value: Boolean) {
             canGoBack = value
         }
@@ -643,6 +644,11 @@ internal class BrowserTabScreenState(
                 return result
             }
         }
+
+    // メディアセッションデリゲートを作成
+    fun createMediaSessionDelegate(): org.mozilla.geckoview.MediaSession.Delegate {
+        return net.matsudamper.browser.media.GeckoMediaSessionDelegate(context)
+    }
 
     fun createScrollDelegate(): GeckoSession.ScrollDelegate =
         object : GeckoSession.ScrollDelegate {
