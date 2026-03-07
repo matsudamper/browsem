@@ -33,6 +33,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.Text
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
@@ -51,6 +53,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
@@ -102,11 +105,26 @@ internal fun BrowserToolBar(
 
     val latestOnHorizontalDrag by rememberUpdatedState(onHorizontalDrag)
     val latestOnHorizontalDragEnd by rememberUpdatedState(onHorizontalDragEnd)
+
+    val isSystemDarkTheme = isSystemInDarkTheme()
     val resolvedToolbarColor = toolbarColor ?: MaterialTheme.colorScheme.primaryContainer
+    val urlBarBackgroundColor: Color
+    val toolbarContentColor: Color
+    run {
+        val isBrightThemeColor = toolbarColor?.luminance()?.let { it >= 0.5f } ?: !isSystemDarkTheme
+        urlBarBackgroundColor = if (isBrightThemeColor) {
+            Color.Black
+        } else {
+            Color.LightGray
+        }
+        toolbarContentColor = if (isBrightThemeColor) Color.White else Color.Black
+    }
+
     val colorSource = if (toolbarColor == null) "default" else "theme"
 
     Surface(
         color = resolvedToolbarColor,
+        contentColor = urlBarBackgroundColor,
         modifier = modifier
             .testTag(TEST_TAG_TOOLBAR)
             .semantics {
@@ -144,50 +162,56 @@ internal fun BrowserToolBar(
         Row(
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Row(
+            Surface(
                 modifier = Modifier
                     .height(IntrinsicSize.Min)
                     .weight(1f)
-                    .padding(4.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.surface)
-                    .padding(
-                        start = 8.dp,
-                        end = 4.dp,
-                        top = 4.dp,
-                        bottom = 4.dp
-                    ),
-                verticalAlignment = Alignment.CenterVertically,
+                    .padding(4.dp),
+                contentColor = toolbarContentColor,
+                color = urlBarBackgroundColor,
+                shape = CircleShape,
             ) {
-                UrlTextInput(
+                Row(
                     modifier = Modifier
-                        .weight(1f)
-                        .horizontalScroll(
-                            state = rememberScrollState(),
-                            enabled = isFocused,
+                        .padding(
+                            start = 8.dp,
+                            end = 4.dp,
+                            top = 4.dp,
+                            bottom = 4.dp
                         ),
-                    value = value,
-                    onValueChange = onValueChange,
-                    onSubmit = onSubmit,
-                    onFocusChanged = onFocusChanged,
-                )
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    UrlTextInput(
+                        modifier = Modifier
+                            .weight(1f)
+                            .horizontalScroll(
+                                state = rememberScrollState(),
+                                enabled = isFocused,
+                            ),
+                        value = value,
+                        onValueChange = onValueChange,
+                        onSubmit = onSubmit,
+                        onFocusChanged = onFocusChanged,
+                        textColor = LocalContentColor.current,
+                    )
 
-                if (isFocused) {
-                    CompositionLocalProvider(
-                        LocalMinimumInteractiveComponentSize provides 0.dp
-                    ) {
-                        Icon(
-                            modifier = Modifier
-                                .fillMaxHeight()
-                                .aspectRatio(1f)
-                                .clickable(
-                                    indication = ripple(),
-                                    interactionSource = remember { MutableInteractionSource() },
-                                    onClick = { onValueChange("") }
-                                ),
-                            painter = painterResource(R.drawable.close_24dp),
-                            contentDescription = "クリア",
-                        )
+                    if (isFocused) {
+                        CompositionLocalProvider(
+                            LocalMinimumInteractiveComponentSize provides 0.dp
+                        ) {
+                            Icon(
+                                modifier = Modifier
+                                    .fillMaxHeight()
+                                    .aspectRatio(1f)
+                                    .clickable(
+                                        indication = ripple(),
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        onClick = { onValueChange("") }
+                                    ),
+                                painter = painterResource(R.drawable.close_24dp),
+                                contentDescription = "クリア",
+                            )
+                        }
                     }
                 }
             }
@@ -216,7 +240,7 @@ internal fun BrowserToolBar(
                 ) {
                     Icon(
                         painter = painterResource(R.drawable.ic_more_vert_24dp),
-                        contentDescription = "Menu"
+                        contentDescription = "Menu",
                     )
                     ToolbarMenu(
                         visibleMenu = visibleMenu,
@@ -246,12 +270,14 @@ fun UrlTextInput(
     onValueChange: (String) -> Unit,
     onSubmit: (String) -> Unit,
     onFocusChanged: (Boolean) -> Unit,
+    textColor: Color,
     modifier: Modifier = Modifier,
 ) {
     val currentValue by rememberUpdatedState(value)
     val currentOnValueChange by rememberUpdatedState(onValueChange)
     val currentOnSubmit by rememberUpdatedState(onSubmit)
     val currentOnFocusChanged by rememberUpdatedState(onFocusChanged)
+    val textColor by rememberUpdatedState(textColor)
 
     // 一度AndroidViewを経由しないとBitwardenが認識しない
     AndroidView(
@@ -274,7 +300,8 @@ fun UrlTextInput(
                         singleLine = true,
                         textStyle = MaterialTheme.typography.bodyLarge
                             .merge(
-                                color = MaterialTheme.colorScheme.onSurface,
+                                color = textColor,
+                                textAlign = TextAlign.Start,
                             ),
                         cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                         keyboardOptions = KeyboardOptions.Default.copy(
