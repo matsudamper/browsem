@@ -1,6 +1,7 @@
 package net.matsudamper.browser.data
 
 import android.content.Context
+import android.util.Log
 import androidx.datastore.core.DataStore
 import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
 import androidx.datastore.dataStore
@@ -22,36 +23,46 @@ class TabRepository(context: Context) {
         tabs: List<PersistedTabState>,
         selectedTabIndex: Int,
     ) {
-        dataStore.updateData { current ->
-            val builder = current.toBuilder()
-            val currentTabs = current.tabStatesList.map {
-                PersistedTabState(
-                    url = it.url,
-                    sessionState = it.sessionState,
-                    title = it.title,
-                    previewImageWebp = it.previewImageWebp,
-                    tabId = it.tabId,
-                    openerTabId = it.openerTabId,
-                )
+        // 空リストでの保存を拒否（既存データの消失を防止）
+        if (tabs.isEmpty()) {
+            Log.w("TabRepository", "空のタブリストは保存しない")
+            return
+        }
+        val clampedIndex = selectedTabIndex.coerceIn(0, tabs.lastIndex)
+        try {
+            dataStore.updateData { current ->
+                val currentTabs = current.tabStatesList.map {
+                    PersistedTabState(
+                        url = it.url,
+                        sessionState = it.sessionState,
+                        title = it.title,
+                        previewImageWebp = it.previewImageWebp,
+                        tabId = it.tabId,
+                        openerTabId = it.openerTabId,
+                    )
+                }
+                if (currentTabs == tabs && current.selectedTabIndex == clampedIndex) {
+                    return@updateData current
+                }
+                val builder = current.toBuilder()
+                builder.clearTabStates()
+                tabs.forEach { tab ->
+                    builder.addTabStates(
+                        BrowserTabState.newBuilder()
+                            .setUrl(tab.url)
+                            .setSessionState(tab.sessionState)
+                            .setTitle(tab.title)
+                            .setPreviewImageWebp(tab.previewImageWebp)
+                            .setTabId(tab.tabId)
+                            .setOpenerTabId(tab.openerTabId)
+                            .build()
+                    )
+                }
+                builder.selectedTabIndex = clampedIndex
+                builder.build()
             }
-            if (currentTabs == tabs && current.selectedTabIndex == selectedTabIndex) {
-                return@updateData current
-            }
-            builder.clearTabStates()
-            tabs.forEach { tab ->
-                builder.addTabStates(
-                    BrowserTabState.newBuilder()
-                        .setUrl(tab.url)
-                        .setSessionState(tab.sessionState)
-                        .setTitle(tab.title)
-                        .setPreviewImageWebp(tab.previewImageWebp)
-                        .setTabId(tab.tabId)
-                        .setOpenerTabId(tab.openerTabId)
-                        .build()
-                )
-            }
-            builder.selectedTabIndex = selectedTabIndex
-            builder.build()
+        } catch (e: Exception) {
+            Log.e("TabRepository", "タブ状態の保存に失敗", e)
         }
     }
 }

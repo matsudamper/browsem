@@ -3,28 +3,24 @@ package net.matsudamper.browser.screen.browser
 import androidx.lifecycle.ViewModel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
-import net.matsudamper.browser.BrowserViewModel
 import net.matsudamper.browser.SettingsUiState
 import net.matsudamper.browser.data.history.HistoryEntry
+import net.matsudamper.browser.data.history.HistoryRepository
 
 internal class BrowserScreenViewModel(
-    private val browserViewModel: BrowserViewModel,
+    val settingsUiState: StateFlow<SettingsUiState?>,
+    private val historyRepository: HistoryRepository,
 ) : ViewModel() {
-    val settingsUiState: StateFlow<SettingsUiState?> = browserViewModel.settingsUiState
-
-    fun bumpTabPersistence() {
-        browserViewModel.bumpTabPersistence()
-    }
 
     suspend fun recordHistory(url: String, title: String): Long {
-        return browserViewModel.recordHistory(url, title)
+        return historyRepository.recordVisit(url, title)
     }
 
     suspend fun updateHistoryTitle(id: Long, title: String) {
-        browserViewModel.updateHistoryTitle(id, title)
+        historyRepository.updateTitle(id, title)
     }
 
     fun searchHistory(query: String): Flow<List<HistoryEntry>> {
-        return browserViewModel.searchHistory(query)
+        return if (query.isBlank()) historyRepository.getRecent() else historyRepository.search(query)
     }
 }

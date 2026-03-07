@@ -6,16 +6,19 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
-import net.matsudamper.browser.BrowserViewModel
+import kotlinx.coroutines.launch
+import net.matsudamper.browser.SettingsUiState
+import net.matsudamper.browser.data.SettingsRepository
 
 internal class NotificationPermissionsScreenViewModel(
-    private val browserViewModel: BrowserViewModel,
+    private val settingsRepository: SettingsRepository,
+    settingsUiState: StateFlow<SettingsUiState?>,
 ) : ViewModel() {
-    val allowedOrigins: StateFlow<List<String>> = browserViewModel.settingsUiState
+    val allowedOrigins: StateFlow<List<String>> = settingsUiState
         .map { uiState -> uiState?.notificationAllowedOrigins ?: emptyList() }
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     fun removeNotificationAllowedOrigin(origin: String) {
-        browserViewModel.removeNotificationAllowedOrigin(origin)
+        viewModelScope.launch { settingsRepository.removeNotificationAllowedOrigin(origin) }
     }
 }
