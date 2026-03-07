@@ -8,7 +8,7 @@ import net.matsudamper.browser.SettingsUiState
 import net.matsudamper.browser.data.history.HistoryEntry
 
 internal class BrowserScreenViewModel(
-    browserViewModel: BrowserViewModel,
+    private val browserViewModel: BrowserViewModel,
 ) : ViewModel() {
     val settingsUiState: StateFlow<SettingsUiState?> = browserViewModel.settingsUiState
 
