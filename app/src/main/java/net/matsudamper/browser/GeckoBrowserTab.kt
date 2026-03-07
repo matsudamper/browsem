@@ -3,6 +3,7 @@ package net.matsudamper.browser
 import android.annotation.SuppressLint
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.os.SystemClock
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
@@ -28,6 +29,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ListItem
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
@@ -48,6 +50,7 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -65,11 +68,12 @@ import org.mozilla.geckoview.PanZoomController
 
 @Composable
 @OptIn(ExperimentalLayoutApi::class)
-fun GeckoBrowserTab(
+internal fun GeckoBrowserTab(
     browserTab: BrowserTab,
     homepageUrl: String,
     searchTemplate: String,
     translationProvider: TranslationProvider,
+    themeColorExtension: ThemeColorWebExtension,
     browserSessionController: BrowserSessionController,
     modifier: Modifier = Modifier,
     tabCount: Int,
@@ -81,16 +85,24 @@ fun GeckoBrowserTab(
     onCloseTab: (() -> Unit)? = null,
     onToolbarHorizontalDrag: (Float) -> Unit = {},
     onToolbarDragEnd: () -> Unit = {},
+    onHistoryRecord: (suspend (url: String, title: String) -> Long)? = null,
+    onHistoryTitleUpdate: (suspend (id: Long, title: String) -> Unit)? = null,
+    historySuggestions: List<net.matsudamper.browser.data.history.HistoryEntry> = emptyList(),
+    onUrlInputChanged: ((String) -> Unit)? = null,
 ) {
     val state = rememberBrowserTabScreenState(
         browserTab = browserTab,
         homepageUrl = homepageUrl,
         searchTemplate = searchTemplate,
+        onHistoryRecord = onHistoryRecord,
+        onHistoryTitleUpdate = onHistoryTitleUpdate,
     )
     val session = state.session
     val keyboardController = LocalSoftwareKeyboardController.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val isImeVisible = WindowInsets.isImeVisible
+    var imeWasVisibleDuringUrlFocus by remember { mutableStateOf(false) }
+    var urlBarFocusStartedAtMs by remember { mutableStateOf(0L) }
     var geckoView: GeckoView? by remember { mutableStateOf(null) }
 
     // Sync title/url changes to BrowserTab for persistence
@@ -101,6 +113,16 @@ fun GeckoBrowserTab(
     LaunchedEffect(state) {
         snapshotFlow { state.currentPageUrl }
             .collectLatest { state.syncUrlToTab() }
+    }
+
+    // URLバー入力変更時にサジェスト検索を発火
+    LaunchedEffect(state, onUrlInputChanged) {
+        snapshotFlow { state.urlInput to state.isUrlInputFocused }
+            .collectLatest { (input, focused) ->
+                if (focused) {
+                    onUrlInputChanged?.invoke(input)
+                }
+            }
     }
 
     // Lifecycle observer for tab preview capture
@@ -115,6 +137,19 @@ fun GeckoBrowserTab(
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    // theme-color WebExtensionのコールバック登録
+    DisposableEffect(session, state, themeColorExtension) {
+        themeColorExtension.registerSession(session) { color, reportedUrl ->
+            if (!isThemeColorForCurrentPage(state.currentPageUrl, reportedUrl)) {
+                return@registerSession
+            }
+            state.toolbarColor = color
+        }
+        onDispose {
+            themeColorExtension.unregisterSession(session)
+        }
     }
 
     DisposableEffect(
@@ -164,12 +199,33 @@ fun GeckoBrowserTab(
 
     // Back handlers
     BackHandler(enabled = state.showFindInPage) { state.closeFindInPage() }
-    BackHandler(enabled = state.canGoBack) { state.onGoBack() }
+    BackHandler(enabled = state.canGoBack && !state.isUrlInputFocused) { state.onGoBack() }
+    BackHandler(enabled = state.isUrlInputFocused) {
+        state.isUrlInputFocused = false
+        state.urlInput = state.currentPageUrl
+        imeWasVisibleDuringUrlFocus = false
+        keyboardController?.hide()
+        runCatching { session.setFocused(true) }
+        geckoView?.requestFocus()
+    }
 
-    // IME visibility tracking
-    LaunchedEffect(isImeVisible) {
-        if (!isImeVisible) {
+    // IME visibility tracking:
+    // URLバーにフォーカスした直後はIMEがまだ非表示のことがあるため、
+    // 一度でもIME表示を確認した後の「非表示化」のみをフォーカス解除トリガーにする。
+    LaunchedEffect(state.isUrlInputFocused, isImeVisible) {
+        if (!state.isUrlInputFocused) {
+            imeWasVisibleDuringUrlFocus = false
+            return@LaunchedEffect
+        }
+        if (isImeVisible) {
+            imeWasVisibleDuringUrlFocus = true
+            return@LaunchedEffect
+        }
+        val inGracePeriod = SystemClock.elapsedRealtime() - urlBarFocusStartedAtMs <
+            URL_BAR_IME_HIDE_GRACE_MS
+        if (imeWasVisibleDuringUrlFocus && !inGracePeriod) {
             state.isUrlInputFocused = false
+            imeWasVisibleDuringUrlFocus = false
         }
     }
 
@@ -196,11 +252,17 @@ fun GeckoBrowserTab(
                 onValueChange = { state.urlInput = it },
                 onSubmit = { rawInput ->
                     state.onUrlSubmit(rawInput)
+                    state.isUrlInputFocused = false
                     keyboardController?.hide()
                 },
                 isFocused = state.isUrlInputFocused,
                 onFocusChanged = { hasFocus ->
-                    if (!hasFocus) {
+                    if (hasFocus) {
+                        urlBarFocusStartedAtMs = SystemClock.elapsedRealtime()
+                        runCatching { session.setFocused(false) }
+                        geckoView?.clearFocus()
+                        keyboardController?.show()
+                    } else {
                         state.urlInput = state.currentPageUrl
                     }
                     state.isUrlInputFocused = hasFocus
@@ -237,17 +299,39 @@ fun GeckoBrowserTab(
 
         val latestOnRefresh by rememberUpdatedState { state.onRefreshFromSwipe() }
         val id = rememberSaveable { View.generateViewId() }
-        GeckoView(
-            modifier = Modifier.fillMaxSize(),
-            state = state,
-            id = id,
-            session = session,
-            latestOnRefresh = latestOnRefresh,
-            browserTab = browserTab,
-            updateGeckoView = {
-                geckoView = it
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .testTag(TEST_TAG_GECKO_CONTAINER),
+        ) {
+            GeckoView(
+                modifier = Modifier.fillMaxSize(),
+                state = state,
+                id = id,
+                session = session,
+                latestOnRefresh = latestOnRefresh,
+                browserTab = browserTab,
+                updateGeckoView = {
+                    geckoView = it
+                }
+            )
+
+            // URLバーフォーカス中にサジェストを表示
+            if (!state.showFindInPage && state.isUrlInputFocused && historySuggestions.isNotEmpty()) {
+                HistorySuggestionList(
+                    suggestions = historySuggestions,
+                    onSuggestionClick = { entry ->
+                        state.onUrlSubmit(entry.url)
+                        state.isUrlInputFocused = false
+                        keyboardController?.hide()
+                    },
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .testTag(TEST_TAG_HISTORY_SUGGESTION_LIST)
+                        .background(MaterialTheme.colorScheme.surface),
+                )
             }
-        )
+        }
 
         // Image context menu dialog
         state.imageContextMenuUrl?.let { imageUrl ->
@@ -298,6 +382,31 @@ fun GeckoBrowserTab(
                         TextButton(onClick = { state.linkContextMenuUrl = null }) {
                             Text("キャンセル")
                         }
+                    }
+                },
+            )
+        }
+
+        // ファイルダウンロード確認ダイアログ
+        state.pendingDownloadResponse?.let { response ->
+            AlertDialog(
+                onDismissRequest = state::dismissPendingDownload,
+                title = { Text("ダウンロード") },
+                text = {
+                    Text(
+                        text = response.uri,
+                        maxLines = 4,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                },
+                confirmButton = {
+                    TextButton(onClick = state::confirmPendingDownload) {
+                        Text("ダウンロード")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = state::dismissPendingDownload) {
+                        Text("キャンセル")
                     }
                 },
             )
@@ -461,6 +570,17 @@ fun GeckoBrowserTab(
             )
         }
     }
+}
+
+private fun isThemeColorForCurrentPage(currentPageUrl: String, reportedUrl: String): Boolean {
+    if (reportedUrl.isBlank()) return false
+    return normalizedThemeColorUrlKey(currentPageUrl) == normalizedThemeColorUrlKey(reportedUrl)
+}
+
+private fun normalizedThemeColorUrlKey(url: String): String {
+    return url
+        .substringBefore("#")
+        .removeSuffix("/")
 }
 
 @Composable
@@ -628,6 +748,37 @@ private fun ChoicePromptDialog(
     )
 }
 
+@Composable
+private fun HistorySuggestionList(
+    suggestions: List<net.matsudamper.browser.data.history.HistoryEntry>,
+    onSuggestionClick: (net.matsudamper.browser.data.history.HistoryEntry) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    LazyColumn(modifier = modifier.fillMaxWidth()) {
+        items(suggestions, key = { it.id }) { entry ->
+            ListItem(
+                headlineContent = {
+                    Text(
+                        text = entry.title.ifBlank { entry.url },
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                },
+                supportingContent = {
+                    if (entry.title.isNotBlank()) {
+                        Text(
+                            text = entry.url,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                },
+                modifier = Modifier.clickable { onSuggestionClick(entry) },
+            )
+        }
+    }
+}
+
 private fun flattenChoices(
     choices: Array<GeckoSession.PromptDelegate.ChoicePrompt.Choice>,
 ): List<GeckoSession.PromptDelegate.ChoicePrompt.Choice> {
@@ -635,3 +786,7 @@ private fun flattenChoices(
         if (choice.items != null) choice.items!!.toList() else listOf(choice)
     }
 }
+
+const val TEST_TAG_GECKO_CONTAINER = "gecko_container"
+const val TEST_TAG_HISTORY_SUGGESTION_LIST = "history_suggestion_list"
+private const val URL_BAR_IME_HIDE_GRACE_MS = 700L

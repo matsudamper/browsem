@@ -30,6 +30,7 @@ import androidx.navigation3.scene.Scene
 import androidx.navigation3.ui.NavDisplay
 import androidx.navigation3.ui.defaultPopTransitionSpec
 import androidx.navigation3.ui.defaultTransitionSpec
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collectLatest
 import net.matsudamper.browser.navigation.AppDestination
@@ -38,6 +39,8 @@ import net.matsudamper.browser.screen.browser.BrowserScreen
 import net.matsudamper.browser.screen.browser.BrowserScreenViewModel
 import net.matsudamper.browser.screen.extensions.ExtensionsScreen
 import net.matsudamper.browser.screen.extensions.ExtensionsScreenViewModel
+import net.matsudamper.browser.screen.history.HistoryScreen
+import net.matsudamper.browser.screen.history.HistoryScreenViewModel
 import net.matsudamper.browser.screen.notificationpermissions.NotificationPermissionsScreen
 import net.matsudamper.browser.screen.notificationpermissions.NotificationPermissionsScreenViewModel
 import net.matsudamper.browser.screen.settings.SettingsScreen
@@ -58,6 +61,7 @@ internal fun BrowserApp(
     val homepageUrl = settingsUiState.homepageUrl
     val searchTemplate = settingsUiState.searchTemplate
     val browserSessionController = viewModel.browserSessionController
+    val themeColorExtension = viewModel.themeColorExtension
 
     LaunchedEffect(settingsUiState.enableThirdPartyCa) {
         viewModel.applyRuntimeSettings()
@@ -65,8 +69,12 @@ internal fun BrowserApp(
 
     val backStack = rememberNavBackStack(AppDestination.Setup)
     val navController = remember(backStack) { NavController(backStack = backStack) }
+    // タブ復元完了を待機するためのシグナル
+    val setupComplete = remember { CompletableDeferred<Unit>() }
 
     LaunchedEffect(newTabUrlFlow) {
+        // タブ復元完了を待ってから外部URLを処理する（レースコンディション防止）
+        setupComplete.await()
         newTabUrlFlow.collect { url ->
             val newTab = browserSessionController.createAndAppendTab(initialUrl = url)
             navController.selectTab(newTab.tabId)
@@ -74,9 +82,14 @@ internal fun BrowserApp(
     }
 
     LaunchedEffect(browserSessionController) {
-        val currentTab = navController.getSelectedTab()
-        snapshotFlow { browserSessionController.stateChanged }
-            .collectLatest { viewModel.saveTabStates(currentTab) }
+        snapshotFlow {
+            browserSessionController.stateChanged
+            viewModel.tabPersistenceSignal
+        }.collectLatest {
+            // 保存時に最新の選択タブIDを取得する
+            val currentTab = navController.getSelectedTab()
+            viewModel.saveTabStates(currentTab)
+        }
     }
 
     val handleNotificationPermission: (uri: String) -> GeckoResult<Int> = { uri ->
@@ -132,6 +145,7 @@ internal fun BrowserApp(
                         LaunchedEffect(Unit) {
                             val tabId = viewModel.restoreTabs()
                             navController.selectTab(tabId)
+                            setupComplete.complete(Unit) // 復元完了を通知
                         }
                     }
 
@@ -147,6 +161,7 @@ internal fun BrowserApp(
                             browserSessionController = browserSessionController,
                             viewModel = browserScreenViewModel,
                             navController = navController,
+                            themeColorExtension = themeColorExtension,
                             onInstallExtensionRequest = onInstallExtensionRequest,
                             handleNotificationPermission = handleNotificationPermission,
                         )
@@ -161,6 +176,23 @@ internal fun BrowserApp(
                             onOpenExtensions = { backStack.add(AppDestination.Extensions) },
                             onOpenNotificationPermissions = {
                                 backStack.add(AppDestination.NotificationPermissions)
+                            },
+                            onOpenHistory = { backStack.add(AppDestination.History) },
+                            onBack = { backStack.removeLastOrNull() },
+                        )
+                    }
+
+                    AppDestination.History -> navEntry(key) {
+                        val historyViewModel = remember(viewModel) {
+                            HistoryScreenViewModel(viewModel)
+                        }
+                        HistoryScreen(
+                            viewModel = historyViewModel,
+                            onNavigateToUrl = { url ->
+                                val newTab = browserSessionController.createAndAppendTab(
+                                    initialUrl = url,
+                                )
+                                navController.selectTab(newTab.tabId)
                             },
                             onBack = { backStack.removeLastOrNull() },
                         )

@@ -3,8 +3,6 @@ package net.matsudamper.browser
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
-import android.os.Handler
-import android.os.Looper
 import android.widget.Toast
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
@@ -16,7 +14,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.core.graphics.toColorInt
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -29,14 +26,15 @@ import org.mozilla.geckoview.GeckoView
 import org.mozilla.geckoview.TranslationsController
 import org.mozilla.geckoview.WebResponse
 import java.io.ByteArrayOutputStream
-import java.net.URL
-import java.util.concurrent.Executors
+
 
 @Composable
 internal fun rememberBrowserTabScreenState(
     browserTab: BrowserTab,
     homepageUrl: String,
     searchTemplate: String,
+    onHistoryRecord: (suspend (url: String, title: String) -> Long)? = null,
+    onHistoryTitleUpdate: (suspend (id: Long, title: String) -> Unit)? = null,
 ): BrowserTabScreenState {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -54,10 +52,14 @@ internal fun rememberBrowserTabScreenState(
             coroutineScope = coroutineScope,
             geckoDownloadManager = geckoDownloadManager,
             context = context,
+            onHistoryRecord = onHistoryRecord,
+            onHistoryTitleUpdate = onHistoryTitleUpdate,
         )
     }
     state.homepageUrl = homepageUrl
     state.searchTemplate = searchTemplate
+    state.onHistoryRecord = onHistoryRecord
+    state.onHistoryTitleUpdate = onHistoryTitleUpdate
     return state
 }
 
@@ -69,7 +71,11 @@ internal class BrowserTabScreenState(
     private val coroutineScope: CoroutineScope,
     private val geckoDownloadManager: GeckoDownloadManager,
     private val context: Context,
+    var onHistoryRecord: (suspend (url: String, title: String) -> Long)? = null,
+    var onHistoryTitleUpdate: (suspend (id: Long, title: String) -> Unit)? = null,
 ) {
+    // 現在のページの履歴エントリID（タイトル更新に使用）
+    private var currentHistoryEntryId: Long? = null
     var homepageUrl by mutableStateOf(homepageUrl)
     var searchTemplate by mutableStateOf(searchTemplate)
     val session: GeckoSession get() = browserTab.session
@@ -85,6 +91,7 @@ internal class BrowserTabScreenState(
     // --- Display state ---
     var isPcMode by mutableStateOf(false)
     var toolbarColor by mutableStateOf<Color?>(null)
+    private var lastPageStartUrlKey: String = normalizedToolbarUrlKey(browserTab.currentUrl)
 
     // --- Translation state ---
     var translationState by mutableStateOf(TranslationState.Idle)
@@ -113,6 +120,9 @@ internal class BrowserTabScreenState(
     var pendingDateTimePrompt by mutableStateOf<GeckoSession.PromptDelegate.DateTimePrompt?>(null)
     var pendingDateTimeResult by mutableStateOf<GeckoResult<GeckoSession.PromptDelegate.PromptResponse>?>(null)
 
+    // --- ファイルダウンロード確認ダイアログ用state ---
+    var pendingDownloadResponse by mutableStateOf<WebResponse?>(null)
+
     var renderReady by mutableStateOf(false)
 
     // --- Scroll / Refresh state ---
@@ -129,12 +139,14 @@ internal class BrowserTabScreenState(
     fun onUrlSubmit(rawInput: String) {
         val resolved = buildUrlFromInput(rawInput, homepageUrl, searchTemplate)
         urlInput = resolved
+        maybeResetToolbarColor(currentPageUrl, resolved)
         currentPageUrl = resolved
         session.loadUri(resolved)
     }
 
     fun onHome() {
         urlInput = homepageUrl
+        maybeResetToolbarColor(currentPageUrl, homepageUrl)
         currentPageUrl = homepageUrl
         session.loadUri(homepageUrl)
     }
@@ -260,20 +272,30 @@ internal class BrowserTabScreenState(
     fun downloadImage(imageUrl: String) {
         imageContextMenuUrl = null
         // WorkManagerにエンキューして通知で進捗表示
-        geckoDownloadManager.enqueueImageDownload(
-            imageUrl = imageUrl,
+        geckoDownloadManager.enqueueDownload(
+            url = imageUrl,
             referrerUrl = currentPageUrl,
         )
     }
 
     // GeckoViewがレンダリングできないレスポンス（ダウンロードリンク等）を受け取った際に呼ばれる
-    // 通知による進捗表示はsaveFileFromResponse内で処理される
+    // ユーザーに確認ダイアログを表示するため、pendingDownloadResponseに保持する
     fun downloadFileFromResponse(response: WebResponse) {
-        coroutineScope.launch {
-            runCatching {
-                geckoDownloadManager.saveFileFromResponse(response)
-            }.onFailure { it.printStackTrace() }
-        }
+        pendingDownloadResponse = response
+    }
+
+    fun confirmPendingDownload() {
+        val response = pendingDownloadResponse ?: return
+        pendingDownloadResponse = null
+        geckoDownloadManager.enqueueDownloadFromResponse(
+            response = response,
+            referrerUrl = currentPageUrl,
+        )
+    }
+
+    fun dismissPendingDownload() {
+        pendingDownloadResponse?.body?.close()
+        pendingDownloadResponse = null
     }
 
     fun copyLinkUrl(url: String) {
@@ -449,7 +471,6 @@ internal class BrowserTabScreenState(
             if (!isUrlInputFocused) {
                 urlInput = newUrl
             }
-            toolbarColor = null
             val revertUrl = originalPageUrlForRevert
             if (translationState != TranslationState.Idle &&
                 !newUrl.startsWith("data:") &&
@@ -461,13 +482,32 @@ internal class BrowserTabScreenState(
             if (!newUrl.startsWith("data:")) {
                 detectedPageLanguage = null
             }
+            // 履歴を記録（about:blank や data: URL は除外）
+            if (newUrl.isNotBlank() && !newUrl.startsWith("about:") && !newUrl.startsWith("data:")) {
+                currentHistoryEntryId = null
+                val callback = onHistoryRecord
+                if (callback != null) {
+                    coroutineScope.launch {
+                        currentHistoryEntryId = callback(newUrl, currentPageTitle)
+                    }
+                }
+            }
         }
     }
 
     fun createContentDelegate(onClose: (() -> Unit)? = null): GeckoSession.ContentDelegate =
         object : GeckoSession.ContentDelegate {
             override fun onTitleChange(session: GeckoSession, title: String?) {
-                currentPageTitle = title.orEmpty()
+                val newTitle = title.orEmpty()
+                currentPageTitle = newTitle
+                // 履歴エントリのタイトルを更新
+                val entryId = currentHistoryEntryId
+                val callback = onHistoryTitleUpdate
+                if (entryId != null && newTitle.isNotBlank() && callback != null) {
+                    coroutineScope.launch {
+                        callback(entryId, newTitle)
+                    }
+                }
             }
 
             override fun onContextMenu(
@@ -522,16 +562,11 @@ internal class BrowserTabScreenState(
             }
 
             override fun onPageStart(session: GeckoSession, url: String) {
+                maybeResetToolbarColorOnPageStart(url)
             }
 
             override fun onPageStop(session: GeckoSession, success: Boolean) {
                 renderReady = true
-                val pageUrl = currentPageUrl
-                resolveThemeColor(pageUrl) { resolvedUrl, color ->
-                    if (resolvedUrl == currentPageUrl) {
-                        toolbarColor = color
-                    }
-                }
             }
         }
 
@@ -625,56 +660,26 @@ internal class BrowserTabScreenState(
             }
         }
 
-    companion object {
-        private val themeColorHandler = Handler(Looper.getMainLooper())
-        private val themeColorExecutor = Executors.newSingleThreadExecutor()
-
-        private fun resolveThemeColor(
-            pageUrl: String,
-            onColorResolved: (String, Color?) -> Unit,
-        ) {
-            if (pageUrl.isBlank()) {
-                onColorResolved(pageUrl, null)
-                return
-            }
-            themeColorExecutor.execute {
-                val colorText = runCatching {
-                    URL(pageUrl).openConnection().getInputStream().bufferedReader().use { reader ->
-                        reader.readText()
-                    }
-                }.getOrNull()?.let(::findThemeColorMetaContent)
-
-                val parsedColor = colorText?.let(::parseManifestColor)
-                themeColorHandler.post {
-                    onColorResolved(pageUrl, parsedColor)
-                }
-            }
+    private fun maybeResetToolbarColor(fromUrl: String, toUrl: String) {
+        if (shouldResetToolbarColor(fromUrl, toUrl)) {
+            toolbarColor = null
         }
+    }
 
-        private fun findThemeColorMetaContent(html: String): String? {
-            val metaTagRegex =
-                Regex("""<meta\b[^>]*>""", setOf(RegexOption.IGNORE_CASE))
-            val nameRegex =
-                Regex("""\bname\s*=\s*(["'])theme-color\1""", setOf(RegexOption.IGNORE_CASE))
-            val contentRegex =
-                Regex("""\bcontent\s*=\s*(["'])(.*?)\1""", setOf(RegexOption.IGNORE_CASE))
+    private fun maybeResetToolbarColorOnPageStart(url: String) {
+        val nextKey = normalizedToolbarUrlKey(url)
+        if (nextKey == lastPageStartUrlKey) return
+        toolbarColor = null
+        lastPageStartUrlKey = nextKey
+    }
 
-            return metaTagRegex.findAll(html).firstNotNullOfOrNull { matchResult ->
-                val tag = matchResult.value
-                if (!nameRegex.containsMatchIn(tag)) {
-                    return@firstNotNullOfOrNull null
-                }
-                contentRegex.find(tag)?.groupValues?.getOrNull(2)?.trim()
-                    ?.takeIf { it.isNotEmpty() }
-            }
-        }
+    private fun shouldResetToolbarColor(fromUrl: String, toUrl: String): Boolean {
+        return normalizedToolbarUrlKey(fromUrl) != normalizedToolbarUrlKey(toUrl)
+    }
 
-        private fun parseManifestColor(colorValue: String): Color? {
-            return try {
-                Color(colorValue.toColorInt())
-            } catch (_: IllegalArgumentException) {
-                null
-            }
-        }
+    private fun normalizedToolbarUrlKey(url: String): String {
+        return url
+            .substringBefore("#")
+            .removeSuffix("/")
     }
 }

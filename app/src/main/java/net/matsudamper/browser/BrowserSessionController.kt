@@ -121,6 +121,13 @@ class BrowserSessionController(runtime: GeckoRuntime) {
         )
     }
 
+    fun moveTab(fromIndex: Int, toIndex: Int) {
+        if (fromIndex == toIndex) return
+        if (fromIndex < 0 || fromIndex >= tabList.size) return
+        if (toIndex < 0 || toIndex >= tabList.size) return
+        tabList.add(toIndex, tabList.removeAt(fromIndex))
+    }
+
     fun closeTab(tabId: String) {
         val index = tabList.indexOfFirst { it.tabId == tabId }
         if (index < 0) {
