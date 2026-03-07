@@ -13,7 +13,9 @@
       "mcp__ide__getDiagnostics"
     ],
     "deny": [
-      "Bash(cd:*)"
+      "Bash(cd:*)",
+      "Bash(git push:*)",
+      "Bash(git checkout:*)"
     ]
   },
   "hooks": {
