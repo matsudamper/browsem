@@ -146,7 +146,7 @@ internal fun BrowserApp(
 
                     is AppDestination.Browser -> navEntry(key) {
                         val browserScreenViewModel = remember(viewModel) {
-                            BrowserScreenViewModel(viewModel)
+                            BrowserScreenViewModel(viewModel.settingsUiState, viewModel.historyRepository)
                         }
                         BrowserScreen(
                             key = key,
@@ -167,7 +167,7 @@ internal fun BrowserApp(
 
                     AppDestination.Settings -> navEntry(key) {
                         val settingsViewModel = remember(viewModel) {
-                            SettingsScreenViewModel(viewModel)
+                            SettingsScreenViewModel(viewModel.settingsRepository, viewModel.settingsUiState)
                         }
                         SettingsScreen(
                             viewModel = settingsViewModel,
@@ -182,7 +182,7 @@ internal fun BrowserApp(
 
                     AppDestination.History -> navEntry(key) {
                         val historyViewModel = remember(viewModel) {
-                            HistoryScreenViewModel(viewModel)
+                            HistoryScreenViewModel(viewModel.historyRepository)
                         }
                         HistoryScreen(
                             viewModel = historyViewModel,
@@ -216,7 +216,7 @@ internal fun BrowserApp(
 
                     AppDestination.NotificationPermissions -> navEntry(key) {
                         val notificationPermissionsViewModel = remember(viewModel) {
-                            NotificationPermissionsScreenViewModel(viewModel)
+                            NotificationPermissionsScreenViewModel(viewModel.settingsRepository, viewModel.settingsUiState)
                         }
                         NotificationPermissionsScreen(
                             viewModel = notificationPermissionsViewModel,

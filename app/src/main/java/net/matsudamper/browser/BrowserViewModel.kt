@@ -11,7 +11,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.protobuf.ByteString
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
@@ -29,7 +28,6 @@ import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.TabRepository
 import net.matsudamper.browser.data.ThemeMode
 import net.matsudamper.browser.data.TranslationProvider
-import net.matsudamper.browser.data.history.HistoryEntry
 import net.matsudamper.browser.data.history.HistoryRepository
 import net.matsudamper.browser.data.resolvedHomepageUrl
 import net.matsudamper.browser.data.resolvedSearchTemplate
@@ -57,9 +55,9 @@ internal class BrowserViewModel(
 ) : ViewModel() {
     val browserSessionController = BrowserSessionController(runtime)
     val themeColorExtension = ThemeColorWebExtension().also { it.install(runtime) }
-    private val settingsRepository = SettingsRepository(context)
+    internal val settingsRepository = SettingsRepository(context)
     private val tabRepository = TabRepository(context)
-    private val historyRepository = HistoryRepository(context)
+    internal val historyRepository = HistoryRepository(context)
 
     private val settings: StateFlow<BrowserSettings?> = settingsRepository.settings
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
@@ -161,60 +159,6 @@ internal class BrowserViewModel(
         )
     }
 
-    fun setHomepageType(type: HomepageType) {
-        viewModelScope.launch {
-            settingsRepository.setHomepageType(type)
-        }
-    }
-
-    fun setCustomHomepageUrl(url: String) {
-        viewModelScope.launch {
-            settingsRepository.setCustomHomepageUrl(url)
-        }
-    }
-
-    fun setSearchProvider(provider: SearchProvider) {
-        viewModelScope.launch {
-            settingsRepository.setSearchProvider(provider)
-        }
-    }
-
-    fun setCustomSearchUrl(url: String) {
-        viewModelScope.launch {
-            settingsRepository.setCustomSearchUrl(url)
-        }
-    }
-
-    fun setThemeMode(mode: ThemeMode) {
-        viewModelScope.launch {
-            settingsRepository.setThemeMode(mode)
-        }
-    }
-
-    fun setTranslationProvider(provider: TranslationProvider) {
-        viewModelScope.launch {
-            settingsRepository.setTranslationProvider(provider)
-        }
-    }
-
-    fun setEnableThirdPartyCa(enabled: Boolean) {
-        viewModelScope.launch {
-            settingsRepository.setEnableThirdPartyCa(enabled)
-        }
-    }
-
-    fun addNotificationAllowedOrigin(origin: String) {
-        viewModelScope.launch {
-            settingsRepository.addNotificationAllowedOrigin(origin)
-        }
-    }
-
-    fun removeNotificationAllowedOrigin(origin: String) {
-        viewModelScope.launch {
-            settingsRepository.removeNotificationAllowedOrigin(origin)
-        }
-    }
-
     fun handleNotificationPermission(
         uri: String,
         onDesktopNotificationPermissionRequest: () -> GeckoResult<Int>,
@@ -226,39 +170,9 @@ internal class BrowserViewModel(
         val androidResult = onDesktopNotificationPermissionRequest()
         return androidResult.then { value ->
             if (value == GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW) {
-                addNotificationAllowedOrigin(uri)
+                viewModelScope.launch { settingsRepository.addNotificationAllowedOrigin(uri) }
             }
             GeckoResult.fromValue(value)
-        }
-    }
-
-    // --- 履歴 ---
-
-    suspend fun recordHistory(url: String, title: String): Long {
-        return historyRepository.recordVisit(url, title)
-    }
-
-    suspend fun updateHistoryTitle(id: Long, title: String) {
-        historyRepository.updateTitle(id, title)
-    }
-
-    fun searchHistory(query: String): Flow<List<HistoryEntry>> {
-        return if (query.isBlank()) {
-            historyRepository.getRecent()
-        } else {
-            historyRepository.search(query)
-        }
-    }
-
-    fun deleteAllHistory() {
-        viewModelScope.launch {
-            historyRepository.deleteAll()
-        }
-    }
-
-    fun deleteHistoryEntry(id: Long) {
-        viewModelScope.launch {
-            historyRepository.deleteById(id)
         }
     }
 
