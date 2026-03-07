@@ -163,28 +163,33 @@ internal fun GeckoBrowserTab(
         val translationsDelegate = state.createTranslationsDelegate()
         val promptDelegate = state.createPromptDelegate()
 
-        val mediaSessionDelegate = state.createMediaSessionDelegate()
-
         session.permissionDelegate = permissionDelegate
         session.navigationDelegate = navigationDelegate
         session.contentDelegate = contentDelegate
         session.progressDelegate = progressDelegate
         session.translationsSessionDelegate = translationsDelegate
         session.promptDelegate = promptDelegate
-        session.mediaSessionDelegate = mediaSessionDelegate
 
         browserSessionController.restoreSession(browserTab)
 
         onDispose {
-            if (session.mediaSessionDelegate === mediaSessionDelegate) {
-                session.mediaSessionDelegate = null
-            }
             session.permissionDelegate = null
             session.navigationDelegate = null
             session.contentDelegate = null
             session.progressDelegate = null
             session.translationsSessionDelegate = null
             session.promptDelegate = null
+        }
+    }
+
+    // メディアセッションデリゲートは不安定なラムダキーの影響を受けないよう独立して管理
+    DisposableEffect(session, state) {
+        val mediaSessionDelegate = state.createMediaSessionDelegate()
+        session.mediaSessionDelegate = mediaSessionDelegate
+        onDispose {
+            if (session.mediaSessionDelegate === mediaSessionDelegate) {
+                session.mediaSessionDelegate = null
+            }
         }
     }
 

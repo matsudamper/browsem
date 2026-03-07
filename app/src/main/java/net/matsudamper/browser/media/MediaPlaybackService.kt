@@ -2,17 +2,17 @@ package net.matsudamper.browser.media
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
-import android.content.Intent
 import android.graphics.Bitmap
 import android.os.Looper
+import android.util.Log
 import androidx.annotation.OptIn
-import androidx.core.app.NotificationCompat
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import androidx.media3.common.SimpleBasePlayer
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.session.DefaultMediaNotificationProvider
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import com.google.common.collect.ImmutableList
@@ -39,38 +39,40 @@ class MediaPlaybackService : MediaSessionService() {
     @OptIn(UnstableApi::class)
     override fun onCreate() {
         super.onCreate()
+        Log.d(TAG, "onCreate: bridgeState=${MediaSessionBridge.playbackState.value}")
         ensureMediaNotificationChannel()
 
+        // 既存チャンネルを使用するようMedia3の通知プロバイダを設定。
+        // onStartCommandでの手動startForegroundはMedia3の通知管理と競合するため使用しない。
+        // onActivated()でactivate()を呼んでからサービス起動しているため、
+        // Player初期状態はSTATE_READYになりMedia3がonStartCommand内で通知を発行する。
+        setMediaNotificationProvider(
+            DefaultMediaNotificationProvider.Builder(this)
+                .setChannelId(CHANNEL_ID)
+                .build()
+        )
+
+        // サービス起動前にonActivated()が呼ばれbridge状態にisActive=trueが反映済みのため、
+        // 現在のBridge状態で初期化してSTATE_READYからスタートさせる
         val player = GeckoMediaPlayer()
         mediaSession = MediaSession.Builder(this, player).build()
 
         // Bridge状態を監視してPlayerの状態を更新
         serviceScope.launch {
             MediaSessionBridge.playbackState.collectLatest { state ->
+                Log.d(TAG, "bridge state: isActive=${state.isActive}, isPlaying=${state.isPlaying}, title=${state.title}")
                 player.updateFromBridge(state)
             }
         }
     }
 
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        // Media3の通知が準備される前にタイムアウトしないよう、
-        // 即座にプレースホルダー通知でstartForegroundを呼ぶ
-        ensureMediaNotificationChannel()
-        val notification = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(androidx.media3.session.R.drawable.media3_icon_circular_play)
-            .setContentTitle("メディア再生")
-            .setSilent(true)
-            .build()
-        startForeground(NOTIFICATION_ID, notification)
-
-        return super.onStartCommand(intent, flags, startId)
-    }
-
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? {
+        Log.d(TAG, "onGetSession: packageName=${controllerInfo.packageName}")
         return mediaSession
     }
 
     override fun onDestroy() {
+        Log.d(TAG, "onDestroy")
         mediaSession?.run {
             player.release()
             release()
@@ -92,7 +94,7 @@ class MediaPlaybackService : MediaSessionService() {
 
     companion object {
         const val CHANNEL_ID = "media_playback"
-        private const val NOTIFICATION_ID = 1001
+        private const val TAG = "MediaPlayback"
     }
 }
 
@@ -103,7 +105,9 @@ class MediaPlaybackService : MediaSessionService() {
 @OptIn(UnstableApi::class)
 private class GeckoMediaPlayer : SimpleBasePlayer(Looper.getMainLooper()) {
 
-    private var currentState = MediaPlaybackState()
+    // サービス起動前にonActivated()→activate()が呼ばれているため、
+    // 現在のBridge状態で初期化することでSTATE_READYからスタートできる
+    private var currentState = MediaSessionBridge.playbackState.value
 
     fun updateFromBridge(state: MediaPlaybackState) {
         currentState = state

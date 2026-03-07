@@ -1,6 +1,7 @@
 package net.matsudamper.browser.media
 
 import android.graphics.Bitmap
+import android.util.Log
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -22,10 +23,12 @@ object MediaSessionBridge {
     val playbackState: StateFlow<MediaPlaybackState> = _playbackState.asStateFlow()
 
     fun activate() {
+        Log.d(TAG, "activate")
         _playbackState.value = _playbackState.value.copy(isActive = true)
     }
 
     fun deactivate() {
+        Log.d(TAG, "deactivate")
         _playbackState.value = MediaPlaybackState()
         activeGeckoMediaSession = null
     }
@@ -36,6 +39,7 @@ object MediaSessionBridge {
         album: String,
         artworkBitmap: Bitmap?,
     ) {
+        Log.d(TAG, "updateMetadata: title=$title, artist=$artist, hasArtwork=${artworkBitmap != null}")
         _playbackState.value = _playbackState.value.copy(
             title = title,
             artist = artist,
@@ -45,6 +49,7 @@ object MediaSessionBridge {
     }
 
     fun updatePlaying(isPlaying: Boolean) {
+        Log.d(TAG, "updatePlaying: isPlaying=$isPlaying")
         _playbackState.value = _playbackState.value.copy(isPlaying = isPlaying)
     }
 
@@ -56,16 +61,37 @@ object MediaSessionBridge {
     }
 
     fun updateFeatures(features: Long) {
+        Log.d(TAG, "updateFeatures: features=$features")
         _playbackState.value = _playbackState.value.copy(features = features)
     }
 
     // サービスからGeckoViewへの制御メソッド
-    fun play() { activeGeckoMediaSession?.play() }
-    fun pause() { activeGeckoMediaSession?.pause() }
-    fun stop() { activeGeckoMediaSession?.stop() }
-    fun nextTrack() { activeGeckoMediaSession?.nextTrack() }
-    fun previousTrack() { activeGeckoMediaSession?.previousTrack() }
-    fun seekTo(positionSeconds: Double) { activeGeckoMediaSession?.seekTo(positionSeconds, true) }
+    fun play() {
+        Log.d(TAG, "play")
+        activeGeckoMediaSession?.play()
+    }
+    fun pause() {
+        Log.d(TAG, "pause")
+        activeGeckoMediaSession?.pause()
+    }
+    fun stop() {
+        Log.d(TAG, "stop")
+        activeGeckoMediaSession?.stop()
+    }
+    fun nextTrack() {
+        Log.d(TAG, "nextTrack")
+        activeGeckoMediaSession?.nextTrack()
+    }
+    fun previousTrack() {
+        Log.d(TAG, "previousTrack")
+        activeGeckoMediaSession?.previousTrack()
+    }
+    fun seekTo(positionSeconds: Double) {
+        Log.d(TAG, "seekTo: positionSeconds=$positionSeconds")
+        activeGeckoMediaSession?.seekTo(positionSeconds, true)
+    }
+
+    private const val TAG = "MediaSessionBridge"
 }
 
 // メディア再生状態を保持するデータクラス
