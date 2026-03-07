@@ -45,6 +45,7 @@ internal fun SettingsScreen(
     viewModel: SettingsScreenViewModel,
     onOpenExtensions: () -> Unit,
     onOpenNotificationPermissions: () -> Unit,
+    onOpenHistory: () -> Unit,
     onBack: () -> Unit,
 ) {
     val currentUiState by viewModel.uiState.collectAsState()
@@ -226,6 +227,17 @@ internal fun SettingsScreen(
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text("インストール済み拡張機能を管理")
+                }
+            }
+
+            Spacer(Modifier.height(24.dp))
+
+            SettingSection(title = "履歴") {
+                TextButton(
+                    onClick = onOpenHistory,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("閲覧履歴を検索")
                 }
             }
 
