@@ -1,5 +1,6 @@
 package net.matsudamper.browser
 
+import android.view.View
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -18,7 +19,6 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -34,6 +34,8 @@ import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.Text
 import androidx.compose.material3.ripple
@@ -174,20 +176,19 @@ internal fun BrowserToolBar(
                 Row(
                     modifier = Modifier
                         .padding(
-                            start = 8.dp,
                             end = 4.dp,
-                            top = 4.dp,
-                            bottom = 4.dp
                         ),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     UrlTextInput(
                         modifier = Modifier
-                            .weight(1f)
-                            .horizontalScroll(
-                                state = rememberScrollState(),
-                                enabled = isFocused,
-                            ),
+                            .weight(1f),
+                        paddingValues = PaddingValues(
+                            start = 8.dp,
+                            top = 4.dp,
+                            bottom = 4.dp
+                        ),
+                        scrollEnabled = isFocused,
                         value = value,
                         onValueChange = onValueChange,
                         onSubmit = onSubmit,
@@ -265,12 +266,14 @@ internal fun BrowserToolBar(
 }
 
 @Composable
-fun UrlTextInput(
+private fun UrlTextInput(
     value: String,
+    scrollEnabled: Boolean,
     onValueChange: (String) -> Unit,
     onSubmit: (String) -> Unit,
     onFocusChanged: (Boolean) -> Unit,
     textColor: Color,
+    paddingValues: PaddingValues,
     modifier: Modifier = Modifier,
 ) {
     val currentValue by rememberUpdatedState(value)
@@ -278,6 +281,8 @@ fun UrlTextInput(
     val currentOnSubmit by rememberUpdatedState(onSubmit)
     val currentOnFocusChanged by rememberUpdatedState(onFocusChanged)
     val textColor by rememberUpdatedState(textColor)
+    val scrollEnabled by rememberUpdatedState(scrollEnabled)
+    val paddingValues by rememberUpdatedState(paddingValues)
 
     // 一度AndroidViewを経由しないとBitwardenが認識しない
     AndroidView(
@@ -286,10 +291,13 @@ fun UrlTextInput(
             ComposeView(context).apply {
                 setContent {
                     BasicTextField(
-                        value = currentValue,
-                        onValueChange = { currentOnValueChange(it) },
                         modifier = Modifier
                             .fillMaxWidth()
+                            .horizontalScroll(
+                                state = rememberScrollState(),
+                                enabled = scrollEnabled,
+                            )
+                            .padding(paddingValues)
                             .testTag("url_bar")
                             .onFocusChanged { currentOnFocusChanged(it.hasFocus) }
                             .semantics {
@@ -297,6 +305,8 @@ fun UrlTextInput(
                                 contentType = ContentType("url")
                                 contentDataType = ContentDataType.Text
                             },
+                        value = currentValue,
+                        onValueChange = { currentOnValueChange(it) },
                         singleLine = true,
                         textStyle = MaterialTheme.typography.bodyLarge
                             .merge(
