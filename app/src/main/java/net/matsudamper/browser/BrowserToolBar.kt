@@ -348,16 +348,17 @@ private fun ToolbarMenu(
                 IconButton(
                     onClick = {
                         onDismissRequest()
-                        onRefresh()
-                    }
+                        onForward()
+                    },
+                    enabled = canGoForward,
                 ) {
                     Icon(
-                        painter = painterResource(R.drawable.ic_refresh_24dp),
-                        contentDescription = "更新",
+                        painter = painterResource(R.drawable.ic_arrow_forward_24dp),
+                        contentDescription = "進む",
                     )
                 }
                 Text(
-                    text = "更新",
+                    text = "進む",
                     style = MaterialTheme.typography.labelSmall,
                 )
             }
@@ -382,17 +383,16 @@ private fun ToolbarMenu(
                 IconButton(
                     onClick = {
                         onDismissRequest()
-                        onForward()
-                    },
-                    enabled = canGoForward,
+                        onRefresh()
+                    }
                 ) {
                     Icon(
-                        painter = painterResource(R.drawable.ic_arrow_forward_24dp),
-                        contentDescription = "進む",
+                        painter = painterResource(R.drawable.ic_refresh_24dp),
+                        contentDescription = "更新",
                     )
                 }
                 Text(
-                    text = "進む",
+                    text = "更新",
                     style = MaterialTheme.typography.labelSmall,
                 )
             }
