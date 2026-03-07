@@ -11,9 +11,6 @@
       "Bash(find:*)",
       "Read(./**)",
       "mcp__ide__getDiagnostics"
-    ],
-    "deny": [
-      "Bash(cd:*)"
     ]
   },
   "hooks": {

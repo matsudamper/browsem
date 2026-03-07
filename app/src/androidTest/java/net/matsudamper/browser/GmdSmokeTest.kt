@@ -219,7 +219,7 @@ class GmdSmokeTest {
     private fun seedHistoryEntry(url: String, title: String) {
         composeRule.runOnIdle {
             runBlocking {
-                getBrowserViewModel().recordHistory(url, title)
+                getBrowserViewModel().historyRepository.recordVisit(url, title)
             }
         }
     }
