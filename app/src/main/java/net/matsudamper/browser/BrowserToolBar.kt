@@ -1,5 +1,6 @@
 package net.matsudamper.browser
 
+import android.view.ViewGroup
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -265,7 +266,7 @@ internal fun BrowserToolBar(
 }
 
 @Composable
-fun UrlTextInput(
+private fun UrlTextInput(
     value: String,
     onValueChange: (String) -> Unit,
     onSubmit: (String) -> Unit,
@@ -284,6 +285,10 @@ fun UrlTextInput(
         modifier = modifier,
         factory = { context ->
             ComposeView(context).apply {
+                layoutParams = ViewGroup.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT
+                )
                 setContent {
                     BasicTextField(
                         value = currentValue,
