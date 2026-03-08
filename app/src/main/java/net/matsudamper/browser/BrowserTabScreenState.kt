@@ -3,6 +3,7 @@ package net.matsudamper.browser
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
+import android.util.Log
 import android.widget.Toast
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
@@ -430,11 +431,23 @@ internal class BrowserTabScreenState(
             session: GeckoSession,
             perm: GeckoSession.PermissionDelegate.ContentPermission,
         ): GeckoResult<Int> {
+            Log.d("BrowserTabPermission", "onContentPermissionRequest: permission=${perm.permission}, uri=${perm.uri}")
+            if (
+                perm.permission == GeckoSession.PermissionDelegate.PERMISSION_AUTOPLAY_INAUDIBLE ||
+                perm.permission == GeckoSession.PermissionDelegate.PERMISSION_AUTOPLAY_AUDIBLE
+            ) {
+                Log.d("BrowserTabPermission", "autoplay permission allowed")
+                return GeckoResult.fromValue(
+                    GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW
+                )
+            }
             if (perm.permission != GeckoSession.PermissionDelegate.PERMISSION_DESKTOP_NOTIFICATION) {
+                Log.d("BrowserTabPermission", "non-notification permission prompted")
                 return GeckoResult.fromValue(
                     GeckoSession.PermissionDelegate.ContentPermission.VALUE_PROMPT
                 )
             }
+            Log.d("BrowserTabPermission", "desktop notification delegated")
             return onDesktopNotificationPermissionRequest(perm.uri)
         }
     }
@@ -442,6 +455,7 @@ internal class BrowserTabScreenState(
     fun createNavigationDelegate(
         onOpenNewSessionRequest: (String) -> GeckoSession,
     ): GeckoSession.NavigationDelegate = object : GeckoSession.NavigationDelegate {
+
         override fun onCanGoBack(session: GeckoSession, value: Boolean) {
             canGoBack = value
         }
@@ -643,6 +657,11 @@ internal class BrowserTabScreenState(
                 return result
             }
         }
+
+    // メディアセッションデリゲートを作成
+    fun createMediaSessionDelegate(): org.mozilla.geckoview.MediaSession.Delegate {
+        return net.matsudamper.browser.media.GeckoMediaSessionDelegate(context)
+    }
 
     fun createScrollDelegate(): GeckoSession.ScrollDelegate =
         object : GeckoSession.ScrollDelegate {
