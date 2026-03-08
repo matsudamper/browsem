@@ -6,7 +6,6 @@ import androidx.compose.animation.ContentTransform
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.snap
-import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideIn
@@ -31,6 +30,8 @@ import androidx.navigation3.ui.defaultPopTransitionSpec
 import androidx.navigation3.ui.defaultTransitionSpec
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.Flow
+import net.matsudamper.browser.data.SettingsRepository
+import net.matsudamper.browser.data.history.HistoryRepository
 import net.matsudamper.browser.navigation.AppDestination
 import net.matsudamper.browser.navigation.NavController
 import net.matsudamper.browser.screen.browser.BrowserScreen
@@ -44,6 +45,7 @@ import net.matsudamper.browser.screen.notificationpermissions.NotificationPermis
 import net.matsudamper.browser.screen.settings.SettingsScreen
 import net.matsudamper.browser.screen.settings.SettingsScreenViewModel
 import net.matsudamper.browser.screen.tab.TabsScreen
+import org.koin.compose.koinInject
 import org.mozilla.geckoview.GeckoResult
 
 @Composable
@@ -60,6 +62,10 @@ internal fun BrowserApp(
     val searchTemplate = settingsUiState.searchTemplate
     val browserSessionController = viewModel.browserSessionController
     val themeColorExtension = viewModel.themeColorExtension
+
+    // Koin からリポジトリを取得（画面 ViewModel に直接渡す）
+    val settingsRepository: SettingsRepository = koinInject()
+    val historyRepository: HistoryRepository = koinInject()
 
     LaunchedEffect(settingsUiState.enableThirdPartyCa) {
         viewModel.applyRuntimeSettings()
@@ -146,7 +152,7 @@ internal fun BrowserApp(
 
                     is AppDestination.Browser -> navEntry(key) {
                         val browserScreenViewModel = remember(viewModel) {
-                            BrowserScreenViewModel(viewModel.settingsUiState, viewModel.historyRepository)
+                            BrowserScreenViewModel(viewModel.settingsUiState, historyRepository)
                         }
                         BrowserScreen(
                             key = key,
@@ -167,7 +173,7 @@ internal fun BrowserApp(
 
                     AppDestination.Settings -> navEntry(key) {
                         val settingsViewModel = remember(viewModel) {
-                            SettingsScreenViewModel(viewModel.settingsRepository, viewModel.settingsUiState)
+                            SettingsScreenViewModel(settingsRepository, viewModel.settingsUiState)
                         }
                         SettingsScreen(
                             viewModel = settingsViewModel,
@@ -181,8 +187,8 @@ internal fun BrowserApp(
                     }
 
                     AppDestination.History -> navEntry(key) {
-                        val historyViewModel = remember(viewModel) {
-                            HistoryScreenViewModel(viewModel.historyRepository)
+                        val historyViewModel = remember {
+                            HistoryScreenViewModel(historyRepository)
                         }
                         HistoryScreen(
                             viewModel = historyViewModel,
@@ -216,7 +222,7 @@ internal fun BrowserApp(
 
                     AppDestination.NotificationPermissions -> navEntry(key) {
                         val notificationPermissionsViewModel = remember(viewModel) {
-                            NotificationPermissionsScreenViewModel(viewModel.settingsRepository, viewModel.settingsUiState)
+                            NotificationPermissionsScreenViewModel(settingsRepository, viewModel.settingsUiState)
                         }
                         NotificationPermissionsScreen(
                             viewModel = notificationPermissionsViewModel,

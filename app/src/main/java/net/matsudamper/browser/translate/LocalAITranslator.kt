@@ -10,6 +10,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import org.mozilla.geckoview.GeckoSession
+import java.net.HttpURLConnection
 import java.net.URL
 import java.util.Locale
 
@@ -18,9 +19,16 @@ class LocalAITranslator(
     private val currentPageUrl: String,
 ) : Translator {
     override suspend fun translate() {
-        // 1. HTMLを取得
+        // 1. HTMLを取得（タイムアウト付き）
         val rawHtml = withContext(Dispatchers.IO) {
-            URL(currentPageUrl).readText()
+            val connection = URL(currentPageUrl).openConnection() as HttpURLConnection
+            connection.connectTimeout = NETWORK_TIMEOUT_MS
+            connection.readTimeout = NETWORK_TIMEOUT_MS
+            try {
+                connection.inputStream.bufferedReader().readText()
+            } finally {
+                connection.disconnect()
+            }
         }
 
         // 2. <script>/<style>/<noscript>/<template> を除去してJSON-LD汚染を防ぐ
@@ -108,5 +116,9 @@ class LocalAITranslator(
             translator.downloadModelIfNeeded(conditions).await()
             translator.translate(text).await()
         }
+    }
+
+    companion object {
+        private const val NETWORK_TIMEOUT_MS = 15_000
     }
 }

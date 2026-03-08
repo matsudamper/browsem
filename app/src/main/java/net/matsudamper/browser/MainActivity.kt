@@ -8,6 +8,7 @@ import android.content.IntentSender
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.IntentSenderRequest
@@ -23,11 +24,10 @@ import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
-import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.receiveAsFlow
+import org.koin.android.ext.android.inject
+import org.koin.androidx.compose.koinViewModel
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoSession
@@ -38,11 +38,12 @@ import java.util.concurrent.CancellationException
 
 class MainActivity : ComponentActivity() {
 
-    private lateinit var runtime: GeckoRuntime
+    private val runtime: GeckoRuntime by inject()
     private lateinit var extensionInstaller: WebExtensionInstaller
     private var pendingActivityResult: GeckoResult<Intent>? = null
     private var webExtensionWarmUpCompleted = false
     private var webExtensionWarmUpInProgress = false
+    private var webExtensionWarmUpRetryCount = 0
     private val createNewTabChannel = Channel<String>(Channel.UNLIMITED)
     private var pendingNotificationPermissionResult: GeckoResult<Int>? = null
 
@@ -129,7 +130,6 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        runtime = GeckoRuntime.getDefault(this)
         extensionInstaller = WebExtensionInstaller(runtime)
 
         runtime.setActivityDelegate(activityDelegate)
@@ -147,14 +147,7 @@ class MainActivity : ComponentActivity() {
         }
 
         setContent {
-            val browserViewModel = viewModel<BrowserViewModel>(
-                factory = object : ViewModelProvider.Factory {
-                    @Suppress("UNCHECKED_CAST")
-                    override fun <T : ViewModel> create(modelClass: Class<T>): T {
-                        return BrowserViewModel(runtime, applicationContext) as T
-                    }
-                }
-            )
+            val browserViewModel: BrowserViewModel = koinViewModel()
             Box(
                 modifier = Modifier.semantics {
                     testTagsAsResourceId = true
@@ -233,23 +226,16 @@ class MainActivity : ComponentActivity() {
             CancellationException("Activity was destroyed before notification permission completed.")
         )
         pendingNotificationPermissionResult = null
-        if (::runtime.isInitialized && runtime.getActivityDelegate() === activityDelegate) {
+        if (::extensionInstaller.isInitialized && runtime.getActivityDelegate() === activityDelegate) {
             runtime.setActivityDelegate(null)
         }
-        if (::runtime.isInitialized &&
+        if (::extensionInstaller.isInitialized &&
             runtime.webExtensionController.getPromptDelegate() === extensionInstaller.promptDelegate
         ) {
             runtime.webExtensionController.setPromptDelegate(null)
         }
         runtime.webExtensionController.setAddonManagerDelegate(null)
         super.onDestroy()
-    }
-
-    override fun onStop() {
-        super.onStop()
-        if (isFinishing) {
-            extensionInstaller.cleanup()
-        }
     }
 
     private fun extractDomain(url: String): String {
@@ -286,14 +272,21 @@ class MainActivity : ComponentActivity() {
             },
             {
                 webExtensionWarmUpInProgress = false
-                if (!isFinishing && !isDestroyed) {
+                webExtensionWarmUpRetryCount++
+                if (!isFinishing && !isDestroyed && webExtensionWarmUpRetryCount < MAX_WARMUP_RETRIES) {
                     window.decorView.postDelayed(
                         { warmUpWebExtensionController() },
                         1200L
                     )
+                } else if (webExtensionWarmUpRetryCount >= MAX_WARMUP_RETRIES) {
+                    Log.w("MainActivity", "WebExtension warmup を ${MAX_WARMUP_RETRIES}回リトライしても失敗")
                 }
             },
         )
+    }
+
+    companion object {
+        private const val MAX_WARMUP_RETRIES = 5
     }
 }
 

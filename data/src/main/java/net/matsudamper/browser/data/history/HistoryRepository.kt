@@ -1,15 +1,10 @@
 package net.matsudamper.browser.data.history
 
 import android.content.Context
-import androidx.room.Room
 import kotlinx.coroutines.flow.Flow
 
 class HistoryRepository(context: Context) {
-    private val db = Room.databaseBuilder(
-        context.applicationContext,
-        BrowserDatabase::class.java,
-        "browser.db",
-    ).build()
+    private val db = BrowserDatabase.getInstance(context)
     private val dao = db.historyDao()
 
     suspend fun recordVisit(url: String, title: String): Long {

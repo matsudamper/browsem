@@ -1,6 +1,5 @@
 package net.matsudamper.browser
 
-import android.content.Context
 import android.util.Log
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
@@ -28,7 +27,6 @@ import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.TabRepository
 import net.matsudamper.browser.data.ThemeMode
 import net.matsudamper.browser.data.TranslationProvider
-import net.matsudamper.browser.data.history.HistoryRepository
 import net.matsudamper.browser.data.resolvedHomepageUrl
 import net.matsudamper.browser.data.resolvedSearchTemplate
 import org.mozilla.geckoview.GeckoResult
@@ -51,13 +49,12 @@ internal data class SettingsUiState(
 @Stable
 internal class BrowserViewModel(
     val runtime: GeckoRuntime,
-    context: Context,
+    private val settingsRepository: SettingsRepository,
+    private val tabRepository: TabRepository,
+    private val historyRepository: net.matsudamper.browser.data.history.HistoryRepository,
 ) : ViewModel() {
     val browserSessionController = BrowserSessionController(runtime)
     val themeColorExtension = ThemeColorWebExtension().also { it.install(runtime) }
-    internal val settingsRepository = SettingsRepository(context)
-    private val tabRepository = TabRepository(context)
-    internal val historyRepository = HistoryRepository(context)
 
     private val settings: StateFlow<BrowserSettings?> = settingsRepository.settings
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
@@ -161,19 +158,23 @@ internal class BrowserViewModel(
         }
 
         // 変更部分のみをDBに同期する
-        tabRepository.syncTabs(
-            tabs = tabs.map { tab ->
-                PersistedTabState(
-                    url = tab.url,
-                    sessionState = tab.sessionState,
-                    title = tab.title,
-                    tabId = tab.tabId,
-                    openerTabId = tab.openerTabId.orEmpty(),
-                    themeColor = tab.themeColor,
-                )
-            },
-            selectedTabId = selectedTabId,
-        )
+        runCatching {
+            tabRepository.syncTabs(
+                tabs = tabs.map { tab ->
+                    PersistedTabState(
+                        url = tab.url,
+                        sessionState = tab.sessionState,
+                        title = tab.title,
+                        tabId = tab.tabId,
+                        openerTabId = tab.openerTabId.orEmpty(),
+                        themeColor = tab.themeColor,
+                    )
+                },
+                selectedTabId = selectedTabId,
+            )
+        }.onFailure { e ->
+            Log.e("BrowserViewModel", "タブ状態の保存に失敗しました", e)
+        }
     }
 
     fun handleNotificationPermission(
@@ -200,6 +201,7 @@ internal class BrowserViewModel(
     override fun onCleared() {
         super.onCleared()
         browserSessionController.close()
+        themeColorExtension.cleanup()
     }
 }
 
