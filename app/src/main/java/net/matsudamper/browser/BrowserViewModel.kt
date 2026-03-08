@@ -51,7 +51,7 @@ internal class BrowserViewModel(
     val runtime: GeckoRuntime,
     private val settingsRepository: SettingsRepository,
     private val tabRepository: TabRepository,
-    private val historyRepository: net.matsudamper.browser.data.history.HistoryRepository,
+    internal val historyRepository: net.matsudamper.browser.data.history.HistoryRepository,
 ) : ViewModel() {
     val browserSessionController = BrowserSessionController(runtime)
     val themeColorExtension = ThemeColorWebExtension().also { it.install(runtime) }
