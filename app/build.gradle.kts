@@ -15,6 +15,7 @@ android {
 
     defaultConfig {
         applicationId = "net.matsudamper.browser"
+        testApplicationId = "net.matsudamper.browser.androidtest"
         minSdk = 30
         targetSdk = 36
         versionCode = 1
