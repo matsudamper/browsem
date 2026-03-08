@@ -14,6 +14,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -91,7 +92,10 @@ internal class BrowserTabScreenState(
 
     // --- Display state ---
     var isPcMode by mutableStateOf(false)
-    var toolbarColor by mutableStateOf<Color?>(null)
+    // BrowserTab.themeColor に委譲することで、変更が自動的に永続化対象になる
+    var toolbarColor: Color?
+        get() = browserTab.themeColor?.let { Color(it) }
+        set(value) { browserTab.themeColor = value?.toArgb() }
     private var lastPageStartUrlKey: String = normalizedToolbarUrlKey(browserTab.currentUrl)
 
     // --- Translation state ---

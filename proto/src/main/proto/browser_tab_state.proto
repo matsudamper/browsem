@@ -15,4 +15,5 @@ message BrowserTabState {
   bytes preview_image_webp = 4;
   string tab_id = 5;
   string opener_tab_id = 6;
+  optional int32 theme_color = 7;
 }

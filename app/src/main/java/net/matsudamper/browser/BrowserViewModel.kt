@@ -102,6 +102,7 @@ internal class BrowserViewModel(
                 previewImageWebp = thumbnail ?: byteArrayOf(),
                 tabId = tabId,
                 openerTabId = tabState.openerTabId.ifBlank { null },
+                themeColor = if (tabState.hasThemeColor()) tabState.themeColor else null,
             )
         }
         val tabId = browserSessionController.restoreTabs(
@@ -172,6 +173,7 @@ internal class BrowserViewModel(
                     title = tab.title,
                     tabId = tab.tabId,
                     openerTabId = tab.openerTabId.orEmpty(),
+                    themeColor = tab.themeColor,
                 )
             },
             selectedTabIndex = selectedIndex,

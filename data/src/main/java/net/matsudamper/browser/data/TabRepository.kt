@@ -60,6 +60,7 @@ class TabRepository(context: Context) {
                         title = it.title,
                         tabId = it.tabId,
                         openerTabId = it.openerTabId,
+                        themeColor = if (it.hasThemeColor()) it.themeColor else null,
                     )
                 }
                 if (currentTabs == tabs && current.selectedTabIndex == clampedIndex) {
@@ -68,15 +69,16 @@ class TabRepository(context: Context) {
                 val builder = current.toBuilder()
                 builder.clearTabStates()
                 tabs.forEach { tab ->
-                    builder.addTabStates(
-                        BrowserTabState.newBuilder()
-                            .setUrl(tab.url)
-                            .setSessionState(tab.sessionState)
-                            .setTitle(tab.title)
-                            .setTabId(tab.tabId)
-                            .setOpenerTabId(tab.openerTabId)
-                            .build()
-                    )
+                    val stateBuilder = BrowserTabState.newBuilder()
+                        .setUrl(tab.url)
+                        .setSessionState(tab.sessionState)
+                        .setTitle(tab.title)
+                        .setTabId(tab.tabId)
+                        .setOpenerTabId(tab.openerTabId)
+                    if (tab.themeColor != null) {
+                        stateBuilder.setThemeColor(tab.themeColor)
+                    }
+                    builder.addTabStates(stateBuilder.build())
                 }
                 builder.selectedTabIndex = clampedIndex
                 builder.build()
@@ -93,4 +95,5 @@ data class PersistedTabState(
     val title: String,
     val tabId: String = "",
     val openerTabId: String = "",
+    val themeColor: Int? = null,
 )
