@@ -18,6 +18,7 @@ coroutinesPlayServices = "1.10.2"
 mlkitLanguageId = "17.0.6"
 swiperefreshlayout = "1.2.0"
 lifecycleViewmodelCompose = "2.9.1"
+media3 = "1.6.0"
 workManager = "2.10.1"
 room = "2.7.1"
 ksp = "2.3.6"
@@ -46,6 +47,7 @@ mlkit-language-id = { module = "com.google.mlkit:language-id", version.ref = "ml
 kotlinx-coroutines-play-services = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-play-services", version.ref = "coroutinesPlayServices" }
 androidx-swiperefreshlayout = { group = "androidx.swiperefreshlayout", name = "swiperefreshlayout", version.ref = "swiperefreshlayout" }
 androidx-lifecycle-viewmodel-compose = { module = "androidx.lifecycle:lifecycle-viewmodel-compose", version.ref = "lifecycleViewmodelCompose" }
+androidx-media3-session = { module = "androidx.media3:media3-session", version.ref = "media3" }
 androidx-work-runtime = { module = "androidx.work:work-runtime-ktx", version.ref = "workManager" }
 androidx-room-runtime = { module = "androidx.room:room-runtime", version.ref = "room" }
 androidx-room-compiler = { module = "androidx.room:room-compiler", version.ref = "room" }

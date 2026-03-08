@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Media Notification Test</title>
+  <style>
+    body { font-family: sans-serif; max-width: 720px; margin: 24px auto; padding: 0 16px; background: #111; color: #eee; }
+    h1 { font-size: 1.25rem; }
+    video { width: 100%; background: #000; border-radius: 8px; }
+    #status { margin-top: 12px; color: #bfbfbf; }
+  </style>
+</head>
+<body>
+  <h1>Media Notification Test</h1>
+  <video id="video" controls preload="metadata" playsinline autoplay>
+    <source src="./test.webm" type="video/webm" />
+  </video>
+  <div id="status">idle (tap video to start)</div>
+
+  <script>
+    const video = document.getElementById('video');
+    const status = document.getElementById('status');
+
+    if ('mediaSession' in navigator) {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: 'Test Video',
+        artist: 'Browsem',
+        album: 'AndroidTest Assets',
+      });
+
+      navigator.mediaSession.setActionHandler('play', () => video.play());
+      navigator.mediaSession.setActionHandler('pause', () => video.pause());
+      navigator.mediaSession.setActionHandler('previoustrack', () => {
+        video.currentTime = 0;
+      });
+      navigator.mediaSession.setActionHandler('nexttrack', () => {});
+      navigator.mediaSession.setActionHandler('seekto', (e) => {
+        if (typeof e.seekTime === 'number') {
+          video.currentTime = e.seekTime;
+        }
+      });
+      navigator.mediaSession.setActionHandler('seekbackward', (e) => {
+        const offset = e.seekOffset ?? 10;
+        video.currentTime = Math.max(0, video.currentTime - offset);
+      });
+      navigator.mediaSession.setActionHandler('seekforward', (e) => {
+        const offset = e.seekOffset ?? 10;
+        video.currentTime = Math.min(video.duration || 0, video.currentTime + offset);
+      });
+    }
+
+    video.addEventListener('play', () => {
+      status.textContent = 'playing';
+      if ('mediaSession' in navigator) {
+        navigator.mediaSession.playbackState = 'playing';
+      }
+    });
+
+    video.addEventListener('pause', () => {
+      status.textContent = 'paused';
+      if ('mediaSession' in navigator) {
+        navigator.mediaSession.playbackState = 'paused';
+      }
+    });
+
+    video.addEventListener('timeupdate', () => {
+      if ('mediaSession' in navigator && Number.isFinite(video.duration) && video.duration > 0) {
+        navigator.mediaSession.setPositionState({
+          duration: video.duration,
+          playbackRate: video.playbackRate,
+          position: video.currentTime,
+        });
+      }
+    });
+
+    video.addEventListener('ended', () => {
+      status.textContent = 'ended';
+      if ('mediaSession' in navigator) {
+        navigator.mediaSession.playbackState = 'paused';
+      }
+    });
+
+    const requestPlayback = () => {
+      video.play().catch((error) => {
+        status.textContent = `play blocked: ${error?.name ?? 'unknown'}`;
+      });
+    };
+    video.addEventListener('loadedmetadata', requestPlayback);
+    document.addEventListener('pointerdown', requestPlayback, { once: true });
+    document.addEventListener('click', requestPlayback, { once: true });
+  </script>
+</body>
+</html>
