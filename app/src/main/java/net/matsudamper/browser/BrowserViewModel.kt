@@ -9,8 +9,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.google.protobuf.ByteString
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
@@ -88,12 +89,18 @@ internal class BrowserViewModel(
         val currentTabData = tabData.filterNotNull().first()
         val homepageUrl = currentSettings.resolvedHomepageUrl()
         val persistedTabs = currentTabData.tabStatesList.map { tabState ->
+            val tabId = tabState.tabId.ifBlank { java.util.UUID.randomUUID().toString() }
+            // キャッシュから読み込み、なければprotoの旧データを移行してキャッシュに保存する
+            val thumbnail = tabRepository.loadTabThumbnail(tabId)
+                ?: tabState.previewImageWebp.toByteArray().takeIf { it.isNotEmpty() }?.also { bytes ->
+                    tabRepository.saveTabThumbnail(tabId, bytes)
+                }
             PersistedBrowserTab(
                 url = tabState.url,
                 sessionState = tabState.sessionState,
                 title = tabState.title,
-                previewImageWebp = tabState.previewImageWebp.toByteArray(),
-                tabId = tabState.tabId.ifBlank { java.util.UUID.randomUUID().toString() },
+                previewImageWebp = thumbnail ?: byteArrayOf(),
+                tabId = tabId,
                 openerTabId = tabState.openerTabId.ifBlank { null },
             )
         }
@@ -144,13 +151,25 @@ internal class BrowserViewModel(
         } else {
             null
         } ?: tabs.lastIndex
+
+        // サムネイルをキャッシュファイルに保存
+        val currentTabIds = tabs.map { it.tabId }.toSet()
+        withContext(Dispatchers.IO) {
+            tabs.forEach { tab ->
+                if (tab.previewImageWebp.isNotEmpty()) {
+                    tabRepository.saveTabThumbnail(tab.tabId, tab.previewImageWebp)
+                }
+            }
+            // 削除されたタブのサムネイルファイルを削除
+            tabRepository.deleteOrphanedThumbnails(currentTabIds)
+        }
+
         tabRepository.updateTabStates(
             tabs = tabs.map { tab ->
                 PersistedTabState(
                     url = tab.url,
                     sessionState = tab.sessionState,
                     title = tab.title,
-                    previewImageWebp = ByteString.copyFrom(tab.previewImageWebp),
                     tabId = tab.tabId,
                     openerTabId = tab.openerTabId.orEmpty(),
                 )

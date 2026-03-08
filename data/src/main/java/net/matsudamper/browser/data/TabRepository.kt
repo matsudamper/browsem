@@ -5,8 +5,8 @@ import android.util.Log
 import androidx.datastore.core.DataStore
 import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
 import androidx.datastore.dataStore
-import com.google.protobuf.ByteString
 import kotlinx.coroutines.flow.Flow
+import java.io.File
 
 private val Context.browserTabDataStore: DataStore<BrowserTabData> by dataStore(
     fileName = "browser_tab_state.pb",
@@ -16,8 +16,30 @@ private val Context.browserTabDataStore: DataStore<BrowserTabData> by dataStore(
 
 class TabRepository(context: Context) {
     private val dataStore = context.browserTabDataStore
+    private val thumbnailDir = File(context.cacheDir, "tab_thumbnails").apply { mkdirs() }
 
     val tabs: Flow<BrowserTabData> = dataStore.data
+
+    /** サムネイル画像をキャッシュファイルに保存する */
+    fun saveTabThumbnail(tabId: String, imageBytes: ByteArray) {
+        if (imageBytes.isEmpty()) return
+        File(thumbnailDir, "$tabId.webp").writeBytes(imageBytes)
+    }
+
+    /** サムネイル画像をキャッシュファイルから読み込む */
+    fun loadTabThumbnail(tabId: String): ByteArray? {
+        val file = File(thumbnailDir, "$tabId.webp")
+        return if (file.exists()) file.readBytes() else null
+    }
+
+    /** 現在存在しないタブのサムネイルファイルを削除する */
+    fun deleteOrphanedThumbnails(validTabIds: Set<String>) {
+        thumbnailDir.listFiles()?.forEach { file ->
+            if (file.nameWithoutExtension !in validTabIds) {
+                file.delete()
+            }
+        }
+    }
 
     suspend fun updateTabStates(
         tabs: List<PersistedTabState>,
@@ -36,7 +58,6 @@ class TabRepository(context: Context) {
                         url = it.url,
                         sessionState = it.sessionState,
                         title = it.title,
-                        previewImageWebp = it.previewImageWebp,
                         tabId = it.tabId,
                         openerTabId = it.openerTabId,
                     )
@@ -52,7 +73,6 @@ class TabRepository(context: Context) {
                             .setUrl(tab.url)
                             .setSessionState(tab.sessionState)
                             .setTitle(tab.title)
-                            .setPreviewImageWebp(tab.previewImageWebp)
                             .setTabId(tab.tabId)
                             .setOpenerTabId(tab.openerTabId)
                             .build()
@@ -71,7 +91,6 @@ data class PersistedTabState(
     val url: String,
     val sessionState: String,
     val title: String,
-    val previewImageWebp: ByteString = ByteString.EMPTY,
     val tabId: String = "",
     val openerTabId: String = "",
 )
