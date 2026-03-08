@@ -20,7 +20,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import net.matsudamper.browser.data.BrowserTabData
 import net.matsudamper.browser.data.BrowserSettings
 import net.matsudamper.browser.data.HomepageType
 import net.matsudamper.browser.data.PersistedTabState
@@ -62,8 +61,6 @@ internal class BrowserViewModel(
 
     private val settings: StateFlow<BrowserSettings?> = settingsRepository.settings
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
-    private val tabData: StateFlow<BrowserTabData?> = tabRepository.tabs
-        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
     val settingsUiState: StateFlow<SettingsUiState?> = settings
         .map { current -> current?.toUiState() }
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
@@ -86,15 +83,13 @@ internal class BrowserViewModel(
 
     suspend fun restoreTabs(): String {
         val currentSettings = settings.filterNotNull().first()
-        val currentTabData = tabData.filterNotNull().first()
         val homepageUrl = currentSettings.resolvedHomepageUrl()
-        val persistedTabs = currentTabData.tabStatesList.map { tabState ->
+
+        val (persistedTabStates, restoredSelectedTabId) = tabRepository.loadTabsForRestoration()
+
+        val persistedTabs = persistedTabStates.map { tabState ->
             val tabId = tabState.tabId.ifBlank { java.util.UUID.randomUUID().toString() }
-            // キャッシュから読み込み、なければprotoの旧データを移行してキャッシュに保存する
             val thumbnail = tabRepository.loadTabThumbnail(tabId)
-                ?: tabState.previewImageWebp.toByteArray().takeIf { it.isNotEmpty() }?.also { bytes ->
-                    tabRepository.saveTabThumbnail(tabId, bytes)
-                }
             PersistedBrowserTab(
                 url = tabState.url,
                 sessionState = tabState.sessionState,
@@ -102,13 +97,20 @@ internal class BrowserViewModel(
                 previewImageWebp = thumbnail ?: byteArrayOf(),
                 tabId = tabId,
                 openerTabId = tabState.openerTabId.ifBlank { null },
-                themeColor = if (tabState.hasThemeColor()) tabState.themeColor else null,
+                themeColor = tabState.themeColor,
             )
         }
+
+        val selectedIndex = if (restoredSelectedTabId != null) {
+            persistedTabs.indexOfFirst { it.tabId == restoredSelectedTabId }.takeIf { it >= 0 } ?: 0
+        } else {
+            0
+        }
+
         val tabId = browserSessionController.restoreTabs(
             homepageUrl = homepageUrl,
             persistedTabs = persistedTabs,
-            persistedSelectedTabIndex = currentTabData.selectedTabIndex,
+            persistedSelectedTabIndex = selectedIndex,
         )
         selectedTabId = tabId
         restorationComplete = true
@@ -145,15 +147,8 @@ internal class BrowserViewModel(
             Log.w("BrowserViewModel", "タブリストが空のため保存をスキップ")
             return
         }
-        val currentSelectedTabId = selectedTabId
-        val selectedIndex = if (currentSelectedTabId != null) {
-            tabs.indexOfFirst { it.tabId == currentSelectedTabId }
-                .takeIf { it >= 0 }
-        } else {
-            null
-        } ?: tabs.lastIndex
 
-        // サムネイルをキャッシュファイルに保存
+        // サムネイルをキャッシュファイルに保存する
         val currentTabIds = tabs.map { it.tabId }.toSet()
         withContext(Dispatchers.IO) {
             tabs.forEach { tab ->
@@ -161,11 +156,12 @@ internal class BrowserViewModel(
                     tabRepository.saveTabThumbnail(tab.tabId, tab.previewImageWebp)
                 }
             }
-            // 削除されたタブのサムネイルファイルを削除
+            // 削除されたタブのサムネイルファイルを削除する
             tabRepository.deleteOrphanedThumbnails(currentTabIds)
         }
 
-        tabRepository.updateTabStates(
+        // 変更部分のみをDBに同期する
+        tabRepository.syncTabs(
             tabs = tabs.map { tab ->
                 PersistedTabState(
                     url = tab.url,
@@ -176,7 +172,7 @@ internal class BrowserViewModel(
                     themeColor = tab.themeColor,
                 )
             },
-            selectedTabIndex = selectedIndex,
+            selectedTabId = selectedTabId,
         )
     }
 
