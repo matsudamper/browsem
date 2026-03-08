@@ -82,37 +82,44 @@ internal class BrowserViewModel(
         val currentSettings = settings.filterNotNull().first()
         val homepageUrl = currentSettings.resolvedHomepageUrl()
 
-        val (persistedTabStates, restoredSelectedTabId) = tabRepository.loadTabsForRestoration()
+        val (persistedTabs, selectedIndex) = withContext(Dispatchers.IO) {
+            val (persistedTabStates, restoredSelectedTabId) = tabRepository.loadTabsForRestoration()
 
-        val persistedTabs = persistedTabStates.map { tabState ->
-            val tabId = tabState.tabId.ifBlank { java.util.UUID.randomUUID().toString() }
-            val thumbnail = tabRepository.loadTabThumbnail(tabId)
-            PersistedBrowserTab(
-                url = tabState.url,
-                sessionState = tabState.sessionState,
-                title = tabState.title,
-                previewImageWebp = thumbnail ?: byteArrayOf(),
-                tabId = tabId,
-                openerTabId = tabState.openerTabId.ifBlank { null },
-                themeColor = tabState.themeColor,
+            val restoredTabs = persistedTabStates.map { tabState ->
+                val tabId = tabState.tabId.ifBlank { java.util.UUID.randomUUID().toString() }
+                val thumbnail = tabRepository.loadTabThumbnail(tabId)
+                PersistedBrowserTab(
+                    url = tabState.url,
+                    sessionState = tabState.sessionState,
+                    title = tabState.title,
+                    previewImageWebp = thumbnail ?: byteArrayOf(),
+                    tabId = tabId,
+                    openerTabId = tabState.openerTabId.ifBlank { null },
+                    themeColor = tabState.themeColor,
+                )
+            }
+
+            val restoredSelectedIndex = if (restoredSelectedTabId != null) {
+                restoredTabs.indexOfFirst { it.tabId == restoredSelectedTabId }
+                    .takeIf { it >= 0 } ?: 0
+            } else {
+                0
+            }
+
+            restoredTabs to restoredSelectedIndex
+        }
+
+        return withContext(Dispatchers.Main.immediate) {
+            val tabId = browserSessionController.restoreTabs(
+                homepageUrl = homepageUrl,
+                persistedTabs = persistedTabs,
+                persistedSelectedTabIndex = selectedIndex,
             )
+            selectedTabId = tabId
+            restorationComplete = true
+            startTabPersistence()
+            tabId
         }
-
-        val selectedIndex = if (restoredSelectedTabId != null) {
-            persistedTabs.indexOfFirst { it.tabId == restoredSelectedTabId }.takeIf { it >= 0 } ?: 0
-        } else {
-            0
-        }
-
-        val tabId = browserSessionController.restoreTabs(
-            homepageUrl = homepageUrl,
-            persistedTabs = persistedTabs,
-            persistedSelectedTabIndex = selectedIndex,
-        )
-        selectedTabId = tabId
-        restorationComplete = true
-        startTabPersistence()
-        return tabId
     }
 
     /**
