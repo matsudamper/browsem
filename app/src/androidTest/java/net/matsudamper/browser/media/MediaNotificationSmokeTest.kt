@@ -138,9 +138,10 @@ class MediaNotificationSmokeTest {
     }
 
     private fun prepareLocalMediaPageUri(): String {
-        val context = InstrumentationRegistry.getInstrumentation().targetContext
-        val destinationDir = File(context.cacheDir, LOCAL_MEDIA_DIR_NAME).apply { mkdirs() }
-        val assetManager = context.assets
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val targetContext = instrumentation.targetContext
+        val destinationDir = File(targetContext.cacheDir, LOCAL_MEDIA_DIR_NAME).apply { mkdirs() }
+        val assetManager = instrumentation.context.assets
         assetManager.list(LOCAL_MEDIA_ASSET_DIR)?.forEach { name ->
             val destination = File(destinationDir, name)
             assetManager.open("$LOCAL_MEDIA_ASSET_DIR/$name").use { input ->
