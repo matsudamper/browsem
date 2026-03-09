@@ -48,6 +48,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
@@ -598,16 +599,21 @@ private fun GeckoView(
     updateGeckoView: (GeckoView) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Box(modifier = modifier) {
+    val containerBackground = MaterialTheme.colorScheme.surface.toArgb()
+
+    Box(modifier = modifier.background(MaterialTheme.colorScheme.surface)) {
         AndroidView(
             modifier = Modifier
                 .fillMaxSize()
+                .background(MaterialTheme.colorScheme.surface)
                 .clipToBounds(),
             factory = { context ->
                 SwipeRefreshLayout(context).also { swipeRefreshLayout ->
                     var swipeRefreshScrollEnabled = false
+                    swipeRefreshLayout.setBackgroundColor(containerBackground)
                     val gecko = GeckoView(context).also { geckoView ->
                         geckoView.id = id
+                        geckoView.setBackgroundColor(containerBackground)
                         geckoView.isNestedScrollingEnabled = true
                         geckoView.setAutofillEnabled(true)
                         geckoView.importantForAutofill =
@@ -656,6 +662,8 @@ private fun GeckoView(
             update = { swipeRefreshLayout ->
                 swipeRefreshLayout.isRefreshing = state.isRefreshing
                 val geckoView = swipeRefreshLayout.findViewById<GeckoView>(id)
+                swipeRefreshLayout.setBackgroundColor(containerBackground)
+                geckoView.setBackgroundColor(containerBackground)
                 if (!state.isUrlInputFocused && !geckoView.isFocused) {
                     geckoView.requestFocus()
                 }
