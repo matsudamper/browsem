@@ -44,13 +44,16 @@ class MainActivity : ComponentActivity() {
     private var webExtensionWarmUpCompleted = false
     private var webExtensionWarmUpInProgress = false
     private val createNewTabChannel = Channel<String>(Channel.UNLIMITED)
-    private var pendingNotificationPermissionResult: GeckoResult<Int>? = null
+
+    // Activity 再生成をまたいで GeckoResult を保持するため ViewModel に委譲する
+    private var browserViewModel: BrowserViewModel? = null
 
     private val requestNotificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { isGranted ->
-        val pendingResult = pendingNotificationPermissionResult ?: return@registerForActivityResult
-        pendingNotificationPermissionResult = null
+        val vm = browserViewModel ?: return@registerForActivityResult
+        val pendingResult = vm.pendingNotificationPermissionResult ?: return@registerForActivityResult
+        vm.pendingNotificationPermissionResult = null
         pendingResult.complete(
             if (isGranted) {
                 GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW
@@ -154,7 +157,7 @@ class MainActivity : ComponentActivity() {
                         return BrowserViewModel(runtime, applicationContext) as T
                     }
                 }
-            )
+            ).also { this@MainActivity.browserViewModel = it }
             Box(
                 modifier = Modifier.semantics {
                     testTagsAsResourceId = true
@@ -206,14 +209,17 @@ class MainActivity : ComponentActivity() {
         ) {
             return GeckoResult.fromValue(GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW)
         }
-        pendingNotificationPermissionResult?.let {
+        val vm = browserViewModel ?: return GeckoResult.fromException(
+            IllegalStateException("ViewModel not available for notification permission request.")
+        )
+        vm.pendingNotificationPermissionResult?.let {
             return GeckoResult.fromException(
                 IllegalStateException("Another notification permission request is already pending.")
             )
         }
 
         return GeckoResult<Int>().also { result ->
-            pendingNotificationPermissionResult = result
+            vm.pendingNotificationPermissionResult = result
             requestNotificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
     }
@@ -229,10 +235,15 @@ class MainActivity : ComponentActivity() {
             CancellationException("Activity was destroyed before Gecko activity completed.")
         )
         pendingActivityResult = null
-        pendingNotificationPermissionResult?.completeExceptionally(
-            CancellationException("Activity was destroyed before notification permission completed.")
-        )
-        pendingNotificationPermissionResult = null
+        // 設定変更（画面回転など）による再生成の場合は ViewModel が GeckoResult を保持し続けるため、
+        // completeExceptionally を呼ばない。完全な破棄時のみ例外で完了させる。
+        if (!isChangingConfigurations) {
+            browserViewModel?.pendingNotificationPermissionResult?.completeExceptionally(
+                CancellationException("Activity was destroyed before notification permission completed.")
+            )
+            browserViewModel?.pendingNotificationPermissionResult = null
+        }
+        browserViewModel = null
         if (::runtime.isInitialized && runtime.getActivityDelegate() === activityDelegate) {
             runtime.setActivityDelegate(null)
         }

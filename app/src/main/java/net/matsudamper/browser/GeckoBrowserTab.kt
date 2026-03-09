@@ -152,13 +152,20 @@ internal fun GeckoBrowserTab(
         }
     }
 
-    DisposableEffect(
-        session, state, onCloseTab, onDesktopNotificationPermissionRequest,
-        onOpenNewSessionRequest, browserTab
-    ) {
-        val permissionDelegate = state.createPermissionDelegate(onDesktopNotificationPermissionRequest)
-        val navigationDelegate = state.createNavigationDelegate(onOpenNewSessionRequest)
-        val contentDelegate = state.createContentDelegate(onClose = onCloseTab)
+    // ラムダはコンポジションごとに新しい参照になるため、rememberUpdatedState で最新値を保持する
+    val latestOnDesktopNotificationPermissionRequest by rememberUpdatedState(onDesktopNotificationPermissionRequest)
+    val latestOnOpenNewSessionRequest by rememberUpdatedState(onOpenNewSessionRequest)
+    val latestOnCloseTab by rememberUpdatedState(onCloseTab)
+
+    // ラムダをキーから除外することで、ラムダ参照変更時に DisposableEffect が再実行されるのを防ぐ
+    DisposableEffect(session, state, browserTab) {
+        val permissionDelegate = state.createPermissionDelegate { uri ->
+            latestOnDesktopNotificationPermissionRequest(uri)
+        }
+        val navigationDelegate = state.createNavigationDelegate { uri ->
+            latestOnOpenNewSessionRequest(uri)
+        }
+        val contentDelegate = state.createContentDelegate(onClose = { latestOnCloseTab?.invoke() })
         val progressDelegate = state.createProgressDelegate()
         val translationsDelegate = state.createTranslationsDelegate()
         val promptDelegate = state.createPromptDelegate()

@@ -159,6 +159,9 @@ internal class BrowserViewModel(
         )
     }
 
+    // Activity 再生成をまたいで保持する OS 通知許可の保留中 GeckoResult
+    var pendingNotificationPermissionResult: GeckoResult<Int>? = null
+
     fun handleNotificationPermission(
         uri: String,
         onDesktopNotificationPermissionRequest: () -> GeckoResult<Int>,
@@ -168,12 +171,18 @@ internal class BrowserViewModel(
             return GeckoResult.fromValue(GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW)
         }
         val androidResult = onDesktopNotificationPermissionRequest()
-        return androidResult.then { value ->
-            if (value == GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW) {
-                viewModelScope.launch { settingsRepository.addNotificationAllowedOrigin(uri) }
-            }
-            GeckoResult.fromValue(value)
-        }
+        return androidResult.then(
+            { value ->
+                if (value == GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW) {
+                    viewModelScope.launch { settingsRepository.addNotificationAllowedOrigin(uri) }
+                }
+                GeckoResult.fromValue(value)
+            },
+            { _ ->
+                // OS 許可が例外で終わった場合（Activity 破棄など）は DENY として扱う
+                GeckoResult.fromValue(GeckoSession.PermissionDelegate.ContentPermission.VALUE_DENY)
+            },
+        )
     }
 
     fun applyRuntimeSettings() {
@@ -183,6 +192,11 @@ internal class BrowserViewModel(
     override fun onCleared() {
         super.onCleared()
         browserSessionController.close()
+        // ViewModel がクリアされた時点で保留中の通知許可を例外で完了させる
+        pendingNotificationPermissionResult?.completeExceptionally(
+            java.util.concurrent.CancellationException("ViewModel cleared before notification permission completed.")
+        )
+        pendingNotificationPermissionResult = null
     }
 }
 
