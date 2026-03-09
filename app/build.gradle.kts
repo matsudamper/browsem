@@ -127,6 +127,8 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.media3.session)
     implementation(libs.androidx.work.runtime)
+    implementation(libs.koin.android)
+    implementation(libs.koin.androidx.compose)
 
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)

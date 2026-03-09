@@ -1,6 +1,5 @@
 package net.matsudamper.browser
 
-import android.content.Context
 import android.util.Log
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
@@ -9,8 +8,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.google.protobuf.ByteString
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
@@ -19,7 +19,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import net.matsudamper.browser.data.BrowserTabData
 import net.matsudamper.browser.data.BrowserSettings
 import net.matsudamper.browser.data.HomepageType
 import net.matsudamper.browser.data.PersistedTabState
@@ -28,7 +27,6 @@ import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.TabRepository
 import net.matsudamper.browser.data.ThemeMode
 import net.matsudamper.browser.data.TranslationProvider
-import net.matsudamper.browser.data.history.HistoryRepository
 import net.matsudamper.browser.data.resolvedHomepageUrl
 import net.matsudamper.browser.data.resolvedSearchTemplate
 import org.mozilla.geckoview.GeckoResult
@@ -51,17 +49,14 @@ internal data class SettingsUiState(
 @Stable
 internal class BrowserViewModel(
     val runtime: GeckoRuntime,
-    context: Context,
+    private val settingsRepository: SettingsRepository,
+    private val tabRepository: TabRepository,
+    internal val historyRepository: net.matsudamper.browser.data.history.HistoryRepository,
 ) : ViewModel() {
     val browserSessionController = BrowserSessionController(runtime)
     val themeColorExtension = ThemeColorWebExtension().also { it.install(runtime) }
-    internal val settingsRepository = SettingsRepository(context)
-    private val tabRepository = TabRepository(context)
-    internal val historyRepository = HistoryRepository(context)
 
     private val settings: StateFlow<BrowserSettings?> = settingsRepository.settings
-        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
-    private val tabData: StateFlow<BrowserTabData?> = tabRepository.tabs
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
     val settingsUiState: StateFlow<SettingsUiState?> = settings
         .map { current -> current?.toUiState() }
@@ -85,27 +80,46 @@ internal class BrowserViewModel(
 
     suspend fun restoreTabs(): String {
         val currentSettings = settings.filterNotNull().first()
-        val currentTabData = tabData.filterNotNull().first()
         val homepageUrl = currentSettings.resolvedHomepageUrl()
-        val persistedTabs = currentTabData.tabStatesList.map { tabState ->
-            PersistedBrowserTab(
-                url = tabState.url,
-                sessionState = tabState.sessionState,
-                title = tabState.title,
-                previewImageWebp = tabState.previewImageWebp.toByteArray(),
-                tabId = tabState.tabId.ifBlank { java.util.UUID.randomUUID().toString() },
-                openerTabId = tabState.openerTabId.ifBlank { null },
-            )
+
+        val (persistedTabs, selectedIndex) = withContext(Dispatchers.IO) {
+            val (persistedTabStates, restoredSelectedTabId) = tabRepository.loadTabsForRestoration()
+
+            val restoredTabs = persistedTabStates.map { tabState ->
+                val tabId = tabState.tabId.ifBlank { java.util.UUID.randomUUID().toString() }
+                val thumbnail = tabRepository.loadTabThumbnail(tabId)
+                PersistedBrowserTab(
+                    url = tabState.url,
+                    sessionState = tabState.sessionState,
+                    title = tabState.title,
+                    previewImageWebp = thumbnail ?: byteArrayOf(),
+                    tabId = tabId,
+                    openerTabId = tabState.openerTabId.ifBlank { null },
+                    themeColor = tabState.themeColor,
+                )
+            }
+
+            val restoredSelectedIndex = if (restoredSelectedTabId != null) {
+                restoredTabs.indexOfFirst { it.tabId == restoredSelectedTabId }
+                    .takeIf { it >= 0 } ?: 0
+            } else {
+                0
+            }
+
+            restoredTabs to restoredSelectedIndex
         }
-        val tabId = browserSessionController.restoreTabs(
-            homepageUrl = homepageUrl,
-            persistedTabs = persistedTabs,
-            persistedSelectedTabIndex = currentTabData.selectedTabIndex,
-        )
-        selectedTabId = tabId
-        restorationComplete = true
-        startTabPersistence()
-        return tabId
+
+        return withContext(Dispatchers.Main.immediate) {
+            val tabId = browserSessionController.restoreTabs(
+                homepageUrl = homepageUrl,
+                persistedTabs = persistedTabs,
+                persistedSelectedTabIndex = selectedIndex,
+            )
+            selectedTabId = tabId
+            restorationComplete = true
+            startTabPersistence()
+            tabId
+        }
     }
 
     /**
@@ -137,26 +151,37 @@ internal class BrowserViewModel(
             Log.w("BrowserViewModel", "タブリストが空のため保存をスキップ")
             return
         }
-        val currentSelectedTabId = selectedTabId
-        val selectedIndex = if (currentSelectedTabId != null) {
-            tabs.indexOfFirst { it.tabId == currentSelectedTabId }
-                .takeIf { it >= 0 }
-        } else {
-            null
-        } ?: tabs.lastIndex
-        tabRepository.updateTabStates(
-            tabs = tabs.map { tab ->
-                PersistedTabState(
-                    url = tab.url,
-                    sessionState = tab.sessionState,
-                    title = tab.title,
-                    previewImageWebp = ByteString.copyFrom(tab.previewImageWebp),
-                    tabId = tab.tabId,
-                    openerTabId = tab.openerTabId.orEmpty(),
-                )
-            },
-            selectedTabIndex = selectedIndex,
-        )
+
+        // サムネイルをキャッシュファイルに保存する
+        val currentTabIds = tabs.map { it.tabId }.toSet()
+        withContext(Dispatchers.IO) {
+            tabs.forEach { tab ->
+                if (tab.previewImageWebp.isNotEmpty()) {
+                    tabRepository.saveTabThumbnail(tab.tabId, tab.previewImageWebp)
+                }
+            }
+            // 削除されたタブのサムネイルファイルを削除する
+            tabRepository.deleteOrphanedThumbnails(currentTabIds)
+        }
+
+        // 変更部分のみをDBに同期する
+        runCatching {
+            tabRepository.syncTabs(
+                tabs = tabs.map { tab ->
+                    PersistedTabState(
+                        url = tab.url,
+                        sessionState = tab.sessionState,
+                        title = tab.title,
+                        tabId = tab.tabId,
+                        openerTabId = tab.openerTabId.orEmpty(),
+                        themeColor = tab.themeColor,
+                    )
+                },
+                selectedTabId = selectedTabId,
+            )
+        }.onFailure { e ->
+            Log.e("BrowserViewModel", "タブ状態の保存に失敗しました", e)
+        }
     }
 
     fun handleNotificationPermission(
@@ -183,6 +208,7 @@ internal class BrowserViewModel(
     override fun onCleared() {
         super.onCleared()
         browserSessionController.close()
+        themeColorExtension.cleanup()
     }
 }
 

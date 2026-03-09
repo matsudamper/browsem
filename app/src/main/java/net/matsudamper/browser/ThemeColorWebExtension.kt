@@ -51,6 +51,10 @@ internal class ThemeColorWebExtension {
 
     fun isInstalled(): Boolean = extension != null
 
+    fun cleanup() {
+        callbacks.clear()
+    }
+
     fun unregisterSession(session: GeckoSession) {
         callbacks.remove(session)
     }
