@@ -249,7 +249,9 @@ private class GeckoMediaPlayer : SimpleBasePlayer(Looper.getMainLooper()) {
             .setContentPositionMs(currentState.positionMs)
             .setPlaylist(
                 ImmutableList.of(
-                    MediaItemData.Builder("gecko-media")
+                    // metadataVersionをUIDに含めることで曲が変わるたびにUIDが変わり、
+                    // SimpleBasePlayerがonMediaItemTransitionを発火して通知が更新される
+                    MediaItemData.Builder("gecko-media-${currentState.metadataVersion}")
                         .setMediaItem(mediaItem)
                         .setMediaMetadata(metadata)
                         .setDurationUs(durationUs)

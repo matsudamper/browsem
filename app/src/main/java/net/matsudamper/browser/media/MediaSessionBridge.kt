@@ -45,6 +45,8 @@ object MediaSessionBridge {
             artist = artist,
             album = album,
             artworkBitmap = artworkBitmap,
+            // 曲が変わるたびにバージョンをインクリメントし、Media3がメディアアイテムの変更を検知できるようにする
+            metadataVersion = _playbackState.value.metadataVersion + 1,
         )
     }
 
@@ -105,4 +107,7 @@ data class MediaPlaybackState(
     val durationMs: Long = 0L,
     val positionMs: Long = 0L,
     val features: Long = 0L,
+    // updateMetadata()が呼ばれるたびにインクリメントされるバージョン番号。
+    // Media3のSimpleBasePlayerがメディアアイテムの変更を検知するためにMediaItemData UIDに使用する。
+    val metadataVersion: Int = 0,
 )
