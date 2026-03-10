@@ -31,6 +31,7 @@ class BrowserSessionController(runtime: GeckoRuntime) {
             h = 31 * h + tab.sessionState.hashCode()
             h = 31 * h + tab.title.hashCode()
             h = 31 * h + (tab.previewBitmap?.contentHashCode() ?: 0)
+            h = 31 * h + (tab.themeColor ?: 0)
             h
         }
     }
@@ -76,6 +77,7 @@ class BrowserSessionController(runtime: GeckoRuntime) {
                 restoredSessionState = persistedTab.sessionState,
                 restoredTitle = persistedTab.title,
                 restoredPreviewImage = persistedTab.previewImageWebp,
+                restoredThemeColor = persistedTab.themeColor,
                 openerTabId = persistedTab.openerTabId,
             )
         }
@@ -89,6 +91,7 @@ class BrowserSessionController(runtime: GeckoRuntime) {
         restoredSessionState: String? = null,
         restoredTitle: String = "",
         restoredPreviewImage: ByteArray = byteArrayOf(),
+        restoredThemeColor: Int? = null,
         openerTabId: String? = null,
     ): BrowserTab {
         val normalizedInitialUrl = initialUrl.ifBlank { "about:blank" }
@@ -100,6 +103,7 @@ class BrowserSessionController(runtime: GeckoRuntime) {
             sessionState = restoredSessionState.orEmpty(),
             title = restoredTitle,
             previewBitmapArray = restoredPreviewImage,
+            themeColor = restoredThemeColor,
             openerTabId = openerTabId,
         )
         // 復元情報を保持（ensureSessionOpen で使用）
@@ -163,6 +167,7 @@ class BrowserSessionController(runtime: GeckoRuntime) {
                 previewImageWebp = tab.previewBitmap ?: byteArrayOf(),
                 tabId = tab.tabId,
                 openerTabId = tab.openerTabId,
+                themeColor = tab.themeColor,
             )
         }
     }
@@ -183,6 +188,7 @@ class BrowserSessionController(runtime: GeckoRuntime) {
         sessionState: String,
         title: String,
         previewBitmapArray: ByteArray?,
+        themeColor: Int? = null,
         openerTabId: String? = null,
     ): BrowserTab {
         val tab = BrowserTab(
@@ -192,6 +198,7 @@ class BrowserSessionController(runtime: GeckoRuntime) {
             sessionState = sessionState,
             title = title.ifBlank { initialUrl },
             previewBitmap = previewBitmapArray ?: byteArrayOf(),
+            themeColor = themeColor,
             openerTabId = openerTabId,
         )
         tabList += tab
@@ -208,11 +215,13 @@ class BrowserTab(
     sessionState: String,
     title: String,
     previewBitmap: ByteArray?,
+    themeColor: Int? = null,
 ) {
     var currentUrl by mutableStateOf(currentUrl)
     var sessionState by mutableStateOf(sessionState)
     var title by mutableStateOf(title)
     var previewBitmap: ByteArray? by mutableStateOf(previewBitmap)
+    var themeColor: Int? by mutableStateOf(themeColor)
     // 未オープンタブのセッション復元情報を保持
     internal var pendingSessionState: String? by mutableStateOf(null)
 }
@@ -224,6 +233,7 @@ internal data class PersistedBrowserTab(
     val previewImageWebp: ByteArray = byteArrayOf(),
     val tabId: String = UUID.randomUUID().toString(),
     val openerTabId: String? = null,
+    val themeColor: Int? = null,
 ) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
@@ -233,7 +243,8 @@ internal data class PersistedBrowserTab(
             title == other.title &&
             previewImageWebp.contentEquals(other.previewImageWebp) &&
             tabId == other.tabId &&
-            openerTabId == other.openerTabId
+            openerTabId == other.openerTabId &&
+            themeColor == other.themeColor
     }
 
     override fun hashCode(): Int {
@@ -243,6 +254,7 @@ internal data class PersistedBrowserTab(
         result = 31 * result + previewImageWebp.contentHashCode()
         result = 31 * result + tabId.hashCode()
         result = 31 * result + openerTabId.hashCode()
+        result = 31 * result + (themeColor ?: 0)
         return result
     }
 }

@@ -12,6 +12,7 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
+        android:name=".BrowserApplication"
         android:allowBackup="true"
         android:icon="@drawable/ic_firefox_like"
         android:roundIcon="@drawable/ic_firefox_like"
