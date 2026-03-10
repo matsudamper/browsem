@@ -11,6 +11,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performTextReplacement
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 import androidx.lifecycle.ViewModelProvider
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -20,6 +21,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.io.File
 
 /**
  * Managed device(ATD) 上で、ブラウザの主要フローが壊れていないことを確認するスモークテスト。
@@ -35,43 +37,38 @@ class GmdSmokeTest {
     val composeRule = createAndroidComposeRule<MainActivity>()
 
     /**
-     * 公開ページを開いたときにツールバーの色ソースが `default` から `theme` に切り替わることを確認する。
+     * ローカルHTMLを開いたときにツールバーの色ソースが `default` から `theme` に切り替わることを確認する。
      */
     @Test
     fun openHatenablogAndApplyThemeColor() {
         val browserSessionController = waitForBrowserSessionController()
         val activeTab = waitForActiveTab(browserSessionController)
+        val localThemeColorPageUri = prepareLocalThemeColorPageUri()
         waitForThemeColorExtensionInstalled()
         val initialToolbarState = waitForToolbarState()
         assertEquals("default", initialToolbarState.source)
 
-        composeRule.onNodeWithTag("url_bar").performClick()
-        composeRule.onNodeWithTag("url_bar")
-            .performTextReplacement("https://matsudamper.hatenablog.jp/")
-        composeRule.onNodeWithTag("url_bar").performImeAction()
-
-        waitForActiveTabUrl(timeoutMillis = 60_000, activeTab = activeTab) { currentUrl ->
-            currentUrl.startsWith("https://matsudamper.hatenablog.jp")
+        // URLバー経由だと file URI が補正されるため、GeckoSession に直接 file URI を渡す。
+        composeRule.runOnIdle {
+            activeTab.session.loadUri(localThemeColorPageUri)
         }
 
-        val themeApplied = runCatching {
-            composeRule.waitUntil(timeoutMillis = 60_000) {
-                runCatching {
-                    waitForToolbarState().source == "theme"
-                }.getOrDefault(false)
-            }
-            true
-        }.getOrDefault(false)
+        waitForActiveTabUrl(timeoutMillis = 60_000, activeTab = activeTab) { currentUrl ->
+            currentUrl.startsWith("file:") && currentUrl.contains(LOCAL_THEME_COLOR_INDEX_FILE_NAME)
+        }
+
+        composeRule.waitUntil(timeoutMillis = 60_000) {
+            waitForToolbarState().source == "theme"
+        }
 
         val resolvedToolbarState = waitForToolbarState()
 
         composeRule.runOnIdle {
-            assertTrue(activeTab.currentUrl.startsWith("https://matsudamper.hatenablog.jp"))
+            assertTrue(activeTab.currentUrl.startsWith("file:"))
+            assertTrue(activeTab.currentUrl.contains(LOCAL_THEME_COLOR_INDEX_FILE_NAME))
         }
-        if (themeApplied) {
-            assertEquals("theme", resolvedToolbarState.source)
-            assertNotEquals(initialToolbarState.argbHex, resolvedToolbarState.argbHex)
-        }
+        assertEquals("theme", resolvedToolbarState.source)
+        assertNotEquals(initialToolbarState.argbHex, resolvedToolbarState.argbHex)
     }
 
     /**
@@ -222,6 +219,23 @@ class GmdSmokeTest {
                 getBrowserViewModel().historyRepository.recordVisit(url, title)
             }
         }
+    }
+
+    /**
+     * テーマカラー検証用のローカルHTMLをキャッシュへ展開し、file URI を返す。
+     */
+    private fun prepareLocalThemeColorPageUri(): String {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val targetContext = instrumentation.targetContext
+        val destinationDir = File(targetContext.cacheDir, LOCAL_THEME_COLOR_DIR_NAME).apply { mkdirs() }
+        val assetManager = instrumentation.context.assets
+        val destination = File(destinationDir, LOCAL_THEME_COLOR_INDEX_FILE_NAME)
+        assetManager.open("$LOCAL_THEME_COLOR_ASSET_DIR/$LOCAL_THEME_COLOR_INDEX_FILE_NAME").use { input ->
+            destination.outputStream().use { output ->
+                input.copyTo(output)
+            }
+        }
+        return destination.toURI().toString()
     }
 
     /**
@@ -490,4 +504,10 @@ class GmdSmokeTest {
         val source: String,
         val argbHex: String,
     )
+
+    companion object {
+        private const val LOCAL_THEME_COLOR_ASSET_DIR = "test-theme-color"
+        private const val LOCAL_THEME_COLOR_DIR_NAME = "test-theme-color"
+        private const val LOCAL_THEME_COLOR_INDEX_FILE_NAME = "index.html"
+    }
 }

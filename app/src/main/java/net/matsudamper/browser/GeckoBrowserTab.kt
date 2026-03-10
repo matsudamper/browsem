@@ -97,6 +97,7 @@ internal fun GeckoBrowserTab(
         onHistoryRecord = onHistoryRecord,
         onHistoryTitleUpdate = onHistoryTitleUpdate,
     )
+    val dialogState = state.promptDialogState
     val session = state.session
     val keyboardController = LocalSoftwareKeyboardController.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -168,7 +169,7 @@ internal fun GeckoBrowserTab(
         val contentDelegate = state.createContentDelegate(onClose = { latestOnCloseTab?.invoke() })
         val progressDelegate = state.createProgressDelegate()
         val translationsDelegate = state.createTranslationsDelegate()
-        val promptDelegate = state.createPromptDelegate()
+        val promptDelegate = dialogState.createPromptDelegate()
 
         session.permissionDelegate = permissionDelegate
         session.navigationDelegate = navigationDelegate
@@ -425,12 +426,12 @@ internal fun GeckoBrowserTab(
         }
 
         // Alert prompt dialog
-        state.pendingAlertPrompt?.let { prompt ->
+        dialogState.pendingAlertPrompt?.let { prompt ->
             AlertDialog(
-                onDismissRequest = state::dismissAlertPrompt,
+                onDismissRequest = dialogState::dismissAlertPrompt,
                 text = { Text(prompt.message ?: "") },
                 confirmButton = {
-                    TextButton(onClick = state::dismissAlertPrompt) {
+                    TextButton(onClick = dialogState::dismissAlertPrompt) {
                         Text("OK")
                     }
                 },
@@ -438,17 +439,17 @@ internal fun GeckoBrowserTab(
         }
 
         // Button prompt dialog (window.confirm())
-        state.pendingButtonPrompt?.let { prompt ->
+        dialogState.pendingButtonPrompt?.let { prompt ->
             AlertDialog(
-                onDismissRequest = state::dismissButtonPrompt,
+                onDismissRequest = dialogState::dismissButtonPrompt,
                 text = { Text(prompt.message ?: "") },
                 confirmButton = {
-                    TextButton(onClick = { state.confirmButtonPrompt(true) }) {
+                    TextButton(onClick = { dialogState.confirmButtonPrompt(true) }) {
                         Text("OK")
                     }
                 },
                 dismissButton = {
-                    TextButton(onClick = { state.confirmButtonPrompt(false) }) {
+                    TextButton(onClick = { dialogState.confirmButtonPrompt(false) }) {
                         Text("キャンセル")
                     }
                 },
@@ -456,10 +457,10 @@ internal fun GeckoBrowserTab(
         }
 
         // Text prompt dialog (window.prompt())
-        state.pendingTextPrompt?.let { prompt ->
+        dialogState.pendingTextPrompt?.let { prompt ->
             var textValue by remember(prompt) { mutableStateOf(prompt.defaultValue ?: "") }
             AlertDialog(
-                onDismissRequest = state::dismissTextPrompt,
+                onDismissRequest = dialogState::dismissTextPrompt,
                 title = prompt.message?.takeIf { it.isNotEmpty() }?.let { { Text(it) } },
                 text = {
                     OutlinedTextField(
@@ -469,12 +470,12 @@ internal fun GeckoBrowserTab(
                     )
                 },
                 confirmButton = {
-                    TextButton(onClick = { state.confirmTextPrompt(textValue) }) {
+                    TextButton(onClick = { dialogState.confirmTextPrompt(textValue) }) {
                         Text("OK")
                     }
                 },
                 dismissButton = {
-                    TextButton(onClick = state::dismissTextPrompt) {
+                    TextButton(onClick = dialogState::dismissTextPrompt) {
                         Text("キャンセル")
                     }
                 },
@@ -482,17 +483,17 @@ internal fun GeckoBrowserTab(
         }
 
         // Choice prompt dialog (<select> elements)
-        state.pendingChoicePrompt?.let { prompt ->
+        dialogState.pendingChoicePrompt?.let { prompt ->
             ChoicePromptDialog(
                 prompt = prompt,
-                onDismiss = state::dismissChoicePrompt,
-                onConfirmSingle = state::confirmChoicePromptSingle,
-                onConfirmMultiple = state::confirmChoicePromptMultiple,
+                onDismiss = dialogState::dismissChoicePrompt,
+                onConfirmSingle = dialogState::confirmChoicePromptSingle,
+                onConfirmMultiple = dialogState::confirmChoicePromptMultiple,
             )
         }
 
         // Color prompt dialog (<input type="color">)
-        state.pendingColorPrompt?.let { prompt ->
+        dialogState.pendingColorPrompt?.let { prompt ->
             var colorText by remember(prompt) { mutableStateOf(prompt.defaultValue ?: "#000000") }
             val parsedColor = remember(colorText) {
                 runCatching {
@@ -500,7 +501,7 @@ internal fun GeckoBrowserTab(
                 }.getOrNull()
             }
             AlertDialog(
-                onDismissRequest = state::dismissColorPrompt,
+                onDismissRequest = dialogState::dismissColorPrompt,
                 title = { Text("色を選択") },
                 text = {
                     Column {
@@ -523,14 +524,14 @@ internal fun GeckoBrowserTab(
                 },
                 confirmButton = {
                     TextButton(
-                        onClick = { state.confirmColorPrompt(colorText) },
+                        onClick = { dialogState.confirmColorPrompt(colorText) },
                         enabled = parsedColor != null,
                     ) {
                         Text("OK")
                     }
                 },
                 dismissButton = {
-                    TextButton(onClick = state::dismissColorPrompt) {
+                    TextButton(onClick = dialogState::dismissColorPrompt) {
                         Text("キャンセル")
                     }
                 },
@@ -538,7 +539,7 @@ internal fun GeckoBrowserTab(
         }
 
         // DateTime prompt dialog (<input type="date/time/...">)
-        state.pendingDateTimePrompt?.let { prompt ->
+        dialogState.pendingDateTimePrompt?.let { prompt ->
             var dateTimeText by remember(prompt) { mutableStateOf(prompt.defaultValue ?: "") }
             val (title, hint) = when (prompt.type) {
                 GeckoSession.PromptDelegate.DateTimePrompt.Type.DATE ->
@@ -559,7 +560,7 @@ internal fun GeckoBrowserTab(
                 else -> "値を入力" to ""
             }
             AlertDialog(
-                onDismissRequest = state::dismissDateTimePrompt,
+                onDismissRequest = dialogState::dismissDateTimePrompt,
                 title = { Text(title) },
                 text = {
                     OutlinedTextField(
@@ -570,12 +571,12 @@ internal fun GeckoBrowserTab(
                     )
                 },
                 confirmButton = {
-                    TextButton(onClick = { state.confirmDateTimePrompt(dateTimeText) }) {
+                    TextButton(onClick = { dialogState.confirmDateTimePrompt(dateTimeText) }) {
                         Text("OK")
                     }
                 },
                 dismissButton = {
-                    TextButton(onClick = state::dismissDateTimePrompt) {
+                    TextButton(onClick = dialogState::dismissDateTimePrompt) {
                         Text("キャンセル")
                     }
                 },
