@@ -1,7 +1,6 @@
 package net.matsudamper.browser.media
 
 import android.graphics.Bitmap
-import android.os.SystemClock
 import android.util.Log
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -23,9 +22,10 @@ object MediaSessionBridge {
     // サービスが監視するメディア状態
     val playbackState: StateFlow<MediaPlaybackState> = _playbackState.asStateFlow()
 
-    // トラック変更直後のonPositionStateは前の曲のデータが来るため、
-    // 一定時間内のupdatePositionをスキップする
-    private var lastTrackChangeTimeMs = 0L
+    // トラック変更時の前の曲の最終ポジション。
+    // GeckoViewはトラック変更後もonPositionStateで前の曲の最終位置を繰り返し報告するため、
+    // この値と一致するonPositionStateはスキップする。
+    private var stalePositionMs = -1L
 
     fun activate() {
         Log.d(TAG, "activate")
@@ -36,6 +36,7 @@ object MediaSessionBridge {
         Log.d(TAG, "deactivate")
         _playbackState.value = MediaPlaybackState()
         activeGeckoMediaSession = null
+        stalePositionMs = -1L
     }
 
     fun updateMetadata(
@@ -50,8 +51,11 @@ object MediaSessionBridge {
         // 毎回トラック変更扱いにすると不要なリセットが発生する。
         val isNewTrack = title != current.title || artist != current.artist
 
-        if (isNewTrack) {
-            lastTrackChangeTimeMs = SystemClock.elapsedRealtime()
+        if (isNewTrack && stalePositionMs < 0) {
+            // トラック変更シーケンスの最初のみ記録する。
+            // GeckoViewは変更途中にartist=""のメタデータを挟むことがあり、
+            // 2回目のisNewTrackでリセット後のpositionMs=0を記録してしまうのを防ぐ。
+            stalePositionMs = current.positionMs
         }
 
         Log.d(TAG, "updateMetadata: title=$title, artist=$artist, hasArtwork=${artworkBitmap != null}, isNewTrack=$isNewTrack")
@@ -73,14 +77,14 @@ object MediaSessionBridge {
     }
 
     fun updatePosition(positionMs: Long, durationMs: Long) {
-        // トラック変更直後のonPositionStateは前の曲の最終位置が報告されるためスキップする。
-        // ログで確認: onPositionState は前の曲と完全に同じ position/duration を
-        // トラック変更後約1秒で報告してくる。2秒のマージンで確実にフィルタする。
-        val timeSinceTrackChange = SystemClock.elapsedRealtime() - lastTrackChangeTimeMs
-        if (timeSinceTrackChange < TRACK_CHANGE_POSITION_IGNORE_MS) {
-            Log.d(TAG, "updatePosition: skipped (${timeSinceTrackChange}ms since track change)")
+        // GeckoViewはトラック変更後もonPositionStateで前の曲の最終位置を
+        // 繰り返し報告する（停止・一時停止時にも）。前の曲の値と一致する場合はスキップする。
+        if (stalePositionMs >= 0 && positionMs == stalePositionMs) {
+            Log.d(TAG, "updatePosition: skipped (matches stale position $stalePositionMs from previous track)")
             return
         }
+        // 新しいポジションが来たらstaleマーカーをクリア
+        stalePositionMs = -1L
         _playbackState.value = _playbackState.value.copy(
             positionMs = positionMs,
             durationMs = durationMs,
@@ -119,7 +123,6 @@ object MediaSessionBridge {
     }
 
     private const val TAG = "MediaSessionBridge"
-    private const val TRACK_CHANGE_POSITION_IGNORE_MS = 2000L
 }
 
 // メディア再生状態を保持するデータクラス
