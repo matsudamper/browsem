@@ -127,6 +127,20 @@ java_home = os.environ.get('JAVA_HOME', '/usr/lib/jvm/java-21-openjdk-amd64')
 import_ca_into_jdk(java_home, 'JDK 21')
 enable_basic_auth_tunneling(java_home, 'JDK 21')
 
+# ~/.gradle/jdks/ 配下の全 JDK にも CA をインポート
+# (GradleがJetBrains JDK等のToolchain JDKを使う場合に必要)
+gradle_jdks_dir = os.path.join(gradle_home, 'jdks')
+if os.path.isdir(gradle_jdks_dir):
+    for jdk_name in os.listdir(gradle_jdks_dir):
+        jdk_path = os.path.join(gradle_jdks_dir, jdk_name)
+        if not os.path.isdir(jdk_path):
+            continue
+        keytool = os.path.join(jdk_path, 'bin', 'keytool')
+        if not os.path.exists(keytool):
+            continue
+        import_ca_into_jdk(jdk_path, f'Gradle JDK ({jdk_name})')
+        enable_basic_auth_tunneling(jdk_path, f'Gradle JDK ({jdk_name})')
+
 # ── gradle.properties にプロキシ設定を書き込む ───────────────────────────────
 props = (
     f"systemProp.https.proxyHost={host}\n"
