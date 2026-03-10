@@ -106,6 +106,11 @@ internal fun GeckoBrowserTab(
     var urlBarFocusStartedAtMs by remember { mutableStateOf(0L) }
     var geckoView: GeckoView? by remember { mutableStateOf(null) }
 
+    // 不安定なラムダキーによる DisposableEffect の再実行を防ぐ
+    val currentOnCloseTab by rememberUpdatedState(onCloseTab)
+    val currentOnDesktopNotificationPermissionRequest by rememberUpdatedState(onDesktopNotificationPermissionRequest)
+    val currentOnOpenNewSessionRequest by rememberUpdatedState(onOpenNewSessionRequest)
+
     // Sync title/url changes to BrowserTab for persistence
     LaunchedEffect(state) {
         snapshotFlow { state.currentPageTitle }
@@ -153,20 +158,17 @@ internal fun GeckoBrowserTab(
         }
     }
 
-    // ラムダはコンポジションごとに新しい参照になるため、rememberUpdatedState で最新値を保持する
-    val latestOnDesktopNotificationPermissionRequest by rememberUpdatedState(onDesktopNotificationPermissionRequest)
-    val latestOnOpenNewSessionRequest by rememberUpdatedState(onOpenNewSessionRequest)
-    val latestOnCloseTab by rememberUpdatedState(onCloseTab)
-
     // ラムダをキーから除外することで、ラムダ参照変更時に DisposableEffect が再実行されるのを防ぐ
     DisposableEffect(session, state, browserTab) {
         val permissionDelegate = state.createPermissionDelegate { uri ->
-            latestOnDesktopNotificationPermissionRequest(uri)
+            currentOnDesktopNotificationPermissionRequest(uri)
         }
         val navigationDelegate = state.createNavigationDelegate { uri ->
-            latestOnOpenNewSessionRequest(uri)
+            currentOnOpenNewSessionRequest(uri)
         }
-        val contentDelegate = state.createContentDelegate(onClose = { latestOnCloseTab?.invoke() })
+        val contentDelegate = state.createContentDelegate(
+            onClose = { currentOnCloseTab?.invoke() },
+        )
         val progressDelegate = state.createProgressDelegate()
         val translationsDelegate = state.createTranslationsDelegate()
         val promptDelegate = dialogState.createPromptDelegate()
@@ -386,7 +388,7 @@ internal fun GeckoBrowserTab(
                     Column {
                         TextButton(
                             onClick = {
-                                onOpenNewSessionRequest(linkUrl)
+                                currentOnOpenNewSessionRequest(linkUrl)
                                 state.linkContextMenuUrl = null
                             },
                         ) {
