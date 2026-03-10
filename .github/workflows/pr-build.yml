@@ -67,6 +67,7 @@ jobs:
 
   android-test:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     steps:
       - name: Checkout
@@ -91,7 +92,7 @@ jobs:
           sudo udevadm trigger --name-match=kvm
 
       - name: Run Android Instrumentation Tests (Managed Device)
-        run: gradle :app:pixel6Api30DebugAndroidTest
+        run: gradle :app:pixel6Api34DebugAndroidTest
 
       - name: Upload Android test report
         if: always()
@@ -99,5 +100,5 @@ jobs:
         with:
           name: app-androidtest-report
           path: |
-            app/build/reports/androidTests/managedDevice/debug/pixel6Api30
-            app/build/outputs/androidTest-results/managedDevice/debug/pixel6Api30
+            app/build/reports/androidTests/managedDevice/debug/pixel6Api34
+            app/build/outputs/androidTest-results/managedDevice/debug/pixel6Api34
