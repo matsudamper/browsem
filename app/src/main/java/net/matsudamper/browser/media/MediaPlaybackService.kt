@@ -87,9 +87,18 @@ class MediaPlaybackService : MediaSessionService() {
 
         // Bridge状態を監視してPlayerの状態を更新
         serviceScope.launch {
+            var previousMetadataVersion = -1
             MediaSessionBridge.playbackState.collectLatest { state ->
                 Log.d(TAG, "bridge state: isActive=${state.isActive}, isPlaying=${state.isPlaying}, title=${state.title}")
                 player.updateFromBridge(state)
+
+                // メタデータが変わった場合（曲が変わった場合）、通知を強制更新する。
+                // SimpleBasePlayerはUID固定のMediaItemDataのメタデータ変更だけでは
+                // 通知の再描画をトリガーしないため、明示的にonUpdateNotificationを呼ぶ。
+                if (state.metadataVersion != previousMetadataVersion) {
+                    previousMetadataVersion = state.metadataVersion
+                    mediaSession?.let { onUpdateNotification(it, false) }
+                }
             }
         }
     }
@@ -249,9 +258,7 @@ private class GeckoMediaPlayer : SimpleBasePlayer(Looper.getMainLooper()) {
             .setContentPositionMs(currentState.positionMs)
             .setPlaylist(
                 ImmutableList.of(
-                    // metadataVersionをUIDに含めることで曲が変わるたびにUIDが変わり、
-                    // SimpleBasePlayerがonMediaItemTransitionを発火して通知が更新される
-                    MediaItemData.Builder("gecko-media-${currentState.metadataVersion}")
+                    MediaItemData.Builder("gecko-media")
                         .setMediaItem(mediaItem)
                         .setMediaMetadata(metadata)
                         .setDurationUs(durationUs)
