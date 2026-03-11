@@ -292,12 +292,18 @@ internal class BrowserTabScreenState(
         pendingDownloadResponse = null
     }
 
+    fun restoreCurrentPageUrlToInput() {
+        urlInput = currentPageUrl
+    }
+
+    fun copyCurrentPageUrl() {
+        if (currentPageUrl.isBlank()) return
+        copyUrlToClipboard(currentPageUrl)
+    }
+
     fun copyLinkUrl(url: String) {
-        val clipboard =
-            context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-        clipboard.setPrimaryClip(android.content.ClipData.newPlainText("URL", url))
+        copyUrlToClipboard(url)
         linkContextMenuUrl = null
-        Toast.makeText(context, "URLをコピーしました", Toast.LENGTH_SHORT).show()
     }
 
     fun captureTabPreview(geckoView: GeckoView) {
@@ -541,5 +547,12 @@ internal class BrowserTabScreenState(
         return url
             .substringBefore("#")
             .removeSuffix("/")
+    }
+
+    private fun copyUrlToClipboard(url: String) {
+        val clipboard =
+            context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+        clipboard.setPrimaryClip(android.content.ClipData.newPlainText("URL", url))
+        Toast.makeText(context, "URLをコピーしました", Toast.LENGTH_SHORT).show()
     }
 }

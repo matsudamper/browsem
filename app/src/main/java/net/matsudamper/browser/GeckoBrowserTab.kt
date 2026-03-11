@@ -11,8 +11,10 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -21,6 +23,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.isImeVisible
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -112,6 +115,16 @@ internal fun GeckoBrowserTab(
     val currentOnCloseTab by rememberUpdatedState(onCloseTab)
     val currentOnDesktopNotificationPermissionRequest by rememberUpdatedState(onDesktopNotificationPermissionRequest)
     val currentOnOpenNewSessionRequest by rememberUpdatedState(onOpenNewSessionRequest)
+    val closeUrlInput: (Boolean) -> Unit = { restoreCurrentUrl ->
+        state.isUrlInputFocused = false
+        if (restoreCurrentUrl) {
+            state.restoreCurrentPageUrlToInput()
+        }
+        imeWasVisibleDuringUrlFocus = false
+        keyboardController?.hide()
+        runCatching { session.setFocused(true) }
+        geckoView?.requestFocus()
+    }
 
     // Sync title/url changes to BrowserTab for persistence
     LaunchedEffect(state) {
@@ -223,14 +236,7 @@ internal fun GeckoBrowserTab(
     // Back handlers
     BackHandler(enabled = state.showFindInPage) { state.closeFindInPage() }
     BackHandler(enabled = state.canGoBack && !state.isUrlInputFocused) { state.onGoBack() }
-    BackHandler(enabled = state.isUrlInputFocused) {
-        state.isUrlInputFocused = false
-        state.urlInput = state.currentPageUrl
-        imeWasVisibleDuringUrlFocus = false
-        keyboardController?.hide()
-        runCatching { session.setFocused(true) }
-        geckoView?.requestFocus()
-    }
+    BackHandler(enabled = state.isUrlInputFocused) { closeUrlInput(true) }
 
     // IME visibility tracking:
     // URLバーにフォーカスした直後はIMEがまだ非表示のことがあるため、
@@ -247,8 +253,7 @@ internal fun GeckoBrowserTab(
         val inGracePeriod = SystemClock.elapsedRealtime() - urlBarFocusStartedAtMs <
             URL_BAR_IME_HIDE_GRACE_MS
         if (imeWasVisibleDuringUrlFocus && !inGracePeriod) {
-            state.isUrlInputFocused = false
-            imeWasVisibleDuringUrlFocus = false
+            closeUrlInput(true)
         }
     }
 
@@ -275,18 +280,20 @@ internal fun GeckoBrowserTab(
                 onValueChange = { state.urlInput = it },
                 onSubmit = { rawInput ->
                     state.onUrlSubmit(rawInput)
-                    state.isUrlInputFocused = false
-                    keyboardController?.hide()
+                    closeUrlInput(false)
                 },
                 isFocused = state.isUrlInputFocused,
                 onFocusChanged = { hasFocus ->
                     if (hasFocus) {
                         urlBarFocusStartedAtMs = SystemClock.elapsedRealtime()
+                        if (!state.isUrlInputFocused) {
+                            state.urlInput = ""
+                        }
                         runCatching { session.setFocused(false) }
                         geckoView?.clearFocus()
                         keyboardController?.show()
                     } else {
-                        state.urlInput = state.currentPageUrl
+                        state.restoreCurrentPageUrlToInput()
                     }
                     state.isUrlInputFocused = hasFocus
                 },
@@ -340,14 +347,20 @@ internal fun GeckoBrowserTab(
             )
 
             // URLバーフォーカス中にサジェストを表示
-            if (!state.showFindInPage && state.isUrlInputFocused && historySuggestions.isNotEmpty()) {
+            if (
+                !state.showFindInPage &&
+                state.isUrlInputFocused &&
+                (historySuggestions.isNotEmpty() || state.currentPageUrl.isNotBlank())
+            ) {
                 HistorySuggestionList(
+                    currentPageUrl = state.currentPageUrl,
                     suggestions = historySuggestions,
                     onSuggestionClick = { entry ->
                         state.onUrlSubmit(entry.url)
-                        state.isUrlInputFocused = false
-                        keyboardController?.hide()
+                        closeUrlInput(false)
                     },
+                    onCopyCurrentUrl = state::copyCurrentPageUrl,
+                    onRestoreCurrentUrl = state::restoreCurrentPageUrlToInput,
                     modifier = Modifier
                         .fillMaxSize()
                         .testTag(TEST_TAG_HISTORY_SUGGESTION_LIST)
@@ -773,11 +786,26 @@ private fun ChoicePromptDialog(
 
 @Composable
 private fun HistorySuggestionList(
+    currentPageUrl: String,
     suggestions: List<net.matsudamper.browser.data.history.HistoryEntry>,
     onSuggestionClick: (net.matsudamper.browser.data.history.HistoryEntry) -> Unit,
+    onCopyCurrentUrl: () -> Unit,
+    onRestoreCurrentUrl: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     LazyColumn(modifier = modifier.fillMaxWidth()) {
+        if (currentPageUrl.isNotBlank()) {
+            item(key = "current_page_url") {
+                CurrentPageUrlListItem(
+                    currentPageUrl = currentPageUrl,
+                    onCopyCurrentUrl = onCopyCurrentUrl,
+                    onRestoreCurrentUrl = onRestoreCurrentUrl,
+                )
+                if (suggestions.isNotEmpty()) {
+                    HorizontalDivider()
+                }
+            }
+        }
         items(suggestions, key = { it.id }) { entry ->
             ListItem(
                 headlineContent = {
@@ -802,6 +830,41 @@ private fun HistorySuggestionList(
     }
 }
 
+@Composable
+private fun CurrentPageUrlListItem(
+    currentPageUrl: String,
+    onCopyCurrentUrl: () -> Unit,
+    onRestoreCurrentUrl: () -> Unit,
+) {
+    ListItem(
+        headlineContent = {
+            Text(text = "今のURL")
+        },
+        supportingContent = {
+            Column(
+                modifier = Modifier.padding(top = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    text = currentPageUrl,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.testTag(TEST_TAG_CURRENT_URL_TEXT),
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = onCopyCurrentUrl) {
+                        Text("コピー")
+                    }
+                    TextButton(onClick = onRestoreCurrentUrl) {
+                        Text("URLバーに戻す")
+                    }
+                }
+            }
+        },
+        modifier = Modifier.testTag(TEST_TAG_CURRENT_URL_ACTIONS),
+    )
+}
+
 private fun flattenChoices(
     choices: Array<GeckoSession.PromptDelegate.ChoicePrompt.Choice>,
 ): List<GeckoSession.PromptDelegate.ChoicePrompt.Choice> {
@@ -812,4 +875,6 @@ private fun flattenChoices(
 
 const val TEST_TAG_GECKO_CONTAINER = "gecko_container"
 const val TEST_TAG_HISTORY_SUGGESTION_LIST = "history_suggestion_list"
+const val TEST_TAG_CURRENT_URL_ACTIONS = "current_url_actions"
+const val TEST_TAG_CURRENT_URL_TEXT = "current_url_text"
 private const val URL_BAR_IME_HIDE_GRACE_MS = 700L
