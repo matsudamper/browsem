@@ -218,6 +218,7 @@ private fun TabPreviewPage(
             onOpenTabs = {},
             toolbarMenu = {},
             gestureState = null,
+            updateVisibleMenu = {},
             urlInputState = UrlInputState(
                 value = tab.currentUrl,
                 onValueChange = {},

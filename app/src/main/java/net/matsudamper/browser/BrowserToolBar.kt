@@ -121,6 +121,9 @@ internal fun BrowserToolBar(
             enableSuggest = true,
             scrollEnabled = isFocused,
         ),
+        updateVisibleMenu = {
+            visibleMenu = it
+        },
         toolbarMenu = {
             ToolbarMenu(
                 visibleMenu = visibleMenu,
@@ -189,6 +192,7 @@ internal fun BrowserToolbar(
     gestureState: BrowserToolBarGestureState?,
     urlInputState: UrlInputState,
     toolbarColor: Color?,
+    updateVisibleMenu: (Boolean) -> Unit,
     onOpenTabs: () -> Unit,
     tabCount: Int,
     toolbarMenu: @Composable () -> Unit,
@@ -303,9 +307,8 @@ internal fun BrowserToolbar(
                             .padding(horizontal = 8.dp, vertical = 2.dp),
                     )
                 }
-                var visibleMenu by remember { mutableStateOf(false) }
                 IconButton(
-                    onClick = { visibleMenu = !visibleMenu }
+                    onClick = { updateVisibleMenu(true) }
                 ) {
                     Icon(
                         painter = painterResource(R.drawable.ic_more_vert_24dp),
