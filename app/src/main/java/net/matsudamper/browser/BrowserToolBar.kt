@@ -1,16 +1,16 @@
 package net.matsudamper.browser
 
-import android.view.View
-import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -30,17 +31,15 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.Text
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -102,11 +101,104 @@ internal fun BrowserToolBar(
     onHorizontalDrag: (Float) -> Unit = {},
     onHorizontalDragEnd: () -> Unit = {},
 ) {
-    var heightCache by remember { mutableIntStateOf(0) }
-    val latestOnOpenTabs by rememberUpdatedState(onOpenTabs)
+    var visibleMenu by remember { mutableStateOf(false) }
+    BrowserToolbar(
+        modifier = modifier,
+        isFocused = isFocused,
+        gestureState = BrowserToolBarGestureState(
+            onHorizontalDrag = onHorizontalDrag,
+            onHorizontalDragEnd = onHorizontalDragEnd,
+            onOpenTabs = onOpenTabs
+        ),
+        toolbarColor = toolbarColor,
+        onOpenTabs = onOpenTabs,
+        tabCount = tabCount,
+        urlInputState = UrlInputState(
+            value = value,
+            onValueChange = onValueChange,
+            onSubmit = onSubmit,
+            onFocusChanged = onFocusChanged,
+            enableSuggest = true,
+            scrollEnabled = isFocused,
+        ),
+        updateVisibleMenu = {
+            visibleMenu = it
+        },
+        toolbarMenu = {
+            ToolbarMenu(
+                visibleMenu = visibleMenu,
+                onDismissRequest = { visibleMenu = false },
+                onRefresh = onRefresh,
+                onHome = onHome,
+                onForward = onForward,
+                canGoForward = canGoForward,
+                isPcMode = isPcMode,
+                onPcModeToggle = onPcModeToggle,
+                showInstallExtensionItem = showInstallExtensionItem,
+                onInstallExtension = onInstallExtension,
+                onTranslatePage = onTranslatePage,
+                onShare = onShare,
+                onFindInPage = onFindInPage,
+                onOpenSettings = onOpenSettings,
+            )
+        }
+    )
+}
 
-    val latestOnHorizontalDrag by rememberUpdatedState(onHorizontalDrag)
-    val latestOnHorizontalDragEnd by rememberUpdatedState(onHorizontalDragEnd)
+internal class BrowserToolBarGestureState(
+    onHorizontalDrag: (Float) -> Unit,
+    onHorizontalDragEnd: () -> Unit,
+    onOpenTabs: () -> Unit,
+) {
+    var isFocused by mutableStateOf(false)
+
+    val modifier = Modifier
+        .pointerInput(isFocused) {
+            // 非フォーカス時のみURLバーの水平スワイプでタブ切り替え
+            // フォーカス中はテキスト入力を邪魔しないようにする
+            if (isFocused) return@pointerInput
+            detectHorizontalDragGestures(
+                onHorizontalDrag = { _, dragAmount ->
+                    onHorizontalDrag(dragAmount)
+                },
+                onDragEnd = { onHorizontalDragEnd() },
+                onDragCancel = { onHorizontalDragEnd() },
+            )
+        }
+        .pointerInput(isFocused) {
+            // 非フォーカス時のみ下スワイプでタブ一覧を開く
+            if (isFocused) return@pointerInput
+            detectDownSwipe(
+                density = this,
+                onDownSwipe = {
+                    onOpenTabs()
+                }
+            )
+        }
+}
+
+data class UrlInputState(
+    val enableSuggest: Boolean,
+    val scrollEnabled: Boolean,
+    val onValueChange: (String) -> Unit,
+    val onSubmit: (String) -> Unit,
+    val onFocusChanged: (Boolean) -> Unit,
+    val value: String,
+)
+
+@Composable
+internal fun BrowserToolbar(
+    isFocused: Boolean,
+    gestureState: BrowserToolBarGestureState?,
+    urlInputState: UrlInputState,
+    toolbarColor: Color?,
+    updateVisibleMenu: (Boolean) -> Unit,
+    onOpenTabs: () -> Unit,
+    tabCount: Int,
+    toolbarMenu: @Composable () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var heightCache by remember { mutableIntStateOf(0) }
 
     val isSystemDarkTheme = isSystemInDarkTheme()
     val resolvedToolbarColor = toolbarColor ?: MaterialTheme.colorScheme.primaryContainer
@@ -132,28 +224,7 @@ internal fun BrowserToolBar(
             .semantics {
                 stateDescription = "toolbarColor|$colorSource|${resolvedToolbarColor.toArgbHex()}"
             }
-            .pointerInput(isFocused) {
-                // 非フォーカス時のみURLバーの水平スワイプでタブ切り替え
-                // フォーカス中はテキスト入力を邪魔しないようにする
-                if (isFocused) return@pointerInput
-                detectHorizontalDragGestures(
-                    onHorizontalDrag = { _, dragAmount ->
-                        latestOnHorizontalDrag(dragAmount)
-                    },
-                    onDragEnd = { latestOnHorizontalDragEnd() },
-                    onDragCancel = { latestOnHorizontalDragEnd() },
-                )
-            }
-            .pointerInput(isFocused) {
-                // 非フォーカス時のみ下スワイプでタブ一覧を開く
-                if (isFocused) return@pointerInput
-                detectDownSwipe(
-                    density = this,
-                    onDownSwipe = {
-                        latestOnOpenTabs()
-                    }
-                )
-            }
+            .then(gestureState?.modifier ?: Modifier)
             .onSizeChanged {
                 heightCache = it.height.coerceAtLeast(heightCache)
             }
@@ -183,16 +254,17 @@ internal fun BrowserToolBar(
                     UrlTextInput(
                         modifier = Modifier
                             .weight(1f),
+                        enableSuggest = urlInputState.enableSuggest,
                         paddingValues = PaddingValues(
                             start = 8.dp,
                             top = 4.dp,
                             bottom = 4.dp
                         ),
                         scrollEnabled = isFocused,
-                        value = value,
-                        onValueChange = onValueChange,
-                        onSubmit = onSubmit,
-                        onFocusChanged = onFocusChanged,
+                        value = urlInputState.value,
+                        onValueChange = urlInputState.onValueChange,
+                        onSubmit = urlInputState.onSubmit,
+                        onFocusChanged = urlInputState.onFocusChanged,
                         textColor = LocalContentColor.current,
                     )
 
@@ -207,7 +279,7 @@ internal fun BrowserToolBar(
                                     .clickable(
                                         indication = ripple(),
                                         interactionSource = remember { MutableInteractionSource() },
-                                        onClick = { onValueChange("") }
+                                        onClick = { urlInputState.onValueChange("") }
                                     ),
                                 painter = painterResource(R.drawable.close_24dp),
                                 contentDescription = "クリア",
@@ -235,30 +307,14 @@ internal fun BrowserToolBar(
                             .padding(horizontal = 8.dp, vertical = 2.dp),
                     )
                 }
-                var visibleMenu by remember { mutableStateOf(false) }
                 IconButton(
-                    onClick = { visibleMenu = !visibleMenu }
+                    onClick = { updateVisibleMenu(true) }
                 ) {
                     Icon(
                         painter = painterResource(R.drawable.ic_more_vert_24dp),
                         contentDescription = "Menu",
                     )
-                    ToolbarMenu(
-                        visibleMenu = visibleMenu,
-                        onDismissRequest = { visibleMenu = false },
-                        onRefresh = onRefresh,
-                        onHome = onHome,
-                        onForward = onForward,
-                        canGoForward = canGoForward,
-                        isPcMode = isPcMode,
-                        onPcModeToggle = onPcModeToggle,
-                        showInstallExtensionItem = showInstallExtensionItem,
-                        onInstallExtension = onInstallExtension,
-                        onTranslatePage = onTranslatePage,
-                        onShare = onShare,
-                        onFindInPage = onFindInPage,
-                        onOpenSettings = onOpenSettings,
-                    )
+                    toolbarMenu()
                 }
             }
         }
@@ -273,6 +329,7 @@ private fun UrlTextInput(
     onSubmit: (String) -> Unit,
     onFocusChanged: (Boolean) -> Unit,
     textColor: Color,
+    enableSuggest: Boolean,
     paddingValues: PaddingValues,
     modifier: Modifier = Modifier,
 ) {
@@ -298,12 +355,21 @@ private fun UrlTextInput(
                                 enabled = scrollEnabled,
                             )
                             .padding(paddingValues)
-                            .testTag("url_bar")
+                            .then(
+                                if (enableSuggest) {
+                                    Modifier.testTag("url_bar")
+                                } else {
+                                    Modifier
+                                }
+                            )
+
                             .onFocusChanged { currentOnFocusChanged(it.hasFocus) }
                             .semantics {
-                                contentDescription = "Address bar"
-                                contentType = ContentType("url")
-                                contentDataType = ContentDataType.Text
+                                if (enableSuggest) {
+                                    contentDescription = "Address bar"
+                                    contentType = ContentType("url")
+                                    contentDataType = ContentDataType.Text
+                                }
                             },
                         value = currentValue,
                         onValueChange = { currentOnValueChange(it) },

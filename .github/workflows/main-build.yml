@@ -37,7 +37,7 @@ jobs:
       - name: Build release APK
         env:
           DEBUG_KEYSTORE_PATH: ${{ runner.temp }}/debug.keystore
-        run: gradle :app:assembleRelease
+        run: ./gradlew :app:assembleRelease
 
       - name: Upload release APK
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -46,7 +46,7 @@ jobs:
           path: app/build/outputs/apk/release/app-release.apk
 
       - name: Run Android Lint
-        run: gradle :app:lintDebug
+        run: ./gradlew :app:lintDebug
 
       - name: Upload lint report
         if: always()
@@ -57,6 +57,7 @@ jobs:
 
   android-test:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     steps:
       - name: Checkout
@@ -81,7 +82,7 @@ jobs:
           sudo udevadm trigger --name-match=kvm
 
       - name: Run Android Instrumentation Tests (Managed Device)
-        run: gradle :app:pixel6Api30DebugAndroidTest
+        run: ./gradlew :app:pixel6Api34DebugAndroidTest
 
       - name: Upload Android test report
         if: always()
@@ -89,5 +90,5 @@ jobs:
         with:
           name: app-androidtest-report
           path: |
-            app/build/reports/androidTests/managedDevice/debug/pixel6Api30
-            app/build/outputs/androidTest-results/managedDevice/debug/pixel6Api30
+            app/build/reports/androidTests/managedDevice/debug/pixel6Api34
+            app/build/outputs/androidTest-results/managedDevice/debug/pixel6Api34

@@ -20,6 +20,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import net.matsudamper.browser.data.TranslationProvider
+import net.matsudamper.browser.media.MediaWebExtension
 import org.koin.compose.koinInject
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoRuntime
@@ -502,8 +503,10 @@ internal class BrowserTabScreenState(
         }
 
     // メディアセッションデリゲートを作成
-    fun createMediaSessionDelegate(): org.mozilla.geckoview.MediaSession.Delegate {
-        return net.matsudamper.browser.media.GeckoMediaSessionDelegate(context)
+    fun createMediaSessionDelegate(
+        mediaWebExtension: MediaWebExtension,
+    ): org.mozilla.geckoview.MediaSession.Delegate {
+        return net.matsudamper.browser.media.GeckoMediaSessionDelegate(mediaWebExtension)
     }
 
     fun createScrollDelegate(): GeckoSession.ScrollDelegate =

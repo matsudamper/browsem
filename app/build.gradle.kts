@@ -67,9 +67,9 @@ android {
     testOptions {
         managedDevices {
             localDevices {
-                maybeCreate("pixel6Api30").apply {
+                maybeCreate("pixel6Api34").apply {
                     device = "Pixel 6"
-                    apiLevel = 30
+                    apiLevel = 34
                     systemImageSource = "aosp-atd"
                     require64Bit = true
                     testedAbi = "x86_64"
@@ -77,7 +77,7 @@ android {
             }
             groups {
                 maybeCreate("gmd").apply {
-                    targetDevices.add(localDevices["pixel6Api30"])
+                    targetDevices.add(localDevices["pixel6Api34"])
                 }
             }
         }
