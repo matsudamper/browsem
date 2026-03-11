@@ -5,9 +5,14 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -21,20 +26,24 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.dp
 import androidx.navigation3.runtime.NavKey
-import kotlin.math.roundToInt
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import net.matsudamper.browser.BrowserSessionController
 import net.matsudamper.browser.BrowserTab
+import net.matsudamper.browser.BrowserToolbar
 import net.matsudamper.browser.GeckoBrowserTab
 import net.matsudamper.browser.ThemeColorWebExtension
+import net.matsudamper.browser.UrlInputState
 import net.matsudamper.browser.data.history.HistoryEntry
 import net.matsudamper.browser.media.MediaWebExtension
 import net.matsudamper.browser.navigation.AppDestination
 import net.matsudamper.browser.navigation.NavController
 import org.mozilla.geckoview.GeckoResult
+import kotlin.math.roundToInt
 
 @Composable
 internal fun BrowserScreen(
@@ -96,6 +105,7 @@ internal fun BrowserScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .offset { IntOffset((swipeOffset.value - pageWidthPx).roundToInt(), 0) },
+                tabCount = tabs.size,
             )
         }
 
@@ -106,6 +116,7 @@ internal fun BrowserScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .offset { IntOffset((swipeOffset.value + pageWidthPx).roundToInt(), 0) },
+                tabCount = tabs.size,
             )
         }
 
@@ -171,6 +182,7 @@ internal fun BrowserScreen(
                             onSelectTab(prevTab.tabId, null)
                         }
                     }
+
                     swipeOffset.value < -threshold && nextTab != null -> {
                         // 端までアニメーション完了後に次のタブへ切り替え
                         coroutineScope.launch {
@@ -178,6 +190,7 @@ internal fun BrowserScreen(
                             onSelectTab(nextTab.tabId, null)
                         }
                     }
+
                     else -> {
                         // しきい値未満の場合は元の位置へスナップバック
                         coroutineScope.launch {
@@ -193,25 +206,57 @@ internal fun BrowserScreen(
 @Composable
 private fun TabPreviewPage(
     tab: BrowserTab,
+    tabCount: Int,
     modifier: Modifier = Modifier,
 ) {
-    Box(modifier = modifier.safeDrawingPadding()) {
-        val previewBitmap = tab.previewBitmap
-        if (previewBitmap != null && previewBitmap.isNotEmpty()) {
-            val bitmap = remember(previewBitmap) {
-                BitmapFactory.decodeByteArray(previewBitmap, 0, previewBitmap.size)
+    Column(modifier = modifier.safeDrawingPadding()) {
+        BrowserToolbar(
+            modifier = Modifier.fillMaxWidth(),
+            toolbarColor = null,
+            isFocused = false,
+            tabCount = tabCount,
+            onOpenTabs = {},
+            toolbarMenu = {},
+            gestureState = null,
+            updateVisibleMenu = {},
+            urlInputState = UrlInputState(
+                value = tab.currentUrl,
+                onValueChange = {},
+                onSubmit = {},
+                onFocusChanged = {},
+                enableSuggest = false,
+                scrollEnabled = false,
+            ),
+        )
+
+        Box(modifier = Modifier.fillMaxSize()) {
+            val previewBitmap = tab.previewBitmap
+            if (previewBitmap != null && previewBitmap.isNotEmpty()) {
+                val bitmap = remember(previewBitmap) {
+                    BitmapFactory.decodeByteArray(previewBitmap, 0, previewBitmap.size)
+                }
+                if (bitmap != null) {
+                    Image(
+                        modifier = Modifier.fillMaxSize(),
+                        bitmap = bitmap.asImageBitmap(),
+                        contentDescription = null,
+                        contentScale = ContentScale.FillWidth,
+                        // URLバーの高さ分ズレるため、画像は下固定にする
+                        alignment = Alignment.BottomCenter,
+                    )
+                    return
+                }
             }
-            if (bitmap != null) {
-                Image(
-                    modifier = Modifier.fillMaxSize(),
-                    bitmap = bitmap.asImageBitmap(),
-                    contentDescription = null,
-                    contentScale = ContentScale.FillWidth,
-                    // URLバーの高さ分ズレるため、画像は下固定にする
-                    alignment = Alignment.BottomCenter,
-                )
-                return
-            }
+
+            Text(
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .padding(16.dp),
+                text = tab.title.ifBlank { tab.currentUrl },
+                style = MaterialTheme.typography.bodyLarge,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
     }
 }
