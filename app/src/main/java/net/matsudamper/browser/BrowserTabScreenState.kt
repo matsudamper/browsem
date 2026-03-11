@@ -121,6 +121,9 @@ internal class BrowserTabScreenState(
     var isRefreshing by mutableStateOf(false)
     var scrollY by mutableIntStateOf(0)
 
+    // --- ページロードエラー表示 ---
+    var pageLoadErrorMessage by mutableStateOf<String?>(null)
+
     val showInstallExtensionItem: Boolean
         get() = resolveAmoInstallUriFromPage(currentPageUrl) != null
 
@@ -131,6 +134,7 @@ internal class BrowserTabScreenState(
     fun onUrlSubmit(rawInput: String) {
         val resolved = buildUrlFromInput(rawInput, homepageUrl, searchTemplate)
         urlInput = resolved
+        pageLoadErrorMessage = null
         maybeResetToolbarColor(currentPageUrl, resolved)
         currentPageUrl = resolved
         session.loadUri(resolved)
@@ -138,26 +142,35 @@ internal class BrowserTabScreenState(
 
     fun onHome() {
         urlInput = homepageUrl
+        pageLoadErrorMessage = null
         maybeResetToolbarColor(currentPageUrl, homepageUrl)
         currentPageUrl = homepageUrl
         session.loadUri(homepageUrl)
     }
 
     fun onRefresh() {
+        pageLoadErrorMessage = null
         session.reload()
     }
 
     fun onRefreshFromSwipe() {
+        pageLoadErrorMessage = null
         session.reload()
         isRefreshing = false
     }
 
     fun onGoForward() {
+        pageLoadErrorMessage = null
         session.goForward()
     }
 
     fun onGoBack() {
+        pageLoadErrorMessage = null
         session.goBack()
+    }
+
+    fun dismissPageLoadError() {
+        pageLoadErrorMessage = null
     }
 
     fun togglePcMode() {
@@ -391,6 +404,7 @@ internal class BrowserTabScreenState(
             if (!isUrlInputFocused) {
                 urlInput = newUrl
             }
+            pageLoadErrorMessage = null
             val revertUrl = originalPageUrlForRevert
             if (translationState != TranslationState.Idle &&
                 !newUrl.startsWith("data:") &&
@@ -482,11 +496,15 @@ internal class BrowserTabScreenState(
             }
 
             override fun onPageStart(session: GeckoSession, url: String) {
+                pageLoadErrorMessage = null
                 maybeResetToolbarColorOnPageStart(url)
             }
 
             override fun onPageStop(session: GeckoSession, success: Boolean) {
                 renderReady = true
+                if (!success) {
+                    pageLoadErrorMessage = "ページを読み込めませんでした。\nドメインが存在しない、またはネットワーク接続を確認してください。"
+                }
             }
         }
 

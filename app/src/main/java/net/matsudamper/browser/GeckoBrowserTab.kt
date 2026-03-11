@@ -426,6 +426,20 @@ internal fun GeckoBrowserTab(
             )
         }
 
+        // サイト側でハンドリングできないページロードエラーを表示
+        state.pageLoadErrorMessage?.let { message ->
+            AlertDialog(
+                onDismissRequest = state::dismissPageLoadError,
+                title = { Text("読み込みエラー") },
+                text = { Text(message) },
+                confirmButton = {
+                    TextButton(onClick = state::dismissPageLoadError) {
+                        Text("閉じる")
+                    }
+                },
+            )
+        }
+
         // Alert prompt dialog
         dialogState.pendingAlertPrompt?.let { prompt ->
             AlertDialog(
