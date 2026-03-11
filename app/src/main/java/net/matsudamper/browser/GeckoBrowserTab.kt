@@ -36,7 +36,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -880,45 +879,46 @@ private fun PageLoadErrorOverlay(
     pageLoadError: PageLoadError,
     onRetry: () -> Unit,
 ) {
-    Box(
+    Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.96f))
-            .padding(24.dp)
+            .background(MaterialTheme.colorScheme.surface)
+            .padding(horizontal = 24.dp, vertical = 32.dp)
             .testTag(TEST_TAG_PAGE_LOAD_ERROR),
-        contentAlignment = Alignment.Center,
+        verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {
-        Surface(
-            tonalElevation = 4.dp,
-            shape = MaterialTheme.shapes.extraLarge,
+        Spacer(modifier = Modifier.height(32.dp))
+        Text(
+            text = "ページを表示できません",
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f, fill = false)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 24.dp, vertical = 28.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
+            Text(
+                text = pageLoadError.title,
+                style = MaterialTheme.typography.headlineMedium,
+            )
+            Text(
+                text = pageLoadError.message,
+                style = MaterialTheme.typography.bodyLarge,
+            )
+            if (pageLoadError.failingUrl.isNotBlank()) {
                 Text(
-                    text = pageLoadError.title,
-                    style = MaterialTheme.typography.headlineSmall,
+                    text = pageLoadError.failingUrl,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                Text(
-                    text = pageLoadError.message,
-                    style = MaterialTheme.typography.bodyLarge,
-                )
-                if (pageLoadError.failingUrl.isNotBlank()) {
-                    Text(
-                        text = pageLoadError.failingUrl,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TextButton(onClick = onRetry) {
-                        Text("再読み込み")
-                    }
-                }
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            TextButton(onClick = onRetry) {
+                Text("再読み込み")
             }
         }
     }
