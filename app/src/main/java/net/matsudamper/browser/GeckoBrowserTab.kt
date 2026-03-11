@@ -28,12 +28,15 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -345,6 +348,13 @@ internal fun GeckoBrowserTab(
                     geckoView = it
                 }
             )
+
+            state.pageLoadError?.let { pageLoadError ->
+                PageLoadErrorOverlay(
+                    pageLoadError = pageLoadError,
+                    onRetry = state::retryPageLoad,
+                )
+            }
 
             // URLバーフォーカス中にサジェストを表示
             if (
@@ -865,6 +875,55 @@ private fun CurrentPageUrlListItem(
     )
 }
 
+@Composable
+private fun PageLoadErrorOverlay(
+    pageLoadError: PageLoadError,
+    onRetry: () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.96f))
+            .padding(24.dp)
+            .testTag(TEST_TAG_PAGE_LOAD_ERROR),
+        contentAlignment = Alignment.Center,
+    ) {
+        Surface(
+            tonalElevation = 4.dp,
+            shape = MaterialTheme.shapes.extraLarge,
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 24.dp, vertical = 28.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                Text(
+                    text = pageLoadError.title,
+                    style = MaterialTheme.typography.headlineSmall,
+                )
+                Text(
+                    text = pageLoadError.message,
+                    style = MaterialTheme.typography.bodyLarge,
+                )
+                if (pageLoadError.failingUrl.isNotBlank()) {
+                    Text(
+                        text = pageLoadError.failingUrl,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = onRetry) {
+                        Text("再読み込み")
+                    }
+                }
+            }
+        }
+    }
+}
+
 private fun flattenChoices(
     choices: Array<GeckoSession.PromptDelegate.ChoicePrompt.Choice>,
 ): List<GeckoSession.PromptDelegate.ChoicePrompt.Choice> {
@@ -877,4 +936,5 @@ const val TEST_TAG_GECKO_CONTAINER = "gecko_container"
 const val TEST_TAG_HISTORY_SUGGESTION_LIST = "history_suggestion_list"
 const val TEST_TAG_CURRENT_URL_ACTIONS = "current_url_actions"
 const val TEST_TAG_CURRENT_URL_TEXT = "current_url_text"
+const val TEST_TAG_PAGE_LOAD_ERROR = "page_load_error"
 private const val URL_BAR_IME_HIDE_GRACE_MS = 700L
