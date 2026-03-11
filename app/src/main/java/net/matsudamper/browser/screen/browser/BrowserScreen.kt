@@ -25,7 +25,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
@@ -176,6 +178,7 @@ internal fun BrowserScreen(
                             onSelectTab(prevTab.tabId, null)
                         }
                     }
+
                     swipeOffset.value < -threshold && nextTab != null -> {
                         // 端までアニメーション完了後に次のタブへ切り替え
                         coroutineScope.launch {
@@ -183,6 +186,7 @@ internal fun BrowserScreen(
                             onSelectTab(nextTab.tabId, null)
                         }
                     }
+
                     else -> {
                         // しきい値未満の場合は元の位置へスナップバック
                         coroutineScope.launch {
@@ -201,7 +205,7 @@ private fun TabPreviewPage(
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier.safeDrawingPadding()) {
-        val toolbarColor = tab.themeColor?.let(::androidx.compose.ui.graphics.Color)
+        val toolbarColor = tab.themeColor?.let { Color(it) }
             ?: MaterialTheme.colorScheme.primaryContainer
         val toolbarContentColor = if (toolbarColor.luminance() >= 0.5f) {
             MaterialTheme.colorScheme.onPrimaryContainer
