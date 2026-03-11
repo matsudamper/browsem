@@ -36,7 +36,7 @@ jobs:
       - name: Build debug APK
         env:
           DEBUG_KEYSTORE_PATH: ${{ runner.temp }}/debug.keystore
-        run: gradle :app:assembleDebug
+        run: ./gradlew :app:assembleDebug
 
       - name: Upload debug APK
         id: upload_apk
@@ -46,7 +46,7 @@ jobs:
           path: app/build/outputs/apk/debug/app-debug.apk
 
       - name: Run Android Lint
-        run: gradle :app:lintDebug
+        run: ./gradlew :app:lintDebug
 
       - name: Upload lint report
         if: always()
@@ -92,7 +92,7 @@ jobs:
           sudo udevadm trigger --name-match=kvm
 
       - name: Run Android Instrumentation Tests (Managed Device)
-        run: gradle :app:pixel6Api34DebugAndroidTest
+        run: ./gradlew :app:pixel6Api34DebugAndroidTest
 
       - name: Upload Android test report
         if: always()
