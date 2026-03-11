@@ -148,13 +148,11 @@ internal class BrowserTabScreenState(
     }
 
     fun onRefresh() {
-        clearPageLoadError()
-        session.reload()
+        refreshCurrentPage()
     }
 
     fun onRefreshFromSwipe() {
-        clearPageLoadError()
-        session.reload()
+        refreshCurrentPage()
         isRefreshing = false
     }
 
@@ -176,8 +174,7 @@ internal class BrowserTabScreenState(
         } else {
             GeckoSessionSettings.USER_AGENT_MODE_MOBILE
         }
-        clearPageLoadError()
-        session.reload()
+        refreshCurrentPage()
     }
 
     fun openFindInPage() {
@@ -306,8 +303,7 @@ internal class BrowserTabScreenState(
     }
 
     fun retryPageLoad() {
-        clearPageLoadError()
-        session.reload()
+        refreshCurrentPage()
     }
 
     fun copyCurrentPageUrl() {
@@ -403,7 +399,17 @@ internal class BrowserTabScreenState(
             uri: String?,
             error: WebRequestError,
         ): GeckoResult<String>? {
-            pageLoadError = error.toPageLoadError(uri)
+            val resolvedError = error.toPageLoadError(uri)
+            val failedUrl = resolvedError.failingUrl
+            if (failedUrl.isNotBlank()) {
+                maybeResetToolbarColor(currentPageUrl, failedUrl)
+                currentPageUrl = failedUrl
+                if (!isUrlInputFocused) {
+                    urlInput = failedUrl
+                }
+            }
+            currentPageTitle = resolvedError.title
+            pageLoadError = resolvedError
             return null
         }
 
@@ -557,6 +563,20 @@ internal class BrowserTabScreenState(
         if (shouldResetToolbarColor(fromUrl, toUrl)) {
             toolbarColor = null
         }
+    }
+
+    private fun refreshCurrentPage() {
+        val retryUrl = pageLoadError?.failingUrl?.takeIf { it.isNotBlank() }
+        clearPageLoadError()
+        if (retryUrl != null) {
+            currentPageUrl = retryUrl
+            if (!isUrlInputFocused) {
+                urlInput = retryUrl
+            }
+            session.loadUri(retryUrl)
+            return
+        }
+        session.reload()
     }
 
     private fun clearPageLoadError() {
