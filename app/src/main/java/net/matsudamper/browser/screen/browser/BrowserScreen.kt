@@ -29,8 +29,9 @@ import kotlinx.coroutines.launch
 import net.matsudamper.browser.BrowserSessionController
 import net.matsudamper.browser.BrowserTab
 import net.matsudamper.browser.GeckoBrowserTab
-import net.matsudamper.browser.data.history.HistoryEntry
 import net.matsudamper.browser.ThemeColorWebExtension
+import net.matsudamper.browser.data.history.HistoryEntry
+import net.matsudamper.browser.media.MediaWebExtension
 import net.matsudamper.browser.navigation.AppDestination
 import net.matsudamper.browser.navigation.NavController
 import org.mozilla.geckoview.GeckoResult
@@ -45,6 +46,7 @@ internal fun BrowserScreen(
     viewModel: BrowserScreenViewModel,
     navController: NavController,
     themeColorExtension: ThemeColorWebExtension,
+    mediaWebExtension: MediaWebExtension,
     onInstallExtensionRequest: (String) -> Unit,
     handleNotificationPermission: (uri: String) -> GeckoResult<Int>,
     onSelectTab: (tabId: String, beforeTab: AppDestination.Browser?) -> Unit,
@@ -117,6 +119,7 @@ internal fun BrowserScreen(
             searchTemplate = searchTemplate,
             translationProvider = settingsUiState.translationProvider,
             themeColorExtension = themeColorExtension,
+            mediaWebExtension = mediaWebExtension,
             tabCount = tabs.size,
             onInstallExtensionRequest = onInstallExtensionRequest,
             onDesktopNotificationPermissionRequest = handleNotificationPermission,
