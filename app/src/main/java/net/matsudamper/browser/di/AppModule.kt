@@ -19,5 +19,5 @@ val dataModule = module {
 val appModule = module {
     single { GeckoRuntime.getDefault(androidContext()) }
     factory { GeckoDownloadManager(androidContext(), get()) }
-    viewModel { BrowserViewModel(get(), get(), get(), get()) }
+    viewModel { BrowserViewModel(androidContext(), get(), get(), get(), get()) }
 }

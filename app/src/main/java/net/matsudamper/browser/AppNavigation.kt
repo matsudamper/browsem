@@ -62,6 +62,7 @@ internal fun BrowserApp(
     val searchTemplate = settingsUiState.searchTemplate
     val browserSessionController = viewModel.browserSessionController
     val themeColorExtension = viewModel.themeColorExtension
+    val mediaWebExtension = viewModel.mediaWebExtension
 
     // Koin からリポジトリを取得（画面 ViewModel に直接渡す）
     val settingsRepository: SettingsRepository = koinInject()
@@ -163,6 +164,7 @@ internal fun BrowserApp(
                             viewModel = browserScreenViewModel,
                             navController = navController,
                             themeColorExtension = themeColorExtension,
+                            mediaWebExtension = mediaWebExtension,
                             onInstallExtensionRequest = onInstallExtensionRequest,
                             handleNotificationPermission = handleNotificationPermission,
                             onSelectTab = { tabId, beforeTab ->

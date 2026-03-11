@@ -61,6 +61,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import kotlinx.coroutines.flow.collectLatest
 import net.matsudamper.browser.data.TranslationProvider
+import net.matsudamper.browser.media.MediaWebExtension
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.GeckoView
@@ -74,6 +75,7 @@ internal fun GeckoBrowserTab(
     searchTemplate: String,
     translationProvider: TranslationProvider,
     themeColorExtension: ThemeColorWebExtension,
+    mediaWebExtension: MediaWebExtension,
     browserSessionController: BrowserSessionController,
     modifier: Modifier = Modifier,
     tabCount: Int,
@@ -158,6 +160,13 @@ internal fun GeckoBrowserTab(
         }
     }
 
+    DisposableEffect(session, mediaWebExtension) {
+        mediaWebExtension.registerSession(session)
+        onDispose {
+            mediaWebExtension.unregisterSession(session)
+        }
+    }
+
     DisposableEffect(session, state, browserTab) {
         val permissionDelegate = state.createPermissionDelegate { uri ->
             currentOnDesktopNotificationPermissionRequest(uri)
@@ -192,8 +201,8 @@ internal fun GeckoBrowserTab(
     }
 
     // メディアセッションデリゲートは不安定なラムダキーの影響を受けないよう独立して管理
-    DisposableEffect(session, state) {
-        val mediaSessionDelegate = state.createMediaSessionDelegate()
+    DisposableEffect(session, state, mediaWebExtension) {
+        val mediaSessionDelegate = state.createMediaSessionDelegate(mediaWebExtension)
         session.mediaSessionDelegate = mediaSessionDelegate
         onDispose {
             if (session.mediaSessionDelegate === mediaSessionDelegate) {
