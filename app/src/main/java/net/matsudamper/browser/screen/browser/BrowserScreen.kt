@@ -76,10 +76,7 @@ internal fun BrowserScreen(
 
     LaunchedEffect(historySuggestionQuery) {
         viewModel.searchHistory(historySuggestionQuery).collectLatest { entries ->
-            // 同一URLの重複サジェストを除外する
             historySuggestions = entries
-                .distinctBy { it.url }
-                .take(8)
         }
     }
 

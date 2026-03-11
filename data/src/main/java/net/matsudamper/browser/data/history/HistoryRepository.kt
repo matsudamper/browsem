@@ -21,7 +21,7 @@ class HistoryRepository(context: Context) {
         dao.updateTitle(id, title)
     }
 
-    fun search(query: String): Flow<List<HistoryEntry>> = dao.search(query)
+    fun search(query: String, limit: Int = 50): Flow<List<HistoryEntry>> = dao.search(query, limit)
 
     fun getRecent(limit: Int = 100, offset: Int = 0): Flow<List<HistoryEntry>> =
         dao.getRecent(limit, offset)
