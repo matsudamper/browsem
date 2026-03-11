@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
@@ -38,9 +39,11 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import net.matsudamper.browser.BrowserSessionController
 import net.matsudamper.browser.BrowserTab
+import net.matsudamper.browser.BrowserToolbar
 import net.matsudamper.browser.GeckoBrowserTab
 import net.matsudamper.browser.data.history.HistoryEntry
 import net.matsudamper.browser.ThemeColorWebExtension
+import net.matsudamper.browser.UrlInputState
 import net.matsudamper.browser.navigation.AppDestination
 import net.matsudamper.browser.navigation.NavController
 import org.mozilla.geckoview.GeckoResult
@@ -104,6 +107,7 @@ internal fun BrowserScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .offset { IntOffset((swipeOffset.value - pageWidthPx).roundToInt(), 0) },
+                tabCount = tabs.size,
             )
         }
 
@@ -114,6 +118,7 @@ internal fun BrowserScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .offset { IntOffset((swipeOffset.value + pageWidthPx).roundToInt(), 0) },
+                tabCount = tabs.size,
             )
         }
 
@@ -202,36 +207,27 @@ internal fun BrowserScreen(
 @Composable
 private fun TabPreviewPage(
     tab: BrowserTab,
+    tabCount: Int,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier.safeDrawingPadding()) {
-        val toolbarColor = tab.themeColor?.let { Color(it) }
-            ?: MaterialTheme.colorScheme.primaryContainer
-        val toolbarContentColor = if (toolbarColor.luminance() >= 0.5f) {
-            MaterialTheme.colorScheme.onPrimaryContainer
-        } else {
-            MaterialTheme.colorScheme.onSurface
-        }
-
-        Surface(
-            color = toolbarColor,
-            contentColor = toolbarContentColor,
-        ) {
-            Surface(
-                modifier = Modifier
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
-                shape = CircleShape,
-                color = MaterialTheme.colorScheme.surface,
-            ) {
-                Text(
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                    text = tab.currentUrl,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-            }
-        }
+        BrowserToolbar(
+            modifier = Modifier.fillMaxWidth(),
+            toolbarColor = null,
+            isFocused = false,
+            tabCount = tabCount,
+            onOpenTabs = {},
+            toolbarMenu = {},
+            gestureState = null,
+            urlInputState = UrlInputState(
+                value = tab.currentUrl,
+                onValueChange = {},
+                onSubmit = {},
+                onFocusChanged = {},
+                enableSuggest = false,
+                scrollEnabled = false,
+            ),
+        )
 
         Box(modifier = Modifier.fillMaxSize()) {
             val previewBitmap = tab.previewBitmap
