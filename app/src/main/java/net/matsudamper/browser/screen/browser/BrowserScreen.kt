@@ -11,9 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -26,27 +24,26 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.navigation3.runtime.NavKey
-import kotlin.math.roundToInt
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import net.matsudamper.browser.BrowserSessionController
 import net.matsudamper.browser.BrowserTab
 import net.matsudamper.browser.BrowserToolbar
 import net.matsudamper.browser.GeckoBrowserTab
-import net.matsudamper.browser.data.history.HistoryEntry
 import net.matsudamper.browser.ThemeColorWebExtension
 import net.matsudamper.browser.UrlInputState
+import net.matsudamper.browser.data.history.HistoryEntry
+import net.matsudamper.browser.media.MediaWebExtension
 import net.matsudamper.browser.navigation.AppDestination
 import net.matsudamper.browser.navigation.NavController
 import org.mozilla.geckoview.GeckoResult
+import kotlin.math.roundToInt
 
 @Composable
 internal fun BrowserScreen(
@@ -58,6 +55,7 @@ internal fun BrowserScreen(
     viewModel: BrowserScreenViewModel,
     navController: NavController,
     themeColorExtension: ThemeColorWebExtension,
+    mediaWebExtension: MediaWebExtension,
     onInstallExtensionRequest: (String) -> Unit,
     handleNotificationPermission: (uri: String) -> GeckoResult<Int>,
     onSelectTab: (tabId: String, beforeTab: AppDestination.Browser?) -> Unit,
@@ -132,6 +130,7 @@ internal fun BrowserScreen(
             searchTemplate = searchTemplate,
             translationProvider = settingsUiState.translationProvider,
             themeColorExtension = themeColorExtension,
+            mediaWebExtension = mediaWebExtension,
             tabCount = tabs.size,
             onInstallExtensionRequest = onInstallExtensionRequest,
             onDesktopNotificationPermissionRequest = handleNotificationPermission,

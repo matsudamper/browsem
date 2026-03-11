@@ -29,6 +29,7 @@ import net.matsudamper.browser.data.ThemeMode
 import net.matsudamper.browser.data.TranslationProvider
 import net.matsudamper.browser.data.resolvedHomepageUrl
 import net.matsudamper.browser.data.resolvedSearchTemplate
+import net.matsudamper.browser.media.MediaWebExtension
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoSession
@@ -48,6 +49,7 @@ internal data class SettingsUiState(
 
 @Stable
 internal class BrowserViewModel(
+    private val appContext: android.content.Context,
     val runtime: GeckoRuntime,
     private val settingsRepository: SettingsRepository,
     private val tabRepository: TabRepository,
@@ -55,6 +57,7 @@ internal class BrowserViewModel(
 ) : ViewModel() {
     val browserSessionController = BrowserSessionController(runtime)
     val themeColorExtension = ThemeColorWebExtension().also { it.install(runtime) }
+    val mediaWebExtension = MediaWebExtension(appContext).also { it.install(runtime) }
 
     private val settings: StateFlow<BrowserSettings?> = settingsRepository.settings
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
@@ -209,6 +212,7 @@ internal class BrowserViewModel(
         super.onCleared()
         browserSessionController.close()
         themeColorExtension.cleanup()
+        mediaWebExtension.cleanup()
     }
 }
 
