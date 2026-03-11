@@ -22,17 +22,10 @@ internal class BrowserScreenViewModel(
     }
 
     fun searchHistory(query: String, limit: Int = 8): Flow<List<HistoryEntry>> {
-        val fetchLimit = limit * 5
-        val flow = if (query.isBlank()) {
-            historyRepository.getRecent(limit = fetchLimit)
+        return if (query.isBlank()) {
+            historyRepository.getRecentSuggestions(limit = limit)
         } else {
-            historyRepository.search(query = query, limit = fetchLimit)
-        }
-
-        return flow.map { entries ->
-            entries
-                .distinctBy { it.url }
-                .take(limit)
+            historyRepository.searchSuggestions(query = query, limit = limit)
         }
     }
 }
