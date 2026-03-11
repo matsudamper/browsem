@@ -151,9 +151,10 @@ class MediaPlaybackService : MediaSessionService() {
             notification.extras?.getCharSequence(android.app.Notification.EXTRA_TITLE)?.toString()
         lastGeneratedNotificationText =
             notification.extras?.getCharSequence(android.app.Notification.EXTRA_TEXT)?.toString()
+        lastGeneratedNotificationHasLargeIcon = notification.getLargeIcon() != null
         Log.d(
             TAG,
-            "generated notification: actionCount=$lastGeneratedNotificationActionCount, title=$lastGeneratedNotificationTitle, text=$lastGeneratedNotificationText",
+            "generated notification: actionCount=$lastGeneratedNotificationActionCount, title=$lastGeneratedNotificationTitle, text=$lastGeneratedNotificationText, hasLargeIcon=$lastGeneratedNotificationHasLargeIcon",
         )
     }
 
@@ -167,11 +168,14 @@ class MediaPlaybackService : MediaSessionService() {
         var lastGeneratedNotificationTitle: String? = null
         @Volatile
         var lastGeneratedNotificationText: String? = null
+        @Volatile
+        var lastGeneratedNotificationHasLargeIcon: Boolean = false
 
         fun resetGeneratedNotificationDebugState() {
             lastGeneratedNotificationActionCount = 0
             lastGeneratedNotificationTitle = null
             lastGeneratedNotificationText = null
+            lastGeneratedNotificationHasLargeIcon = false
         }
 
         private const val NOTIFICATION_ID = 1001

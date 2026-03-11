@@ -1,6 +1,7 @@
 package net.matsudamper.browser.media
 
 import android.content.Context
+import android.graphics.Bitmap
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
@@ -12,6 +13,8 @@ import org.mozilla.geckoview.MediaSession
 import org.mozilla.geckoview.WebExtension
 import java.util.Collections
 import java.util.WeakHashMap
+import java.util.concurrent.atomic.AtomicLong
+import kotlin.math.max
 
 /**
  * GeckoView の不安定な MediaSession 状態取得を避けるため、
@@ -24,8 +27,19 @@ internal class MediaWebExtension(
     private val mainHandler = Handler(Looper.getMainLooper())
     private val sessionStates =
         Collections.synchronizedMap(WeakHashMap<GeckoSession, SessionPlaybackSnapshot>())
+    private val sessionArtworkBitmaps =
+        Collections.synchronizedMap(WeakHashMap<GeckoSession, Bitmap>())
+    private val sessionArtworkRequestIds =
+        Collections.synchronizedMap(WeakHashMap<GeckoSession, Long>())
     private val registeredSessions =
         Collections.synchronizedSet(Collections.newSetFromMap(WeakHashMap<GeckoSession, Boolean>()))
+    private val artworkRequestSerial = AtomicLong(0L)
+    private val artworkTargetSizePx by lazy(LazyThreadSafetyMode.NONE) {
+        max(
+            context.resources.getDimensionPixelSize(android.R.dimen.notification_large_icon_width),
+            context.resources.getDimensionPixelSize(android.R.dimen.notification_large_icon_height),
+        ).coerceAtLeast(DEFAULT_ARTWORK_SIZE_PX)
+    }
 
     @Volatile
     private var activeSession: GeckoSession? = null
@@ -84,11 +98,58 @@ internal class MediaWebExtension(
         }
     }
 
+    fun onMetadata(session: GeckoSession, meta: MediaSession.Metadata) {
+        Log.d(
+            TAG,
+            "onMetadata: title=${meta.title}, artist=${meta.artist}, hasArtwork=${meta.artwork != null}",
+        )
+        val artwork = meta.artwork
+        val requestId = invalidateArtwork(session)
+        if (artwork == null) {
+            if (activeSession === session) {
+                applySessionState(session)
+            }
+            return
+        }
+
+        artwork.getBitmap(artworkTargetSizePx).accept(
+            { bitmap ->
+                mainHandler.post {
+                    if (!isArtworkRequestCurrent(session, requestId)) {
+                        return@post
+                    }
+                    if (bitmap == null) {
+                        sessionArtworkBitmaps.remove(session)
+                    } else {
+                        sessionArtworkBitmaps[session] = bitmap
+                    }
+                    if (activeSession === session) {
+                        applySessionState(session)
+                    }
+                }
+            },
+            { error ->
+                Log.w(TAG, "artwork getBitmap failed", error)
+                mainHandler.post {
+                    if (!isArtworkRequestCurrent(session, requestId)) {
+                        return@post
+                    }
+                    sessionArtworkBitmaps.remove(session)
+                    if (activeSession === session) {
+                        applySessionState(session)
+                    }
+                }
+            },
+        )
+    }
+
     fun isInstalled(): Boolean = extension != null
 
     fun cleanup() {
         activeSession = null
         sessionStates.clear()
+        sessionArtworkBitmaps.clear()
+        sessionArtworkRequestIds.clear()
         registeredSessions.clear()
     }
 
@@ -116,9 +177,20 @@ internal class MediaWebExtension(
                         features = sessionStates[session]?.features ?: 0L,
                     )
                     mainHandler.post {
+                        val previousSnapshot = sessionStates[session]
+                        if (
+                            previousSnapshot != null &&
+                            (
+                                previousSnapshot.title != snapshot.title ||
+                                    previousSnapshot.artist != snapshot.artist ||
+                                    previousSnapshot.album != snapshot.album
+                                )
+                        ) {
+                            invalidateArtwork(session)
+                        }
                         sessionStates[session] = snapshot
                         if (activeSession === session) {
-                            applySnapshot(snapshot)
+                            applySnapshot(session, snapshot)
                         }
                     }
                     return null
@@ -131,16 +203,22 @@ internal class MediaWebExtension(
     private fun applySessionState(session: GeckoSession) {
         val snapshot = sessionStates[session]
         if (snapshot != null) {
-            applySnapshot(snapshot)
+            applySnapshot(session, snapshot)
             return
         }
 
         MediaSessionBridge.activate()
+        MediaSessionBridge.updateMetadata(
+            title = "",
+            artist = "",
+            album = "",
+            artworkBitmap = sessionArtworkBitmaps[session],
+        )
         MediaSessionBridge.updatePlaying(false)
         MediaSessionBridge.updatePosition(positionMs = 0L, durationMs = 0L)
     }
 
-    private fun applySnapshot(snapshot: SessionPlaybackSnapshot) {
+    private fun applySnapshot(session: GeckoSession, snapshot: SessionPlaybackSnapshot) {
         if (!snapshot.isActive) {
             MediaSessionBridge.deactivate()
             MediaPlaybackServiceController.stop(context)
@@ -152,7 +230,7 @@ internal class MediaWebExtension(
             title = snapshot.title,
             artist = snapshot.artist,
             album = snapshot.album,
-            artworkBitmap = null,
+            artworkBitmap = sessionArtworkBitmaps[session],
         )
         MediaSessionBridge.updatePosition(
             positionMs = snapshot.positionMs,
@@ -174,11 +252,23 @@ internal class MediaWebExtension(
         MediaPlaybackServiceController.stop(context)
     }
 
+    private fun invalidateArtwork(session: GeckoSession): Long {
+        val requestId = artworkRequestSerial.incrementAndGet()
+        sessionArtworkRequestIds[session] = requestId
+        sessionArtworkBitmaps.remove(session)
+        return requestId
+    }
+
+    private fun isArtworkRequestCurrent(session: GeckoSession, requestId: Long): Boolean {
+        return sessionArtworkRequestIds[session] == requestId
+    }
+
     companion object {
         private const val TAG = "MediaWebExtension"
         private const val NATIVE_APP_ID = "mediaBridge"
         private const val EXTENSION_URI =
             "resource://android/assets/web_extensions/media_bridge/"
+        private const val DEFAULT_ARTWORK_SIZE_PX = 256
     }
 }
 
