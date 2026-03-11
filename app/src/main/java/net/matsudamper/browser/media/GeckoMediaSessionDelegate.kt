@@ -27,7 +27,8 @@ internal class GeckoMediaSessionDelegate(
         mediaSession: MediaSession,
         meta: MediaSession.Metadata,
     ) {
-        Log.d(TAG, "onMetadata ignored: title=${meta.title}, artist=${meta.artist}")
+        Log.d(TAG, "onMetadata: title=${meta.title}, artist=${meta.artist}, hasArtwork=${meta.artwork != null}")
+        mediaWebExtension.onMetadata(session, meta)
     }
 
     override fun onFeatures(

@@ -31,12 +31,15 @@
   <script>
     const video = document.getElementById('video');
     const status = document.getElementById('status');
+    const artworkDataUrl =
+      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGAAAABgCAYAAADimHc4AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAK1SURBVHhe7dixbRtBFEVRxa7ANbkQl6Bu1IsC1+BMgAJlypQpWmMMESCvZHD5589/M+u3wEksmpy31zQJ3X3/+WsznTv+gdVyADEHEHMAMQcQcwAxBxBzADEHEHMAMQcQcwAxBxBzADEHEHMAMQcQcwCxJQJsv7+F8blmM20A3sgMfI0ZTBeAN20EvqbSNAF4kyrwDAryALwpCjxTJWkA3gglnq2KJADHz4RnHa08AAfPiGceqTQAh86MZx+lLAAHroAbRigJwGEr4ZZsDnAFt2QbHoCDVsRNmYYG4JCVcVsWB9iJ27IMC8ABR8CNGSYOcL/tvx6/+Pv5uDHDkAA8eMwtAT6u1x9fPE8ubu11rADb87Y98XlycWuv9AA8cBwCvPDnH14eLx+32Ltg/QDN29nj3u4//zwZN/c4XoD/+R3Ag/bZGeD1+exBNd+GGm6PWifA1Wv8B/A5bo86ToCC//vPcXvUcQL8vereBdwetU6Af30GPD1cPu794fNjBuD2qPUDNBcfxDXvAm6PcoAgbo9KC8AD9tsbgJ8VNV9FuT8qLUDDQ/bhjd15FX0b4vaogwWo+dffcHvUcQIU/AriHLdHTRxgbtwe5QBB3B7lAEHcHuUAQdwelRqg4UGPiJt7OEAAN/dwgABu7pEeoOGBj4RbeznAjbi115AADQ9+BNyYwQFuwI0ZhgVoOGBl3JbFAXbitixDAzQcsiJuyjQ8QMNBK+GWbA5wBbdkKwnQcNgKuGGEsgANB86MZx+lNEDDoTPimUcqD9Bw8Ex41tEkAU44XolnqyIN0PBGKPBMleQBTnhTKvAMCtMEOOFNGoGvqTRdgBPetAx8jRlMG+Acb+Qt+FyzWSLAkTmAmAOIOYCYA4g5gJgDiDmAmAOIOYCYA4g5gJgDiDmAmAOIOYCYA4g5gNgfR3SeUl4mPvkAAAAASUVORK5CYII=';
 
     if ('mediaSession' in navigator) {
       navigator.mediaSession.metadata = new MediaMetadata({
         title: 'Test Video',
         artist: 'Browsem',
         album: 'AndroidTest Assets',
+        artwork: [{ src: artworkDataUrl, sizes: '96x96', type: 'image/png' }],
       });
 
       navigator.mediaSession.setActionHandler('play', () => video.play());
