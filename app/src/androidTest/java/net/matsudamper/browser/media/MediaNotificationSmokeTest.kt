@@ -64,28 +64,15 @@ class MediaNotificationSmokeTest {
         waitForMediaExtensionInstalled()
 
         // URL バー経由だと "https://file///..." に補正されるため、GeckoSession に直接 file URI を渡す。
-        composeRule.runOnIdle {
-            activeTab.session.loadUri(mediaPageUri)
-        }
-        Thread.sleep(PAGE_READY_DELAY_MS)
-
-        // CI エミュレータではページ読み込みが遅いため、isActive になるまでクリックをリトライする
-        val clickRetryDeadline = SystemClock.uptimeMillis() + SESSION_ACTIVATION_TIMEOUT_MS
-        while (!MediaSessionBridge.playbackState.value.isActive && SystemClock.uptimeMillis() < clickRetryDeadline) {
-            composeRule.onNodeWithTag(TEST_TAG_GECKO_CONTAINER).performTouchInput {
-                click(center)
-            }
-            Thread.sleep(CLICK_RETRY_INTERVAL_MS)
-        }
+        assertTrue(
+            "ビデオ再生後に MediaSessionBridge がアクティブになること",
+            startPlaybackWithRetry(activeTab = activeTab, mediaPageUri = mediaPageUri),
+        )
 
         // 最終的に isActive になったことを確認
         composeRule.waitUntil(timeoutMillis = SESSION_ACTIVATION_TIMEOUT_MS) {
             MediaSessionBridge.playbackState.value.isActive
         }
-        assertTrue(
-            "ビデオ再生後に MediaSessionBridge がアクティブになること",
-            MediaSessionBridge.playbackState.value.isActive,
-        )
 
         // GeckoView の onPlay で isPlaying=true になるまで待機
         composeRule.waitUntil(timeoutMillis = PLAYBACK_STATE_TIMEOUT_MS) {
@@ -207,6 +194,69 @@ class MediaNotificationSmokeTest {
         }
     }
 
+    private fun startPlaybackWithRetry(
+        activeTab: BrowserTab,
+        mediaPageUri: String,
+    ): Boolean {
+        repeat(PLAYBACK_START_ATTEMPTS) { attempt ->
+            loadMediaPage(activeTab, mediaPageUri)
+            waitForActiveTabUrl(timeoutMillis = PAGE_LOAD_TIMEOUT_MS, activeTab = activeTab) { currentUrl ->
+                currentUrl.startsWith("file:") && currentUrl.contains(LOCAL_MEDIA_INDEX_FILE_NAME)
+            }
+            Thread.sleep(PAGE_READY_DELAY_MS)
+
+            val deadline = SystemClock.uptimeMillis() + SESSION_ACTIVATION_TIMEOUT_MS
+            while (!MediaSessionBridge.playbackState.value.isActive && SystemClock.uptimeMillis() < deadline) {
+                requestPlayback(activeTab)
+                composeRule.onNodeWithTag(TEST_TAG_GECKO_CONTAINER).performTouchInput {
+                    click(center)
+                }
+                Thread.sleep(CLICK_RETRY_INTERVAL_MS)
+            }
+            if (MediaSessionBridge.playbackState.value.isActive) {
+                return true
+            }
+            if (attempt + 1 < PLAYBACK_START_ATTEMPTS) {
+                Thread.sleep(PAGE_RELOAD_DELAY_MS)
+            }
+        }
+        return MediaSessionBridge.playbackState.value.isActive
+    }
+
+    private fun loadMediaPage(activeTab: BrowserTab, mediaPageUri: String) {
+        composeRule.runOnIdle {
+            activeTab.session.loadUri(mediaPageUri)
+        }
+    }
+
+    private fun requestPlayback(activeTab: BrowserTab) {
+        composeRule.runOnIdle {
+            activeTab.session.loadUri(
+                "javascript:void((function(){" +
+                    "var video=document.getElementById('video');" +
+                    "if(video){" +
+                    "var result=video.play();" +
+                    "if(result&&result.catch){result.catch(function(){});}" +
+                    "}" +
+                    "})())",
+            )
+        }
+    }
+
+    private fun waitForActiveTabUrl(
+        timeoutMillis: Long,
+        activeTab: BrowserTab,
+        predicate: (String) -> Boolean,
+    ) {
+        composeRule.waitUntil(timeoutMillis = timeoutMillis) {
+            var matched = false
+            composeRule.runOnIdle {
+                matched = predicate(activeTab.currentUrl)
+            }
+            matched
+        }
+    }
+
     private fun hasMediaControlNotification(): Boolean {
         return MediaPlaybackService.lastGeneratedNotificationActionCount > 0
     }
@@ -227,6 +277,9 @@ class MediaNotificationSmokeTest {
     companion object {
         private const val TEST_TIMEOUT_MS = 90_000L
         private const val PAGE_READY_DELAY_MS = 3_000L
+        private const val PAGE_LOAD_TIMEOUT_MS = 30_000L
+        private const val PAGE_RELOAD_DELAY_MS = 1_500L
+        private const val PLAYBACK_START_ATTEMPTS = 2
         private const val SESSION_ACTIVATION_TIMEOUT_MS = 30_000L
         private const val CLICK_RETRY_INTERVAL_MS = 2_000L
         private const val PLAYBACK_STATE_TIMEOUT_MS = 15_000L
