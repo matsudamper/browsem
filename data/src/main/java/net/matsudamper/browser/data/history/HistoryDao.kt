@@ -19,6 +19,31 @@ interface HistoryDao {
     )
     fun search(query: String, limit: Int = 50): Flow<List<HistoryEntry>>
 
+
+    @Query(
+        "SELECT * FROM history h " +
+            "WHERE (h.url LIKE '%' || :query || '%' OR h.title LIKE '%' || :query || '%') " +
+            "AND h.id = (" +
+            "SELECT h2.id FROM history h2 " +
+            "WHERE h2.url = h.url " +
+            "AND (h2.url LIKE '%' || :query || '%' OR h2.title LIKE '%' || :query || '%') " +
+            "ORDER BY h2.visitedAt DESC, h2.id DESC LIMIT 1" +
+            ") " +
+            "ORDER BY h.visitedAt DESC, h.id DESC LIMIT :limit",
+    )
+    fun searchSuggestions(query: String, limit: Int): Flow<List<HistoryEntry>>
+
+    @Query(
+        "SELECT * FROM history h " +
+            "WHERE h.id = (" +
+            "SELECT h2.id FROM history h2 " +
+            "WHERE h2.url = h.url " +
+            "ORDER BY h2.visitedAt DESC, h2.id DESC LIMIT 1" +
+            ") " +
+            "ORDER BY h.visitedAt DESC, h.id DESC LIMIT :limit",
+    )
+    fun getRecentSuggestions(limit: Int): Flow<List<HistoryEntry>>
+
     @Query("SELECT * FROM history ORDER BY visitedAt DESC LIMIT :limit OFFSET :offset")
     fun getRecent(limit: Int = 100, offset: Int = 0): Flow<List<HistoryEntry>>
 

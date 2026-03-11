@@ -87,7 +87,7 @@ internal fun BrowserScreen(
 
     LaunchedEffect(historySuggestionQuery) {
         viewModel.searchHistory(historySuggestionQuery).collectLatest { entries ->
-            historySuggestions = entries.take(8)
+            historySuggestions = entries
         }
     }
 
