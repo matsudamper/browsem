@@ -34,12 +34,15 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ListItem
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -879,46 +882,58 @@ private fun PageLoadErrorOverlay(
     pageLoadError: PageLoadError,
     onRetry: () -> Unit,
 ) {
-    Column(
+    Surface(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.surface)
-            .padding(horizontal = 24.dp, vertical = 32.dp)
             .testTag(TEST_TAG_PAGE_LOAD_ERROR),
-        verticalArrangement = Arrangement.spacedBy(20.dp),
+        color = MaterialTheme.colorScheme.surface,
+        contentColor = MaterialTheme.colorScheme.onSurface,
     ) {
-        Spacer(modifier = Modifier.height(32.dp))
-        Text(
-            text = "ページを表示できません",
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
         Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f, fill = false)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+                .fillMaxSize()
+                .padding(horizontal = 24.dp, vertical = 32.dp),
+            verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
-            Text(
-                text = pageLoadError.title,
-                style = MaterialTheme.typography.headlineMedium,
-            )
-            Text(
-                text = pageLoadError.message,
-                style = MaterialTheme.typography.bodyLarge,
-            )
-            if (pageLoadError.failingUrl.isNotBlank()) {
+            Spacer(modifier = Modifier.height(32.dp))
+            CompositionLocalProvider(
+                LocalContentColor provides MaterialTheme.colorScheme.onSurfaceVariant,
+            ) {
                 Text(
-                    text = pageLoadError.failingUrl,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    text = "ページを表示できません",
+                    style = MaterialTheme.typography.labelLarge,
                 )
             }
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            TextButton(onClick = onRetry) {
-                Text("再読み込み")
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f, fill = false)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                Text(
+                    text = pageLoadError.title,
+                    style = MaterialTheme.typography.headlineMedium,
+                )
+                Text(
+                    text = pageLoadError.message,
+                    style = MaterialTheme.typography.bodyLarge,
+                )
+                if (pageLoadError.failingUrl.isNotBlank()) {
+                    CompositionLocalProvider(
+                        LocalContentColor provides MaterialTheme.colorScheme.onSurfaceVariant,
+                    ) {
+                        Text(
+                            text = pageLoadError.failingUrl,
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
+                }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = onRetry) {
+                    Text("再読み込み")
+                }
             }
         }
     }
