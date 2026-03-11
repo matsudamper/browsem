@@ -5,9 +5,15 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -21,7 +27,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.dp
 import androidx.navigation3.runtime.NavKey
 import kotlin.math.roundToInt
 import kotlinx.coroutines.flow.collectLatest
@@ -192,23 +200,63 @@ private fun TabPreviewPage(
     tab: BrowserTab,
     modifier: Modifier = Modifier,
 ) {
-    Box(modifier = modifier.safeDrawingPadding()) {
-        val previewBitmap = tab.previewBitmap
-        if (previewBitmap != null && previewBitmap.isNotEmpty()) {
-            val bitmap = remember(previewBitmap) {
-                BitmapFactory.decodeByteArray(previewBitmap, 0, previewBitmap.size)
-            }
-            if (bitmap != null) {
-                Image(
-                    modifier = Modifier.fillMaxSize(),
-                    bitmap = bitmap.asImageBitmap(),
-                    contentDescription = null,
-                    contentScale = ContentScale.FillWidth,
-                    // URLバーの高さ分ズレるため、画像は下固定にする
-                    alignment = Alignment.BottomCenter,
+    Column(modifier = modifier.safeDrawingPadding()) {
+        val toolbarColor = tab.themeColor?.let(::androidx.compose.ui.graphics.Color)
+            ?: MaterialTheme.colorScheme.primaryContainer
+        val toolbarContentColor = if (toolbarColor.luminance() >= 0.5f) {
+            MaterialTheme.colorScheme.onPrimaryContainer
+        } else {
+            MaterialTheme.colorScheme.onSurface
+        }
+
+        Surface(
+            color = toolbarColor,
+            contentColor = toolbarContentColor,
+        ) {
+            Surface(
+                modifier = Modifier
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.surface,
+            ) {
+                Text(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    text = tab.currentUrl,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.bodyMedium,
                 )
-                return
             }
+        }
+
+        Box(modifier = Modifier.fillMaxSize()) {
+            val previewBitmap = tab.previewBitmap
+            if (previewBitmap != null && previewBitmap.isNotEmpty()) {
+                val bitmap = remember(previewBitmap) {
+                    BitmapFactory.decodeByteArray(previewBitmap, 0, previewBitmap.size)
+                }
+                if (bitmap != null) {
+                    Image(
+                        modifier = Modifier.fillMaxSize(),
+                        bitmap = bitmap.asImageBitmap(),
+                        contentDescription = null,
+                        contentScale = ContentScale.FillWidth,
+                        // URLバーの高さ分ズレるため、画像は下固定にする
+                        alignment = Alignment.BottomCenter,
+                    )
+                    return
+                }
+            }
+
+            Text(
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .padding(16.dp),
+                text = tab.title.ifBlank { tab.currentUrl },
+                style = MaterialTheme.typography.bodyLarge,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
     }
 }
