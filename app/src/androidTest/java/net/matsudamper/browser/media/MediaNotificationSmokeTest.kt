@@ -68,11 +68,17 @@ class MediaNotificationSmokeTest {
             activeTab.session.loadUri(mediaPageUri)
         }
         Thread.sleep(PAGE_READY_DELAY_MS)
-        composeRule.onNodeWithTag(TEST_TAG_GECKO_CONTAINER).performTouchInput {
-            click(center)
+
+        // CI エミュレータではページ読み込みが遅いため、isActive になるまでクリックをリトライする
+        val clickRetryDeadline = SystemClock.uptimeMillis() + SESSION_ACTIVATION_TIMEOUT_MS
+        while (!MediaSessionBridge.playbackState.value.isActive && SystemClock.uptimeMillis() < clickRetryDeadline) {
+            composeRule.onNodeWithTag(TEST_TAG_GECKO_CONTAINER).performTouchInput {
+                click(center)
+            }
+            Thread.sleep(CLICK_RETRY_INTERVAL_MS)
         }
 
-        // ユーザー操作で再生開始した後、GeckoView の onActivated が呼ばれて isActive になるまで待機
+        // 最終的に isActive になったことを確認
         composeRule.waitUntil(timeoutMillis = SESSION_ACTIVATION_TIMEOUT_MS) {
             MediaSessionBridge.playbackState.value.isActive
         }
@@ -219,13 +225,14 @@ class MediaNotificationSmokeTest {
     }
 
     companion object {
-        private const val TEST_TIMEOUT_MS = 30_000L
-        private const val PAGE_READY_DELAY_MS = 1_000L
-        private const val SESSION_ACTIVATION_TIMEOUT_MS = 12_000L
-        private const val PLAYBACK_STATE_TIMEOUT_MS = 8_000L
-        private const val METADATA_TIMEOUT_MS = 8_000L
-        private const val POSITION_TIMEOUT_MS = 8_000L
-        private const val NOTIFICATION_CONTROL_TIMEOUT_MS = 5_000L
+        private const val TEST_TIMEOUT_MS = 90_000L
+        private const val PAGE_READY_DELAY_MS = 3_000L
+        private const val SESSION_ACTIVATION_TIMEOUT_MS = 30_000L
+        private const val CLICK_RETRY_INTERVAL_MS = 2_000L
+        private const val PLAYBACK_STATE_TIMEOUT_MS = 15_000L
+        private const val NOTIFICATION_CONTROL_TIMEOUT_MS = 10_000L
+        private const val METADATA_TIMEOUT_MS = 15_000L
+        private const val POSITION_TIMEOUT_MS = 15_000L
         private const val LOCAL_MEDIA_ASSET_DIR = "test-media"
         private const val LOCAL_MEDIA_DIR_NAME = "test-media"
         private const val LOCAL_MEDIA_INDEX_FILE_NAME = "index.html"

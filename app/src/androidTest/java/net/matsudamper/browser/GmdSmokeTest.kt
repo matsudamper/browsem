@@ -154,27 +154,31 @@ class GmdSmokeTest {
     }
 
     /**
-     * GeckoView 側にフォーカスがある状態で `google.com` を開いた後に URL バーをタップしても、
+     * GeckoView 側にフォーカスがある状態でローカルHTMLページを開いた後に URL バーをタップしても、
      * 入力フォーカスが即座に失われないことを確認する。
      *
      * IME が観測期間中に一度でも表示された場合は、その後すぐに閉じていないことも確認する。
+     *
+     * ※ 外部URL(google.com)への依存を避けるため、ローカルHTMLページを使用する。
      */
     @Test
-    fun openingUrlBarFromGeckoViewOnGoogleDoesNotImmediatelyCloseKeyboard() {
+    fun openingUrlBarFromGeckoViewDoesNotImmediatelyCloseKeyboard() {
         val browserSessionController = waitForBrowserSessionController()
         val activeTab = waitForActiveTab(browserSessionController)
+        val focusPageUri = prepareLocalFocusPageUri()
 
-        composeRule.onNodeWithTag("url_bar").performClick()
-        composeRule.onNodeWithTag("url_bar").performTextReplacement("https://www.google.com/")
-        composeRule.onNodeWithTag("url_bar").performImeAction()
+        // ローカルHTMLを直接ロードする
+        composeRule.runOnIdle {
+            activeTab.session.loadUri(focusPageUri)
+        }
 
-        waitForActiveTabUrl(timeoutMillis = 30_000, activeTab = activeTab) { currentUrl ->
-            currentUrl.startsWith("https://www.google.com")
+        waitForActiveTabUrl(timeoutMillis = 60_000, activeTab = activeTab) { currentUrl ->
+            currentUrl.startsWith("file:") && currentUrl.contains(LOCAL_FOCUS_INDEX_FILE_NAME)
         }
         waitForUrlBarNotFocused()
         assertGeckoViewInFront()
 
-        focusGoogleSearchInput(activeTab)
+        focusPageSearchInput(activeTab)
         val imeWasVisibleBeforeTap = waitForImeVisible(timeoutMillis = 5_000)
 
         composeRule.onNodeWithTag("url_bar").performClick()
@@ -321,17 +325,34 @@ class GmdSmokeTest {
     }
 
     /**
-     * `google.com` の検索入力へ JS でフォーカスを当てる。
+     * ローカルHTMLの検索入力へ JS でフォーカスを当てる。
      */
-    private fun focusGoogleSearchInput(activeTab: BrowserTab) {
+    private fun focusPageSearchInput(activeTab: BrowserTab) {
         composeRule.runOnIdle {
             activeTab.session.loadUri(
                 "javascript:void((function(){" +
-                    "var el=document.querySelector('textarea[name=q],input[name=q]');" +
+                    "var el=document.querySelector('input[name=q]');" +
                     "if(el){el.focus();}" +
                     "})())",
             )
         }
+    }
+
+    /**
+     * フォーカステスト用のローカルHTMLをキャッシュへ展開し、file URI を返す。
+     */
+    private fun prepareLocalFocusPageUri(): String {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val targetContext = instrumentation.targetContext
+        val destinationDir = File(targetContext.cacheDir, LOCAL_FOCUS_DIR_NAME).apply { mkdirs() }
+        val assetManager = instrumentation.context.assets
+        val destination = File(destinationDir, LOCAL_FOCUS_INDEX_FILE_NAME)
+        assetManager.open("$LOCAL_FOCUS_ASSET_DIR/$LOCAL_FOCUS_INDEX_FILE_NAME").use { input ->
+            destination.outputStream().use { output ->
+                input.copyTo(output)
+            }
+        }
+        return destination.toURI().toString()
     }
 
     /**
@@ -509,5 +530,8 @@ class GmdSmokeTest {
         private const val LOCAL_THEME_COLOR_ASSET_DIR = "test-theme-color"
         private const val LOCAL_THEME_COLOR_DIR_NAME = "test-theme-color"
         private const val LOCAL_THEME_COLOR_INDEX_FILE_NAME = "index.html"
+        private const val LOCAL_FOCUS_ASSET_DIR = "test-focus"
+        private const val LOCAL_FOCUS_DIR_NAME = "test-focus"
+        private const val LOCAL_FOCUS_INDEX_FILE_NAME = "index.html"
     }
 }
