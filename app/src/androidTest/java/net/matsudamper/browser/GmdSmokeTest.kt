@@ -90,6 +90,45 @@ class GmdSmokeTest {
     }
 
     /**
+     * URLバーを開くと入力欄が空になり、サジェスト先頭に現在URLの操作行が表示されることを確認する。
+     *
+     * 併せて「URLバーに戻す」で現在URLを入力欄へ戻せることを確認する。
+     */
+    @Test
+    fun tappingUrlBarClearsInputAndShowsCurrentUrlActions() {
+        val browserSessionController = waitForBrowserSessionController()
+        val activeTab = waitForActiveTab(browserSessionController)
+        val focusPageUri = prepareLocalFocusPageUri()
+
+        composeRule.runOnIdle {
+            activeTab.session.loadUri(focusPageUri)
+        }
+
+        waitForActiveTabUrl(timeoutMillis = 60_000, activeTab = activeTab) { currentUrl ->
+            currentUrl.startsWith("file:") && currentUrl.contains(LOCAL_FOCUS_INDEX_FILE_NAME)
+        }
+
+        var currentUrl = ""
+        composeRule.runOnIdle {
+            currentUrl = activeTab.currentUrl
+        }
+
+        composeRule.onNodeWithTag("url_bar").performClick()
+        waitForUrlBarFocused()
+        waitForUrlBarText("")
+        composeRule.waitUntil(timeoutMillis = 20_000) {
+            composeRule.onAllNodesWithTag(TEST_TAG_CURRENT_URL_ACTIONS).fetchSemanticsNodes().isNotEmpty() &&
+                composeRule.onAllNodesWithTag(TEST_TAG_CURRENT_URL_TEXT).fetchSemanticsNodes().isNotEmpty() &&
+                composeRule.onAllNodesWithText("コピー").fetchSemanticsNodes().isNotEmpty() &&
+                composeRule.onAllNodesWithText("URLバーに戻す").fetchSemanticsNodes().isNotEmpty() &&
+                composeRule.onAllNodesWithText(currentUrl).fetchSemanticsNodes().isNotEmpty()
+        }
+
+        composeRule.onNodeWithText("URLバーに戻す").performClick()
+        waitForUrlBarText(currentUrl)
+    }
+
+    /**
      * 履歴候補が出ている状態でも IME 実行で通常検索 URL へ遷移し、
      * 候補オーバーレイが消えて GeckoView が前面になることを確認する。
      *
@@ -390,6 +429,27 @@ class GmdSmokeTest {
                 .fetchSemanticsNode()
                 .config[SemanticsProperties.Focused]
         }.getOrDefault(false)
+    }
+
+    /**
+     * 現在の URL バー文字列が期待値になるまで待機する。
+     */
+    private fun waitForUrlBarText(expected: String) {
+        composeRule.waitUntil(timeoutMillis = 20_000) {
+            getUrlBarText() == expected
+        }
+    }
+
+    /**
+     * 現在の URL バー文字列を返す。
+     */
+    private fun getUrlBarText(): String {
+        return runCatching {
+            composeRule.onNodeWithTag("url_bar")
+                .fetchSemanticsNode()
+                .config[SemanticsProperties.EditableText]
+                .text
+        }.getOrDefault("")
     }
 
     /**
