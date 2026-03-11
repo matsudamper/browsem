@@ -254,6 +254,42 @@ class GmdSmokeTest {
     }
 
     /**
+     * 表示失敗後の再読み込みが、直前に成功していたページではなく失敗したURLを再試行することを確認する。
+     */
+    @Test
+    fun retryOnPageLoadErrorRetriesFailedUrl() {
+        val browserSessionController = waitForBrowserSessionController()
+        val activeTab = waitForActiveTab(browserSessionController)
+        val focusPageUri = prepareLocalFocusPageUri()
+
+        composeRule.runOnIdle {
+            activeTab.session.loadUri(focusPageUri)
+        }
+
+        waitForActiveTabUrl(timeoutMillis = 60_000, activeTab = activeTab) { currentUrl ->
+            currentUrl.startsWith("file:") && currentUrl.contains(LOCAL_FOCUS_INDEX_FILE_NAME)
+        }
+
+        composeRule.runOnIdle {
+            activeTab.session.loadUri(PAGE_LOAD_ERROR_TEST_URL)
+        }
+
+        waitForPageLoadErrorVisible(PAGE_LOAD_ERROR_TEST_URL)
+        composeRule.runOnIdle {
+            assertEquals(PAGE_LOAD_ERROR_TEST_URL, activeTab.currentUrl)
+        }
+        waitForUrlBarText(PAGE_LOAD_ERROR_TEST_URL)
+
+        composeRule.onNodeWithText("再読み込み").performClick()
+
+        waitForPageLoadErrorVisible(PAGE_LOAD_ERROR_TEST_URL)
+        composeRule.runOnIdle {
+            assertEquals(PAGE_LOAD_ERROR_TEST_URL, activeTab.currentUrl)
+        }
+        waitForUrlBarText(PAGE_LOAD_ERROR_TEST_URL)
+    }
+
+    /**
      * テスト用に履歴エントリを 1 件追加する。
      */
     private fun seedHistoryEntry(url: String, title: String) {
@@ -307,6 +343,19 @@ class GmdSmokeTest {
                 .onAllNodesWithTag(TEST_TAG_HISTORY_SUGGESTION_LIST)
                 .fetchSemanticsNodes()
                 .isEmpty()
+        }
+    }
+
+    /**
+     * ページ読み込みエラー画面と失敗URLが表示されるまで待機する。
+     */
+    private fun waitForPageLoadErrorVisible(failingUrl: String) {
+        composeRule.waitUntil(timeoutMillis = 30_000) {
+            composeRule
+                .onAllNodesWithTag(TEST_TAG_PAGE_LOAD_ERROR)
+                .fetchSemanticsNodes()
+                .isNotEmpty() &&
+                composeRule.onAllNodesWithText(failingUrl).fetchSemanticsNodes().isNotEmpty()
         }
     }
 
@@ -593,5 +642,6 @@ class GmdSmokeTest {
         private const val LOCAL_FOCUS_ASSET_DIR = "test-focus"
         private const val LOCAL_FOCUS_DIR_NAME = "test-focus"
         private const val LOCAL_FOCUS_INDEX_FILE_NAME = "index.html"
+        private const val PAGE_LOAD_ERROR_TEST_URL = "https://reload-error-test.invalid/"
     }
 }
