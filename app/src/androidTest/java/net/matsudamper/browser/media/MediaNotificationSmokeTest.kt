@@ -27,7 +27,7 @@ import java.io.File
  * メディア通知機能のスモークテスト。
  *
  * assets に埋め込んだテスト動画を GeckoView で再生し、
- * GeckoView の MediaSession コールバック → MediaSessionBridge → MediaPlaybackService
+ * 独自WebExtensionによるメディア状態取得 → MediaSessionBridge → MediaPlaybackService
  * の一連のフローを検証する。
  */
 @RunWith(AndroidJUnit4::class)
@@ -52,15 +52,16 @@ class MediaNotificationSmokeTest {
 
     /**
      * file:///android_asset/test-media/index.html を開き、
-     * JavaScript でビデオ再生後に MediaSessionBridge がアクティブ＆再生中になることを確認する。
+     * JavaScript でビデオ再生後に WebExtension 経由のメタデータと再生位置が反映されることを確認する。
      */
     @Test
-    fun ローカル動画再生でメディアセッションが起動する() {
+    fun ローカル動画再生で拡張経由のメディア状態が反映される() {
         val browserSessionController = waitForBrowserSessionController()
         val activeTab = waitForActiveTab(browserSessionController)
         val mediaPageUri = prepareLocalMediaPageUri()
         MediaPlaybackService.resetGeneratedNotificationDebugState()
         allowAutoplayForTest()
+        waitForMediaExtensionInstalled()
 
         // URL バー経由だと "https://file///..." に補正されるため、GeckoSession に直接 file URI を渡す。
         composeRule.runOnIdle {
@@ -89,6 +90,24 @@ class MediaNotificationSmokeTest {
             MediaSessionBridge.playbackState.value.isPlaying,
         )
 
+        composeRule.waitUntil(timeoutMillis = METADATA_TIMEOUT_MS) {
+            val state = MediaSessionBridge.playbackState.value
+            state.title == EXPECTED_TITLE &&
+                state.artist == EXPECTED_ARTIST &&
+                state.album == EXPECTED_ALBUM &&
+                state.durationMs > 0
+        }
+        composeRule.waitUntil(timeoutMillis = POSITION_TIMEOUT_MS) {
+            MediaSessionBridge.playbackState.value.positionMs > 0L
+        }
+
+        val playbackState = MediaSessionBridge.playbackState.value
+        assertTrue("title=${playbackState.title}", playbackState.title == EXPECTED_TITLE)
+        assertTrue("artist=${playbackState.artist}", playbackState.artist == EXPECTED_ARTIST)
+        assertTrue("album=${playbackState.album}", playbackState.album == EXPECTED_ALBUM)
+        assertTrue("durationMs=${playbackState.durationMs}", playbackState.durationMs > 0L)
+        assertTrue("positionMs=${playbackState.positionMs}", playbackState.positionMs > 0L)
+
         val hasMediaControlNotification = waitForMediaControlNotification(
             timeoutMs = NOTIFICATION_CONTROL_TIMEOUT_MS,
         )
@@ -98,6 +117,10 @@ class MediaNotificationSmokeTest {
                 "title=${MediaPlaybackService.lastGeneratedNotificationTitle}, " +
                 "text=${MediaPlaybackService.lastGeneratedNotificationText}",
             hasMediaControlNotification,
+        )
+        assertTrue(
+            "通知タイトルが拡張経由メタデータを反映すること: ${MediaPlaybackService.lastGeneratedNotificationTitle}",
+            MediaPlaybackService.lastGeneratedNotificationTitle == EXPECTED_TITLE,
         )
     }
 
@@ -167,6 +190,17 @@ class MediaNotificationSmokeTest {
         }
     }
 
+    private fun waitForMediaExtensionInstalled() {
+        composeRule.waitUntil(timeoutMillis = 20_000) {
+            var installed = false
+            composeRule.runOnIdle {
+                installed = runCatching { getBrowserViewModel().mediaWebExtension.isInstalled() }
+                    .getOrDefault(false)
+            }
+            installed
+        }
+    }
+
     private fun hasMediaControlNotification(): Boolean {
         return MediaPlaybackService.lastGeneratedNotificationActionCount > 0
     }
@@ -189,9 +223,14 @@ class MediaNotificationSmokeTest {
         private const val PAGE_READY_DELAY_MS = 1_000L
         private const val SESSION_ACTIVATION_TIMEOUT_MS = 12_000L
         private const val PLAYBACK_STATE_TIMEOUT_MS = 8_000L
+        private const val METADATA_TIMEOUT_MS = 8_000L
+        private const val POSITION_TIMEOUT_MS = 8_000L
         private const val NOTIFICATION_CONTROL_TIMEOUT_MS = 5_000L
         private const val LOCAL_MEDIA_ASSET_DIR = "test-media"
         private const val LOCAL_MEDIA_DIR_NAME = "test-media"
         private const val LOCAL_MEDIA_INDEX_FILE_NAME = "index.html"
+        private const val EXPECTED_TITLE = "Test Video"
+        private const val EXPECTED_ARTIST = "Browsem"
+        private const val EXPECTED_ALBUM = "AndroidTest Assets"
     }
 }
