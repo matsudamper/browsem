@@ -1,8 +1,10 @@
 package net.matsudamper.browser
 
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Binder
+import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
 import androidx.browser.customtabs.CustomTabsSessionToken
@@ -17,6 +19,27 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class MainActivityCustomTabLaunchTest {
+
+    @Test
+    fun CustomTabsServiceが他アプリからbind可能なmanifest設定になっている() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val packageManager = context.packageManager
+        val intent = Intent(ACTION_CUSTOM_TABS_SERVICE).setPackage(context.packageName)
+        val resolveInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            packageManager.resolveService(intent, PackageManager.ResolveInfoFlags.of(0))
+        } else {
+            @Suppress("DEPRECATION")
+            packageManager.resolveService(intent, 0)
+        }
+
+        assertNotNull("CustomTabsService が見つかりません", resolveInfo)
+        val serviceInfo = resolveInfo!!.serviceInfo
+        assertTrue("CustomTabsService は exported=true が必要です", serviceInfo.exported)
+        assertTrue(
+            "CustomTabsService に bind 制限 permission を設定すると他アプリで SecurityException が発生します",
+            serviceInfo.permission.isNullOrEmpty(),
+        )
+    }
 
     @Test
     fun customTabsIntentでCustomTabActivityへ遷移する() {
@@ -115,6 +138,7 @@ class MainActivityCustomTabLaunchTest {
     }
 
     companion object {
+        private const val ACTION_CUSTOM_TABS_SERVICE = "android.support.customtabs.action.CustomTabsService"
         private const val EXTRA_CUSTOM_TABS_SESSION = "android.support.customtabs.extra.SESSION"
     }
 }
