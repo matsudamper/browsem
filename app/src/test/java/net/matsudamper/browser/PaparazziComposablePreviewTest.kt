@@ -20,9 +20,10 @@ class PaparazziComposablePreviewTest {
             .includePrivatePreviews()
             .getPreviews()
             .filter { preview ->
+                val previewName = preview.previewInfo.name.orEmpty()
                 filter.isEmpty() ||
-                    preview.declaringClass.qualifiedName.orEmpty().contains(filter, ignoreCase = true) ||
-                    preview.previewInfo.name.contains(filter, ignoreCase = true)
+                    preview.toString().contains(filter, ignoreCase = true) ||
+                    previewName.contains(filter, ignoreCase = true)
             }
             .forEach { preview ->
                 paparazzi.snapshot { preview() }

@@ -6,7 +6,6 @@ import android.graphics.Bitmap
 import android.os.Looper
 import android.util.Log
 import androidx.annotation.OptIn
-import androidx.core.app.NotificationCompat
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
@@ -112,7 +111,7 @@ class MediaPlaybackService : MediaSessionService() {
         if (requiresImmediateForeground) {
             startForeground(
                 NOTIFICATION_ID,
-                NotificationCompat.Builder(this, CHANNEL_ID)
+                android.app.Notification.Builder(this, CHANNEL_ID)
                     .setSmallIcon(android.R.drawable.ic_media_play)
                     .setContentTitle("Media playback")
                     .setContentText("Starting…")

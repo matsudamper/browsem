@@ -15,19 +15,17 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
-import kotlinx.coroutines.flow.collectLatest
+import androidx.lifecycle.viewmodel.compose.viewModel
 import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.TranslationProvider
-import net.matsudamper.browser.data.history.HistoryEntry
 import net.matsudamper.browser.data.history.HistoryRepository
 import net.matsudamper.browser.data.resolvedHomepageUrl
 import net.matsudamper.browser.data.resolvedSearchTemplate
 import net.matsudamper.browser.media.MediaWebExtension
+import net.matsudamper.browser.screen.browser.BrowserScreenViewModel
 import org.koin.android.ext.android.inject
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoRuntime
@@ -39,9 +37,7 @@ class CustomTabActivity : ComponentActivity() {
     private val settingsRepository: SettingsRepository by inject()
     private val historyRepository: HistoryRepository by inject()
 
-    private lateinit var browserSessionController: BrowserSessionController
-    private lateinit var themeColorExtension: ThemeColorWebExtension
-    private lateinit var mediaWebExtension: MediaWebExtension
+    private lateinit var runtimeCoordinator: BrowserRuntimeCoordinator
 
     private var pendingNotificationPermissionResult: GeckoResult<Int>? = null
 
@@ -63,9 +59,7 @@ class CustomTabActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         runtime.settings.setExtensionsWebAPIEnabled(true)
 
-        browserSessionController = BrowserSessionController(runtime)
-        themeColorExtension = ThemeColorWebExtension().also { it.install(runtime) }
-        mediaWebExtension = MediaWebExtension(applicationContext).also { it.install(runtime) }
+        runtimeCoordinator = BrowserRuntimeCoordinator(applicationContext, runtime)
 
         val initialUrl = intent.dataString.orEmpty()
         val customTabsSessionToken = CustomTabsSessionToken.getSessionTokenFromIntent(intent)
@@ -74,7 +68,7 @@ class CustomTabActivity : ComponentActivity() {
             val browserSettings = settings ?: return@setContent
 
             LaunchedEffect(browserSettings.enableThirdPartyCa) {
-                runtime.settings.setEnterpriseRootsEnabled(browserSettings.enableThirdPartyCa)
+                runtimeCoordinator.applyRuntimeSettings(browserSettings.enableThirdPartyCa)
             }
 
             BrowserTheme(themeMode = browserSettings.themeMode) {
@@ -84,10 +78,10 @@ class CustomTabActivity : ComponentActivity() {
                     homepageUrl = browserSettings.resolvedHomepageUrl(),
                     searchTemplate = browserSettings.resolvedSearchTemplate(),
                     translationProvider = browserSettings.translationProvider,
-                    browserSessionController = browserSessionController,
+                    browserSessionController = runtimeCoordinator.browserSessionController,
                     historyRepository = historyRepository,
-                    themeColorExtension = themeColorExtension,
-                    mediaWebExtension = mediaWebExtension,
+                    themeColorExtension = runtimeCoordinator.themeColorExtension,
+                    mediaWebExtension = runtimeCoordinator.mediaWebExtension,
                     onClose = ::finish,
                     onOpenInBrowser = ::openInMainBrowser,
                     onDesktopNotificationPermissionRequest = { requestNotificationPermissionIfNeeded() },
@@ -101,14 +95,8 @@ class CustomTabActivity : ComponentActivity() {
             CancellationException("Activity was destroyed before notification permission completed.")
         )
         pendingNotificationPermissionResult = null
-        if (::browserSessionController.isInitialized) {
-            browserSessionController.close()
-        }
-        if (::themeColorExtension.isInitialized) {
-            themeColorExtension.cleanup()
-        }
-        if (::mediaWebExtension.isInitialized) {
-            mediaWebExtension.cleanup()
+        if (::runtimeCoordinator.isInitialized) {
+            runtimeCoordinator.close()
         }
         super.onDestroy()
     }
@@ -163,6 +151,10 @@ private fun CustomTabScreen(
     onOpenInBrowser: (String) -> Unit,
     onDesktopNotificationPermissionRequest: () -> GeckoResult<Int>,
 ) {
+    val viewModel = viewModel(initializer = {
+        BrowserScreenViewModel(historyRepository)
+    })
+    val historySuggestions by viewModel.historySuggestions.collectAsState()
     val prewarmedSession = remember(customTabsSessionToken, initialUrl) {
         customTabsSessionToken?.let { token ->
             CustomTabsWarmupStore.consumePreparedSession(
@@ -179,20 +171,6 @@ private fun CustomTabScreen(
             )
         } else {
             browserSessionController.createAndAppendTab(initialUrl = initialUrl)
-        }
-    }
-
-    var historySuggestions by remember { mutableStateOf<List<HistoryEntry>>(emptyList()) }
-    var historySuggestionQuery by remember { mutableStateOf("") }
-
-    LaunchedEffect(historySuggestionQuery, historyRepository) {
-        val flow = if (historySuggestionQuery.isBlank()) {
-            historyRepository.getRecentSuggestions(limit = 8)
-        } else {
-            historyRepository.searchSuggestions(query = historySuggestionQuery, limit = 8)
-        }
-        flow.collectLatest { entries ->
-            historySuggestions = entries
         }
     }
 
@@ -226,8 +204,6 @@ private fun CustomTabScreen(
         onHistoryRecord = { url, title -> historyRepository.recordVisit(url, title) },
         onHistoryTitleUpdate = { id, title -> historyRepository.updateTitle(id, title) },
         historySuggestions = historySuggestions,
-        onUrlInputChanged = { query ->
-            historySuggestionQuery = query
-        },
+        onUrlInputChanged = viewModel::onUrlInputChanged,
     )
 }

@@ -4,7 +4,6 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import androidx.compose.ui.graphics.Color
-import androidx.core.graphics.toColorInt
 import org.json.JSONObject
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoRuntime
@@ -18,7 +17,7 @@ import java.util.concurrent.ConcurrentHashMap
  * session.webExtensionController.setMessageDelegate（セッションレベル）に届く。
  * ext.setMessageDelegate（拡張レベル）はバックグラウンドスクリプト専用。
  */
-internal class ThemeColorWebExtension {
+class ThemeColorWebExtension {
     private var extension: WebExtension? = null
     private val mainHandler = Handler(Looper.getMainLooper())
     private val callbacks = ConcurrentHashMap<GeckoSession, (Color?, String) -> Unit>()
@@ -94,7 +93,7 @@ internal class ThemeColorWebExtension {
 
         private fun parseColor(colorValue: String): Color? {
             return try {
-                Color(colorValue.toColorInt())
+                Color(android.graphics.Color.parseColor(colorValue))
             } catch (_: IllegalArgumentException) {
                 Log.w(TAG, "色のパース失敗: $colorValue")
                 null
