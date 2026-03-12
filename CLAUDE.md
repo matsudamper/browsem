@@ -52,12 +52,10 @@ Kotlin / Jetpack Compose / Material 3 / Navigation 3 / Koin DI。
 
 ## ツールチェーン
 
-- **Kotlin**: 2.3.10 / JVM Target 21
-- **Gradle**: 9.4.0
-- **AGP**: 9.1.0
-- **compileSdk / targetSdk**: 36
-- **minSdk**: 30
-- **バージョンカタログ**: `gradle/libs.versions.toml`
+- バージョンは `@gradle/libs.versions.toml` を参照
+- Gradle バージョンは `@gradle/wrapper/gradle-wrapper.properties` を参照
+- compileSdk / minSdk / targetSdk は `@app/build.gradle.kts` を参照
+- JVM Target / Java 互換性も `@app/build.gradle.kts` を参照
 
 ## アーキテクチャ方針
 
