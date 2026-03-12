@@ -28,16 +28,21 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ListItem
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -345,6 +350,13 @@ internal fun GeckoBrowserTab(
                     geckoView = it
                 }
             )
+
+            state.pageLoadError?.let { pageLoadError ->
+                PageLoadErrorOverlay(
+                    pageLoadError = pageLoadError,
+                    onRetry = state::retryPageLoad,
+                )
+            }
 
             // URLバーフォーカス中にサジェストを表示
             if (
@@ -865,6 +877,68 @@ private fun CurrentPageUrlListItem(
     )
 }
 
+@Composable
+private fun PageLoadErrorOverlay(
+    pageLoadError: PageLoadError,
+    onRetry: () -> Unit,
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxSize()
+            .testTag(TEST_TAG_PAGE_LOAD_ERROR),
+        color = MaterialTheme.colorScheme.surface,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 24.dp, vertical = 32.dp),
+            verticalArrangement = Arrangement.spacedBy(20.dp),
+        ) {
+            Spacer(modifier = Modifier.height(32.dp))
+            CompositionLocalProvider(
+                LocalContentColor provides MaterialTheme.colorScheme.onSurfaceVariant,
+            ) {
+                Text(
+                    text = "ページを表示できません",
+                    style = MaterialTheme.typography.labelLarge,
+                )
+            }
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f, fill = false)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                Text(
+                    text = pageLoadError.title,
+                    style = MaterialTheme.typography.headlineMedium,
+                )
+                Text(
+                    text = pageLoadError.message,
+                    style = MaterialTheme.typography.bodyLarge,
+                )
+                if (pageLoadError.failingUrl.isNotBlank()) {
+                    CompositionLocalProvider(
+                        LocalContentColor provides MaterialTheme.colorScheme.onSurfaceVariant,
+                    ) {
+                        Text(
+                            text = pageLoadError.failingUrl,
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
+                }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = onRetry) {
+                    Text("再読み込み")
+                }
+            }
+        }
+    }
+}
+
 private fun flattenChoices(
     choices: Array<GeckoSession.PromptDelegate.ChoicePrompt.Choice>,
 ): List<GeckoSession.PromptDelegate.ChoicePrompt.Choice> {
@@ -877,4 +951,5 @@ const val TEST_TAG_GECKO_CONTAINER = "gecko_container"
 const val TEST_TAG_HISTORY_SUGGESTION_LIST = "history_suggestion_list"
 const val TEST_TAG_CURRENT_URL_ACTIONS = "current_url_actions"
 const val TEST_TAG_CURRENT_URL_TEXT = "current_url_text"
+const val TEST_TAG_PAGE_LOAD_ERROR = "page_load_error"
 private const val URL_BAR_IME_HIDE_GRACE_MS = 700L

@@ -23,12 +23,12 @@ import net.matsudamper.browser.data.TranslationProvider
 import net.matsudamper.browser.media.MediaWebExtension
 import org.koin.compose.koinInject
 import org.mozilla.geckoview.GeckoResult
-import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.GeckoSessionSettings
 import org.mozilla.geckoview.GeckoView
 import org.mozilla.geckoview.TranslationsController
 import org.mozilla.geckoview.WebResponse
+import org.mozilla.geckoview.WebRequestError
 import java.io.ByteArrayOutputStream
 
 
@@ -117,6 +117,7 @@ internal class BrowserTabScreenState(
     var pendingDownloadResponse by mutableStateOf<WebResponse?>(null)
 
     var renderReady by mutableStateOf(false)
+    var pageLoadError by mutableStateOf<PageLoadError?>(null)
 
     // --- Scroll / Refresh state ---
     var isRefreshing by mutableStateOf(false)
@@ -134,6 +135,7 @@ internal class BrowserTabScreenState(
         urlInput = resolved
         maybeResetToolbarColor(currentPageUrl, resolved)
         currentPageUrl = resolved
+        clearPageLoadError()
         session.loadUri(resolved)
     }
 
@@ -141,23 +143,26 @@ internal class BrowserTabScreenState(
         urlInput = homepageUrl
         maybeResetToolbarColor(currentPageUrl, homepageUrl)
         currentPageUrl = homepageUrl
+        clearPageLoadError()
         session.loadUri(homepageUrl)
     }
 
     fun onRefresh() {
-        session.reload()
+        refreshCurrentPage()
     }
 
     fun onRefreshFromSwipe() {
-        session.reload()
+        refreshCurrentPage()
         isRefreshing = false
     }
 
     fun onGoForward() {
+        clearPageLoadError()
         session.goForward()
     }
 
     fun onGoBack() {
+        clearPageLoadError()
         session.goBack()
     }
 
@@ -169,7 +174,7 @@ internal class BrowserTabScreenState(
         } else {
             GeckoSessionSettings.USER_AGENT_MODE_MOBILE
         }
-        session.reload()
+        refreshCurrentPage()
     }
 
     fun openFindInPage() {
@@ -245,6 +250,7 @@ internal class BrowserTabScreenState(
         translationState = TranslationState.Idle
         originalPageUrlForRevert = null
         if (savedUrl != null) {
+            clearPageLoadError()
             session.loadUri(savedUrl)
         }
     }
@@ -294,6 +300,10 @@ internal class BrowserTabScreenState(
 
     fun restoreCurrentPageUrlToInput() {
         urlInput = currentPageUrl
+    }
+
+    fun retryPageLoad() {
+        refreshCurrentPage()
     }
 
     fun copyCurrentPageUrl() {
@@ -384,6 +394,25 @@ internal class BrowserTabScreenState(
             return GeckoResult.fromValue(onOpenNewSessionRequest(uri))
         }
 
+        override fun onLoadError(
+            session: GeckoSession,
+            uri: String?,
+            error: WebRequestError,
+        ): GeckoResult<String>? {
+            val resolvedError = error.toPageLoadError(uri)
+            val failedUrl = resolvedError.failingUrl
+            if (failedUrl.isNotBlank()) {
+                maybeResetToolbarColor(currentPageUrl, failedUrl)
+                currentPageUrl = failedUrl
+                if (!isUrlInputFocused) {
+                    urlInput = failedUrl
+                }
+            }
+            currentPageTitle = resolvedError.title
+            pageLoadError = resolvedError
+            return null
+        }
+
         override fun onLocationChange(
             session: GeckoSession,
             url: String?,
@@ -393,6 +422,9 @@ internal class BrowserTabScreenState(
             val newUrl = url.orEmpty()
             if (newUrl == "about:blank" && currentPageUrl != "about:blank") {
                 return
+            }
+            if (pageLoadError?.failingUrl != newUrl) {
+                clearPageLoadError()
             }
             currentPageUrl = newUrl
             if (!isUrlInputFocused) {
@@ -489,6 +521,7 @@ internal class BrowserTabScreenState(
             }
 
             override fun onPageStart(session: GeckoSession, url: String) {
+                clearPageLoadError()
                 maybeResetToolbarColorOnPageStart(url)
             }
 
@@ -530,6 +563,24 @@ internal class BrowserTabScreenState(
         if (shouldResetToolbarColor(fromUrl, toUrl)) {
             toolbarColor = null
         }
+    }
+
+    private fun refreshCurrentPage() {
+        val retryUrl = pageLoadError?.failingUrl?.takeIf { it.isNotBlank() }
+        clearPageLoadError()
+        if (retryUrl != null) {
+            currentPageUrl = retryUrl
+            if (!isUrlInputFocused) {
+                urlInput = retryUrl
+            }
+            session.loadUri(retryUrl)
+            return
+        }
+        session.reload()
+    }
+
+    private fun clearPageLoadError() {
+        pageLoadError = null
     }
 
     private fun maybeResetToolbarColorOnPageStart(url: String) {
