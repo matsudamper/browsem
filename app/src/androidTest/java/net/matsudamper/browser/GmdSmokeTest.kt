@@ -3,10 +3,9 @@ package net.matsudamper.browser
 import android.view.WindowInsets
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.hasAnyDescendant
-import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
-import androidx.compose.ui.test.onAllNodes
+import androidx.compose.ui.test.filter
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
@@ -122,7 +121,8 @@ class GmdSmokeTest {
         waitForUrlBarText("")
         composeRule.waitUntil(timeoutMillis = 20_000) {
             composeRule.onAllNodesWithTag(TEST_TAG_CURRENT_URL_ACTIONS).fetchSemanticsNodes().isNotEmpty() &&
-                composeRule.onAllNodesWithTag(TEST_TAG_CURRENT_URL_TEXT).fetchSemanticsNodes().isNotEmpty() &&
+                // ListItem の mergeDescendants により子ノードは merged tree で不可視のため unmerged tree を使用
+                composeRule.onAllNodesWithTag(TEST_TAG_CURRENT_URL_TEXT, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() &&
                 composeRule.onAllNodesWithText("コピー").fetchSemanticsNodes().isNotEmpty() &&
                 composeRule.onAllNodesWithText("URLバーに戻す").fetchSemanticsNodes().isNotEmpty() &&
                 composeRule.onAllNodesWithText(currentUrl).fetchSemanticsNodes().isNotEmpty()
@@ -356,10 +356,8 @@ class GmdSmokeTest {
     private fun waitForPageLoadErrorVisible(failingUrl: String) {
         composeRule.waitUntil(timeoutMillis = 30_000) {
             composeRule
-                .onAllNodes(
-                    hasTestTag(TEST_TAG_PAGE_LOAD_ERROR) and
-                        hasAnyDescendant(hasText(failingUrl))
-                )
+                .onAllNodesWithTag(TEST_TAG_PAGE_LOAD_ERROR)
+                .filter(hasAnyDescendant(hasText(failingUrl)))
                 .fetchSemanticsNodes()
                 .isNotEmpty() &&
                 composeRule.onAllNodesWithTag(TEST_TAG_PAGE_LOAD_ERROR).fetchSemanticsNodes().isNotEmpty()
