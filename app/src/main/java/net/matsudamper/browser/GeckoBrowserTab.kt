@@ -181,7 +181,7 @@ internal fun GeckoBrowserTab(
         }
     }
 
-    DisposableEffect(session, state, browserTab) {
+    DisposableEffect(session, state, browserTab, mediaWebExtension) {
         val delegates = createGeckoSessionDelegateBundle(
             callbacks = state,
             onDesktopNotificationPermissionRequest = { uri ->
@@ -193,6 +193,7 @@ internal fun GeckoBrowserTab(
             onCloseRequest = { currentOnCloseTab?.invoke() },
         )
         val promptDelegate = dialogState.createPromptDelegate()
+        val mediaSessionDelegate = GeckoMediaSessionDelegate(mediaWebExtension)
 
         session.permissionDelegate = delegates.permissionDelegate
         session.navigationDelegate = delegates.navigationDelegate
@@ -201,6 +202,8 @@ internal fun GeckoBrowserTab(
         session.translationsSessionDelegate = delegates.translationsDelegate
         session.scrollDelegate = delegates.scrollDelegate
         session.promptDelegate = promptDelegate
+        // MediaSession の初回イベントを取りこぼさないよう、ページ読み込み前に delegate を設定する。
+        session.mediaSessionDelegate = mediaSessionDelegate
 
         browserSessionController.restoreSession(browserTab)
 
@@ -212,14 +215,6 @@ internal fun GeckoBrowserTab(
             session.translationsSessionDelegate = null
             session.scrollDelegate = null
             session.promptDelegate = null
-        }
-    }
-
-    // メディアセッションデリゲートは不安定なラムダキーの影響を受けないよう独立して管理
-    DisposableEffect(session, mediaWebExtension) {
-        val mediaSessionDelegate = GeckoMediaSessionDelegate(mediaWebExtension)
-        session.mediaSessionDelegate = mediaSessionDelegate
-        onDispose {
             if (session.mediaSessionDelegate === mediaSessionDelegate) {
                 session.mediaSessionDelegate = null
             }

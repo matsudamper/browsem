@@ -93,6 +93,7 @@ class MediaWebExtension(
         val current = sessionStates[session] ?: SessionPlaybackSnapshot()
         val next = current.copy(features = features)
         sessionStates[session] = next
+        promoteSessionFromSnapshotIfNeeded(session, next)
         if (activeSession === session) {
             MediaSessionBridge.updateFeatures(features)
         }
@@ -188,7 +189,13 @@ class MediaWebExtension(
                         ) {
                             invalidateArtwork(session)
                         }
+                        Log.d(
+                            TAG,
+                            "snapshot: isActive=${snapshot.isActive}, isPlaying=${snapshot.isPlaying}, " +
+                                "title=${snapshot.title}, durationMs=${snapshot.durationMs}, positionMs=${snapshot.positionMs}",
+                        )
                         sessionStates[session] = snapshot
+                        promoteSessionFromSnapshotIfNeeded(session, snapshot)
                         if (activeSession === session) {
                             applySnapshot(session, snapshot)
                         }
@@ -257,6 +264,19 @@ class MediaWebExtension(
         sessionArtworkRequestIds[session] = requestId
         sessionArtworkBitmaps.remove(session)
         return requestId
+    }
+
+    private fun promoteSessionFromSnapshotIfNeeded(
+        session: GeckoSession,
+        snapshot: SessionPlaybackSnapshot,
+    ) {
+        if (!snapshot.isActive) {
+            return
+        }
+        if (activeSession == null) {
+            Log.d(TAG, "activeSession を WebExtension snapshot から補完")
+            activeSession = session
+        }
     }
 
     private fun isArtworkRequestCurrent(session: GeckoSession, requestId: Long): Boolean {
