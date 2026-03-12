@@ -52,8 +52,7 @@
 
         <service
             android:name=".BrowserCustomTabsService"
-            android:exported="true"
-            android:permission="android.permission.BIND_CUSTOM_TABS_SERVICE">
+            android:exported="true">
             <intent-filter>
                 <action android:name="android.support.customtabs.action.CustomTabsService" />
                 <action android:name="androidx.browser.customtabs.action.CustomTabsService" />
