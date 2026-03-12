@@ -7,6 +7,7 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -47,17 +48,6 @@ import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.GeckoView
 import org.mozilla.geckoview.PanZoomController
-
-internal fun isThemeColorForCurrentPage(currentPageUrl: String, reportedUrl: String): Boolean {
-    if (reportedUrl.isBlank()) return false
-    return normalizedThemeColorUrlKey(currentPageUrl) == normalizedThemeColorUrlKey(reportedUrl)
-}
-
-private fun normalizedThemeColorUrlKey(url: String): String {
-    return url
-        .substringBefore("#")
-        .removeSuffix("/")
-}
 
 @Composable
 internal fun BrowserContentHost(
@@ -150,6 +140,44 @@ internal fun BrowserContentHost(
                     alignment = androidx.compose.ui.Alignment.TopStart,
                 )
             }
+        }
+    }
+}
+
+@Composable
+internal fun BrowserTabOverlayLayer(
+    state: BrowserTabScreenState,
+    historySuggestions: List<net.matsudamper.browser.data.history.HistoryEntry>,
+    onSuggestionClick: (net.matsudamper.browser.data.history.HistoryEntry) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Box(modifier = modifier) {
+        state.pageLoadError?.let { pageLoadError ->
+            PageLoadErrorOverlay(
+                pageLoadError = pageLoadError,
+                onRetry = state::retryPageLoad,
+            )
+        }
+
+        if (
+            shouldShowHistorySuggestions(
+                showFindInPage = state.showFindInPage,
+                isUrlInputFocused = state.isUrlInputFocused,
+                suggestionCount = historySuggestions.size,
+                currentPageUrl = state.currentPageUrl,
+            )
+        ) {
+            HistorySuggestionList(
+                currentPageUrl = state.currentPageUrl,
+                suggestions = historySuggestions,
+                onSuggestionClick = onSuggestionClick,
+                onCopyCurrentUrl = state::copyCurrentPageUrl,
+                onRestoreCurrentUrl = state::restoreCurrentPageUrlToInput,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.surface)
+                    .testTag(TEST_TAG_HISTORY_SUGGESTION_LIST),
+            )
         }
     }
 }
