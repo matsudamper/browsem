@@ -1,5 +1,6 @@
 package net.matsudamper.browser.data.websuggestion
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import net.matsudamper.browser.data.SearchProvider
@@ -40,7 +41,7 @@ class HttpWebSuggestionRepository(
                     return@runCatching emptyList()
                 }
 
-                connection.inputStream.bufferedReader().use { reader ->
+                connection.inputStream.bufferedReader(Charsets.UTF_8).use { reader ->
                     parseSuggestionResponse(
                         searchProvider = request.searchProvider,
                         body = reader.readText(),
@@ -49,6 +50,9 @@ class HttpWebSuggestionRepository(
             } finally {
                 connection.disconnect()
             }
+        }.onFailure { e ->
+            // キャンセル時は再スローしてコルーチンのキャンセルを正しく伝播させる
+            if (e is CancellationException) throw e
         }.getOrDefault(emptyList())
     }
 }

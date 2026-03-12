@@ -1,9 +1,11 @@
 package net.matsudamper.browser.screen.browser
 
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -14,6 +16,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import java.io.Closeable
 import net.matsudamper.browser.data.SearchProvider
 import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.history.HistoryEntry
@@ -27,12 +30,24 @@ data class UrlBarSuggestionsUiState(
     val isLoadingWebSuggestions: Boolean = false,
 )
 
-@OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
+@OptIn(ExperimentalCoroutinesApi::class)
 class BrowserScreenViewModel(
     private val historyRepository: HistoryRepository,
     private val settingsRepository: SettingsRepository,
     private val webSuggestionRepository: WebSuggestionRepository,
-) : ViewModel() {
+) : ViewModel(), Closeable {
+    // ViewModel継承時はonCleared()でキャンセル、remember()使用時はclose()でキャンセル
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+
+    override fun onCleared() {
+        super.onCleared()
+        scope.cancel()
+    }
+
+    override fun close() {
+        scope.cancel()
+    }
+
     private val suggestionQuery = MutableStateFlow("")
 
     private val historySuggestions: StateFlow<List<HistoryEntry>> = suggestionQuery
@@ -49,7 +64,7 @@ class BrowserScreenViewModel(
             }
         }
         .stateIn(
-            scope = viewModelScope,
+            scope = scope,
             started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS),
             initialValue = emptyList(),
         )
@@ -88,7 +103,7 @@ class BrowserScreenViewModel(
             }
         }
         .stateIn(
-            scope = viewModelScope,
+            scope = scope,
             started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS),
             initialValue = WebSuggestionState(),
         )
@@ -104,7 +119,7 @@ class BrowserScreenViewModel(
         )
     }
         .stateIn(
-            scope = viewModelScope,
+            scope = scope,
             started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS),
             initialValue = UrlBarSuggestionsUiState(),
         )

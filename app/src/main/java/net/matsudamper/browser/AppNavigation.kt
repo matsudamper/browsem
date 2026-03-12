@@ -161,6 +161,10 @@ internal fun BrowserApp(
                                 webSuggestionRepository = webSuggestionRepository,
                             )
                         }
+                        // タブが閉じられた際にコルーチンスコープをキャンセルしてリークを防ぐ
+                        DisposableEffect(key.tabId) {
+                            onDispose { browserScreenViewModel.close() }
+                        }
                         BrowserScreen(
                             key = key,
                             homepageUrl = homepageUrl,
