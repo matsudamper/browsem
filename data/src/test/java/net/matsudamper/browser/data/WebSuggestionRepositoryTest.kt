@@ -4,7 +4,7 @@ import net.matsudamper.browser.data.websuggestion.buildSuggestionRequest
 import net.matsudamper.browser.data.websuggestion.parseSuggestionResponse
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
-import org.junit.Assert.assertTrue
+import org.junit.Assert.assertFalse
 import org.junit.Test
 
 class WebSuggestionRepositoryTest {
@@ -64,8 +64,8 @@ class WebSuggestionRepositoryTest {
     }
 
     @Test
-    fun webSuggestionsDefaultToEnabledWhenUnset() {
-        assertTrue(BrowserSettings.getDefaultInstance().resolvedEnableWebSuggestions())
+    fun webSuggestionsDefaultToDisabledWhenUnset() {
+        assertFalse(BrowserSettings.getDefaultInstance().resolvedEnableWebSuggestions())
     }
 
     @Test

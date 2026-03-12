@@ -4,11 +4,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
@@ -57,8 +57,7 @@ class BrowserScreenViewModel(
     private val webSuggestions: StateFlow<WebSuggestionState> = combine(
         suggestionQuery
             .map(String::trim)
-            .distinctUntilChanged()
-            .debounce(WEB_SUGGESTION_DEBOUNCE_MILLIS),
+            .distinctUntilChanged(),
         settingsRepository.settings,
     ) { query, settings ->
         WebSuggestionParams(
@@ -67,23 +66,25 @@ class BrowserScreenViewModel(
             enabled = settings.resolvedEnableWebSuggestions(),
         )
     }
+        .distinctUntilChanged()
         .flatMapLatest { params ->
-            if (!params.enabled || !shouldFetchWebSuggestions(params.query)) {
-                flow {
-                    emit(WebSuggestionState())
+            flow {
+                emit(WebSuggestionState())
+
+                if (!params.enabled || !shouldFetchWebSuggestions(params.query)) {
+                    return@flow
                 }
-            } else {
-                flow {
-                    emit(WebSuggestionState(isLoading = true))
-                    emit(
-                        WebSuggestionState(
-                            suggestions = webSuggestionRepository.getSuggestions(
-                                searchProvider = params.searchProvider,
-                                query = params.query,
-                            ),
+
+                delay(WEB_SUGGESTION_DEBOUNCE_MILLIS)
+                emit(WebSuggestionState(isLoading = true))
+                emit(
+                    WebSuggestionState(
+                        suggestions = webSuggestionRepository.getSuggestions(
+                            searchProvider = params.searchProvider,
+                            query = params.query,
                         ),
-                    )
-                }
+                    ),
+                )
             }
         }
         .stateIn(
@@ -132,7 +133,7 @@ internal fun shouldFetchWebSuggestions(query: String): Boolean {
     if (trimmed.isBlank()) {
         return false
     }
-    if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+    if (SCHEME_PREFIX_REGEX.containsMatchIn(trimmed)) {
         return false
     }
     if (!trimmed.contains(" ") && trimmed.contains(".")) {
@@ -140,6 +141,8 @@ internal fun shouldFetchWebSuggestions(query: String): Boolean {
     }
     return true
 }
+
+private val SCHEME_PREFIX_REGEX = Regex("^[a-zA-Z][a-zA-Z0-9+.-]*:")
 
 private data class WebSuggestionParams(
     val query: String,

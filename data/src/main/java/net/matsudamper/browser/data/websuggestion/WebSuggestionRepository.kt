@@ -6,6 +6,7 @@ import net.matsudamper.browser.data.SearchProvider
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
+import java.util.Locale
 
 interface WebSuggestionRepository {
     suspend fun getSuggestions(
@@ -124,7 +125,7 @@ private fun parseDuckDuckGoSuggestions(body: String): List<String> {
 
 private fun List<String>.distinctPreservingOrder(): List<String> {
     val seen = mutableSetOf<String>()
-    return filter { seen.add(it.lowercase()) }
+    return filter { seen.add(it.lowercase(Locale.ROOT)) }
 }
 
 private fun parseTopLevelArrayValues(body: String): List<String> {
