@@ -57,7 +57,7 @@ internal fun BrowserScreen(
     handleNotificationPermission: (uri: String) -> GeckoResult<Int>,
     onSelectTab: (tabId: String, beforeTab: AppDestination.Browser?) -> Unit,
 ) {
-    val historySuggestions by viewModel.historySuggestions.collectAsState()
+    val urlBarSuggestions by viewModel.urlBarSuggestions.collectAsState()
 
     val selectedTab = remember(key.tabId) {
         val tab = browserSessionController.getOrCreateTab(
@@ -139,7 +139,7 @@ internal fun BrowserScreen(
             },
             onHistoryRecord = { url, title -> viewModel.recordHistory(url, title) },
             onHistoryTitleUpdate = { id, title -> viewModel.updateHistoryTitle(id, title) },
-            historySuggestions = historySuggestions,
+            urlBarSuggestions = urlBarSuggestions,
             onUrlInputChanged = viewModel::onUrlInputChanged,
             onToolbarHorizontalDrag = { delta ->
                 // URLバーの水平ドラッグをスワイプオフセットに反映

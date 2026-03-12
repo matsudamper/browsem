@@ -32,6 +32,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.Flow
 import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.history.HistoryRepository
+import net.matsudamper.browser.data.websuggestion.WebSuggestionRepository
 import net.matsudamper.browser.navigation.AppDestination
 import net.matsudamper.browser.navigation.NavController
 import net.matsudamper.browser.screen.browser.BrowserScreen
@@ -67,6 +68,7 @@ internal fun BrowserApp(
     // Koin からリポジトリを取得（画面 ViewModel に直接渡す）
     val settingsRepository: SettingsRepository = koinInject()
     val historyRepository: HistoryRepository = koinInject()
+    val webSuggestionRepository: WebSuggestionRepository = koinInject()
 
     LaunchedEffect(settingsUiState.enableThirdPartyCa) {
         viewModel.applyRuntimeSettings()
@@ -153,7 +155,11 @@ internal fun BrowserApp(
 
                     is AppDestination.Browser -> navEntry(key) {
                         val browserScreenViewModel = remember(viewModel) {
-                            BrowserScreenViewModel(historyRepository)
+                            BrowserScreenViewModel(
+                                historyRepository = historyRepository,
+                                settingsRepository = settingsRepository,
+                                webSuggestionRepository = webSuggestionRepository,
+                            )
                         }
                         BrowserScreen(
                             key = key,

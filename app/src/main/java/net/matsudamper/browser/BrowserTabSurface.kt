@@ -44,6 +44,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+import net.matsudamper.browser.screen.browser.UrlBarSuggestionsUiState
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.GeckoView
@@ -147,8 +148,9 @@ internal fun BrowserContentHost(
 @Composable
 internal fun BrowserTabOverlayLayer(
     state: BrowserTabScreenState,
-    historySuggestions: List<net.matsudamper.browser.data.history.HistoryEntry>,
-    onSuggestionClick: (net.matsudamper.browser.data.history.HistoryEntry) -> Unit,
+    urlBarSuggestions: UrlBarSuggestionsUiState,
+    onHistorySuggestionClick: (net.matsudamper.browser.data.history.HistoryEntry) -> Unit,
+    onWebSuggestionClick: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Box(modifier = modifier) {
@@ -160,17 +162,22 @@ internal fun BrowserTabOverlayLayer(
         }
 
         if (
-            shouldShowHistorySuggestions(
+            shouldShowUrlSuggestions(
                 showFindInPage = state.showFindInPage,
                 isUrlInputFocused = state.isUrlInputFocused,
-                suggestionCount = historySuggestions.size,
+                suggestionCount = urlBarSuggestions.historySuggestions.size +
+                    urlBarSuggestions.webSuggestions.size +
+                    if (urlBarSuggestions.isLoadingWebSuggestions) 1 else 0,
                 currentPageUrl = state.currentPageUrl,
             )
         ) {
-            HistorySuggestionList(
+            UrlSuggestionList(
                 currentPageUrl = state.currentPageUrl,
-                suggestions = historySuggestions,
-                onSuggestionClick = onSuggestionClick,
+                historySuggestions = urlBarSuggestions.historySuggestions,
+                webSuggestions = urlBarSuggestions.webSuggestions,
+                isLoadingWebSuggestions = urlBarSuggestions.isLoadingWebSuggestions,
+                onHistorySuggestionClick = onHistorySuggestionClick,
+                onWebSuggestionClick = onWebSuggestionClick,
                 onCopyCurrentUrl = state::copyCurrentPageUrl,
                 onRestoreCurrentUrl = state::restoreCurrentPageUrlToInput,
                 modifier = Modifier
@@ -183,14 +190,20 @@ internal fun BrowserTabOverlayLayer(
 }
 
 @Composable
-internal fun HistorySuggestionList(
+internal fun UrlSuggestionList(
     currentPageUrl: String,
-    suggestions: List<net.matsudamper.browser.data.history.HistoryEntry>,
-    onSuggestionClick: (net.matsudamper.browser.data.history.HistoryEntry) -> Unit,
+    historySuggestions: List<net.matsudamper.browser.data.history.HistoryEntry>,
+    webSuggestions: List<String>,
+    isLoadingWebSuggestions: Boolean,
+    onHistorySuggestionClick: (net.matsudamper.browser.data.history.HistoryEntry) -> Unit,
+    onWebSuggestionClick: (String) -> Unit,
     onCopyCurrentUrl: () -> Unit,
     onRestoreCurrentUrl: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val hasHistorySuggestions = historySuggestions.isNotEmpty()
+    val hasWebSuggestions = webSuggestions.isNotEmpty() || isLoadingWebSuggestions
+
     LazyColumn(modifier = modifier.fillMaxWidth()) {
         if (currentPageUrl.isNotBlank()) {
             item(key = "current_page_url") {
@@ -199,32 +212,90 @@ internal fun HistorySuggestionList(
                     onCopyCurrentUrl = onCopyCurrentUrl,
                     onRestoreCurrentUrl = onRestoreCurrentUrl,
                 )
-                if (suggestions.isNotEmpty()) {
+                if (hasHistorySuggestions || hasWebSuggestions) {
                     HorizontalDivider()
                 }
             }
         }
-        items(suggestions, key = { it.id }) { entry ->
-            ListItem(
-                headlineContent = {
-                    Text(
-                        text = entry.title.ifBlank { entry.url },
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                },
-                supportingContent = {
-                    if (entry.title.isNotBlank()) {
+
+        if (hasHistorySuggestions) {
+            item(key = "history_header") {
+                SuggestionSectionHeader(title = "履歴")
+            }
+            items(historySuggestions, key = { it.id }) { entry ->
+                ListItem(
+                    headlineContent = {
                         Text(
-                            text = entry.url,
+                            text = entry.title.ifBlank { entry.url },
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
-                    }
-                },
-                modifier = Modifier.clickable { onSuggestionClick(entry) },
-            )
+                    },
+                    supportingContent = {
+                        if (entry.title.isNotBlank()) {
+                            Text(
+                                text = entry.url,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    },
+                    modifier = Modifier.clickable { onHistorySuggestionClick(entry) },
+                )
+            }
         }
+
+        if (hasHistorySuggestions && hasWebSuggestions) {
+            item(key = "history_web_divider") {
+                HorizontalDivider()
+            }
+        }
+
+        if (hasWebSuggestions) {
+            item(key = "web_header") {
+                SuggestionSectionHeader(
+                    title = "Web検索候補",
+                    modifier = Modifier.testTag(TEST_TAG_WEB_SUGGESTION_SECTION),
+                )
+            }
+            if (isLoadingWebSuggestions && webSuggestions.isEmpty()) {
+                item(key = "web_loading") {
+                    ListItem(
+                        headlineContent = {
+                            Text(text = "候補を取得中...")
+                        },
+                    )
+                }
+            }
+            items(webSuggestions, key = { it }) { suggestion ->
+                ListItem(
+                    headlineContent = {
+                        Text(
+                            text = suggestion,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    },
+                    modifier = Modifier.clickable { onWebSuggestionClick(suggestion) },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SuggestionSectionHeader(
+    title: String,
+    modifier: Modifier = Modifier,
+) {
+    androidx.compose.runtime.CompositionLocalProvider(
+        LocalContentColor provides MaterialTheme.colorScheme.onSurfaceVariant,
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.labelLarge,
+            modifier = modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+        )
     }
 }
 
@@ -327,6 +398,7 @@ internal fun PageLoadErrorOverlay(
 
 const val TEST_TAG_GECKO_CONTAINER = "gecko_container"
 const val TEST_TAG_HISTORY_SUGGESTION_LIST = "history_suggestion_list"
+const val TEST_TAG_WEB_SUGGESTION_SECTION = "web_suggestion_section"
 const val TEST_TAG_CURRENT_URL_ACTIONS = "current_url_actions"
 const val TEST_TAG_CURRENT_URL_TEXT = "current_url_text"
 const val TEST_TAG_PAGE_LOAD_ERROR = "page_load_error"

@@ -153,6 +153,33 @@ internal fun SettingsScreen(
 
             Spacer(Modifier.height(24.dp))
 
+            SettingSection(title = "検索候補") {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp),
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Webサジェストを有効化",
+                            style = MaterialTheme.typography.bodyLarge,
+                        )
+                        Text(
+                            text = "入力中のキーワードを検索エンジンへ送信して候補を表示します",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(
+                        checked = uiState.enableWebSuggestions,
+                        onCheckedChange = viewModel::setEnableWebSuggestions,
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(24.dp))
+
             SettingSection(title = "テーマ") {
                 Column(Modifier.selectableGroup()) {
                     SettingsRadioOption(

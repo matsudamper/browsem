@@ -9,7 +9,7 @@ internal fun shouldResetToolbarColor(fromUrl: String, toUrl: String): Boolean {
     return normalizedBrowserPageKey(fromUrl) != normalizedBrowserPageKey(toUrl)
 }
 
-internal fun shouldShowHistorySuggestions(
+internal fun shouldShowUrlSuggestions(
     showFindInPage: Boolean,
     isUrlInputFocused: Boolean,
     suggestionCount: Int,
