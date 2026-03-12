@@ -40,7 +40,7 @@ jobs:
         run: ./gradlew :app:assembleRelease
 
       - name: Upload release APK
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: app-release-apk
           path: app/build/outputs/apk/release/app-release.apk
@@ -50,7 +50,7 @@ jobs:
 
       - name: Upload lint report
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: app-lint-report
           path: app/build/reports/lint-results-debug.html
@@ -86,7 +86,7 @@ jobs:
 
       - name: Upload Android test report
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: app-androidtest-report
           path: |
