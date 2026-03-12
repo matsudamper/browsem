@@ -1,57 +1,35 @@
 package net.matsudamper.browser
 
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
-import android.util.Log
 import androidx.compose.runtime.Stable
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableLongStateOf
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import net.matsudamper.browser.core.TabSelectionPolicy
+import net.matsudamper.browser.core.TabStore
+import net.matsudamper.browser.core.TabStoreState
+import net.matsudamper.browser.core.TabSummary
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoSession
-import java.io.ByteArrayOutputStream
 import java.util.UUID
 
 @Stable
-class BrowserSessionController(runtime: GeckoRuntime) {
+class BrowserSessionController(runtime: GeckoRuntime) : TabStore {
     private val geckoRuntime = runtime
     private val tabList = mutableStateListOf<BrowserTab>()
+    private val _tabStoreState = MutableStateFlow(TabStoreState())
+    override val tabStoreState: StateFlow<TabStoreState> = _tabStoreState.asStateFlow()
 
-    /**
-     * タブコンテンツの変更バージョン。
-     * Compose snapshotシステムにより、tabList内の各プロパティ変更を自動追跡する。
-     */
-    val contentVersion by derivedStateOf {
-        tabList.fold(0) { acc, tab ->
-            var h = acc
-            h = 31 * h + tab.currentUrl.hashCode()
-            h = 31 * h + tab.sessionState.hashCode()
-            h = 31 * h + tab.title.hashCode()
-            h = 31 * h + (tab.previewBitmap?.contentHashCode() ?: 0)
-            h = 31 * h + (tab.themeColor ?: 0)
-            h
-        }
-    }
-
-    /**
-     * タブ構造変更（追加・削除・並べ替え）や選択タブ変更時に手動インクリメントするカウンター。
-     * [contentVersion] が検出しない変更（選択タブの変更等）を補完する。
-     */
-    var structuralVersion by mutableLongStateOf(0L)
+    var selectedTabId: String? by mutableStateOf(null)
         private set
-
-    fun notifyStructuralChange() {
-        structuralVersion++
-    }
 
     val tabs: List<BrowserTab>
         get() = tabList
 
     fun getOrCreateTab(tabId: String, homepageUrl: String): BrowserTab {
-        Log.d("LOG", "getOrCreateTab: tabList=${tabList.size}")
         val alreadyCreatedTab = tabList.firstOrNull { it.tabId == tabId }
         if (alreadyCreatedTab != null) return alreadyCreatedTab
 
@@ -59,14 +37,23 @@ class BrowserSessionController(runtime: GeckoRuntime) {
         return newTab
     }
 
+    fun selectTab(tabId: String?) {
+        if (selectedTabId == tabId) {
+            return
+        }
+        selectedTabId = tabId
+        publishState()
+    }
+
     internal fun restoreTabs(
         homepageUrl: String,
         persistedTabs: List<PersistedBrowserTab>,
         persistedSelectedTabIndex: Int,
-    ) : String {
+    ): String {
         if (persistedTabs.isEmpty()) {
             val tabId = UUID.randomUUID().toString()
             val initialTab = createAndAppendTab(tabId = tabId, initialUrl = homepageUrl)
+            selectTab(initialTab.tabId)
             return initialTab.tabId
         }
 
@@ -82,7 +69,7 @@ class BrowserSessionController(runtime: GeckoRuntime) {
             )
         }
         val index = persistedSelectedTabIndex.coerceIn(0, tabList.lastIndex)
-        return tabs[index].tabId
+        return tabs[index].tabId.also(::selectTab)
     }
 
     fun createAndAppendTab(
@@ -108,6 +95,9 @@ class BrowserSessionController(runtime: GeckoRuntime) {
         )
         // 復元情報を保持（ensureSessionOpen で使用）
         tab.pendingSessionState = restoredSessionState?.takeIf { it.isNotBlank() }
+        if (selectedTabId == null) {
+            selectTab(tab.tabId)
+        }
         return tab
     }
 
@@ -166,17 +156,25 @@ class BrowserSessionController(runtime: GeckoRuntime) {
         if (fromIndex < 0 || fromIndex >= tabList.size) return
         if (toIndex < 0 || toIndex >= tabList.size) return
         tabList.add(toIndex, tabList.removeAt(fromIndex))
+        publishState()
     }
 
-    fun closeTab(tabId: String) {
+    fun closeTab(tabId: String): String? {
         val index = tabList.indexOfFirst { it.tabId == tabId }
         if (index < 0) {
-            return
+            return selectedTabId
         }
+        val nextSelectedTabId = TabSelectionPolicy.resolveNextSelectedTab(
+            closingTabId = tabId,
+            state = _tabStoreState.value,
+        )
         val removed = tabList.removeAt(index)
         if (removed.session.isOpen) {
             removed.session.close()
         }
+        selectedTabId = nextSelectedTabId
+        publishState()
+        return selectedTabId
     }
 
     internal fun exportPersistedTabs(): List<PersistedBrowserTab> {
@@ -200,6 +198,8 @@ class BrowserSessionController(runtime: GeckoRuntime) {
             }
         }
         tabList.clear()
+        selectedTabId = null
+        publishState()
     }
 
     private fun appendTab(
@@ -221,9 +221,18 @@ class BrowserSessionController(runtime: GeckoRuntime) {
             previewBitmap = previewBitmapArray ?: byteArrayOf(),
             themeColor = themeColor,
             openerTabId = openerTabId,
+            onStateChanged = ::publishState,
         )
         tabList += tab
+        publishState()
         return tab
+    }
+
+    private fun publishState() {
+        _tabStoreState.value = TabStoreState(
+            tabs = tabList.map { tab -> tab.toSummary() },
+            selectedTabId = selectedTabId,
+        )
     }
 }
 
@@ -237,12 +246,48 @@ class BrowserTab(
     title: String,
     previewBitmap: ByteArray?,
     themeColor: Int? = null,
+    private val onStateChanged: () -> Unit = {},
 ) {
-    var currentUrl by mutableStateOf(currentUrl)
-    var sessionState by mutableStateOf(sessionState)
-    var title by mutableStateOf(title)
-    var previewBitmap: ByteArray? by mutableStateOf(previewBitmap)
-    var themeColor: Int? by mutableStateOf(themeColor)
+    private var currentUrlState by mutableStateOf(currentUrl)
+    var currentUrl: String
+        get() = currentUrlState
+        set(value) {
+            if (currentUrlState == value) return
+            currentUrlState = value
+            onStateChanged()
+        }
+    private var sessionStateState by mutableStateOf(sessionState)
+    var sessionState: String
+        get() = sessionStateState
+        set(value) {
+            if (sessionStateState == value) return
+            sessionStateState = value
+            onStateChanged()
+        }
+    private var titleState by mutableStateOf(title)
+    var title: String
+        get() = titleState
+        set(value) {
+            if (titleState == value) return
+            titleState = value
+            onStateChanged()
+        }
+    private var previewBitmapState: ByteArray? by mutableStateOf(previewBitmap)
+    var previewBitmap: ByteArray?
+        get() = previewBitmapState
+        set(value) {
+            if (previewBitmapState.contentEqualsNullable(value)) return
+            previewBitmapState = value
+            onStateChanged()
+        }
+    private var themeColorState: Int? by mutableStateOf(themeColor)
+    var themeColor: Int?
+        get() = themeColorState
+        set(value) {
+            if (themeColorState == value) return
+            themeColorState = value
+            onStateChanged()
+        }
     // 未オープンタブのセッション復元情報を保持
     internal var pendingSessionState: String? by mutableStateOf(null)
 }
@@ -280,17 +325,21 @@ internal data class PersistedBrowserTab(
     }
 }
 
-private fun Bitmap?.toWebpByteArray(): ByteArray {
-    val bitmap = this ?: return byteArrayOf()
-    val outputStream = ByteArrayOutputStream()
-    val format = Bitmap.CompressFormat.WEBP_LOSSY
-    bitmap.compress(format, 80, outputStream)
-    return outputStream.toByteArray()
-}
+private fun BrowserTab.toSummary(): TabSummary = TabSummary(
+    id = tabId,
+    title = title,
+    url = currentUrl,
+    openerTabId = openerTabId,
+    previewBitmapArray = previewBitmap,
+    themeColor = themeColor,
+)
 
-private fun ByteArray.toBitmapOrNull(): Bitmap? {
-    if (isEmpty()) return null
-    return BitmapFactory.decodeByteArray(this, 0, size)
+private fun ByteArray?.contentEqualsNullable(other: ByteArray?): Boolean {
+    return when {
+        this === other -> true
+        this == null || other == null -> false
+        else -> this.contentEquals(other)
+    }
 }
 
 

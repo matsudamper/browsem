@@ -8,7 +8,7 @@ import org.mozilla.geckoview.MediaSession
  * GeckoViewのMediaSession.Delegateを実装し、
  * 制御用のMediaSession参照と feature 情報だけを保持する。
  */
-internal class GeckoMediaSessionDelegate(
+class GeckoMediaSessionDelegate(
     private val mediaWebExtension: MediaWebExtension,
 ) : MediaSession.Delegate {
 
