@@ -2,7 +2,11 @@ package net.matsudamper.browser
 
 import android.view.WindowInsets
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.hasAnyDescendant
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodes
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
@@ -352,10 +356,13 @@ class GmdSmokeTest {
     private fun waitForPageLoadErrorVisible(failingUrl: String) {
         composeRule.waitUntil(timeoutMillis = 30_000) {
             composeRule
-                .onAllNodesWithTag(TEST_TAG_PAGE_LOAD_ERROR)
+                .onAllNodes(
+                    hasTestTag(TEST_TAG_PAGE_LOAD_ERROR) and
+                        hasAnyDescendant(hasText(failingUrl))
+                )
                 .fetchSemanticsNodes()
                 .isNotEmpty() &&
-                composeRule.onAllNodesWithText(failingUrl).fetchSemanticsNodes().isNotEmpty()
+                composeRule.onAllNodesWithTag(TEST_TAG_PAGE_LOAD_ERROR).fetchSemanticsNodes().isNotEmpty()
         }
     }
 
