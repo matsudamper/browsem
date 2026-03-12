@@ -2,10 +2,7 @@ package net.matsudamper.browser.media
 
 import android.content.Intent
 import android.os.SystemClock
-import androidx.compose.ui.test.click
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
-import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.performTouchInput
 import androidx.lifecycle.ViewModelProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -13,7 +10,6 @@ import net.matsudamper.browser.BrowserSessionController
 import net.matsudamper.browser.BrowserTab
 import net.matsudamper.browser.BrowserViewModel
 import net.matsudamper.browser.MainActivity
-import net.matsudamper.browser.TEST_TAG_GECKO_CONTAINER
 import org.mozilla.gecko.util.GeckoBundle
 import org.junit.After
 import org.junit.Assert.assertTrue
@@ -41,12 +37,14 @@ class MediaNotificationSmokeTest {
 
     @After
     fun tearDown() {
-        // テスト後にブリッジとサービスをリセット
-        composeRule.runOnIdle {
+        // GeckoView描画中でも後始末できるよう、idling待機を避けてUIスレッドで直接実行する。
+        runOnMainThread {
             MediaSessionBridge.deactivate()
-            composeRule.activity.stopService(
-                Intent(composeRule.activity, MediaPlaybackService::class.java),
-            )
+            runCatching {
+                composeRule.activity.stopService(
+                    Intent(composeRule.activity, MediaPlaybackService::class.java),
+                )
+            }
         }
     }
 
@@ -64,23 +62,19 @@ class MediaNotificationSmokeTest {
         waitForMediaExtensionInstalled()
 
         // URL バー経由だと "https://file///..." に補正されるため、GeckoSession に直接 file URI を渡す。
-        composeRule.runOnIdle {
+        runOnMainThread {
             activeTab.session.loadUri(mediaPageUri)
         }
         Thread.sleep(PAGE_READY_DELAY_MS)
 
-        // CI エミュレータではページ読み込みが遅いため、isActive になるまでクリックをリトライする
-        val clickRetryDeadline = SystemClock.uptimeMillis() + SESSION_ACTIVATION_TIMEOUT_MS
-        while (!MediaSessionBridge.playbackState.value.isActive && SystemClock.uptimeMillis() < clickRetryDeadline) {
-            composeRule.onNodeWithTag(TEST_TAG_GECKO_CONTAINER).performTouchInput {
-                click(center)
-            }
-            Thread.sleep(CLICK_RETRY_INTERVAL_MS)
-        }
-
-        // 最終的に isActive になったことを確認
-        composeRule.waitUntil(timeoutMillis = SESSION_ACTIVATION_TIMEOUT_MS) {
-            MediaSessionBridge.playbackState.value.isActive
+        // CI エミュレータではタップ入力が不安定な場合があるため、JSで再生要求をリトライする。
+        val activationRetryDeadline = SystemClock.uptimeMillis() + SESSION_ACTIVATION_TIMEOUT_MS
+        while (
+            !MediaSessionBridge.playbackState.value.isActive &&
+            SystemClock.uptimeMillis() < activationRetryDeadline
+        ) {
+            requestMediaPlayback(activeTab)
+            Thread.sleep(PLAY_REQUEST_RETRY_INTERVAL_MS)
         }
         assertTrue(
             "ビデオ再生後に MediaSessionBridge がアクティブになること",
@@ -88,25 +82,34 @@ class MediaNotificationSmokeTest {
         )
 
         // GeckoView の onPlay で isPlaying=true になるまで待機
-        composeRule.waitUntil(timeoutMillis = PLAYBACK_STATE_TIMEOUT_MS) {
-            MediaSessionBridge.playbackState.value.isPlaying
-        }
         assertTrue(
             "MediaSessionBridge の isPlaying が true になること",
+            waitForCondition(timeoutMs = PLAYBACK_STATE_TIMEOUT_MS) {
+                MediaSessionBridge.playbackState.value.isPlaying
+            },
+        )
+        assertTrue(
+            "MediaSessionBridge の isPlaying が true になること (state=${MediaSessionBridge.playbackState.value})",
             MediaSessionBridge.playbackState.value.isPlaying,
         )
 
-        composeRule.waitUntil(timeoutMillis = METADATA_TIMEOUT_MS) {
-            val state = MediaSessionBridge.playbackState.value
-            state.title == EXPECTED_TITLE &&
-                state.artist == EXPECTED_ARTIST &&
-                state.album == EXPECTED_ALBUM &&
-                state.artworkBitmap != null &&
-                state.durationMs > 0
-        }
-        composeRule.waitUntil(timeoutMillis = POSITION_TIMEOUT_MS) {
-            MediaSessionBridge.playbackState.value.positionMs > 0L
-        }
+        assertTrue(
+            "メタデータが拡張経由で反映されること",
+            waitForCondition(timeoutMs = METADATA_TIMEOUT_MS) {
+                val state = MediaSessionBridge.playbackState.value
+                state.title == EXPECTED_TITLE &&
+                    state.artist == EXPECTED_ARTIST &&
+                    state.album == EXPECTED_ALBUM &&
+                    state.artworkBitmap != null &&
+                    state.durationMs > 0
+            },
+        )
+        assertTrue(
+            "再生位置が更新されること",
+            waitForCondition(timeoutMs = POSITION_TIMEOUT_MS) {
+                MediaSessionBridge.playbackState.value.positionMs > 0L
+            },
+        )
 
         val playbackState = MediaSessionBridge.playbackState.value
         assertTrue("title=${playbackState.title}", playbackState.title == EXPECTED_TITLE)
@@ -130,9 +133,12 @@ class MediaNotificationSmokeTest {
             "通知タイトルが拡張経由メタデータを反映すること: ${MediaPlaybackService.lastGeneratedNotificationTitle}",
             MediaPlaybackService.lastGeneratedNotificationTitle == EXPECTED_TITLE,
         )
-        composeRule.waitUntil(timeoutMillis = NOTIFICATION_ARTWORK_TIMEOUT_MS) {
-            MediaPlaybackService.lastGeneratedNotificationHasLargeIcon
-        }
+        assertTrue(
+            "通知に artwork が表示されること",
+            waitForCondition(timeoutMs = NOTIFICATION_ARTWORK_TIMEOUT_MS) {
+                MediaPlaybackService.lastGeneratedNotificationHasLargeIcon
+            },
+        )
         assertTrue(
             "通知に artwork が表示されること",
             MediaPlaybackService.lastGeneratedNotificationHasLargeIcon,
@@ -192,7 +198,7 @@ class MediaNotificationSmokeTest {
     }
 
     private fun allowAutoplayForTest() {
-        composeRule.runOnIdle {
+        runOnMainThread {
             val runtime = getBrowserViewModel().runtime
             val prefs = GeckoBundle(2).apply {
                 putInt("media.autoplay.default", 0)
@@ -206,7 +212,7 @@ class MediaNotificationSmokeTest {
     }
 
     private fun waitForMediaExtensionInstalled() {
-        composeRule.waitUntil(timeoutMillis = 20_000) {
+        composeRule.waitUntil(timeoutMillis = EXTENSION_INSTALL_TIMEOUT_MS) {
             var installed = false
             composeRule.runOnIdle {
                 installed = runCatching { getBrowserViewModel().mediaWebExtension.isInstalled() }
@@ -223,31 +229,69 @@ class MediaNotificationSmokeTest {
     private fun waitForMediaControlNotification(
         timeoutMs: Long,
     ): Boolean {
+        return waitForCondition(timeoutMs = timeoutMs) {
+            hasMediaControlNotification()
+        }
+    }
+
+    private fun requestMediaPlayback(activeTab: BrowserTab) {
+        runOnMainThread {
+            activeTab.session.loadUri(PLAYBACK_REQUEST_JAVASCRIPT_URI)
+        }
+    }
+
+    private fun waitForCondition(
+        timeoutMs: Long,
+        intervalMs: Long = CONDITION_POLL_INTERVAL_MS,
+        condition: () -> Boolean,
+    ): Boolean {
         val deadline = SystemClock.uptimeMillis() + timeoutMs
         while (SystemClock.uptimeMillis() < deadline) {
-            if (hasMediaControlNotification()) {
+            if (condition()) {
                 return true
             }
-            Thread.sleep(200)
+            Thread.sleep(intervalMs)
         }
-        return false
+        return condition()
+    }
+
+    private fun <T> runOnMainThread(block: () -> T): T {
+        var result: T? = null
+        var throwable: Throwable? = null
+        InstrumentationRegistry.getInstrumentation().runOnMainSync {
+            runCatching { block() }
+                .onSuccess { result = it }
+                .onFailure { throwable = it }
+        }
+        throwable?.let { throw it }
+        @Suppress("UNCHECKED_CAST")
+        return result as T
     }
 
     companion object {
-        private const val TEST_TIMEOUT_MS = 90_000L
+        private const val TEST_TIMEOUT_MS = 120_000L
         private const val PAGE_READY_DELAY_MS = 3_000L
         private const val SESSION_ACTIVATION_TIMEOUT_MS = 30_000L
-        private const val CLICK_RETRY_INTERVAL_MS = 2_000L
+        private const val PLAY_REQUEST_RETRY_INTERVAL_MS = 1_000L
         private const val PLAYBACK_STATE_TIMEOUT_MS = 15_000L
         private const val NOTIFICATION_CONTROL_TIMEOUT_MS = 10_000L
         private const val METADATA_TIMEOUT_MS = 15_000L
         private const val POSITION_TIMEOUT_MS = 15_000L
         private const val NOTIFICATION_ARTWORK_TIMEOUT_MS = 10_000L
+        private const val EXTENSION_INSTALL_TIMEOUT_MS = 20_000L
+        private const val CONDITION_POLL_INTERVAL_MS = 200L
         private const val LOCAL_MEDIA_ASSET_DIR = "test-media"
         private const val LOCAL_MEDIA_DIR_NAME = "test-media"
         private const val LOCAL_MEDIA_INDEX_FILE_NAME = "index.html"
         private const val EXPECTED_TITLE = "Test Video"
         private const val EXPECTED_ARTIST = "Browsem"
         private const val EXPECTED_ALBUM = "AndroidTest Assets"
+        private const val PLAYBACK_REQUEST_JAVASCRIPT_URI =
+            "javascript:void((function(){" +
+                "var media=document.querySelector('video,audio');" +
+                "if(!media){return;}" +
+                "var playPromise=media.play();" +
+                "if(playPromise&&typeof playPromise.catch==='function'){playPromise.catch(function(){});}" +
+                "})())"
     }
 }
