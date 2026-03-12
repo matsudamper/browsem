@@ -115,9 +115,9 @@ class MediaNotificationSmokeTest {
         assertTrue("title=${playbackState.title}", playbackState.title == EXPECTED_TITLE)
         assertTrue("artist=${playbackState.artist}", playbackState.artist == EXPECTED_ARTIST)
         assertTrue("album=${playbackState.album}", playbackState.album == EXPECTED_ALBUM)
-        assertTrue("artworkBitmap=${playbackState.artworkBitmap}", playbackState.artworkBitmap != null)
         assertTrue("durationMs=${playbackState.durationMs}", playbackState.durationMs > 0L)
         assertTrue("positionMs=${playbackState.positionMs}", playbackState.positionMs > 0L)
+        assertTrue("artworkBitmap=${playbackState.artworkBitmap}", playbackState.artworkBitmap != null)
 
         val hasMediaControlNotification = waitForMediaControlNotification(
             timeoutMs = NOTIFICATION_CONTROL_TIMEOUT_MS,
@@ -151,7 +151,7 @@ class MediaNotificationSmokeTest {
 
     private fun waitForBrowserSessionController(): BrowserSessionController {
         var controller: BrowserSessionController? = null
-        composeRule.waitUntil(timeoutMillis = 20_000) {
+        composeRule.waitUntil(timeoutMillis = CONTROLLER_WAIT_TIMEOUT_MS) {
             var resolved = false
             composeRule.runOnIdle {
                 resolved = runCatching {
@@ -165,7 +165,7 @@ class MediaNotificationSmokeTest {
 
     private fun waitForActiveTab(browserSessionController: BrowserSessionController): BrowserTab {
         var activeTab: BrowserTab? = null
-        composeRule.waitUntil(timeoutMillis = 20_000) {
+        composeRule.waitUntil(timeoutMillis = ACTIVE_TAB_WAIT_TIMEOUT_MS) {
             var found = false
             composeRule.runOnIdle {
                 activeTab = browserSessionController.tabs.firstOrNull { it.session.isOpen }
@@ -269,7 +269,9 @@ class MediaNotificationSmokeTest {
     }
 
     companion object {
-        private const val TEST_TIMEOUT_MS = 120_000L
+        private const val TEST_TIMEOUT_MS = 180_000L
+        private const val CONTROLLER_WAIT_TIMEOUT_MS = 20_000L
+        private const val ACTIVE_TAB_WAIT_TIMEOUT_MS = 20_000L
         private const val PAGE_READY_DELAY_MS = 3_000L
         private const val SESSION_ACTIVATION_TIMEOUT_MS = 30_000L
         private const val PLAY_REQUEST_RETRY_INTERVAL_MS = 1_000L

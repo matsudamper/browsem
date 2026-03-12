@@ -41,11 +41,13 @@ class GeckoMediaSessionDelegate(
     }
 
     override fun onPlay(session: GeckoSession, mediaSession: MediaSession) {
-        Log.d(TAG, "onPlay ignored")
+        Log.d(TAG, "onPlay")
+        mediaWebExtension.onPlay(session, mediaSession)
     }
 
     override fun onPause(session: GeckoSession, mediaSession: MediaSession) {
-        Log.d(TAG, "onPause ignored")
+        Log.d(TAG, "onPause")
+        mediaWebExtension.onPause(session, mediaSession)
     }
 
     override fun onStop(session: GeckoSession, mediaSession: MediaSession) {
@@ -58,7 +60,8 @@ class GeckoMediaSessionDelegate(
         mediaSession: MediaSession,
         state: MediaSession.PositionState,
     ) {
-        Log.d(TAG, "onPositionState ignored: position=${state.position}, duration=${state.duration}")
+        Log.d(TAG, "onPositionState: position=${state.position}, duration=${state.duration}")
+        mediaWebExtension.onPositionState(session, mediaSession, state)
     }
 
     override fun onFullscreen(
