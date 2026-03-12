@@ -1,19 +1,10 @@
 package net.matsudamper.browser
 
-import android.util.Log
 import androidx.compose.runtime.Stable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -21,7 +12,6 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import net.matsudamper.browser.data.BrowserSettings
 import net.matsudamper.browser.data.HomepageType
-import net.matsudamper.browser.data.PersistedTabState
 import net.matsudamper.browser.data.SearchProvider
 import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.TabRepository
@@ -29,7 +19,6 @@ import net.matsudamper.browser.data.ThemeMode
 import net.matsudamper.browser.data.TranslationProvider
 import net.matsudamper.browser.data.resolvedHomepageUrl
 import net.matsudamper.browser.data.resolvedSearchTemplate
-import net.matsudamper.browser.media.MediaWebExtension
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoSession
@@ -55,9 +44,15 @@ internal class BrowserViewModel(
     private val tabRepository: TabRepository,
     internal val historyRepository: net.matsudamper.browser.data.history.HistoryRepository,
 ) : ViewModel() {
-    val browserSessionController = BrowserSessionController(runtime)
-    val themeColorExtension = ThemeColorWebExtension().also { it.install(runtime) }
-    val mediaWebExtension = MediaWebExtension(appContext).also { it.install(runtime) }
+    private val runtimeCoordinator = BrowserRuntimeCoordinator(appContext, runtime)
+    private val tabPersistenceCoordinator = TabPersistenceCoordinator(tabRepository)
+
+    val browserSessionController: BrowserSessionController
+        get() = runtimeCoordinator.browserSessionController
+    val themeColorExtension: ThemeColorWebExtension
+        get() = runtimeCoordinator.themeColorExtension
+    val mediaWebExtension
+        get() = runtimeCoordinator.mediaWebExtension
 
     private val settings: StateFlow<BrowserSettings?> = settingsRepository.settings
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
@@ -65,125 +60,27 @@ internal class BrowserViewModel(
         .map { current -> current?.toUiState() }
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
-    // 復元完了フラグ。これがtrueになるまで保存を行わない
-    private var restorationComplete = false
-
-    // 現在選択中のタブID（永続化用）
-    var selectedTabId: String? by mutableStateOf(null)
-        private set
-
     /**
      * 選択タブを更新する。
-     * NavController での画面遷移とは別に、永続化のためにViewModelにも通知する。
+     * NavController での画面遷移とは別に、タブ store にも通知する。
      */
     fun selectTab(tabId: String) {
-        selectedTabId = tabId
-        browserSessionController.notifyStructuralChange()
+        browserSessionController.selectTab(tabId)
     }
 
     suspend fun restoreTabs(): String {
         val currentSettings = settings.filterNotNull().first()
         val homepageUrl = currentSettings.resolvedHomepageUrl()
 
-        val (persistedTabs, selectedIndex) = withContext(Dispatchers.IO) {
-            val (persistedTabStates, restoredSelectedTabId) = tabRepository.loadTabsForRestoration()
-
-            val restoredTabs = persistedTabStates.map { tabState ->
-                val tabId = tabState.tabId.ifBlank { java.util.UUID.randomUUID().toString() }
-                val thumbnail = tabRepository.loadTabThumbnail(tabId)
-                PersistedBrowserTab(
-                    url = tabState.url,
-                    sessionState = tabState.sessionState,
-                    title = tabState.title,
-                    previewImageWebp = thumbnail ?: byteArrayOf(),
-                    tabId = tabId,
-                    openerTabId = tabState.openerTabId.ifBlank { null },
-                    themeColor = tabState.themeColor,
-                )
-            }
-
-            val restoredSelectedIndex = if (restoredSelectedTabId != null) {
-                restoredTabs.indexOfFirst { it.tabId == restoredSelectedTabId }
-                    .takeIf { it >= 0 } ?: 0
-            } else {
-                0
-            }
-
-            restoredTabs to restoredSelectedIndex
-        }
-
-        return withContext(Dispatchers.Main.immediate) {
-            val tabId = browserSessionController.restoreTabs(
-                homepageUrl = homepageUrl,
-                persistedTabs = persistedTabs,
-                persistedSelectedTabIndex = selectedIndex,
+        return tabPersistenceCoordinator.restoreTabs(
+            homepageUrl = homepageUrl,
+            browserSessionController = browserSessionController,
+        ).also { tabId ->
+            browserSessionController.selectTab(tabId)
+            tabPersistenceCoordinator.bind(
+                scope = viewModelScope,
+                browserSessionController = browserSessionController,
             )
-            selectedTabId = tabId
-            restorationComplete = true
-            startTabPersistence()
-            tabId
-        }
-    }
-
-    /**
-     * タブ状態の自動保存を開始する。
-     * snapshotFlow で BrowserSessionController の変更を監視し、デバウンス付きで保存する。
-     * restoreTabs() 完了後に呼ばれるため、復元前に空リストを保存するレースコンディションを防止する。
-     */
-    private fun startTabPersistence() {
-        viewModelScope.launch {
-            snapshotFlow {
-                // コンテンツ変更（URL、タイトル、セッション状態、プレビュー画像）を自動追跡
-                val content = browserSessionController.contentVersion
-                // 構造変更（タブ追加・削除・並べ替え）と選択タブ変更を追跡
-                val structural = browserSessionController.structuralVersion
-                val selected = selectedTabId
-                Triple(content, structural, selected)
-            }.collectLatest {
-                // デバウンス: 連続的な変更をまとめて1回の保存にする
-                delay(500)
-                saveTabStatesInternal()
-            }
-        }
-    }
-
-    private suspend fun saveTabStatesInternal() {
-        if (!restorationComplete) return
-        val tabs = browserSessionController.exportPersistedTabs()
-        if (tabs.isEmpty()) {
-            Log.w("BrowserViewModel", "タブリストが空のため保存をスキップ")
-            return
-        }
-
-        // サムネイルをキャッシュファイルに保存する
-        val currentTabIds = tabs.map { it.tabId }.toSet()
-        withContext(Dispatchers.IO) {
-            tabs.forEach { tab ->
-                if (tab.previewImageWebp.isNotEmpty()) {
-                    tabRepository.saveTabThumbnail(tab.tabId, tab.previewImageWebp)
-                }
-            }
-            // 削除されたタブのサムネイルファイルを削除する
-            tabRepository.deleteOrphanedThumbnails(currentTabIds)
-        }
-
-        // 変更部分のみをDBに同期する
-        runCatching {
-            tabRepository.syncTabs(
-                tabs = tabs.map { tab ->
-                    PersistedTabState(
-                        url = tab.url,
-                        sessionState = tab.sessionState,
-                        title = tab.title,
-                        tabId = tab.tabId,
-                        openerTabId = tab.openerTabId.orEmpty(),
-                        themeColor = tab.themeColor,
-                    )
-                },
-                selectedTabId = selectedTabId,
-            )
-        }.onFailure { e ->
-            Log.e("BrowserViewModel", "タブ状態の保存に失敗しました", e)
         }
     }
 
@@ -205,14 +102,12 @@ internal class BrowserViewModel(
     }
 
     fun applyRuntimeSettings() {
-        runtime.settings.setEnterpriseRootsEnabled(settings.value?.enableThirdPartyCa ?: false)
+        runtimeCoordinator.applyRuntimeSettings(settings.value?.enableThirdPartyCa ?: false)
     }
 
     override fun onCleared() {
         super.onCleared()
-        browserSessionController.close()
-        themeColorExtension.cleanup()
-        mediaWebExtension.cleanup()
+        runtimeCoordinator.close()
     }
 }
 

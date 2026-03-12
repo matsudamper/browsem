@@ -22,5 +22,9 @@ dependencyResolutionManagement {
 
 rootProject.name = "browser"
 include(":app")
+include(":browser-core")
+include(":browser-engine-gecko")
 include(":data")
+include(":feature-browser")
+include(":feature-tabs")
 include(":proto")

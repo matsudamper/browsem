@@ -20,7 +20,7 @@ import kotlin.math.max
  * GeckoView の不安定な MediaSession 状態取得を避けるため、
  * ページ内の media 要素を監視する組み込み WebExtension。
  */
-internal class MediaWebExtension(
+class MediaWebExtension(
     private val context: Context,
 ) {
     private var extension: WebExtension? = null

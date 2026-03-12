@@ -153,7 +153,7 @@ internal fun BrowserApp(
 
                     is AppDestination.Browser -> navEntry(key) {
                         val browserScreenViewModel = remember(viewModel) {
-                            BrowserScreenViewModel(viewModel.settingsUiState, historyRepository)
+                            BrowserScreenViewModel(historyRepository)
                         }
                         BrowserScreen(
                             key = key,
@@ -163,6 +163,7 @@ internal fun BrowserApp(
                             browserSessionController = browserSessionController,
                             viewModel = browserScreenViewModel,
                             navController = navController,
+                            translationProvider = settingsUiState.translationProvider,
                             themeColorExtension = themeColorExtension,
                             mediaWebExtension = mediaWebExtension,
                             onInstallExtensionRequest = onInstallExtensionRequest,
@@ -238,7 +239,7 @@ internal fun BrowserApp(
                         }
                         TabsScreen(
                             browserSessionController = browserSessionController,
-                            selectedTabId = navController.getSelectedTab(),
+                            selectedTabId = browserSessionController.selectedTabId,
                             onSelectTab = { tabId ->
                                 selectTab(tabId, null)
                             },

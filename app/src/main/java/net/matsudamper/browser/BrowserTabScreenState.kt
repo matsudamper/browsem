@@ -20,9 +20,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import net.matsudamper.browser.data.TranslationProvider
-import net.matsudamper.browser.media.MediaWebExtension
 import org.koin.compose.koinInject
-import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.GeckoSessionSettings
 import org.mozilla.geckoview.GeckoView
@@ -72,7 +70,7 @@ internal class BrowserTabScreenState(
     private val context: Context,
     var onHistoryRecord: (suspend (url: String, title: String) -> Long)? = null,
     var onHistoryTitleUpdate: (suspend (id: Long, title: String) -> Unit)? = null,
-) {
+) : BrowserSessionStateCallbacks {
     // 現在のページの履歴エントリID（タイトル更新に使用）
     private var currentHistoryEntryId: Long? = null
     var homepageUrl by mutableStateOf(homepageUrl)
@@ -93,7 +91,7 @@ internal class BrowserTabScreenState(
     var toolbarColor: Color?
         get() = browserTab.themeColor?.let { Color(it) }
         set(value) { browserTab.themeColor = value?.toArgb() }
-    private var lastPageStartUrlKey: String = normalizedToolbarUrlKey(browserTab.currentUrl)
+    private var lastPageStartUrlKey: String = normalizedBrowserPageKey(browserTab.currentUrl)
 
     // --- Translation state ---
     var translationState by mutableStateOf(TranslationState.Idle)
@@ -343,224 +341,126 @@ internal class BrowserTabScreenState(
         browserTab.currentUrl = currentPageUrl
     }
 
-    // ================================================================
-    // Session Delegates
-    // ================================================================
-
-    fun createPermissionDelegate(
-        onDesktopNotificationPermissionRequest: (String) -> GeckoResult<Int>,
-    ): GeckoSession.PermissionDelegate = object : GeckoSession.PermissionDelegate {
-        override fun onContentPermissionRequest(
-            session: GeckoSession,
-            perm: GeckoSession.PermissionDelegate.ContentPermission,
-        ): GeckoResult<Int> {
-            Log.d("BrowserTabPermission", "onContentPermissionRequest: permission=${perm.permission}, uri=${perm.uri}")
-            if (
-                perm.permission == GeckoSession.PermissionDelegate.PERMISSION_AUTOPLAY_INAUDIBLE ||
-                perm.permission == GeckoSession.PermissionDelegate.PERMISSION_AUTOPLAY_AUDIBLE
-            ) {
-                Log.d("BrowserTabPermission", "autoplay permission allowed")
-                return GeckoResult.fromValue(
-                    GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW
-                )
-            }
-            if (perm.permission != GeckoSession.PermissionDelegate.PERMISSION_DESKTOP_NOTIFICATION) {
-                Log.d("BrowserTabPermission", "non-notification permission prompted")
-                return GeckoResult.fromValue(
-                    GeckoSession.PermissionDelegate.ContentPermission.VALUE_PROMPT
-                )
-            }
-            Log.d("BrowserTabPermission", "desktop notification delegated")
-            return onDesktopNotificationPermissionRequest(perm.uri)
-        }
+    override fun onCanGoBackChanged(value: Boolean) {
+        canGoBack = value
     }
 
-    fun createNavigationDelegate(
-        onOpenNewSessionRequest: (String) -> GeckoSession,
-    ): GeckoSession.NavigationDelegate = object : GeckoSession.NavigationDelegate {
+    override fun onCanGoForwardChanged(value: Boolean) {
+        canGoForward = value
+    }
 
-        override fun onCanGoBack(session: GeckoSession, value: Boolean) {
-            canGoBack = value
-        }
-
-        override fun onCanGoForward(session: GeckoSession, value: Boolean) {
-            canGoForward = value
-        }
-
-        override fun onNewSession(
-            session: GeckoSession,
-            uri: String,
-        ): GeckoResult<GeckoSession> {
-            return GeckoResult.fromValue(onOpenNewSessionRequest(uri))
-        }
-
-        override fun onLoadError(
-            session: GeckoSession,
-            uri: String?,
-            error: WebRequestError,
-        ): GeckoResult<String>? {
-            val resolvedError = error.toPageLoadError(uri)
-            val failedUrl = resolvedError.failingUrl
-            if (failedUrl.isNotBlank()) {
-                maybeResetToolbarColor(currentPageUrl, failedUrl)
-                currentPageUrl = failedUrl
-                if (!isUrlInputFocused) {
-                    urlInput = failedUrl
-                }
-            }
-            currentPageTitle = resolvedError.title
-            pageLoadError = resolvedError
-            return null
-        }
-
-        override fun onLocationChange(
-            session: GeckoSession,
-            url: String?,
-            perms: MutableList<GeckoSession.PermissionDelegate.ContentPermission>,
-            hasUserGesture: Boolean,
-        ) {
-            val newUrl = url.orEmpty()
-            if (newUrl == "about:blank" && currentPageUrl != "about:blank") {
-                return
-            }
-            if (pageLoadError?.failingUrl != newUrl) {
-                clearPageLoadError()
-            }
-            currentPageUrl = newUrl
+    override fun onLoadError(uri: String?, error: WebRequestError) {
+        val resolvedError = error.toPageLoadError(uri)
+        val failedUrl = resolvedError.failingUrl
+        if (failedUrl.isNotBlank()) {
+            maybeResetToolbarColor(currentPageUrl, failedUrl)
+            currentPageUrl = failedUrl
             if (!isUrlInputFocused) {
-                urlInput = newUrl
+                urlInput = failedUrl
             }
-            val revertUrl = originalPageUrlForRevert
-            if (translationState != TranslationState.Idle &&
-                !newUrl.startsWith("data:") &&
-                newUrl != revertUrl
-            ) {
-                translationState = TranslationState.Idle
-                originalPageUrlForRevert = null
-            }
-            if (!newUrl.startsWith("data:")) {
-                detectedPageLanguage = null
-            }
-            // 履歴を記録（about:blank や data: URL は除外）
-            if (newUrl.isNotBlank() && !newUrl.startsWith("about:") && !newUrl.startsWith("data:")) {
-                currentHistoryEntryId = null
-                val callback = onHistoryRecord
-                if (callback != null) {
-                    coroutineScope.launch {
-                        currentHistoryEntryId = callback(newUrl, currentPageTitle)
-                    }
+        }
+        currentPageTitle = resolvedError.title
+        pageLoadError = resolvedError
+    }
+
+    override fun onLocationChange(url: String) {
+        if (url == "about:blank" && currentPageUrl != "about:blank") {
+            return
+        }
+        if (pageLoadError?.failingUrl != url) {
+            clearPageLoadError()
+        }
+        currentPageUrl = url
+        if (!isUrlInputFocused) {
+            urlInput = url
+        }
+        val revertUrl = originalPageUrlForRevert
+        if (translationState != TranslationState.Idle &&
+            !url.startsWith("data:") &&
+            url != revertUrl
+        ) {
+            translationState = TranslationState.Idle
+            originalPageUrlForRevert = null
+        }
+        if (!url.startsWith("data:")) {
+            detectedPageLanguage = null
+        }
+        // 履歴を記録（about:blank や data: URL は除外）
+        if (url.isNotBlank() && !url.startsWith("about:") && !url.startsWith("data:")) {
+            currentHistoryEntryId = null
+            val callback = onHistoryRecord
+            if (callback != null) {
+                coroutineScope.launch {
+                    currentHistoryEntryId = callback(url, currentPageTitle)
                 }
             }
         }
     }
 
-    fun createContentDelegate(onClose: (() -> Unit)? = null): GeckoSession.ContentDelegate =
-        object : GeckoSession.ContentDelegate {
-            override fun onTitleChange(session: GeckoSession, title: String?) {
-                val newTitle = title.orEmpty()
-                currentPageTitle = newTitle
-                // 履歴エントリのタイトルを更新
-                val entryId = currentHistoryEntryId
-                val callback = onHistoryTitleUpdate
-                if (entryId != null && newTitle.isNotBlank() && callback != null) {
-                    coroutineScope.launch {
-                        callback(entryId, newTitle)
-                    }
-                }
-            }
-
-            override fun onContextMenu(
-                session: GeckoSession,
-                screenX: Int,
-                screenY: Int,
-                element: GeckoSession.ContentDelegate.ContextElement,
-            ) {
-                val linkUri = element.linkUri
-                if (linkUri != null) {
-                    linkContextMenuUrl = linkUri
-                    return
-                }
-                when (element.type) {
-                    GeckoSession.ContentDelegate.ContextElement.TYPE_IMAGE -> {
-                        imageContextMenuUrl = element.srcUri
-                    }
-
-                    GeckoSession.ContentDelegate.ContextElement.TYPE_AUDIO,
-                    GeckoSession.ContentDelegate.ContextElement.TYPE_NONE,
-                    GeckoSession.ContentDelegate.ContextElement.TYPE_VIDEO -> {
-                        // TODO
-                    }
-                }
-            }
-
-            override fun onCloseRequest(session: GeckoSession) {
-                onClose?.invoke()
-            }
-
-            override fun onFirstContentfulPaint(session: GeckoSession) {
-                renderReady = true
-            }
-
-            override fun onFirstComposite(session: GeckoSession) {
-                renderReady = true
-            }
-
-            // GeckoViewがレンダリングできないコンテンツ（ダウンロード対象ファイル等）を受け取った際に呼ばれる
-            override fun onExternalResponse(session: GeckoSession, response: WebResponse) {
-                downloadFileFromResponse(response)
+    override fun onTitleChange(title: String) {
+        currentPageTitle = title
+        val entryId = currentHistoryEntryId
+        val callback = onHistoryTitleUpdate
+        if (entryId != null && title.isNotBlank() && callback != null) {
+            coroutineScope.launch {
+                callback(entryId, title)
             }
         }
-
-    fun createProgressDelegate(): GeckoSession.ProgressDelegate =
-        object : GeckoSession.ProgressDelegate {
-            override fun onSessionStateChange(
-                session: GeckoSession,
-                sessionState: GeckoSession.SessionState,
-            ) {
-                browserTab.sessionState = sessionState.toString().orEmpty()
-            }
-
-            override fun onPageStart(session: GeckoSession, url: String) {
-                clearPageLoadError()
-                maybeResetToolbarColorOnPageStart(url)
-            }
-
-            override fun onPageStop(session: GeckoSession, success: Boolean) {
-                renderReady = true
-            }
-        }
-
-    fun createTranslationsDelegate(): TranslationsController.SessionTranslation.Delegate =
-        object : TranslationsController.SessionTranslation.Delegate {
-            override fun onTranslationStateChange(
-                session: GeckoSession,
-                translationState: TranslationsController.SessionTranslation.TranslationState?,
-            ) {
-                val lang = translationState?.detectedLanguages?.docLangTag ?: return
-                detectedPageLanguage = lang
-            }
-        }
-
-    // メディアセッションデリゲートを作成
-    fun createMediaSessionDelegate(
-        mediaWebExtension: MediaWebExtension,
-    ): org.mozilla.geckoview.MediaSession.Delegate {
-        return net.matsudamper.browser.media.GeckoMediaSessionDelegate(mediaWebExtension)
     }
 
-    fun createScrollDelegate(): GeckoSession.ScrollDelegate =
-        object : GeckoSession.ScrollDelegate {
-            override fun onScrollChanged(
-                session: GeckoSession,
-                scrollX: Int,
-                scrollYValue: Int,
-            ) {
-                scrollY = scrollYValue
+    override fun onContextMenu(element: GeckoSession.ContentDelegate.ContextElement) {
+        val linkUri = element.linkUri
+        if (linkUri != null) {
+            linkContextMenuUrl = linkUri
+            return
+        }
+        when (element.type) {
+            GeckoSession.ContentDelegate.ContextElement.TYPE_IMAGE -> {
+                imageContextMenuUrl = element.srcUri
+            }
+
+            GeckoSession.ContentDelegate.ContextElement.TYPE_AUDIO,
+            GeckoSession.ContentDelegate.ContextElement.TYPE_NONE,
+            GeckoSession.ContentDelegate.ContextElement.TYPE_VIDEO -> {
+                // TODO
             }
         }
+    }
+
+    override fun onRenderReady() {
+        renderReady = true
+    }
+
+    override fun onExternalResponse(response: WebResponse) {
+        downloadFileFromResponse(response)
+    }
+
+    override fun onSessionStateChange(sessionState: GeckoSession.SessionState) {
+        browserTab.sessionState = sessionState.toString().orEmpty()
+    }
+
+    override fun onPageStart(url: String) {
+        clearPageLoadError()
+        maybeResetToolbarColorOnPageStart(url)
+    }
+
+    override fun onPageStop(success: Boolean) {
+        renderReady = true
+    }
+
+    override fun onTranslationStateChange(
+        translationState: TranslationsController.SessionTranslation.TranslationState?,
+    ) {
+        val lang = translationState?.detectedLanguages?.docLangTag ?: return
+        detectedPageLanguage = lang
+    }
+
+    override fun onScrollChanged(scrollY: Int) {
+        this.scrollY = scrollY
+    }
 
     private fun maybeResetToolbarColor(fromUrl: String, toUrl: String) {
-        if (shouldResetToolbarColor(fromUrl, toUrl)) {
+        if (net.matsudamper.browser.shouldResetToolbarColor(fromUrl, toUrl)) {
             toolbarColor = null
         }
     }
@@ -584,20 +484,10 @@ internal class BrowserTabScreenState(
     }
 
     private fun maybeResetToolbarColorOnPageStart(url: String) {
-        val nextKey = normalizedToolbarUrlKey(url)
+        val nextKey = normalizedBrowserPageKey(url)
         if (nextKey == lastPageStartUrlKey) return
         toolbarColor = null
         lastPageStartUrlKey = nextKey
-    }
-
-    private fun shouldResetToolbarColor(fromUrl: String, toUrl: String): Boolean {
-        return normalizedToolbarUrlKey(fromUrl) != normalizedToolbarUrlKey(toUrl)
-    }
-
-    private fun normalizedToolbarUrlKey(url: String): String {
-        return url
-            .substringBefore("#")
-            .removeSuffix("/")
     }
 
     private fun copyUrlToClipboard(url: String) {

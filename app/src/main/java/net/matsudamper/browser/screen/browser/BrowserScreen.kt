@@ -14,13 +14,10 @@ import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
@@ -30,7 +27,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.navigation3.runtime.NavKey
-import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import net.matsudamper.browser.BrowserSessionController
 import net.matsudamper.browser.BrowserTab
@@ -38,7 +34,7 @@ import net.matsudamper.browser.BrowserToolbar
 import net.matsudamper.browser.GeckoBrowserTab
 import net.matsudamper.browser.ThemeColorWebExtension
 import net.matsudamper.browser.UrlInputState
-import net.matsudamper.browser.data.history.HistoryEntry
+import net.matsudamper.browser.data.TranslationProvider
 import net.matsudamper.browser.media.MediaWebExtension
 import net.matsudamper.browser.navigation.AppDestination
 import net.matsudamper.browser.navigation.NavController
@@ -54,14 +50,14 @@ internal fun BrowserScreen(
     browserSessionController: BrowserSessionController,
     viewModel: BrowserScreenViewModel,
     navController: NavController,
+    translationProvider: TranslationProvider,
     themeColorExtension: ThemeColorWebExtension,
     mediaWebExtension: MediaWebExtension,
     onInstallExtensionRequest: (String) -> Unit,
     handleNotificationPermission: (uri: String) -> GeckoResult<Int>,
     onSelectTab: (tabId: String, beforeTab: AppDestination.Browser?) -> Unit,
 ) {
-    val currentSettings by viewModel.settingsUiState.collectAsState()
-    val settingsUiState = currentSettings ?: return
+    val historySuggestions by viewModel.historySuggestions.collectAsState()
 
     val selectedTab = remember(key.tabId) {
         val tab = browserSessionController.getOrCreateTab(
@@ -80,16 +76,6 @@ internal fun BrowserScreen(
     val coroutineScope = rememberCoroutineScope()
     // URLバースワイプのオフセット（ピクセル単位）タブ切替時にリセット
     val swipeOffset = remember(key.tabId) { Animatable(0f) }
-
-    // 履歴サジェスト
-    var historySuggestions by remember { mutableStateOf<List<HistoryEntry>>(emptyList()) }
-    var historySuggestionQuery by remember { mutableStateOf("") }
-
-    LaunchedEffect(historySuggestionQuery) {
-        viewModel.searchHistory(historySuggestionQuery).collectLatest { entries ->
-            historySuggestions = entries
-        }
-    }
 
     BoxWithConstraints(
         modifier = Modifier
@@ -128,7 +114,7 @@ internal fun BrowserScreen(
             browserTab = selectedTab,
             homepageUrl = homepageUrl,
             searchTemplate = searchTemplate,
-            translationProvider = settingsUiState.translationProvider,
+            translationProvider = translationProvider,
             themeColorExtension = themeColorExtension,
             mediaWebExtension = mediaWebExtension,
             tabCount = tabs.size,
@@ -146,11 +132,7 @@ internal fun BrowserScreen(
                 newTab.session
             },
             onCloseTab = {
-                val openerTabId = selectedTab.openerTabId
-                browserSessionController.closeTab(key.tabId)
-                val targetTabId = openerTabId?.takeIf { id ->
-                    browserSessionController.tabs.any { it.tabId == id }
-                } ?: browserSessionController.tabs.lastOrNull()?.tabId
+                val targetTabId = browserSessionController.closeTab(key.tabId)
                 if (targetTabId != null) {
                     onSelectTab(targetTabId, null)
                 }
@@ -158,9 +140,7 @@ internal fun BrowserScreen(
             onHistoryRecord = { url, title -> viewModel.recordHistory(url, title) },
             onHistoryTitleUpdate = { id, title -> viewModel.updateHistoryTitle(id, title) },
             historySuggestions = historySuggestions,
-            onUrlInputChanged = { query ->
-                historySuggestionQuery = query
-            },
+            onUrlInputChanged = viewModel::onUrlInputChanged,
             onToolbarHorizontalDrag = { delta ->
                 // URLバーの水平ドラッグをスワイプオフセットに反映
                 coroutineScope.launch {
