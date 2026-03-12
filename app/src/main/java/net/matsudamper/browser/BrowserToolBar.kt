@@ -89,6 +89,7 @@ internal fun BrowserToolBar(
     onShare: () -> Unit,
     tabCount: Int,
     onOpenTabs: () -> Unit,
+    showTabActions: Boolean = true,
     onRefresh: () -> Unit,
     onHome: () -> Unit,
     onForward: () -> Unit,
@@ -105,14 +106,19 @@ internal fun BrowserToolBar(
     BrowserToolbar(
         modifier = modifier,
         isFocused = isFocused,
-        gestureState = BrowserToolBarGestureState(
-            onHorizontalDrag = onHorizontalDrag,
-            onHorizontalDragEnd = onHorizontalDragEnd,
-            onOpenTabs = onOpenTabs
-        ),
+        gestureState = if (showTabActions) {
+            BrowserToolBarGestureState(
+                onHorizontalDrag = onHorizontalDrag,
+                onHorizontalDragEnd = onHorizontalDragEnd,
+                onOpenTabs = onOpenTabs
+            )
+        } else {
+            null
+        },
         toolbarColor = toolbarColor,
         onOpenTabs = onOpenTabs,
         tabCount = tabCount,
+        showTabButton = showTabActions,
         urlInputState = UrlInputState(
             value = value,
             onValueChange = onValueChange,
@@ -195,6 +201,7 @@ internal fun BrowserToolbar(
     updateVisibleMenu: (Boolean) -> Unit,
     onOpenTabs: () -> Unit,
     tabCount: Int,
+    showTabButton: Boolean = true,
     toolbarMenu: @Composable () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -290,22 +297,24 @@ internal fun BrowserToolbar(
             }
 
             if (!isFocused) {
-                IconButton(
-                    onClick = onOpenTabs,
-                ) {
-                    Text(
-                        text = "$tabCount",
-                        style = MaterialTheme.typography.titleMedium,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .border(
-                                width = 1.dp,
-                                color = MaterialTheme.colorScheme.outline,
-                                shape = RoundedCornerShape(8.dp),
-                            )
-                            .padding(horizontal = 8.dp, vertical = 2.dp),
-                    )
+                if (showTabButton) {
+                    IconButton(
+                        onClick = onOpenTabs,
+                    ) {
+                        Text(
+                            text = "$tabCount",
+                            style = MaterialTheme.typography.titleMedium,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .border(
+                                    width = 1.dp,
+                                    color = MaterialTheme.colorScheme.outline,
+                                    shape = RoundedCornerShape(8.dp),
+                                )
+                                .padding(horizontal = 8.dp, vertical = 2.dp),
+                        )
+                    }
                 }
                 IconButton(
                     onClick = { updateVisibleMenu(true) }

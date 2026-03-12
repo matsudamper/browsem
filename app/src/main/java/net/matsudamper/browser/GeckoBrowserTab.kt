@@ -32,7 +32,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
@@ -58,6 +62,7 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -91,6 +96,12 @@ internal fun GeckoBrowserTab(
     onDesktopNotificationPermissionRequest: (String) -> GeckoResult<Int>,
     onOpenSettings: () -> Unit,
     onOpenTabs: () -> Unit,
+    enableTabUi: Boolean = true,
+    showInstallExtensionItem: Boolean = true,
+    enableBackNavigation: Boolean = true,
+    customTabMode: Boolean = false,
+    onCloseCustomTab: (() -> Unit)? = null,
+    onOpenInBrowser: ((String) -> Unit)? = null,
     onOpenNewSessionRequest: (String) -> GeckoSession,
     onCloseTab: (() -> Unit)? = null,
     onToolbarHorizontalDrag: (Float) -> Unit = {},
@@ -240,7 +251,9 @@ internal fun GeckoBrowserTab(
 
     // Back handlers
     BackHandler(enabled = state.showFindInPage) { state.closeFindInPage() }
-    BackHandler(enabled = state.canGoBack && !state.isUrlInputFocused) { state.onGoBack() }
+    BackHandler(enabled = enableBackNavigation && state.canGoBack && !state.isUrlInputFocused) {
+        state.onGoBack()
+    }
     BackHandler(enabled = state.isUrlInputFocused) { closeUrlInput(true) }
 
     // IME visibility tracking:
@@ -279,52 +292,69 @@ internal fun GeckoBrowserTab(
                 onClose = state::closeFindInPage,
             )
         } else {
-            BrowserToolBar(
-                modifier = Modifier.fillMaxWidth(),
-                value = state.urlInput,
-                onValueChange = { state.urlInput = it },
-                onSubmit = { rawInput ->
-                    state.onUrlSubmit(rawInput)
-                    closeUrlInput(false)
-                },
-                isFocused = state.isUrlInputFocused,
-                onFocusChanged = { hasFocus ->
-                    if (hasFocus) {
-                        urlBarFocusStartedAtMs = SystemClock.elapsedRealtime()
-                        if (!state.isUrlInputFocused) {
-                            state.urlInput = ""
+            if (customTabMode) {
+                CustomTabToolbar(
+                    title = state.currentPageTitle.ifBlank { "ページ" },
+                    url = state.currentPageUrl,
+                    onClose = { onCloseCustomTab?.invoke() ?: onCloseTab?.invoke() },
+                    onRefresh = state::onRefresh,
+                    onShare = state::sharePage,
+                    onOpenInBrowser = onOpenInBrowser?.let { callback ->
+                        { callback(state.currentPageUrl) }
+                    },
+                    toolbarColor = state.toolbarColor,
+                )
+            } else {
+                BrowserToolBar(
+                    modifier = Modifier.fillMaxWidth(),
+                    value = state.urlInput,
+                    onValueChange = { state.urlInput = it },
+                    onSubmit = { rawInput ->
+                        state.onUrlSubmit(rawInput)
+                        closeUrlInput(false)
+                    },
+                    isFocused = state.isUrlInputFocused,
+                    onFocusChanged = { hasFocus ->
+                        if (hasFocus) {
+                            urlBarFocusStartedAtMs = SystemClock.elapsedRealtime()
+                            if (!state.isUrlInputFocused) {
+                                state.urlInput = ""
+                            }
+                            runCatching { session.setFocused(false) }
+                            geckoView?.clearFocus()
+                            keyboardController?.show()
+                        } else {
+                            state.restoreCurrentPageUrlToInput()
                         }
-                        runCatching { session.setFocused(false) }
-                        geckoView?.clearFocus()
-                        keyboardController?.show()
-                    } else {
-                        state.restoreCurrentPageUrlToInput()
-                    }
-                    state.isUrlInputFocused = hasFocus
-                },
-                showInstallExtensionItem = state.showInstallExtensionItem,
-                onInstallExtension = { onInstallExtensionRequest(state.currentPageUrl) },
-                onOpenSettings = onOpenSettings,
-                onShare = state::sharePage,
-                tabCount = tabCount,
-                onOpenTabs = {
-                    geckoView?.also {
-                        state.flushAndCaptureForTabSwitch(it)
-                    }
-                    onOpenTabs()
-                },
-                isPcMode = state.isPcMode,
-                onPcModeToggle = state::togglePcMode,
-                onFindInPage = state::openFindInPage,
-                toolbarColor = state.toolbarColor,
-                onHome = state::onHome,
-                onForward = state::onGoForward,
-                canGoForward = state.canGoForward,
-                onRefresh = state::onRefresh,
-                onTranslatePage = { state.onTranslate(translationProvider) },
-                onHorizontalDrag = onToolbarHorizontalDrag,
-                onHorizontalDragEnd = onToolbarDragEnd,
-            )
+                        state.isUrlInputFocused = hasFocus
+                    },
+                    showInstallExtensionItem = showInstallExtensionItem && state.showInstallExtensionItem,
+                    onInstallExtension = { onInstallExtensionRequest(state.currentPageUrl) },
+                    onOpenSettings = onOpenSettings,
+                    onShare = state::sharePage,
+                    tabCount = tabCount,
+                    showTabActions = enableTabUi,
+                    onOpenTabs = {
+                        if (enableTabUi) {
+                            geckoView?.also {
+                                state.flushAndCaptureForTabSwitch(it)
+                            }
+                            onOpenTabs()
+                        }
+                    },
+                    isPcMode = state.isPcMode,
+                    onPcModeToggle = state::togglePcMode,
+                    onFindInPage = state::openFindInPage,
+                    toolbarColor = state.toolbarColor,
+                    onHome = state::onHome,
+                    onForward = state::onGoForward,
+                    canGoForward = state.canGoForward,
+                    onRefresh = state::onRefresh,
+                    onTranslatePage = { state.onTranslate(translationProvider) },
+                    onHorizontalDrag = onToolbarHorizontalDrag,
+                    onHorizontalDragEnd = onToolbarDragEnd,
+                )
+            }
             TranslationStatusBar(
                 state = state.translationState,
                 onRevert = state::onRevertTranslation,
@@ -419,13 +449,24 @@ internal fun GeckoBrowserTab(
                 },
                 dismissButton = {
                     Column {
-                        TextButton(
-                            onClick = {
-                                currentOnOpenNewSessionRequest(linkUrl)
-                                state.linkContextMenuUrl = null
-                            },
-                        ) {
-                            Text("新しいタブで開く")
+                        if (enableTabUi) {
+                            TextButton(
+                                onClick = {
+                                    currentOnOpenNewSessionRequest(linkUrl)
+                                    state.linkContextMenuUrl = null
+                                },
+                            ) {
+                                Text("新しいタブで開く")
+                            }
+                        } else {
+                            TextButton(
+                                onClick = {
+                                    state.onUrlSubmit(linkUrl)
+                                    state.linkContextMenuUrl = null
+                                },
+                            ) {
+                                Text("開く")
+                            }
                         }
                         TextButton(onClick = { state.linkContextMenuUrl = null }) {
                             Text("キャンセル")
@@ -616,6 +657,94 @@ internal fun GeckoBrowserTab(
                     }
                 },
             )
+        }
+    }
+}
+
+@Composable
+private fun CustomTabToolbar(
+    title: String,
+    url: String,
+    onClose: () -> Unit,
+    onRefresh: () -> Unit,
+    onShare: () -> Unit,
+    onOpenInBrowser: (() -> Unit)?,
+    toolbarColor: androidx.compose.ui.graphics.Color?,
+) {
+    var menuExpanded by remember { mutableStateOf(false) }
+    val resolvedToolbarColor = toolbarColor ?: MaterialTheme.colorScheme.primaryContainer
+
+    Surface(
+        color = resolvedToolbarColor,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 4.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            IconButton(onClick = onClose) {
+                Icon(
+                    painter = painterResource(R.drawable.close_24dp),
+                    contentDescription = "閉じる",
+                )
+            }
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(horizontal = 4.dp),
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleSmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = url,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Box {
+                IconButton(onClick = { menuExpanded = true }) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_more_vert_24dp),
+                        contentDescription = "メニュー",
+                    )
+                }
+                DropdownMenu(
+                    expanded = menuExpanded,
+                    onDismissRequest = { menuExpanded = false },
+                ) {
+                    onOpenInBrowser?.let { openInBrowser ->
+                        DropdownMenuItem(
+                            text = { Text("ブラウザで開く") },
+                            onClick = {
+                                menuExpanded = false
+                                openInBrowser()
+                            },
+                        )
+                    }
+                    DropdownMenuItem(
+                        text = { Text("共有") },
+                        onClick = {
+                            menuExpanded = false
+                            onShare()
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("更新") },
+                        onClick = {
+                            menuExpanded = false
+                            onRefresh()
+                        },
+                    )
+                }
+            }
         }
     }
 }
