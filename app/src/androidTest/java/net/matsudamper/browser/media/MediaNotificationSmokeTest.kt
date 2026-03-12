@@ -101,6 +101,7 @@ class MediaNotificationSmokeTest {
             state.title == EXPECTED_TITLE &&
                 state.artist == EXPECTED_ARTIST &&
                 state.album == EXPECTED_ALBUM &&
+                state.artworkBitmap != null &&
                 state.durationMs > 0
         }
         composeRule.waitUntil(timeoutMillis = POSITION_TIMEOUT_MS) {
@@ -111,6 +112,7 @@ class MediaNotificationSmokeTest {
         assertTrue("title=${playbackState.title}", playbackState.title == EXPECTED_TITLE)
         assertTrue("artist=${playbackState.artist}", playbackState.artist == EXPECTED_ARTIST)
         assertTrue("album=${playbackState.album}", playbackState.album == EXPECTED_ALBUM)
+        assertTrue("artworkBitmap=${playbackState.artworkBitmap}", playbackState.artworkBitmap != null)
         assertTrue("durationMs=${playbackState.durationMs}", playbackState.durationMs > 0L)
         assertTrue("positionMs=${playbackState.positionMs}", playbackState.positionMs > 0L)
 
@@ -127,6 +129,13 @@ class MediaNotificationSmokeTest {
         assertTrue(
             "通知タイトルが拡張経由メタデータを反映すること: ${MediaPlaybackService.lastGeneratedNotificationTitle}",
             MediaPlaybackService.lastGeneratedNotificationTitle == EXPECTED_TITLE,
+        )
+        composeRule.waitUntil(timeoutMillis = NOTIFICATION_ARTWORK_TIMEOUT_MS) {
+            MediaPlaybackService.lastGeneratedNotificationHasLargeIcon
+        }
+        assertTrue(
+            "通知に artwork が表示されること",
+            MediaPlaybackService.lastGeneratedNotificationHasLargeIcon,
         )
     }
 
@@ -233,6 +242,7 @@ class MediaNotificationSmokeTest {
         private const val NOTIFICATION_CONTROL_TIMEOUT_MS = 10_000L
         private const val METADATA_TIMEOUT_MS = 15_000L
         private const val POSITION_TIMEOUT_MS = 15_000L
+        private const val NOTIFICATION_ARTWORK_TIMEOUT_MS = 10_000L
         private const val LOCAL_MEDIA_ASSET_DIR = "test-media"
         private const val LOCAL_MEDIA_DIR_NAME = "test-media"
         private const val LOCAL_MEDIA_INDEX_FILE_NAME = "index.html"
