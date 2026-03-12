@@ -143,6 +143,6 @@ fun BrowserSettings.resolvedEnableWebSuggestions(): Boolean {
     return if (hasEnableWebSuggestions()) {
         enableWebSuggestions
     } else {
-        true
+        false
     }
 }

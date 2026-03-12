@@ -17,6 +17,13 @@ class BrowserScreenViewModelPolicyTest {
     }
 
     @Test
+    fun webSuggestionsAreDisabledForAnySchemeUrl() {
+        assertFalse(shouldFetchWebSuggestions("about:blank"))
+        assertFalse(shouldFetchWebSuggestions("file:///storage/emulated/0/Download/test.html"))
+        assertFalse(shouldFetchWebSuggestions("HTTPS://example.com"))
+    }
+
+    @Test
     fun webSuggestionsAreDisabledForHostLikeInput() {
         assertFalse(shouldFetchWebSuggestions("example.com"))
     }

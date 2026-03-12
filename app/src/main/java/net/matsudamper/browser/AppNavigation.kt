@@ -154,7 +154,7 @@ internal fun BrowserApp(
                     }
 
                     is AppDestination.Browser -> navEntry(key) {
-                        val browserScreenViewModel = remember(viewModel) {
+                        val browserScreenViewModel = remember(viewModel, key.tabId) {
                             BrowserScreenViewModel(
                                 historyRepository = historyRepository,
                                 settingsRepository = settingsRepository,
