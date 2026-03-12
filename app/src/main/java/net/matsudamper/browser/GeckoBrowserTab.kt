@@ -59,7 +59,9 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
@@ -669,13 +671,16 @@ private fun CustomTabToolbar(
     onRefresh: () -> Unit,
     onShare: () -> Unit,
     onOpenInBrowser: (() -> Unit)?,
-    toolbarColor: androidx.compose.ui.graphics.Color?,
+    toolbarColor: Color?,
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
     val resolvedToolbarColor = toolbarColor ?: MaterialTheme.colorScheme.primaryContainer
+    val toolbarContentColor = if (resolvedToolbarColor.luminance() >= 0.5f) Color.Black else Color.White
+    val toolbarSecondaryContentColor = toolbarContentColor.copy(alpha = 0.72f)
 
     Surface(
         color = resolvedToolbarColor,
+        contentColor = toolbarContentColor,
         modifier = Modifier.fillMaxWidth(),
     ) {
         Row(
@@ -704,7 +709,7 @@ private fun CustomTabToolbar(
                 Text(
                     text = url,
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = toolbarSecondaryContentColor,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
