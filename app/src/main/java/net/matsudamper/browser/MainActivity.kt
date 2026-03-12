@@ -13,6 +13,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.browser.customtabs.CustomTabsSessionToken
 import androidx.compose.foundation.layout.Box
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
@@ -130,6 +131,11 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (intent.isCustomTabLaunchIntent()) {
+            launchCustomTabActivity(intent)
+            finish()
+            return
+        }
         extensionInstaller = WebExtensionInstaller(runtime)
 
         runtime.setActivityDelegate(activityDelegate)
@@ -181,6 +187,10 @@ class MainActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        if (intent.isCustomTabLaunchIntent()) {
+            launchCustomTabActivity(intent, finishCurrentTask = true)
+            return
+        }
         setIntent(intent)
         val url = intent.dataString
         if (url != null) {
@@ -213,11 +223,15 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        warmUpWebExtensionController()
+        if (::extensionInstaller.isInitialized) {
+            warmUpWebExtensionController()
+        }
     }
 
     override fun onDestroy() {
-        extensionInstaller.cleanup()
+        if (::extensionInstaller.isInitialized) {
+            extensionInstaller.cleanup()
+        }
         pendingActivityResult?.completeExceptionally(
             CancellationException("Activity was destroyed before Gecko activity completed.")
         )
@@ -287,6 +301,33 @@ class MainActivity : ComponentActivity() {
 
     companion object {
         private const val MAX_WARMUP_RETRIES = 5
+        private const val EXTRA_CUSTOM_TABS_SESSION = "android.support.customtabs.extra.SESSION"
+        private const val EXTRA_CUSTOM_TABS_SESSION_ID = "androidx.browser.customtabs.extra.SESSION_ID"
+    }
+
+    private fun Intent.isCustomTabLaunchIntent(): Boolean {
+        if (action != Intent.ACTION_VIEW) return false
+        if (CustomTabsSessionToken.getSessionTokenFromIntent(this) != null) {
+            return true
+        }
+        val extras = extras ?: return false
+        return extras.containsKey(EXTRA_CUSTOM_TABS_SESSION) ||
+            extras.containsKey(EXTRA_CUSTOM_TABS_SESSION_ID)
+    }
+
+    private fun launchCustomTabActivity(
+        sourceIntent: Intent,
+        finishCurrentTask: Boolean = false,
+    ) {
+        val customTabIntent = Intent(this, CustomTabActivity::class.java).apply {
+            action = sourceIntent.action
+            data = sourceIntent.data
+            sourceIntent.extras?.let { putExtras(it) }
+        }
+        startActivity(customTabIntent)
+        if (finishCurrentTask) {
+            finishAndRemoveTask()
+        }
     }
 }
 

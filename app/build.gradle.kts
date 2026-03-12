@@ -118,6 +118,7 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.navigation3.runtime)
     implementation(libs.androidx.navigation3.ui)
+    implementation(libs.androidx.browser)
     implementation(libs.mozilla.geckoview)
     implementation(libs.mlkit.translate)
     implementation(libs.mlkit.language.id)
