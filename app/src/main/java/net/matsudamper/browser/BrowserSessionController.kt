@@ -140,6 +140,27 @@ class BrowserSessionController(runtime: GeckoRuntime) {
         )
     }
 
+    fun createAndAppendTabWithSession(
+        session: GeckoSession,
+        tabId: String = UUID.randomUUID().toString(),
+        initialUrl: String,
+        openerTabId: String? = null,
+    ): BrowserTab {
+        val normalizedInitialUrl = initialUrl.ifBlank { "about:blank" }
+        if (!session.isOpen) {
+            session.open(geckoRuntime)
+        }
+        return appendTab(
+            tabId = tabId,
+            session = session,
+            initialUrl = normalizedInitialUrl,
+            sessionState = "",
+            title = normalizedInitialUrl,
+            previewBitmapArray = null,
+            openerTabId = openerTabId,
+        )
+    }
+
     fun moveTab(fromIndex: Int, toIndex: Int) {
         if (fromIndex == toIndex) return
         if (fromIndex < 0 || fromIndex >= tabList.size) return

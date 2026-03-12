@@ -29,6 +29,12 @@
                 <category android:name="android.intent.category.APP_BROWSER" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+        </activity>
+        <activity
+            android:name=".DeepLinkActivity"
+            android:exported="true"
+            android:noHistory="true"
+            android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
 
@@ -39,6 +45,20 @@
                 <data android:scheme="https" />
             </intent-filter>
         </activity>
+        <activity
+            android:name=".CustomTabActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
+
+        <service
+            android:name=".BrowserCustomTabsService"
+            android:exported="true"
+            android:permission="android.permission.BIND_CUSTOM_TABS_SERVICE">
+            <intent-filter>
+                <action android:name="android.support.customtabs.action.CustomTabsService" />
+                <action android:name="androidx.browser.customtabs.action.CustomTabsService" />
+            </intent-filter>
+        </service>
 
         <service
             android:name=".media.MediaPlaybackService"
