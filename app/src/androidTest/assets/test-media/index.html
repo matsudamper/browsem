@@ -47,7 +47,10 @@
       navigator.mediaSession.setActionHandler('previoustrack', () => {
         video.currentTime = 0;
       });
-      navigator.mediaSession.setActionHandler('nexttrack', () => {});
+      navigator.mediaSession.setActionHandler('nexttrack', () => {
+        video.currentTime = 0;
+        video.play().catch(() => {});
+      });
       navigator.mediaSession.setActionHandler('seekto', (e) => {
         if (typeof e.seekTime === 'number') {
           video.currentTime = e.seekTime;
