@@ -86,7 +86,7 @@ class BrowserScreenViewModel(
             flow {
                 emit(WebSuggestionState())
 
-                if (!params.enabled || !shouldFetchWebSuggestions(params.query)) {
+                if (!params.enabled || !params.searchProvider.supportsWebSuggestions() || !shouldFetchWebSuggestions(params.query)) {
                     return@flow
                 }
 
@@ -158,6 +158,10 @@ internal fun shouldFetchWebSuggestions(query: String): Boolean {
 }
 
 private val SCHEME_PREFIX_REGEX = Regex("^[a-zA-Z][a-zA-Z0-9+.-]*:")
+
+private fun SearchProvider.supportsWebSuggestions(): Boolean {
+    return this == SearchProvider.GOOGLE || this == SearchProvider.DUCKDUCKGO
+}
 
 private data class WebSuggestionParams(
     val query: String,

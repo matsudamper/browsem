@@ -397,7 +397,7 @@ internal fun PageLoadErrorOverlay(
 }
 
 const val TEST_TAG_GECKO_CONTAINER = "gecko_container"
-const val TEST_TAG_URL_SUGGESTION_LIST = "history_suggestion_list"
+const val TEST_TAG_URL_SUGGESTION_LIST = "url_suggestion_list"
 const val TEST_TAG_WEB_SUGGESTION_SECTION = "web_suggestion_section"
 const val TEST_TAG_CURRENT_URL_ACTIONS = "current_url_actions"
 const val TEST_TAG_CURRENT_URL_TEXT = "current_url_text"
