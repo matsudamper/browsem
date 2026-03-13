@@ -122,6 +122,32 @@ internal fun BrowserTabDialogLayer(
         )
     }
 
+    state.pendingExternalAppLaunch?.let { request ->
+        AlertDialog(
+            onDismissRequest = state::dismissPendingExternalAppLaunch,
+            title = { Text("アプリを開く") },
+            text = {
+                Text(
+                    text = request.appName?.let { appName ->
+                        "$appName をアプリで開きますか？\n\n${request.sourceUri}"
+                    } ?: "このリンクをアプリで開きますか？\n\n${request.sourceUri}",
+                    maxLines = 6,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = state::confirmPendingExternalAppLaunch) {
+                    Text("開く")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = state::dismissPendingExternalAppLaunch) {
+                    Text("キャンセル")
+                }
+            },
+        )
+    }
+
     dialogState.pendingAlertPrompt?.let { prompt ->
         AlertDialog(
             onDismissRequest = dialogState::dismissAlertPrompt,

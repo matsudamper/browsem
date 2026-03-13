@@ -1,6 +1,7 @@
 package net.matsudamper.browser
 
 import android.util.Log
+import org.mozilla.geckoview.AllowOrDeny
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.TranslationsController
@@ -23,6 +24,9 @@ interface BrowserSessionStateCallbacks {
         translationState: TranslationsController.SessionTranslation.TranslationState?,
     )
     fun onScrollChanged(scrollY: Int)
+    fun onLoadRequest(
+        request: GeckoSession.NavigationDelegate.LoadRequest,
+    ): GeckoResult<AllowOrDeny>?
 }
 
 data class GeckoSessionDelegateBundle(
@@ -92,6 +96,13 @@ fun createGeckoSessionDelegateBundle(
             ): GeckoResult<String>? {
                 callbacks.onLoadError(uri, error)
                 return null
+            }
+
+            override fun onLoadRequest(
+                session: GeckoSession,
+                request: GeckoSession.NavigationDelegate.LoadRequest,
+            ): GeckoResult<AllowOrDeny>? {
+                return callbacks.onLoadRequest(request)
             }
 
             override fun onLocationChange(

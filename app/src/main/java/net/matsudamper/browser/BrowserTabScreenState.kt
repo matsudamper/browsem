@@ -21,12 +21,14 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import net.matsudamper.browser.data.TranslationProvider
 import org.koin.compose.koinInject
+import org.mozilla.geckoview.AllowOrDeny
+import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.GeckoSessionSettings
 import org.mozilla.geckoview.GeckoView
 import org.mozilla.geckoview.TranslationsController
-import org.mozilla.geckoview.WebResponse
 import org.mozilla.geckoview.WebRequestError
+import org.mozilla.geckoview.WebResponse
 import java.io.ByteArrayOutputStream
 
 
@@ -113,6 +115,7 @@ internal class BrowserTabScreenState(
 
     // --- ファイルダウンロード確認ダイアログ用state ---
     var pendingDownloadResponse by mutableStateOf<WebResponse?>(null)
+    var pendingExternalAppLaunch by mutableStateOf<PendingExternalAppLaunch?>(null)
 
     var renderReady by mutableStateOf(false)
     var pageLoadError by mutableStateOf<PageLoadError?>(null)
@@ -296,6 +299,26 @@ internal class BrowserTabScreenState(
         pendingDownloadResponse = null
     }
 
+    fun confirmPendingExternalAppLaunch() {
+        val request = pendingExternalAppLaunch ?: return
+        pendingExternalAppLaunch = null
+        val result = launchExternalApp(context, request)
+        if (result.isSuccess) {
+            return
+        }
+
+        val fallbackUrl = request.fallbackUrl
+        if (fallbackUrl != null) {
+            openFallbackUrl(fallbackUrl)
+            return
+        }
+        Toast.makeText(context, "対応するアプリを開けませんでした", Toast.LENGTH_SHORT).show()
+    }
+
+    fun dismissPendingExternalAppLaunch() {
+        pendingExternalAppLaunch = null
+    }
+
     fun restoreCurrentPageUrlToInput() {
         urlInput = currentPageUrl
     }
@@ -448,6 +471,28 @@ internal class BrowserTabScreenState(
         renderReady = true
     }
 
+    override fun onLoadRequest(
+        request: GeckoSession.NavigationDelegate.LoadRequest,
+    ): GeckoResult<AllowOrDeny>? {
+        return when (val action = resolveExternalAppNavigationAction(context, request.uri)) {
+            ExternalAppNavigationAction.AllowInBrowser -> null
+            ExternalAppNavigationAction.AppNotFound -> {
+                Toast.makeText(context, "対応するアプリが見つかりません", Toast.LENGTH_SHORT).show()
+                GeckoResult.fromValue(AllowOrDeny.DENY)
+            }
+
+            is ExternalAppNavigationAction.Launch -> {
+                pendingExternalAppLaunch = action.request
+                GeckoResult.fromValue(AllowOrDeny.DENY)
+            }
+
+            is ExternalAppNavigationAction.OpenFallback -> {
+                openFallbackUrl(action.url)
+                GeckoResult.fromValue(AllowOrDeny.DENY)
+            }
+        }
+    }
+
     override fun onTranslationStateChange(
         translationState: TranslationsController.SessionTranslation.TranslationState?,
     ) {
@@ -488,6 +533,16 @@ internal class BrowserTabScreenState(
         if (nextKey == lastPageStartUrlKey) return
         toolbarColor = null
         lastPageStartUrlKey = nextKey
+    }
+
+    private fun openFallbackUrl(url: String) {
+        maybeResetToolbarColor(currentPageUrl, url)
+        currentPageUrl = url
+        if (!isUrlInputFocused) {
+            urlInput = url
+        }
+        clearPageLoadError()
+        session.loadUri(url)
     }
 
     private fun copyUrlToClipboard(url: String) {
