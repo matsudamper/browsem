@@ -2,8 +2,8 @@ package net.matsudamper.browser.media
 
 import android.content.Intent
 import android.os.SystemClock
-import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.lifecycle.ViewModelProvider
+import androidx.test.ext.junit.rules.ActivityScenarioRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import net.matsudamper.browser.BrowserSessionController
@@ -13,6 +13,7 @@ import net.matsudamper.browser.MainActivity
 import org.mozilla.gecko.util.GeckoBundle
 import org.junit.After
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.Timeout
@@ -28,22 +29,28 @@ import java.io.File
  */
 @RunWith(AndroidJUnit4::class)
 class MediaNotificationSmokeTest {
+    private lateinit var activity: MainActivity
 
     @get:Rule
-    val composeRule = createAndroidComposeRule<MainActivity>()
+    val activityRule = ActivityScenarioRule(MainActivity::class.java)
 
     @get:Rule
     val timeoutRule: Timeout = Timeout.millis(TEST_TIMEOUT_MS)
 
+    @Before
+    fun setUp() {
+        activityRule.scenario.onActivity { launchedActivity ->
+            activity = launchedActivity
+        }
+    }
+
     @After
     fun tearDown() {
-        // GeckoView描画中でも後始末できるよう、idling待機を避けてUIスレッドで直接実行する。
+        // GeckoView描画中でも後始末できるよう、UIスレッドで直接停止処理を行う。
         runOnMainThread {
             MediaSessionBridge.deactivate()
             runCatching {
-                composeRule.activity.stopService(
-                    Intent(composeRule.activity, MediaPlaybackService::class.java),
-                )
+                activity.stopService(Intent(activity, MediaPlaybackService::class.java))
             }
         }
     }
@@ -150,35 +157,28 @@ class MediaNotificationSmokeTest {
     // ================================================================
 
     private fun waitForBrowserSessionController(): BrowserSessionController {
-        var controller: BrowserSessionController? = null
-        composeRule.waitUntil(timeoutMillis = CONTROLLER_WAIT_TIMEOUT_MS) {
-            var resolved = false
-            composeRule.runOnIdle {
-                resolved = runCatching {
-                    controller = getBrowserViewModel().browserSessionController
-                }.isSuccess
+        return requireNotNull(
+            waitForValue(timeoutMs = CONTROLLER_WAIT_TIMEOUT_MS) {
+                runCatching {
+                    runOnMainThread { getBrowserViewModel().browserSessionController }
+                }.getOrNull()
             }
-            resolved
-        }
-        return requireNotNull(controller)
+        )
     }
 
     private fun waitForActiveTab(browserSessionController: BrowserSessionController): BrowserTab {
-        var activeTab: BrowserTab? = null
-        composeRule.waitUntil(timeoutMillis = ACTIVE_TAB_WAIT_TIMEOUT_MS) {
-            var found = false
-            composeRule.runOnIdle {
-                activeTab = browserSessionController.tabs.firstOrNull { it.session.isOpen }
-                    ?: browserSessionController.tabs.lastOrNull()
-                found = activeTab != null
+        return requireNotNull(
+            waitForValue(timeoutMs = ACTIVE_TAB_WAIT_TIMEOUT_MS) {
+                runOnMainThread {
+                    browserSessionController.tabs.firstOrNull { it.session.isOpen }
+                        ?: browserSessionController.tabs.lastOrNull()
+                }
             }
-            found
-        }
-        return requireNotNull(activeTab)
+        )
     }
 
     private fun getBrowserViewModel(): BrowserViewModel {
-        return ViewModelProvider(composeRule.activity)[BrowserViewModel::class.java]
+        return ViewModelProvider(activity)[BrowserViewModel::class.java]
     }
 
     private fun prepareLocalMediaPageUri(): String {
@@ -212,14 +212,15 @@ class MediaNotificationSmokeTest {
     }
 
     private fun waitForMediaExtensionInstalled() {
-        composeRule.waitUntil(timeoutMillis = EXTENSION_INSTALL_TIMEOUT_MS) {
-            var installed = false
-            composeRule.runOnIdle {
-                installed = runCatching { getBrowserViewModel().mediaWebExtension.isInstalled() }
-                    .getOrDefault(false)
-            }
-            installed
-        }
+        assertTrue(
+            "media WebExtension のインストールが完了すること",
+            waitForCondition(timeoutMs = EXTENSION_INSTALL_TIMEOUT_MS) {
+                runOnMainThread {
+                    runCatching { getBrowserViewModel().mediaWebExtension.isInstalled() }
+                        .getOrDefault(false)
+                }
+            },
+        )
     }
 
     private fun hasMediaControlNotification(): Boolean {
@@ -253,6 +254,19 @@ class MediaNotificationSmokeTest {
             Thread.sleep(intervalMs)
         }
         return condition()
+    }
+
+    private fun <T> waitForValue(
+        timeoutMs: Long,
+        intervalMs: Long = CONDITION_POLL_INTERVAL_MS,
+        provider: () -> T?,
+    ): T? {
+        val deadline = SystemClock.uptimeMillis() + timeoutMs
+        while (SystemClock.uptimeMillis() < deadline) {
+            provider()?.let { return it }
+            Thread.sleep(intervalMs)
+        }
+        return provider()
     }
 
     private fun <T> runOnMainThread(block: () -> T): T {
