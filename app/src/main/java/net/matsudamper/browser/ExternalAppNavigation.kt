@@ -35,7 +35,13 @@ internal fun resolveExternalAppNavigationAction(
 
     val intent = buildExternalIntent(uri = uri, parsedUri = parsedUri, scheme = scheme)
         ?: return ExternalAppNavigationAction.AllowInBrowser
-    val fallbackUrl = intent.getStringExtra(EXTRA_BROWSER_FALLBACK_URL)?.takeIf { it.isNotBlank() }
+    val fallbackUrl = intent.getStringExtra(EXTRA_BROWSER_FALLBACK_URL)
+        ?.takeIf { it.isNotBlank() }
+        ?.takeIf { url ->
+            // javascript: などの危険なスキームを排除し、http/https のみ許可する
+            val urlScheme = runCatching { Uri.parse(url).scheme?.lowercase(Locale.US) }.getOrNull()
+            urlScheme == "http" || urlScheme == "https"
+        }
     intent.removeExtra(EXTRA_BROWSER_FALLBACK_URL)
 
     val packageManager = context.packageManager
