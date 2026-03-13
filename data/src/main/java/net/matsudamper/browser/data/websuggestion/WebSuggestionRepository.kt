@@ -7,6 +7,7 @@ import net.matsudamper.browser.data.SearchProvider
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
+import java.nio.charset.StandardCharsets
 import java.util.Locale
 
 interface WebSuggestionRepository {
@@ -80,7 +81,7 @@ internal fun buildSuggestionRequest(
     if (trimmed.isBlank()) {
         return null
     }
-    val encodedQuery = URLEncoder.encode(trimmed, "UTF-8")
+    val encodedQuery = URLEncoder.encode(trimmed, StandardCharsets.UTF_8.name())
     return when (searchProvider) {
         SearchProvider.GOOGLE -> SuggestionRequest(
             searchProvider = searchProvider,
