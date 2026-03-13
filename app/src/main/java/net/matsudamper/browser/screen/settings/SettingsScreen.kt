@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -158,6 +159,11 @@ internal fun SettingsScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
                         .fillMaxWidth()
+                        .toggleable(
+                            value = uiState.enableWebSuggestions,
+                            role = Role.Switch,
+                            onValueChange = viewModel::setEnableWebSuggestions,
+                        )
                         .padding(vertical = 4.dp),
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
@@ -173,7 +179,7 @@ internal fun SettingsScreen(
                     }
                     Switch(
                         checked = uiState.enableWebSuggestions,
-                        onCheckedChange = viewModel::setEnableWebSuggestions,
+                        onCheckedChange = null,
                     )
                 }
             }
