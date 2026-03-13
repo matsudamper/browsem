@@ -74,7 +74,18 @@ class MediaNotificationSmokeTest {
         }
         Thread.sleep(PAGE_READY_DELAY_MS)
 
-        // CI エミュレータではタップ入力が不安定な場合があるため、JSで再生要求をリトライする。
+        // CI エミュレータでは最初の動画再生が不安定なため、
+        // 同じ動画の再生→リスタートを繰り返してメディアパイプラインをウォームアップする。
+        // 3 曲目（3 回目の再生）相当でアクティベーションチェックを開始する。
+        repeat(MEDIA_WARMUP_RESTARTS) {
+            requestMediaPlayback(activeTab)
+            Thread.sleep(MEDIA_WARMUP_INTERVAL_MS)
+            if (MediaSessionBridge.playbackState.value.isActive) return@repeat
+            restartMediaPlayback(activeTab)
+            Thread.sleep(MEDIA_RESTART_SETTLE_MS)
+        }
+
+        // ウォームアップ後、最終再生要求とアクティベーションのリトライ
         val activationRetryDeadline = SystemClock.uptimeMillis() + SESSION_ACTIVATION_TIMEOUT_MS
         while (
             !MediaSessionBridge.playbackState.value.isActive &&
@@ -241,6 +252,12 @@ class MediaNotificationSmokeTest {
         }
     }
 
+    private fun restartMediaPlayback(activeTab: BrowserTab) {
+        runOnMainThread {
+            activeTab.session.loadUri(RESTART_PLAYBACK_JAVASCRIPT_URI)
+        }
+    }
+
     private fun waitForCondition(
         timeoutMs: Long,
         intervalMs: Long = CONDITION_POLL_INTERVAL_MS,
@@ -287,6 +304,9 @@ class MediaNotificationSmokeTest {
         private const val CONTROLLER_WAIT_TIMEOUT_MS = 20_000L
         private const val ACTIVE_TAB_WAIT_TIMEOUT_MS = 20_000L
         private const val PAGE_READY_DELAY_MS = 3_000L
+        private const val MEDIA_WARMUP_RESTARTS = 2
+        private const val MEDIA_WARMUP_INTERVAL_MS = 3_000L
+        private const val MEDIA_RESTART_SETTLE_MS = 1_000L
         private const val SESSION_ACTIVATION_TIMEOUT_MS = 30_000L
         private const val PLAY_REQUEST_RETRY_INTERVAL_MS = 1_000L
         private const val PLAYBACK_STATE_TIMEOUT_MS = 15_000L
@@ -306,6 +326,15 @@ class MediaNotificationSmokeTest {
             "javascript:void((function(){" +
                 "var media=document.querySelector('video,audio');" +
                 "if(!media){return;}" +
+                "var playPromise=media.play();" +
+                "if(playPromise&&typeof playPromise.catch==='function'){playPromise.catch(function(){});}" +
+                "})())"
+        private const val RESTART_PLAYBACK_JAVASCRIPT_URI =
+            "javascript:void((function(){" +
+                "var media=document.querySelector('video,audio');" +
+                "if(!media){return;}" +
+                "media.pause();" +
+                "media.currentTime=0;" +
                 "var playPromise=media.play();" +
                 "if(playPromise&&typeof playPromise.catch==='function'){playPromise.catch(function(){});}" +
                 "})())"
