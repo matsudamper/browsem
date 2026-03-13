@@ -25,4 +25,5 @@ kotlin {
 dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.ktx)
     implementation(project(":data"))
+    testImplementation(libs.junit4)
 }

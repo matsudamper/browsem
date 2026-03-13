@@ -24,6 +24,7 @@ import net.matsudamper.browser.data.TranslationProvider
 import net.matsudamper.browser.data.history.HistoryRepository
 import net.matsudamper.browser.data.resolvedHomepageUrl
 import net.matsudamper.browser.data.resolvedSearchTemplate
+import net.matsudamper.browser.data.websuggestion.WebSuggestionRepository
 import net.matsudamper.browser.media.MediaWebExtension
 import net.matsudamper.browser.screen.browser.BrowserScreenViewModel
 import org.koin.android.ext.android.inject
@@ -36,6 +37,7 @@ class CustomTabActivity : ComponentActivity() {
     private val runtime: GeckoRuntime by inject()
     private val settingsRepository: SettingsRepository by inject()
     private val historyRepository: HistoryRepository by inject()
+    private val webSuggestionRepository: WebSuggestionRepository by inject()
 
     private lateinit var runtimeCoordinator: BrowserRuntimeCoordinator
 
@@ -79,7 +81,9 @@ class CustomTabActivity : ComponentActivity() {
                     searchTemplate = browserSettings.resolvedSearchTemplate(),
                     translationProvider = browserSettings.translationProvider,
                     browserSessionController = runtimeCoordinator.browserSessionController,
+                    settingsRepository = settingsRepository,
                     historyRepository = historyRepository,
+                    webSuggestionRepository = webSuggestionRepository,
                     themeColorExtension = runtimeCoordinator.themeColorExtension,
                     mediaWebExtension = runtimeCoordinator.mediaWebExtension,
                     onClose = ::finish,
@@ -144,7 +148,9 @@ private fun CustomTabScreen(
     searchTemplate: String,
     translationProvider: TranslationProvider,
     browserSessionController: BrowserSessionController,
+    settingsRepository: SettingsRepository,
     historyRepository: HistoryRepository,
+    webSuggestionRepository: WebSuggestionRepository,
     themeColorExtension: ThemeColorWebExtension,
     mediaWebExtension: MediaWebExtension,
     onClose: () -> Unit,
@@ -152,9 +158,13 @@ private fun CustomTabScreen(
     onDesktopNotificationPermissionRequest: () -> GeckoResult<Int>,
 ) {
     val viewModel = viewModel(initializer = {
-        BrowserScreenViewModel(historyRepository)
+        BrowserScreenViewModel(
+            historyRepository = historyRepository,
+            settingsRepository = settingsRepository,
+            webSuggestionRepository = webSuggestionRepository,
+        )
     })
-    val historySuggestions by viewModel.historySuggestions.collectAsState()
+    val urlBarSuggestions by viewModel.urlBarSuggestions.collectAsState()
     val prewarmedSession = remember(customTabsSessionToken, initialUrl) {
         customTabsSessionToken?.let { token ->
             CustomTabsWarmupStore.consumePreparedSession(
@@ -203,7 +213,7 @@ private fun CustomTabScreen(
         onCloseTab = onClose,
         onHistoryRecord = { url, title -> historyRepository.recordVisit(url, title) },
         onHistoryTitleUpdate = { id, title -> historyRepository.updateTitle(id, title) },
-        historySuggestions = historySuggestions,
+        urlBarSuggestions = urlBarSuggestions,
         onUrlInputChanged = viewModel::onUrlInputChanged,
     )
 }

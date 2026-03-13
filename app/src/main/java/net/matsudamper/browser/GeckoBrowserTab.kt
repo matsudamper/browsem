@@ -60,6 +60,7 @@ import kotlinx.coroutines.flow.collectLatest
 import net.matsudamper.browser.data.TranslationProvider
 import net.matsudamper.browser.media.GeckoMediaSessionDelegate
 import net.matsudamper.browser.media.MediaWebExtension
+import net.matsudamper.browser.screen.browser.UrlBarSuggestionsUiState
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.GeckoView
@@ -92,7 +93,7 @@ internal fun GeckoBrowserTab(
     onToolbarDragEnd: () -> Unit = {},
     onHistoryRecord: (suspend (url: String, title: String) -> Long)? = null,
     onHistoryTitleUpdate: (suspend (id: Long, title: String) -> Unit)? = null,
-    historySuggestions: List<net.matsudamper.browser.data.history.HistoryEntry> = emptyList(),
+    urlBarSuggestions: UrlBarSuggestionsUiState = UrlBarSuggestionsUiState(),
     onUrlInputChanged: ((String) -> Unit)? = null,
 ) {
     val state = rememberBrowserTabScreenState(
@@ -354,9 +355,13 @@ internal fun GeckoBrowserTab(
 
             BrowserTabOverlayLayer(
                 state = state,
-                historySuggestions = historySuggestions,
-                onSuggestionClick = { entry ->
+                urlBarSuggestions = urlBarSuggestions,
+                onHistorySuggestionClick = { entry ->
                     state.onUrlSubmit(entry.url)
+                    closeUrlInput(false)
+                },
+                onWebSuggestionClick = { query ->
+                    state.onUrlSubmit(query)
                     closeUrlInput(false)
                 },
                 modifier = Modifier.fillMaxSize(),

@@ -27,6 +27,13 @@ class SettingsRepository(context: Context) {
                 .setThemeMode(settings.themeMode)
                 .setTranslationProvider(settings.translationProvider)
                 .setEnableThirdPartyCa(settings.enableThirdPartyCa)
+                .apply {
+                    if (settings.hasEnableWebSuggestions()) {
+                        setEnableWebSuggestions(settings.enableWebSuggestions)
+                    } else {
+                        clearEnableWebSuggestions()
+                    }
+                }
                 .build()
         }
     }
@@ -87,6 +94,14 @@ class SettingsRepository(context: Context) {
         }
     }
 
+    suspend fun setEnableWebSuggestions(enabled: Boolean) {
+        dataStore.updateData { current ->
+            current.toBuilder()
+                .setEnableWebSuggestions(enabled)
+                .build()
+        }
+    }
+
     suspend fun addNotificationAllowedOrigin(origin: String) {
         dataStore.updateData { current ->
             if (current.notificationAllowedOriginsList.contains(origin)) {
@@ -122,4 +137,12 @@ fun BrowserSettings.resolvedSearchTemplate(): String = when (searchProvider) {
     SearchProvider.DUCKDUCKGO -> "https://duckduckgo.com/?q=%s"
     SearchProvider.CUSTOM -> customSearchUrl.ifBlank { "https://www.google.com/search?q=%s" }
     else -> "https://www.google.com/search?q=%s"
+}
+
+fun BrowserSettings.resolvedEnableWebSuggestions(): Boolean {
+    return if (hasEnableWebSuggestions()) {
+        enableWebSuggestions
+    } else {
+        false
+    }
 }

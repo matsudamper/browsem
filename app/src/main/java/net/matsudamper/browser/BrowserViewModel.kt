@@ -17,6 +17,7 @@ import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.TabRepository
 import net.matsudamper.browser.data.ThemeMode
 import net.matsudamper.browser.data.TranslationProvider
+import net.matsudamper.browser.data.resolvedEnableWebSuggestions
 import net.matsudamper.browser.data.resolvedHomepageUrl
 import net.matsudamper.browser.data.resolvedSearchTemplate
 import org.mozilla.geckoview.GeckoResult
@@ -31,6 +32,7 @@ internal data class SettingsUiState(
     val themeMode: ThemeMode,
     val translationProvider: TranslationProvider,
     val enableThirdPartyCa: Boolean,
+    val enableWebSuggestions: Boolean,
     val notificationAllowedOrigins: List<String>,
     val homepageUrl: String,
     val searchTemplate: String,
@@ -119,6 +121,7 @@ private fun BrowserSettings.toUiState(): SettingsUiState = SettingsUiState(
     themeMode = themeMode,
     translationProvider = translationProvider,
     enableThirdPartyCa = enableThirdPartyCa,
+    enableWebSuggestions = resolvedEnableWebSuggestions(),
     notificationAllowedOrigins = notificationAllowedOriginsList,
     homepageUrl = resolvedHomepageUrl(),
     searchTemplate = resolvedSearchTemplate(),

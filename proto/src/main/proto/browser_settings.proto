@@ -37,4 +37,5 @@ message BrowserSettings {
   repeated string notification_allowed_origins = 8;
   TranslationProvider translation_provider = 9;
   bool enable_third_party_ca = 10;
+  optional bool enable_web_suggestions = 11;
 }

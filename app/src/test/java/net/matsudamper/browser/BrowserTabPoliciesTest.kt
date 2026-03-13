@@ -49,7 +49,7 @@ class BrowserTabPoliciesTest {
     @Test
     fun historySuggestionsAreShownWhenFocusedAndCurrentUrlExists() {
         assertTrue(
-            shouldShowHistorySuggestions(
+            shouldShowUrlSuggestions(
                 showFindInPage = false,
                 isUrlInputFocused = true,
                 suggestionCount = 0,
@@ -59,9 +59,21 @@ class BrowserTabPoliciesTest {
     }
 
     @Test
-    fun historySuggestionsAreHiddenWhileFindInPageIsOpen() {
+    fun suggestionsAreShownWhenOnlySuggestionItemsExist() {
+        assertTrue(
+            shouldShowUrlSuggestions(
+                showFindInPage = false,
+                isUrlInputFocused = true,
+                suggestionCount = 2,
+                currentPageUrl = "",
+            )
+        )
+    }
+
+    @Test
+    fun suggestionsAreHiddenWhileFindInPageIsOpen() {
         assertFalse(
-            shouldShowHistorySuggestions(
+            shouldShowUrlSuggestions(
                 showFindInPage = true,
                 isUrlInputFocused = true,
                 suggestionCount = 3,

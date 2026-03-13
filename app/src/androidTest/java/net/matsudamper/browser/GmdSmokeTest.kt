@@ -327,7 +327,7 @@ class GmdSmokeTest {
     private fun waitForHistorySuggestionsVisible(suggestionTitle: String) {
         composeRule.waitUntil(timeoutMillis = 20_000) {
             val overlayVisible = composeRule
-                .onAllNodesWithTag(TEST_TAG_HISTORY_SUGGESTION_LIST)
+                .onAllNodesWithTag(TEST_TAG_URL_SUGGESTION_LIST)
                 .fetchSemanticsNodes()
                 .isNotEmpty()
             val itemVisible = composeRule
@@ -344,7 +344,7 @@ class GmdSmokeTest {
     private fun waitForHistorySuggestionsHidden() {
         composeRule.waitUntil(timeoutMillis = 20_000) {
             composeRule
-                .onAllNodesWithTag(TEST_TAG_HISTORY_SUGGESTION_LIST)
+                .onAllNodesWithTag(TEST_TAG_URL_SUGGESTION_LIST)
                 .fetchSemanticsNodes()
                 .isEmpty()
         }
@@ -530,7 +530,7 @@ class GmdSmokeTest {
             composeRule.onAllNodesWithTag(TEST_TAG_GECKO_CONTAINER).fetchSemanticsNodes().isNotEmpty()
         )
         assertTrue(
-            composeRule.onAllNodesWithTag(TEST_TAG_HISTORY_SUGGESTION_LIST).fetchSemanticsNodes().isEmpty()
+            composeRule.onAllNodesWithTag(TEST_TAG_URL_SUGGESTION_LIST).fetchSemanticsNodes().isEmpty()
         )
     }
 

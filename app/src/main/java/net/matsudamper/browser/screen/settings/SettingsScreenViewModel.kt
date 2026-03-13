@@ -43,4 +43,8 @@ internal class SettingsScreenViewModel(
     fun setEnableThirdPartyCa(enabled: Boolean) {
         viewModelScope.launch { settingsRepository.setEnableThirdPartyCa(enabled) }
     }
+
+    fun setEnableWebSuggestions(enabled: Boolean) {
+        viewModelScope.launch { settingsRepository.setEnableWebSuggestions(enabled) }
+    }
 }

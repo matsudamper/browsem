@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -148,6 +149,38 @@ internal fun SettingsScreen(
                             modifier = Modifier.fillMaxWidth(),
                         )
                     }
+                }
+            }
+
+            Spacer(Modifier.height(24.dp))
+
+            SettingSection(title = "検索候補") {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .toggleable(
+                            value = uiState.enableWebSuggestions,
+                            role = Role.Switch,
+                            onValueChange = viewModel::setEnableWebSuggestions,
+                        )
+                        .padding(vertical = 4.dp),
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Webサジェストを有効化",
+                            style = MaterialTheme.typography.bodyLarge,
+                        )
+                        Text(
+                            text = "入力中のキーワードを検索エンジンへ送信して候補を表示します",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(
+                        checked = uiState.enableWebSuggestions,
+                        onCheckedChange = null,
+                    )
                 }
             }
 
