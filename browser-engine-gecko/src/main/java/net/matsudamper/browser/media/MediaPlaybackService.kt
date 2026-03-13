@@ -124,6 +124,7 @@ class MediaPlaybackService : MediaSessionService() {
 
     override fun onDestroy() {
         Log.d(TAG, "onDestroy")
+        MediaPlaybackServiceController.onServiceDestroyed()
         mediaSession?.run {
             removeSession(this)
             player.release()

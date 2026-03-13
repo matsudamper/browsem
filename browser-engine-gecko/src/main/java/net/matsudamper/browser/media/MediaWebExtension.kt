@@ -15,6 +15,7 @@ import java.util.Collections
 import java.util.WeakHashMap
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.math.max
+import kotlin.math.roundToLong
 
 /**
  * GeckoView の不安定な MediaSession 状態取得を避けるため、
@@ -93,6 +94,7 @@ class MediaWebExtension(
         val current = sessionStates[session] ?: SessionPlaybackSnapshot()
         val next = current.copy(features = features)
         sessionStates[session] = next
+        promoteSessionFromSnapshotIfNeeded(session, next)
         if (activeSession === session) {
             MediaSessionBridge.updateFeatures(features)
         }
@@ -103,6 +105,14 @@ class MediaWebExtension(
             TAG,
             "onMetadata: title=${meta.title}, artist=${meta.artist}, hasArtwork=${meta.artwork != null}",
         )
+        updateSessionSnapshot(session) { current ->
+            current.copy(
+                isActive = true,
+                title = meta.title?.takeUnless { it.isBlank() } ?: current.title,
+                artist = meta.artist?.takeUnless { it.isBlank() } ?: current.artist,
+                album = meta.album?.takeUnless { it.isBlank() } ?: current.album,
+            )
+        }
         val artwork = meta.artwork
         val requestId = invalidateArtwork(session)
         if (artwork == null) {
@@ -141,6 +151,41 @@ class MediaWebExtension(
                 }
             },
         )
+    }
+
+    fun onPlay(session: GeckoSession, mediaSession: MediaSession) {
+        Log.d(TAG, "onPlay fallback")
+        bindMediaSessionIfNeeded(session, mediaSession)
+        updateSessionSnapshot(session) { current ->
+            current.copy(isActive = true, isPlaying = true)
+        }
+    }
+
+    fun onPause(session: GeckoSession, mediaSession: MediaSession) {
+        Log.d(TAG, "onPause fallback")
+        bindMediaSessionIfNeeded(session, mediaSession)
+        updateSessionSnapshot(session) { current ->
+            current.copy(isActive = true, isPlaying = false)
+        }
+    }
+
+    fun onPositionState(
+        session: GeckoSession,
+        mediaSession: MediaSession,
+        state: MediaSession.PositionState,
+    ) {
+        Log.d(
+            TAG,
+            "onPositionState fallback: position=${state.position}, duration=${state.duration}",
+        )
+        bindMediaSessionIfNeeded(session, mediaSession)
+        updateSessionSnapshot(session) { current ->
+            current.copy(
+                isActive = true,
+                positionMs = state.position.toSnapshotMillis(current.positionMs),
+                durationMs = state.duration.toSnapshotMillis(current.durationMs),
+            )
+        }
     }
 
     fun isInstalled(): Boolean = extension != null
@@ -188,7 +233,13 @@ class MediaWebExtension(
                         ) {
                             invalidateArtwork(session)
                         }
+                        Log.d(
+                            TAG,
+                            "snapshot: isActive=${snapshot.isActive}, isPlaying=${snapshot.isPlaying}, " +
+                                "title=${snapshot.title}, durationMs=${snapshot.durationMs}, positionMs=${snapshot.positionMs}",
+                        )
                         sessionStates[session] = snapshot
+                        promoteSessionFromSnapshotIfNeeded(session, snapshot)
                         if (activeSession === session) {
                             applySnapshot(session, snapshot)
                         }
@@ -218,6 +269,19 @@ class MediaWebExtension(
         MediaSessionBridge.updatePosition(positionMs = 0L, durationMs = 0L)
     }
 
+    private fun updateSessionSnapshot(
+        session: GeckoSession,
+        transform: (SessionPlaybackSnapshot) -> SessionPlaybackSnapshot,
+    ): SessionPlaybackSnapshot {
+        val next = transform(sessionStates[session] ?: SessionPlaybackSnapshot())
+        sessionStates[session] = next
+        promoteSessionFromSnapshotIfNeeded(session, next)
+        if (activeSession === session) {
+            applySnapshot(session, next)
+        }
+        return next
+    }
+
     private fun applySnapshot(session: GeckoSession, snapshot: SessionPlaybackSnapshot) {
         if (!snapshot.isActive) {
             MediaSessionBridge.deactivate()
@@ -243,6 +307,13 @@ class MediaWebExtension(
         }
     }
 
+    private fun bindMediaSessionIfNeeded(session: GeckoSession, mediaSession: MediaSession) {
+        if (activeSession == null || activeSession === session) {
+            activeSession = session
+            MediaSessionBridge.activeGeckoMediaSession = mediaSession
+        }
+    }
+
     private fun deactivateSession(session: GeckoSession) {
         if (activeSession !== session) {
             return
@@ -259,6 +330,19 @@ class MediaWebExtension(
         return requestId
     }
 
+    private fun promoteSessionFromSnapshotIfNeeded(
+        session: GeckoSession,
+        snapshot: SessionPlaybackSnapshot,
+    ) {
+        if (!snapshot.isActive) {
+            return
+        }
+        if (activeSession == null) {
+            Log.d(TAG, "activeSession を WebExtension snapshot から補完")
+            activeSession = session
+        }
+    }
+
     private fun isArtworkRequestCurrent(session: GeckoSession, requestId: Long): Boolean {
         return sessionArtworkRequestIds[session] == requestId
     }
@@ -270,6 +354,13 @@ class MediaWebExtension(
             "resource://android/assets/web_extensions/media_bridge/"
         private const val DEFAULT_ARTWORK_SIZE_PX = 256
     }
+}
+
+private fun Double.toSnapshotMillis(fallback: Long): Long {
+    if (!isFinite()) {
+        return fallback
+    }
+    return (coerceAtLeast(0.0) * 1000.0).roundToLong()
 }
 
 internal data class SessionPlaybackSnapshot(
