@@ -54,6 +54,11 @@ class TabGroupRepository(context: Context) {
         dao.setTabGroup(tabId, groupId.value)
     }
 
+    /** グループ情報をすべて削除する */
+    suspend fun clearAllData() {
+        dao.deleteAll()
+    }
+
     /** タブのグループ割り当てを空文字に設定する（タブ削除時） */
     suspend fun removeTabFromGroup(tabId: String) {
         dao.setTabGroup(tabId, "")

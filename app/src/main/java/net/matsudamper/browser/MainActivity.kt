@@ -168,6 +168,7 @@ class MainActivity : ComponentActivity() {
                     onDesktopNotificationPermissionRequest = {
                         requestNotificationPermissionIfNeeded()
                     },
+                    onRestartActivity = { recreate() },
                 )
             }
             extensionInstaller.installPromptState?.let { prompt ->

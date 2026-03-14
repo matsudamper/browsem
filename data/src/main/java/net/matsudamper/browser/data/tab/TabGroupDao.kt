@@ -29,6 +29,9 @@ interface TabGroupDao {
     /** タブID→グループIDのマッピングを Flow で購読する */
     @Query("SELECT tabId, groupId FROM tab_state")
     fun observeTabGroupAssignments(): Flow<List<TabGroupAssignment>>
+
+    @Query("DELETE FROM tab_group")
+    suspend fun deleteAll()
 }
 
 data class TabGroupAssignment(val tabId: String, val groupId: String)

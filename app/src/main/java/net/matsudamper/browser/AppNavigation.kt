@@ -30,8 +30,10 @@ import androidx.navigation3.ui.defaultPopTransitionSpec
 import androidx.navigation3.ui.defaultTransitionSpec
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.launch
 import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.TabGroupRepository
+import net.matsudamper.browser.data.TabRepository
 import net.matsudamper.browser.data.history.HistoryRepository
 import net.matsudamper.browser.data.websuggestion.WebSuggestionRepository
 import net.matsudamper.browser.navigation.AppDestination
@@ -56,6 +58,7 @@ internal fun BrowserApp(
     newTabUrlFlow: Flow<String>,
     onInstallExtensionRequest: (String) -> Unit,
     onDesktopNotificationPermissionRequest: () -> GeckoResult<Int>,
+    onRestartActivity: () -> Unit,
 ) {
     val currentSettings by viewModel.settingsUiState.collectAsState()
     val settingsUiState = currentSettings ?: return
@@ -71,6 +74,7 @@ internal fun BrowserApp(
     val historyRepository: HistoryRepository = koinInject()
     val webSuggestionRepository: WebSuggestionRepository = koinInject()
     val tabGroupRepository: TabGroupRepository = koinInject()
+    val tabRepository: TabRepository = koinInject()
 
     LaunchedEffect(settingsUiState.enableThirdPartyCa) {
         viewModel.applyRuntimeSettings()
@@ -190,6 +194,7 @@ internal fun BrowserApp(
                         val settingsViewModel = remember(viewModel) {
                             SettingsScreenViewModel(settingsRepository, viewModel.settingsUiState)
                         }
+                        val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
                         SettingsScreen(
                             viewModel = settingsViewModel,
                             onOpenExtensions = { backStack.add(AppDestination.Extensions) },
@@ -198,6 +203,14 @@ internal fun BrowserApp(
                             },
                             onOpenHistory = { backStack.add(AppDestination.History) },
                             onBack = { backStack.removeLastOrNull() },
+                            onClearAppData = {
+                                coroutineScope.launch {
+                                    historyRepository.deleteAll()
+                                    tabRepository.clearAllData()
+                                    tabGroupRepository.clearAllData()
+                                    onRestartActivity()
+                                }
+                            },
                         )
                     }
 

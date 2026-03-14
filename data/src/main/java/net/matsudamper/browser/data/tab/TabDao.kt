@@ -34,4 +34,7 @@ interface TabDao {
     /** 指定したタブを選択中にし、他は未選択にする */
     @Query("UPDATE tab_state SET isSelected = CASE WHEN tabId = :tabId THEN 1 ELSE 0 END")
     suspend fun setSelectedTab(tabId: String)
+
+    @Query("DELETE FROM tab_state")
+    suspend fun deleteAll()
 }

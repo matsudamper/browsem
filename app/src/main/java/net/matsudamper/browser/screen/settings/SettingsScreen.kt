@@ -13,6 +13,7 @@ import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -27,6 +28,9 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
@@ -48,9 +52,32 @@ internal fun SettingsScreen(
     onOpenNotificationPermissions: () -> Unit,
     onOpenHistory: () -> Unit,
     onBack: () -> Unit,
+    onClearAppData: () -> Unit,
 ) {
     val currentUiState by viewModel.uiState.collectAsState()
     val uiState = currentUiState ?: return
+
+    var showClearDataDialog by remember { mutableStateOf(false) }
+    if (showClearDataDialog) {
+        AlertDialog(
+            onDismissRequest = { showClearDataDialog = false },
+            title = { Text("アプリデータを削除") },
+            text = { Text("タブ履歴・閲覧履歴・タブグループを削除します。GeckoViewのキャッシュは削除されません。アプリを再起動します。") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showClearDataDialog = false
+                    onClearAppData()
+                }) {
+                    Text("削除して再起動")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearDataDialog = false }) {
+                    Text("キャンセル")
+                }
+            },
+        )
+    }
 
     Scaffold(
         topBar = {
@@ -286,6 +313,19 @@ internal fun SettingsScreen(
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text("通知を許可したサイト")
+            }
+
+            Spacer(Modifier.height(8.dp))
+
+            Spacer(Modifier.height(24.dp))
+
+            SettingSection(title = "データ管理") {
+                TextButton(
+                    onClick = { showClearDataDialog = true },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("アプリデータを削除（タブ・履歴・グループ）")
+                }
             }
 
             Spacer(Modifier.height(8.dp))
