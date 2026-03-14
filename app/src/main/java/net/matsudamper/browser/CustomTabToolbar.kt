@@ -34,6 +34,7 @@ internal fun CustomTabToolbar(
     onShare: () -> Unit,
     onOpenInBrowser: (() -> Unit)?,
     toolbarColor: Color?,
+    showCloseButton: Boolean = true,
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
     val resolvedToolbarColor = toolbarColor ?: MaterialTheme.colorScheme.primaryContainer
@@ -55,11 +56,13 @@ internal fun CustomTabToolbar(
                 .padding(horizontal = 4.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            IconButton(onClick = onClose) {
-                Icon(
-                    painter = painterResource(R.drawable.close_24dp),
-                    contentDescription = "閉じる",
-                )
+            if (showCloseButton) {
+                IconButton(onClick = onClose) {
+                    Icon(
+                        painter = painterResource(R.drawable.close_24dp),
+                        contentDescription = "閉じる",
+                    )
+                }
             }
             Column(
                 modifier = Modifier

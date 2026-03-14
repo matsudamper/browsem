@@ -49,6 +49,16 @@
             android:name=".CustomTabActivity"
             android:exported="false"
             android:windowSoftInputMode="adjustResize" />
+        <!--
+            ホームに「アプリとして追加」したショートカットから起動するActivity。
+            ピン留めショートカットから起動するためにexported=trueが必要。
+            intent-filterを持たないので外部アプリからは発見されない。
+        -->
+        <activity
+            android:name=".WebAppActivity"
+            android:exported="true"
+            android:taskAffinity=".webapp"
+            android:windowSoftInputMode="adjustResize" />
 
         <service
             android:name=".BrowserCustomTabsService"
