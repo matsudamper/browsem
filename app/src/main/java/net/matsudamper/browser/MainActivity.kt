@@ -145,11 +145,13 @@ class MainActivity : ComponentActivity() {
         runtime.webNotificationDelegate = webNotificationDelegate
         warmUpWebExtensionController()
 
-        if (savedInstanceState == null) {
-            val url = intent.dataString
-            if (url != null) {
-                createNewTabChannel.trySend(url)
-            }
+        // プロセスが強制終了後に外部URLで再起動した場合も処理する。
+        // 設定変更（回転等）による再生成では同じURLを重複処理しないよう、
+        // 前回処理済みのURLと比較して未処理のURLのみ送信する。
+        val url = intent.dataString
+        val processedUrl = savedInstanceState?.getString(KEY_PROCESSED_URL)
+        if (url != null && url != processedUrl) {
+            createNewTabChannel.trySend(url)
         }
 
         setContent {
@@ -228,6 +230,12 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        // 現在のintentのURLを保存し、設定変更時の再処理を防ぐ
+        intent.dataString?.let { outState.putString(KEY_PROCESSED_URL, it) }
+    }
+
     override fun onDestroy() {
         if (::extensionInstaller.isInitialized) {
             extensionInstaller.cleanup()
@@ -303,6 +311,7 @@ class MainActivity : ComponentActivity() {
         private const val MAX_WARMUP_RETRIES = 5
         private const val EXTRA_CUSTOM_TABS_SESSION = "android.support.customtabs.extra.SESSION"
         private const val EXTRA_CUSTOM_TABS_SESSION_ID = "androidx.browser.customtabs.extra.SESSION_ID"
+        private const val KEY_PROCESSED_URL = "processed_url"
     }
 
     private fun Intent.isCustomTabLaunchIntent(): Boolean {
