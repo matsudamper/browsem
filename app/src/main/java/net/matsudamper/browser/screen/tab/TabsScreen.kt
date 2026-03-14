@@ -365,9 +365,9 @@ private fun TabsScreenContent(
         }
     }
 
-    // ユーザーのスワイプ → ViewModelへ通知
+    // ユーザーのスワイプ → ViewModelへ通知（settledPage でアニメーション完了後のみ通知）
     LaunchedEffect(pagerState) {
-        snapshotFlow { pagerState.currentPage }.collect { page ->
+        snapshotFlow { pagerState.settledPage }.collect { page ->
             onGroupPageChanged(page)
         }
     }
