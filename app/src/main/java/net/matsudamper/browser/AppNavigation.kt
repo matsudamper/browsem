@@ -31,6 +31,7 @@ import androidx.navigation3.ui.defaultTransitionSpec
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.Flow
 import net.matsudamper.browser.data.SettingsRepository
+import net.matsudamper.browser.data.TabGroupRepository
 import net.matsudamper.browser.data.history.HistoryRepository
 import net.matsudamper.browser.data.websuggestion.WebSuggestionRepository
 import net.matsudamper.browser.navigation.AppDestination
@@ -69,6 +70,7 @@ internal fun BrowserApp(
     val settingsRepository: SettingsRepository = koinInject()
     val historyRepository: HistoryRepository = koinInject()
     val webSuggestionRepository: WebSuggestionRepository = koinInject()
+    val tabGroupRepository: TabGroupRepository = koinInject()
 
     LaunchedEffect(settingsUiState.enableThirdPartyCa) {
         viewModel.applyRuntimeSettings()
@@ -249,6 +251,7 @@ internal fun BrowserApp(
                         }
                         TabsScreen(
                             browserSessionController = browserSessionController,
+                            tabGroupRepository = tabGroupRepository,
                             selectedTabId = browserSessionController.selectedTabId,
                             onSelectTab = { tabId ->
                                 selectTab(tabId, null)

@@ -4,7 +4,10 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -20,12 +23,17 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.GenericShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -33,7 +41,6 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -43,6 +50,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -50,6 +58,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
@@ -62,15 +71,18 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.round
 import androidx.compose.ui.unit.toOffset
+import androidx.compose.ui.zIndex
 import androidx.lifecycle.viewmodel.compose.viewModel
 import net.matsudamper.browser.BrowserSessionController
 import net.matsudamper.browser.R
+import net.matsudamper.browser.data.TabGroupData
+import net.matsudamper.browser.data.TabGroupId
+import net.matsudamper.browser.data.TabGroupRepository
 
 internal object TabsLayoutDefaults {
     val minCellWidth: Dp = 220.dp
     val gridPadding: Dp = 12.dp
     val gridSpacing: Dp = 12.dp
-    val topBarHeight: Dp = 56.dp
     const val cardAspectRatio: Float = 1f
 
     fun calculateColumns(availableWidth: Dp): Int {
@@ -84,9 +96,25 @@ internal object TabsLayoutDefaults {
     }
 }
 
+/** 栞（ブックマーク）形シェイプ：下辺中央に上向きVノッチ */
+private val BookmarkShape = GenericShape { size, _ ->
+    val notchDepth = size.height * 0.25f
+    val notchLeft = size.width * 0.3f
+    val notchRight = size.width * 0.7f
+    moveTo(0f, 0f)
+    lineTo(size.width, 0f)
+    lineTo(size.width, size.height)
+    lineTo(notchRight, size.height)
+    lineTo(size.width / 2f, size.height - notchDepth) // Vの頂点（上向き）
+    lineTo(notchLeft, size.height)
+    lineTo(0f, size.height)
+    close()
+}
+
 @Composable
 internal fun TabsScreen(
     browserSessionController: BrowserSessionController,
+    tabGroupRepository: TabGroupRepository,
     selectedTabId: String?,
     onSelectTab: (String) -> Unit,
     onCloseTab: (String) -> Unit,
@@ -96,16 +124,28 @@ internal fun TabsScreen(
     val viewModel = viewModel(initializer = {
         TabsScreenViewModel(
             browserSessionController = browserSessionController,
+            tabGroupRepository = tabGroupRepository,
         )
     })
-    val tabs by viewModel.tabs.collectAsState()
+    val groupedTabs by viewModel.groupedTabs.collectAsState()
+    val groups by viewModel.groups.collectAsState()
+    val activeGroupIndex by viewModel.activeGroupIndex.collectAsState()
+
     TabsScreenContent(
-        tabs = tabs,
+        groupedTabs = groupedTabs,
+        groups = groups,
+        activeGroupIndex = activeGroupIndex,
         selectedTabId = selectedTabId,
         onSelectTab = onSelectTab,
-        onCloseTab = onCloseTab,
+        onCloseTab = { tabId ->
+            viewModel.onTabClosed(tabId)
+            onCloseTab(tabId)
+        },
         onOpenNewTab = onOpenNewTab,
         onReorderTabs = viewModel::reorderTabs,
+        onGroupSelected = viewModel::onGroupSelected,
+        onGroupPageChanged = viewModel::onGroupPageChanged,
+        onAddGroup = viewModel::addGroup,
         modifier = modifier,
     )
 }
@@ -212,134 +252,70 @@ private fun rememberDragDropState(
 
 @Composable
 private fun TabsScreenContent(
-    tabs: List<TabsScreenTabData>,
+    groupedTabs: List<List<TabsScreenTabData>>,
+    groups: List<TabGroupData>,
+    activeGroupIndex: Int,
     selectedTabId: String?,
     onSelectTab: (String) -> Unit,
     onCloseTab: (String) -> Unit,
     onOpenNewTab: () -> Unit,
-    onReorderTabs: (fromIndex: Int, toIndex: Int) -> Unit,
+    onReorderTabs: (groupIndex: Int, fromLocalIndex: Int, toLocalIndex: Int) -> Unit,
+    onGroupSelected: (Int) -> Unit,
+    onGroupPageChanged: (Int) -> Unit,
+    onAddGroup: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val safePageCount = groups.size.coerceAtLeast(1)
+    val safeInitialPage = activeGroupIndex.coerceIn(0, safePageCount - 1)
+    val pagerState = rememberPagerState(
+        initialPage = safeInitialPage,
+        pageCount = { groups.size.coerceAtLeast(1) },
+    )
+
+    // ViewModelのactiveGroupIndex変化 → ページスクロール
+    LaunchedEffect(activeGroupIndex) {
+        if (pagerState.currentPage != activeGroupIndex && activeGroupIndex in 0 until groups.size) {
+            pagerState.animateScrollToPage(activeGroupIndex)
+        }
+    }
+
+    // ユーザーのスワイプ → ViewModelへ通知
+    LaunchedEffect(pagerState) {
+        snapshotFlow { pagerState.currentPage }.collect { page ->
+            onGroupPageChanged(page)
+        }
+    }
+
     Box(
         modifier = modifier
             .fillMaxSize()
             .windowInsetsPadding(WindowInsets.safeDrawing),
     ) {
-        Column(
-            modifier = Modifier.fillMaxSize(),
-        ) {
-            Surface(
-                color = MaterialTheme.colorScheme.primaryContainer,
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(TabsLayoutDefaults.topBarHeight)
-                        .padding(horizontal = 16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = "Tabs",
-                        style = MaterialTheme.typography.titleMedium,
-                        modifier = Modifier.weight(1f),
-                    )
-                }
-            }
+        Column(modifier = Modifier.fillMaxSize()) {
+            // グループタブバー（栞形）
+            GroupTabBar(
+                groups = groups,
+                activeGroupIndex = activeGroupIndex,
+                onGroupSelected = onGroupSelected,
+                onAddGroup = onAddGroup,
+                modifier = Modifier.fillMaxWidth(),
+            )
 
-            if (tabs.isEmpty()) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text("タブがありません")
-                }
-                return
-            }
-
-            BoxWithConstraints(
-                modifier = Modifier.fillMaxSize(),
-            ) {
-                val columns = TabsLayoutDefaults.calculateColumns(maxWidth)
-                val gridState = rememberLazyGridState()
-                val dragDropState = rememberDragDropState(
-                    gridState = gridState,
-                    onMove = onReorderTabs,
+            // グループごとのタブグリッド（HorizontalPager）
+            HorizontalPager(
+                state = pagerState,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+            ) { page ->
+                val tabsForPage = groupedTabs.getOrElse(page) { emptyList() }
+                GroupTabGrid(
+                    tabs = tabsForPage,
+                    selectedTabId = selectedTabId,
+                    onSelectTab = onSelectTab,
+                    onCloseTab = onCloseTab,
+                    onReorderTabs = { from, to -> onReorderTabs(page, from, to) },
                 )
-
-                LaunchedEffect(Unit) {
-                    val selectedIndex = tabs.indexOfFirst { it.id == selectedTabId }
-                    if (selectedIndex >= 0) {
-                        val targetRow = selectedIndex / columns
-                        gridState.scrollToItem(targetRow * columns)
-                    }
-                }
-
-                LazyVerticalGrid(
-                    columns = GridCells.Fixed(columns),
-                    state = gridState,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .pointerInput(dragDropState) {
-                            detectDragGesturesAfterLongPress(
-                                onDragStart = { offset ->
-                                    dragDropState.onDragStart(offset)
-                                },
-                                onDrag = { change, dragAmount ->
-                                    change.consume()
-                                    dragDropState.onDrag(dragAmount)
-                                },
-                                onDragEnd = { dragDropState.onDragEnd() },
-                                onDragCancel = { dragDropState.onDragEnd() },
-                            )
-                        },
-                    contentPadding = PaddingValues(TabsLayoutDefaults.gridPadding),
-                    verticalArrangement = Arrangement.spacedBy(TabsLayoutDefaults.gridSpacing),
-                    horizontalArrangement = Arrangement.spacedBy(TabsLayoutDefaults.gridSpacing),
-                ) {
-                    items(
-                        items = tabs,
-                        key = { tab -> tab.id },
-                    ) { tab ->
-                        val selected = tab.id == selectedTabId
-                        // ドラッグ中のアイテムはグリッド上で非表示（透明）にする
-                        val isDraggingThis = dragDropState.draggedItemKey == tab.id
-                        TabCard(
-                            tab = tab,
-                            selected = selected,
-                            onSelectTab = onSelectTab,
-                            onCloseTab = onCloseTab,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .aspectRatio(TabsLayoutDefaults.cardAspectRatio)
-                                .animateItem()
-                                .then(if (isDraggingThis) Modifier.alpha(0f) else Modifier),
-                        )
-                    }
-                }
-
-                // ドラッグ中のオーバーレイ表示
-                if (dragDropState.isDragging) {
-                    val overlayTab = tabs.firstOrNull { it.id == dragDropState.draggedItemKey }
-                    if (overlayTab != null) {
-                        val density = LocalDensity.current
-                        val widthDp = with(density) { dragDropState.draggedItemSize.width.toDp() }
-                        val heightDp = with(density) { dragDropState.draggedItemSize.height.toDp() }
-                        Box(
-                            modifier = Modifier
-                                .offset { dragDropState.draggedItemOffset }
-                                .size(width = widthDp, height = heightDp)
-                                .shadow(elevation = 16.dp, shape = RoundedCornerShape(12.dp)),
-                        ) {
-                            TabCard(
-                                tab = overlayTab,
-                                selected = overlayTab.id == selectedTabId,
-                                onSelectTab = {},
-                                onCloseTab = {},
-                                modifier = Modifier.fillMaxSize(),
-                            )
-                        }
-                    }
-                }
             }
         }
 
@@ -353,6 +329,238 @@ private fun TabsScreenContent(
                 painter = painterResource(R.drawable.ic_add_24dp),
                 contentDescription = "新規タブ",
             )
+        }
+    }
+}
+
+/**
+ * グループタブバー。
+ * 栞形のタブを横並びに表示し、末尾に追加ボタンを配置する。
+ * 選択中のタブが手前に表示され、非選択タブは下に沈んで奥にあるように見える。
+ */
+@Composable
+private fun GroupTabBar(
+    groups: List<TabGroupData>,
+    activeGroupIndex: Int,
+    onGroupSelected: (Int) -> Unit,
+    onAddGroup: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(start = 8.dp, top = 8.dp),
+        verticalAlignment = Alignment.Bottom,
+    ) {
+        groups.forEachIndexed { index, group ->
+            val isSelected = index == activeGroupIndex
+            GroupBookmarkTab(
+                label = group.name,
+                isSelected = isSelected,
+                onClick = { onGroupSelected(index) },
+                modifier = Modifier.zIndex(
+                    // 選択中タブを最前面に表示する
+                    if (isSelected) groups.size.toFloat() else index.toFloat(),
+                ),
+            )
+        }
+        // グループ追加ボタン（栞形）
+        AddGroupBookmarkTab(onClick = onAddGroup)
+    }
+}
+
+/**
+ * 栞形のグループタブ。
+ * 選択中: 手前に表示・強調色。非選択: 下にオフセットして奥に見える。
+ */
+@Composable
+private fun GroupBookmarkTab(
+    label: String,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val selectedColor = MaterialTheme.colorScheme.primaryContainer
+    val unselectedColor = MaterialTheme.colorScheme.surfaceVariant
+    val selectedTextColor = MaterialTheme.colorScheme.onPrimaryContainer
+    val unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+    val density = LocalDensity.current
+
+    Box(
+        modifier = modifier
+            .width(120.dp)
+            .height(48.dp)
+            .graphicsLayer {
+                // 非選択タブは下方向にオフセットして奥にあるように見せる
+                translationY = if (isSelected) 0f else with(density) { 6.dp.toPx() }
+                shadowElevation = if (isSelected) {
+                    with(density) { 8.dp.toPx() }
+                } else {
+                    with(density) { 2.dp.toPx() }
+                }
+                shape = BookmarkShape
+                clip = true
+            }
+            .background(
+                color = if (isSelected) selectedColor else unselectedColor,
+                shape = BookmarkShape,
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp)
+            .padding(bottom = 14.dp), // Vノッチ分の下余白
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = label,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            style = MaterialTheme.typography.labelMedium,
+            color = if (isSelected) selectedTextColor else unselectedTextColor,
+        )
+    }
+}
+
+/** 栞形のグループ追加ボタン（"+" アイコン） */
+@Composable
+private fun AddGroupBookmarkTab(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val density = LocalDensity.current
+    Box(
+        modifier = modifier
+            .width(56.dp)
+            .height(48.dp)
+            .graphicsLayer {
+                translationY = with(density) { 6.dp.toPx() }
+                shadowElevation = with(density) { 2.dp.toPx() }
+                shape = BookmarkShape
+                clip = true
+            }
+            .background(
+                color = MaterialTheme.colorScheme.secondaryContainer,
+                shape = BookmarkShape,
+            )
+            .clickable(onClick = onClick)
+            .padding(bottom = 14.dp), // Vノッチ分の下余白
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            painter = painterResource(R.drawable.ic_add_24dp),
+            contentDescription = "グループを追加",
+            tint = MaterialTheme.colorScheme.onSecondaryContainer,
+            modifier = Modifier.size(20.dp),
+        )
+    }
+}
+
+/**
+ * グループ内のタブグリッド。
+ * ドラッグ&ドロップによる並び替えをサポートする。
+ */
+@Composable
+private fun GroupTabGrid(
+    tabs: List<TabsScreenTabData>,
+    selectedTabId: String?,
+    onSelectTab: (String) -> Unit,
+    onCloseTab: (String) -> Unit,
+    onReorderTabs: (fromIndex: Int, toIndex: Int) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    if (tabs.isEmpty()) {
+        Box(
+            modifier = modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text("タブがありません")
+        }
+        return
+    }
+
+    BoxWithConstraints(
+        modifier = modifier.fillMaxSize(),
+    ) {
+        val columns = TabsLayoutDefaults.calculateColumns(maxWidth)
+        val gridState = rememberLazyGridState()
+        val dragDropState = rememberDragDropState(
+            gridState = gridState,
+            onMove = onReorderTabs,
+        )
+
+        LaunchedEffect(Unit) {
+            val selectedIndex = tabs.indexOfFirst { it.id == selectedTabId }
+            if (selectedIndex >= 0) {
+                val targetRow = selectedIndex / columns
+                gridState.scrollToItem(targetRow * columns)
+            }
+        }
+
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(columns),
+            state = gridState,
+            modifier = Modifier
+                .fillMaxSize()
+                .pointerInput(dragDropState) {
+                    detectDragGesturesAfterLongPress(
+                        onDragStart = { offset ->
+                            dragDropState.onDragStart(offset)
+                        },
+                        onDrag = { change, dragAmount ->
+                            change.consume()
+                            dragDropState.onDrag(dragAmount)
+                        },
+                        onDragEnd = { dragDropState.onDragEnd() },
+                        onDragCancel = { dragDropState.onDragEnd() },
+                    )
+                },
+            contentPadding = PaddingValues(TabsLayoutDefaults.gridPadding),
+            verticalArrangement = Arrangement.spacedBy(TabsLayoutDefaults.gridSpacing),
+            horizontalArrangement = Arrangement.spacedBy(TabsLayoutDefaults.gridSpacing),
+        ) {
+            items(
+                items = tabs,
+                key = { tab -> tab.id },
+            ) { tab ->
+                val selected = tab.id == selectedTabId
+                // ドラッグ中のアイテムはグリッド上で非表示（透明）にする
+                val isDraggingThis = dragDropState.draggedItemKey == tab.id
+                TabCard(
+                    tab = tab,
+                    selected = selected,
+                    onSelectTab = onSelectTab,
+                    onCloseTab = onCloseTab,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(TabsLayoutDefaults.cardAspectRatio)
+                        .animateItem()
+                        .then(if (isDraggingThis) Modifier.alpha(0f) else Modifier),
+                )
+            }
+        }
+
+        // ドラッグ中のオーバーレイ表示
+        if (dragDropState.isDragging) {
+            val overlayTab = tabs.firstOrNull { it.id == dragDropState.draggedItemKey }
+            if (overlayTab != null) {
+                val density = LocalDensity.current
+                val widthDp = with(density) { dragDropState.draggedItemSize.width.toDp() }
+                val heightDp = with(density) { dragDropState.draggedItemSize.height.toDp() }
+                Box(
+                    modifier = Modifier
+                        .offset { dragDropState.draggedItemOffset }
+                        .size(width = widthDp, height = heightDp)
+                        .shadow(elevation = 16.dp, shape = RoundedCornerShape(12.dp)),
+                ) {
+                    TabCard(
+                        tab = overlayTab,
+                        selected = overlayTab.id == selectedTabId,
+                        onSelectTab = {},
+                        onCloseTab = {},
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
+            }
         }
     }
 }
@@ -451,31 +659,34 @@ private fun TabCard(
 @Composable
 @Preview
 private fun Preview() {
-    val tabs = remember {
+    val groups = remember {
         listOf(
-            TabsScreenTabData(
-                id = 1L.toString(),
-                title = "Example Domain",
-                previewBitmapArray = null,
+            TabGroupData(TabGroupId("g1"), "デフォルト"),
+            TabGroupData(TabGroupId("g2"), "開発"),
+        )
+    }
+    val groupedTabs = remember {
+        listOf(
+            listOf(
+                TabsScreenTabData(id = "1", title = "Example Domain", previewBitmapArray = null),
+                TabsScreenTabData(id = "2", title = "Google", previewBitmapArray = null),
             ),
-            TabsScreenTabData(
-                id = 2L.toString(),
-                title = "Google",
-                previewBitmapArray = null,
-            ),
-            TabsScreenTabData(
-                id = 3L.toString(),
-                title = "GitHub: Let's build from here",
-                previewBitmapArray = null,
+            listOf(
+                TabsScreenTabData(id = "3", title = "GitHub", previewBitmapArray = null),
             ),
         )
     }
     TabsScreenContent(
-        tabs = tabs,
-        selectedTabId = 1L.toString(),
+        groupedTabs = groupedTabs,
+        groups = groups,
+        activeGroupIndex = 0,
+        selectedTabId = "1",
         onSelectTab = {},
         onCloseTab = {},
         onOpenNewTab = {},
-        onReorderTabs = { _, _ -> },
+        onReorderTabs = { _, _, _ -> },
+        onGroupSelected = {},
+        onGroupPageChanged = {},
+        onAddGroup = {},
     )
 }
