@@ -8,15 +8,16 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import net.matsudamper.browser.BrowserSessionController
+import net.matsudamper.browser.core.TabStore
 import net.matsudamper.browser.data.TabGroupData
 import net.matsudamper.browser.data.TabGroupRepository
 
 
 class TabsScreenViewModel(
-    private val browserSessionController: BrowserSessionController,
+    private val tabStore: TabStore,
     private val tabGroupRepository: TabGroupRepository,
 ) : ViewModel() {
 
@@ -26,7 +27,9 @@ class TabsScreenViewModel(
      */
     private val _localGroupOrder = MutableStateFlow<List<TabGroupData>?>(null)
 
-    /** グループ一覧。ドラッグ中はローカル順序を優先し、DB の更新が遅れても表示が乱れないようにする。 */
+    /** グループ一覧。ドラッグ中はローカル順序を優先し、DB の更新が遅れても表示が乱れないようにする。
+     * Eagerly で収集することで、UI 購読者がいない場合（テスト等）でも groups.value が常に最新値を返す。
+     */
     val groups: StateFlow<List<TabGroupData>> = combine(
         tabGroupRepository.observeGroups(),
         _localGroupOrder,
@@ -34,7 +37,7 @@ class TabsScreenViewModel(
         localOrder ?: dbGroups
     }.stateIn(
         scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS),
+        started = SharingStarted.Eagerly,
         initialValue = emptyList(),
     )
 
@@ -43,12 +46,19 @@ class TabsScreenViewModel(
     val activeGroupIndex: StateFlow<Int> = _activeGroupIndex.asStateFlow()
 
     /**
+     * onGroupSelected で設定したプログラム的スクロールの目標ページ。
+     * Pager アニメーション中に settledPage が中間ページを報告した場合に
+     * _activeGroupIndex を誤って上書きしないようにするためのガード。
+     */
+    private var programmaticScrollTarget: Int? = null
+
+    /**
      * グループ別のタブリスト。
      * groups・tabStoreState・タブグループ割り当ての3つを combine して算出する。
      */
     val groupedTabs: StateFlow<List<List<TabsScreenTabData>>> = combine(
         groups,
-        browserSessionController.tabStoreState,
+        tabStore.tabStoreState,
         tabGroupRepository.observeTabGroupAssignments(),
     ) { groups, tabState, assignments ->
         val assignmentMap = assignments.associate { it.tabId to it.groupId }
@@ -72,32 +82,64 @@ class TabsScreenViewModel(
     init {
         viewModelScope.launch {
             // 初回: デフォルトグループを作成する（DBが空のときのみ）
-            val initialTabs = browserSessionController.tabStoreState.first()
+            val initialTabs = tabStore.tabStoreState.first()
             tabGroupRepository.createDefaultGroupIfEmpty(initialTabs.tabs.map { it.id })
         }
         viewModelScope.launch {
-            // 新規タブを監視してアクティブグループに自動割り当てする
-            var previousTabIds = browserSessionController.tabStoreState.value.tabs.map { it.id }.toSet()
-            browserSessionController.tabStoreState.collect { state ->
-                val currentIds = state.tabs.map { it.id }.toSet()
-                val newIds = currentIds - previousTabIds
-                newIds.forEach { tabId ->
-                    val activeGroup = groups.value.getOrNull(_activeGroupIndex.value) ?: return@forEach
-                    tabGroupRepository.assignTabToGroup(tabId, activeGroup.id)
-                }
-                previousTabIds = currentIds
+            // タブとグループ割り当ての両方が揃ってから、未割当タブをアクティブグループに自動割り当てする。
+            // TabGroupDao.setTabGroup は INSERT IGNORE + UPDATE を行うため、
+            // TabPersistenceCoordinator が tab_state 行を作成する前でも割り当てが成功する。
+            combine(
+                tabStore.tabStoreState.map { state -> state.tabs.map { it.id }.toSet() },
+                tabGroupRepository.observeTabGroupAssignments(),
+                groups,
+                _activeGroupIndex,
+            ) { allTabIds, assignments, groupList, activeIndex ->
+                val assignedTabIds = assignments
+                    .filter { it.groupId.isNotEmpty() }
+                    .map { it.tabId }
+                    .toSet()
+                val unassigned = allTabIds - assignedTabIds
+                val activeGroup = groupList.getOrNull(activeIndex)
+                Pair(unassigned, activeGroup)
             }
+                .collect { (unassignedTabIds, activeGroup) ->
+                    if (unassignedTabIds.isEmpty()) return@collect
+                    if (activeGroup == null) return@collect
+                    unassignedTabIds.forEach { tabId ->
+                        tabGroupRepository.assignTabToGroup(tabId, activeGroup.id)
+                    }
+                }
         }
     }
 
-    /** グループを選択する（タブバーのタップ時） */
+    /**
+     * グループを選択する（タブバーのタップ時）。
+     * Pager のプログラム的アニメーション中に settledPage が中間ページを報告しても
+     * _activeGroupIndex が上書きされないよう、programmaticScrollTarget を設定する。
+     */
     fun onGroupSelected(index: Int) {
         if (_activeGroupIndex.value == index) return
-        _activeGroupIndex.value = index.coerceIn(0, groups.value.lastIndex.coerceAtLeast(0))
+        val coerced = index.coerceIn(0, groups.value.lastIndex.coerceAtLeast(0))
+        programmaticScrollTarget = coerced
+        _activeGroupIndex.value = coerced
     }
 
-    /** ページスワイプ時にグループインデックスを同期する */
+    /**
+     * ページスワイプ時にグループインデックスを同期する。
+     * プログラム的アニメーション中（onGroupSelected 経由）は中間ページを無視し、
+     * 目標ページに到達したときのみターゲットをクリアする。
+     */
     fun onGroupPageChanged(page: Int) {
+        val target = programmaticScrollTarget
+        if (target != null) {
+            if (page == target) {
+                // アニメーションが目標ページに到達 → ターゲットをクリア
+                programmaticScrollTarget = null
+            }
+            // プログラム的スクロール中は _activeGroupIndex を上書きしない
+            return
+        }
         if (_activeGroupIndex.value == page) return
         _activeGroupIndex.value = page.coerceIn(0, groups.value.lastIndex.coerceAtLeast(0))
     }
@@ -161,9 +203,9 @@ class TabsScreenViewModel(
             if (idx == groupIndex) reordered else tabs
         }
         globalOrder.forEachIndexed { targetIdx, tab ->
-            val currentIdx = browserSessionController.tabStoreState.value.tabs.indexOfFirst { it.id == tab.id }
+            val currentIdx = tabStore.tabStoreState.value.tabs.indexOfFirst { it.id == tab.id }
             if (currentIdx >= 0 && currentIdx != targetIdx) {
-                browserSessionController.moveTab(currentIdx, targetIdx)
+                tabStore.moveTab(currentIdx, targetIdx)
             }
         }
     }

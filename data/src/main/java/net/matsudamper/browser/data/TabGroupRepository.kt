@@ -7,33 +7,55 @@ import net.matsudamper.browser.data.tab.TabDatabase
 import net.matsudamper.browser.data.tab.TabGroupAssignment
 import net.matsudamper.browser.data.tab.TabGroupEntity
 
-class TabGroupRepository(context: Context) {
-    private val db = TabDatabase.getInstance(context)
-    private val dao = db.tabGroupDao()
-
+interface TabGroupRepository {
     /** グループ一覧を Flow で購読する */
-    fun observeGroups(): Flow<List<TabGroupData>> {
-        return dao.observeGroups().map { entities ->
-            entities.map { TabGroupData(TabGroupId(it.groupId), it.name) }
-        }
-    }
+    fun observeGroups(): Flow<List<TabGroupData>>
 
     /** タブID→グループIDのマッピングを Flow で購読する */
-    fun observeTabGroupAssignments(): Flow<List<TabGroupAssignment>> {
-        return dao.observeTabGroupAssignments()
-    }
+    fun observeTabGroupAssignments(): Flow<List<TabGroupAssignment>>
 
     /**
      * 初期グループを作成する。
      * DB が空のときのみデフォルトグループを作成し、既存のすべてのタブをそのグループに割り当てる。
      * DB に既にグループが存在する場合は先頭グループのIDを返す。
      */
-    suspend fun createDefaultGroupIfEmpty(tabIds: List<String>): TabGroupId {
+    suspend fun createDefaultGroupIfEmpty(tabIds: List<String>): TabGroupId
+
+    /** 新グループを追加する */
+    suspend fun addGroup(name: String, sortOrder: Int): TabGroupId
+
+    /** タブをグループに割り当てる */
+    suspend fun assignTabToGroup(tabId: String, groupId: TabGroupId)
+
+    /** タブのグループ割り当てを空文字に設定する（タブ削除時） */
+    suspend fun removeTabFromGroup(tabId: String)
+
+    /** グループの並び順を更新する */
+    suspend fun reorderGroups(orderedGroupIds: List<String>)
+}
+
+class TabGroupRepositoryImpl(context: Context) : TabGroupRepository {
+    private val db = TabDatabase.getInstance(context)
+    private val dao = db.tabGroupDao()
+
+    override fun observeGroups(): Flow<List<TabGroupData>> {
+        return dao.observeGroups().map { entities ->
+            entities.map { TabGroupData(TabGroupId(it.groupId), it.name) }
+        }
+    }
+
+    override fun observeTabGroupAssignments(): Flow<List<TabGroupAssignment>> {
+        return dao.observeTabGroupAssignments()
+    }
+
+    override suspend fun createDefaultGroupIfEmpty(tabIds: List<String>): TabGroupId {
         val existing = dao.getAllGroups()
         if (existing.isNotEmpty()) {
             val firstId = TabGroupId(existing.first().groupId)
-            // グループ未割当タブをデフォルトグループに割り当て
-            tabIds.forEach { tabId -> dao.setTabGroup(tabId, firstId.value) }
+            // グループ未割当タブ（groupId が空）のみデフォルトグループに割り当て
+            // 既に別グループに割り当て済みのタブは触らない
+            val unassignedTabIds = dao.getUnassignedTabIds()
+            unassignedTabIds.forEach { tabId -> dao.setTabGroup(tabId, firstId.value) }
             return firstId
         }
         val id = TabGroupId.generate()
@@ -42,25 +64,21 @@ class TabGroupRepository(context: Context) {
         return id
     }
 
-    /** 新グループを追加する */
-    suspend fun addGroup(name: String, sortOrder: Int): TabGroupId {
+    override suspend fun addGroup(name: String, sortOrder: Int): TabGroupId {
         val id = TabGroupId.generate()
         dao.upsertGroup(TabGroupEntity(groupId = id.value, name = name, sortOrder = sortOrder))
         return id
     }
 
-    /** タブをグループに割り当てる */
-    suspend fun assignTabToGroup(tabId: String, groupId: TabGroupId) {
+    override suspend fun assignTabToGroup(tabId: String, groupId: TabGroupId) {
         dao.setTabGroup(tabId, groupId.value)
     }
 
-    /** タブのグループ割り当てを空文字に設定する（タブ削除時） */
-    suspend fun removeTabFromGroup(tabId: String) {
+    override suspend fun removeTabFromGroup(tabId: String) {
         dao.setTabGroup(tabId, "")
     }
 
-    /** グループの並び順を更新する */
-    suspend fun reorderGroups(orderedGroupIds: List<String>) {
+    override suspend fun reorderGroups(orderedGroupIds: List<String>) {
         orderedGroupIds.forEachIndexed { index, groupId ->
             dao.updateSortOrder(groupId, index)
         }

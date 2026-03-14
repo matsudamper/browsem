@@ -126,7 +126,7 @@ internal fun TabsScreen(
 ) {
     val viewModel = viewModel(initializer = {
         TabsScreenViewModel(
-            browserSessionController = browserSessionController,
+            tabStore = browserSessionController,
             tabGroupRepository = tabGroupRepository,
         )
     })

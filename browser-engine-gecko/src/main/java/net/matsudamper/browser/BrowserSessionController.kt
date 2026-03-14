@@ -151,7 +151,7 @@ class BrowserSessionController(runtime: GeckoRuntime) : TabStore {
         )
     }
 
-    fun moveTab(fromIndex: Int, toIndex: Int) {
+    override fun moveTab(fromIndex: Int, toIndex: Int) {
         if (fromIndex == toIndex) return
         if (fromIndex < 0 || fromIndex >= tabList.size) return
         if (toIndex < 0 || toIndex >= tabList.size) return

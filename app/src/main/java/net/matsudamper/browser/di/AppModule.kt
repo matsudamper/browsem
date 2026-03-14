@@ -4,6 +4,7 @@ import net.matsudamper.browser.BrowserViewModel
 import net.matsudamper.browser.GeckoDownloadManager
 import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.TabGroupRepository
+import net.matsudamper.browser.data.TabGroupRepositoryImpl
 import net.matsudamper.browser.data.TabRepository
 import net.matsudamper.browser.data.history.HistoryRepository
 import net.matsudamper.browser.data.websuggestion.HttpWebSuggestionRepository
@@ -16,7 +17,7 @@ import org.mozilla.geckoview.GeckoRuntime
 val dataModule = module {
     single { SettingsRepository(androidContext()) }
     single { TabRepository(androidContext()) }
-    single { TabGroupRepository(androidContext()) }
+    single<TabGroupRepository> { TabGroupRepositoryImpl(androidContext()) }
     single { HistoryRepository(androidContext()) }
     single<WebSuggestionRepository> { HttpWebSuggestionRepository() }
 }
