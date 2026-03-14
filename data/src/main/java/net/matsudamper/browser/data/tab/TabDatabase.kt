@@ -5,9 +5,10 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 
-@Database(entities = [TabStateEntity::class], version = 1, exportSchema = false)
+@Database(entities = [TabStateEntity::class, TabGroupEntity::class], version = 3, exportSchema = false)
 abstract class TabDatabase : RoomDatabase() {
     abstract fun tabDao(): TabDao
+    abstract fun tabGroupDao(): TabGroupDao
 
     companion object {
         @Volatile
@@ -19,7 +20,9 @@ abstract class TabDatabase : RoomDatabase() {
                     context.applicationContext,
                     TabDatabase::class.java,
                     "tab.db",
-                ).build().also { instance = it }
+                )
+                    .fallbackToDestructiveMigration() // 互換性不要なので完全再構築
+                    .build().also { instance = it }
             }
         }
     }

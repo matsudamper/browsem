@@ -74,6 +74,12 @@ class TabRepository(context: Context) {
         return if (file.exists()) file.readBytes() else null
     }
 
+    /** タブ状態とサムネイルをすべて削除する */
+    suspend fun clearAllData() {
+        dao.deleteAll()
+        thumbnailDir.listFiles()?.forEach { it.delete() }
+    }
+
     /** 現在存在しないタブのサムネイルファイルを削除する */
     fun deleteOrphanedThumbnails(validTabIds: Set<String>) {
         thumbnailDir.listFiles()?.forEach { file ->
@@ -101,6 +107,7 @@ class TabRepository(context: Context) {
         themeColor = themeColor,
         sortOrder = sortOrder,
         isSelected = isSelected,
+        groupId = "", // グループ管理は TabGroupRepository が担う
     )
 }
 

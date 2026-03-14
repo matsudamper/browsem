@@ -26,4 +26,5 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.ktx)
     implementation(project(":browser-core"))
     implementation(project(":browser-engine-gecko"))
+    implementation(project(":data"))
 }
