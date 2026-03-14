@@ -74,6 +74,7 @@ internal fun BrowserToolBar(
     isPcMode: Boolean,
     onPcModeToggle: () -> Unit,
     onTranslatePage: () -> Unit,
+    onAddToHomeScreen: () -> Unit,
     toolbarColor: Color?,
     onHorizontalDrag: (Float) -> Unit = {},
     onHorizontalDragEnd: () -> Unit = {},
@@ -122,6 +123,7 @@ internal fun BrowserToolBar(
                 onShare = onShare,
                 onFindInPage = onFindInPage,
                 onOpenSettings = onOpenSettings,
+                onAddToHomeScreen = onAddToHomeScreen,
             )
         }
     )
@@ -320,6 +322,7 @@ private fun Preview() {
                     isPcMode = false,
                     onPcModeToggle = {},
                     onFindInPage = {},
+                    onAddToHomeScreen = {},
                     toolbarColor = null,
                     onRefresh = {},
                     onHome = {},
