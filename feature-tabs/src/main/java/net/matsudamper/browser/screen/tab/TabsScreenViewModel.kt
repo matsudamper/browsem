@@ -20,13 +20,23 @@ class TabsScreenViewModel(
     private val tabGroupRepository: TabGroupRepository,
 ) : ViewModel() {
 
-    /** グループ一覧（DBから購読） */
-    val groups: StateFlow<List<TabGroupData>> = tabGroupRepository.observeGroups()
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS),
-            initialValue = emptyList(),
-        )
+    /**
+     * ドラッグ中のグループ並び順をローカルで保持する。
+     * null のときは DB の順序をそのまま使う。
+     */
+    private val _localGroupOrder = MutableStateFlow<List<TabGroupData>?>(null)
+
+    /** グループ一覧。ドラッグ中はローカル順序を優先し、DB の更新が遅れても表示が乱れないようにする。 */
+    val groups: StateFlow<List<TabGroupData>> = combine(
+        tabGroupRepository.observeGroups(),
+        _localGroupOrder,
+    ) { dbGroups, localOrder ->
+        localOrder ?: dbGroups
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS),
+        initialValue = emptyList(),
+    )
 
     /** 現在アクティブなグループのインデックス */
     private val _activeGroupIndex = MutableStateFlow(0)
@@ -95,9 +105,37 @@ class TabsScreenViewModel(
     /** 新しいグループを追加する */
     fun addGroup() {
         viewModelScope.launch {
-            val newSortOrder = groups.value.size
-            tabGroupRepository.addGroup("グループ ${newSortOrder + 1}", newSortOrder)
+            val currentGroups = groups.value
+            val newSortOrder = currentGroups.size
+            val name = "グループ ${newSortOrder + 1}"
+            val newId = tabGroupRepository.addGroup(name, newSortOrder)
+            // ローカル順序に追加してすぐに反映する
+            _localGroupOrder.value = currentGroups + TabGroupData(newId, name)
             _activeGroupIndex.value = newSortOrder
+        }
+    }
+
+    /**
+     * グループを長押しドラッグで並び替える。
+     * ローカル順序をすぐに更新して UI を即時反映し、DB へも非同期で保存する。
+     */
+    fun reorderGroups(fromIndex: Int, toIndex: Int) {
+        val currentGroups = (_localGroupOrder.value ?: groups.value).toMutableList()
+        if (fromIndex !in currentGroups.indices || toIndex !in currentGroups.indices) return
+        currentGroups.add(toIndex, currentGroups.removeAt(fromIndex))
+        _localGroupOrder.value = currentGroups
+
+        // アクティブグループのインデックスを並び替えに合わせて補正する
+        val active = _activeGroupIndex.value
+        _activeGroupIndex.value = when {
+            active == fromIndex -> toIndex
+            fromIndex < toIndex && active in (fromIndex + 1)..toIndex -> active - 1
+            fromIndex > toIndex && active in toIndex until fromIndex -> active + 1
+            else -> active
+        }
+
+        viewModelScope.launch {
+            tabGroupRepository.reorderGroups(currentGroups.map { it.id.value })
         }
     }
 

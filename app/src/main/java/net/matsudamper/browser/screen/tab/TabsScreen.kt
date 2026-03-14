@@ -7,7 +7,6 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -30,9 +29,12 @@ import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.GenericShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
@@ -71,6 +73,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.round
 import androidx.compose.ui.unit.toOffset
+import kotlin.math.abs
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.viewmodel.compose.viewModel
 import net.matsudamper.browser.BrowserSessionController
@@ -143,6 +146,7 @@ internal fun TabsScreen(
         },
         onOpenNewTab = onOpenNewTab,
         onReorderTabs = viewModel::reorderTabs,
+        onReorderGroups = viewModel::reorderGroups,
         onGroupSelected = viewModel::onGroupSelected,
         onGroupPageChanged = viewModel::onGroupPageChanged,
         onAddGroup = viewModel::addGroup,
@@ -250,6 +254,87 @@ private fun rememberDragDropState(
     }
 }
 
+/** グループタブバーのドラッグ&ドロップ状態を管理するクラス */
+private class GroupDragDropState(
+    val listState: LazyListState,
+    private val onMove: (fromIndex: Int, toIndex: Int) -> Unit,
+) {
+    /** ドラッグ中のグループの key（group.id.value） */
+    var draggedItemKey: Any? by mutableStateOf(null)
+        private set
+
+    /** LazyRow ビューポート座標でのオーバーレイ左上位置 */
+    var draggedItemOffset: IntOffset by mutableStateOf(IntOffset.Zero)
+        private set
+
+    /** ドラッグ中アイテムのサイズ（ピクセル） */
+    var draggedItemSize: IntSize by mutableStateOf(IntSize.Zero)
+        private set
+
+    /** 並び替え追跡用の現在インデックス */
+    private var currentDragIndex: Int by mutableIntStateOf(-1)
+
+    val isDragging: Boolean get() = draggedItemKey != null
+
+    /** ドラッグ開始時の処理。groupCount は追加ボタンを除いたグループ数。 */
+    fun onDragStart(offset: Offset, groupCount: Int) {
+        val viewportOffset = listState.layoutInfo.viewportStartOffset
+        val item = listState.layoutInfo.visibleItemsInfo.firstOrNull { info ->
+            // LazyRow はスクロール方向が x なので viewportOffset を引いてビューポート相対座標に変換する
+            val itemLeft = (info.offset - viewportOffset).toFloat()
+            val itemRight = itemLeft + info.size
+            info.index < groupCount && offset.x >= itemLeft && offset.x <= itemRight
+        } ?: return
+
+        draggedItemKey = item.key
+        draggedItemOffset = IntOffset(item.offset - viewportOffset, 0)
+        draggedItemSize = IntSize(item.size, listState.layoutInfo.viewportSize.height)
+        currentDragIndex = item.index
+    }
+
+    /** ドラッグ中の移動処理 */
+    fun onDrag(dragAmount: Offset, groupCount: Int) {
+        if (!isDragging) return
+        draggedItemOffset = (draggedItemOffset.toOffset() + dragAmount).round()
+
+        val centerX = draggedItemOffset.x + draggedItemSize.width / 2f
+        val viewportOffset = listState.layoutInfo.viewportStartOffset
+
+        val targetItem = listState.layoutInfo.visibleItemsInfo
+            .filter { it.key != draggedItemKey && it.index < groupCount }
+            .minByOrNull { info ->
+                val itemCenterX = (info.offset - viewportOffset) + info.size / 2f
+                abs(centerX - itemCenterX)
+            } ?: return
+
+        val targetLeft = (targetItem.offset - viewportOffset).toFloat()
+        val targetRight = targetLeft + targetItem.size
+
+        if (centerX in targetLeft..targetRight && targetItem.index != currentDragIndex) {
+            onMove(currentDragIndex, targetItem.index)
+            currentDragIndex = targetItem.index
+        }
+    }
+
+    /** ドラッグ終了時の処理 */
+    fun onDragEnd() {
+        draggedItemKey = null
+        draggedItemOffset = IntOffset.Zero
+        draggedItemSize = IntSize.Zero
+        currentDragIndex = -1
+    }
+}
+
+@Composable
+private fun rememberGroupDragDropState(
+    listState: LazyListState,
+    onMove: (fromIndex: Int, toIndex: Int) -> Unit,
+): GroupDragDropState {
+    return remember(listState) {
+        GroupDragDropState(listState = listState, onMove = onMove)
+    }
+}
+
 @Composable
 private fun TabsScreenContent(
     groupedTabs: List<List<TabsScreenTabData>>,
@@ -260,6 +345,7 @@ private fun TabsScreenContent(
     onCloseTab: (String) -> Unit,
     onOpenNewTab: () -> Unit,
     onReorderTabs: (groupIndex: Int, fromLocalIndex: Int, toLocalIndex: Int) -> Unit,
+    onReorderGroups: (fromIndex: Int, toIndex: Int) -> Unit,
     onGroupSelected: (Int) -> Unit,
     onGroupPageChanged: (Int) -> Unit,
     onAddGroup: () -> Unit,
@@ -297,6 +383,7 @@ private fun TabsScreenContent(
                 groups = groups,
                 activeGroupIndex = activeGroupIndex,
                 onGroupSelected = onGroupSelected,
+                onReorderGroups = onReorderGroups,
                 onAddGroup = onAddGroup,
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -337,36 +424,83 @@ private fun TabsScreenContent(
  * グループタブバー。
  * 栞形のタブを横並びに表示し、末尾に追加ボタンを配置する。
  * 選択中のタブが手前に表示され、非選択タブは下に沈んで奥にあるように見える。
+ * 長押しドラッグでグループの順序を入れ替えられる。
  */
 @Composable
 private fun GroupTabBar(
     groups: List<TabGroupData>,
     activeGroupIndex: Int,
     onGroupSelected: (Int) -> Unit,
+    onReorderGroups: (fromIndex: Int, toIndex: Int) -> Unit,
     onAddGroup: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Row(
+    val listState = rememberLazyListState()
+    val dragDropState = rememberGroupDragDropState(
+        listState = listState,
+        onMove = onReorderGroups,
+    )
+
+    Box(
         modifier = modifier
             .fillMaxWidth()
-            .horizontalScroll(rememberScrollState())
             .padding(start = 8.dp, top = 8.dp),
-        verticalAlignment = Alignment.Bottom,
     ) {
-        groups.forEachIndexed { index, group ->
-            val isSelected = index == activeGroupIndex
-            GroupBookmarkTab(
-                label = group.name,
-                isSelected = isSelected,
-                onClick = { onGroupSelected(index) },
-                modifier = Modifier.zIndex(
-                    // 選択中タブを最前面に表示する
-                    if (isSelected) groups.size.toFloat() else index.toFloat(),
-                ),
-            )
+        LazyRow(
+            state = listState,
+            modifier = Modifier
+                .fillMaxWidth()
+                .pointerInput(dragDropState) {
+                    detectDragGesturesAfterLongPress(
+                        onDragStart = { offset ->
+                            dragDropState.onDragStart(offset, groups.size)
+                        },
+                        onDrag = { change, dragAmount ->
+                            change.consume()
+                            dragDropState.onDrag(dragAmount, groups.size)
+                        },
+                        onDragEnd = { dragDropState.onDragEnd() },
+                        onDragCancel = { dragDropState.onDragEnd() },
+                    )
+                },
+            verticalAlignment = Alignment.Bottom,
+        ) {
+            itemsIndexed(
+                items = groups,
+                key = { _, group -> group.id.value },
+            ) { index, group ->
+                val isSelected = index == activeGroupIndex
+                val isDraggingThis = dragDropState.draggedItemKey == group.id.value
+                GroupBookmarkTab(
+                    label = group.name,
+                    isSelected = isSelected,
+                    onClick = { onGroupSelected(index) },
+                    modifier = Modifier
+                        .animateItem()
+                        .zIndex(if (isSelected) groups.size.toFloat() else index.toFloat())
+                        .then(if (isDraggingThis) Modifier.alpha(0f) else Modifier),
+                )
+            }
+            // グループ追加ボタン（ドラッグ対象外）
+            item(key = "add_group") {
+                AddGroupBookmarkTab(onClick = onAddGroup)
+            }
         }
-        // グループ追加ボタン（栞形）
-        AddGroupBookmarkTab(onClick = onAddGroup)
+
+        // ドラッグ中のオーバーレイ表示
+        if (dragDropState.isDragging) {
+            val draggedGroup = groups.firstOrNull { it.id.value == dragDropState.draggedItemKey }
+            if (draggedGroup != null) {
+                GroupBookmarkTab(
+                    label = draggedGroup.name,
+                    isSelected = true, // 持ち上がった状態なので選択扱いでエレベーションを高くする
+                    onClick = {},
+                    modifier = Modifier
+                        .offset { dragDropState.draggedItemOffset }
+                        .zIndex(Float.MAX_VALUE),
+                )
+            }
+        }
     }
 }
 
@@ -685,6 +819,7 @@ private fun Preview() {
         onCloseTab = {},
         onOpenNewTab = {},
         onReorderTabs = { _, _, _ -> },
+        onReorderGroups = { _, _ -> },
         onGroupSelected = {},
         onGroupPageChanged = {},
         onAddGroup = {},

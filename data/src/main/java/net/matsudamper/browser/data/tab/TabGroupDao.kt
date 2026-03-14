@@ -26,6 +26,9 @@ interface TabGroupDao {
     @Query("UPDATE tab_state SET groupId = :groupId WHERE tabId = :tabId")
     suspend fun setTabGroup(tabId: String, groupId: String)
 
+    @Query("UPDATE tab_group SET sortOrder = :sortOrder WHERE groupId = :groupId")
+    suspend fun updateSortOrder(groupId: String, sortOrder: Int)
+
     /** タブID→グループIDのマッピングを Flow で購読する */
     @Query("SELECT tabId, groupId FROM tab_state")
     fun observeTabGroupAssignments(): Flow<List<TabGroupAssignment>>

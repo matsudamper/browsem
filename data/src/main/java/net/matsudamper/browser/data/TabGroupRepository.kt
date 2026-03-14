@@ -58,6 +58,13 @@ class TabGroupRepository(context: Context) {
     suspend fun removeTabFromGroup(tabId: String) {
         dao.setTabGroup(tabId, "")
     }
+
+    /** グループの並び順を更新する */
+    suspend fun reorderGroups(orderedGroupIds: List<String>) {
+        orderedGroupIds.forEachIndexed { index, groupId ->
+            dao.updateSortOrder(groupId, index)
+        }
+    }
 }
 
 data class TabGroupData(val id: TabGroupId, val name: String)
