@@ -59,14 +59,15 @@ internal fun AddToHomeScreenDialog(
 
 /**
  * ホーム画面にショートカットを追加する。
- * ショートカットはメインブラウザでURLを開く。
+ * ショートカットはアプリの http/https ディープリンクハンドラ経由でURLを開く。
  */
 private fun addShortcutToHome(context: Context, url: String, title: String) {
     if (!ShortcutManagerCompat.isRequestPinShortcutSupported(context)) {
         Toast.makeText(context, "ランチャーがショートカット追加に対応していません", Toast.LENGTH_SHORT).show()
         return
     }
-    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url), context, MainActivity::class.java)
+    // DeepLinkActivity を経由することでアプリの http/https VIEW ルーティングを正しく使用する
+    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url), context, DeepLinkActivity::class.java)
     val info = ShortcutInfoCompat.Builder(context, "shortcut_${url.hashCode()}")
         .setShortLabel(title.ifBlank { url }.take(25))
         .setLongLabel(title.ifBlank { url })
@@ -78,17 +79,18 @@ private fun addShortcutToHome(context: Context, url: String, title: String) {
 
 /**
  * ホーム画面にアプリとして追加する。
- * 専用の WebAppActivity で開き、独立したタスクとして管理される。
+ * 専用の WebAppActivity で開き、ドキュメントタスクとして独立したRecentsエントリを持つ。
  */
 private fun addWebAppToHome(context: Context, url: String, title: String) {
     if (!ShortcutManagerCompat.isRequestPinShortcutSupported(context)) {
         Toast.makeText(context, "ランチャーがショートカット追加に対応していません", Toast.LENGTH_SHORT).show()
         return
     }
+    // FLAG_ACTIVITY_NEW_DOCUMENT により各ショートカットが独立したRecentsエントリを持つ
     val intent = Intent(context, WebAppActivity::class.java).apply {
         action = Intent.ACTION_VIEW
         data = Uri.parse(url)
-        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        addFlags(Intent.FLAG_ACTIVITY_NEW_DOCUMENT)
     }
     val info = ShortcutInfoCompat.Builder(context, "webapp_${url.hashCode()}")
         .setShortLabel(title.ifBlank { url }.take(25))

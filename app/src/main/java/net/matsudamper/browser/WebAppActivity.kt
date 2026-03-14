@@ -1,29 +1,23 @@
 package net.matsudamper.browser
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
-import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
-import androidx.lifecycle.viewmodel.compose.viewModel
 import net.matsudamper.browser.data.SettingsRepository
-import net.matsudamper.browser.data.TranslationProvider
 import net.matsudamper.browser.data.history.HistoryRepository
 import net.matsudamper.browser.data.resolvedHomepageUrl
 import net.matsudamper.browser.data.resolvedSearchTemplate
 import net.matsudamper.browser.data.websuggestion.WebSuggestionRepository
-import net.matsudamper.browser.media.MediaWebExtension
-import net.matsudamper.browser.screen.browser.BrowserScreenViewModel
+import net.matsudamper.browser.screen.webapp.WebAppScreen
 import org.koin.android.ext.android.inject
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoRuntime
@@ -65,7 +59,8 @@ class WebAppActivity : ComponentActivity() {
 
         runtimeCoordinator = BrowserRuntimeCoordinator(applicationContext, runtime)
 
-        val initialUrl = intent.dataString.orEmpty()
+        // 外部アプリから任意のURLが渡されないよう、http/https スキームのみ許可する
+        val initialUrl = resolveInitialUrl()
         setContent {
             val settings by settingsRepository.settings.collectAsState(initial = null)
             val browserSettings = settings ?: return@setContent
@@ -76,7 +71,7 @@ class WebAppActivity : ComponentActivity() {
 
             BrowserTheme(themeMode = browserSettings.themeMode) {
                 WebAppScreen(
-                    initialUrl = initialUrl.takeIf { it.isNotBlank() } ?: browserSettings.resolvedHomepageUrl(),
+                    initialUrl = initialUrl ?: browserSettings.resolvedHomepageUrl(),
                     homepageUrl = browserSettings.resolvedHomepageUrl(),
                     searchTemplate = browserSettings.resolvedSearchTemplate(),
                     translationProvider = browserSettings.translationProvider,
@@ -103,6 +98,19 @@ class WebAppActivity : ComponentActivity() {
         super.onDestroy()
     }
 
+    /**
+     * Intentのデータから安全なURLを取り出す。
+     * ACTION_VIEW かつ http/https スキームの場合のみURLとして採用し、
+     * それ以外は null を返してホームページにフォールバックさせる。
+     */
+    private fun resolveInitialUrl(): String? {
+        if (intent.action != Intent.ACTION_VIEW) return null
+        val data = intent.data ?: return null
+        val scheme = data.scheme ?: return null
+        if (scheme != "http" && scheme != "https") return null
+        return data.toString()
+    }
+
     private fun requestNotificationPermissionIfNeeded(): GeckoResult<Int> {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
             return GeckoResult.fromValue(GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW)
@@ -127,61 +135,3 @@ class WebAppActivity : ComponentActivity() {
     }
 }
 
-@Composable
-private fun WebAppScreen(
-    initialUrl: String,
-    homepageUrl: String,
-    searchTemplate: String,
-    translationProvider: TranslationProvider,
-    browserSessionController: BrowserSessionController,
-    settingsRepository: SettingsRepository,
-    historyRepository: HistoryRepository,
-    webSuggestionRepository: WebSuggestionRepository,
-    themeColorExtension: ThemeColorWebExtension,
-    mediaWebExtension: MediaWebExtension,
-    onDesktopNotificationPermissionRequest: () -> GeckoResult<Int>,
-) {
-    val viewModel = viewModel(initializer = {
-        BrowserScreenViewModel(
-            historyRepository = historyRepository,
-            settingsRepository = settingsRepository,
-            webSuggestionRepository = webSuggestionRepository,
-        )
-    })
-    val urlBarSuggestions by viewModel.urlBarSuggestions.collectAsState()
-    val browserTab = remember(browserSessionController, initialUrl) {
-        browserSessionController.createAndAppendTab(initialUrl = initialUrl)
-    }
-
-    GeckoBrowserTab(
-        modifier = Modifier.fillMaxSize(),
-        browserTab = browserTab,
-        homepageUrl = homepageUrl,
-        searchTemplate = searchTemplate,
-        translationProvider = translationProvider,
-        themeColorExtension = themeColorExtension,
-        mediaWebExtension = mediaWebExtension,
-        browserSessionController = browserSessionController,
-        tabCount = 1,
-        onInstallExtensionRequest = {},
-        onDesktopNotificationPermissionRequest = { _ ->
-            onDesktopNotificationPermissionRequest()
-        },
-        onOpenSettings = {},
-        onOpenTabs = {},
-        enableTabUi = false,
-        showInstallExtensionItem = false,
-        // バックナビゲーションを有効にしてブラウザ履歴を遡れるようにする
-        enableBackNavigation = true,
-        // ウェブアプリモード: 閉じるボタンなし、カスタムタブ風のツールバー
-        webAppMode = true,
-        onOpenNewSessionRequest = { uri ->
-            browserTab.session.loadUri(uri)
-            browserTab.session
-        },
-        onHistoryRecord = { url, title -> historyRepository.recordVisit(url, title) },
-        onHistoryTitleUpdate = { id, title -> historyRepository.updateTitle(id, title) },
-        urlBarSuggestions = urlBarSuggestions,
-        onUrlInputChanged = viewModel::onUrlInputChanged,
-    )
-}
