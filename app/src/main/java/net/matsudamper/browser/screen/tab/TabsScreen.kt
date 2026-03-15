@@ -59,10 +59,13 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -150,6 +153,7 @@ internal fun TabsScreen(
         onGroupSelected = viewModel::onGroupSelected,
         onGroupPageChanged = viewModel::onGroupPageChanged,
         onAddGroup = viewModel::addGroup,
+        onMoveTabToGroup = viewModel::moveTabToGroup,
         modifier = modifier,
     )
 }
@@ -177,6 +181,13 @@ private class DragDropState(
     /** ドラッグ中かどうか */
     val isDragging: Boolean get() = draggedItemKey != null
 
+    /** ルート座標でのドラッグ中の中心位置（グループ間移動の衝突判定用） */
+    var dragCenterInRoot: Offset by mutableStateOf(Offset.Zero)
+        private set
+
+    /** グリッドのルート座標上の bounds（onGloballyPositioned で設定） */
+    var gridBoundsInRoot: Rect by mutableStateOf(Rect.Zero)
+
     /** ドラッグ開始時の処理 */
     fun onDragStart(offset: Offset) {
         val viewportOffset = gridState.layoutInfo.viewportStartOffset
@@ -194,6 +205,9 @@ private class DragDropState(
         draggedItemOffset = IntOffset(item.offset.x, item.offset.y - viewportOffset)
         draggedItemSize = item.size
         currentDragIndex = item.index
+
+        // ルート座標での中心位置を初期化
+        updateDragCenterInRoot()
     }
 
     /** ドラッグ中の移動処理 */
@@ -201,6 +215,9 @@ private class DragDropState(
         if (!isDragging) return
 
         draggedItemOffset = (draggedItemOffset.toOffset() + dragAmount).round()
+
+        // ルート座標を更新
+        updateDragCenterInRoot()
 
         // ドラッグ中アイテムの中心座標（ビューポート相対）
         val centerX = draggedItemOffset.x + draggedItemSize.width / 2f
@@ -235,12 +252,24 @@ private class DragDropState(
         }
     }
 
-    /** ドラッグ終了時の処理 */
-    fun onDragEnd() {
+    /** ドラッグ終了時の処理。ドラッグされていたアイテムのキーを返す。 */
+    fun onDragEnd(): Any? {
+        val key = draggedItemKey
         draggedItemKey = null
         draggedItemOffset = IntOffset.Zero
         draggedItemSize = IntSize.Zero
         currentDragIndex = -1
+        dragCenterInRoot = Offset.Zero
+        return key
+    }
+
+    private fun updateDragCenterInRoot() {
+        val centerX = draggedItemOffset.x + draggedItemSize.width / 2f
+        val centerY = draggedItemOffset.y + draggedItemSize.height / 2f
+        dragCenterInRoot = Offset(
+            x = gridBoundsInRoot.left + centerX,
+            y = gridBoundsInRoot.top + centerY,
+        )
     }
 }
 
@@ -349,6 +378,7 @@ private fun TabsScreenContent(
     onGroupSelected: (Int) -> Unit,
     onGroupPageChanged: (Int) -> Unit,
     onAddGroup: () -> Unit,
+    onMoveTabToGroup: (tabId: String, targetGroupIndex: Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val safePageCount = groups.size.coerceAtLeast(1)
@@ -372,6 +402,22 @@ private fun TabsScreenContent(
         }
     }
 
+    // グループタブバー上の各グループタブのルート座標 bounds を保持する
+    val groupTabBounds = remember { mutableMapOf<Int, Rect>() }
+
+    // タブドラッグ中のルート座標中心を追跡（各ページの DragDropState から更新される）
+    var tabDragCenterInRoot by remember { mutableStateOf(Offset.Zero) }
+    var isTabDragging by remember { mutableStateOf(false) }
+
+    // ドラッグ中に中心がどのグループタブ上にあるかを判定する
+    val highlightedGroupIndex = if (isTabDragging) {
+        groupTabBounds.entries.firstOrNull { (_, bounds) ->
+            bounds.contains(tabDragCenterInRoot)
+        }?.key
+    } else {
+        null
+    }
+
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -382,9 +428,13 @@ private fun TabsScreenContent(
             GroupTabBar(
                 groups = groups,
                 activeGroupIndex = activeGroupIndex,
+                highlightedDropTargetIndex = highlightedGroupIndex,
                 onGroupSelected = onGroupSelected,
                 onReorderGroups = onReorderGroups,
                 onAddGroup = onAddGroup,
+                onGroupTabBoundsChanged = { index, bounds ->
+                    groupTabBounds[index] = bounds
+                },
                 modifier = Modifier.fillMaxWidth(),
             )
 
@@ -394,6 +444,7 @@ private fun TabsScreenContent(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f),
+                userScrollEnabled = !isTabDragging,
             ) { page ->
                 val tabsForPage = groupedTabs.getOrElse(page) { emptyList() }
                 GroupTabGrid(
@@ -402,6 +453,19 @@ private fun TabsScreenContent(
                     onSelectTab = onSelectTab,
                     onCloseTab = onCloseTab,
                     onReorderTabs = { from, to -> onReorderTabs(page, from, to) },
+                    onTabDragStateChanged = { dragging, centerInRoot ->
+                        isTabDragging = dragging
+                        tabDragCenterInRoot = centerInRoot
+                    },
+                    onTabDropped = { tabId ->
+                        // ドロップ先のグループタブを判定
+                        val targetIndex = groupTabBounds.entries.firstOrNull { (_, bounds) ->
+                            bounds.contains(tabDragCenterInRoot)
+                        }?.key
+                        if (targetIndex != null && targetIndex != page) {
+                            onMoveTabToGroup(tabId, targetIndex)
+                        }
+                    },
                 )
             }
         }
@@ -425,14 +489,17 @@ private fun TabsScreenContent(
  * 栞形のタブを横並びに表示し、末尾に追加ボタンを配置する。
  * 選択中のタブが手前に表示され、非選択タブは下に沈んで奥にあるように見える。
  * 長押しドラッグでグループの順序を入れ替えられる。
+ * タブドラッグ中のドロップターゲットをハイライト表示する。
  */
 @Composable
 private fun GroupTabBar(
     groups: List<TabGroupData>,
     activeGroupIndex: Int,
+    highlightedDropTargetIndex: Int?,
     onGroupSelected: (Int) -> Unit,
     onReorderGroups: (fromIndex: Int, toIndex: Int) -> Unit,
     onAddGroup: () -> Unit,
+    onGroupTabBoundsChanged: (index: Int, bounds: Rect) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val listState = rememberLazyListState()
@@ -470,15 +537,20 @@ private fun GroupTabBar(
                 key = { _, group -> group.id.value },
             ) { index, group ->
                 val isSelected = index == activeGroupIndex
+                val isDropTarget = index == highlightedDropTargetIndex
                 val isDraggingThis = dragDropState.draggedItemKey == group.id.value
                 GroupBookmarkTab(
                     label = group.name,
                     isSelected = isSelected,
+                    isDropTarget = isDropTarget,
                     onClick = { onGroupSelected(index) },
                     modifier = Modifier
                         .animateItem()
                         .zIndex(if (isSelected) groups.size.toFloat() else index.toFloat())
-                        .then(if (isDraggingThis) Modifier.alpha(0f) else Modifier),
+                        .then(if (isDraggingThis) Modifier.alpha(0f) else Modifier)
+                        .onGloballyPositioned { coordinates ->
+                            onGroupTabBoundsChanged(index, coordinates.boundsInRoot())
+                        },
                 )
             }
             // グループ追加ボタン（ドラッグ対象外）
@@ -494,6 +566,7 @@ private fun GroupTabBar(
                 GroupBookmarkTab(
                     label = draggedGroup.name,
                     isSelected = true, // 持ち上がった状態なので選択扱いでエレベーションを高くする
+                    isDropTarget = false,
                     onClick = {},
                     modifier = Modifier
                         .offset { dragDropState.draggedItemOffset }
@@ -507,19 +580,28 @@ private fun GroupTabBar(
 /**
  * 栞形のグループタブ。
  * 選択中: 手前に表示・強調色。非選択: 下にオフセットして奥に見える。
+ * ドロップターゲット時: 境界線で強調表示。
  */
 @Composable
 private fun GroupBookmarkTab(
     label: String,
     isSelected: Boolean,
+    isDropTarget: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val selectedColor = MaterialTheme.colorScheme.primaryContainer
     val unselectedColor = MaterialTheme.colorScheme.surfaceVariant
+    val dropTargetColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
     val selectedTextColor = MaterialTheme.colorScheme.onPrimaryContainer
     val unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
     val density = LocalDensity.current
+
+    val backgroundColor = when {
+        isDropTarget -> dropTargetColor
+        isSelected -> selectedColor
+        else -> unselectedColor
+    }
 
     Box(
         modifier = modifier
@@ -527,17 +609,17 @@ private fun GroupBookmarkTab(
             .height(48.dp)
             .graphicsLayer {
                 // 非選択タブは下方向にオフセットして奥にあるように見せる
-                translationY = if (isSelected) 0f else with(density) { 6.dp.toPx() }
-                shadowElevation = if (isSelected) {
-                    with(density) { 8.dp.toPx() }
-                } else {
-                    with(density) { 2.dp.toPx() }
+                translationY = if (isSelected || isDropTarget) 0f else with(density) { 6.dp.toPx() }
+                shadowElevation = when {
+                    isDropTarget -> with(density) { 12.dp.toPx() }
+                    isSelected -> with(density) { 8.dp.toPx() }
+                    else -> with(density) { 2.dp.toPx() }
                 }
                 shape = BookmarkShape
                 clip = true
             }
             .background(
-                color = if (isSelected) selectedColor else unselectedColor,
+                color = backgroundColor,
                 shape = BookmarkShape,
             )
             .clickable(onClick = onClick)
@@ -550,7 +632,7 @@ private fun GroupBookmarkTab(
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             style = MaterialTheme.typography.labelMedium,
-            color = if (isSelected) selectedTextColor else unselectedTextColor,
+            color = if (isSelected || isDropTarget) selectedTextColor else unselectedTextColor,
         )
     }
 }
@@ -592,6 +674,7 @@ private fun AddGroupBookmarkTab(
 /**
  * グループ内のタブグリッド。
  * ドラッグ&ドロップによる並び替えをサポートする。
+ * タブをグループタブバーへドラッグすることでグループ間移動もできる。
  */
 @Composable
 private fun GroupTabGrid(
@@ -600,6 +683,8 @@ private fun GroupTabGrid(
     onSelectTab: (String) -> Unit,
     onCloseTab: (String) -> Unit,
     onReorderTabs: (fromIndex: Int, toIndex: Int) -> Unit,
+    onTabDragStateChanged: (isDragging: Boolean, centerInRoot: Offset) -> Unit,
+    onTabDropped: (tabId: String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     if (tabs.isEmpty()) {
@@ -622,6 +707,11 @@ private fun GroupTabGrid(
             onMove = onReorderTabs,
         )
 
+        // ドラッグ状態を上位コンポーザブルに通知する
+        LaunchedEffect(dragDropState.isDragging, dragDropState.dragCenterInRoot) {
+            onTabDragStateChanged(dragDropState.isDragging, dragDropState.dragCenterInRoot)
+        }
+
         LaunchedEffect(Unit) {
             val selectedIndex = tabs.indexOfFirst { it.id == selectedTabId }
             if (selectedIndex >= 0) {
@@ -635,6 +725,9 @@ private fun GroupTabGrid(
             state = gridState,
             modifier = Modifier
                 .fillMaxSize()
+                .onGloballyPositioned { coordinates ->
+                    dragDropState.gridBoundsInRoot = coordinates.boundsInRoot()
+                }
                 .pointerInput(dragDropState) {
                     detectDragGesturesAfterLongPress(
                         onDragStart = { offset ->
@@ -644,7 +737,12 @@ private fun GroupTabGrid(
                             change.consume()
                             dragDropState.onDrag(dragAmount)
                         },
-                        onDragEnd = { dragDropState.onDragEnd() },
+                        onDragEnd = {
+                            val droppedKey = dragDropState.onDragEnd()
+                            if (droppedKey != null) {
+                                onTabDropped(droppedKey as String)
+                            }
+                        },
                         onDragCancel = { dragDropState.onDragEnd() },
                     )
                 },
@@ -823,5 +921,6 @@ private fun Preview() {
         onGroupSelected = {},
         onGroupPageChanged = {},
         onAddGroup = {},
+        onMoveTabToGroup = { _, _ -> },
     )
 }

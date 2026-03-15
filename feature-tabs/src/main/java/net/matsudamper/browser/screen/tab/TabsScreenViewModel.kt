@@ -188,6 +188,14 @@ class TabsScreenViewModel(
         }
     }
 
+    /** タブを別のグループへ移動する */
+    fun moveTabToGroup(tabId: String, targetGroupIndex: Int) {
+        val targetGroup = groups.value.getOrNull(targetGroupIndex) ?: return
+        viewModelScope.launch {
+            tabGroupRepository.assignTabToGroup(tabId, targetGroup.id)
+        }
+    }
+
     /**
      * グループ内でタブを並び替える。
      * グローバルリストはグループ順に連結した順序で同期する。
