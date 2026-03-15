@@ -59,6 +59,10 @@ class TabsScreenViewModelTest {
                 state.copy(tabs = state.tabs + TabSummary(id = id, title = title, url = "https://example.com"))
             }
         }
+
+        fun setSelectedTabId(tabId: String?) {
+            _state.update { it.copy(selectedTabId = tabId) }
+        }
     }
 
     private class FakeTabGroupRepository : TabGroupRepository {
@@ -337,6 +341,69 @@ class TabsScreenViewModelTest {
             "アニメーション中間ページの後でも新規タブは右グループ（g3）に割り当てられるべき",
             TabGroupId("g3"),
             assignment?.second,
+        )
+    }
+
+    // -----------------------------------------------------------------------
+    // 再起動後の activeGroupIndex 復元テスト
+    // -----------------------------------------------------------------------
+
+    /**
+     * 再現シナリオ（本修正のターゲット）:
+     * 1. 2つのグループがある（グループA=index0、グループB=index1）
+     * 2. グループBのタブを選択した状態でアプリが終了（selectedTabId がグループBのタブを指す）
+     * 3. アプリ再起動 → TabsScreenViewModel が生成される
+     * 4. タブ画面を開いたとき activeGroupIndex が 1（グループB）になっていること
+     *
+     * 修正前: _activeGroupIndex が常に 0 で初期化されるためグループAが表示されていた
+     * 修正後: 選択中タブのグループを検索して activeGroupIndex を復元する
+     */
+    @Test
+    fun activeGroupIndex_isRestoredFromSelectedTab_onRestart() = runTest(testDispatcher) {
+        val tabStore = FakeTabStore()
+        val repo = FakeTabGroupRepository()
+
+        val groupA = TabGroupData(TabGroupId("gA"), "グループA")
+        val groupB = TabGroupData(TabGroupId("gB"), "グループB")
+        repo.setGroups(listOf(groupA, groupB))
+
+        // グループBのタブをあらかじめ追加して選択中にする（再起動後の状態を模倣）
+        tabStore.addTab("tab-in-b")
+        tabStore.setSelectedTabId("tab-in-b")
+        // グループBに割り当て済みとする
+        repo.assignTabToGroup("tab-in-b", groupB.id)
+
+        val viewModel = buildViewModel(tabStore, repo, this)
+        advanceUntilIdle()
+
+        assertEquals(
+            "再起動後に選択中タブ（グループB=index1）のグループに activeGroupIndex が復元されるべき",
+            1,
+            viewModel.activeGroupIndex.value,
+        )
+    }
+
+    /**
+     * selectedTabId が null の場合（起動直後などタブがない状態）、
+     * activeGroupIndex はデフォルト値 0 のまま変わらないこと。
+     */
+    @Test
+    fun activeGroupIndex_remainsZero_whenNoSelectedTab() = runTest(testDispatcher) {
+        val tabStore = FakeTabStore()
+        val repo = FakeTabGroupRepository()
+
+        val groupA = TabGroupData(TabGroupId("gA"), "グループA")
+        val groupB = TabGroupData(TabGroupId("gB"), "グループB")
+        repo.setGroups(listOf(groupA, groupB))
+        // selectedTabId は null のまま（FakeTabStore の初期値）
+
+        val viewModel = buildViewModel(tabStore, repo, this)
+        advanceUntilIdle()
+
+        assertEquals(
+            "selectedTabId が null の場合 activeGroupIndex は 0 のまま",
+            0,
+            viewModel.activeGroupIndex.value,
         )
     }
 }

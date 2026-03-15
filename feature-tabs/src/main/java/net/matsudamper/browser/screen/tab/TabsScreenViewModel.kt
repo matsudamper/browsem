@@ -41,9 +41,14 @@ class TabsScreenViewModel(
         initialValue = emptyList(),
     )
 
-    /** 現在アクティブなグループのインデックス */
-    private val _activeGroupIndex = MutableStateFlow(0)
-    val activeGroupIndex: StateFlow<Int> = _activeGroupIndex.asStateFlow()
+    /**
+     * 現在アクティブなグループのインデックス。
+     * null は「復元処理が完了していない」ことを示す。
+     * UI はこの値が null の間は Pager を描画しないことで、
+     * 復元前の 0 で Pager が初期化されてアニメーションが走るのを防ぐ。
+     */
+    private val _activeGroupIndex = MutableStateFlow<Int?>(null)
+    val activeGroupIndex: StateFlow<Int?> = _activeGroupIndex.asStateFlow()
 
     /**
      * onGroupSelected で設定したプログラム的スクロールの目標ページ。
@@ -86,6 +91,27 @@ class TabsScreenViewModel(
             tabGroupRepository.createDefaultGroupIfEmpty(initialTabs.tabs.map { it.id })
         }
         viewModelScope.launch {
+            // アプリ再起動後に選択中タブが属するグループを activeGroupIndex に復元する。
+            // groups と assignments の両方が揃った時点で一度だけ判定する。
+            // selectedTabId が null（新規起動等）の場合は 0 を設定して即座に Pager を表示できるようにする。
+            val selectedTabId = tabStore.tabStoreState.first().selectedTabId
+            if (selectedTabId == null) {
+                _activeGroupIndex.value = 0
+                return@launch
+            }
+            combine(
+                groups,
+                tabGroupRepository.observeTabGroupAssignments(),
+            ) { groupList, assignments ->
+                Pair(groupList, assignments)
+            }.first { (groupList, _) -> groupList.isNotEmpty() }
+                .let { (groupList, assignments) ->
+                    val groupId = assignments.find { it.tabId == selectedTabId }?.groupId
+                    val index = if (groupId != null) groupList.indexOfFirst { it.id.value == groupId } else -1
+                    _activeGroupIndex.value = if (index >= 0) index else 0
+                }
+        }
+        viewModelScope.launch {
             // タブとグループ割り当ての両方が揃ってから、未割当タブをアクティブグループに自動割り当てする。
             // TabGroupDao.setTabGroup は INSERT IGNORE + UPDATE を行うため、
             // TabPersistenceCoordinator が tab_state 行を作成する前でも割り当てが成功する。
@@ -100,7 +126,7 @@ class TabsScreenViewModel(
                     .map { it.tabId }
                     .toSet()
                 val unassigned = allTabIds - assignedTabIds
-                val activeGroup = groupList.getOrNull(activeIndex)
+                val activeGroup = groupList.getOrNull(activeIndex ?: 0)
                 Pair(unassigned, activeGroup)
             }
                 .collect { (unassignedTabIds, activeGroup) ->
@@ -168,7 +194,7 @@ class TabsScreenViewModel(
         _localGroupOrder.value = currentGroups
 
         // アクティブグループのインデックスを並び替えに合わせて補正する
-        val active = _activeGroupIndex.value
+        val active = _activeGroupIndex.value ?: 0
         _activeGroupIndex.value = when {
             active == fromIndex -> toIndex
             fromIndex < toIndex && active in (fromIndex + 1)..toIndex -> active - 1

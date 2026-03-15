@@ -37,13 +37,16 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.GenericShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -135,27 +138,37 @@ internal fun TabsScreen(
     })
     val groupedTabs by viewModel.groupedTabs.collectAsState()
     val groups by viewModel.groups.collectAsState()
-    val activeGroupIndex by viewModel.activeGroupIndex.collectAsState()
+    val activeGroupIndex = viewModel.activeGroupIndex.collectAsState().value
 
-    TabsScreenContent(
-        groupedTabs = groupedTabs,
-        groups = groups,
-        activeGroupIndex = activeGroupIndex,
-        selectedTabId = selectedTabId,
-        onSelectTab = onSelectTab,
-        onCloseTab = { tabId ->
-            viewModel.onTabClosed(tabId)
-            onCloseTab(tabId)
-        },
-        onOpenNewTab = onOpenNewTab,
-        onReorderTabs = viewModel::reorderTabs,
-        onReorderGroups = viewModel::reorderGroups,
-        onGroupSelected = viewModel::onGroupSelected,
-        onGroupPageChanged = viewModel::onGroupPageChanged,
-        onAddGroup = viewModel::addGroup,
-        onMoveTabToGroup = viewModel::moveTabToGroup,
-        modifier = modifier,
-    )
+    if (activeGroupIndex == null) {
+        Box(
+            modifier = modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center,
+        ) {
+            CircularProgressIndicator()
+        }
+    } else {
+        TabsScreenContent(
+            groupedTabs = groupedTabs,
+            groups = groups,
+            activeGroupIndex = activeGroupIndex,
+            selectedTabId = selectedTabId,
+            onSelectTab = onSelectTab,
+            onCloseTab = { tabId ->
+                viewModel.onTabClosed(tabId)
+                onCloseTab(tabId)
+            },
+            onOpenNewTab = onOpenNewTab,
+            onReorderTabs = viewModel::reorderTabs,
+            onReorderGroups = viewModel::reorderGroups,
+            onGroupSelected = viewModel::onGroupSelected,
+            onGroupPageChanged = viewModel::onGroupPageChanged,
+            onAddGroup = viewModel::addGroup,
+            onMoveTabToGroup = { tabId, targetGroupIndex -> viewModel.moveTabToGroup(tabId, targetGroupIndex) },
+            modifier = modifier,
+        )
+    }
+
 }
 
 /** ドラッグ&ドロップの状態を管理するクラス */
@@ -181,6 +194,9 @@ private class DragDropState(
     /** ドラッグ中かどうか */
     val isDragging: Boolean get() = draggedItemKey != null
 
+    /** ドラッグ開始からの累積移動距離（ピクセル） */
+    private var totalDragDistance: Float = 0f
+
     /** ルート座標でのドラッグ中の中心位置（グループ間移動の衝突判定用） */
     var dragCenterInRoot: Offset by mutableStateOf(Offset.Zero)
         private set
@@ -198,13 +214,14 @@ private class DragDropState(
             val itemLeft = info.offset.x.toFloat()
             val itemRight = itemLeft + info.size.width
             offset.x >= itemLeft && offset.x <= itemRight &&
-                offset.y >= itemTop && offset.y <= itemBottom
+                    offset.y >= itemTop && offset.y <= itemBottom
         } ?: return
 
         draggedItemKey = item.key
         draggedItemOffset = IntOffset(item.offset.x, item.offset.y - viewportOffset)
         draggedItemSize = item.size
         currentDragIndex = item.index
+        totalDragDistance = 0f
 
         // ルート座標での中心位置を初期化
         updateDragCenterInRoot()
@@ -215,6 +232,7 @@ private class DragDropState(
         if (!isDragging) return
 
         draggedItemOffset = (draggedItemOffset.toOffset() + dragAmount).round()
+        totalDragDistance += dragAmount.getDistance()
 
         // ルート座標を更新
         updateDragCenterInRoot()
@@ -252,15 +270,27 @@ private class DragDropState(
         }
     }
 
-    /** ドラッグ終了時の処理。ドラッグされていたアイテムのキーを返す。 */
-    fun onDragEnd(): Any? {
-        val key = draggedItemKey
+    /** ドラッグ終了時の処理。ドラッグされていたアイテムのキーと移動したかどうかを返す。 */
+    fun onDragEnd(): DragEndResult? {
+        val key = draggedItemKey ?: return null
+        val didMove = totalDragDistance > DRAG_THRESHOLD
         draggedItemKey = null
         draggedItemOffset = IntOffset.Zero
         draggedItemSize = IntSize.Zero
         currentDragIndex = -1
         dragCenterInRoot = Offset.Zero
-        return key
+        totalDragDistance = 0f
+        return DragEndResult(key = key, didMove = didMove)
+    }
+
+    data class DragEndResult(
+        val key: Any,
+        val didMove: Boolean,
+    )
+
+    companion object {
+        /** ドラッグと判定する最低移動距離（ピクセル） */
+        private const val DRAG_THRESHOLD = 20f
     }
 
     private fun updateDragCenterInRoot() {
@@ -418,6 +448,9 @@ private fun TabsScreenContent(
         null
     }
 
+    // グループ移動ダイアログの状態：長押しして移動せずに離したタブのID
+    var moveDialogTabId by remember { mutableStateOf<String?>(null) }
+
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -466,6 +499,9 @@ private fun TabsScreenContent(
                             onMoveTabToGroup(tabId, targetIndex)
                         }
                     },
+                    onTabLongPressWithoutDrag = { tabId ->
+                        moveDialogTabId = tabId
+                    },
                 )
             }
         }
@@ -481,6 +517,20 @@ private fun TabsScreenContent(
                 contentDescription = "新規タブ",
             )
         }
+    }
+
+    // グループ移動ダイアログ
+    val dialogTabId = moveDialogTabId
+    if (dialogTabId != null) {
+        MoveTabToGroupDialog(
+            groups = groups,
+            currentGroupIndex = activeGroupIndex,
+            onGroupSelected = { targetGroupIndex ->
+                onMoveTabToGroup(dialogTabId, targetGroupIndex)
+                moveDialogTabId = null
+            },
+            onDismiss = { moveDialogTabId = null },
+        )
     }
 }
 
@@ -685,6 +735,7 @@ private fun GroupTabGrid(
     onReorderTabs: (fromIndex: Int, toIndex: Int) -> Unit,
     onTabDragStateChanged: (isDragging: Boolean, centerInRoot: Offset) -> Unit,
     onTabDropped: (tabId: String) -> Unit,
+    onTabLongPressWithoutDrag: (tabId: String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     if (tabs.isEmpty()) {
@@ -738,9 +789,14 @@ private fun GroupTabGrid(
                             dragDropState.onDrag(dragAmount)
                         },
                         onDragEnd = {
-                            val droppedKey = dragDropState.onDragEnd()
-                            if (droppedKey != null) {
-                                onTabDropped(droppedKey as String)
+                            val result = dragDropState.onDragEnd()
+                            if (result != null) {
+                                val tabId = result.key as String
+                                if (result.didMove) {
+                                    onTabDropped(tabId)
+                                } else {
+                                    onTabLongPressWithoutDrag(tabId)
+                                }
                             }
                         },
                         onDragCancel = { dragDropState.onDragEnd() },
@@ -886,6 +942,47 @@ private fun TabCard(
             }
         }
     }
+}
+
+/**
+ * タブの移動先グループを選択するダイアログ。
+ * 現在所属しているグループ以外のグループを一覧表示し、
+ * タップで選択するとそのグループへタブを移動する。
+ */
+@Composable
+private fun MoveTabToGroupDialog(
+    groups: List<TabGroupData>,
+    currentGroupIndex: Int,
+    onGroupSelected: (targetGroupIndex: Int) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text("グループに移動")
+        },
+        text = {
+            Column {
+                groups.forEachIndexed { index, group ->
+                    if (index == currentGroupIndex) return@forEachIndexed
+                    Text(
+                        text = group.name,
+                        style = MaterialTheme.typography.bodyLarge,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onGroupSelected(index) }
+                            .padding(vertical = 12.dp, horizontal = 8.dp),
+                    )
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("キャンセル")
+            }
+        },
+    )
 }
 
 @Composable
