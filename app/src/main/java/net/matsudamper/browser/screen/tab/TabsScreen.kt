@@ -35,7 +35,8 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.foundation.shape.GenericShape
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
@@ -63,6 +64,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
@@ -105,19 +107,39 @@ internal object TabsLayoutDefaults {
     }
 }
 
-/** 栞（ブックマーク）形シェイプ：下辺中央に上向きVノッチ */
-private val BookmarkShape = GenericShape { size, _ ->
-    val notchDepth = size.height * 0.25f
-    val notchLeft = size.width * 0.3f
-    val notchRight = size.width * 0.7f
-    moveTo(0f, 0f)
-    lineTo(size.width, 0f)
-    lineTo(size.width, size.height)
-    lineTo(notchRight, size.height)
-    lineTo(size.width / 2f, size.height - notchDepth) // Vの頂点（上向き）
-    lineTo(notchLeft, size.height)
-    lineTo(0f, size.height)
-    close()
+/** タブシェイプ：上辺のみ角丸の矩形 */
+private val TabShape = RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp)
+
+/** PagerIndicator 計算用の軽量アイテム情報。LazyListItemInfo を Compose に依存しない形で保持する */
+internal data class IndicatorItemInfo(val index: Int, val offset: Int, val size: Int)
+
+/**
+ * インジゲータの描画範囲 (startX, width) を計算する。
+ * @param items 可視タブの位置情報リスト
+ * @param currentPage 現在のページインデックス
+ * @param offsetFraction ページのスクロールオフセット割合（-1.0〜1.0）
+ * @param startOffsetPx LazyRow の左端から原点までのオフセット（px）
+ * @return (startX, width) のペア。計算不能なら null
+ */
+internal fun calculatePagerIndicatorBounds(
+    items: List<IndicatorItemInfo>,
+    currentPage: Int,
+    offsetFraction: Float,
+    startOffsetPx: Float,
+): Pair<Float, Float>? {
+    val currentItem = items.firstOrNull { it.index == currentPage } ?: return null
+    val nextPage = if (offsetFraction >= 0f) currentPage + 1 else currentPage - 1
+    val nextItem = items.firstOrNull { it.index == nextPage }
+    val fraction = kotlin.math.abs(offsetFraction)
+    val rawStartX = startOffsetPx + currentItem.offset.toFloat()
+    return if (nextItem != null && fraction > 0f) {
+        val rawNextX = startOffsetPx + nextItem.offset.toFloat()
+        val startX = rawStartX + (rawNextX - rawStartX) * fraction
+        val width = currentItem.size.toFloat() + (nextItem.size - currentItem.size).toFloat() * fraction
+        Pair(startX, width)
+    } else {
+        Pair(rawStartX, currentItem.size.toFloat())
+    }
 }
 
 @Composable
@@ -432,6 +454,9 @@ private fun TabsScreenContent(
         }
     }
 
+    // グループタブバーの LazyRow 状態（PagerIndicator と共有してスクロール同期に使う）
+    val groupTabListState = rememberLazyListState()
+
     // グループタブバー上の各グループタブのルート座標 bounds を保持する
     val groupTabBounds = remember { mutableMapOf<Int, Rect>() }
 
@@ -457,7 +482,7 @@ private fun TabsScreenContent(
             .windowInsetsPadding(WindowInsets.safeDrawing),
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
-            // グループタブバー（栞形）
+            // グループタブバー（上辺角丸タブ）
             GroupTabBar(
                 groups = groups,
                 activeGroupIndex = activeGroupIndex,
@@ -468,6 +493,14 @@ private fun TabsScreenContent(
                 onGroupTabBoundsChanged = { index, bounds ->
                     groupTabBounds[index] = bounds
                 },
+                listState = groupTabListState,
+                modifier = Modifier.fillMaxWidth(),
+            )
+
+            // スワイプ進捗インジケータ
+            PagerIndicator(
+                pagerState = pagerState,
+                listState = groupTabListState,
                 modifier = Modifier.fillMaxWidth(),
             )
 
@@ -550,9 +583,9 @@ private fun GroupTabBar(
     onReorderGroups: (fromIndex: Int, toIndex: Int) -> Unit,
     onAddGroup: () -> Unit,
     onGroupTabBoundsChanged: (index: Int, bounds: Rect) -> Unit,
+    listState: LazyListState,
     modifier: Modifier = Modifier,
 ) {
-    val listState = rememberLazyListState()
     val dragDropState = rememberGroupDragDropState(
         listState = listState,
         onMove = onReorderGroups,
@@ -653,28 +686,27 @@ private fun GroupBookmarkTab(
         else -> unselectedColor
     }
 
+    // 選択・ドロップターゲット時は高さを大きくして上に飛び出させる
+    val height = if (isSelected || isDropTarget) 48.dp else 40.dp
     Box(
         modifier = modifier
             .width(120.dp)
-            .height(48.dp)
+            .height(height)
             .graphicsLayer {
-                // 非選択タブは下方向にオフセットして奥にあるように見せる
-                translationY = if (isSelected || isDropTarget) 0f else with(density) { 6.dp.toPx() }
                 shadowElevation = when {
                     isDropTarget -> with(density) { 12.dp.toPx() }
                     isSelected -> with(density) { 8.dp.toPx() }
                     else -> with(density) { 2.dp.toPx() }
                 }
-                shape = BookmarkShape
+                shape = TabShape
                 clip = true
             }
             .background(
                 color = backgroundColor,
-                shape = BookmarkShape,
+                shape = TabShape,
             )
             .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp)
-            .padding(bottom = 14.dp), // Vノッチ分の下余白
+            .padding(horizontal = 12.dp),
         contentAlignment = Alignment.Center,
     ) {
         Text(
@@ -697,19 +729,17 @@ private fun AddGroupBookmarkTab(
     Box(
         modifier = modifier
             .width(56.dp)
-            .height(48.dp)
+            .height(40.dp) // 非選択タブと同じ高さ
             .graphicsLayer {
-                translationY = with(density) { 6.dp.toPx() }
                 shadowElevation = with(density) { 2.dp.toPx() }
-                shape = BookmarkShape
+                shape = TabShape
                 clip = true
             }
             .background(
                 color = MaterialTheme.colorScheme.secondaryContainer,
-                shape = BookmarkShape,
+                shape = TabShape,
             )
-            .clickable(onClick = onClick)
-            .padding(bottom = 14.dp), // Vノッチ分の下余白
+            .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         Icon(
@@ -718,6 +748,43 @@ private fun AddGroupBookmarkTab(
             tint = MaterialTheme.colorScheme.onSecondaryContainer,
             modifier = Modifier.size(20.dp),
         )
+    }
+}
+
+/**
+ * HorizontalPager のスクロール進捗に連動して動くインジケータ。
+ * グループタブバーの直下に表示し、LazyRow の実際のアイテム位置に合わせてスライドするバーを描画する。
+ * タブバーがスクロールされていても表示位置と同期する。
+ */
+@Composable
+private fun PagerIndicator(
+    pagerState: PagerState,
+    listState: LazyListState,
+    modifier: Modifier = Modifier,
+) {
+    val indicatorColor = MaterialTheme.colorScheme.primary
+    val trackColor = MaterialTheme.colorScheme.surfaceVariant
+    val density = LocalDensity.current
+    // GroupTabBar の Box に指定された start padding 分だけインジゲータをオフセットする
+    val startOffsetPx = with(density) { 8.dp.toPx() }
+
+    // スクロールやページ変化時に再コンポーズされるよう composable body で状態を読み取る
+    val layoutInfo = listState.layoutInfo
+    val currentPage = pagerState.currentPage
+    val offsetFraction = pagerState.currentPageOffsetFraction
+    val items = layoutInfo.visibleItemsInfo.map { IndicatorItemInfo(it.index, it.offset, it.size) }
+    val bounds = calculatePagerIndicatorBounds(items, currentPage, offsetFraction, startOffsetPx)
+
+    Canvas(modifier = modifier.height(2.dp)) {
+        drawRect(color = trackColor)
+        if (bounds != null) {
+            val (startX, width) = bounds
+            drawRect(
+                color = indicatorColor,
+                topLeft = Offset(x = startX, y = 0f),
+                size = Size(width = width, height = size.height),
+            )
+        }
     }
 }
 
