@@ -35,6 +35,7 @@ internal fun ToolbarMenu(
     onShare: () -> Unit,
     onFindInPage: () -> Unit,
     onOpenSettings: () -> Unit,
+    onAddToHomeScreen: () -> Unit,
 ) {
     DropdownMenu(
         expanded = visibleMenu,
@@ -137,6 +138,15 @@ internal fun ToolbarMenu(
             onClick = {
                 onDismissRequest()
                 onShare()
+            },
+        )
+        DropdownMenuItem(
+            text = {
+                Text(text = "ホームに追加")
+            },
+            onClick = {
+                onDismissRequest()
+                onAddToHomeScreen()
             },
         )
         DropdownMenuItem(

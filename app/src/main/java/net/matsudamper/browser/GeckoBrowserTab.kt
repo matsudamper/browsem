@@ -85,6 +85,7 @@ internal fun GeckoBrowserTab(
     showInstallExtensionItem: Boolean = true,
     enableBackNavigation: Boolean = true,
     customTabMode: Boolean = false,
+    webAppMode: Boolean = false,
     onCloseCustomTab: (() -> Unit)? = null,
     onOpenInBrowser: ((String) -> Unit)? = null,
     onOpenNewSessionRequest: (String) -> GeckoSession,
@@ -111,6 +112,10 @@ internal fun GeckoBrowserTab(
     var imeWasVisibleDuringUrlFocus by remember { mutableStateOf(false) }
     var urlBarFocusStartedAtMs by remember { mutableStateOf(0L) }
     var geckoView: GeckoView? by remember { mutableStateOf(null) }
+    // ホームに追加ダイアログの表示状態
+    var showAddToHomeScreenDialog by remember { mutableStateOf(false) }
+    var addToHomeUrl by remember { mutableStateOf("") }
+    var addToHomeTitle by remember { mutableStateOf("") }
 
     // 不安定なラムダキーによる DisposableEffect の再実行を防ぐ
     val currentOnCloseTab by rememberUpdatedState(onCloseTab)
@@ -264,7 +269,7 @@ internal fun GeckoBrowserTab(
                 onClose = state::closeFindInPage,
             )
         } else {
-            if (customTabMode) {
+            if (customTabMode || webAppMode) {
                 CustomTabToolbar(
                     title = state.currentPageTitle.ifBlank { "ページ" },
                     url = state.currentPageUrl,
@@ -275,6 +280,8 @@ internal fun GeckoBrowserTab(
                         { callback(state.currentPageUrl) }
                     },
                     toolbarColor = state.toolbarColor,
+                    // ウェブアプリモードでは閉じるボタンを非表示にする
+                    showCloseButton = customTabMode,
                 )
             } else {
                 BrowserToolBar(
@@ -325,6 +332,11 @@ internal fun GeckoBrowserTab(
                     onTranslatePage = { state.onTranslate(translationProvider) },
                     onHorizontalDrag = onToolbarHorizontalDrag,
                     onHorizontalDragEnd = onToolbarDragEnd,
+                    onAddToHomeScreen = {
+                        addToHomeUrl = state.currentPageUrl
+                        addToHomeTitle = state.currentPageTitle
+                        showAddToHomeScreenDialog = true
+                    },
                 )
             }
             TranslationStatusBar(
@@ -372,6 +384,15 @@ internal fun GeckoBrowserTab(
             dialogState = dialogState,
             enableTabUi = enableTabUi,
             onOpenNewSessionRequest = currentOnOpenNewSessionRequest,
+        )
+    }
+
+    // ホームに追加ダイアログ
+    if (showAddToHomeScreenDialog) {
+        AddToHomeScreenDialog(
+            url = addToHomeUrl,
+            title = addToHomeTitle,
+            onDismiss = { showAddToHomeScreenDialog = false },
         )
     }
 }
