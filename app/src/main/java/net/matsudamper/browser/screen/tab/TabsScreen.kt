@@ -6,6 +6,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,6 +19,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
@@ -359,9 +361,10 @@ private class GroupDragDropState(
 
     /** ドラッグ開始時の処理。groupCount は追加ボタンを除いたグループ数。 */
     fun onDragStart(offset: Offset, groupCount: Int) {
+        // info.offset はコンテンツ領域先頭（contentPadding 以降）からの相対座標。
+        // viewportStartOffset = -contentPadding.start のため引き算で描画座標に変換する。
         val viewportOffset = listState.layoutInfo.viewportStartOffset
         val item = listState.layoutInfo.visibleItemsInfo.firstOrNull { info ->
-            // LazyRow はスクロール方向が x なので viewportOffset を引いてビューポート相対座標に変換する
             val itemLeft = (info.offset - viewportOffset).toFloat()
             val itemRight = itemLeft + info.size
             info.index < groupCount && offset.x >= itemLeft && offset.x <= itemRight
@@ -384,7 +387,7 @@ private class GroupDragDropState(
         val targetItem = listState.layoutInfo.visibleItemsInfo
             .filter { it.key != draggedItemKey && it.index < groupCount }
             .minByOrNull { info ->
-                val itemCenterX = (info.offset - viewportOffset) + info.size / 2f
+                val itemCenterX = (info.offset - viewportOffset).toFloat() + info.size / 2f
                 abs(centerX - itemCenterX)
             } ?: return
 
@@ -440,10 +443,39 @@ private fun TabsScreenContent(
         pageCount = { groups.size.coerceAtLeast(1) },
     )
 
-    // ViewModelのactiveGroupIndex変化 → ページスクロール
+    // グループタブバーの LazyRow 状態（PagerIndicator と共有してスクロール同期に使う）
+    val groupTabListState = rememberLazyListState()
+    val density = LocalDensity.current
+
+    // ViewModelのactiveGroupIndex変化 → ページスクロールとタブバースクロールを同期
     LaunchedEffect(activeGroupIndex) {
         if (pagerState.currentPage != activeGroupIndex && activeGroupIndex in 0 until groups.size) {
             pagerState.animateScrollToPage(activeGroupIndex)
+        }
+        if (activeGroupIndex in 0 until groups.size) {
+            val layoutInfo = groupTabListState.layoutInfo
+            val targetItem = layoutInfo.visibleItemsInfo.firstOrNull { it.index == activeGroupIndex }
+            if (targetItem == null) {
+                // 画面外にある場合は通常スクロール（左端揃え）
+                groupTabListState.animateScrollToItem(activeGroupIndex)
+            } else {
+                val itemViewportLeft = (targetItem.offset - layoutInfo.viewportStartOffset).toFloat()
+                val itemViewportRight = itemViewportLeft + targetItem.size
+                val viewportWidth = layoutInfo.viewportSize.width.toFloat()
+                // スクロール量に ±24dp のバッファを加えて少し余裕を持たせる
+                val bufferPx = with(density) { 24.dp.toPx() }
+                when {
+                    itemViewportRight > viewportWidth -> {
+                        // 右にはみ出している: はみ出し分 + バッファ分スクロール
+                        groupTabListState.animateScrollBy(itemViewportRight - viewportWidth + bufferPx)
+                    }
+                    itemViewportLeft < 0f -> {
+                        // 左にはみ出している: バッファ分手前でとめる（負 = 左方向）
+                        groupTabListState.animateScrollBy(itemViewportLeft - bufferPx)
+                    }
+                    // else: 完全に表示されているのでスクロール不要
+                }
+            }
         }
     }
 
@@ -453,9 +485,6 @@ private fun TabsScreenContent(
             onGroupPageChanged(page)
         }
     }
-
-    // グループタブバーの LazyRow 状態（PagerIndicator と共有してスクロール同期に使う）
-    val groupTabListState = rememberLazyListState()
 
     // グループタブバー上の各グループタブのルート座標 bounds を保持する
     val groupTabBounds = remember { mutableMapOf<Int, Rect>() }
@@ -594,12 +623,16 @@ private fun GroupTabBar(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .padding(start = 8.dp, top = 8.dp),
+            .padding(top = 8.dp),
     ) {
         LazyRow(
             state = listState,
+            // start padding を contentPadding に移すことで、スクロール時に左端まで表示できるようにする
+            contentPadding = PaddingValues(start = 8.dp),
             modifier = Modifier
                 .fillMaxWidth()
+                // 選択タブと同じ高さを常に確保し、非選択タブのみ表示時に高さが変化しないようにする
+                .height(48.dp)
                 .pointerInput(dragDropState) {
                     detectDragGesturesAfterLongPress(
                         onDragStart = { offset ->
@@ -687,11 +720,12 @@ private fun GroupBookmarkTab(
     }
 
     // 選択・ドロップターゲット時は高さを大きくして上に飛び出させる
-    val height = if (isSelected || isDropTarget) 48.dp else 40.dp
+    // heightIn で最小高さを設定し、大きいフォントサイズでも破綻しないようにする
+    val minHeight = if (isSelected || isDropTarget) 48.dp else 40.dp
     Box(
         modifier = modifier
             .width(120.dp)
-            .height(height)
+            .heightIn(min = minHeight)
             .graphicsLayer {
                 shadowElevation = when {
                     isDropTarget -> with(density) { 12.dp.toPx() }
@@ -729,7 +763,7 @@ private fun AddGroupBookmarkTab(
     Box(
         modifier = modifier
             .width(56.dp)
-            .height(40.dp) // 非選択タブと同じ高さ
+            .heightIn(min = 40.dp) // 非選択タブと同じ最小高さ
             .graphicsLayer {
                 shadowElevation = with(density) { 2.dp.toPx() }
                 shape = TabShape
@@ -764,14 +798,12 @@ private fun PagerIndicator(
 ) {
     val indicatorColor = MaterialTheme.colorScheme.primary
     val trackColor = MaterialTheme.colorScheme.surfaceVariant
-    val density = LocalDensity.current
-    // GroupTabBar の Box に指定された start padding 分だけインジゲータをオフセットする
-    val startOffsetPx = with(density) { 8.dp.toPx() }
-
     // スクロールやページ変化時に再コンポーズされるよう composable body で状態を読み取る
     val layoutInfo = listState.layoutInfo
     val currentPage = pagerState.currentPage
     val offsetFraction = pagerState.currentPageOffsetFraction
+    // viewportStartOffset = -contentPadding.start のため符号反転で描画座標へのオフセット量を得る
+    val startOffsetPx = -layoutInfo.viewportStartOffset.toFloat()
     val items = layoutInfo.visibleItemsInfo.map { IndicatorItemInfo(it.index, it.offset, it.size) }
     val bounds = calculatePagerIndicatorBounds(items, currentPage, offsetFraction, startOffsetPx)
 
