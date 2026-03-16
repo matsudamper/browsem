@@ -71,6 +71,7 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.boundsInRoot
@@ -533,6 +534,7 @@ private fun TabsScreenContent(
             GroupTabBar(
                 groups = groups,
                 activeGroupIndex = activeGroupIndex,
+                pagerState = pagerState,
                 highlightedDropTargetIndex = highlightedGroupIndex,
                 onGroupSelected = onGroupSelected,
                 onReorderGroups = onReorderGroups,
@@ -681,6 +683,7 @@ private fun TabsScreenContent(
 private fun GroupTabBar(
     groups: List<TabGroupData>,
     activeGroupIndex: Int,
+    pagerState: PagerState,
     highlightedDropTargetIndex: Int?,
     onGroupSelected: (Int) -> Unit,
     onReorderGroups: (fromIndex: Int, toIndex: Int) -> Unit,
@@ -693,6 +696,10 @@ private fun GroupTabBar(
         listState = listState,
         onMove = onReorderGroups,
     )
+
+    // ページスクロール進捗を読み取る（タブの高さ・色アニメーションに使用）
+    val currentPage = pagerState.currentPage
+    val offsetFraction = pagerState.currentPageOffsetFraction
 
     Box(
         modifier = modifier
@@ -725,17 +732,23 @@ private fun GroupTabBar(
                 items = groups,
                 key = { _, group -> group.id.value },
             ) { index, group ->
-                val isSelected = index == activeGroupIndex
+                // ページスクロール進捗に応じた選択強度（0=非選択, 1=選択）
+                val selectionFraction = when {
+                    index == currentPage -> 1f - abs(offsetFraction)
+                    index == currentPage + 1 && offsetFraction > 0f -> offsetFraction
+                    index == currentPage - 1 && offsetFraction < 0f -> -offsetFraction
+                    else -> 0f
+                }
                 val isDropTarget = index == highlightedDropTargetIndex
                 val isDraggingThis = dragDropState.draggedItemKey == group.id.value
                 GroupBookmarkTab(
                     label = group.name,
-                    isSelected = isSelected,
+                    selectionFraction = selectionFraction,
                     isDropTarget = isDropTarget,
                     onClick = { onGroupSelected(index) },
                     modifier = Modifier
                         .animateItem()
-                        .zIndex(if (isSelected) groups.size.toFloat() else index.toFloat())
+                        .zIndex(if (index == activeGroupIndex) groups.size.toFloat() else index.toFloat())
                         .then(if (isDraggingThis) Modifier.alpha(0f) else Modifier)
                         .onGloballyPositioned { coordinates ->
                             onGroupTabBoundsChanged(index, coordinates.boundsInRoot())
@@ -754,7 +767,7 @@ private fun GroupTabBar(
             if (draggedGroup != null) {
                 GroupBookmarkTab(
                     label = draggedGroup.name,
-                    isSelected = true, // 持ち上がった状態なので選択扱いでエレベーションを高くする
+                    selectionFraction = 1f, // 持ち上がった状態なので選択扱いでエレベーションを高くする
                     isDropTarget = false,
                     onClick = {},
                     modifier = Modifier
@@ -774,7 +787,7 @@ private fun GroupTabBar(
 @Composable
 private fun GroupBookmarkTab(
     label: String,
-    isSelected: Boolean,
+    selectionFraction: Float,
     isDropTarget: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
@@ -786,16 +799,15 @@ private fun GroupBookmarkTab(
     val unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
     val density = LocalDensity.current
 
+    val fraction = selectionFraction.coerceIn(0f, 1f)
     val backgroundColor = when {
         isDropTarget -> dropTargetColor
-        isSelected -> selectedColor
-        else -> unselectedColor
+        else -> lerp(unselectedColor, selectedColor, fraction)
     }
 
-    // 選択・ドロップターゲット時は高さを大きくして上に飛び出させる
-    val visualHeight = if (isSelected || isDropTarget) GroupTabBarHeight else GroupTabUnselectedHeight
+    // ページスクロール進捗に応じて高さをアニメーションする
+    val visualHeight = GroupTabUnselectedHeight + (GroupTabBarHeight - GroupTabUnselectedHeight) * fraction
     // 外側のBoxは常に GroupTabBarHeight を確保し、LazyRowアイテムの位置が変わらないようにする
-    // これによりActive→Inactive時にアイテムが「下に動く」アニメーションを防ぐ
     Box(
         modifier = modifier
             .width(120.dp)
@@ -809,8 +821,11 @@ private fun GroupBookmarkTab(
                 .graphicsLayer {
                     shadowElevation = when {
                         isDropTarget -> with(density) { 12.dp.toPx() }
-                        isSelected -> with(density) { 8.dp.toPx() }
-                        else -> with(density) { 2.dp.toPx() }
+                        else -> {
+                            val minShadow = with(density) { 2.dp.toPx() }
+                            val maxShadow = with(density) { 8.dp.toPx() }
+                            minShadow + (maxShadow - minShadow) * fraction
+                        }
                     }
                     shape = TabShape
                     clip = true
@@ -828,7 +843,7 @@ private fun GroupBookmarkTab(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 style = MaterialTheme.typography.labelMedium,
-                color = if (isSelected || isDropTarget) selectedTextColor else unselectedTextColor,
+                color = if (isDropTarget) selectedTextColor else lerp(unselectedTextColor, selectedTextColor, fraction),
             )
         }
     }
