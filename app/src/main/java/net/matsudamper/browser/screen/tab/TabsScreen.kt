@@ -42,7 +42,7 @@ import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
-import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -113,6 +113,12 @@ internal object TabsLayoutDefaults {
 
 /** タブシェイプ：上辺のみ角丸の矩形 */
 private val TabShape = RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp)
+
+/** グループタブバー全体の高さ。LazyRow・外側 Box 両方で共有する */
+private val GroupTabBarHeight = 48.dp
+
+/** 非選択タブの最小高さ。選択タブは GroupTabBarHeight まで伸びて「浮き上がり」を表現する */
+private val GroupTabUnselectedHeight = 40.dp
 
 /** PagerIndicator 計算用の軽量アイテム情報。LazyListItemInfo を Compose に依存しない形で保持する */
 internal data class IndicatorItemInfo(val index: Int, val offset: Int, val size: Int)
@@ -562,13 +568,13 @@ private fun TabsScreenContent(
                             .padding(horizontal = 16.dp, vertical = 8.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        OutlinedButton(
+                        FilledTonalButton(
                             onClick = { renameDialogGroupIndex = page },
                             modifier = Modifier.weight(1f),
                         ) {
                             Text("名前変更")
                         }
-                        OutlinedButton(
+                        FilledTonalButton(
                             onClick = { deleteDialogGroupIndex = page },
                             modifier = Modifier.weight(1f),
                             enabled = groups.size > 1,
@@ -699,8 +705,8 @@ private fun GroupTabBar(
             contentPadding = PaddingValues(start = 8.dp),
             modifier = Modifier
                 .fillMaxWidth()
-                // 全アイテムが常に48dpのwrapperを持つため、高さは固定で問題なし
-                .height(48.dp)
+                // 全アイテムが常に GroupTabBarHeight のwrapperを持つため、高さは固定で問題なし
+                .height(GroupTabBarHeight)
                 .pointerInput(dragDropState) {
                     detectDragGesturesAfterLongPress(
                         onDragStart = { offset ->
@@ -777,7 +783,7 @@ private fun GroupBookmarkTab(
     val unselectedColor = MaterialTheme.colorScheme.surfaceVariant
     val dropTargetColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
     val selectedTextColor = MaterialTheme.colorScheme.onPrimaryContainer
-    val unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+    val unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
     val density = LocalDensity.current
 
     val backgroundColor = when {
@@ -787,13 +793,13 @@ private fun GroupBookmarkTab(
     }
 
     // 選択・ドロップターゲット時は高さを大きくして上に飛び出させる
-    val visualHeight = if (isSelected || isDropTarget) 48.dp else 40.dp
-    // 外側のBoxは常に48dpを確保し、LazyRowアイテムの位置が変わらないようにする
+    val visualHeight = if (isSelected || isDropTarget) GroupTabBarHeight else GroupTabUnselectedHeight
+    // 外側のBoxは常に GroupTabBarHeight を確保し、LazyRowアイテムの位置が変わらないようにする
     // これによりActive→Inactive時にアイテムが「下に動く」アニメーションを防ぐ
     Box(
         modifier = modifier
             .width(120.dp)
-            .height(48.dp),
+            .height(GroupTabBarHeight),
         contentAlignment = Alignment.BottomCenter,
     ) {
         Box(
@@ -835,28 +841,36 @@ private fun AddGroupBookmarkTab(
     modifier: Modifier = Modifier,
 ) {
     val density = LocalDensity.current
+    // GroupBookmarkTab と同じ GroupTabBarHeight 外側 Box + BottomCenter 揃えで浮きを防ぐ
     Box(
         modifier = modifier
             .width(56.dp)
-            .heightIn(min = 40.dp) // 非選択タブと同じ最小高さ
-            .graphicsLayer {
-                shadowElevation = with(density) { 2.dp.toPx() }
-                shape = TabShape
-                clip = true
-            }
-            .background(
-                color = MaterialTheme.colorScheme.secondaryContainer,
-                shape = TabShape,
-            )
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center,
+            .height(GroupTabBarHeight),
+        contentAlignment = Alignment.BottomCenter,
     ) {
-        Icon(
-            painter = painterResource(R.drawable.ic_add_24dp),
-            contentDescription = "グループを追加",
-            tint = MaterialTheme.colorScheme.onSecondaryContainer,
-            modifier = Modifier.size(20.dp),
-        )
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = GroupTabUnselectedHeight)
+                .graphicsLayer {
+                    shadowElevation = with(density) { 2.dp.toPx() }
+                    shape = TabShape
+                    clip = true
+                }
+                .background(
+                    color = MaterialTheme.colorScheme.secondaryContainer,
+                    shape = TabShape,
+                )
+                .clickable(onClick = onClick),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                painter = painterResource(R.drawable.ic_add_24dp),
+                contentDescription = "グループを追加",
+                tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                modifier = Modifier.size(20.dp),
+            )
+        }
     }
 }
 
