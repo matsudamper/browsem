@@ -30,6 +30,7 @@ import androidx.navigation3.ui.defaultPopTransitionSpec
 import androidx.navigation3.ui.defaultTransitionSpec
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.Flow
+import net.matsudamper.browser.BrowserTab
 import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.TabGroupRepository
 import net.matsudamper.browser.data.history.HistoryRepository
@@ -167,6 +168,19 @@ internal fun BrowserApp(
                         DisposableEffect(key.tabId) {
                             onDispose { browserScreenViewModel.close() }
                         }
+                        // グループ表示順のタブリストを構築する（アドレスバースワイプ時の前後タブ判定に使用）
+                        val tabGroups by tabGroupRepository.observeGroups().collectAsState(emptyList())
+                        val tabGroupAssignments by tabGroupRepository.observeTabGroupAssignments().collectAsState(emptyList())
+                        val orderedBrowserTabs: List<BrowserTab> = run {
+                            val assignmentMap = tabGroupAssignments.associate { it.tabId to it.groupId }
+                            val allTabs = browserSessionController.tabs
+                            val groupedTabs = tabGroups.flatMap { group ->
+                                allTabs.filter { tab -> assignmentMap[tab.tabId] == group.id.value }
+                            }
+                            val groupedIds = groupedTabs.map { it.tabId }.toSet()
+                            val ungroupedTabs = allTabs.filter { it.tabId !in groupedIds }
+                            groupedTabs + ungroupedTabs
+                        }
                         BrowserScreen(
                             key = key,
                             homepageUrl = homepageUrl,
@@ -183,6 +197,7 @@ internal fun BrowserApp(
                             onSelectTab = { tabId, beforeTab ->
                                 selectTab(tabId, beforeTab)
                             },
+                            orderedTabs = orderedBrowserTabs,
                         )
                     }
 
