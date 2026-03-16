@@ -35,6 +35,8 @@ import java.util.concurrent.CancellationException
 
 class CustomTabActivity : ComponentActivity() {
     private val runtime: GeckoRuntime by inject()
+    private val themeColorExtension: ThemeColorWebExtension by inject()
+    private val mediaWebExtensionInstance: MediaWebExtension by inject()
     private val settingsRepository: SettingsRepository by inject()
     private val historyRepository: HistoryRepository by inject()
     private val webSuggestionRepository: WebSuggestionRepository by inject()
@@ -61,7 +63,8 @@ class CustomTabActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         runtime.settings.setExtensionsWebAPIEnabled(true)
 
-        runtimeCoordinator = BrowserRuntimeCoordinator(applicationContext, runtime)
+        // 拡張機能は Koin の single で管理されるため、ここではセッション管理のみ担当する
+        runtimeCoordinator = BrowserRuntimeCoordinator(runtime, themeColorExtension, mediaWebExtensionInstance)
 
         val initialUrl = intent.dataString.orEmpty()
         val customTabsSessionToken = CustomTabsSessionToken.getSessionTokenFromIntent(intent)
