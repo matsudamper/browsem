@@ -631,7 +631,7 @@ private fun GroupTabBar(
             contentPadding = PaddingValues(start = 8.dp),
             modifier = Modifier
                 .fillMaxWidth()
-                // 選択タブと同じ高さを常に確保し、非選択タブのみ表示時に高さが変化しないようにする
+                // 全アイテムが常に48dpのwrapperを持つため、高さは固定で問題なし
                 .height(48.dp)
                 .pointerInput(dragDropState) {
                     detectDragGesturesAfterLongPress(
@@ -646,7 +646,6 @@ private fun GroupTabBar(
                         onDragCancel = { dragDropState.onDragEnd() },
                     )
                 },
-            verticalAlignment = Alignment.Bottom,
         ) {
             itemsIndexed(
                 items = groups,
@@ -720,36 +719,44 @@ private fun GroupBookmarkTab(
     }
 
     // 選択・ドロップターゲット時は高さを大きくして上に飛び出させる
-    // heightIn で最小高さを設定し、大きいフォントサイズでも破綻しないようにする
-    val minHeight = if (isSelected || isDropTarget) 48.dp else 40.dp
+    val visualHeight = if (isSelected || isDropTarget) 48.dp else 40.dp
+    // 外側のBoxは常に48dpを確保し、LazyRowアイテムの位置が変わらないようにする
+    // これによりActive→Inactive時にアイテムが「下に動く」アニメーションを防ぐ
     Box(
         modifier = modifier
             .width(120.dp)
-            .heightIn(min = minHeight)
-            .graphicsLayer {
-                shadowElevation = when {
-                    isDropTarget -> with(density) { 12.dp.toPx() }
-                    isSelected -> with(density) { 8.dp.toPx() }
-                    else -> with(density) { 2.dp.toPx() }
-                }
-                shape = TabShape
-                clip = true
-            }
-            .background(
-                color = backgroundColor,
-                shape = TabShape,
-            )
-            .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp),
-        contentAlignment = Alignment.Center,
+            .height(48.dp),
+        contentAlignment = Alignment.BottomCenter,
     ) {
-        Text(
-            text = label,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            style = MaterialTheme.typography.labelMedium,
-            color = if (isSelected || isDropTarget) selectedTextColor else unselectedTextColor,
-        )
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = visualHeight)
+                .graphicsLayer {
+                    shadowElevation = when {
+                        isDropTarget -> with(density) { 12.dp.toPx() }
+                        isSelected -> with(density) { 8.dp.toPx() }
+                        else -> with(density) { 2.dp.toPx() }
+                    }
+                    shape = TabShape
+                    clip = true
+                }
+                .background(
+                    color = backgroundColor,
+                    shape = TabShape,
+                )
+                .clickable(onClick = onClick)
+                .padding(horizontal = 12.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = label,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                style = MaterialTheme.typography.labelMedium,
+                color = if (isSelected || isDropTarget) selectedTextColor else unselectedTextColor,
+            )
+        }
     }
 }
 
