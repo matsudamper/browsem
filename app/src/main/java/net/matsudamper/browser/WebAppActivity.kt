@@ -3,40 +3,37 @@ package net.matsudamper.browser
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.browser.customtabs.CustomTabsSessionToken
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
-import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
-import androidx.lifecycle.viewmodel.compose.viewModel
 import net.matsudamper.browser.data.SettingsRepository
-import net.matsudamper.browser.data.TranslationProvider
 import net.matsudamper.browser.data.history.HistoryRepository
 import net.matsudamper.browser.data.resolvedHomepageUrl
 import net.matsudamper.browser.data.resolvedSearchTemplate
 import net.matsudamper.browser.data.websuggestion.WebSuggestionRepository
 import net.matsudamper.browser.media.MediaWebExtension
-import net.matsudamper.browser.screen.browser.BrowserScreenViewModel
+import net.matsudamper.browser.screen.webapp.WebAppScreen
 import org.koin.android.ext.android.inject
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoSession
 import java.util.concurrent.CancellationException
 
-class CustomTabActivity : ComponentActivity() {
+/**
+ * ホームに「アプリとして追加」された場合に起動するActivity。
+ * カスタムタブに近い外観だが、閉じるボタンはなく、バックボタンでブラウザ履歴を遡る。
+ * 独立したタスクとして管理され、アプリの履歴（最近使ったアプリ）に残る。
+ */
+class WebAppActivity : ComponentActivity() {
     private val runtime: GeckoRuntime by inject()
     private val themeColorExtension: ThemeColorWebExtension by inject()
-    private val mediaWebExtensionInstance: MediaWebExtension by inject()
+    private val mediaWebExtension: MediaWebExtension by inject()
     private val settingsRepository: SettingsRepository by inject()
     private val historyRepository: HistoryRepository by inject()
     private val webSuggestionRepository: WebSuggestionRepository by inject()
@@ -64,10 +61,10 @@ class CustomTabActivity : ComponentActivity() {
         runtime.settings.setExtensionsWebAPIEnabled(true)
 
         // 拡張機能は Koin の single で管理されるため、ここではセッション管理のみ担当する
-        runtimeCoordinator = BrowserRuntimeCoordinator(runtime, themeColorExtension, mediaWebExtensionInstance)
+        runtimeCoordinator = BrowserRuntimeCoordinator(runtime, themeColorExtension, mediaWebExtension)
 
-        val initialUrl = intent.dataString.orEmpty()
-        val customTabsSessionToken = CustomTabsSessionToken.getSessionTokenFromIntent(intent)
+        // 外部アプリから任意のURLが渡されないよう、http/https スキームのみ許可する
+        val initialUrl = resolveInitialUrl()
         setContent {
             val settings by settingsRepository.settings.collectAsState(initial = null)
             val browserSettings = settings ?: return@setContent
@@ -77,9 +74,8 @@ class CustomTabActivity : ComponentActivity() {
             }
 
             BrowserTheme(themeMode = browserSettings.themeMode) {
-                CustomTabScreen(
-                    initialUrl = initialUrl.takeIf { it.isNotBlank() } ?: browserSettings.resolvedHomepageUrl(),
-                    customTabsSessionToken = customTabsSessionToken,
+                WebAppScreen(
+                    initialUrl = initialUrl ?: browserSettings.resolvedHomepageUrl(),
                     homepageUrl = browserSettings.resolvedHomepageUrl(),
                     searchTemplate = browserSettings.resolvedSearchTemplate(),
                     translationProvider = browserSettings.translationProvider,
@@ -89,8 +85,6 @@ class CustomTabActivity : ComponentActivity() {
                     webSuggestionRepository = webSuggestionRepository,
                     themeColorExtension = runtimeCoordinator.themeColorExtension,
                     mediaWebExtension = runtimeCoordinator.mediaWebExtension,
-                    onClose = ::finish,
-                    onOpenInBrowser = ::openInMainBrowser,
                     onDesktopNotificationPermissionRequest = { requestNotificationPermissionIfNeeded() },
                 )
             }
@@ -102,10 +96,24 @@ class CustomTabActivity : ComponentActivity() {
             CancellationException("Activity was destroyed before notification permission completed.")
         )
         pendingNotificationPermissionResult = null
+        // セッションのみ閉じる。拡張機能はプロセススコープで管理されるため解放しない。
         if (::runtimeCoordinator.isInitialized) {
             runtimeCoordinator.close()
         }
         super.onDestroy()
+    }
+
+    /**
+     * Intentのデータから安全なURLを取り出す。
+     * ACTION_VIEW かつ http/https スキームの場合のみURLとして採用し、
+     * それ以外は null を返してホームページにフォールバックさせる。
+     */
+    private fun resolveInitialUrl(): String? {
+        if (intent.action != Intent.ACTION_VIEW) return null
+        val data = intent.data ?: return null
+        val scheme = data.scheme ?: return null
+        if (scheme != "http" && scheme != "https") return null
+        return data.toString()
     }
 
     private fun requestNotificationPermissionIfNeeded(): GeckoResult<Int> {
@@ -130,93 +138,4 @@ class CustomTabActivity : ComponentActivity() {
             requestNotificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
     }
-
-    private fun openInMainBrowser(url: String) {
-        val targetUri = Uri.parse(url)
-        startActivity(
-            Intent(this, MainActivity::class.java).apply {
-                action = Intent.ACTION_VIEW
-                data = targetUri
-            }
-        )
-        finish()
-    }
-}
-
-@Composable
-private fun CustomTabScreen(
-    initialUrl: String,
-    customTabsSessionToken: CustomTabsSessionToken?,
-    homepageUrl: String,
-    searchTemplate: String,
-    translationProvider: TranslationProvider,
-    browserSessionController: BrowserSessionController,
-    settingsRepository: SettingsRepository,
-    historyRepository: HistoryRepository,
-    webSuggestionRepository: WebSuggestionRepository,
-    themeColorExtension: ThemeColorWebExtension,
-    mediaWebExtension: MediaWebExtension,
-    onClose: () -> Unit,
-    onOpenInBrowser: (String) -> Unit,
-    onDesktopNotificationPermissionRequest: () -> GeckoResult<Int>,
-) {
-    val viewModel = viewModel(initializer = {
-        BrowserScreenViewModel(
-            historyRepository = historyRepository,
-            settingsRepository = settingsRepository,
-            webSuggestionRepository = webSuggestionRepository,
-        )
-    })
-    val urlBarSuggestions by viewModel.urlBarSuggestions.collectAsState()
-    val prewarmedSession = remember(customTabsSessionToken, initialUrl) {
-        customTabsSessionToken?.let { token ->
-            CustomTabsWarmupStore.consumePreparedSession(
-                token = token,
-                launchUrl = initialUrl,
-            )
-        }
-    }
-    val browserTab = remember(browserSessionController, initialUrl, prewarmedSession) {
-        if (prewarmedSession != null) {
-            browserSessionController.createAndAppendTabWithSession(
-                session = prewarmedSession,
-                initialUrl = initialUrl,
-            )
-        } else {
-            browserSessionController.createAndAppendTab(initialUrl = initialUrl)
-        }
-    }
-
-    GeckoBrowserTab(
-        modifier = Modifier.fillMaxSize(),
-        browserTab = browserTab,
-        homepageUrl = homepageUrl,
-        searchTemplate = searchTemplate,
-        translationProvider = translationProvider,
-        themeColorExtension = themeColorExtension,
-        mediaWebExtension = mediaWebExtension,
-        browserSessionController = browserSessionController,
-        tabCount = 1,
-        onInstallExtensionRequest = {},
-        onDesktopNotificationPermissionRequest = { _ ->
-            onDesktopNotificationPermissionRequest()
-        },
-        onOpenSettings = {},
-        onOpenTabs = {},
-        enableTabUi = false,
-        showInstallExtensionItem = false,
-        enableBackNavigation = false,
-        customTabMode = true,
-        onCloseCustomTab = onClose,
-        onOpenInBrowser = onOpenInBrowser,
-        onOpenNewSessionRequest = { uri ->
-            browserTab.session.loadUri(uri)
-            browserTab.session
-        },
-        onCloseTab = onClose,
-        onHistoryRecord = { url, title -> historyRepository.recordVisit(url, title) },
-        onHistoryTitleUpdate = { id, title -> historyRepository.updateTitle(id, title) },
-        urlBarSuggestions = urlBarSuggestions,
-        onUrlInputChanged = viewModel::onUrlInputChanged,
-    )
 }

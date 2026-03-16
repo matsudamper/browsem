@@ -40,21 +40,18 @@ internal data class SettingsUiState(
 
 @Stable
 internal class BrowserViewModel(
-    private val appContext: android.content.Context,
     val runtime: GeckoRuntime,
+    val themeColorExtension: ThemeColorWebExtension,
+    val mediaWebExtension: net.matsudamper.browser.media.MediaWebExtension,
     private val settingsRepository: SettingsRepository,
     private val tabRepository: TabRepository,
     internal val historyRepository: net.matsudamper.browser.data.history.HistoryRepository,
 ) : ViewModel() {
-    private val runtimeCoordinator = BrowserRuntimeCoordinator(appContext, runtime)
+    private val runtimeCoordinator = BrowserRuntimeCoordinator(runtime, themeColorExtension, mediaWebExtension)
     private val tabPersistenceCoordinator = TabPersistenceCoordinator(tabRepository)
 
     val browserSessionController: BrowserSessionController
         get() = runtimeCoordinator.browserSessionController
-    val themeColorExtension: ThemeColorWebExtension
-        get() = runtimeCoordinator.themeColorExtension
-    val mediaWebExtension
-        get() = runtimeCoordinator.mediaWebExtension
 
     private val settings: StateFlow<BrowserSettings?> = settingsRepository.settings
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
