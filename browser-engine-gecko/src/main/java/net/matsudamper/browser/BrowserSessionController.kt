@@ -1,5 +1,6 @@
 package net.matsudamper.browser
 
+import android.graphics.Bitmap
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -288,6 +289,8 @@ class BrowserTab(
             themeColorState = value
             onStateChanged()
         }
+    // ページのfavicon（ホーム追加時のアイコンに使用、永続化は不要）
+    var faviconBitmap: Bitmap? by mutableStateOf(null)
     // 未オープンタブのセッション復元情報を保持
     internal var pendingSessionState: String? by mutableStateOf(null)
 }

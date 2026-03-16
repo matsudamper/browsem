@@ -7,7 +7,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
-import net.matsudamper.browser.BrowserRuntimeCoordinator
 import net.matsudamper.browser.BrowserSessionController
 import net.matsudamper.browser.GeckoBrowserTab
 import net.matsudamper.browser.ThemeColorWebExtension
@@ -68,6 +67,8 @@ internal fun WebAppScreen(
         // ウェブアプリモード: 閉じるボタンなし、カスタムタブ風のツールバー
         webAppMode = true,
         onOpenNewSessionRequest = { uri ->
+            // ウェブアプリモードでは新規タブを作成せず、同じセッションでURLを読み込む
+            // 新規タブを作成するとユーザーから見えないタブになるため
             browserTab.session.loadUri(uri)
             browserTab.session
         },

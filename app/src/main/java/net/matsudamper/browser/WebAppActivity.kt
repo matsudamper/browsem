@@ -17,6 +17,7 @@ import net.matsudamper.browser.data.history.HistoryRepository
 import net.matsudamper.browser.data.resolvedHomepageUrl
 import net.matsudamper.browser.data.resolvedSearchTemplate
 import net.matsudamper.browser.data.websuggestion.WebSuggestionRepository
+import net.matsudamper.browser.media.MediaWebExtension
 import net.matsudamper.browser.screen.webapp.WebAppScreen
 import org.koin.android.ext.android.inject
 import org.mozilla.geckoview.GeckoResult
@@ -31,6 +32,8 @@ import java.util.concurrent.CancellationException
  */
 class WebAppActivity : ComponentActivity() {
     private val runtime: GeckoRuntime by inject()
+    private val themeColorExtension: ThemeColorWebExtension by inject()
+    private val mediaWebExtension: MediaWebExtension by inject()
     private val settingsRepository: SettingsRepository by inject()
     private val historyRepository: HistoryRepository by inject()
     private val webSuggestionRepository: WebSuggestionRepository by inject()
@@ -57,7 +60,8 @@ class WebAppActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         runtime.settings.setExtensionsWebAPIEnabled(true)
 
-        runtimeCoordinator = BrowserRuntimeCoordinator(applicationContext, runtime)
+        // 拡張機能は Koin の single で管理されるため、ここではセッション管理のみ担当する
+        runtimeCoordinator = BrowserRuntimeCoordinator(runtime, themeColorExtension, mediaWebExtension)
 
         // 外部アプリから任意のURLが渡されないよう、http/https スキームのみ許可する
         val initialUrl = resolveInitialUrl()
@@ -92,6 +96,7 @@ class WebAppActivity : ComponentActivity() {
             CancellationException("Activity was destroyed before notification permission completed.")
         )
         pendingNotificationPermissionResult = null
+        // セッションのみ閉じる。拡張機能はプロセススコープで管理されるため解放しない。
         if (::runtimeCoordinator.isInitialized) {
             runtimeCoordinator.close()
         }
@@ -134,4 +139,3 @@ class WebAppActivity : ComponentActivity() {
         }
     }
 }
-
