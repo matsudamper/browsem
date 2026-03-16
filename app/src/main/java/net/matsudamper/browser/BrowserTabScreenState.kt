@@ -490,12 +490,16 @@ internal class BrowserTabScreenState(
         val faviconUrl = "$scheme://$host/favicon.ico"
         coroutineScope.launch(Dispatchers.IO) {
             val bitmap = runCatching {
-                val connection = URL(faviconUrl).openConnection()
-                connection.connectTimeout = 5000
-                connection.readTimeout = 5000
-                connection.connect()
-                connection.getInputStream().use { stream ->
-                    BitmapFactory.decodeStream(stream)
+                val connection = URL(faviconUrl).openConnection() as java.net.HttpURLConnection
+                try {
+                    connection.connectTimeout = 5000
+                    connection.readTimeout = 5000
+                    connection.connect()
+                    connection.inputStream.use { stream ->
+                        BitmapFactory.decodeStream(stream)
+                    }
+                } finally {
+                    connection.disconnect()
                 }
             }.getOrNull()
             if (bitmap != null) {
