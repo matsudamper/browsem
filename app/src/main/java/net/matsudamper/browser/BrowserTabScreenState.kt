@@ -502,7 +502,8 @@ internal class BrowserTabScreenState(
                     connection.disconnect()
                 }
             }.getOrNull()
-            if (bitmap != null) {
+            // ナビゲーション後の古いfetchが後から完了しても上書きしないようにチェック
+            if (bitmap != null && currentPageUrl == pageUrl) {
                 browserTab.faviconBitmap = bitmap
             }
         }

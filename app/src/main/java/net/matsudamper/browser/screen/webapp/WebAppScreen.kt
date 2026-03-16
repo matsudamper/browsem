@@ -67,9 +67,10 @@ internal fun WebAppScreen(
         // ウェブアプリモード: 閉じるボタンなし、カスタムタブ風のツールバー
         webAppMode = true,
         onOpenNewSessionRequest = { uri ->
-            // 新規ウィンドウリクエスト（target="_blank"等）は新しいGeckoSessionに誘導する
-            // 既存セッションを返すとGeckoViewの内部状態が壊れるため使用しない
-            browserSessionController.createTabForNewSession(uri).session
+            // ウェブアプリモードでは新規タブを作成せず、同じセッションでURLを読み込む
+            // 新規タブを作成するとユーザーから見えないタブになるため
+            browserTab.session.loadUri(uri)
+            browserTab.session
         },
         onHistoryRecord = { url, title -> historyRepository.recordVisit(url, title) },
         onHistoryTitleUpdate = { id, title -> historyRepository.updateTitle(id, title) },
