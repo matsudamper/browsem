@@ -116,6 +116,7 @@ internal fun GeckoBrowserTab(
     var showAddToHomeScreenDialog by remember { mutableStateOf(false) }
     var addToHomeUrl by remember { mutableStateOf("") }
     var addToHomeTitle by remember { mutableStateOf("") }
+    var addToHomeFavicon by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
 
     // 不安定なラムダキーによる DisposableEffect の再実行を防ぐ
     val currentOnCloseTab by rememberUpdatedState(onCloseTab)
@@ -335,6 +336,7 @@ internal fun GeckoBrowserTab(
                     onAddToHomeScreen = {
                         addToHomeUrl = state.currentPageUrl
                         addToHomeTitle = state.currentPageTitle
+                        addToHomeFavicon = browserTab.faviconBitmap
                         showAddToHomeScreenDialog = true
                     },
                 )
@@ -392,6 +394,7 @@ internal fun GeckoBrowserTab(
         AddToHomeScreenDialog(
             url = addToHomeUrl,
             title = addToHomeTitle,
+            favicon = addToHomeFavicon,
             onDismiss = { showAddToHomeScreenDialog = false },
         )
     }

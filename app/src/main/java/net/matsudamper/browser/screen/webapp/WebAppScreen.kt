@@ -7,7 +7,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
-import net.matsudamper.browser.BrowserRuntimeCoordinator
 import net.matsudamper.browser.BrowserSessionController
 import net.matsudamper.browser.GeckoBrowserTab
 import net.matsudamper.browser.ThemeColorWebExtension
@@ -68,8 +67,9 @@ internal fun WebAppScreen(
         // ウェブアプリモード: 閉じるボタンなし、カスタムタブ風のツールバー
         webAppMode = true,
         onOpenNewSessionRequest = { uri ->
-            browserTab.session.loadUri(uri)
-            browserTab.session
+            // 新規ウィンドウリクエスト（target="_blank"等）は新しいGeckoSessionに誘導する
+            // 既存セッションを返すとGeckoViewの内部状態が壊れるため使用しない
+            browserSessionController.createTabForNewSession(uri).session
         },
         onHistoryRecord = { url, title -> historyRepository.recordVisit(url, title) },
         onHistoryTitleUpdate = { id, title -> historyRepository.updateTitle(id, title) },

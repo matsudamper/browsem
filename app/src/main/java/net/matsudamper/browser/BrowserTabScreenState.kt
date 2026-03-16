@@ -3,6 +3,7 @@ package net.matsudamper.browser
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.util.Log
 import android.widget.Toast
 import androidx.compose.runtime.Composable
@@ -19,6 +20,7 @@ import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import java.net.URL
 import net.matsudamper.browser.data.TranslationProvider
 import org.koin.compose.koinInject
 import org.mozilla.geckoview.AllowOrDeny
@@ -465,10 +467,41 @@ internal class BrowserTabScreenState(
     override fun onPageStart(url: String) {
         clearPageLoadError()
         maybeResetToolbarColorOnPageStart(url)
+        // 新しいページへの遷移時にfaviconをリセット
+        browserTab.faviconBitmap = null
     }
 
     override fun onPageStop(success: Boolean) {
         renderReady = true
+        if (success) {
+            fetchFavicon(currentPageUrl)
+        }
+    }
+
+    /**
+     * ページのfaviconを非同期でフェッチしてBrowserTabに保存する。
+     * <origin>/favicon.ico を試みる。失敗した場合はnullのままにする。
+     */
+    private fun fetchFavicon(pageUrl: String) {
+        val uri = runCatching { java.net.URI(pageUrl) }.getOrNull() ?: return
+        val scheme = uri.scheme ?: return
+        if (scheme != "http" && scheme != "https") return
+        val host = uri.host ?: return
+        val faviconUrl = "$scheme://$host/favicon.ico"
+        coroutineScope.launch(Dispatchers.IO) {
+            val bitmap = runCatching {
+                val connection = URL(faviconUrl).openConnection()
+                connection.connectTimeout = 5000
+                connection.readTimeout = 5000
+                connection.connect()
+                connection.getInputStream().use { stream ->
+                    BitmapFactory.decodeStream(stream)
+                }
+            }.getOrNull()
+            if (bitmap != null) {
+                browserTab.faviconBitmap = bitmap
+            }
+        }
     }
 
     override fun onLoadRequest(
