@@ -42,6 +42,8 @@ import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FloatingActionButton
@@ -189,6 +191,8 @@ internal fun TabsScreen(
             onGroupPageChanged = viewModel::onGroupPageChanged,
             onAddGroup = viewModel::addGroup,
             onMoveTabToGroup = { tabId, targetGroupIndex -> viewModel.moveTabToGroup(tabId, targetGroupIndex) },
+            onRenameGroup = viewModel::renameGroup,
+            onDeleteGroup = viewModel::deleteGroup,
             modifier = modifier,
         )
     }
@@ -434,6 +438,8 @@ private fun TabsScreenContent(
     onGroupPageChanged: (Int) -> Unit,
     onAddGroup: () -> Unit,
     onMoveTabToGroup: (tabId: String, targetGroupIndex: Int) -> Unit,
+    onRenameGroup: (groupIndex: Int, newName: String) -> Unit,
+    onDeleteGroup: (groupIndex: Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val safePageCount = groups.size.coerceAtLeast(1)
@@ -505,6 +511,12 @@ private fun TabsScreenContent(
     // グループ移動ダイアログの状態：長押しして移動せずに離したタブのID
     var moveDialogTabId by remember { mutableStateOf<String?>(null) }
 
+    // 名前変更ダイアログの対象グループインデックス
+    var renameDialogGroupIndex by remember { mutableStateOf<Int?>(null) }
+
+    // 削除確認ダイアログの対象グループインデックス
+    var deleteDialogGroupIndex by remember { mutableStateOf<Int?>(null) }
+
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -542,29 +554,53 @@ private fun TabsScreenContent(
                 userScrollEnabled = !isTabDragging,
             ) { page ->
                 val tabsForPage = groupedTabs.getOrElse(page) { emptyList() }
-                GroupTabGrid(
-                    tabs = tabsForPage,
-                    selectedTabId = selectedTabId,
-                    onSelectTab = onSelectTab,
-                    onCloseTab = onCloseTab,
-                    onReorderTabs = { from, to -> onReorderTabs(page, from, to) },
-                    onTabDragStateChanged = { dragging, centerInRoot ->
-                        isTabDragging = dragging
-                        tabDragCenterInRoot = centerInRoot
-                    },
-                    onTabDropped = { tabId ->
-                        // ドロップ先のグループタブを判定
-                        val targetIndex = groupTabBounds.entries.firstOrNull { (_, bounds) ->
-                            bounds.contains(tabDragCenterInRoot)
-                        }?.key
-                        if (targetIndex != null && targetIndex != page) {
-                            onMoveTabToGroup(tabId, targetIndex)
+                Column(modifier = Modifier.fillMaxSize()) {
+                    // ページヘッダー: 名前変更・削除ボタン
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        OutlinedButton(
+                            onClick = { renameDialogGroupIndex = page },
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            Text("名前変更")
                         }
-                    },
-                    onTabLongPressWithoutDrag = { tabId ->
-                        moveDialogTabId = tabId
-                    },
-                )
+                        OutlinedButton(
+                            onClick = { deleteDialogGroupIndex = page },
+                            modifier = Modifier.weight(1f),
+                            enabled = groups.size > 1,
+                        ) {
+                            Text("削除")
+                        }
+                    }
+                    GroupTabGrid(
+                        tabs = tabsForPage,
+                        selectedTabId = selectedTabId,
+                        onSelectTab = onSelectTab,
+                        onCloseTab = onCloseTab,
+                        onReorderTabs = { from, to -> onReorderTabs(page, from, to) },
+                        onTabDragStateChanged = { dragging, centerInRoot ->
+                            isTabDragging = dragging
+                            tabDragCenterInRoot = centerInRoot
+                        },
+                        onTabDropped = { tabId ->
+                            // ドロップ先のグループタブを判定
+                            val targetIndex = groupTabBounds.entries.firstOrNull { (_, bounds) ->
+                                bounds.contains(tabDragCenterInRoot)
+                            }?.key
+                            if (targetIndex != null && targetIndex != page) {
+                                onMoveTabToGroup(tabId, targetIndex)
+                            }
+                        },
+                        onTabLongPressWithoutDrag = { tabId ->
+                            moveDialogTabId = tabId
+                        },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
             }
         }
 
@@ -593,6 +629,38 @@ private fun TabsScreenContent(
             },
             onDismiss = { moveDialogTabId = null },
         )
+    }
+
+    // 名前変更ダイアログ
+    val renameIndex = renameDialogGroupIndex
+    if (renameIndex != null) {
+        val group = groups.getOrNull(renameIndex)
+        if (group != null) {
+            RenameGroupDialog(
+                currentName = group.name,
+                onConfirm = { newName ->
+                    onRenameGroup(renameIndex, newName)
+                    renameDialogGroupIndex = null
+                },
+                onDismiss = { renameDialogGroupIndex = null },
+            )
+        }
+    }
+
+    // 削除確認ダイアログ
+    val deleteIndex = deleteDialogGroupIndex
+    if (deleteIndex != null) {
+        val group = groups.getOrNull(deleteIndex)
+        if (group != null) {
+            DeleteGroupDialog(
+                groupName = group.name,
+                onConfirm = {
+                    onDeleteGroup(deleteIndex)
+                    deleteDialogGroupIndex = null
+                },
+                onDismiss = { deleteDialogGroupIndex = null },
+            )
+        }
     }
 }
 
@@ -1091,6 +1159,66 @@ private fun MoveTabToGroupDialog(
     )
 }
 
+/** グループ名を変更するダイアログ */
+@Composable
+private fun RenameGroupDialog(
+    currentName: String,
+    onConfirm: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var text by remember { mutableStateOf(currentName) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("グループ名を変更") },
+        text = {
+            OutlinedTextField(
+                value = text,
+                onValueChange = { text = it },
+                label = { Text("グループ名") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { if (text.isNotBlank()) onConfirm(text) },
+                enabled = text.isNotBlank(),
+            ) {
+                Text("変更")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("キャンセル")
+            }
+        },
+    )
+}
+
+/** グループを削除する前の確認ダイアログ */
+@Composable
+private fun DeleteGroupDialog(
+    groupName: String,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("グループを削除") },
+        text = { Text("「${groupName}」を削除しますか？グループ内のタブは別のグループへ移動されます。") },
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text("削除", color = MaterialTheme.colorScheme.error)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("キャンセル")
+            }
+        },
+    )
+}
+
 @Composable
 @Preview
 private fun Preview() {
@@ -1125,5 +1253,7 @@ private fun Preview() {
         onGroupPageChanged = {},
         onAddGroup = {},
         onMoveTabToGroup = { _, _ -> },
+        onRenameGroup = { _, _ -> },
+        onDeleteGroup = {},
     )
 }

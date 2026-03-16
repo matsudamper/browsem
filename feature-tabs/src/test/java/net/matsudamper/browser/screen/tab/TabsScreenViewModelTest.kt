@@ -119,6 +119,19 @@ class TabsScreenViewModelTest {
             }
         }
 
+        override suspend fun renameGroup(groupId: TabGroupId, name: String) {
+            groupsFlow.update { groups -> groups.map { if (it.id == groupId) it.copy(name = name) else it } }
+        }
+
+        override suspend fun deleteGroup(groupId: TabGroupId, fallbackGroupId: TabGroupId?) {
+            if (fallbackGroupId != null) {
+                assignmentsFlow.update { assignments ->
+                    assignments.map { if (it.groupId == groupId.value) it.copy(groupId = fallbackGroupId.value) else it }
+                }
+            }
+            groupsFlow.update { groups -> groups.filter { it.id != groupId } }
+        }
+
         fun setGroups(groups: List<TabGroupData>) {
             groupsFlow.value = groups
         }

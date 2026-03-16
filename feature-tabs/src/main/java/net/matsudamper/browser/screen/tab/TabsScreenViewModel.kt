@@ -244,6 +244,38 @@ class TabsScreenViewModel(
         }
     }
 
+    /** グループ名を変更する */
+    fun renameGroup(groupIndex: Int, newName: String) {
+        val currentGroups = groups.value
+        val group = currentGroups.getOrNull(groupIndex) ?: return
+        // ローカル順序を即座に更新して UI に反映する
+        _localGroupOrder.value = currentGroups.toMutableList().also {
+            it[groupIndex] = it[groupIndex].copy(name = newName)
+        }
+        viewModelScope.launch {
+            tabGroupRepository.renameGroup(group.id, newName)
+        }
+    }
+
+    /** グループを削除する。タブは隣接グループへ再割り当てされる。 */
+    fun deleteGroup(groupIndex: Int) {
+        val currentGroups = groups.value
+        val group = currentGroups.getOrNull(groupIndex) ?: return
+        val fallback = currentGroups.firstOrNull { it.id != group.id }
+        val newGroups = currentGroups.toMutableList().also { it.removeAt(groupIndex) }
+        _localGroupOrder.value = newGroups
+        // アクティブインデックスを新しいリストに合わせて補正する
+        val active = _activeGroupIndex.value ?: 0
+        _activeGroupIndex.value = when {
+            active == groupIndex -> (groupIndex - 1).coerceAtLeast(0)
+            active > groupIndex -> active - 1
+            else -> active
+        }.coerceIn(0, (newGroups.size - 1).coerceAtLeast(0))
+        viewModelScope.launch {
+            tabGroupRepository.deleteGroup(group.id, fallback?.id)
+        }
+    }
+
     companion object {
         private const val STOP_TIMEOUT_MILLIS = 5_000L
     }

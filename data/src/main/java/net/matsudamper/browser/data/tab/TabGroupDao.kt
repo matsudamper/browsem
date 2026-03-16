@@ -60,6 +60,9 @@ abstract class TabGroupDao {
     @Query("UPDATE tab_group SET sortOrder = :sortOrder WHERE groupId = :groupId")
     abstract suspend fun updateSortOrder(groupId: String, sortOrder: Int)
 
+    @Query("UPDATE tab_group SET name = :name WHERE groupId = :groupId")
+    abstract suspend fun updateGroupName(groupId: String, name: String)
+
     /** タブID→グループIDのマッピングを Flow で購読する */
     @Query("SELECT tabId, groupId FROM tab_state")
     abstract fun observeTabGroupAssignments(): Flow<List<TabGroupAssignment>>

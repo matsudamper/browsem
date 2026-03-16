@@ -32,6 +32,15 @@ interface TabGroupRepository {
 
     /** グループの並び順を更新する */
     suspend fun reorderGroups(orderedGroupIds: List<String>)
+
+    /** グループ名を変更する */
+    suspend fun renameGroup(groupId: TabGroupId, name: String)
+
+    /**
+     * グループを削除する。
+     * fallbackGroupId が指定された場合、削除前にそのグループへタブを再割り当てする。
+     */
+    suspend fun deleteGroup(groupId: TabGroupId, fallbackGroupId: TabGroupId?)
 }
 
 class TabGroupRepositoryImpl(context: Context) : TabGroupRepository {
@@ -82,6 +91,17 @@ class TabGroupRepositoryImpl(context: Context) : TabGroupRepository {
         orderedGroupIds.forEachIndexed { index, groupId ->
             dao.updateSortOrder(groupId, index)
         }
+    }
+
+    override suspend fun renameGroup(groupId: TabGroupId, name: String) {
+        dao.updateGroupName(groupId.value, name)
+    }
+
+    override suspend fun deleteGroup(groupId: TabGroupId, fallbackGroupId: TabGroupId?) {
+        if (fallbackGroupId != null) {
+            dao.reassignTabsFromGroup(groupId.value, fallbackGroupId.value)
+        }
+        dao.deleteGroup(groupId.value)
     }
 }
 
