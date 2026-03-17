@@ -14,6 +14,10 @@ android {
         sourceCompatibility = JavaVersion.VERSION_21
         targetCompatibility = JavaVersion.VERSION_21
     }
+
+    testOptions {
+        unitTests.isReturnDefaultValues = true
+    }
 }
 
 kotlin {
@@ -26,4 +30,8 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.ktx)
     implementation(project(":browser-core"))
     implementation(project(":browser-engine-gecko"))
+    implementation(project(":data"))
+
+    testImplementation(libs.junit4)
+    testImplementation(libs.kotlinx.coroutines.test)
 }
