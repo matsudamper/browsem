@@ -89,30 +89,8 @@ class TabsScreenViewModel(
             // 初回: デフォルトグループを作成する（DBが空のときのみ）
             val initialTabs = tabStore.tabStoreState.first()
             tabGroupRepository.createDefaultGroupIfEmpty(initialTabs.tabs.map { it.id })
-        }
-        viewModelScope.launch {
-            // アプリ再起動後に選択中タブが属するグループを activeGroupIndex に復元する。
-            // groups と assignments の両方が揃った時点で一度だけ判定する。
-            // selectedTabId が null（新規起動等）の場合は 0 を設定して即座に Pager を表示できるようにする。
-            val selectedTabId = tabStore.tabStoreState.first().selectedTabId
-            if (selectedTabId == null) {
-                _activeGroupIndex.value = 0
-                return@launch
-            }
-            combine(
-                groups,
-                tabGroupRepository.observeTabGroupAssignments(),
-            ) { groupList, assignments ->
-                Pair(groupList, assignments)
-            }.first { (groupList, _) -> groupList.isNotEmpty() }
-                .let { (groupList, assignments) ->
-                    val groupId = assignments.find { it.tabId == selectedTabId }?.groupId
-                    val index = if (groupId != null) groupList.indexOfFirst { it.id.value == groupId } else -1
-                    _activeGroupIndex.value = if (index >= 0) index else 0
-                }
-        }
-        viewModelScope.launch {
-            // タブとグループ割り当ての両方が揃ってから、未割当タブをアクティブグループに自動割り当てする。
+            // createDefaultGroupIfEmpty 完了後に監視を開始することで、グループが存在しない状態で
+            // 新規タブの割り当てがスキップされる競合状態を防ぐ。
             // TabGroupDao.setTabGroup は INSERT IGNORE + UPDATE を行うため、
             // TabPersistenceCoordinator が tab_state 行を作成する前でも割り当てが成功する。
             combine(
@@ -135,6 +113,27 @@ class TabsScreenViewModel(
                     unassignedTabIds.forEach { tabId ->
                         tabGroupRepository.assignTabToGroup(tabId, activeGroup.id)
                     }
+                }
+        }
+        viewModelScope.launch {
+            // アプリ再起動後に選択中タブが属するグループを activeGroupIndex に復元する。
+            // groups と assignments の両方が揃った時点で一度だけ判定する。
+            // selectedTabId が null（新規起動等）の場合は 0 を設定して即座に Pager を表示できるようにする。
+            val selectedTabId = tabStore.tabStoreState.first().selectedTabId
+            if (selectedTabId == null) {
+                _activeGroupIndex.value = 0
+                return@launch
+            }
+            combine(
+                groups,
+                tabGroupRepository.observeTabGroupAssignments(),
+            ) { groupList, assignments ->
+                Pair(groupList, assignments)
+            }.first { (groupList, _) -> groupList.isNotEmpty() }
+                .let { (groupList, assignments) ->
+                    val groupId = assignments.find { it.tabId == selectedTabId }?.groupId
+                    val index = if (groupId != null) groupList.indexOfFirst { it.id.value == groupId } else -1
+                    _activeGroupIndex.value = if (index >= 0) index else 0
                 }
         }
     }
@@ -179,6 +178,9 @@ class TabsScreenViewModel(
             val newId = tabGroupRepository.addGroup(name, newSortOrder)
             // ローカル順序に追加してすぐに反映する
             _localGroupOrder.value = currentGroups + TabGroupData(newId, name)
+            // Pager がアニメーション中に settledPage の中間値で _activeGroupIndex を上書きしないよう
+            // onGroupSelected と同様に programmaticScrollTarget を設定する
+            programmaticScrollTarget = newSortOrder
             _activeGroupIndex.value = newSortOrder
         }
     }
@@ -229,6 +231,7 @@ class TabsScreenViewModel(
     fun reorderTabs(groupIndex: Int, fromLocalIndex: Int, toLocalIndex: Int) {
         val currentGroupedTabs = groupedTabs.value
         val tabsInGroup = currentGroupedTabs.getOrNull(groupIndex) ?: return
+        if (fromLocalIndex !in tabsInGroup.indices || toLocalIndex !in tabsInGroup.indices) return
         val reordered = tabsInGroup.toMutableList().also {
             it.add(toLocalIndex, it.removeAt(fromLocalIndex))
         }
@@ -236,6 +239,7 @@ class TabsScreenViewModel(
         val globalOrder = currentGroupedTabs.flatMapIndexed { idx, tabs ->
             if (idx == groupIndex) reordered else tabs
         }
+        // moveTab 後に tabStoreState が更新されるため、各イテレーションで最新の状態を再取得する
         globalOrder.forEachIndexed { targetIdx, tab ->
             val currentIdx = tabStore.tabStoreState.value.tabs.indexOfFirst { it.id == tab.id }
             if (currentIdx >= 0 && currentIdx != targetIdx) {

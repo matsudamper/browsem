@@ -501,6 +501,11 @@ private fun TabsScreenContent(
 
     // グループタブバー上の各グループタブのルート座標 bounds を保持する
     val groupTabBounds = remember { mutableMapOf<Int, Rect>() }
+    // グループが削除・並び替えされた際に無効なインデックスのエントリを除去する
+    LaunchedEffect(groups) {
+        val validIndices = groups.indices.toSet()
+        groupTabBounds.keys.retainAll(validIndices)
+    }
 
     // タブドラッグ中のルート座標中心を追跡（各ページの DragDropState から更新される）
     var tabDragCenterInRoot by remember { mutableStateOf(Offset.Zero) }

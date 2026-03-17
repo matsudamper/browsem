@@ -84,7 +84,9 @@ class TabGroupRepositoryImpl(context: Context) : TabGroupRepository {
     }
 
     override suspend fun removeTabFromGroup(tabId: String) {
-        dao.setTabGroup(tabId, "")
+        // setTabGroup (INSERT IGNORE + UPDATE) は削除済みタブに幽霊レコードを生成するため、
+        // UPDATE のみ行う updateTabGroup を使う
+        dao.updateTabGroup(tabId, "")
     }
 
     override suspend fun reorderGroups(orderedGroupIds: List<String>) {
