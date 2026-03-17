@@ -8,13 +8,14 @@ class GeckoTranslator(
     private val session: GeckoSession,
     private val fromLanguage: String,
 ) : Translator {
-    override suspend fun translate() {
+    override suspend fun translate(): TranslationLanguages {
         val options = TranslationsController.SessionTranslation.TranslationOptions.Builder()
             .downloadModel(true)
             .build()
-        val sessionTranslation = session.sessionTranslation ?: return
+        val sessionTranslation = session.sessionTranslation ?: return TranslationLanguages(fromLanguage, "ja")
         sessionTranslation
             .translate(fromLanguage, "ja", options)
             .awaitGecko()
+        return TranslationLanguages(fromLanguage, "ja")
     }
 }

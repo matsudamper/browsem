@@ -101,6 +101,10 @@ internal class BrowserTabScreenState(
     var translationState by mutableStateOf(TranslationState.Idle)
     var originalPageUrlForRevert by mutableStateOf<String?>(null)
     var detectedPageLanguage by mutableStateOf<String?>(null)
+    /** 翻訳元言語タグ（例: "en"） */
+    var translationFromLanguage by mutableStateOf<String?>(null)
+    /** 翻訳先言語タグ（例: "ja"） */
+    var translationToLanguage by mutableStateOf<String?>(null)
 
     // --- Find-in-page state ---
     var showFindInPage by mutableStateOf(false)
@@ -239,11 +243,16 @@ internal class BrowserTabScreenState(
                     detectedPageLanguage,
                 )
             }
-            translationState = if (result.isSuccess) {
-                TranslationState.Translated
+            if (result.isSuccess) {
+                val langs = result.getOrNull()
+                translationFromLanguage = langs?.fromLanguage
+                translationToLanguage = langs?.toLanguage
+                translationState = TranslationState.Translated
             } else {
                 Log.e("BrowserTabScreenState", "翻訳に失敗しました", result.exceptionOrNull())
-                TranslationState.Error
+                translationFromLanguage = null
+                translationToLanguage = null
+                translationState = TranslationState.Error
             }
         }
     }
@@ -252,6 +261,8 @@ internal class BrowserTabScreenState(
         val savedUrl = originalPageUrlForRevert
         translationState = TranslationState.Idle
         originalPageUrlForRevert = null
+        translationFromLanguage = null
+        translationToLanguage = null
         if (savedUrl != null) {
             clearPageLoadError()
             session.loadUri(savedUrl)
@@ -261,6 +272,8 @@ internal class BrowserTabScreenState(
     fun onDismissTranslationError() {
         translationState = TranslationState.Idle
         originalPageUrlForRevert = null
+        translationFromLanguage = null
+        translationToLanguage = null
     }
 
     fun sharePage() {
