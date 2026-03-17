@@ -331,6 +331,8 @@ internal fun GeckoBrowserTab(
                     canGoForward = state.canGoForward,
                     onRefresh = state::onRefresh,
                     onTranslatePage = { state.onTranslate(translationProvider) },
+                    isSimpleView = state.isSimpleViewActive,
+                    onSimpleView = state::toggleSimpleView,
                     onHorizontalDrag = onToolbarHorizontalDrag,
                     onHorizontalDragEnd = onToolbarDragEnd,
                     onAddToHomeScreen = {

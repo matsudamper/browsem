@@ -102,6 +102,9 @@ internal class BrowserTabScreenState(
     var originalPageUrlForRevert by mutableStateOf<String?>(null)
     var detectedPageLanguage by mutableStateOf<String?>(null)
 
+    // --- シンプル表示状態 ---
+    var isSimpleViewActive by mutableStateOf(false)
+
     // --- Find-in-page state ---
     var showFindInPage by mutableStateOf(false)
     var findQuery by mutableStateOf("")
@@ -329,6 +332,24 @@ internal class BrowserTabScreenState(
         refreshCurrentPage()
     }
 
+    fun toggleSimpleView() {
+        if (isSimpleViewActive) {
+            // シンプル表示を終了して元のページを再読み込み
+            isSimpleViewActive = false
+            refreshCurrentPage()
+        } else {
+            isSimpleViewActive = true
+            coroutineScope.launch {
+                val result = runCatching {
+                    ReadabilitySimpleView(session, context).execute()
+                }
+                if (result.isFailure) {
+                    isSimpleViewActive = false
+                }
+            }
+        }
+    }
+
     fun copyCurrentPageUrl() {
         if (currentPageUrl.isBlank()) return
         copyUrlToClipboard(currentPageUrl)
@@ -406,6 +427,10 @@ internal class BrowserTabScreenState(
         ) {
             translationState = TranslationState.Idle
             originalPageUrlForRevert = null
+        }
+        // ページ遷移時にシンプル表示をリセット
+        if (isSimpleViewActive && !url.startsWith("javascript:")) {
+            isSimpleViewActive = false
         }
         if (!url.startsWith("data:")) {
             detectedPageLanguage = null

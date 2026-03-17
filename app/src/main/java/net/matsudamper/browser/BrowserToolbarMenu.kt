@@ -36,6 +36,8 @@ internal fun ToolbarMenu(
     onFindInPage: () -> Unit,
     onOpenSettings: () -> Unit,
     onAddToHomeScreen: () -> Unit,
+    isSimpleView: Boolean,
+    onSimpleView: () -> Unit,
 ) {
     DropdownMenu(
         expanded = visibleMenu,
@@ -110,6 +112,19 @@ internal fun ToolbarMenu(
                 )
             },
             onClick = { onPcModeToggle() },
+        )
+        DropdownMenuItem(
+            text = { Text(text = "シンプル表示") },
+            leadingIcon = {
+                Checkbox(
+                    checked = isSimpleView,
+                    onCheckedChange = null,
+                )
+            },
+            onClick = {
+                onDismissRequest()
+                onSimpleView()
+            },
         )
         if (showInstallExtensionItem) {
             DropdownMenuItem(
