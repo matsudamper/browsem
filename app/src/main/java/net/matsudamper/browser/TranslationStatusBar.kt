@@ -16,6 +16,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
+import java.util.Locale
 
 internal enum class TranslationState { Idle, Loading, Translated, Error }
 
@@ -24,6 +25,8 @@ internal fun TranslationStatusBar(
     state: TranslationState,
     onRevert: () -> Unit,
     onDismissError: () -> Unit,
+    fromLanguage: String? = null,
+    toLanguage: String? = null,
     modifier: Modifier = Modifier,
 ) {
     if (state == TranslationState.Idle) return
@@ -51,7 +54,7 @@ internal fun TranslationStatusBar(
                 Text(
                     text = when (state) {
                         TranslationState.Loading -> "翻訳中..."
-                        TranslationState.Translated -> "翻訳済み"
+                        TranslationState.Translated -> buildTranslatedLabel(fromLanguage, toLanguage)
                         TranslationState.Error -> "翻訳に失敗しました"
                         TranslationState.Idle -> ""
                     },
@@ -85,4 +88,12 @@ internal fun TranslationStatusBar(
             }
         }
     }
+}
+
+/** 翻訳済みラベル文字列を組み立てる。言語情報がある場合は「英語 → 日本語」形式で表示する。 */
+private fun buildTranslatedLabel(fromLanguage: String?, toLanguage: String?): String {
+    if (fromLanguage == null || toLanguage == null) return "翻訳済み"
+    val fromName = Locale.forLanguageTag(fromLanguage).getDisplayLanguage(Locale.JAPANESE)
+    val toName = Locale.forLanguageTag(toLanguage).getDisplayLanguage(Locale.JAPANESE)
+    return "翻訳済み: $fromName → $toName"
 }
