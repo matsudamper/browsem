@@ -101,6 +101,7 @@ class TabRepository(context: Context) {
         themeColor = themeColor,
         sortOrder = sortOrder,
         isSelected = isSelected,
+        groupId = "", // グループ管理は TabGroupRepository が担う
     )
 }
 

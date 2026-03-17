@@ -9,6 +9,7 @@ import androidx.compose.runtime.setValue
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import net.matsudamper.browser.core.TabInsertionPolicy
 import net.matsudamper.browser.core.TabSelectionPolicy
 import net.matsudamper.browser.core.TabStore
 import net.matsudamper.browser.core.TabStoreState
@@ -120,6 +121,11 @@ class BrowserSessionController(runtime: GeckoRuntime) : TabStore {
     fun createTabForNewSession(initialUrl: String, openerTabId: String? = null): BrowserTab {
         val normalizedInitialUrl = initialUrl.ifBlank { "about:blank" }
         val session = GeckoSession()
+        // リンクから開く新しいタブはオープナーの次に挿入する
+        val insertIndex = TabInsertionPolicy.resolveInsertionIndex(
+            tabIds = tabList.map { it.tabId },
+            openerTabId = openerTabId,
+        )
         return appendTab(
             tabId = UUID.randomUUID().toString(),
             session = session,
@@ -128,6 +134,7 @@ class BrowserSessionController(runtime: GeckoRuntime) : TabStore {
             title = normalizedInitialUrl,
             previewBitmapArray = null,
             openerTabId = openerTabId,
+            insertIndex = insertIndex,
         )
     }
 
@@ -141,6 +148,11 @@ class BrowserSessionController(runtime: GeckoRuntime) : TabStore {
         if (!session.isOpen) {
             session.open(geckoRuntime)
         }
+        // target="_blank" 等で開く新しいタブはオープナーの次に挿入する
+        val insertIndex = TabInsertionPolicy.resolveInsertionIndex(
+            tabIds = tabList.map { it.tabId },
+            openerTabId = openerTabId,
+        )
         return appendTab(
             tabId = tabId,
             session = session,
@@ -149,10 +161,11 @@ class BrowserSessionController(runtime: GeckoRuntime) : TabStore {
             title = normalizedInitialUrl,
             previewBitmapArray = null,
             openerTabId = openerTabId,
+            insertIndex = insertIndex,
         )
     }
 
-    fun moveTab(fromIndex: Int, toIndex: Int) {
+    override fun moveTab(fromIndex: Int, toIndex: Int) {
         if (fromIndex == toIndex) return
         if (fromIndex < 0 || fromIndex >= tabList.size) return
         if (toIndex < 0 || toIndex >= tabList.size) return
@@ -212,6 +225,7 @@ class BrowserSessionController(runtime: GeckoRuntime) : TabStore {
         previewBitmapArray: ByteArray?,
         themeColor: Int? = null,
         openerTabId: String? = null,
+        insertIndex: Int = tabList.size,
     ): BrowserTab {
         val tab = BrowserTab(
             tabId = tabId,
@@ -224,7 +238,7 @@ class BrowserSessionController(runtime: GeckoRuntime) : TabStore {
             openerTabId = openerTabId,
             onStateChanged = ::publishState,
         )
-        tabList += tab
+        tabList.add(insertIndex, tab)
         publishState()
         return tab
     }

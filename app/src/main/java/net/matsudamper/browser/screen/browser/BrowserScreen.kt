@@ -56,6 +56,8 @@ internal fun BrowserScreen(
     onInstallExtensionRequest: (String) -> Unit,
     handleNotificationPermission: (uri: String) -> GeckoResult<Int>,
     onSelectTab: (tabId: String, beforeTab: AppDestination.Browser?) -> Unit,
+    /** グループ順に並べたタブリスト。アドレスバースワイプ時の前後タブ判定に使用する。 */
+    orderedTabs: List<BrowserTab>,
 ) {
     val urlBarSuggestions by viewModel.urlBarSuggestions.collectAsState()
 
@@ -68,10 +70,10 @@ internal fun BrowserScreen(
     }
     val tabs = browserSessionController.tabs
 
-    // 前後タブの取得
-    val currentIndex = tabs.indexOfFirst { it.tabId == key.tabId }
-    val prevTab = if (currentIndex > 0) tabs[currentIndex - 1] else null
-    val nextTab = if (currentIndex >= 0 && currentIndex < tabs.lastIndex) tabs[currentIndex + 1] else null
+    // 前後タブの取得（グループ表示順を尊重する）
+    val currentIndex = orderedTabs.indexOfFirst { it.tabId == key.tabId }
+    val prevTab = if (currentIndex > 0) orderedTabs[currentIndex - 1] else null
+    val nextTab = if (currentIndex >= 0 && currentIndex < orderedTabs.lastIndex) orderedTabs[currentIndex + 1] else null
 
     val coroutineScope = rememberCoroutineScope()
     // URLバースワイプのオフセット（ピクセル単位）タブ切替時にリセット
