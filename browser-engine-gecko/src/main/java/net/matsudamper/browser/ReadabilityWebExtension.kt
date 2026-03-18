@@ -9,6 +9,7 @@ import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.WebExtension
 import java.util.concurrent.ConcurrentHashMap
+import java.util.Collections
 
 /**
  * mozilla/readability を使って記事を抽出するビルトイン WebExtension。
@@ -24,6 +25,10 @@ class ReadabilityWebExtension {
 
     // セッションごとの結果コールバック（registerSession で登録）
     private val sessionCallbacks = ConcurrentHashMap<GeckoSession, (ReadabilityArticle) -> Unit>()
+
+    // デリゲートを設定済みのセッションを追跡（install と registerSession の競合で二重設定を防ぐ）
+    private val attachedSessions: MutableSet<GeckoSession> =
+        Collections.newSetFromMap(ConcurrentHashMap())
 
     fun install(runtime: GeckoRuntime) {
         Log.d(TAG, "install() 開始: uri=$EXTENSION_URI")
@@ -59,6 +64,11 @@ class ReadabilityWebExtension {
     fun unregisterSession(session: GeckoSession) {
         sessionCallbacks.remove(session)
         sessionPorts.remove(session)
+        attachedSessions.remove(session)
+        // メッセージデリゲートを解除して、セッション再利用時に onConnect が空振りしないようにする
+        extension?.let { ext ->
+            session.webExtensionController.setMessageDelegate(ext, null, NATIVE_APP_ID)
+        }
     }
 
     /**
@@ -76,6 +86,8 @@ class ReadabilityWebExtension {
     }
 
     private fun attachSessionDelegate(session: GeckoSession, ext: WebExtension) {
+        // install() と registerSession() が同時に呼ばれた場合の二重設定を防ぐ
+        if (!attachedSessions.add(session)) return
         session.webExtensionController.setMessageDelegate(
             ext,
             object : WebExtension.MessageDelegate {

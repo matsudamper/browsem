@@ -4,13 +4,13 @@
   if (window !== window.top) return;
 
   // ネイティブアプリとの双方向ポートを確立
-  var port = browser.runtime.connectNative("readabilityBridge");
+  const port = browser.runtime.connectNative("readabilityBridge");
 
   port.onMessage.addListener(function (msg) {
     if (msg.action !== "extract") return;
     try {
-      var doc = document.cloneNode(true);
-      var article = new Readability(doc).parse();
+      const doc = document.cloneNode(true);
+      const article = new Readability(doc).parse();
       if (article) {
         port.postMessage({
           success: true,
