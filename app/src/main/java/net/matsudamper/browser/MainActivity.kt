@@ -46,6 +46,11 @@ class MainActivity : ComponentActivity() {
     private var webExtensionWarmUpInProgress = false
     private var webExtensionWarmUpRetryCount = 0
     private val createNewTabChannel = Channel<String>(Channel.UNLIMITED)
+
+    // リコンポーズのたびに新しい Flow が生成されチャネルがキャンセルされるのを防ぐため、
+    // Composable の外でプロパティとして保持する
+    private val newTabUrlFlow = createNewTabChannel.receiveAsFlow()
+
     private var pendingNotificationPermissionResult: GeckoResult<Int>? = null
 
     private val requestNotificationPermissionLauncher = registerForActivityResult(
@@ -148,7 +153,10 @@ class MainActivity : ComponentActivity() {
         if (savedInstanceState == null) {
             val url = intent.dataString
             if (url != null) {
-                createNewTabChannel.trySend(url)
+                val result = createNewTabChannel.trySend(url)
+                if (result.isFailure) {
+                    Log.e("MainActivity", "URL の送信に失敗: $url, reason=${result.exceptionOrNull()}")
+                }
             }
         }
 
@@ -161,7 +169,7 @@ class MainActivity : ComponentActivity() {
             ) {
                 BrowserApp(
                     viewModel = browserViewModel,
-                    newTabUrlFlow = createNewTabChannel.receiveAsFlow(),
+                    newTabUrlFlow = newTabUrlFlow,
                     onInstallExtensionRequest = { pageUrl ->
                         extensionInstaller.installFromCurrentPage(pageUrl)
                     },
@@ -194,7 +202,10 @@ class MainActivity : ComponentActivity() {
         setIntent(intent)
         val url = intent.dataString
         if (url != null) {
-            createNewTabChannel.trySend(url)
+            val result = createNewTabChannel.trySend(url)
+            if (result.isFailure) {
+                Log.e("MainActivity", "URL の送信に失敗: $url, reason=${result.exceptionOrNull()}")
+            }
         }
     }
 
