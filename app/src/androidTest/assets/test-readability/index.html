@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Readability Test Article</title>
+    <style>
+      body { margin: 0; font-family: sans-serif; }
+      nav { background: #333; color: #fff; padding: 1em; }
+      article { max-width: 800px; margin: 2em auto; padding: 1em; }
+      footer { background: #eee; padding: 2em; text-align: center; }
+    </style>
+  </head>
+  <body>
+    <nav>
+      <a href="/">ホーム</a>
+      <a href="/news">ニュース</a>
+      <a href="/about">会社概要</a>
+    </nav>
+    <article>
+      <h1 id="article-title">シンプル表示テスト用記事タイトル</h1>
+      <p class="byline">テスト著者</p>
+      <p>
+        これはシンプル表示機能をテストするための記事です。
+        Readability ライブラリがこのコンテンツを正しく抽出できることを確認します。
+      </p>
+      <p>
+        記事の本文は複数の段落で構成されています。
+        各段落には十分な量のテキストが含まれており、
+        Readability がメインコンテンツとして認識できるようになっています。
+      </p>
+      <p>
+        この記事は Mozilla の Readability.js を使って処理されます。
+        ナビゲーションバーやフッターなどの不要な要素が除去され、
+        記事本文だけが表示されるようになります。
+      </p>
+      <h2>サブセクション</h2>
+      <p>
+        これはサブセクションの内容です。見出しと段落の組み合わせが
+        Readability によって適切に処理されることを確認します。
+      </p>
+    </article>
+    <footer>
+      <p>Copyright 2026 Test Site</p>
+      <nav>
+        <a href="/privacy">プライバシーポリシー</a>
+        <a href="/terms">利用規約</a>
+      </nav>
+    </footer>
+  </body>
+</html>

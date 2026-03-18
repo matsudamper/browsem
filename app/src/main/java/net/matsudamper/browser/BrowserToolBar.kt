@@ -75,6 +75,8 @@ internal fun BrowserToolBar(
     onPcModeToggle: () -> Unit,
     onTranslatePage: () -> Unit,
     onAddToHomeScreen: () -> Unit,
+    isSimpleView: Boolean,
+    onSimpleView: () -> Unit,
     toolbarColor: Color?,
     onHorizontalDrag: (Float) -> Unit = {},
     onHorizontalDragEnd: () -> Unit = {},
@@ -124,6 +126,8 @@ internal fun BrowserToolBar(
                 onFindInPage = onFindInPage,
                 onOpenSettings = onOpenSettings,
                 onAddToHomeScreen = onAddToHomeScreen,
+                isSimpleView = isSimpleView,
+                onSimpleView = onSimpleView,
             )
         }
     )
@@ -323,6 +327,8 @@ private fun Preview() {
                     onPcModeToggle = {},
                     onFindInPage = {},
                     onAddToHomeScreen = {},
+                    isSimpleView = false,
+                    onSimpleView = {},
                     toolbarColor = null,
                     onRefresh = {},
                     onHome = {},
