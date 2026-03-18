@@ -243,13 +243,28 @@ internal class BrowserTabScreenState(
 
     fun onTranslate(translationProvider: TranslationProvider) {
         if (translationState == TranslationState.Loading) return
+        runTranslation(translationProvider, fromLanguage = detectedPageLanguage, toLanguage = "ja")
+    }
+
+    /** ステータスバーの言語ドロップダウンから再翻訳を実行する */
+    fun onRetranslate(translationProvider: TranslationProvider, fromLanguage: String?, toLanguage: String) {
+        if (translationState == TranslationState.Loading) return
+        runTranslation(translationProvider, fromLanguage = fromLanguage, toLanguage = toLanguage)
+    }
+
+    private fun runTranslation(translationProvider: TranslationProvider, fromLanguage: String?, toLanguage: String) {
         coroutineScope.launch {
-            originalPageUrlForRevert = currentPageUrl
+            // 初回翻訳時のみ元URLを保存する
+            if (originalPageUrlForRevert == null) {
+                originalPageUrlForRevert = currentPageUrl
+            }
             translationState = TranslationState.Loading
+            val pageUrl = originalPageUrlForRevert ?: currentPageUrl
             val result = runCatching {
-                PageTranslator(session, currentPageUrl).translatePageToJapanese(
+                PageTranslator(session, pageUrl).translatePage(
                     translationProvider,
-                    detectedPageLanguage,
+                    fromLanguage,
+                    toLanguage,
                 )
             }
             if (result.isSuccess) {
