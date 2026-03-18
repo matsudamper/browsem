@@ -43,6 +43,7 @@ internal class BrowserViewModel(
     val runtime: GeckoRuntime,
     val themeColorExtension: ThemeColorWebExtension,
     val mediaWebExtension: net.matsudamper.browser.media.MediaWebExtension,
+    val readabilityWebExtension: ReadabilityWebExtension,
     private val settingsRepository: SettingsRepository,
     private val tabRepository: TabRepository,
     internal val historyRepository: net.matsudamper.browser.data.history.HistoryRepository,

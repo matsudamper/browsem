@@ -60,7 +60,9 @@ import kotlinx.coroutines.flow.collectLatest
 import net.matsudamper.browser.data.TranslationProvider
 import net.matsudamper.browser.media.GeckoMediaSessionDelegate
 import net.matsudamper.browser.media.MediaWebExtension
+import net.matsudamper.browser.screen.browser.SimpleViewScreen
 import net.matsudamper.browser.screen.browser.UrlBarSuggestionsUiState
+import org.koin.compose.koinInject
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.GeckoView
@@ -97,6 +99,7 @@ internal fun GeckoBrowserTab(
     urlBarSuggestions: UrlBarSuggestionsUiState = UrlBarSuggestionsUiState(),
     onUrlInputChanged: ((String) -> Unit)? = null,
 ) {
+    val readabilityWebExtension: ReadabilityWebExtension = koinInject()
     val state = rememberBrowserTabScreenState(
         browserTab = browserTab,
         homepageUrl = homepageUrl,
@@ -184,6 +187,16 @@ internal fun GeckoBrowserTab(
         mediaWebExtension.registerSession(session)
         onDispose {
             mediaWebExtension.unregisterSession(session)
+        }
+    }
+
+    // ReadabilityWebExtension のセッション登録
+    DisposableEffect(session, state, readabilityWebExtension) {
+        readabilityWebExtension.registerSession(session) { article ->
+            state.simpleViewArticle = article
+        }
+        onDispose {
+            readabilityWebExtension.unregisterSession(session)
         }
     }
 
@@ -384,6 +397,14 @@ internal fun GeckoBrowserTab(
                 },
                 modifier = Modifier.fillMaxSize(),
             )
+            // シンプル表示オーバーレイ
+            state.simpleViewArticle?.let { article ->
+                SimpleViewScreen(
+                    article = article,
+                    onClose = state::dismissSimpleView,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
         }
         BrowserTabDialogLayer(
             state = state,

@@ -22,6 +22,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import java.net.URL
 import net.matsudamper.browser.data.TranslationProvider
+import net.matsudamper.browser.ReadabilityArticle
+import net.matsudamper.browser.ReadabilityWebExtension
 import org.koin.compose.koinInject
 import org.mozilla.geckoview.AllowOrDeny
 import org.mozilla.geckoview.GeckoResult
@@ -45,6 +47,7 @@ internal fun rememberBrowserTabScreenState(
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val geckoDownloadManager: GeckoDownloadManager = koinInject()
+    val readabilityWebExtension: ReadabilityWebExtension = koinInject()
     val state = remember(browserTab) {
         BrowserTabScreenState(
             browserTab = browserTab,
@@ -52,6 +55,7 @@ internal fun rememberBrowserTabScreenState(
             searchTemplate = searchTemplate,
             coroutineScope = coroutineScope,
             geckoDownloadManager = geckoDownloadManager,
+            readabilityWebExtension = readabilityWebExtension,
             context = context,
             onHistoryRecord = onHistoryRecord,
             onHistoryTitleUpdate = onHistoryTitleUpdate,
@@ -71,6 +75,7 @@ internal class BrowserTabScreenState(
     searchTemplate: String,
     private val coroutineScope: CoroutineScope,
     private val geckoDownloadManager: GeckoDownloadManager,
+    private val readabilityWebExtension: ReadabilityWebExtension,
     private val context: Context,
     var onHistoryRecord: (suspend (url: String, title: String) -> Long)? = null,
     var onHistoryTitleUpdate: (suspend (id: Long, title: String) -> Unit)? = null,
@@ -107,7 +112,8 @@ internal class BrowserTabScreenState(
     var translationToLanguage by mutableStateOf<String?>(null)
 
     // --- シンプル表示状態 ---
-    var isSimpleViewActive by mutableStateOf(false)
+    var simpleViewArticle by mutableStateOf<ReadabilityArticle?>(null)
+    val isSimpleViewActive: Boolean get() = simpleViewArticle != null
 
     // --- Find-in-page state ---
     var showFindInPage by mutableStateOf(false)
@@ -346,21 +352,17 @@ internal class BrowserTabScreenState(
     }
 
     fun toggleSimpleView() {
-        if (isSimpleViewActive) {
-            // シンプル表示を終了して元のページを再読み込み
-            isSimpleViewActive = false
-            refreshCurrentPage()
+        if (simpleViewArticle != null) {
+            // シンプル表示を閉じる
+            simpleViewArticle = null
         } else {
-            isSimpleViewActive = true
-            coroutineScope.launch {
-                val result = runCatching {
-                    ReadabilitySimpleView(session, context).execute()
-                }
-                if (result.isFailure) {
-                    isSimpleViewActive = false
-                }
-            }
+            // コンテンツスクリプトに記事抽出を要求する
+            readabilityWebExtension.requestExtraction(session)
         }
+    }
+
+    fun dismissSimpleView() {
+        simpleViewArticle = null
     }
 
     fun copyCurrentPageUrl() {
@@ -442,8 +444,8 @@ internal class BrowserTabScreenState(
             originalPageUrlForRevert = null
         }
         // ページ遷移時にシンプル表示をリセット
-        if (isSimpleViewActive && !url.startsWith("javascript:")) {
-            isSimpleViewActive = false
+        if (simpleViewArticle != null) {
+            simpleViewArticle = null
         }
         if (!url.startsWith("data:")) {
             detectedPageLanguage = null
