@@ -105,6 +105,12 @@ internal class BrowserTabScreenState(
     var translationFromLanguage by mutableStateOf<String?>(null)
     /** 翻訳先言語タグ（例: "ja"） */
     var translationToLanguage by mutableStateOf<String?>(null)
+    /** 言語選択ダイアログの表示状態 */
+    var showTranslationLanguageDialog by mutableStateOf(false)
+    /** ダイアログで選択中の翻訳元言語タグ */
+    var dialogSelectedFromLanguage by mutableStateOf<String?>(null)
+    /** ダイアログで選択中の翻訳先言語タグ */
+    var dialogSelectedToLanguage by mutableStateOf("ja")
 
     // --- Find-in-page state ---
     var showFindInPage by mutableStateOf(false)
@@ -232,15 +238,29 @@ internal class BrowserTabScreenState(
         }
     }
 
+    /** 翻訳ボタン押下時：言語選択ダイアログを表示する */
     fun onTranslate(translationProvider: TranslationProvider) {
         if (translationState == TranslationState.Loading) return
+        // 検出済み言語をダイアログの初期選択として設定する
+        dialogSelectedFromLanguage = detectedPageLanguage
+        dialogSelectedToLanguage = "ja"
+        showTranslationLanguageDialog = true
+    }
+
+    /** 言語選択ダイアログで確定後に実際の翻訳を実行する */
+    fun onTranslateConfirm(translationProvider: TranslationProvider) {
+        showTranslationLanguageDialog = false
+        if (translationState == TranslationState.Loading) return
+        val fromLang = dialogSelectedFromLanguage
+        val toLang = dialogSelectedToLanguage
         coroutineScope.launch {
             originalPageUrlForRevert = currentPageUrl
             translationState = TranslationState.Loading
             val result = runCatching {
-                PageTranslator(session, currentPageUrl).translatePageToJapanese(
+                PageTranslator(session, currentPageUrl).translatePage(
                     translationProvider,
-                    detectedPageLanguage,
+                    fromLang,
+                    toLang,
                 )
             }
             if (result.isSuccess) {

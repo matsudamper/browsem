@@ -400,5 +400,18 @@ internal fun GeckoBrowserTab(
             onDismiss = { showAddToHomeScreenDialog = false },
         )
     }
+
+    // 翻訳言語選択ダイアログ
+    if (state.showTranslationLanguageDialog) {
+        TranslationLanguageDialog(
+            detectedLanguage = state.detectedPageLanguage,
+            selectedFromLanguage = state.dialogSelectedFromLanguage,
+            selectedToLanguage = state.dialogSelectedToLanguage,
+            onFromLanguageSelected = { state.dialogSelectedFromLanguage = it },
+            onToLanguageSelected = { state.dialogSelectedToLanguage = it },
+            onConfirm = { state.onTranslateConfirm(translationProvider) },
+            onDismiss = { state.showTranslationLanguageDialog = false },
+        )
+    }
 }
 private const val URL_BAR_IME_HIDE_GRACE_MS = 700L

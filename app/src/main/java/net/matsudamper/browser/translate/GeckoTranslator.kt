@@ -7,15 +7,16 @@ import org.mozilla.geckoview.TranslationsController
 class GeckoTranslator(
     private val session: GeckoSession,
     private val fromLanguage: String,
+    private val toLanguage: String,
 ) : Translator {
     override suspend fun translate(): TranslationLanguages {
         val options = TranslationsController.SessionTranslation.TranslationOptions.Builder()
             .downloadModel(true)
             .build()
-        val sessionTranslation = session.sessionTranslation ?: return TranslationLanguages(fromLanguage, "ja")
+        val sessionTranslation = session.sessionTranslation ?: return TranslationLanguages(fromLanguage, toLanguage)
         sessionTranslation
-            .translate(fromLanguage, "ja", options)
+            .translate(fromLanguage, toLanguage, options)
             .awaitGecko()
-        return TranslationLanguages(fromLanguage, "ja")
+        return TranslationLanguages(fromLanguage, toLanguage)
     }
 }

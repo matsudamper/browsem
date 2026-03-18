@@ -10,17 +10,21 @@ internal class PageTranslator(
     private val session: GeckoSession,
     private val currentPageUrl: String,
 ) {
-    suspend fun translatePageToJapanese(provider: TranslationProvider, fromLanguage: String?): TranslationLanguages? {
+    suspend fun translatePage(
+        provider: TranslationProvider,
+        fromLanguage: String?,
+        toLanguage: String,
+    ): TranslationLanguages? {
         return when (provider) {
             TranslationProvider.TRANSLATION_PROVIDER_GECKO,
             TranslationProvider.UNRECOGNIZED,
                 -> {
                 val lang = fromLanguage ?: return null
-                GeckoTranslator(session, lang)
+                GeckoTranslator(session, lang, toLanguage)
             }
 
             TranslationProvider.TRANSLATION_PROVIDER_LOCAL_AI -> {
-                LocalAITranslator(session, currentPageUrl)
+                LocalAITranslator(session, currentPageUrl, toLanguage)
             }
         }.translate()
     }
