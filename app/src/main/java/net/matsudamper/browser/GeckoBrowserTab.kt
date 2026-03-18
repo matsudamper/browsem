@@ -341,12 +341,31 @@ internal fun GeckoBrowserTab(
                     },
                 )
             }
+            // 翻訳元・翻訳先の選択肢：検出済み言語＋英語＋日本語（重複除去）
+            val detectedLang = state.detectedPageLanguage
+            val languageOptions = remember(detectedLang) {
+                buildList {
+                    if (detectedLang != null && detectedLang != "en" && detectedLang != "ja") {
+                        add(detectedLang)
+                    }
+                    add("en")
+                    add("ja")
+                }
+            }
             TranslationStatusBar(
                 state = state.translationState,
                 onRevert = state::onRevertTranslation,
                 onDismissError = state::onDismissTranslationError,
                 fromLanguage = state.translationFromLanguage,
                 toLanguage = state.translationToLanguage,
+                fromLanguageOptions = languageOptions,
+                toLanguageOptions = languageOptions,
+                onFromLanguageSelected = { lang ->
+                    state.onRetranslate(translationProvider, fromLanguage = lang, toLanguage = state.translationToLanguage ?: "ja")
+                },
+                onToLanguageSelected = { lang ->
+                    state.onRetranslate(translationProvider, fromLanguage = state.translationFromLanguage, toLanguage = lang)
+                },
             )
         }
 
@@ -401,17 +420,5 @@ internal fun GeckoBrowserTab(
         )
     }
 
-    // 翻訳言語選択ダイアログ
-    if (state.showTranslationLanguageDialog) {
-        TranslationLanguageDialog(
-            detectedLanguage = state.detectedPageLanguage,
-            selectedFromLanguage = state.dialogSelectedFromLanguage,
-            selectedToLanguage = state.dialogSelectedToLanguage,
-            onFromLanguageSelected = { state.dialogSelectedFromLanguage = it },
-            onToLanguageSelected = { state.dialogSelectedToLanguage = it },
-            onConfirm = { state.onTranslateConfirm(translationProvider) },
-            onDismiss = { state.showTranslationLanguageDialog = false },
-        )
-    }
 }
 private const val URL_BAR_IME_HIDE_GRACE_MS = 700L

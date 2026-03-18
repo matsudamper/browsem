@@ -4,6 +4,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -12,6 +14,10 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
@@ -27,6 +33,12 @@ internal fun TranslationStatusBar(
     onDismissError: () -> Unit,
     fromLanguage: String? = null,
     toLanguage: String? = null,
+    /** 翻訳元の選択肢（言語タグ一覧）。nullなら言語変更UIを表示しない。 */
+    fromLanguageOptions: List<String>? = null,
+    /** 翻訳先の選択肢（言語タグ一覧）。nullなら言語変更UIを表示しない。 */
+    toLanguageOptions: List<String>? = null,
+    onFromLanguageSelected: (String) -> Unit = {},
+    onToLanguageSelected: (String) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     if (state == TranslationState.Idle) return
@@ -51,22 +63,57 @@ internal fun TranslationStatusBar(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.padding(horizontal = 8.dp),
             ) {
-                Text(
-                    text = when (state) {
-                        TranslationState.Loading -> "翻訳中..."
-                        TranslationState.Translated -> buildTranslatedLabel(fromLanguage, toLanguage)
-                        TranslationState.Error -> "翻訳に失敗しました"
-                        TranslationState.Idle -> ""
-                    },
-                    modifier = Modifier
-                        .weight(1f)
-                        .padding(vertical = 8.dp),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = when (state) {
-                        TranslationState.Error -> MaterialTheme.colorScheme.onErrorContainer
-                        else -> MaterialTheme.colorScheme.onSecondaryContainer
-                    },
-                )
+                when (state) {
+                    TranslationState.Translated -> {
+                        Text(
+                            text = "翻訳済み: ",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                            modifier = Modifier.padding(vertical = 8.dp),
+                        )
+                        // 翻訳元言語ドロップダウン
+                        LanguageDropdownButton(
+                            languageTag = fromLanguage,
+                            options = fromLanguageOptions,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                            onSelected = onFromLanguageSelected,
+                        )
+                        Text(
+                            text = " → ",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        )
+                        // 翻訳先言語ドロップダウン
+                        LanguageDropdownButton(
+                            languageTag = toLanguage,
+                            options = toLanguageOptions,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                            onSelected = onToLanguageSelected,
+                        )
+                    }
+
+                    TranslationState.Loading -> {
+                        Text(
+                            text = "翻訳中...",
+                            modifier = Modifier.padding(vertical = 8.dp),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        )
+                    }
+
+                    TranslationState.Error -> {
+                        Text(
+                            text = "翻訳に失敗しました",
+                            modifier = Modifier.padding(vertical = 8.dp),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                        )
+                    }
+
+                    TranslationState.Idle -> {}
+                }
+
+                // 右端のアクションボタン
                 when (state) {
                     TranslationState.Translated -> {
                         TextButton(onClick = onRevert) {
@@ -90,10 +137,54 @@ internal fun TranslationStatusBar(
     }
 }
 
-/** 翻訳済みラベル文字列を組み立てる。言語情報がある場合は「英語 → 日本語」形式で表示する。 */
-private fun buildTranslatedLabel(fromLanguage: String?, toLanguage: String?): String {
-    if (fromLanguage == null || toLanguage == null) return "翻訳済み"
-    val fromName = Locale.forLanguageTag(fromLanguage).getDisplayLanguage(Locale.JAPANESE)
-    val toName = Locale.forLanguageTag(toLanguage).getDisplayLanguage(Locale.JAPANESE)
-    return "翻訳済み: $fromName → $toName"
+/** 言語タグを表示名で示すTextButton。クリックでDropdownMenuを展開する。 */
+@Composable
+private fun LanguageDropdownButton(
+    languageTag: String?,
+    options: List<String>?,
+    color: androidx.compose.ui.graphics.Color,
+    onSelected: (String) -> Unit,
+) {
+    val displayName = languageDisplayName(languageTag)
+    if (options.isNullOrEmpty()) {
+        Text(
+            text = displayName,
+            style = MaterialTheme.typography.bodySmall,
+            color = color,
+        )
+        return
+    }
+
+    var expanded by remember { mutableStateOf(false) }
+    TextButton(
+        onClick = { expanded = true },
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 4.dp, vertical = 0.dp),
+    ) {
+        Text(
+            text = displayName,
+            style = MaterialTheme.typography.bodySmall,
+            color = color,
+        )
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+        ) {
+            options.forEach { lang ->
+                DropdownMenuItem(
+                    text = { Text(languageDisplayName(lang)) },
+                    onClick = {
+                        expanded = false
+                        onSelected(lang)
+                    },
+                )
+            }
+        }
+    }
+}
+
+private fun languageDisplayName(tag: String?): String {
+    if (tag == null) return "不明"
+    val locale = Locale.forLanguageTag(tag)
+    val name = locale.getDisplayLanguage(Locale.JAPANESE)
+    return if (name.isBlank()) tag else name
 }

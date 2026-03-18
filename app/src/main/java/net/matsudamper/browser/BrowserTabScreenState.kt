@@ -105,12 +105,6 @@ internal class BrowserTabScreenState(
     var translationFromLanguage by mutableStateOf<String?>(null)
     /** 翻訳先言語タグ（例: "ja"） */
     var translationToLanguage by mutableStateOf<String?>(null)
-    /** 言語選択ダイアログの表示状態 */
-    var showTranslationLanguageDialog by mutableStateOf(false)
-    /** ダイアログで選択中の翻訳元言語タグ */
-    var dialogSelectedFromLanguage by mutableStateOf<String?>(null)
-    /** ダイアログで選択中の翻訳先言語タグ */
-    var dialogSelectedToLanguage by mutableStateOf("ja")
 
     // --- Find-in-page state ---
     var showFindInPage by mutableStateOf(false)
@@ -238,29 +232,30 @@ internal class BrowserTabScreenState(
         }
     }
 
-    /** 翻訳ボタン押下時：言語選択ダイアログを表示する */
     fun onTranslate(translationProvider: TranslationProvider) {
         if (translationState == TranslationState.Loading) return
-        // 検出済み言語をダイアログの初期選択として設定する
-        dialogSelectedFromLanguage = detectedPageLanguage
-        dialogSelectedToLanguage = "ja"
-        showTranslationLanguageDialog = true
+        runTranslation(translationProvider, fromLanguage = detectedPageLanguage, toLanguage = "ja")
     }
 
-    /** 言語選択ダイアログで確定後に実際の翻訳を実行する */
-    fun onTranslateConfirm(translationProvider: TranslationProvider) {
-        showTranslationLanguageDialog = false
+    /** ステータスバーの言語ドロップダウンから再翻訳を実行する */
+    fun onRetranslate(translationProvider: TranslationProvider, fromLanguage: String?, toLanguage: String) {
         if (translationState == TranslationState.Loading) return
-        val fromLang = dialogSelectedFromLanguage
-        val toLang = dialogSelectedToLanguage
+        runTranslation(translationProvider, fromLanguage = fromLanguage, toLanguage = toLanguage)
+    }
+
+    private fun runTranslation(translationProvider: TranslationProvider, fromLanguage: String?, toLanguage: String) {
         coroutineScope.launch {
-            originalPageUrlForRevert = currentPageUrl
+            // 初回翻訳時のみ元URLを保存する
+            if (originalPageUrlForRevert == null) {
+                originalPageUrlForRevert = currentPageUrl
+            }
             translationState = TranslationState.Loading
+            val pageUrl = originalPageUrlForRevert ?: currentPageUrl
             val result = runCatching {
-                PageTranslator(session, currentPageUrl).translatePage(
+                PageTranslator(session, pageUrl).translatePage(
                     translationProvider,
-                    fromLang,
-                    toLang,
+                    fromLanguage,
+                    toLanguage,
                 )
             }
             if (result.isSuccess) {
