@@ -1,5 +1,6 @@
 package net.matsudamper.browser
 
+import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.ContentTransform
@@ -18,8 +19,11 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateSetOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntOffset
 import androidx.navigation3.runtime.NavEntry
 import androidx.navigation3.runtime.NavKey
@@ -30,6 +34,7 @@ import androidx.navigation3.ui.defaultPopTransitionSpec
 import androidx.navigation3.ui.defaultTransitionSpec
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.launch
 import net.matsudamper.browser.BrowserTab
 import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.TabGroupRepository
@@ -90,11 +95,18 @@ internal fun BrowserApp(
         }
     }
 
+    // 外部 Intent から開いたタブの ID を追跡する
+    val externalTabIds = remember { mutableStateSetOf<String>() }
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+
     LaunchedEffect(newTabUrlFlow) {
         // タブ復元完了を待ってから外部URLを処理する（レースコンディション防止）
         setupComplete.await()
         newTabUrlFlow.collect { url ->
             val newTab = browserSessionController.createAndAppendTab(initialUrl = url)
+            // 外部から開いたタブとして記録する
+            externalTabIds.add(newTab.tabId)
             selectTab(newTab.tabId, null)
         }
     }
@@ -108,6 +120,21 @@ internal fun BrowserApp(
 
     BackHandler(enabled = navController.isLastBackHandled) {
         navController.back()
+    }
+
+    // 外部 URL で開いたタブをバックで閉じる処理。
+    // タブ移動・ホーム遷移等の操作なしにバックされた場合（isLastBackHandled == false）にのみ発火し、
+    // タブを閉じて即座に保存してからアプリを終了する。
+    val currentExternalTabId = run {
+        val currentTabId = backStack.filterIsInstance<AppDestination.Browser>().lastOrNull()?.tabId
+        currentTabId?.takeIf { it in externalTabIds }
+    }
+    BackHandler(enabled = !navController.isLastBackHandled && currentExternalTabId != null) {
+        val tabId = currentExternalTabId ?: return@BackHandler
+        scope.launch {
+            viewModel.closeTabAndSaveImmediately(tabId, homepageUrl)
+            (context as ComponentActivity).finish()
+        }
     }
 
     BrowserTheme(themeMode = settingsUiState.themeMode) {

@@ -18,7 +18,7 @@ class LocalAITranslator(
     private val session: GeckoSession,
     private val currentPageUrl: String,
 ) : Translator {
-    override suspend fun translate() {
+    override suspend fun translate(): TranslationLanguages? {
         // 1. HTMLを取得（タイムアウト付き）
         val rawHtml = withContext(Dispatchers.IO) {
             val connection = URL(currentPageUrl).openConnection() as HttpURLConnection
@@ -41,12 +41,12 @@ class LocalAITranslator(
         val plainText = Html.fromHtml(cleanedHtml, Html.FROM_HTML_MODE_COMPACT)
             .toString()
             .take(4500)
-        if (plainText.isBlank()) return
+        if (plainText.isBlank()) return null
 
         // 3. 言語検出
         val sourceLang = detectLanguage(plainText)
-        val sourceTranslateLang = toTranslateLanguageTag(sourceLang) ?: return
-        if (sourceTranslateLang == TranslateLanguage.JAPANESE) return
+        val sourceTranslateLang = toTranslateLanguageTag(sourceLang) ?: return null
+        if (sourceTranslateLang == TranslateLanguage.JAPANESE) return null
 
         // 4. 翻訳
         val translated = translateWithLocalAi(
@@ -83,6 +83,7 @@ class LocalAITranslator(
             "d.body.appendChild(div);" +
             "})())"
         session.loadUri(script)
+        return TranslationLanguages(sourceLang, TranslateLanguage.JAPANESE)
     }
 
     private suspend fun detectLanguage(text: String): String = withContext(Dispatchers.IO) {
