@@ -431,7 +431,7 @@ private fun rememberGroupDragDropState(
 }
 
 @Composable
-private fun TabsScreenContent(
+internal fun TabsScreenContent(
     groupedTabs: List<List<TabsScreenTabData>>,
     groups: List<TabGroupData>,
     activeGroupIndex: Int,
@@ -511,6 +511,35 @@ private fun TabsScreenContent(
     var tabDragCenterInRoot by remember { mutableStateOf(Offset.Zero) }
     var isTabDragging by remember { mutableStateOf(false) }
 
+    var pagerBounds by remember { mutableStateOf(Rect.Zero) }
+
+    // ドラッグ中に端に近づいたら Pager をスクロールする
+    LaunchedEffect(isTabDragging) {
+        if (!isTabDragging) return@LaunchedEffect
+        while (isTabDragging) {
+            if (pagerBounds != Rect.Zero) {
+                val x = tabDragCenterInRoot.x
+                val y = tabDragCenterInRoot.y
+                val threshold = with(density) { 48.dp.toPx() }
+
+                if (y >= pagerBounds.top && y <= pagerBounds.bottom) {
+                    if (x < pagerBounds.left + threshold && pagerState.currentPage > 0) {
+                        // 左端
+                        pagerState.animateScrollToPage(pagerState.currentPage - 1)
+                        kotlinx.coroutines.delay(300) // スクロール後の連続発火を防ぐ
+                        continue
+                    } else if (x > pagerBounds.right - threshold && pagerState.currentPage < pagerState.pageCount - 1) {
+                        // 右端
+                        pagerState.animateScrollToPage(pagerState.currentPage + 1)
+                        kotlinx.coroutines.delay(300) // スクロール後の連続発火を防ぐ
+                        continue
+                    }
+                }
+            }
+            kotlinx.coroutines.delay(16) // 次のフレームまで待機
+        }
+    }
+
     // ドラッグ中に中心がどのグループタブ上にあるかを判定する
     val highlightedGroupIndex = if (isTabDragging) {
         groupTabBounds.entries.firstOrNull { (_, bounds) ->
@@ -563,7 +592,10 @@ private fun TabsScreenContent(
                 state = pagerState,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .weight(1f),
+                    .weight(1f)
+                    .onGloballyPositioned { coordinates ->
+                        pagerBounds = coordinates.boundsInRoot()
+                    },
                 userScrollEnabled = !isTabDragging,
             ) { page ->
                 val tabsForPage = groupedTabs.getOrElse(page) { emptyList() }
@@ -935,7 +967,7 @@ private fun PagerIndicator(
  * タブをグループタブバーへドラッグすることでグループ間移動もできる。
  */
 @Composable
-private fun GroupTabGrid(
+internal fun GroupTabGrid(
     tabs: List<TabsScreenTabData>,
     selectedTabId: String?,
     onSelectTab: (String) -> Unit,

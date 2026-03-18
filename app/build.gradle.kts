@@ -68,6 +68,9 @@ android {
     testOptions {
         animationsDisabled = true
         execution = "ANDROIDX_TEST_ORCHESTRATOR"
+        unitTests {
+            isIncludeAndroidResources = true
+        }
         managedDevices {
             localDevices {
                 maybeCreate("pixel6Api34").apply {
@@ -142,6 +145,8 @@ dependencies {
 
     testImplementation(libs.junit4)
     testImplementation(libs.composable.preview.scanner)
+    testImplementation(libs.robolectric.library)
+    testImplementation(libs.androidx.compose.ui.test.junit4)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.androidx.test.espresso.core)

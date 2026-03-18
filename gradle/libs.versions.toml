@@ -25,6 +25,7 @@ room = "2.8.4"
 ksp = "2.3.6"
 koin = "4.2.0"
 androidxBrowser = "1.9.0"
+robolectric = "4.14.1"
 
 [libraries]
 androidx-compose-bom = { module = "androidx.compose:compose-bom", version.ref = "composeBom" }
@@ -63,6 +64,7 @@ androidx-room-ktx = { module = "androidx.room:room-ktx", version.ref = "room" }
 koin-android = { module = "io.insert-koin:koin-android", version.ref = "koin" }
 koin-androidx-compose = { module = "io.insert-koin:koin-androidx-compose", version.ref = "koin" }
 androidx-browser = { module = "androidx.browser:browser", version.ref = "androidxBrowser" }
+robolectric-library = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
