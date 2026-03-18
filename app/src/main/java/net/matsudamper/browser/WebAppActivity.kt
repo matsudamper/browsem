@@ -64,7 +64,7 @@ class WebAppActivity : ComponentActivity() {
         runtimeCoordinator = BrowserRuntimeCoordinator(runtime, themeColorExtension, mediaWebExtension)
 
         // 外部アプリから任意のURLが渡されないよう、http/https スキームのみ許可する
-        val initialUrl = resolveInitialUrl()
+        val initialUrl = intent.resolveWebUrl()
         setContent {
             val settings by settingsRepository.settings.collectAsState(initial = null)
             val browserSettings = settings ?: return@setContent
@@ -101,19 +101,6 @@ class WebAppActivity : ComponentActivity() {
             runtimeCoordinator.close()
         }
         super.onDestroy()
-    }
-
-    /**
-     * Intentのデータから安全なURLを取り出す。
-     * ACTION_VIEW かつ http/https スキームの場合のみURLとして採用し、
-     * それ以外は null を返してホームページにフォールバックさせる。
-     */
-    private fun resolveInitialUrl(): String? {
-        if (intent.action != Intent.ACTION_VIEW) return null
-        val data = intent.data ?: return null
-        val scheme = data.scheme ?: return null
-        if (scheme != "http" && scheme != "https") return null
-        return data.toString()
     }
 
     private fun requestNotificationPermissionIfNeeded(): GeckoResult<Int> {

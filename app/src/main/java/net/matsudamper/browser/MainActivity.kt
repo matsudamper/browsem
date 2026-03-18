@@ -146,7 +146,7 @@ class MainActivity : ComponentActivity() {
         warmUpWebExtensionController()
 
         if (savedInstanceState == null) {
-            val url = intent.dataString
+            val url = intent.resolveWebUrl()
             if (url != null) {
                 createNewTabChannel.trySend(url)
             }
@@ -192,7 +192,7 @@ class MainActivity : ComponentActivity() {
             return
         }
         setIntent(intent)
-        val url = intent.dataString
+        val url = intent.resolveWebUrl()
         if (url != null) {
             createNewTabChannel.trySend(url)
         }

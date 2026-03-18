@@ -66,7 +66,7 @@ class CustomTabActivity : ComponentActivity() {
         // 拡張機能は Koin の single で管理されるため、ここではセッション管理のみ担当する
         runtimeCoordinator = BrowserRuntimeCoordinator(runtime, themeColorExtension, mediaWebExtensionInstance)
 
-        val initialUrl = intent.dataString.orEmpty()
+        val initialUrl = intent.resolveWebUrl().orEmpty()
         val customTabsSessionToken = CustomTabsSessionToken.getSessionTokenFromIntent(intent)
         setContent {
             val settings by settingsRepository.settings.collectAsState(initial = null)
