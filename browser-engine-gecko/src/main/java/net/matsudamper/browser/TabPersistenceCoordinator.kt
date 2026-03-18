@@ -58,6 +58,12 @@ class TabPersistenceCoordinator(
         }
     }
 
+    /** 遅延なしで即座にタブ状態を保存する（外部URL タブを閉じてアプリ終了する際に使用）。 */
+    suspend fun saveNow(browserSessionController: BrowserSessionController) {
+        if (!restorationComplete) return
+        saveInternal(browserSessionController)
+    }
+
     fun bind(
         scope: CoroutineScope,
         browserSessionController: BrowserSessionController,
