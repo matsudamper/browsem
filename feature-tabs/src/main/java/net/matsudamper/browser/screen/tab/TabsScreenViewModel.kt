@@ -2,6 +2,7 @@ package net.matsudamper.browser.screen.tab
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -83,6 +84,77 @@ class TabsScreenViewModel(
         started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS),
         initialValue = emptyList(),
     )
+
+    val eventHandler = Channel<(Event) -> Unit>(Channel.UNLIMITED)
+
+    private val callbacks = object : TabsScreenUiState.Callbacks {
+        override fun onCloseTab(tabId: String) {
+            onTabClosed(tabId)
+            eventHandler.trySend { it.closeTab(tabId) }
+        }
+
+        override fun onReorderTabs(groupIndex: Int, fromLocalIndex: Int, toLocalIndex: Int) {
+            reorderTabs(groupIndex, fromLocalIndex, toLocalIndex)
+        }
+
+        override fun onReorderGroups(fromIndex: Int, toIndex: Int) {
+            reorderGroups(fromIndex, toIndex)
+        }
+
+        override fun onGroupSelected(index: Int) {
+            onGroupSelected(index)
+        }
+
+        override fun onGroupPageChanged(page: Int) {
+            onGroupPageChanged(page)
+        }
+
+        override fun onAddGroup() {
+            addGroup()
+        }
+
+        override fun onMoveTabToGroup(tabId: String, targetGroupIndex: Int) {
+            moveTabToGroup(tabId, targetGroupIndex)
+        }
+
+        override fun onRenameGroup(groupIndex: Int, newName: String) {
+            renameGroup(groupIndex, newName)
+        }
+
+        override fun onDeleteGroup(groupIndex: Int) {
+            deleteGroup(groupIndex)
+        }
+    }
+
+    val uiState: StateFlow<TabsScreenUiState> = combine(
+        groups,
+        groupedTabs,
+        activeGroupIndex,
+    ) { currentGroups, currentGroupedTabs, currentActiveIndex ->
+        TabsScreenUiState(
+            callbacks = callbacks,
+            loadingState = if (currentActiveIndex == null) {
+                TabsScreenUiState.LoadingState.Loading
+            } else {
+                TabsScreenUiState.LoadingState.Loaded(
+                    groupedTabs = currentGroupedTabs,
+                    groups = currentGroups,
+                    activeGroupIndex = currentActiveIndex,
+                )
+            },
+        )
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.Eagerly,
+        initialValue = TabsScreenUiState(
+            callbacks = callbacks,
+            loadingState = TabsScreenUiState.LoadingState.Loading,
+        ),
+    )
+
+    interface Event {
+        fun closeTab(tabId: String)
+    }
 
     init {
         viewModelScope.launch {

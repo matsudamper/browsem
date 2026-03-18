@@ -56,6 +56,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import kotlinx.coroutines.flow.receiveAsFlow
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -169,39 +170,50 @@ internal fun TabsScreen(
             tabGroupRepository = tabGroupRepository,
         )
     })
-    val groupedTabs by viewModel.groupedTabs.collectAsState()
-    val groups by viewModel.groups.collectAsState()
-    val activeGroupIndex = viewModel.activeGroupIndex.collectAsState().value
+    val uiState by viewModel.uiState.collectAsState()
 
-    if (activeGroupIndex == null) {
-        Box(
-            modifier = modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center,
-        ) {
-            CircularProgressIndicator()
+    LaunchedEffect(viewModel) {
+        viewModel.eventHandler.receiveAsFlow().collect {
+            it(object : TabsScreenViewModel.Event {
+                override fun closeTab(tabId: String) {
+                    onCloseTab(tabId)
+                }
+            })
         }
-    } else {
-        TabsScreenContent(
-            groupedTabs = groupedTabs,
-            groups = groups,
-            activeGroupIndex = activeGroupIndex,
-            selectedTabId = selectedTabId,
-            onSelectTab = onSelectTab,
-            onCloseTab = { tabId ->
-                viewModel.onTabClosed(tabId)
-                onCloseTab(tabId)
-            },
-            onOpenNewTab = onOpenNewTab,
-            onReorderTabs = viewModel::reorderTabs,
-            onReorderGroups = viewModel::reorderGroups,
-            onGroupSelected = viewModel::onGroupSelected,
-            onGroupPageChanged = viewModel::onGroupPageChanged,
-            onAddGroup = viewModel::addGroup,
-            onMoveTabToGroup = { tabId, targetGroupIndex -> viewModel.moveTabToGroup(tabId, targetGroupIndex) },
-            onRenameGroup = viewModel::renameGroup,
-            onDeleteGroup = viewModel::deleteGroup,
-            modifier = modifier,
-        )
+    }
+
+    when (val loadingState = uiState.loadingState) {
+        is TabsScreenUiState.LoadingState.Loading -> {
+            Box(
+                modifier = modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center,
+            ) {
+                CircularProgressIndicator()
+            }
+        }
+
+        is TabsScreenUiState.LoadingState.Loaded -> {
+            TabsScreenContent(
+                groupedTabs = loadingState.groupedTabs,
+                groups = loadingState.groups,
+                activeGroupIndex = loadingState.activeGroupIndex,
+                selectedTabId = selectedTabId,
+                onSelectTab = onSelectTab,
+                onCloseTab = uiState.callbacks::onCloseTab,
+                onOpenNewTab = onOpenNewTab,
+                onReorderTabs = uiState.callbacks::onReorderTabs,
+                onReorderGroups = uiState.callbacks::onReorderGroups,
+                onGroupSelected = uiState.callbacks::onGroupSelected,
+                onGroupPageChanged = uiState.callbacks::onGroupPageChanged,
+                onAddGroup = uiState.callbacks::onAddGroup,
+                onMoveTabToGroup = { tabId, targetGroupIndex ->
+                    uiState.callbacks.onMoveTabToGroup(tabId, targetGroupIndex)
+                },
+                onRenameGroup = uiState.callbacks::onRenameGroup,
+                onDeleteGroup = uiState.callbacks::onDeleteGroup,
+                modifier = modifier,
+            )
+        }
     }
 
 }

@@ -32,7 +32,7 @@ internal fun NotificationPermissionsScreen(
     viewModel: NotificationPermissionsScreenViewModel,
     onBack: () -> Unit,
 ) {
-    val allowedOrigins by viewModel.allowedOrigins.collectAsState()
+    val uiState by viewModel.uiState.collectAsState()
 
     Scaffold(
         topBar = {
@@ -49,7 +49,7 @@ internal fun NotificationPermissionsScreen(
             )
         },
     ) { paddingValues ->
-        if (allowedOrigins.isEmpty()) {
+        if (uiState.allowedOrigins.isEmpty()) {
             Box(
                 modifier = Modifier
                     .padding(paddingValues)
@@ -66,12 +66,12 @@ internal fun NotificationPermissionsScreen(
                     .fillMaxSize(),
             ) {
                 items(
-                    items = allowedOrigins,
+                    items = uiState.allowedOrigins,
                     key = { it },
                 ) { origin ->
                     NotificationOriginRow(
                         origin = origin,
-                        onRevoke = { viewModel.removeNotificationAllowedOrigin(origin) },
+                        onRevoke = { uiState.callbacks.removeNotificationAllowedOrigin(origin) },
                     )
                 }
             }
