@@ -43,6 +43,7 @@ internal class BrowserViewModel(
     val runtime: GeckoRuntime,
     val themeColorExtension: ThemeColorWebExtension,
     val mediaWebExtension: net.matsudamper.browser.media.MediaWebExtension,
+    val readabilityWebExtension: ReadabilityWebExtension,
     private val settingsRepository: SettingsRepository,
     private val tabRepository: TabRepository,
     internal val historyRepository: net.matsudamper.browser.data.history.HistoryRepository,
@@ -98,6 +99,16 @@ internal class BrowserViewModel(
             }
             GeckoResult.fromValue(value)
         }
+    }
+
+    /** タブを閉じ、即座に永続化する（外部URL タブをバックで閉じるときに使用）。 */
+    suspend fun closeTabAndSaveImmediately(tabId: String, homepageUrl: String) {
+        browserSessionController.closeTab(tabId)
+        // タブが空になった場合はホームタブを作成して空状態での保存を避ける
+        if (browserSessionController.tabs.isEmpty()) {
+            browserSessionController.createAndAppendTab(initialUrl = homepageUrl)
+        }
+        tabPersistenceCoordinator.saveNow(browserSessionController)
     }
 
     fun applyRuntimeSettings() {
