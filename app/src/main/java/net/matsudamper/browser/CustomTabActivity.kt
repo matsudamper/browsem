@@ -167,7 +167,7 @@ private fun CustomTabScreen(
             webSuggestionRepository = webSuggestionRepository,
         )
     })
-    val urlBarSuggestions by viewModel.urlBarSuggestions.collectAsState()
+    val uiState by viewModel.uiState.collectAsState()
     val prewarmedSession = remember(customTabsSessionToken, initialUrl) {
         customTabsSessionToken?.let { token ->
             CustomTabsWarmupStore.consumePreparedSession(
@@ -214,9 +214,9 @@ private fun CustomTabScreen(
             browserTab.session
         },
         onCloseTab = onClose,
-        onHistoryRecord = { url, title -> historyRepository.recordVisit(url, title) },
-        onHistoryTitleUpdate = { id, title -> historyRepository.updateTitle(id, title) },
-        urlBarSuggestions = urlBarSuggestions,
-        onUrlInputChanged = viewModel::onUrlInputChanged,
+        onHistoryRecord = uiState.callbacks::onHistoryRecord,
+        onHistoryTitleUpdate = uiState.callbacks::onHistoryTitleUpdate,
+        urlBarSuggestions = uiState.urlBarSuggestions,
+        onUrlInputChanged = uiState.callbacks::onUrlInputChanged,
     )
 }

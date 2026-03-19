@@ -2,6 +2,7 @@ package net.matsudamper.browser.screen.tab
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -84,6 +85,79 @@ class TabsScreenViewModel(
         initialValue = emptyList(),
     )
 
+    val eventHandler = Channel<(Event) -> Unit>(Channel.UNLIMITED)
+
+    private val callbacks = object : TabsScreenUiState.Callbacks {
+        override fun onCloseTab(tabId: String) {
+            // イベントを先に送信してタブを閉じてから、グループ割り当てを解除する
+            eventHandler.trySend { it.closeTab(tabId) }
+            onTabClosed(tabId)
+        }
+
+        override fun onReorderTabs(groupIndex: Int, fromLocalIndex: Int, toLocalIndex: Int) {
+            reorderTabs(groupIndex, fromLocalIndex, toLocalIndex)
+        }
+
+        override fun onReorderGroups(fromIndex: Int, toIndex: Int) {
+            reorderGroups(fromIndex, toIndex)
+        }
+
+        override fun onGroupSelected(index: Int) {
+            this@TabsScreenViewModel.onGroupSelected(index)
+        }
+
+        override fun onGroupPageChanged(page: Int) {
+            this@TabsScreenViewModel.onGroupPageChanged(page)
+        }
+
+        override fun onAddGroup() {
+            addGroup()
+        }
+
+        override fun onMoveTabToGroup(tabId: String, targetGroupIndex: Int) {
+            moveTabToGroup(tabId, targetGroupIndex)
+        }
+
+        override fun onRenameGroup(groupIndex: Int, newName: String) {
+            renameGroup(groupIndex, newName)
+        }
+
+        override fun onDeleteGroup(groupIndex: Int) {
+            deleteGroup(groupIndex)
+        }
+    }
+
+    val uiState: StateFlow<TabsScreenUiState> = combine(
+        groups,
+        groupedTabs,
+        activeGroupIndex,
+    ) { currentGroups, currentGroupedTabs, currentActiveIndex ->
+        TabsScreenUiState(
+            callbacks = callbacks,
+            loadingState = if (currentActiveIndex == null) {
+                TabsScreenUiState.LoadingState.Loading
+            } else {
+                TabsScreenUiState.LoadingState.Loaded(
+                    groupedTabs = currentGroupedTabs,
+                    groups = currentGroups,
+                    // グループが空になる場合も含めて有効範囲にクランプする
+                    activeGroupIndex = currentActiveIndex.coerceIn(0, (currentGroups.size - 1).coerceAtLeast(0)),
+                )
+            },
+        )
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.Eagerly,
+        initialValue = TabsScreenUiState(
+            callbacks = callbacks,
+            loadingState = TabsScreenUiState.LoadingState.Loading,
+        ),
+    )
+
+    interface Event {
+        fun closeTab(tabId: String)
+    }
+
     init {
         viewModelScope.launch {
             // 初回: デフォルトグループを作成する（DBが空のときのみ）
@@ -143,7 +217,7 @@ class TabsScreenViewModel(
      * Pager のプログラム的アニメーション中に settledPage が中間ページを報告しても
      * _activeGroupIndex が上書きされないよう、programmaticScrollTarget を設定する。
      */
-    fun onGroupSelected(index: Int) {
+    private fun onGroupSelected(index: Int) {
         if (_activeGroupIndex.value == index) return
         val coerced = index.coerceIn(0, groups.value.lastIndex.coerceAtLeast(0))
         programmaticScrollTarget = coerced
@@ -155,7 +229,7 @@ class TabsScreenViewModel(
      * プログラム的アニメーション中（onGroupSelected 経由）は中間ページを無視し、
      * 目標ページに到達したときのみターゲットをクリアする。
      */
-    fun onGroupPageChanged(page: Int) {
+    private fun onGroupPageChanged(page: Int) {
         val target = programmaticScrollTarget
         if (target != null) {
             if (page == target) {
@@ -170,7 +244,7 @@ class TabsScreenViewModel(
     }
 
     /** 新しいグループを追加する */
-    fun addGroup() {
+    private fun addGroup() {
         viewModelScope.launch {
             val currentGroups = groups.value
             val newSortOrder = currentGroups.size
@@ -189,7 +263,7 @@ class TabsScreenViewModel(
      * グループを長押しドラッグで並び替える。
      * ローカル順序をすぐに更新して UI を即時反映し、DB へも非同期で保存する。
      */
-    fun reorderGroups(fromIndex: Int, toIndex: Int) {
+    private fun reorderGroups(fromIndex: Int, toIndex: Int) {
         val currentGroups = (_localGroupOrder.value ?: groups.value).toMutableList()
         if (fromIndex !in currentGroups.indices || toIndex !in currentGroups.indices) return
         currentGroups.add(toIndex, currentGroups.removeAt(fromIndex))
@@ -210,14 +284,14 @@ class TabsScreenViewModel(
     }
 
     /** タブが閉じられたときにグループ割り当てを解除する */
-    fun onTabClosed(tabId: String) {
+    private fun onTabClosed(tabId: String) {
         viewModelScope.launch {
             tabGroupRepository.removeTabFromGroup(tabId)
         }
     }
 
     /** タブを別のグループへ移動する */
-    fun moveTabToGroup(tabId: String, targetGroupIndex: Int) {
+    private fun moveTabToGroup(tabId: String, targetGroupIndex: Int) {
         val targetGroup = groups.value.getOrNull(targetGroupIndex) ?: return
         viewModelScope.launch {
             tabGroupRepository.assignTabToGroup(tabId, targetGroup.id)
@@ -228,7 +302,7 @@ class TabsScreenViewModel(
      * グループ内でタブを並び替える。
      * グローバルリストはグループ順に連結した順序で同期する。
      */
-    fun reorderTabs(groupIndex: Int, fromLocalIndex: Int, toLocalIndex: Int) {
+    private fun reorderTabs(groupIndex: Int, fromLocalIndex: Int, toLocalIndex: Int) {
         val currentGroupedTabs = groupedTabs.value
         val tabsInGroup = currentGroupedTabs.getOrNull(groupIndex) ?: return
         if (fromLocalIndex !in tabsInGroup.indices || toLocalIndex !in tabsInGroup.indices) return
@@ -249,7 +323,7 @@ class TabsScreenViewModel(
     }
 
     /** グループ名を変更する */
-    fun renameGroup(groupIndex: Int, newName: String) {
+    private fun renameGroup(groupIndex: Int, newName: String) {
         val currentGroups = groups.value
         val group = currentGroups.getOrNull(groupIndex) ?: return
         // ローカル順序を即座に更新して UI に反映する
@@ -262,7 +336,7 @@ class TabsScreenViewModel(
     }
 
     /** グループを削除する。タブは隣接グループへ再割り当てされる。 */
-    fun deleteGroup(groupIndex: Int) {
+    private fun deleteGroup(groupIndex: Int) {
         val currentGroups = groups.value
         val group = currentGroups.getOrNull(groupIndex) ?: return
         val fallback = currentGroups.firstOrNull { it.id != group.id }
