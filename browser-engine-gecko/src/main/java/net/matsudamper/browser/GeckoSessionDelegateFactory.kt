@@ -1,6 +1,7 @@
 package net.matsudamper.browser
 
 import android.util.Log
+import org.json.JSONObject
 import org.mozilla.geckoview.AllowOrDeny
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
@@ -27,6 +28,8 @@ interface BrowserSessionStateCallbacks {
     fun onLoadRequest(
         request: GeckoSession.NavigationDelegate.LoadRequest,
     ): GeckoResult<AllowOrDeny>?
+    /** ページのウェブアプリマニフェストが検出されたときに呼ばれる */
+    fun onWebAppManifest(manifest: JSONObject)
 }
 
 data class GeckoSessionDelegateBundle(
@@ -115,6 +118,10 @@ fun createGeckoSessionDelegateBundle(
             }
         },
         contentDelegate = object : GeckoSession.ContentDelegate {
+            override fun onWebAppManifest(session: GeckoSession, manifest: JSONObject) {
+                callbacks.onWebAppManifest(manifest)
+            }
+
             override fun onTitleChange(session: GeckoSession, title: String?) {
                 callbacks.onTitleChange(title.orEmpty())
             }

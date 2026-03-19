@@ -20,6 +20,7 @@ import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import org.json.JSONObject
 import java.net.URL
 import net.matsudamper.browser.data.TranslationProvider
 import net.matsudamper.browser.ReadabilityArticle
@@ -120,6 +121,9 @@ internal class BrowserTabScreenState(
     var findQuery by mutableStateOf("")
     var findMatchCurrent by mutableIntStateOf(0)
     var findMatchTotal by mutableIntStateOf(0)
+
+    // --- ウェブアプリマニフェスト ---
+    var webAppManifest by mutableStateOf<JSONObject?>(null)
 
     // --- Context menu state ---
     var imageContextMenuUrl by mutableStateOf<String?>(null)
@@ -522,8 +526,9 @@ internal class BrowserTabScreenState(
     override fun onPageStart(url: String) {
         clearPageLoadError()
         maybeResetToolbarColorOnPageStart(url)
-        // 新しいページへの遷移時にfaviconをリセット
+        // 新しいページへの遷移時にfaviconとマニフェストをリセット
         browserTab.faviconBitmap = null
+        webAppManifest = null
     }
 
     override fun onPageStop(success: Boolean) {
@@ -595,6 +600,10 @@ internal class BrowserTabScreenState(
 
     override fun onScrollChanged(scrollY: Int) {
         this.scrollY = scrollY
+    }
+
+    override fun onWebAppManifest(manifest: JSONObject) {
+        webAppManifest = manifest
     }
 
     private fun maybeResetToolbarColor(fromUrl: String, toUrl: String) {
