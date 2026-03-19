@@ -125,7 +125,7 @@ class BrowserScreenViewModel(
             initialValue = WebSuggestionState(),
         )
 
-    val urlBarSuggestions: StateFlow<UrlBarSuggestionsUiState> = combine(
+    private val urlBarSuggestions: StateFlow<UrlBarSuggestionsUiState> = combine(
         historySuggestions,
         webSuggestions,
     ) { history, web ->
@@ -158,18 +158,6 @@ class BrowserScreenViewModel(
         )
 
     interface Event
-
-    suspend fun recordHistory(url: String, title: String): Long {
-        return historyRepository.recordVisit(url, title)
-    }
-
-    suspend fun updateHistoryTitle(id: Long, title: String) {
-        historyRepository.updateTitle(id, title)
-    }
-
-    fun onUrlInputChanged(query: String) {
-        suggestionQuery.value = query
-    }
 
     companion object {
         private const val HISTORY_SUGGESTION_LIMIT = 8
