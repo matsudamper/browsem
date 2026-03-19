@@ -260,20 +260,18 @@ internal fun BrowserApp(
                     }
 
                     AppDestination.Extensions -> navEntry(key) {
-                        val extensionsViewModel = remember(viewModel, browserSessionController) {
-                            ExtensionsScreenViewModel(
-                                runtime = viewModel.runtime,
-                                onOpenExtensionSettingsRequest = { optionsPageUrl ->
-                                    val tab = browserSessionController.createAndAppendTab(
-                                        initialUrl = optionsPageUrl,
-                                    )
-                                    selectTab(tab.tabId, null)
-                                },
-                            )
+                        val extensionsViewModel = remember(viewModel) {
+                            ExtensionsScreenViewModel(runtime = viewModel.runtime)
                         }
                         ExtensionsScreen(
                             viewModel = extensionsViewModel,
                             onBack = { backStack.removeLastOrNull() },
+                            onOpenExtensionSettings = { optionsPageUrl ->
+                                val tab = browserSessionController.createAndAppendTab(
+                                    initialUrl = optionsPageUrl,
+                                )
+                                selectTab(tab.tabId, null)
+                            },
                         )
                     }
 

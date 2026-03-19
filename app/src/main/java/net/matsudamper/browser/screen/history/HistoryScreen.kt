@@ -19,15 +19,15 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.flow.receiveAsFlow
 import net.matsudamper.browser.R
 import net.matsudamper.browser.data.history.HistoryEntry
 import java.text.SimpleDateFormat
@@ -41,9 +41,17 @@ internal fun HistoryScreen(
     onNavigateToUrl: (String) -> Unit,
     onBack: () -> Unit,
 ) {
-    val searchQuery by viewModel.searchQuery.collectAsState()
-    val entries by viewModel.historyEntries.collectAsState(initial = emptyList())
-    var showDeleteAllDialog by remember { mutableStateOf(false) }
+    val uiState by viewModel.uiState.collectAsState()
+
+    LaunchedEffect(viewModel) {
+        viewModel.eventHandler.receiveAsFlow().collect {
+            it(object : HistoryScreenViewModel.Event {
+                override fun navigateToUrl(url: String) {
+                    onNavigateToUrl(url)
+                }
+            })
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -58,7 +66,7 @@ internal fun HistoryScreen(
                     }
                 },
                 actions = {
-                    TextButton(onClick = { showDeleteAllDialog = true }) {
+                    TextButton(onClick = uiState.callbacks::onClickDeleteAll) {
                         Text("全削除")
                     }
                 },
@@ -71,8 +79,8 @@ internal fun HistoryScreen(
                 .fillMaxSize(),
         ) {
             OutlinedTextField(
-                value = searchQuery,
-                onValueChange = viewModel::onSearchQueryChange,
+                value = uiState.searchQuery,
+                onValueChange = uiState.callbacks::onSearchQueryChange,
                 label = { Text("タイトルやURLで検索") },
                 singleLine = true,
                 modifier = Modifier
@@ -81,34 +89,29 @@ internal fun HistoryScreen(
             )
 
             LazyColumn(modifier = Modifier.fillMaxSize()) {
-                items(entries, key = { it.id }) { entry ->
+                items(uiState.entries, key = { it.id }) { entry ->
                     HistoryItem(
                         entry = entry,
-                        onClick = { onNavigateToUrl(entry.url) },
-                        onDelete = { viewModel.deleteEntry(entry.id) },
+                        onClick = { uiState.callbacks.onClickEntry(entry.url) },
+                        onDelete = { uiState.callbacks.onDeleteEntry(entry.id) },
                     )
                 }
             }
         }
     }
 
-    if (showDeleteAllDialog) {
+    if (uiState.showDeleteAllDialog) {
         AlertDialog(
-            onDismissRequest = { showDeleteAllDialog = false },
+            onDismissRequest = uiState.callbacks::onDismissDeleteAllDialog,
             title = { Text("確認") },
             text = { Text("すべての閲覧履歴を削除しますか？") },
             confirmButton = {
-                TextButton(
-                    onClick = {
-                        viewModel.deleteAll()
-                        showDeleteAllDialog = false
-                    },
-                ) {
+                TextButton(onClick = uiState.callbacks::onConfirmDeleteAll) {
                     Text("削除")
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showDeleteAllDialog = false }) {
+                TextButton(onClick = uiState.callbacks::onDismissDeleteAllDialog) {
                     Text("キャンセル")
                 }
             },

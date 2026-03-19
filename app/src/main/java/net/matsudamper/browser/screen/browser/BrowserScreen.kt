@@ -59,7 +59,7 @@ internal fun BrowserScreen(
     /** グループ順に並べたタブリスト。アドレスバースワイプ時の前後タブ判定に使用する。 */
     orderedTabs: List<BrowserTab>,
 ) {
-    val urlBarSuggestions by viewModel.urlBarSuggestions.collectAsState()
+    val uiState by viewModel.uiState.collectAsState()
 
     val selectedTab = remember(key.tabId) {
         val tab = browserSessionController.getOrCreateTab(
@@ -139,10 +139,10 @@ internal fun BrowserScreen(
                     onSelectTab(targetTabId, null)
                 }
             },
-            onHistoryRecord = { url, title -> viewModel.recordHistory(url, title) },
-            onHistoryTitleUpdate = { id, title -> viewModel.updateHistoryTitle(id, title) },
-            urlBarSuggestions = urlBarSuggestions,
-            onUrlInputChanged = viewModel::onUrlInputChanged,
+            onHistoryRecord = uiState.callbacks::onHistoryRecord,
+            onHistoryTitleUpdate = uiState.callbacks::onHistoryTitleUpdate,
+            urlBarSuggestions = uiState.urlBarSuggestions,
+            onUrlInputChanged = uiState.callbacks::onUrlInputChanged,
             onToolbarHorizontalDrag = { delta ->
                 // URLバーの水平ドラッグをスワイプオフセットに反映
                 coroutineScope.launch {

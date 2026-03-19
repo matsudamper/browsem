@@ -39,7 +39,7 @@ internal fun WebAppScreen(
             webSuggestionRepository = webSuggestionRepository,
         )
     })
-    val urlBarSuggestions by viewModel.urlBarSuggestions.collectAsState()
+    val uiState by viewModel.uiState.collectAsState()
     val browserTab = remember(browserSessionController, initialUrl) {
         browserSessionController.createAndAppendTab(initialUrl = initialUrl)
     }
@@ -72,9 +72,9 @@ internal fun WebAppScreen(
             browserTab.session.loadUri(uri)
             browserTab.session
         },
-        onHistoryRecord = { url, title -> historyRepository.recordVisit(url, title) },
-        onHistoryTitleUpdate = { id, title -> historyRepository.updateTitle(id, title) },
-        urlBarSuggestions = urlBarSuggestions,
-        onUrlInputChanged = viewModel::onUrlInputChanged,
+        onHistoryRecord = uiState.callbacks::onHistoryRecord,
+        onHistoryTitleUpdate = uiState.callbacks::onHistoryTitleUpdate,
+        urlBarSuggestions = uiState.urlBarSuggestions,
+        onUrlInputChanged = uiState.callbacks::onUrlInputChanged,
     )
 }

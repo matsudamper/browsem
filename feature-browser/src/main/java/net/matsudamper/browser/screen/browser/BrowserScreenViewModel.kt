@@ -6,6 +6,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -46,6 +47,22 @@ class BrowserScreenViewModel(
 
     override fun close() {
         scope.cancel()
+    }
+
+    val eventHandler = Channel<(Event) -> Unit>(Channel.UNLIMITED)
+
+    private val callbacks = object : BrowserScreenUiState.Callbacks {
+        override suspend fun onHistoryRecord(url: String, title: String): Long {
+            return historyRepository.recordVisit(url, title)
+        }
+
+        override suspend fun onHistoryTitleUpdate(id: Long, title: String) {
+            historyRepository.updateTitle(id, title)
+        }
+
+        override fun onUrlInputChanged(query: String) {
+            suggestionQuery.value = query
+        }
     }
 
     private val suggestionQuery = MutableStateFlow("")
@@ -108,7 +125,7 @@ class BrowserScreenViewModel(
             initialValue = WebSuggestionState(),
         )
 
-    val urlBarSuggestions: StateFlow<UrlBarSuggestionsUiState> = combine(
+    private val urlBarSuggestions: StateFlow<UrlBarSuggestionsUiState> = combine(
         historySuggestions,
         webSuggestions,
     ) { history, web ->
@@ -124,17 +141,23 @@ class BrowserScreenViewModel(
             initialValue = UrlBarSuggestionsUiState(),
         )
 
-    suspend fun recordHistory(url: String, title: String): Long {
-        return historyRepository.recordVisit(url, title)
-    }
+    val uiState: StateFlow<BrowserScreenUiState> = urlBarSuggestions
+        .map { suggestions ->
+            BrowserScreenUiState(
+                urlBarSuggestions = suggestions,
+                callbacks = callbacks,
+            )
+        }
+        .stateIn(
+            scope = scope,
+            started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS),
+            initialValue = BrowserScreenUiState(
+                urlBarSuggestions = UrlBarSuggestionsUiState(),
+                callbacks = callbacks,
+            ),
+        )
 
-    suspend fun updateHistoryTitle(id: Long, title: String) {
-        historyRepository.updateTitle(id, title)
-    }
-
-    fun onUrlInputChanged(query: String) {
-        suggestionQuery.value = query
-    }
+    interface Event
 
     companion object {
         private const val HISTORY_SUGGESTION_LIMIT = 8
