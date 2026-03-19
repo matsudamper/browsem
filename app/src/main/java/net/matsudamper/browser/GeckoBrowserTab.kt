@@ -57,6 +57,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import kotlinx.coroutines.flow.collectLatest
+import androidx.lifecycle.viewmodel.compose.viewModel
 import net.matsudamper.browser.data.TranslationProvider
 import net.matsudamper.browser.media.GeckoMediaSessionDelegate
 import net.matsudamper.browser.media.MediaWebExtension
@@ -100,6 +101,8 @@ internal fun GeckoBrowserTab(
     onUrlInputChanged: ((String) -> Unit)? = null,
 ) {
     val readabilityWebExtension: ReadabilityWebExtension = koinInject()
+    // Activity スコープのViewModelとして共有（ダイアログが一度に1つしか表示されないため問題なし）
+    val addToHomeScreenViewModel: AddToHomeScreenViewModel = viewModel()
     val state = rememberBrowserTabScreenState(
         browserTab = browserTab,
         homepageUrl = homepageUrl,
@@ -118,9 +121,6 @@ internal fun GeckoBrowserTab(
     // ホームに追加ダイアログの表示状態
     var showAddToHomeScreenDialog by remember { mutableStateOf(false) }
     var addToHomeUrl by remember { mutableStateOf("") }
-    var addToHomeTitle by remember { mutableStateOf("") }
-    var addToHomeFavicon by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
-    var addToHomeManifest by remember { mutableStateOf<org.json.JSONObject?>(null) }
 
     // 不安定なラムダキーによる DisposableEffect の再実行を防ぐ
     val currentOnCloseTab by rememberUpdatedState(onCloseTab)
@@ -351,9 +351,13 @@ internal fun GeckoBrowserTab(
                     onHorizontalDragEnd = onToolbarDragEnd,
                     onAddToHomeScreen = {
                         addToHomeUrl = state.currentPageUrl
-                        addToHomeTitle = state.currentPageTitle
-                        addToHomeFavicon = browserTab.faviconBitmap
-                        addToHomeManifest = state.webAppManifest
+                        // ViewModelにマニフェスト・アイコン情報を渡して非同期フェッチを開始
+                        addToHomeScreenViewModel.prepare(
+                            url = state.currentPageUrl,
+                            title = state.currentPageTitle,
+                            favicon = browserTab.faviconBitmap,
+                            manifest = state.webAppManifest,
+                        )
                         showAddToHomeScreenDialog = true
                     },
                 )
@@ -438,10 +442,8 @@ internal fun GeckoBrowserTab(
     // ホームに追加ダイアログ
     if (showAddToHomeScreenDialog) {
         AddToHomeScreenDialog(
-            url = addToHomeUrl,
-            title = addToHomeTitle,
-            favicon = addToHomeFavicon,
-            webAppManifest = addToHomeManifest,
+            pageUrl = addToHomeUrl,
+            viewModel = addToHomeScreenViewModel,
             onDismiss = { showAddToHomeScreenDialog = false },
         )
     }

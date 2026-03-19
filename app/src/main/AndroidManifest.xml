@@ -60,6 +60,18 @@
             android:exported="true"
             android:documentLaunchMode="intoExisting"
             android:windowSoftInputMode="adjustResize" />
+        <!--
+            PWAショートカットのTWAランチャーActivity。
+            LauncherActivityを継承しており、タップ時にChrome等のTWA対応ブラウザを経由して
+            Trusted Web ActivityとしてURLを起動する。
+            デジタルアセットリンクで検証済みのドメインはURLバーなしで全画面表示される。
+            exported=true はピン留めショートカットから起動するために必要。
+        -->
+        <activity
+            android:name=".PwaShortcutLauncherActivity"
+            android:exported="true"
+            android:documentLaunchMode="intoExisting"
+            android:windowSoftInputMode="adjustResize" />
 
         <service
             android:name=".BrowserCustomTabsService"
