@@ -198,38 +198,26 @@ with open(local_props, 'w') as f:
     f.write(f"sdk.dir={android_home}\n")
 print(f"[session-start] local.properties written: sdk.dir={android_home}")
 
-# ── platforms;android-36 のインストール ───────────────────────────────────────
+# ── Android SDK Platform 36 の android.jar が欠けていれば補完する ──────────────
 platform_dir = os.path.join(android_home, 'platforms', 'android-36')
 android_jar  = os.path.join(platform_dir, 'android.jar')
 if not os.path.exists(android_jar):
-    print("[session-start] Installing Android SDK platform 36 via sdkmanager...")
-    env = os.environ.copy()
-    env['ANDROID_HOME']     = android_home
-    env['ANDROID_SDK_ROOT'] = android_home
-    # プロキシ認証を JVM システムプロパティで設定
-    jvm_opts = []
-    if user and password:
-        jvm_opts += [
-            f'-Dhttps.proxyUser={user}',
-            f'-Dhttps.proxyPassword={password}',
-            f'-Dhttp.proxyUser={user}',
-            f'-Dhttp.proxyPassword={password}',
-            '-Djdk.http.auth.tunneling.disabledSchemes=',
-            '-Djdk.http.auth.proxying.disabledSchemes=',
-        ]
-    if jvm_opts:
-        env['_JAVA_OPTIONS'] = ' '.join(jvm_opts)
-    sdkmanager_args = [sdkmanager_bin, f'--sdk_root={android_home}']
-    if host and port:
-        sdkmanager_args += ['--proxy=http', f'--proxy_host={host}', f'--proxy_port={port}']
-    sdkmanager_args.append('platforms;android-36')
-    r = subprocess.run(sdkmanager_args, input='y\n', capture_output=True, text=True, env=env)
-    if r.returncode == 0:
-        print("[session-start] Android SDK platform 36 installed")
-    else:
-        print(f"[session-start] Failed to install platform 36 via sdkmanager: {r.stderr[:500]}")
+    print("[session-start] android-36/android.jar が見つかりません。ダウンロードします...")
+    os.makedirs(platform_dir, exist_ok=True)
+    platform_zip_path = os.path.join(android_home, 'platform-36.zip')
+    download('https://dl.google.com/android/repository/platform-36_r02.zip', platform_zip_path)
+    with zipfile.ZipFile(platform_zip_path, 'r') as zf:
+        # android-36/ 配下のファイルを platforms/android-36/ に展開する
+        members = [m for m in zf.namelist() if m.startswith('android-36/') and not m.endswith('/')]
+        for member in members:
+            dest = os.path.join(platform_dir, member[len('android-36/'):])
+            os.makedirs(os.path.dirname(dest), exist_ok=True)
+            with zf.open(member) as src, open(dest, 'wb') as dst:
+                dst.write(src.read())
+    os.unlink(platform_zip_path)
+    print(f"[session-start] android-36 platform installed: {platform_dir}")
 else:
-    print("[session-start] Android SDK platform 36 already installed")
+    print("[session-start] android-36/android.jar は既に存在します。スキップします。")
 
 # ── protobuf compiler のインストール ──────────────────────────────────────────
 result = subprocess.run(['which', 'protoc'], capture_output=True)
