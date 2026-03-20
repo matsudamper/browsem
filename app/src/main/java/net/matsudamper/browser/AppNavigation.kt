@@ -32,7 +32,6 @@ import androidx.navigation3.scene.Scene
 import androidx.navigation3.ui.NavDisplay
 import androidx.navigation3.ui.defaultPopTransitionSpec
 import androidx.navigation3.ui.defaultTransitionSpec
-import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
 import net.matsudamper.browser.BrowserTab
@@ -84,8 +83,8 @@ internal fun BrowserApp(
 
     val backStack = rememberNavBackStack(AppDestination.Setup)
     val navController = remember(backStack) { NavController(backStack = backStack) }
-    // タブ復元完了を待機するためのシグナル
-    val setupComplete = remember { CompletableDeferred<Unit>() }
+    // タブ復元完了シグナルは ViewModel で保持（構成変更後も有効）
+    val setupComplete = viewModel.setupComplete
 
     // ナビゲーションとViewModelの両方にタブ選択を通知するヘルパー
     val selectTab: (String, AppDestination.Browser?) -> Unit = remember(navController, viewModel) {
@@ -185,7 +184,7 @@ internal fun BrowserApp(
                         LaunchedEffect(Unit) {
                             val tabId = viewModel.restoreTabs()
                             selectTab(tabId, null)
-                            setupComplete.complete(Unit) // 復元完了を通知
+                            // setupComplete は restoreTabs() 内で complete 済み
                         }
                     }
 

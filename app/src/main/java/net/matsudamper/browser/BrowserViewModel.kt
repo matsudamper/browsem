@@ -3,6 +3,7 @@ package net.matsudamper.browser
 import androidx.compose.runtime.Stable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.filterNotNull
@@ -54,6 +55,9 @@ internal class BrowserViewModel(
     val browserSessionController: BrowserSessionController
         get() = runtimeCoordinator.browserSessionController
 
+    // 構成変更を経ても破棄されないよう ViewModel で保持するセットアップ完了シグナル
+    val setupComplete = CompletableDeferred<Unit>()
+
     private val settings: StateFlow<BrowserSettings?> = settingsRepository.settings
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
     val settingsUiState: StateFlow<SettingsUiState?> = settings
@@ -81,6 +85,7 @@ internal class BrowserViewModel(
                 scope = viewModelScope,
                 browserSessionController = browserSessionController,
             )
+            setupComplete.complete(Unit)
         }
     }
 
