@@ -46,10 +46,12 @@ class MainActivity : ComponentActivity() {
     private var webExtensionWarmUpInProgress = false
     private var webExtensionWarmUpRetryCount = 0
     private val createNewTabChannel = Channel<String>(Channel.UNLIMITED)
+    private val openDownloadsChannel = Channel<Unit>(Channel.CONFLATED)
 
     // リコンポーズのたびに新しい Flow が生成されチャネルがキャンセルされるのを防ぐため、
     // Composable の外でプロパティとして保持する
     private val newTabUrlFlow = createNewTabChannel.receiveAsFlow()
+    private val openDownloadsFlow = openDownloadsChannel.receiveAsFlow()
 
     private var pendingNotificationPermissionResult: GeckoResult<Int>? = null
 
@@ -151,11 +153,15 @@ class MainActivity : ComponentActivity() {
         warmUpWebExtensionController()
 
         if (savedInstanceState == null) {
-            val url = intent.dataString
-            if (url != null) {
-                val result = createNewTabChannel.trySend(url)
-                if (result.isFailure) {
-                    Log.e("MainActivity", "URL の送信に失敗: $url, reason=${result.exceptionOrNull()}")
+            if (intent.action == DownloadWorker.ACTION_OPEN_DOWNLOADS) {
+                openDownloadsChannel.trySend(Unit)
+            } else {
+                val url = intent.dataString
+                if (url != null) {
+                    val result = createNewTabChannel.trySend(url)
+                    if (result.isFailure) {
+                        Log.e("MainActivity", "URL の送信に失敗: $url, reason=${result.exceptionOrNull()}")
+                    }
                 }
             }
         }
@@ -170,6 +176,7 @@ class MainActivity : ComponentActivity() {
                 BrowserApp(
                     viewModel = browserViewModel,
                     newTabUrlFlow = newTabUrlFlow,
+                    openDownloadsFlow = openDownloadsFlow,
                     onInstallExtensionRequest = { pageUrl ->
                         extensionInstaller.installFromCurrentPage(pageUrl)
                     },
@@ -200,6 +207,10 @@ class MainActivity : ComponentActivity() {
             return
         }
         setIntent(intent)
+        if (intent.action == DownloadWorker.ACTION_OPEN_DOWNLOADS) {
+            openDownloadsChannel.trySend(Unit)
+            return
+        }
         val url = intent.dataString
         if (url != null) {
             val result = createNewTabChannel.trySend(url)
