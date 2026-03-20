@@ -9,6 +9,8 @@ internal data class BrowserToolbarColors(
     val urlBarBackgroundColor: Color,
     val toolbarContentColor: Color,
     val colorSource: String,
+    // ツールバー背景が明るい場合 true（ステータスバーアイコンを黒にする用途）
+    val isBrightBackground: Boolean,
 )
 
 internal fun resolveBrowserToolbarColors(
@@ -34,6 +36,7 @@ internal fun resolveBrowserToolbarColors(
         urlBarBackgroundColor = urlBarBackgroundColor,
         toolbarContentColor = toolbarContentColor,
         colorSource = if (toolbarColor == null) "default" else "theme",
+        isBrightBackground = isBrightThemeColor,
     )
 }
 
