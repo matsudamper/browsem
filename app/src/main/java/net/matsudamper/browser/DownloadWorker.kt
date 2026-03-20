@@ -38,15 +38,15 @@ internal class DownloadWorker(
         setForeground(createForegroundInfo(0, true, context.getString(R.string.download_notification_starting), 0L, -1L))
 
         return try {
-            downloadFile(url, referrerUrl)
-            Result.success()
+            val fileUri = downloadFile(url, referrerUrl)
+            Result.success(workDataOf(KEY_FILE_URI to fileUri.toString()))
         } catch (e: Exception) {
             e.printStackTrace()
             Result.failure()
         }
     }
 
-    private suspend fun downloadFile(urlString: String, referrerUrl: String) {
+    private suspend fun downloadFile(urlString: String, referrerUrl: String): android.net.Uri {
         // GeckoRuntime.getDefault() はUIスレッドでのみ呼び出し可能
         val executor = withContext(Dispatchers.Main) {
             val runtime = GeckoRuntime.getDefault(context)
@@ -143,6 +143,7 @@ internal class DownloadWorker(
             resolver.delete(uri, null, null)
             throw e
         }
+        return uri
     }
 
     private fun createForegroundInfo(
@@ -187,6 +188,7 @@ internal class DownloadWorker(
         const val KEY_PROGRESS = "progress"
         const val KEY_TOTAL_READ = "total_read"
         const val KEY_CONTENT_LENGTH = "content_length"
+        const val KEY_FILE_URI = "file_uri"
         const val CHANNEL_ID = "download_progress_channel"
         const val NOTIFICATION_ID = 9001
         const val TAG_DOWNLOAD = "download"

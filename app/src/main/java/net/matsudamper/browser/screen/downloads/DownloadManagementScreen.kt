@@ -49,6 +49,15 @@ internal fun DownloadManagementScreen(
                         )
                     }
                 },
+                actions = {
+                    // ダウンロードフォルダを開くボタン
+                    IconButton(onClick = uiState.callbacks.onOpenDownloadsFolder) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_folder_open_24dp),
+                            contentDescription = "ダウンロードフォルダを開く",
+                        )
+                    }
+                },
             )
         },
     ) { paddingValues ->
@@ -60,7 +69,7 @@ internal fun DownloadManagementScreen(
                     .padding(16.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                Text("ダウンロード中のファイルはありません。")
+                Text("ダウンロード履歴はありません。")
             }
         } else {
             LazyColumn(
@@ -75,6 +84,7 @@ internal fun DownloadManagementScreen(
                     DownloadItemRow(
                         item = item,
                         onCancel = { uiState.callbacks.onCancel(item.id) },
+                        onOpenFile = { fileUri -> uiState.callbacks.onOpenFile(fileUri) },
                     )
                 }
             }
@@ -86,6 +96,7 @@ internal fun DownloadManagementScreen(
 private fun DownloadItemRow(
     item: DownloadManagementScreenUiState.DownloadItem,
     onCancel: () -> Unit,
+    onOpenFile: (String) -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -106,29 +117,57 @@ private fun DownloadItemRow(
                     .weight(1f)
                     .padding(end = 8.dp),
             )
-            TextButton(onClick = onCancel) {
-                Text("キャンセル")
+            when (val status = item.status) {
+                is DownloadManagementScreenUiState.DownloadStatus.InProgress -> {
+                    TextButton(onClick = onCancel) {
+                        Text("キャンセル")
+                    }
+                }
+                is DownloadManagementScreenUiState.DownloadStatus.Completed -> {
+                    TextButton(onClick = { onOpenFile(status.fileUri) }) {
+                        Text("開く")
+                    }
+                }
+                is DownloadManagementScreenUiState.DownloadStatus.Failed -> {
+                    Text(
+                        text = "失敗",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
             }
         }
-        val sizeText = DownloadWorker.buildSizeText(item.totalRead, item.contentLength)
-        Text(
-            text = sizeText,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        if (item.isIndeterminate) {
-            LinearProgressIndicator(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 4.dp),
-            )
-        } else {
-            LinearProgressIndicator(
-                progress = { item.progress / 100f },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 4.dp),
-            )
+        when (val status = item.status) {
+            is DownloadManagementScreenUiState.DownloadStatus.InProgress -> {
+                val sizeText = DownloadWorker.buildSizeText(status.totalRead, status.contentLength)
+                Text(
+                    text = sizeText,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                if (status.isIndeterminate) {
+                    LinearProgressIndicator(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 4.dp),
+                    )
+                } else {
+                    LinearProgressIndicator(
+                        progress = { status.progress / 100f },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 4.dp),
+                    )
+                }
+            }
+            is DownloadManagementScreenUiState.DownloadStatus.Completed -> {
+                Text(
+                    text = "完了",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            is DownloadManagementScreenUiState.DownloadStatus.Failed -> Unit
         }
     }
 }
