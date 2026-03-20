@@ -125,6 +125,10 @@ class TabsScreenViewModel(
         override fun onDeleteGroup(groupIndex: Int) {
             deleteGroup(groupIndex)
         }
+
+        override fun onToggleDefaultGroup(groupIndex: Int) {
+            toggleDefaultGroup(groupIndex)
+        }
     }
 
     val uiState: StateFlow<TabsScreenUiState> = combine(
@@ -319,6 +323,27 @@ class TabsScreenViewModel(
             if (currentIdx >= 0 && currentIdx != targetIdx) {
                 tabStore.moveTab(currentIdx, targetIdx)
             }
+        }
+    }
+
+    /**
+     * グループのデフォルト設定をトグルする。
+     * ON にした場合は他のグループのデフォルトをすべて解除する。
+     */
+    private fun toggleDefaultGroup(groupIndex: Int) {
+        val currentGroups = groups.value
+        val group = currentGroups.getOrNull(groupIndex) ?: return
+        val newIsDefault = !group.isDefault
+        // ローカル順序を即座に更新して UI に反映する
+        _localGroupOrder.value = currentGroups.map { g ->
+            when {
+                g.id == group.id -> g.copy(isDefault = newIsDefault)
+                newIsDefault -> g.copy(isDefault = false) // 他のグループのデフォルトを解除
+                else -> g
+            }
+        }
+        viewModelScope.launch {
+            tabGroupRepository.setDefaultGroup(group.id, newIsDefault)
         }
     }
 

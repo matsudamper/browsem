@@ -41,6 +41,15 @@ interface TabGroupRepository {
      * fallbackGroupId が指定された場合、削除前にそのグループへタブを再割り当てする。
      */
     suspend fun deleteGroup(groupId: TabGroupId, fallbackGroupId: TabGroupId?)
+
+    /**
+     * グループのデフォルト設定を変更する。
+     * isDefault = true の場合は他のグループのデフォルトをすべて解除してから設定する。
+     */
+    suspend fun setDefaultGroup(groupId: TabGroupId, isDefault: Boolean)
+
+    /** デフォルトに設定されているグループIDを返す。設定されていない場合は null。 */
+    suspend fun getDefaultGroupId(): TabGroupId?
 }
 
 class TabGroupRepositoryImpl(context: Context) : TabGroupRepository {
@@ -49,7 +58,7 @@ class TabGroupRepositoryImpl(context: Context) : TabGroupRepository {
 
     override fun observeGroups(): Flow<List<TabGroupData>> {
         return dao.observeGroups().map { entities ->
-            entities.map { TabGroupData(TabGroupId(it.groupId), it.name) }
+            entities.map { TabGroupData(TabGroupId(it.groupId), it.name, it.isDefault) }
         }
     }
 
@@ -105,6 +114,14 @@ class TabGroupRepositoryImpl(context: Context) : TabGroupRepository {
         }
         dao.deleteGroup(groupId.value)
     }
+
+    override suspend fun setDefaultGroup(groupId: TabGroupId, isDefault: Boolean) {
+        dao.setDefaultGroup(groupId.value, isDefault)
+    }
+
+    override suspend fun getDefaultGroupId(): TabGroupId? {
+        return dao.getAllGroups().firstOrNull { it.isDefault }?.let { TabGroupId(it.groupId) }
+    }
 }
 
-data class TabGroupData(val id: TabGroupId, val name: String)
+data class TabGroupData(val id: TabGroupId, val name: String, val isDefault: Boolean = false)

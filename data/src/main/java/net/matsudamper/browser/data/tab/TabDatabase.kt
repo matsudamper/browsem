@@ -7,7 +7,7 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
-@Database(entities = [TabStateEntity::class, TabGroupEntity::class], version = 2, exportSchema = false)
+@Database(entities = [TabStateEntity::class, TabGroupEntity::class], version = 3, exportSchema = false)
 abstract class TabDatabase : RoomDatabase() {
     abstract fun tabDao(): TabDao
     abstract fun tabGroupDao(): TabGroupDao
@@ -26,6 +26,13 @@ abstract class TabDatabase : RoomDatabase() {
             }
         }
 
+        /** v2→v3: tab_group への isDefault カラム追加 */
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `tab_group` ADD COLUMN `isDefault` INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
         fun getInstance(context: Context): TabDatabase {
             return instance ?: synchronized(this) {
                 instance ?: Room.databaseBuilder(
@@ -33,7 +40,7 @@ abstract class TabDatabase : RoomDatabase() {
                     TabDatabase::class.java,
                     "tab.db",
                 )
-                    .addMigrations(MIGRATION_1_2)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                     .build().also { instance = it }
             }
         }

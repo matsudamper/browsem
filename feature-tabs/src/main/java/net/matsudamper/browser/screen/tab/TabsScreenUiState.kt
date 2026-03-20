@@ -16,6 +16,7 @@ data class TabsScreenUiState(
         fun onMoveTabToGroup(tabId: String, targetGroupIndex: Int)
         fun onRenameGroup(groupIndex: Int, newName: String)
         fun onDeleteGroup(groupIndex: Int)
+        fun onToggleDefaultGroup(groupIndex: Int)
     }
 
     sealed interface LoadingState {

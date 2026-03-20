@@ -63,6 +63,29 @@ abstract class TabGroupDao {
     @Query("UPDATE tab_group SET name = :name WHERE groupId = :groupId")
     abstract suspend fun updateGroupName(groupId: String, name: String)
 
+    @Query("UPDATE tab_group SET isDefault = 0")
+    abstract suspend fun clearAllDefault()
+
+    @Query("UPDATE tab_group SET isDefault = 1 WHERE groupId = :groupId")
+    abstract suspend fun setDefaultOn(groupId: String)
+
+    @Query("UPDATE tab_group SET isDefault = 0 WHERE groupId = :groupId")
+    abstract suspend fun setDefaultOff(groupId: String)
+
+    /**
+     * 指定グループをデフォルトに設定する（isDefault = true の場合は他をすべて解除）。
+     * isDefault = false の場合は指定グループのデフォルトを解除するのみ。
+     */
+    @Transaction
+    open suspend fun setDefaultGroup(groupId: String, isDefault: Boolean) {
+        if (isDefault) {
+            clearAllDefault()
+            setDefaultOn(groupId)
+        } else {
+            setDefaultOff(groupId)
+        }
+    }
+
     /** タブID→グループIDのマッピングを Flow で購読する */
     @Query("SELECT tabId, groupId FROM tab_state")
     abstract fun observeTabGroupAssignments(): Flow<List<TabGroupAssignment>>

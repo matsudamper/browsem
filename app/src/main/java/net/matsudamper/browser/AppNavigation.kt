@@ -107,6 +107,12 @@ internal fun BrowserApp(
             val newTab = browserSessionController.createAndAppendTab(initialUrl = url)
             // 外部から開いたタブとして記録する
             externalTabIds.add(newTab.tabId)
+            // デフォルトグループが設定されている場合はそのグループに割り当てる
+            // 設定されていない場合は TabsScreenViewModel が activeGroup に割り当てる（既存動作）
+            val defaultGroupId = tabGroupRepository.getDefaultGroupId()
+            if (defaultGroupId != null) {
+                tabGroupRepository.assignTabToGroup(newTab.tabId, defaultGroupId)
+            }
             selectTab(newTab.tabId, null)
         }
     }
