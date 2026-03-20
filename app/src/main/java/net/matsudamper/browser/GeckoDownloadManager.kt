@@ -24,6 +24,7 @@ internal class GeckoDownloadManager(
                     DownloadWorker.KEY_REFERRER_URL to referrerUrl,
                 )
             )
+            .addTag(DownloadWorker.TAG_DOWNLOAD)
             .build()
         WorkManager.getInstance(context).enqueue(workRequest)
     }

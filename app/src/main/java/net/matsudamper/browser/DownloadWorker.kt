@@ -2,8 +2,10 @@ package net.matsudamper.browser
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.ContentValues
 import android.content.Context
+import android.content.Intent
 import android.os.Environment
 import android.provider.MediaStore
 import android.webkit.URLUtil
@@ -11,6 +13,7 @@ import androidx.core.app.NotificationCompat
 import androidx.work.CoroutineWorker
 import androidx.work.ForegroundInfo
 import androidx.work.WorkerParameters
+import androidx.work.workDataOf
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.mozilla.geckoview.GeckoRuntime
@@ -35,15 +38,15 @@ internal class DownloadWorker(
         setForeground(createForegroundInfo(0, true, context.getString(R.string.download_notification_starting), 0L, -1L))
 
         return try {
-            downloadFile(url, referrerUrl)
-            Result.success()
+            val fileUri = downloadFile(url, referrerUrl)
+            Result.success(workDataOf(KEY_FILE_URI to fileUri.toString()))
         } catch (e: Exception) {
             e.printStackTrace()
             Result.failure()
         }
     }
 
-    private suspend fun downloadFile(urlString: String, referrerUrl: String) {
+    private suspend fun downloadFile(urlString: String, referrerUrl: String): android.net.Uri {
         // GeckoRuntime.getDefault() はUIスレッドでのみ呼び出し可能
         val executor = withContext(Dispatchers.Main) {
             val runtime = GeckoRuntime.getDefault(context)
@@ -84,6 +87,7 @@ internal class DownloadWorker(
         val fileName = URLUtil.guessFileName(urlString, contentDisposition, mimeType)
             .ifBlank { "download-${System.currentTimeMillis()}" }
 
+        setProgress(workDataOf(KEY_FILE_NAME to fileName, KEY_CONTENT_LENGTH to contentLength))
         setForeground(createForegroundInfo(0, contentLength <= 0, fileName, 0L, contentLength))
 
         val resolver = context.contentResolver
@@ -102,14 +106,40 @@ internal class DownloadWorker(
                     val buffer = ByteArray(8192)
                     var bytesRead: Int
                     var totalRead = 0L
+                    // 通知のレート制限を避けるため、最後に通知を更新した時刻を記録する
+                    var lastNotificationTime = 0L
                     while (inputStream.read(buffer).also { bytesRead = it } != -1) {
                         outputStream.write(buffer, 0, bytesRead)
                         totalRead += bytesRead
                         if (contentLength > 0) {
                             val progress = (totalRead * 100 / contentLength).toInt()
-                            setForeground(createForegroundInfo(progress, false, fileName, totalRead, contentLength))
+                            setProgress(
+                                workDataOf(
+                                    KEY_FILE_NAME to fileName,
+                                    KEY_PROGRESS to progress,
+                                    KEY_TOTAL_READ to totalRead,
+                                    KEY_CONTENT_LENGTH to contentLength,
+                                ),
+                            )
+                            val now = System.currentTimeMillis()
+                            if (now - lastNotificationTime >= 1000L) {
+                                setForeground(createForegroundInfo(progress, false, fileName, totalRead, contentLength))
+                                lastNotificationTime = now
+                            }
                         } else {
-                            setForeground(createForegroundInfo(0, true, fileName, totalRead, contentLength))
+                            setProgress(
+                                workDataOf(
+                                    KEY_FILE_NAME to fileName,
+                                    KEY_PROGRESS to 0,
+                                    KEY_TOTAL_READ to totalRead,
+                                    KEY_CONTENT_LENGTH to contentLength,
+                                ),
+                            )
+                            val now = System.currentTimeMillis()
+                            if (now - lastNotificationTime >= 1000L) {
+                                setForeground(createForegroundInfo(0, true, fileName, totalRead, contentLength))
+                                lastNotificationTime = now
+                            }
                         }
                     }
                 }
@@ -123,6 +153,7 @@ internal class DownloadWorker(
             resolver.delete(uri, null, null)
             throw e
         }
+        return uri
     }
 
     private fun createForegroundInfo(
@@ -133,6 +164,17 @@ internal class DownloadWorker(
         contentLength: Long,
     ): ForegroundInfo {
         val sizeText = buildSizeText(totalRead, contentLength)
+        // タップ時にダウンロード管理画面を開くPendingIntent
+        val openDownloadsIntent = Intent(context, MainActivity::class.java).apply {
+            action = ACTION_OPEN_DOWNLOADS
+            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_NEW_TASK
+        }
+        val pendingIntent = PendingIntent.getActivity(
+            context,
+            0,
+            openDownloadsIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_sys_download)
             .setContentTitle(title)
@@ -140,6 +182,7 @@ internal class DownloadWorker(
             .setProgress(100, progress, indeterminate)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
+            .setContentIntent(pendingIntent)
             .build()
         return ForegroundInfo(
             NOTIFICATION_ID,
@@ -151,8 +194,17 @@ internal class DownloadWorker(
     companion object {
         const val KEY_URL = "url"
         const val KEY_REFERRER_URL = "referrer_url"
+        const val KEY_FILE_NAME = "file_name"
+        const val KEY_PROGRESS = "progress"
+        const val KEY_TOTAL_READ = "total_read"
+        const val KEY_CONTENT_LENGTH = "content_length"
+        const val KEY_FILE_URI = "file_uri"
         const val CHANNEL_ID = "download_progress_channel"
         const val NOTIFICATION_ID = 9001
+        const val TAG_DOWNLOAD = "download"
+
+        /** ダウンロード管理画面を開くためのActionキー */
+        const val ACTION_OPEN_DOWNLOADS = "net.matsudamper.browser.ACTION_OPEN_DOWNLOADS"
 
         /**
          * バイト数を適切な単位（B/KB/MB）の文字列に変換する。

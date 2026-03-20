@@ -198,6 +198,27 @@ with open(local_props, 'w') as f:
     f.write(f"sdk.dir={android_home}\n")
 print(f"[session-start] local.properties written: sdk.dir={android_home}")
 
+# ── Android SDK Platform 36 の android.jar が欠けていれば補完する ──────────────
+platform_dir = os.path.join(android_home, 'platforms', 'android-36')
+android_jar  = os.path.join(platform_dir, 'android.jar')
+if not os.path.exists(android_jar):
+    print("[session-start] android-36/android.jar が見つかりません。ダウンロードします...")
+    os.makedirs(platform_dir, exist_ok=True)
+    platform_zip_path = os.path.join(android_home, 'platform-36.zip')
+    download('https://dl.google.com/android/repository/platform-36_r02.zip', platform_zip_path)
+    with zipfile.ZipFile(platform_zip_path, 'r') as zf:
+        # android-36/ 配下のファイルを platforms/android-36/ に展開する
+        members = [m for m in zf.namelist() if m.startswith('android-36/') and not m.endswith('/')]
+        for member in members:
+            dest = os.path.join(platform_dir, member[len('android-36/'):])
+            os.makedirs(os.path.dirname(dest), exist_ok=True)
+            with zf.open(member) as src, open(dest, 'wb') as dst:
+                dst.write(src.read())
+    os.unlink(platform_zip_path)
+    print(f"[session-start] android-36 platform installed: {platform_dir}")
+else:
+    print("[session-start] android-36/android.jar は既に存在します。スキップします。")
+
 # ── protobuf compiler のインストール ──────────────────────────────────────────
 result = subprocess.run(['which', 'protoc'], capture_output=True)
 if result.returncode != 0:
