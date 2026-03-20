@@ -33,6 +33,6 @@ val appModule = module {
     single { ThemeColorWebExtension().also { it.install(get()) } }
     single { MediaWebExtension(androidContext()).also { it.install(get()) } }
     single { ReadabilityWebExtension().also { it.install(get()) } }
-    factory { GeckoDownloadManager(androidContext(), get()) }
+    factory { GeckoDownloadManager(androidContext(), get(), get()) }
     viewModel { BrowserViewModel(get(), get(), get(), get(), get(), get(), get()) }
 }

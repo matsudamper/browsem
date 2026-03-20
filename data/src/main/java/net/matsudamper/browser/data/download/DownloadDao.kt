@@ -12,8 +12,20 @@ interface DownloadDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(entity: DownloadEntity)
 
+    /** 既存レコードがある場合は何もしない（ENQUEUEDの事前挿入に使用） */
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertIgnoreConflict(entity: DownloadEntity)
+
+    /** ENQUEUEDからRUNNINGへの状態遷移。ENQUEUED以外は変更しない */
+    @Query("UPDATE download SET status = 'RUNNING' WHERE workerId = :workerId AND status = 'ENQUEUED'")
+    suspend fun updateEnqueuedToRunning(workerId: String)
+
     @Query("UPDATE download SET status = :status WHERE workerId = :workerId")
     suspend fun updateStatus(workerId: String, status: String)
+
+    /** SUCCEEDED/FAILED 以外の状態のときのみキャンセルする。完了済みの上書きを防ぐ */
+    @Query("UPDATE download SET status = 'CANCELLED' WHERE workerId = :workerId AND status NOT IN ('SUCCEEDED', 'FAILED', 'CANCELLED')")
+    suspend fun cancelIfActive(workerId: String)
 
     @Query(
         "UPDATE download SET fileName = :fileName, status = 'RUNNING', " +

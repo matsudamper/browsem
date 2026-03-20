@@ -62,6 +62,14 @@ internal class DownloadManagementScreenViewModel(
                 }
             }
             DownloadRecordStatus.FAILED -> DownloadManagementScreenUiState.DownloadStatus.Failed
+            DownloadRecordStatus.ENQUEUED -> {
+                DownloadManagementScreenUiState.DownloadStatus.InProgress(
+                    progress = 0,
+                    totalRead = 0L,
+                    contentLength = -1L,
+                    isIndeterminate = true,
+                )
+            }
             DownloadRecordStatus.RUNNING -> {
                 DownloadManagementScreenUiState.DownloadStatus.InProgress(
                     progress = progress,
@@ -74,7 +82,10 @@ internal class DownloadManagementScreenViewModel(
         }
         return DownloadManagementScreenUiState.DownloadItem(
             id = UUID.fromString(workerId),
-            fileName = fileName.ifEmpty { "ダウンロード中..." },
+            fileName = fileName.ifEmpty {
+                // FAILEDかつファイル名未取得の場合は失敗を明示する
+                if (status == DownloadRecordStatus.FAILED) "ダウンロード失敗" else "ダウンロード中..."
+            },
             status = uiStatus,
         )
     }

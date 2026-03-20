@@ -4,7 +4,7 @@ import android.content.Context
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
-enum class DownloadRecordStatus { RUNNING, SUCCEEDED, FAILED, CANCELLED }
+enum class DownloadRecordStatus { ENQUEUED, RUNNING, SUCCEEDED, FAILED, CANCELLED }
 
 data class DownloadRecord(
     val workerId: String,
@@ -26,9 +26,27 @@ class DownloadRepository(context: Context) {
         return dao.observeAll().map { list -> list.map { it.toRecord() } }
     }
 
-    /** ダウンロード開始時に RUNNING 状態でレコードを挿入する */
+    /** エンキュー時に ENQUEUED 状態でレコードを事前挿入する。既存レコードがある場合は何もしない */
+    suspend fun insertEnqueued(workerId: String, url: String, enqueuedAt: Long) {
+        dao.insertIgnoreConflict(
+            DownloadEntity(
+                workerId = workerId,
+                url = url,
+                fileName = "",
+                fileUri = null,
+                status = DownloadRecordStatus.ENQUEUED.name,
+                progress = 0,
+                totalRead = 0L,
+                contentLength = -1L,
+                enqueuedAt = enqueuedAt,
+            ),
+        )
+    }
+
+    /** Worker 開始時に RUNNING 状態に遷移する。ENQUEUED レコードがあれば遷移、なければ新規挿入する */
     suspend fun insertDownload(workerId: String, url: String, enqueuedAt: Long) {
-        dao.upsert(
+        // ENQUEUEDレコードがない場合に備えてRUNNINGで新規挿入（競合時は無視）
+        dao.insertIgnoreConflict(
             DownloadEntity(
                 workerId = workerId,
                 url = url,
@@ -41,6 +59,8 @@ class DownloadRepository(context: Context) {
                 enqueuedAt = enqueuedAt,
             ),
         )
+        // ENQUEUEDからRUNNINGへの状態遷移（既にRUNNINGの場合は何もしない）
+        dao.updateEnqueuedToRunning(workerId)
     }
 
     suspend fun updateProgress(
@@ -67,8 +87,9 @@ class DownloadRepository(context: Context) {
         dao.updateStatus(workerId, DownloadRecordStatus.FAILED.name)
     }
 
+    /** SUCCEEDED/FAILED 以外の状態のときのみキャンセル状態に更新する */
     suspend fun updateCancelled(workerId: String) {
-        dao.updateStatus(workerId, DownloadRecordStatus.CANCELLED.name)
+        dao.cancelIfActive(workerId)
     }
 
     private fun DownloadEntity.toRecord(): DownloadRecord {
