@@ -60,13 +60,15 @@ internal class DownloadWorker(
     }
 
     private fun postCompletionNotification(fileName: String) {
+        // 負のhashCodeによる通知ID衝突を防ぐため、非負の値に変換する
+        val positiveHash = id.hashCode() and 0x7fffffff
         val openDownloadsIntent = Intent(context, MainActivity::class.java).apply {
             action = ACTION_OPEN_DOWNLOADS
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_NEW_TASK
         }
         val pendingIntent = PendingIntent.getActivity(
             context,
-            id.hashCode(),
+            positiveHash,
             openDownloadsIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
@@ -78,7 +80,7 @@ internal class DownloadWorker(
             .setAutoCancel(true)
             .build()
         val notificationManager = context.getSystemService(android.app.NotificationManager::class.java)
-        notificationManager.notify(NOTIFICATION_ID_COMPLETE_BASE + id.hashCode(), notification)
+        notificationManager.notify(NOTIFICATION_ID_COMPLETE_BASE + positiveHash, notification)
     }
 
     private suspend fun downloadFile(
