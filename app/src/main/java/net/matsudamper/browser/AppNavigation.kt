@@ -33,6 +33,8 @@ import androidx.navigation3.ui.NavDisplay
 import androidx.navigation3.ui.defaultPopTransitionSpec
 import androidx.navigation3.ui.defaultTransitionSpec
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import net.matsudamper.browser.BrowserTab
 import net.matsudamper.browser.data.SettingsRepository
@@ -49,6 +51,8 @@ import net.matsudamper.browser.screen.history.HistoryScreen
 import net.matsudamper.browser.screen.history.HistoryScreenViewModel
 import net.matsudamper.browser.screen.notificationpermissions.NotificationPermissionsScreen
 import net.matsudamper.browser.screen.notificationpermissions.NotificationPermissionsScreenViewModel
+import net.matsudamper.browser.screen.downloads.DownloadManagementScreen
+import net.matsudamper.browser.screen.downloads.DownloadManagementScreenViewModel
 import net.matsudamper.browser.screen.settings.SettingsScreen
 import net.matsudamper.browser.screen.settings.SettingsScreenViewModel
 import net.matsudamper.browser.screen.tab.TabsScreen
@@ -59,6 +63,7 @@ import org.mozilla.geckoview.GeckoResult
 internal fun BrowserApp(
     viewModel: BrowserViewModel,
     newTabUrlFlow: Flow<String>,
+    openDownloadsFlow: Flow<Unit>,
     onInstallExtensionRequest: (String) -> Unit,
     onDesktopNotificationPermissionRequest: () -> GeckoResult<Int>,
 ) {
@@ -98,6 +103,15 @@ internal fun BrowserApp(
     val externalTabIds = remember { mutableStateSetOf<String>() }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+
+    // 通知タップ時にダウンロード管理画面を開く
+    LaunchedEffect(openDownloadsFlow) {
+        openDownloadsFlow.onEach {
+            if (backStack.none { it is AppDestination.Downloads }) {
+                backStack.add(AppDestination.Downloads)
+            }
+        }.launchIn(this)
+    }
 
     LaunchedEffect(newTabUrlFlow) {
         // タブ復元完了を待ってから外部URLを処理する（レースコンディション防止）
@@ -238,6 +252,7 @@ internal fun BrowserApp(
                                 backStack.add(AppDestination.NotificationPermissions)
                             },
                             onOpenHistory = { backStack.add(AppDestination.History) },
+                            onOpenDownloads = { backStack.add(AppDestination.Downloads) },
                             onBack = { backStack.removeLastOrNull() },
                         )
                     }
@@ -280,6 +295,16 @@ internal fun BrowserApp(
                         }
                         NotificationPermissionsScreen(
                             viewModel = notificationPermissionsViewModel,
+                            onBack = { backStack.removeLastOrNull() },
+                        )
+                    }
+
+                    AppDestination.Downloads -> navEntry(key) {
+                        val downloadsViewModel = remember {
+                            DownloadManagementScreenViewModel(context.applicationContext as android.app.Application)
+                        }
+                        DownloadManagementScreen(
+                            viewModel = downloadsViewModel,
                             onBack = { backStack.removeLastOrNull() },
                         )
                     }

@@ -47,6 +47,7 @@ internal fun SettingsScreen(
     onOpenExtensions: () -> Unit,
     onOpenNotificationPermissions: () -> Unit,
     onOpenHistory: () -> Unit,
+    onOpenDownloads: () -> Unit,
     onBack: () -> Unit,
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -249,6 +250,17 @@ internal fun SettingsScreen(
                         checked = currentUiState.enableThirdPartyCa,
                         onCheckedChange = currentUiState.callbacks::setEnableThirdPartyCa,
                     )
+                }
+            }
+
+            Spacer(Modifier.height(24.dp))
+
+            SettingSection(title = "ダウンロード") {
+                TextButton(
+                    onClick = onOpenDownloads,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("ダウンロード管理")
                 }
             }
 
