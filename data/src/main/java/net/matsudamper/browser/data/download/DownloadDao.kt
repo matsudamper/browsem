@@ -46,6 +46,6 @@ interface DownloadDao {
     )
     suspend fun updateCompleted(workerId: String, fileName: String, fileUri: String)
 
-    @Query("SELECT * FROM download ORDER BY enqueuedAt ASC")
+    @Query("SELECT * FROM download ORDER BY enqueuedAt DESC")
     fun observeAll(): Flow<List<DownloadEntity>>
 }
