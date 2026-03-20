@@ -192,7 +192,9 @@ internal fun BrowserApp(
                         LaunchedEffect(Unit) {
                             val tabId = viewModel.restoreTabs()
                             selectTab(tabId, null)
-                            // setupComplete は restoreTabs() 内で complete 済み
+                            // selectTab() の後に complete することで、外部 URL の
+                            // LaunchedEffect が復元タブ選択より先に動いて上書きされるのを防ぐ
+                            setupComplete.complete(Unit)
                         }
                     }
 

@@ -85,7 +85,8 @@ internal class BrowserViewModel(
                 scope = viewModelScope,
                 browserSessionController = browserSessionController,
             )
-            setupComplete.complete(Unit)
+            // setupComplete は呼び出し元（AppNavigation の Setup LaunchedEffect）で
+            // selectTab() の後に complete する
         }
     }
 
