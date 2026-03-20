@@ -8,6 +8,7 @@ import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.TabGroupRepository
 import net.matsudamper.browser.data.TabGroupRepositoryImpl
 import net.matsudamper.browser.data.TabRepository
+import net.matsudamper.browser.data.download.DownloadRepository
 import net.matsudamper.browser.data.history.HistoryRepository
 import net.matsudamper.browser.data.websuggestion.HttpWebSuggestionRepository
 import net.matsudamper.browser.data.websuggestion.WebSuggestionRepository
@@ -22,6 +23,7 @@ val dataModule = module {
     single { TabRepository(androidContext()) }
     single<TabGroupRepository> { TabGroupRepositoryImpl(androidContext()) }
     single { HistoryRepository(androidContext()) }
+    single { DownloadRepository(androidContext()) }
     single<WebSuggestionRepository> { HttpWebSuggestionRepository() }
 }
 
@@ -31,6 +33,6 @@ val appModule = module {
     single { ThemeColorWebExtension().also { it.install(get()) } }
     single { MediaWebExtension(androidContext()).also { it.install(get()) } }
     single { ReadabilityWebExtension().also { it.install(get()) } }
-    factory { GeckoDownloadManager(androidContext(), get()) }
+    factory { GeckoDownloadManager(androidContext(), get(), get()) }
     viewModel { BrowserViewModel(get(), get(), get(), get(), get(), get(), get()) }
 }

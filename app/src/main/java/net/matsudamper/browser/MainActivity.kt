@@ -152,16 +152,17 @@ class MainActivity : ComponentActivity() {
         runtime.webNotificationDelegate = webNotificationDelegate
         warmUpWebExtensionController()
 
-        if (savedInstanceState == null) {
-            if (intent.action == DownloadWorker.ACTION_OPEN_DOWNLOADS) {
-                openDownloadsChannel.trySend(Unit)
-            } else {
-                val url = intent.dataString
-                if (url != null) {
-                    val result = createNewTabChannel.trySend(url)
-                    if (result.isFailure) {
-                        Log.e("MainActivity", "URL の送信に失敗: $url, reason=${result.exceptionOrNull()}")
-                    }
+        // ACTION_OPEN_DOWNLOADS は savedInstanceState の有無にかかわらず処理する。
+        // savedInstanceState != null (OS によるプロセスキル後の復元) の場合でも
+        // ダウンロード通知タップでダウンロード画面へ遷移させるため。
+        if (intent.action == DownloadWorker.ACTION_OPEN_DOWNLOADS) {
+            openDownloadsChannel.trySend(Unit)
+        } else if (savedInstanceState == null) {
+            val url = intent.dataString
+            if (url != null) {
+                val result = createNewTabChannel.trySend(url)
+                if (result.isFailure) {
+                    Log.e("MainActivity", "URL の送信に失敗: $url, reason=${result.exceptionOrNull()}")
                 }
             }
         }
