@@ -152,16 +152,20 @@ class MainActivity : ComponentActivity() {
         runtime.webNotificationDelegate = webNotificationDelegate
         warmUpWebExtensionController()
 
-        if (savedInstanceState == null) {
-            if (intent.action == DownloadWorker.ACTION_OPEN_DOWNLOADS) {
+        // savedInstanceState == null のみ処理するのではなく、プロセスキル後の復元時にも
+        // 新しい intent の URL を処理できるよう、前回処理済みの URL と比較する。
+        // ローテーション等の構成変更では intent.dataString と savedUrl が一致するためスキップされる。
+        val savedUrl = savedInstanceState?.getString(KEY_LAST_PROCESSED_URL)
+        if (intent.action == DownloadWorker.ACTION_OPEN_DOWNLOADS) {
+            if (savedInstanceState == null) {
                 openDownloadsChannel.trySend(Unit)
-            } else {
-                val url = intent.dataString
-                if (url != null) {
-                    val result = createNewTabChannel.trySend(url)
-                    if (result.isFailure) {
-                        Log.e("MainActivity", "URL の送信に失敗: $url, reason=${result.exceptionOrNull()}")
-                    }
+            }
+        } else {
+            val url = intent.dataString
+            if (url != null && url != savedUrl) {
+                val result = createNewTabChannel.trySend(url)
+                if (result.isFailure) {
+                    Log.e("MainActivity", "URL の送信に失敗: $url, reason=${result.exceptionOrNull()}")
                 }
             }
         }
@@ -241,6 +245,12 @@ class MainActivity : ComponentActivity() {
             pendingNotificationPermissionResult = result
             requestNotificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        // ローテーション等の構成変更後に同じ URL を再処理しないよう、現在の intent URL を保存する
+        outState.putString(KEY_LAST_PROCESSED_URL, intent.dataString)
     }
 
     override fun onResume() {
@@ -325,6 +335,7 @@ class MainActivity : ComponentActivity() {
         private const val MAX_WARMUP_RETRIES = 5
         private const val EXTRA_CUSTOM_TABS_SESSION = "android.support.customtabs.extra.SESSION"
         private const val EXTRA_CUSTOM_TABS_SESSION_ID = "androidx.browser.customtabs.extra.SESSION_ID"
+        private const val KEY_LAST_PROCESSED_URL = "lastProcessedUrl"
     }
 
     private fun Intent.isCustomTabLaunchIntent(): Boolean {
