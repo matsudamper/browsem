@@ -38,15 +38,39 @@ internal class DownloadWorker(
         setForeground(createForegroundInfo(0, true, context.getString(R.string.download_notification_starting), 0L, -1L))
 
         return try {
-            val fileUri = downloadFile(url, referrerUrl)
-            Result.success(workDataOf(KEY_FILE_URI to fileUri.toString()))
+            val (fileUri, fileName) = downloadFile(url, referrerUrl)
+            // フォアグラウンドサービス終了後も完了通知を残す
+            postCompletionNotification(fileName)
+            Result.success(workDataOf(KEY_FILE_URI to fileUri.toString(), KEY_FILE_NAME to fileName))
         } catch (e: Exception) {
             e.printStackTrace()
             Result.failure()
         }
     }
 
-    private suspend fun downloadFile(urlString: String, referrerUrl: String): android.net.Uri {
+    private fun postCompletionNotification(fileName: String) {
+        val openDownloadsIntent = Intent(context, MainActivity::class.java).apply {
+            action = ACTION_OPEN_DOWNLOADS
+            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_NEW_TASK
+        }
+        val pendingIntent = PendingIntent.getActivity(
+            context,
+            id.hashCode(),
+            openDownloadsIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        val notification = NotificationCompat.Builder(context, CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.stat_sys_download_done)
+            .setContentTitle(fileName)
+            .setContentText(context.getString(R.string.download_notification_complete))
+            .setContentIntent(pendingIntent)
+            .setAutoCancel(true)
+            .build()
+        val notificationManager = context.getSystemService(android.app.NotificationManager::class.java)
+        notificationManager.notify(NOTIFICATION_ID_COMPLETE_BASE + id.hashCode(), notification)
+    }
+
+    private suspend fun downloadFile(urlString: String, referrerUrl: String): Pair<android.net.Uri, String> {
         // GeckoRuntime.getDefault() はUIスレッドでのみ呼び出し可能
         val executor = withContext(Dispatchers.Main) {
             val runtime = GeckoRuntime.getDefault(context)
@@ -153,7 +177,7 @@ internal class DownloadWorker(
             resolver.delete(uri, null, null)
             throw e
         }
-        return uri
+        return Pair(uri, fileName)
     }
 
     private fun createForegroundInfo(
@@ -194,6 +218,7 @@ internal class DownloadWorker(
     companion object {
         const val KEY_URL = "url"
         const val KEY_REFERRER_URL = "referrer_url"
+        const val KEY_ENQUEUE_TIME = "enqueue_time"
         const val KEY_FILE_NAME = "file_name"
         const val KEY_PROGRESS = "progress"
         const val KEY_TOTAL_READ = "total_read"
@@ -201,6 +226,8 @@ internal class DownloadWorker(
         const val KEY_FILE_URI = "file_uri"
         const val CHANNEL_ID = "download_progress_channel"
         const val NOTIFICATION_ID = 9001
+        /** 完了通知IDのベース。ワークIDのhashCodeを加算して使用する */
+        const val NOTIFICATION_ID_COMPLETE_BASE = 10000
         const val TAG_DOWNLOAD = "download"
 
         /** ダウンロード管理画面を開くためのActionキー */

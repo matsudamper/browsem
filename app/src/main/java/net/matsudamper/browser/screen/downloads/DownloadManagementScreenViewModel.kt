@@ -30,6 +30,7 @@ internal class DownloadManagementScreenViewModel(
                         info.state == WorkInfo.State.SUCCEEDED ||
                         info.state == WorkInfo.State.FAILED
                 }
+                .sortedBy { info -> info.inputData.getLong(DownloadWorker.KEY_ENQUEUE_TIME, 0L) }
                 .map { info -> info.toDownloadItem() }
             DownloadManagementScreenUiState(
                 downloads = items,
