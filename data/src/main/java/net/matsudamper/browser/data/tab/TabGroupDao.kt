@@ -90,8 +90,18 @@ abstract class TabGroupDao {
     @Query("SELECT tabId, groupId FROM tab_state")
     abstract fun observeTabGroupAssignments(): Flow<List<TabGroupAssignment>>
 
-    /** グループ未割当（groupId が空）のタブIDを取得する */
-    @Query("SELECT tabId FROM tab_state WHERE groupId = '' OR groupId IS NULL")
+    /**
+     * グループ未割当のタブIDを取得する。
+     * groupId が空のタブに加え、groupId が存在しないグループを指している（孤立した）タブも対象とする。
+     * これにより、レースコンディションで削除済みグループに割り当てられたタブを自動回収できる。
+     */
+    @Query(
+        """
+        SELECT tabId FROM tab_state
+        WHERE groupId = '' OR groupId IS NULL
+        OR (groupId != '' AND groupId NOT IN (SELECT groupId FROM tab_group))
+        """,
+    )
     abstract suspend fun getUnassignedTabIds(): List<String>
 }
 
