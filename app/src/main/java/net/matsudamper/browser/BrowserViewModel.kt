@@ -58,6 +58,26 @@ internal class BrowserViewModel(
     // 構成変更を経ても破棄されないよう ViewModel で保持するセットアップ完了シグナル
     val setupComplete = CompletableDeferred<Unit>()
 
+    // プロセス存続中に onCreate で処理済みの Intent URL セット。
+    // ViewModel はローテーション等の構成変更を経ても生存するが、プロセスキルで再生成される。
+    // これを利用して「構成変更後の同 URL 再処理スキップ」を実現する。
+    private val processedIntentUrls = mutableSetOf<String>()
+
+    internal fun hasIntentUrlBeenProcessed(url: String): Boolean = url in processedIntentUrls
+
+    internal fun markIntentUrlAsProcessed(url: String) {
+        processedIntentUrls.add(url)
+    }
+
+    // ダウンロード画面を開く Intent についても同様に処理済みフラグを管理する
+    private var downloadsIntentProcessed = false
+
+    internal fun hasDownloadsIntentBeenProcessed(): Boolean = downloadsIntentProcessed
+
+    internal fun markDownloadsIntentAsProcessed() {
+        downloadsIntentProcessed = true
+    }
+
     private val settings: StateFlow<BrowserSettings?> = settingsRepository.settings
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
     val settingsUiState: StateFlow<SettingsUiState?> = settings

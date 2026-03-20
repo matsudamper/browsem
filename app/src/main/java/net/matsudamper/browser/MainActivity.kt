@@ -29,6 +29,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.receiveAsFlow
 import org.koin.android.ext.android.inject
 import org.koin.androidx.compose.koinViewModel
+import org.koin.androidx.viewmodel.ext.android.viewModel as koinActivityViewModel
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoSession
@@ -40,6 +41,8 @@ import java.util.concurrent.CancellationException
 class MainActivity : ComponentActivity() {
 
     private val runtime: GeckoRuntime by inject()
+    // ViewModel はローテーションを経ても生存するため、プロセスキルの検出に使用する
+    private val browserViewModel: BrowserViewModel by koinActivityViewModel()
     private lateinit var extensionInstaller: WebExtensionInstaller
     private var pendingActivityResult: GeckoResult<Intent>? = null
     private var webExtensionWarmUpCompleted = false
@@ -152,17 +155,19 @@ class MainActivity : ComponentActivity() {
         runtime.webNotificationDelegate = webNotificationDelegate
         warmUpWebExtensionController()
 
-        // savedInstanceState == null のみ処理するのではなく、プロセスキル後の復元時にも
-        // 新しい intent の URL を処理できるよう、前回処理済みの URL と比較する。
-        // ローテーション等の構成変更では intent.dataString と savedUrl が一致するためスキップされる。
-        val savedUrl = savedInstanceState?.getString(KEY_LAST_PROCESSED_URL)
+        // ViewModel ベースの重複チェック:
+        //   - ViewModel はローテーション等の構成変更を経ても生存 → 処理済みフラグが保持される
+        //   - ViewModel はプロセスキル後に再生成される → フラグがリセットされ同 URL でも再処理できる
+        //   - これにより savedInstanceState の有無に関わらず正しく重複排除できる
         if (intent.action == DownloadWorker.ACTION_OPEN_DOWNLOADS) {
-            if (savedInstanceState == null) {
+            if (!browserViewModel.hasDownloadsIntentBeenProcessed()) {
+                browserViewModel.markDownloadsIntentAsProcessed()
                 openDownloadsChannel.trySend(Unit)
             }
         } else {
             val url = intent.dataString
-            if (url != null && url != savedUrl) {
+            if (url != null && !browserViewModel.hasIntentUrlBeenProcessed(url)) {
+                browserViewModel.markIntentUrlAsProcessed(url)
                 val result = createNewTabChannel.trySend(url)
                 if (result.isFailure) {
                     Log.e("MainActivity", "URL の送信に失敗: $url, reason=${result.exceptionOrNull()}")
@@ -171,7 +176,6 @@ class MainActivity : ComponentActivity() {
         }
 
         setContent {
-            val browserViewModel: BrowserViewModel = koinViewModel()
             Box(
                 modifier = Modifier.semantics {
                     testTagsAsResourceId = true
@@ -212,11 +216,16 @@ class MainActivity : ComponentActivity() {
         }
         setIntent(intent)
         if (intent.action == DownloadWorker.ACTION_OPEN_DOWNLOADS) {
+            // onNewIntent 経由は常に開く。ローテーション後に重複処理されないよう記録もする
+            browserViewModel.markDownloadsIntentAsProcessed()
             openDownloadsChannel.trySend(Unit)
             return
         }
         val url = intent.dataString
         if (url != null) {
+            // onNewIntent 経由は常に新しいタブで開く。
+            // ローテーション後に onCreate で再処理されないよう記録しておく
+            browserViewModel.markIntentUrlAsProcessed(url)
             val result = createNewTabChannel.trySend(url)
             if (result.isFailure) {
                 Log.e("MainActivity", "URL の送信に失敗: $url, reason=${result.exceptionOrNull()}")
@@ -245,12 +254,6 @@ class MainActivity : ComponentActivity() {
             pendingNotificationPermissionResult = result
             requestNotificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
-    }
-
-    override fun onSaveInstanceState(outState: Bundle) {
-        super.onSaveInstanceState(outState)
-        // ローテーション等の構成変更後に同じ URL を再処理しないよう、現在の intent URL を保存する
-        outState.putString(KEY_LAST_PROCESSED_URL, intent.dataString)
     }
 
     override fun onResume() {
@@ -335,7 +338,6 @@ class MainActivity : ComponentActivity() {
         private const val MAX_WARMUP_RETRIES = 5
         private const val EXTRA_CUSTOM_TABS_SESSION = "android.support.customtabs.extra.SESSION"
         private const val EXTRA_CUSTOM_TABS_SESSION_ID = "androidx.browser.customtabs.extra.SESSION_ID"
-        private const val KEY_LAST_PROCESSED_URL = "lastProcessedUrl"
     }
 
     private fun Intent.isCustomTabLaunchIntent(): Boolean {

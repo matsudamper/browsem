@@ -91,6 +91,17 @@ internal fun BrowserApp(
     // タブ復元完了シグナルは ViewModel で保持（構成変更後も有効）
     val setupComplete = viewModel.setupComplete
 
+    // rememberSaveable によりプロセスキル後もバックスタックが復元される場合、
+    // Setup が再実行されず restoreTabs() が呼ばれないことがある。
+    // ViewModel が新規作成（プロセスキル後）かつ Setup がバックスタックにない場合は
+    // バックスタックをリセットして Setup を再実行する。
+    LaunchedEffect(Unit) {
+        if (!setupComplete.isCompleted && backStack.none { it is AppDestination.Setup }) {
+            backStack.clear()
+            backStack.add(AppDestination.Setup)
+        }
+    }
+
     // ナビゲーションとViewModelの両方にタブ選択を通知するヘルパー
     val selectTab: (String, AppDestination.Browser?) -> Unit = remember(navController, viewModel) {
         { tabId, beforeTab ->
