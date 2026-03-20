@@ -1,39 +1,30 @@
 package net.matsudamper.browser
 
-import android.annotation.SuppressLint
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
+import android.app.Activity
 import android.os.SystemClock
-import android.view.MotionEvent
+import android.view.ActionMode
+import android.view.Menu
+import android.view.MenuItem
 import android.view.View
-import android.view.ViewGroup
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.isImeVisible
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -41,18 +32,12 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.graphics.luminance
-import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
-import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
+import androidx.core.view.WindowCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -63,9 +48,11 @@ import net.matsudamper.browser.media.MediaWebExtension
 import net.matsudamper.browser.screen.browser.SimpleViewScreen
 import net.matsudamper.browser.screen.browser.UrlBarSuggestionsUiState
 import org.koin.compose.koinInject
+import org.mozilla.geckoview.BasicSelectionActionDelegate
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.GeckoView
+import java.net.URLEncoder
 
 @Composable
 @OptIn(ExperimentalLayoutApi::class)
@@ -99,6 +86,7 @@ internal fun GeckoBrowserTab(
     urlBarSuggestions: UrlBarSuggestionsUiState = UrlBarSuggestionsUiState(),
     onUrlInputChanged: ((String) -> Unit)? = null,
 ) {
+    val context = LocalContext.current
     val readabilityWebExtension: ReadabilityWebExtension = koinInject()
     val state = rememberBrowserTabScreenState(
         browserTab = browserTab,
@@ -107,6 +95,22 @@ internal fun GeckoBrowserTab(
         onHistoryRecord = onHistoryRecord,
         onHistoryTitleUpdate = onHistoryTitleUpdate,
     )
+
+    // ツールバー色の輝度に応じてステータスバーアイコン色（黒/白）を動的に切り替える
+    val toolbarColors = resolveBrowserToolbarColors(
+        toolbarColor = state.toolbarColor,
+        defaultToolbarColor = MaterialTheme.colorScheme.primaryContainer,
+        isSystemDarkTheme = isSystemInDarkTheme(),
+    )
+    val view = LocalView.current
+    if (!view.isInEditMode) {
+        SideEffect {
+            val window = (view.context as Activity).window
+            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars =
+                toolbarColors.isBrightBackground
+        }
+    }
+
     val dialogState = state.promptDialogState
     val session = state.session
     val keyboardController = LocalSoftwareKeyboardController.current
@@ -240,6 +244,70 @@ internal fun GeckoBrowserTab(
         }
     }
 
+    // テキスト選択メニューにカスタムアクション（検索/開く）を追加
+    DisposableEffect(session, enableTabUi, searchTemplate) {
+        val activity = context as Activity
+        val delegate = object : BasicSelectionActionDelegate(activity) {
+            override fun onCreateActionMode(mode: ActionMode, menu: Menu): Boolean {
+                val result = super.onCreateActionMode(mode, menu)
+
+                // コピー等の標準項目・他アプリの後にカスタム項目を末尾追加
+                val text = mSelection?.text?.trim() ?: ""
+                if (text.isNotBlank()) {
+                    val isUrl = text.startsWith("http://") || text.startsWith("https://") ||
+                        (!text.contains(" ") && text.contains("."))
+                    if (isUrl) {
+                        val title = if (enableTabUi) "新しいタブで開く" else "開く"
+                        menu.add(Menu.NONE, MENU_ID_OPEN, Menu.NONE, title)
+                    } else {
+                        menu.add(Menu.NONE, MENU_ID_SEARCH, Menu.NONE, "検索")
+                    }
+                }
+
+                return result
+            }
+
+            override fun onActionItemClicked(mode: ActionMode, item: MenuItem): Boolean {
+                val text = mSelection?.text?.trim()
+                    ?: return super.onActionItemClicked(mode, item)
+                when (item.itemId) {
+                    MENU_ID_SEARCH -> {
+                        val url = searchTemplate.replace(
+                            "%s",
+                            URLEncoder.encode(text, "UTF-8"),
+                        )
+                        if (enableTabUi) {
+                            currentOnOpenNewSessionRequest(url)
+                        } else {
+                            session.loadUri(url)
+                        }
+                        mode.finish()
+                        return true
+                    }
+                    MENU_ID_OPEN -> {
+                        val url = if (text.startsWith("http://") || text.startsWith("https://")) {
+                            text
+                        } else {
+                            "https://$text"
+                        }
+                        if (enableTabUi) {
+                            currentOnOpenNewSessionRequest(url)
+                        } else {
+                            session.loadUri(url)
+                        }
+                        mode.finish()
+                        return true
+                    }
+                }
+                return super.onActionItemClicked(mode, item)
+            }
+        }
+        session.selectionActionDelegate = delegate
+        onDispose {
+            session.selectionActionDelegate = null
+        }
+    }
+
     // Back handlers
     BackHandler(enabled = state.showFindInPage) { state.closeFindInPage() }
     BackHandler(enabled = enableBackNavigation && state.canGoBack && !state.isUrlInputFocused) {
@@ -269,7 +337,8 @@ internal fun GeckoBrowserTab(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .windowInsetsPadding(WindowInsets.safeDrawing)
+            // 上部（ステータスバー）は BrowserToolBar の背景色で塗りつぶすため除外する
+            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal))
             .imePadding()
     ) {
         if (state.showFindInPage) {
@@ -445,3 +514,7 @@ internal fun GeckoBrowserTab(
 
 }
 private const val URL_BAR_IME_HIDE_GRACE_MS = 700L
+
+// テキスト選択メニューのカスタム項目 ID
+private const val MENU_ID_SEARCH = 0x10001
+private const val MENU_ID_OPEN = 0x10002

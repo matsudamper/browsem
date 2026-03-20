@@ -38,12 +38,27 @@ jobs:
           DEBUG_KEYSTORE_PATH: ${{ runner.temp }}/debug.keystore
         run: ./gradlew :app:assembleDebug
 
+      - name: Rename APK with branch and short hash
+        env:
+          BRANCH_NAME: ${{ github.head_ref }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          SHORT_SHA="${GITHUB_SHA:0:7}"
+          # リポジトリ名のみ取得（org名を除去）し、ブランチ名のスラッシュをハイフンに置換してファイル名に使えるようにする
+          SAFE_REPO="${REPOSITORY##*/}"
+          SAFE_BRANCH="${BRANCH_NAME//\//-}"
+          APK_NAME="app-${SAFE_REPO}-${SAFE_BRANCH}-${SHORT_SHA}.apk"
+          mv app/build/outputs/apk/debug/app-debug.apk \
+             "app/build/outputs/apk/debug/${APK_NAME}"
+          echo "APK_NAME=${APK_NAME}" >> "$GITHUB_ENV"
+          echo "APK_PATH=app/build/outputs/apk/debug/${APK_NAME}" >> "$GITHUB_ENV"
+
       - name: Upload debug APK
         id: upload_apk
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: app-debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
+          path: ${{ env.APK_PATH }}
 
       - name: Run Android Lint
         run: ./gradlew :app:lintDebug
@@ -63,7 +78,7 @@ jobs:
             ✅ Debug APK artifact is ready.
 
             - Download URL: ${{ steps.upload_apk.outputs.artifact-url }}
-            - Artifact Name: `app-debug-apk`
+            - Artifact Name: `${{ env.APK_NAME }}`
 
   android-test:
     runs-on: ubuntu-latest

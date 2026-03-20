@@ -315,6 +315,7 @@ internal class BrowserTabScreenState(
         geckoDownloadManager.enqueueDownload(
             url = imageUrl,
             referrerUrl = currentPageUrl,
+            coroutineScope = coroutineScope,
         )
     }
 
@@ -330,6 +331,7 @@ internal class BrowserTabScreenState(
         geckoDownloadManager.enqueueDownloadFromResponse(
             response = response,
             referrerUrl = currentPageUrl,
+            coroutineScope = coroutineScope,
         )
     }
 

@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -212,6 +213,10 @@ internal fun BrowserToolbar(
             ),
     ) {
         Row(
+            // ステータスバー領域の高さ分だけコンテンツを下に押し出す。
+            // Surface の背景色はステータスバー領域まで延びて塗りつぶされる。
+            // 親が safeDrawingPadding を適用済みの場合はインセットが消費されているため 0 になる。
+            modifier = Modifier.statusBarsPadding(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Surface(
