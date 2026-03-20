@@ -45,7 +45,7 @@
                 <data android:scheme="https" />
             </intent-filter>
         </activity>
-        <activity
+<activity
             android:name=".CustomTabActivity"
             android:exported="false"
             android:windowSoftInputMode="adjustResize" />
