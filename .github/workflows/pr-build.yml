@@ -41,11 +41,13 @@ jobs:
       - name: Rename APK with branch and short hash
         env:
           BRANCH_NAME: ${{ github.head_ref }}
+          REPOSITORY: ${{ github.repository }}
         run: |
           SHORT_SHA="${GITHUB_SHA:0:7}"
-          # ブランチ名のスラッシュをハイフンに置換してファイル名に使えるようにする
+          # リポジトリ名・ブランチ名のスラッシュをハイフンに置換してファイル名に使えるようにする
+          SAFE_REPO="${REPOSITORY//\//-}"
           SAFE_BRANCH="${BRANCH_NAME//\//-}"
-          APK_NAME="app-${SAFE_BRANCH}-${SHORT_SHA}.apk"
+          APK_NAME="app-${SAFE_REPO}-${SAFE_BRANCH}-${SHORT_SHA}.apk"
           mv app/build/outputs/apk/debug/app-debug.apk \
              "app/build/outputs/apk/debug/${APK_NAME}"
           echo "APK_NAME=${APK_NAME}" >> "$GITHUB_ENV"
