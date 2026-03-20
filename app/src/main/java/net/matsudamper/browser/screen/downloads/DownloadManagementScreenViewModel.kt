@@ -5,33 +5,32 @@ import android.app.DownloadManager
 import android.content.Intent
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import net.matsudamper.browser.DownloadWorker
+import net.matsudamper.browser.data.download.DownloadRecord
+import net.matsudamper.browser.data.download.DownloadRecordStatus
+import net.matsudamper.browser.data.download.DownloadRepository
 import java.util.UUID
 
 internal class DownloadManagementScreenViewModel(
     application: Application,
 ) : AndroidViewModel(application) {
 
+    // キャンセル操作のみWorkManagerを使用する
     private val workManager = WorkManager.getInstance(application)
+    private val downloadRepository = DownloadRepository(application)
 
-    val uiState: StateFlow<DownloadManagementScreenUiState> = workManager
-        .getWorkInfosByTagFlow(DownloadWorker.TAG_DOWNLOAD)
-        .map { workInfoList ->
-            val items = workInfoList
-                .filter { info ->
-                    info.state == WorkInfo.State.RUNNING ||
-                        info.state == WorkInfo.State.ENQUEUED ||
-                        info.state == WorkInfo.State.SUCCEEDED ||
-                        info.state == WorkInfo.State.FAILED
-                }
-                .sortedBy { info -> info.inputData.getLong(DownloadWorker.KEY_ENQUEUE_TIME, 0L) }
-                .map { info -> info.toDownloadItem() }
+    val uiState: StateFlow<DownloadManagementScreenUiState> = downloadRepository
+        .observeDownloads()
+        .map { records ->
+            val items = records
+                .filter { record -> record.status != DownloadRecordStatus.CANCELLED }
+                .map { record -> record.toDownloadItem() }
             DownloadManagementScreenUiState(
                 downloads = items,
                 callbacks = buildCallbacks(),
@@ -52,41 +51,40 @@ internal class DownloadManagementScreenViewModel(
         onOpenDownloadsFolder = { openDownloadsFolder() },
     )
 
-    private fun WorkInfo.toDownloadItem(): DownloadManagementScreenUiState.DownloadItem {
-        val fileName = progress.getString(DownloadWorker.KEY_FILE_NAME)
-            ?: outputData.getString(DownloadWorker.KEY_FILE_NAME)
-            ?: "ダウンロード..."
-        val status = when (state) {
-            WorkInfo.State.SUCCEEDED -> {
-                val fileUri = outputData.getString(DownloadWorker.KEY_FILE_URI)
-                if (fileUri != null) {
-                    DownloadManagementScreenUiState.DownloadStatus.Completed(fileUri)
+    private fun DownloadRecord.toDownloadItem(): DownloadManagementScreenUiState.DownloadItem {
+        val uiStatus = when (status) {
+            DownloadRecordStatus.SUCCEEDED -> {
+                val uri = fileUri
+                if (uri != null) {
+                    DownloadManagementScreenUiState.DownloadStatus.Completed(uri)
                 } else {
                     DownloadManagementScreenUiState.DownloadStatus.Failed
                 }
             }
-            WorkInfo.State.FAILED -> DownloadManagementScreenUiState.DownloadStatus.Failed
-            else -> {
-                val p = progress.getInt(DownloadWorker.KEY_PROGRESS, 0)
-                val totalRead = progress.getLong(DownloadWorker.KEY_TOTAL_READ, 0L)
-                val contentLength = progress.getLong(DownloadWorker.KEY_CONTENT_LENGTH, -1L)
+            DownloadRecordStatus.FAILED -> DownloadManagementScreenUiState.DownloadStatus.Failed
+            DownloadRecordStatus.RUNNING -> {
                 DownloadManagementScreenUiState.DownloadStatus.InProgress(
-                    progress = p,
+                    progress = progress,
                     totalRead = totalRead,
                     contentLength = contentLength,
                     isIndeterminate = contentLength <= 0,
                 )
             }
+            DownloadRecordStatus.CANCELLED -> DownloadManagementScreenUiState.DownloadStatus.Failed
         }
         return DownloadManagementScreenUiState.DownloadItem(
-            id = id,
-            fileName = fileName,
-            status = status,
+            id = UUID.fromString(workerId),
+            fileName = fileName.ifEmpty { "ダウンロード中..." },
+            status = uiStatus,
         )
     }
 
     private fun cancelDownload(id: UUID) {
         workManager.cancelWorkById(id)
+        // ENQUEUEDでWorkerが未起動の場合もRoom側を更新する
+        viewModelScope.launch {
+            downloadRepository.updateCancelled(id.toString())
+        }
     }
 
     private fun openFile(fileUri: String) {

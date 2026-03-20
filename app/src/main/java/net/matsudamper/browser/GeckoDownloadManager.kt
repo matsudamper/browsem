@@ -22,7 +22,6 @@ internal class GeckoDownloadManager(
                 workDataOf(
                     DownloadWorker.KEY_URL to url,
                     DownloadWorker.KEY_REFERRER_URL to referrerUrl,
-                    DownloadWorker.KEY_ENQUEUE_TIME to System.currentTimeMillis(),
                 )
             )
             .addTag(DownloadWorker.TAG_DOWNLOAD)

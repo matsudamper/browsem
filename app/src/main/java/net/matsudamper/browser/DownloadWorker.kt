@@ -13,9 +13,10 @@ import androidx.core.app.NotificationCompat
 import androidx.work.CoroutineWorker
 import androidx.work.ForegroundInfo
 import androidx.work.WorkerParameters
-import androidx.work.workDataOf
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import net.matsudamper.browser.data.download.DownloadRepository
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoWebExecutor
 import org.mozilla.geckoview.WebRequest
@@ -24,6 +25,7 @@ import java.io.IOException
 /**
  * WorkManagerを使った進捗通知付きダウンロードWorker。
  * GeckoWebExecutorを使用してダウンロードすることで、GeckoViewのCookie/セッション情報が共有される。
+ * 進捗・結果はRoomに書き込み、WorkManagerのprogress/outputDataは使用しない。
  */
 internal class DownloadWorker(
     private val context: Context,
@@ -34,16 +36,25 @@ internal class DownloadWorker(
         val url = inputData.getString(KEY_URL) ?: return Result.failure()
         val referrerUrl = inputData.getString(KEY_REFERRER_URL).orEmpty()
 
+        val repository = DownloadRepository(context)
+        val enqueuedAt = System.currentTimeMillis()
+
         ensureNotificationChannel(context)
         setForeground(createForegroundInfo(0, true, context.getString(R.string.download_notification_starting), 0L, -1L))
 
+        repository.insertDownload(workerId = id.toString(), url = url, enqueuedAt = enqueuedAt)
+
         return try {
-            val (fileUri, fileName) = downloadFile(url, referrerUrl)
-            // フォアグラウンドサービス終了後も完了通知を残す
+            val (fileUri, fileName) = downloadFile(url, referrerUrl, repository)
+            repository.updateCompleted(id.toString(), fileName, fileUri.toString())
             postCompletionNotification(fileName)
-            Result.success(workDataOf(KEY_FILE_URI to fileUri.toString(), KEY_FILE_NAME to fileName))
+            Result.success()
+        } catch (e: CancellationException) {
+            repository.updateCancelled(id.toString())
+            throw e
         } catch (e: Exception) {
             e.printStackTrace()
+            repository.updateFailed(id.toString())
             Result.failure()
         }
     }
@@ -70,7 +81,11 @@ internal class DownloadWorker(
         notificationManager.notify(NOTIFICATION_ID_COMPLETE_BASE + id.hashCode(), notification)
     }
 
-    private suspend fun downloadFile(urlString: String, referrerUrl: String): Pair<android.net.Uri, String> {
+    private suspend fun downloadFile(
+        urlString: String,
+        referrerUrl: String,
+        repository: DownloadRepository,
+    ): Pair<android.net.Uri, String> {
         // GeckoRuntime.getDefault() はUIスレッドでのみ呼び出し可能
         val executor = withContext(Dispatchers.Main) {
             val runtime = GeckoRuntime.getDefault(context)
@@ -111,7 +126,6 @@ internal class DownloadWorker(
         val fileName = URLUtil.guessFileName(urlString, contentDisposition, mimeType)
             .ifBlank { "download-${System.currentTimeMillis()}" }
 
-        setProgress(workDataOf(KEY_FILE_NAME to fileName, KEY_CONTENT_LENGTH to contentLength))
         setForeground(createForegroundInfo(0, contentLength <= 0, fileName, 0L, contentLength))
 
         val resolver = context.contentResolver
@@ -130,40 +144,17 @@ internal class DownloadWorker(
                     val buffer = ByteArray(8192)
                     var bytesRead: Int
                     var totalRead = 0L
-                    // 通知のレート制限を避けるため、最後に通知を更新した時刻を記録する
-                    var lastNotificationTime = 0L
+                    // 通知・Room更新のレート制限を避けるため、最後に更新した時刻を記録する
+                    var lastUpdateTime = 0L
                     while (inputStream.read(buffer).also { bytesRead = it } != -1) {
                         outputStream.write(buffer, 0, bytesRead)
                         totalRead += bytesRead
-                        if (contentLength > 0) {
-                            val progress = (totalRead * 100 / contentLength).toInt()
-                            setProgress(
-                                workDataOf(
-                                    KEY_FILE_NAME to fileName,
-                                    KEY_PROGRESS to progress,
-                                    KEY_TOTAL_READ to totalRead,
-                                    KEY_CONTENT_LENGTH to contentLength,
-                                ),
-                            )
-                            val now = System.currentTimeMillis()
-                            if (now - lastNotificationTime >= 1000L) {
-                                setForeground(createForegroundInfo(progress, false, fileName, totalRead, contentLength))
-                                lastNotificationTime = now
-                            }
-                        } else {
-                            setProgress(
-                                workDataOf(
-                                    KEY_FILE_NAME to fileName,
-                                    KEY_PROGRESS to 0,
-                                    KEY_TOTAL_READ to totalRead,
-                                    KEY_CONTENT_LENGTH to contentLength,
-                                ),
-                            )
-                            val now = System.currentTimeMillis()
-                            if (now - lastNotificationTime >= 1000L) {
-                                setForeground(createForegroundInfo(0, true, fileName, totalRead, contentLength))
-                                lastNotificationTime = now
-                            }
+                        val now = System.currentTimeMillis()
+                        if (now - lastUpdateTime >= 1000L) {
+                            val progress = if (contentLength > 0) (totalRead * 100 / contentLength).toInt() else 0
+                            repository.updateProgress(id.toString(), fileName, progress, totalRead, contentLength)
+                            setForeground(createForegroundInfo(progress, contentLength <= 0, fileName, totalRead, contentLength))
+                            lastUpdateTime = now
                         }
                     }
                 }
@@ -218,12 +209,6 @@ internal class DownloadWorker(
     companion object {
         const val KEY_URL = "url"
         const val KEY_REFERRER_URL = "referrer_url"
-        const val KEY_ENQUEUE_TIME = "enqueue_time"
-        const val KEY_FILE_NAME = "file_name"
-        const val KEY_PROGRESS = "progress"
-        const val KEY_TOTAL_READ = "total_read"
-        const val KEY_CONTENT_LENGTH = "content_length"
-        const val KEY_FILE_URI = "file_uri"
         const val CHANNEL_ID = "download_progress_channel"
         const val NOTIFICATION_ID = 9001
         /** 完了通知IDのベース。ワークIDのhashCodeを加算して使用する */
