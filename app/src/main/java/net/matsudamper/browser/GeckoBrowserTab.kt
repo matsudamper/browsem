@@ -1,10 +1,14 @@
 package net.matsudamper.browser
 
+import android.app.Activity
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.os.SystemClock
+import android.view.ActionMode
+import android.view.Menu
+import android.view.MenuItem
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
@@ -53,6 +57,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
@@ -70,9 +75,11 @@ import net.matsudamper.browser.media.MediaWebExtension
 import net.matsudamper.browser.screen.browser.SimpleViewScreen
 import net.matsudamper.browser.screen.browser.UrlBarSuggestionsUiState
 import org.koin.compose.koinInject
+import org.mozilla.geckoview.BasicSelectionActionDelegate
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.GeckoView
+import java.net.URLEncoder
 
 @Composable
 @OptIn(ExperimentalLayoutApi::class)
@@ -106,6 +113,7 @@ internal fun GeckoBrowserTab(
     urlBarSuggestions: UrlBarSuggestionsUiState = UrlBarSuggestionsUiState(),
     onUrlInputChanged: ((String) -> Unit)? = null,
 ) {
+    val context = LocalContext.current
     val readabilityWebExtension: ReadabilityWebExtension = koinInject()
     val state = rememberBrowserTabScreenState(
         browserTab = browserTab,
@@ -260,6 +268,70 @@ internal fun GeckoBrowserTab(
             if (session.mediaSessionDelegate === mediaSessionDelegate) {
                 session.mediaSessionDelegate = null
             }
+        }
+    }
+
+    // テキスト選択メニューにカスタムアクション（検索/開く）を追加
+    DisposableEffect(session, enableTabUi, searchTemplate) {
+        val activity = context as Activity
+        val delegate = object : BasicSelectionActionDelegate(activity) {
+            override fun onCreateActionMode(mode: ActionMode, menu: Menu): Boolean {
+                val result = super.onCreateActionMode(mode, menu)
+
+                // コピー等の標準項目・他アプリの後にカスタム項目を末尾追加
+                val text = mSelection?.text?.trim() ?: ""
+                if (text.isNotBlank()) {
+                    val isUrl = text.startsWith("http://") || text.startsWith("https://") ||
+                        (!text.contains(" ") && text.contains("."))
+                    if (isUrl) {
+                        val title = if (enableTabUi) "新しいタブで開く" else "開く"
+                        menu.add(Menu.NONE, MENU_ID_OPEN, Menu.NONE, title)
+                    } else {
+                        menu.add(Menu.NONE, MENU_ID_SEARCH, Menu.NONE, "検索")
+                    }
+                }
+
+                return result
+            }
+
+            override fun onActionItemClicked(mode: ActionMode, item: MenuItem): Boolean {
+                val text = mSelection?.text?.trim()
+                    ?: return super.onActionItemClicked(mode, item)
+                when (item.itemId) {
+                    MENU_ID_SEARCH -> {
+                        val url = searchTemplate.replace(
+                            "%s",
+                            URLEncoder.encode(text, "UTF-8"),
+                        )
+                        if (enableTabUi) {
+                            currentOnOpenNewSessionRequest(url)
+                        } else {
+                            session.loadUri(url)
+                        }
+                        mode.finish()
+                        return true
+                    }
+                    MENU_ID_OPEN -> {
+                        val url = if (text.startsWith("http://") || text.startsWith("https://")) {
+                            text
+                        } else {
+                            "https://$text"
+                        }
+                        if (enableTabUi) {
+                            currentOnOpenNewSessionRequest(url)
+                        } else {
+                            session.loadUri(url)
+                        }
+                        mode.finish()
+                        return true
+                    }
+                }
+                return super.onActionItemClicked(mode, item)
+            }
+        }
+        session.selectionActionDelegate = delegate
+        onDispose {
+            session.selectionActionDelegate = null
         }
     }
 
@@ -469,3 +541,7 @@ internal fun GeckoBrowserTab(
 
 }
 private const val URL_BAR_IME_HIDE_GRACE_MS = 700L
+
+// テキスト選択メニューのカスタム項目 ID
+private const val MENU_ID_SEARCH = 0x10001
+private const val MENU_ID_OPEN = 0x10002
