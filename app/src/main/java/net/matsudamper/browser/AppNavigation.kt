@@ -302,7 +302,7 @@ internal fun BrowserApp(
 
                     AppDestination.Downloads -> navEntry(key) {
                         val downloadsViewModel = remember {
-                            DownloadManagementScreenViewModel(context)
+                            DownloadManagementScreenViewModel(context.applicationContext as android.app.Application)
                         }
                         DownloadManagementScreen(
                             viewModel = downloadsViewModel,

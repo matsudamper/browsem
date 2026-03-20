@@ -1,9 +1,9 @@
 package net.matsudamper.browser.screen.downloads
 
+import android.app.Application
 import android.app.DownloadManager
-import android.content.Context
 import android.content.Intent
-import androidx.lifecycle.ViewModel
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
@@ -15,10 +15,10 @@ import net.matsudamper.browser.DownloadWorker
 import java.util.UUID
 
 internal class DownloadManagementScreenViewModel(
-    private val context: Context,
-) : ViewModel() {
+    application: Application,
+) : AndroidViewModel(application) {
 
-    private val workManager = WorkManager.getInstance(context)
+    private val workManager = WorkManager.getInstance(application)
 
     val uiState: StateFlow<DownloadManagementScreenUiState> = workManager
         .getWorkInfosByTagFlow(DownloadWorker.TAG_DOWNLOAD)
@@ -89,19 +89,21 @@ internal class DownloadManagementScreenViewModel(
     }
 
     private fun openFile(fileUri: String) {
+        val app = getApplication<Application>()
         val uri = android.net.Uri.parse(fileUri)
-        val mimeType = context.contentResolver.getType(uri) ?: "*/*"
+        val mimeType = app.contentResolver.getType(uri) ?: "*/*"
         val intent = Intent(Intent.ACTION_VIEW).apply {
             setDataAndType(uri, mimeType)
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION
         }
-        runCatching { context.startActivity(intent) }
+        runCatching { app.startActivity(intent) }
     }
 
     private fun openDownloadsFolder() {
+        val app = getApplication<Application>()
         val intent = Intent(DownloadManager.ACTION_VIEW_DOWNLOADS).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK
         }
-        runCatching { context.startActivity(intent) }
+        runCatching { app.startActivity(intent) }
     }
 }

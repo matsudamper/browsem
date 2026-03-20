@@ -106,6 +106,8 @@ internal class DownloadWorker(
                     val buffer = ByteArray(8192)
                     var bytesRead: Int
                     var totalRead = 0L
+                    // 通知のレート制限を避けるため、最後に通知を更新した時刻を記録する
+                    var lastNotificationTime = 0L
                     while (inputStream.read(buffer).also { bytesRead = it } != -1) {
                         outputStream.write(buffer, 0, bytesRead)
                         totalRead += bytesRead
@@ -119,7 +121,11 @@ internal class DownloadWorker(
                                     KEY_CONTENT_LENGTH to contentLength,
                                 ),
                             )
-                            setForeground(createForegroundInfo(progress, false, fileName, totalRead, contentLength))
+                            val now = System.currentTimeMillis()
+                            if (now - lastNotificationTime >= 1000L) {
+                                setForeground(createForegroundInfo(progress, false, fileName, totalRead, contentLength))
+                                lastNotificationTime = now
+                            }
                         } else {
                             setProgress(
                                 workDataOf(
@@ -129,7 +135,11 @@ internal class DownloadWorker(
                                     KEY_CONTENT_LENGTH to contentLength,
                                 ),
                             )
-                            setForeground(createForegroundInfo(0, true, fileName, totalRead, contentLength))
+                            val now = System.currentTimeMillis()
+                            if (now - lastNotificationTime >= 1000L) {
+                                setForeground(createForegroundInfo(0, true, fileName, totalRead, contentLength))
+                                lastNotificationTime = now
+                            }
                         }
                     }
                 }
