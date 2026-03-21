@@ -132,6 +132,29 @@ class TabsScreenViewModelTest {
             groupsFlow.update { groups -> groups.filter { it.id != groupId } }
         }
 
+        override suspend fun setDefaultGroup(groupId: TabGroupId, isDefault: Boolean) {
+            groupsFlow.update { groups ->
+                groups.map { group ->
+                    when {
+                        isDefault -> group.copy(isDefault = group.id == groupId)
+                        group.id == groupId -> group.copy(isDefault = false)
+                        else -> group
+                    }
+                }
+            }
+        }
+
+        override suspend fun getDefaultGroupId(): TabGroupId? {
+            return groupsFlow.value.firstOrNull { it.isDefault }?.id
+        }
+
+        override suspend fun assignTabToGroupIfUnassigned(tabId: String, groupId: TabGroupId) {
+            val current = assignmentsFlow.value.find { it.tabId == tabId }
+            if (current == null || current.groupId.isEmpty()) {
+                assignTabToGroup(tabId, groupId)
+            }
+        }
+
         fun setGroups(groups: List<TabGroupData>) {
             groupsFlow.value = groups
         }
@@ -183,7 +206,7 @@ class TabsScreenViewModelTest {
         advanceUntilIdle()
 
         // 右グループ（index=2）を選択
-        viewModel.onGroupSelected(2)
+        viewModel.uiState.value.callbacks.onGroupSelected(2)
 
         // 新規タブを追加（tabStoreState に行が追加 → DB はまだ空）
         tabStore.addTab("tab-new")
@@ -252,7 +275,7 @@ class TabsScreenViewModelTest {
         advanceUntilIdle()
 
         // グループB（index=1）を選択
-        viewModel.onGroupSelected(1)
+        viewModel.uiState.value.callbacks.onGroupSelected(1)
 
         // 1つ目の新規タブを追加
         tabStore.addTab("tab-1")
@@ -300,11 +323,11 @@ class TabsScreenViewModelTest {
         advanceUntilIdle()
 
         // ユーザーが右グループ（index=2）をタップ
-        viewModel.onGroupSelected(2)
+        viewModel.uiState.value.callbacks.onGroupSelected(2)
         assertEquals("onGroupSelected 後は activeGroupIndex=2", 2, viewModel.activeGroupIndex.value)
 
         // Pager アニメーション中に中間ページ(1) が報告される
-        viewModel.onGroupPageChanged(1)
+        viewModel.uiState.value.callbacks.onGroupPageChanged(1)
         assertEquals(
             "中間ページ報告後も activeGroupIndex は 2 のまま（上書きされない）",
             2,
@@ -312,11 +335,11 @@ class TabsScreenViewModelTest {
         )
 
         // アニメーションが目標ページ(2) に到達
-        viewModel.onGroupPageChanged(2)
+        viewModel.uiState.value.callbacks.onGroupPageChanged(2)
         assertEquals("目標ページ到達後も activeGroupIndex は 2", 2, viewModel.activeGroupIndex.value)
 
         // その後のユーザースワイプ（プログラム的でない）は通常通り反映される
-        viewModel.onGroupPageChanged(0)
+        viewModel.uiState.value.callbacks.onGroupPageChanged(0)
         assertEquals("ユーザースワイプによるページ変更は反映される", 0, viewModel.activeGroupIndex.value)
     }
 
@@ -339,10 +362,10 @@ class TabsScreenViewModelTest {
         advanceUntilIdle()
 
         // 右グループ（index=2）を選択
-        viewModel.onGroupSelected(2)
+        viewModel.uiState.value.callbacks.onGroupSelected(2)
 
         // Pager アニメーション中に中間ページ(1)が報告される
-        viewModel.onGroupPageChanged(1)
+        viewModel.uiState.value.callbacks.onGroupPageChanged(1)
 
         // この状態で新規タブを追加
         tabStore.addTab("tab-after-animation")

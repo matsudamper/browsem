@@ -8,4 +8,5 @@ data class TabGroupEntity(
     @PrimaryKey val groupId: String, // TabGroupId.value を格納
     val name: String,
     val sortOrder: Int,
+    val isDefault: Boolean = false,
 )

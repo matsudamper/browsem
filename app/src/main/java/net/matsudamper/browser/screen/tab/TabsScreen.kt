@@ -50,6 +50,7 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -211,6 +212,7 @@ internal fun TabsScreen(
                 },
                 onRenameGroup = uiState.callbacks::onRenameGroup,
                 onDeleteGroup = uiState.callbacks::onDeleteGroup,
+                onToggleDefaultGroup = uiState.callbacks::onToggleDefaultGroup,
                 modifier = modifier,
             )
         }
@@ -459,6 +461,7 @@ private fun TabsScreenContent(
     onMoveTabToGroup: (tabId: String, targetGroupIndex: Int) -> Unit,
     onRenameGroup: (groupIndex: Int, newName: String) -> Unit,
     onDeleteGroup: (groupIndex: Int) -> Unit,
+    onToggleDefaultGroup: (groupIndex: Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val safePageCount = groups.size.coerceAtLeast(1)
@@ -580,12 +583,13 @@ private fun TabsScreenContent(
             ) { page ->
                 val tabsForPage = groupedTabs.getOrElse(page) { emptyList() }
                 Column(modifier = Modifier.fillMaxSize()) {
-                    // ページヘッダー: 名前変更・削除ボタン
+                    // ページヘッダー: 名前変更・削除ボタン・デフォルトトグル
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 16.dp, vertical = 8.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
                         FilledTonalButton(
                             onClick = { renameDialogGroupIndex = page },
@@ -599,6 +603,20 @@ private fun TabsScreenContent(
                             enabled = groups.size > 1,
                         ) {
                             Text("削除")
+                        }
+                        // デフォルトグループ設定トグル
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            Text(
+                                text = "デフォルト",
+                                style = MaterialTheme.typography.labelMedium,
+                            )
+                            Switch(
+                                checked = groups.getOrNull(page)?.isDefault ?: false,
+                                onCheckedChange = { onToggleDefaultGroup(page) },
+                            )
                         }
                     }
                     GroupTabGrid(
@@ -1301,5 +1319,6 @@ private fun Preview() {
         onMoveTabToGroup = { _, _ -> },
         onRenameGroup = { _, _ -> },
         onDeleteGroup = {},
+        onToggleDefaultGroup = {},
     )
 }

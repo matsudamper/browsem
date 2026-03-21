@@ -32,6 +32,7 @@ import androidx.navigation3.scene.Scene
 import androidx.navigation3.ui.NavDisplay
 import androidx.navigation3.ui.defaultPopTransitionSpec
 import androidx.navigation3.ui.defaultTransitionSpec
+import java.util.UUID
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
@@ -117,7 +118,15 @@ internal fun BrowserApp(
         // タブ復元完了を待ってから外部URLを処理する（レースコンディション防止）
         setupComplete.await()
         newTabUrlFlow.collect { url ->
-            val newTab = browserSessionController.createAndAppendTab(initialUrl = url)
+            // デフォルトグループが設定されている場合、createAndAppendTab より先に DB 行を作成して
+            // グループを確定させる。こうすることで TabsScreenViewModel のウォッチャーが発火した際に
+            // このタブはすでに assignedTabIds に含まれ、アクティブグループへの上書きを防ぐ。
+            val tabId = UUID.randomUUID().toString()
+            val defaultGroupId = tabGroupRepository.getDefaultGroupId()
+            if (defaultGroupId != null) {
+                tabGroupRepository.assignTabToGroup(tabId, defaultGroupId)
+            }
+            val newTab = browserSessionController.createAndAppendTab(tabId = tabId, initialUrl = url)
             // 外部から開いたタブとして記録する
             externalTabIds.add(newTab.tabId)
             selectTab(newTab.tabId, null)

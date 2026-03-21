@@ -27,6 +27,13 @@ interface TabGroupRepository {
     /** タブをグループに割り当てる */
     suspend fun assignTabToGroup(tabId: String, groupId: TabGroupId)
 
+    /**
+     * タブをグループに割り当てる（未割当のときのみ）。
+     * 既に別グループが設定済みの場合は上書きしない。
+     * TabsScreenViewModel のウォッチャーから呼び出し、AppNavigation の事前割り当てを保護する。
+     */
+    suspend fun assignTabToGroupIfUnassigned(tabId: String, groupId: TabGroupId)
+
     /** タブのグループ割り当てを空文字に設定する（タブ削除時） */
     suspend fun removeTabFromGroup(tabId: String)
 
@@ -41,6 +48,15 @@ interface TabGroupRepository {
      * fallbackGroupId が指定された場合、削除前にそのグループへタブを再割り当てする。
      */
     suspend fun deleteGroup(groupId: TabGroupId, fallbackGroupId: TabGroupId?)
+
+    /**
+     * グループのデフォルト設定を変更する。
+     * isDefault = true の場合は他のグループのデフォルトをすべて解除してから設定する。
+     */
+    suspend fun setDefaultGroup(groupId: TabGroupId, isDefault: Boolean)
+
+    /** デフォルトに設定されているグループIDを返す。設定されていない場合は null。 */
+    suspend fun getDefaultGroupId(): TabGroupId?
 }
 
 class TabGroupRepositoryImpl(context: Context) : TabGroupRepository {
@@ -49,7 +65,7 @@ class TabGroupRepositoryImpl(context: Context) : TabGroupRepository {
 
     override fun observeGroups(): Flow<List<TabGroupData>> {
         return dao.observeGroups().map { entities ->
-            entities.map { TabGroupData(TabGroupId(it.groupId), it.name) }
+            entities.map { TabGroupData(TabGroupId(it.groupId), it.name, it.isDefault) }
         }
     }
 
@@ -83,6 +99,10 @@ class TabGroupRepositoryImpl(context: Context) : TabGroupRepository {
         dao.setTabGroup(tabId, groupId.value)
     }
 
+    override suspend fun assignTabToGroupIfUnassigned(tabId: String, groupId: TabGroupId) {
+        dao.setTabGroupIfUnassigned(tabId, groupId.value)
+    }
+
     override suspend fun removeTabFromGroup(tabId: String) {
         // setTabGroup (INSERT IGNORE + UPDATE) は削除済みタブに幽霊レコードを生成するため、
         // UPDATE のみ行う updateTabGroup を使う
@@ -105,6 +125,14 @@ class TabGroupRepositoryImpl(context: Context) : TabGroupRepository {
         }
         dao.deleteGroup(groupId.value)
     }
+
+    override suspend fun setDefaultGroup(groupId: TabGroupId, isDefault: Boolean) {
+        dao.setDefaultGroup(groupId.value, isDefault)
+    }
+
+    override suspend fun getDefaultGroupId(): TabGroupId? {
+        return dao.getAllGroups().firstOrNull { it.isDefault }?.let { TabGroupId(it.groupId) }
+    }
 }
 
-data class TabGroupData(val id: TabGroupId, val name: String)
+data class TabGroupData(val id: TabGroupId, val name: String, val isDefault: Boolean = false)
