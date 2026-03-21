@@ -8,6 +8,7 @@ import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.browser.customtabs.CustomTabsSessionToken
 import androidx.compose.foundation.layout.fillMaxSize
@@ -61,6 +62,7 @@ class CustomTabActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
         runtime.settings.setExtensionsWebAPIEnabled(true)
 
         // 拡張機能は Koin の single で管理されるため、ここではセッション管理のみ担当する
