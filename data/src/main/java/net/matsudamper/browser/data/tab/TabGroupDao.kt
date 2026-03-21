@@ -28,6 +28,13 @@ abstract class TabGroupDao {
     abstract suspend fun updateTabGroup(tabId: String, groupId: String)
 
     /**
+     * groupId が空または NULL のタブのみグループに割り当てる。
+     * 既に別グループ（事前割り当て等）が設定されているタブは変更しない。
+     */
+    @Query("UPDATE tab_state SET groupId = :groupId WHERE tabId = :tabId AND (groupId = '' OR groupId IS NULL)")
+    abstract suspend fun updateTabGroupIfUnassigned(tabId: String, groupId: String)
+
+    /**
      * tab_state 行がまだ存在しない場合（TabPersistenceCoordinator の 500ms デバウンス待ち）に
      * プレースホルダ行を作成する。既に行がある場合は IGNORE で何もしない。
      */
@@ -55,6 +62,29 @@ abstract class TabGroupDao {
             ),
         )
         updateTabGroup(tabId, groupId)
+    }
+
+    /**
+     * tab_state 行が存在しない場合は空の groupId でプレースホルダ行を作成し、
+     * groupId が空または NULL のときのみ割り当てを行う。
+     * 既に別グループ（例：AppNavigation の事前割り当て）が設定されている場合は上書きしない。
+     */
+    @Transaction
+    open suspend fun setTabGroupIfUnassigned(tabId: String, groupId: String) {
+        insertTabIfNotExists(
+            TabStateEntity(
+                tabId = tabId,
+                url = "",
+                sessionState = "",
+                title = "",
+                openerTabId = "",
+                themeColor = null,
+                sortOrder = 0,
+                isSelected = 0,
+                groupId = "",
+            ),
+        )
+        updateTabGroupIfUnassigned(tabId, groupId)
     }
 
     @Query("UPDATE tab_group SET sortOrder = :sortOrder WHERE groupId = :groupId")

@@ -189,7 +189,7 @@ class TabsScreenViewModel(
                     if (unassignedTabIds.isEmpty()) return@collect
                     if (activeGroup == null) return@collect
                     unassignedTabIds.forEach { tabId ->
-                        tabGroupRepository.assignTabToGroup(tabId, activeGroup.id)
+                        tabGroupRepository.assignTabToGroupIfUnassigned(tabId, activeGroup.id)
                     }
                 }
         }

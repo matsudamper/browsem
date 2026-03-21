@@ -27,6 +27,13 @@ interface TabGroupRepository {
     /** タブをグループに割り当てる */
     suspend fun assignTabToGroup(tabId: String, groupId: TabGroupId)
 
+    /**
+     * タブをグループに割り当てる（未割当のときのみ）。
+     * 既に別グループが設定済みの場合は上書きしない。
+     * TabsScreenViewModel のウォッチャーから呼び出し、AppNavigation の事前割り当てを保護する。
+     */
+    suspend fun assignTabToGroupIfUnassigned(tabId: String, groupId: TabGroupId)
+
     /** タブのグループ割り当てを空文字に設定する（タブ削除時） */
     suspend fun removeTabFromGroup(tabId: String)
 
@@ -90,6 +97,10 @@ class TabGroupRepositoryImpl(context: Context) : TabGroupRepository {
 
     override suspend fun assignTabToGroup(tabId: String, groupId: TabGroupId) {
         dao.setTabGroup(tabId, groupId.value)
+    }
+
+    override suspend fun assignTabToGroupIfUnassigned(tabId: String, groupId: TabGroupId) {
+        dao.setTabGroupIfUnassigned(tabId, groupId.value)
     }
 
     override suspend fun removeTabFromGroup(tabId: String) {
