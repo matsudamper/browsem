@@ -143,6 +143,7 @@ Proto → DataStore/Room → Repository → ViewModel (StateFlow) → Compose
 - **単体テスト**: JUnit 4。`./gradlew test` で実行 (Paparazzi テストは自動除外)
 - **スクリーンショットテスト**: Paparazzi。`@Preview` 付き Composable を自動スキャンしてスナップショット
 - **Instrumentation テスト**: Managed Device (Pixel 6, API 34)。`app/src/androidTest/`
+  - **接続デバイス (実機・通常エミュレータ) の使用は禁止**。必ず Gradle Managed Device (`./gradlew :app:pixel6Api34DebugAndroidTest`) を使用すること
 - **Lint**: `./gradlew :app:lintDebug`
 
 ## 作業フロー
