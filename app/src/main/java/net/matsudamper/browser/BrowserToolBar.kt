@@ -277,6 +277,7 @@ internal fun BrowserToolbar(
                 if (showTabButton) {
                     IconButton(
                         onClick = onOpenTabs,
+                        modifier = Modifier.testTag(TEST_TAG_OPEN_TABS),
                     ) {
                         Text(
                             text = "$tabCount",
@@ -308,6 +309,7 @@ internal fun BrowserToolbar(
 }
 
 internal const val TEST_TAG_TOOLBAR = "browser_toolbar"
+internal const val TEST_TAG_OPEN_TABS = "open_tabs_button"
 
 @Preview(name = "Light")
 @Preview(name = "Dark", uiMode = android.content.res.Configuration.UI_MODE_NIGHT_YES)
