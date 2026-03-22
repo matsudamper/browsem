@@ -34,14 +34,6 @@ class TabsScreenViewModel(
 
     val eventHandler = Channel<(Event) -> Unit>(Channel.UNLIMITED)
 
-    /**
-     * 現在アクティブなグループのインデックス。
-     * null は「復元処理が完了していない」ことを示す。
-     * UI はこの値が null の間は Pager を描画しないことで、
-     * 復元前の 0 で Pager が初期化されてアニメーションが走るのを防ぐ。
-     */
-    val activeGroupIndex: Int? get() = viewModelStateFlow.value.activeGroupIndex
-
     private val callbacks = object : TabsScreenUiState.Callbacks {
         override fun onCloseTab(tabId: String) {
             // イベントを先に送信してタブを閉じてから、グループ割り当てを解除する
