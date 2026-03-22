@@ -69,6 +69,7 @@ internal fun BrowserApp(
     openDownloadsFlow: Flow<Unit>,
     onInstallExtensionRequest: (String) -> Unit,
     onDesktopNotificationPermissionRequest: () -> GeckoResult<Int>,
+    onRequestDownloadNotificationPermission: () -> Unit,
 ) {
     val currentSettings by viewModel.settingsUiState.collectAsState()
     val settingsUiState = currentSettings ?: return
@@ -245,6 +246,7 @@ internal fun BrowserApp(
                             mediaWebExtension = mediaWebExtension,
                             onInstallExtensionRequest = onInstallExtensionRequest,
                             handleNotificationPermission = handleNotificationPermission,
+                            onRequestDownloadNotificationPermission = onRequestDownloadNotificationPermission,
                             onSelectTab = { tabId, beforeTab ->
                                 selectTab(tabId, beforeTab)
                             },

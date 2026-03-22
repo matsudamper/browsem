@@ -94,6 +94,7 @@ class CustomTabActivity : ComponentActivity() {
                     onClose = ::finish,
                     onOpenInBrowser = ::openInMainBrowser,
                     onDesktopNotificationPermissionRequest = { requestNotificationPermissionIfNeeded() },
+                    onRequestDownloadNotificationPermission = { requestDownloadNotificationPermission() },
                 )
             }
         }
@@ -108,6 +109,22 @@ class CustomTabActivity : ComponentActivity() {
             runtimeCoordinator.close()
         }
         super.onDestroy()
+    }
+
+    /**
+     * ダウンロード通知を表示するために POST_NOTIFICATIONS パーミッションを要求する。
+     * GeckoView の通知パーミッション要求が保留中の場合はスキップする。
+     */
+    private fun requestDownloadNotificationPermission() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+        if (ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.POST_NOTIFICATIONS,
+            ) == PackageManager.PERMISSION_GRANTED
+        ) return
+        // GeckoView の通知パーミッション要求が保留中の場合は競合を避けるためスキップ
+        if (pendingNotificationPermissionResult != null) return
+        requestNotificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
     }
 
     private fun requestNotificationPermissionIfNeeded(): GeckoResult<Int> {
@@ -161,6 +178,7 @@ private fun CustomTabScreen(
     onClose: () -> Unit,
     onOpenInBrowser: (String) -> Unit,
     onDesktopNotificationPermissionRequest: () -> GeckoResult<Int>,
+    onRequestDownloadNotificationPermission: () -> Unit,
 ) {
     val viewModel = viewModel(initializer = {
         BrowserScreenViewModel(
@@ -203,6 +221,7 @@ private fun CustomTabScreen(
         onDesktopNotificationPermissionRequest = { _ ->
             onDesktopNotificationPermissionRequest()
         },
+        onRequestDownloadNotificationPermission = onRequestDownloadNotificationPermission,
         onOpenSettings = {},
         onOpenTabs = {},
         enableTabUi = false,
