@@ -30,6 +30,8 @@ internal data class DownloadManagementScreenUiState(
         val id: UUID,
         val fileName: String,
         val status: DownloadStatus,
+        /** ダウンロードを開始した時刻（エポックミリ秒） */
+        val enqueuedAt: Long,
     )
 
     @Stable
