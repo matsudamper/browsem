@@ -399,7 +399,7 @@ internal fun GeckoBrowserTab(
                     onOpenTabs = {
                         if (enableTabUi) {
                             geckoView?.also {
-                                state.flushAndCaptureForTabSwitch(it)
+                                runCatching { state.flushAndCaptureForTabSwitch(it) }
                             }
                             onOpenTabs()
                         }

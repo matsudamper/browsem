@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.platform.testTag
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -782,6 +783,7 @@ private fun GroupTabBar(
                     isDropTarget = isDropTarget,
                     onClick = { onGroupSelected(index) },
                     modifier = Modifier
+                        .testTag(TabsScreenTestTags.tabGroupTestTag(index))
                         .animateItem()
                         .zIndex(if (index == activeGroupIndex) groups.size.toFloat() else index.toFloat())
                         .then(if (isDraggingThis) Modifier.alpha(0f) else Modifier)
@@ -1321,4 +1323,8 @@ private fun Preview() {
         onDeleteGroup = {},
         onToggleDefaultGroup = {},
     )
+}
+
+object TabsScreenTestTags {
+    fun tabGroupTestTag(index: Int): String = "tab_group_$index"
 }

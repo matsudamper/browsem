@@ -36,7 +36,9 @@ import java.util.UUID
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import net.matsudamper.browser.BrowserTab
 import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.TabGroupRepository
@@ -339,10 +341,23 @@ internal fun BrowserApp(
                                 }
                             },
                             onOpenNewTab = {
-                                val newTab = browserSessionController.createAndAppendTab(
-                                    initialUrl = homepageUrl,
-                                )
-                                selectTab(newTab.tabId, null)
+                                // デフォルトグループが設定されている場合、タブ作成前に割り当てることで
+                                // TabsScreenViewModel の未割当モニターによるアクティブグループへの上書きを防ぐ
+                                scope.launch {
+                                    val tabId = UUID.randomUUID().toString()
+                                    val defaultGroupId = tabGroupRepository.getDefaultGroupId()
+                                    if (defaultGroupId != null) {
+                                        tabGroupRepository.assignTabToGroup(tabId, defaultGroupId)
+                                    }
+                                    // GeckoSession の生成は UI スレッドで行う必要がある
+                                    withContext(Dispatchers.Main) {
+                                        val newTab = browserSessionController.createAndAppendTab(
+                                            tabId = tabId,
+                                            initialUrl = homepageUrl,
+                                        )
+                                        selectTab(newTab.tabId, null)
+                                    }
+                                }
                             },
                             modifier = Modifier
                                 .fillMaxSize()
