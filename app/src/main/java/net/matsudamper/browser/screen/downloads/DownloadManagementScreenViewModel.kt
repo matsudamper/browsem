@@ -87,6 +87,7 @@ internal class DownloadManagementScreenViewModel(
                 if (status == DownloadRecordStatus.FAILED) "ダウンロード失敗" else "ダウンロード中..."
             },
             status = uiStatus,
+            enqueuedAt = enqueuedAt,
         )
     }
 

@@ -21,6 +21,10 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
@@ -98,6 +102,7 @@ private fun DownloadItemRow(
     onCancel: () -> Unit,
     onOpenFile: (String) -> Unit,
 ) {
+    val dateFormat = remember { SimpleDateFormat("yyyy/MM/dd HH:mm", Locale.getDefault()) }
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -169,5 +174,11 @@ private fun DownloadItemRow(
             }
             is DownloadManagementScreenUiState.DownloadStatus.Failed -> Unit
         }
+        // ダウンロード開始時刻（完了後も常に表示）
+        Text(
+            text = dateFormat.format(Date(item.enqueuedAt)),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
