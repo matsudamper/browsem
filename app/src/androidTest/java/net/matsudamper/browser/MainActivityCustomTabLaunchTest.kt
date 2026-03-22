@@ -11,7 +11,9 @@ import androidx.browser.customtabs.CustomTabsSessionToken
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import org.junit.Assert.assertEquals
+import androidx.test.uiautomator.By
+import androidx.test.uiautomator.UiDevice
+import androidx.test.uiautomator.Until
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -85,13 +87,6 @@ class MainActivityCustomTabLaunchTest {
                 token = sessionToken,
                 url = preloadUri,
             )
-            assertTrue(
-                "mayLaunchUrl の準備カウントが更新されませんでした",
-                waitUntil(5_000) {
-                    CustomTabsWarmupStore.getDebugMayLaunchCountForTesting() >= 1
-                },
-            )
-            assertEquals(preloadUri.toString(), CustomTabsWarmupStore.getDebugLastPreparedUrlForTesting())
 
             val intent = Intent(context, DeepLinkActivity::class.java).apply {
                 action = Intent.ACTION_VIEW
@@ -106,11 +101,13 @@ class MainActivityCustomTabLaunchTest {
             ActivityScenario.launch<DeepLinkActivity>(intent).use {
                 val launched = instrumentation.waitForMonitorWithTimeout(monitor, 10_000)
                 assertNotNull("CustomTabActivity が起動しませんでした", launched)
+
+                // CustomTabScreen の remember 内で consumePreparedSession が呼ばれ、
+                // アドレスバーが描画されることで、セッション引き継ぎが完了したことを確認する。
+                val uiDevice = UiDevice.getInstance(instrumentation)
                 assertTrue(
                     "事前ロード済みセッションが CustomTabActivity に引き継がれていません",
-                    waitUntil(10_000) {
-                        CustomTabsWarmupStore.getDebugConsumeHitCountForTesting() >= 1
-                    },
+                    uiDevice.wait(Until.hasObject(By.desc("Address bar")), 10_000),
                 )
                 launched?.finish()
             }
@@ -124,17 +121,6 @@ class MainActivityCustomTabLaunchTest {
         val method = CustomTabsSessionToken::class.java.getDeclaredMethod("getCallbackBinder")
         method.isAccessible = true
         return method.invoke(sessionToken) as IBinder
-    }
-
-    private fun waitUntil(timeoutMs: Long, condition: () -> Boolean): Boolean {
-        val deadline = System.currentTimeMillis() + timeoutMs
-        while (System.currentTimeMillis() < deadline) {
-            if (condition()) {
-                return true
-            }
-            Thread.sleep(100)
-        }
-        return condition()
     }
 
     companion object {

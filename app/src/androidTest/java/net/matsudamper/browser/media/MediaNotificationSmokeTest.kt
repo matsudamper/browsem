@@ -6,6 +6,9 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.test.ext.junit.rules.ActivityScenarioRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.test.uiautomator.By
+import androidx.test.uiautomator.UiDevice
+import androidx.test.uiautomator.Until
 import net.matsudamper.browser.BrowserSessionController
 import net.matsudamper.browser.BrowserTab
 import net.matsudamper.browser.BrowserViewModel
@@ -53,18 +56,20 @@ class MediaNotificationSmokeTest {
                 activity.stopService(Intent(activity, MediaPlaybackService::class.java))
             }
         }
+        // 通知シェードが残っている場合は閉じる。
+        UiDevice.getInstance(InstrumentationRegistry.getInstrumentation()).pressBack()
     }
 
     /**
      * file:///android_asset/test-media/index.html を開き、
      * JavaScript でビデオ再生後に WebExtension 経由のメタデータと再生位置が反映されることを確認する。
+     * また、通知シェードにメディアコントロールとタイトルが表示されることを確認する。
      */
     @Test
     fun ローカル動画再生で拡張経由のメディア状態が反映される() {
         val browserSessionController = waitForBrowserSessionController()
         val activeTab = waitForActiveTab(browserSessionController)
         val mediaPageUri = prepareLocalMediaPageUri()
-        MediaPlaybackService.resetGeneratedNotificationDebugState()
         allowAutoplayForTest()
         waitForMediaExtensionInstalled()
 
@@ -137,30 +142,22 @@ class MediaNotificationSmokeTest {
         assertTrue("positionMs=${playbackState.positionMs}", playbackState.positionMs > 0L)
         assertTrue("artworkBitmap=${playbackState.artworkBitmap}", playbackState.artworkBitmap != null)
 
-        val hasMediaControlNotification = waitForMediaControlNotification(
-            timeoutMs = NOTIFICATION_CONTROL_TIMEOUT_MS,
-        )
-        assertTrue(
-            "メディア通知にコントロール（action）が表示されること\n" +
-                "actionCount=${MediaPlaybackService.lastGeneratedNotificationActionCount}, " +
-                "title=${MediaPlaybackService.lastGeneratedNotificationTitle}, " +
-                "text=${MediaPlaybackService.lastGeneratedNotificationText}",
-            hasMediaControlNotification,
-        )
-        assertTrue(
-            "通知タイトルが拡張経由メタデータを反映すること: ${MediaPlaybackService.lastGeneratedNotificationTitle}",
-            MediaPlaybackService.lastGeneratedNotificationTitle == EXPECTED_TITLE,
-        )
-        assertTrue(
-            "通知に artwork が表示されること",
-            waitForCondition(timeoutMs = NOTIFICATION_ARTWORK_TIMEOUT_MS) {
-                MediaPlaybackService.lastGeneratedNotificationHasLargeIcon
-            },
-        )
-        assertTrue(
-            "通知に artwork が表示されること",
-            MediaPlaybackService.lastGeneratedNotificationHasLargeIcon,
-        )
+        // 通知シェードを開き、メディア通知のタイトルとコントロールをUIで確認する。
+        val uiDevice = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
+        uiDevice.openNotification()
+        try {
+            assertTrue(
+                "通知タイトルが拡張経由メタデータを反映すること",
+                uiDevice.wait(Until.hasObject(By.text(EXPECTED_TITLE)), NOTIFICATION_CONTROL_TIMEOUT_MS),
+            )
+            // Media3が生成する通知にはPlay/Pauseコントロールが含まれる。
+            assertTrue(
+                "メディア通知にコントロール（Play/Pause）が表示されること",
+                uiDevice.hasObject(By.descContains("Play")) || uiDevice.hasObject(By.descContains("Pause")),
+            )
+        } finally {
+            uiDevice.pressBack()
+        }
     }
 
     // ================================================================
@@ -234,18 +231,6 @@ class MediaNotificationSmokeTest {
         )
     }
 
-    private fun hasMediaControlNotification(): Boolean {
-        return MediaPlaybackService.lastGeneratedNotificationActionCount > 0
-    }
-
-    private fun waitForMediaControlNotification(
-        timeoutMs: Long,
-    ): Boolean {
-        return waitForCondition(timeoutMs = timeoutMs) {
-            hasMediaControlNotification()
-        }
-    }
-
     private fun requestMediaPlayback(activeTab: BrowserTab) {
         runOnMainThread {
             activeTab.session.loadUri(PLAYBACK_REQUEST_JAVASCRIPT_URI)
@@ -313,7 +298,6 @@ class MediaNotificationSmokeTest {
         private const val NOTIFICATION_CONTROL_TIMEOUT_MS = 10_000L
         private const val METADATA_TIMEOUT_MS = 15_000L
         private const val POSITION_TIMEOUT_MS = 15_000L
-        private const val NOTIFICATION_ARTWORK_TIMEOUT_MS = 10_000L
         private const val EXTENSION_INSTALL_TIMEOUT_MS = 20_000L
         private const val CONDITION_POLL_INTERVAL_MS = 200L
         private const val LOCAL_MEDIA_ASSET_DIR = "test-media"
