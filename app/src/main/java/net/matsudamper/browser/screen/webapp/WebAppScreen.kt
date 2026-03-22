@@ -31,6 +31,7 @@ internal fun WebAppScreen(
     themeColorExtension: ThemeColorWebExtension,
     mediaWebExtension: MediaWebExtension,
     onDesktopNotificationPermissionRequest: () -> GeckoResult<Int>,
+    onRequestDownloadNotificationPermission: () -> Unit,
 ) {
     val viewModel = viewModel(initializer = {
         BrowserScreenViewModel(
@@ -58,6 +59,7 @@ internal fun WebAppScreen(
         onDesktopNotificationPermissionRequest = { _ ->
             onDesktopNotificationPermissionRequest()
         },
+        onRequestDownloadNotificationPermission = onRequestDownloadNotificationPermission,
         onOpenSettings = {},
         onOpenTabs = {},
         enableTabUi = false,

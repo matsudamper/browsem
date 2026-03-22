@@ -28,6 +28,7 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.navigation3.runtime.NavKey
@@ -59,6 +60,7 @@ internal fun BrowserScreen(
     mediaWebExtension: MediaWebExtension,
     onInstallExtensionRequest: (String) -> Unit,
     handleNotificationPermission: (uri: String) -> GeckoResult<Int>,
+    onRequestDownloadNotificationPermission: () -> Unit,
     onSelectTab: (tabId: String, beforeTab: AppDestination.Browser?) -> Unit,
     /** グループ順に並べたタブリスト。アドレスバースワイプ時の前後タブ判定に使用する。 */
     orderedTabs: List<BrowserTab>,
@@ -89,6 +91,9 @@ internal fun BrowserScreen(
             .clipToBounds(),
     ) {
         val pageWidthPx = constraints.maxWidth.toFloat()
+        val density = LocalDensity.current
+        // タブ切替スワイプ閾値：割合と固定距離の短い方を使用（タブレット等の広い画面でも操作しやすくなる）
+        val swipeThreshold = minOf(pageWidthPx * 0.3f, with(density) { 120.dp.toPx() })
 
         // 前のタブのプレビュー画像（右スワイプ時に左から表示）
         prevTab?.let { tab ->
@@ -126,6 +131,7 @@ internal fun BrowserScreen(
             tabCount = tabs.size,
             onInstallExtensionRequest = onInstallExtensionRequest,
             onDesktopNotificationPermissionRequest = handleNotificationPermission,
+            onRequestDownloadNotificationPermission = onRequestDownloadNotificationPermission,
             onOpenSettings = { backStack.add(AppDestination.Settings) },
             onOpenTabs = { backStack.add(AppDestination.Tabs) },
             browserSessionController = browserSessionController,
@@ -159,9 +165,8 @@ internal fun BrowserScreen(
             },
             onToolbarDragEnd = {
                 // スワイプ完了時のタブ切替判定
-                val threshold = pageWidthPx * 0.3f
                 when {
-                    swipeOffset.value > threshold && prevTab != null -> {
+                    swipeOffset.value > swipeThreshold && prevTab != null -> {
                         // 端までアニメーション完了後に前のタブへ切り替え
                         coroutineScope.launch {
                             swipeOffset.animateTo(pageWidthPx)
@@ -169,7 +174,7 @@ internal fun BrowserScreen(
                         }
                     }
 
-                    swipeOffset.value < -threshold && nextTab != null -> {
+                    swipeOffset.value < -swipeThreshold && nextTab != null -> {
                         // 端までアニメーション完了後に次のタブへ切り替え
                         coroutineScope.launch {
                             swipeOffset.animateTo(-pageWidthPx)
