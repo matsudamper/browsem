@@ -194,25 +194,40 @@ class TabsScreenViewModel(
                 }
         }
         viewModelScope.launch {
-            // アプリ再起動後に選択中タブが属するグループを activeGroupIndex に復元する。
-            // groups と assignments の両方が揃った時点で一度だけ判定する。
-            // selectedTabId が null（新規起動等）の場合は 0 を設定して即座に Pager を表示できるようにする。
-            val selectedTabId = tabStore.tabStoreState.first().selectedTabId
-            if (selectedTabId == null) {
+            // 初回: 選択中タブが属するグループを activeGroupIndex に復元する。
+            // groups と assignments の両方が揃った時点で判定する。
+            val initialSelectedTabId = tabStore.tabStoreState.first().selectedTabId
+            if (initialSelectedTabId == null) {
                 _activeGroupIndex.value = 0
-                return@launch
+            } else {
+                combine(
+                    groups,
+                    tabGroupRepository.observeTabGroupAssignments(),
+                ) { groupList, assignments ->
+                    Pair(groupList, assignments)
+                }.first { (groupList, _) -> groupList.isNotEmpty() }
+                    .let { (groupList, assignments) ->
+                        val groupId = assignments.find { it.tabId == initialSelectedTabId }?.groupId
+                        val index = if (groupId != null) groupList.indexOfFirst { it.id.value == groupId } else -1
+                        _activeGroupIndex.value = if (index >= 0) index else 0
+                    }
             }
-            combine(
-                groups,
-                tabGroupRepository.observeTabGroupAssignments(),
-            ) { groupList, assignments ->
-                Pair(groupList, assignments)
-            }.first { (groupList, _) -> groupList.isNotEmpty() }
-                .let { (groupList, assignments) ->
-                    val groupId = assignments.find { it.tabId == selectedTabId }?.groupId
-                    val index = if (groupId != null) groupList.indexOfFirst { it.id.value == groupId } else -1
-                    _activeGroupIndex.value = if (index >= 0) index else 0
+            // 初回復元後、selectedTabId の変化を継続的に監視して activeGroupIndex を同期する。
+            // 外部リンク等で別グループにタブが追加された場合にも、
+            // タブ一覧画面を開く前に正しいグループが設定される。
+            tabStore.tabStoreState.map { it.selectedTabId }.collect { selectedTabId ->
+                if (selectedTabId == null) return@collect
+                val groupList = groups.value
+                if (groupList.isEmpty()) return@collect
+                val assignments = tabGroupRepository.observeTabGroupAssignments().first()
+                val groupId = assignments.find { it.tabId == selectedTabId }?.groupId
+                val index = if (groupId != null) groupList.indexOfFirst { it.id.value == groupId } else -1
+                val resolvedIndex = if (index >= 0) index else 0
+                if (_activeGroupIndex.value != resolvedIndex) {
+                    programmaticScrollTarget = resolvedIndex
+                    _activeGroupIndex.value = resolvedIndex
                 }
+            }
         }
     }
 

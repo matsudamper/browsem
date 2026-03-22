@@ -148,11 +148,6 @@ class TabsScreenViewModelTest {
             return groupsFlow.value.firstOrNull { it.isDefault }?.id
         }
 
-        override suspend fun getGroupIdForTab(tabId: String): TabGroupId? {
-            val groupId = assignmentsFlow.value.find { it.tabId == tabId }?.groupId
-            return if (groupId.isNullOrEmpty()) null else TabGroupId(groupId)
-        }
-
         override suspend fun assignTabToGroupIfUnassigned(tabId: String, groupId: TabGroupId) {
             val current = assignmentsFlow.value.find { it.tabId == tabId }
             if (current == null || current.groupId.isEmpty()) {
