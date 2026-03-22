@@ -6,15 +6,16 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import net.matsudamper.browser.core.TabStore
+import net.matsudamper.browser.core.TabStoreState
 import net.matsudamper.browser.data.TabGroupData
 import net.matsudamper.browser.data.TabGroupRepository
+import net.matsudamper.browser.data.tab.TabGroupAssignment
 
 
 class TabsScreenViewModel(
@@ -22,25 +23,16 @@ class TabsScreenViewModel(
     private val tabGroupRepository: TabGroupRepository,
 ) : ViewModel() {
 
-    /**
-     * ドラッグ中のグループ並び順をローカルで保持する。
-     * null のときは DB の順序をそのまま使う。
-     */
-    private val _localGroupOrder = MutableStateFlow<List<TabGroupData>?>(null)
+    private val viewModelStateFlow = MutableStateFlow(ViewModelState())
 
-    /** グループ一覧。ドラッグ中はローカル順序を優先し、DB の更新が遅れても表示が乱れないようにする。
-     * Eagerly で収集することで、UI 購読者がいない場合（テスト等）でも groups.value が常に最新値を返す。
+    /**
+     * onGroupSelected で設定したプログラム的スクロールの目標ページ。
+     * Pager アニメーション中に settledPage が中間ページを報告した場合に
+     * activeGroupIndex を誤って上書きしないようにするためのガード。
      */
-    val groups: StateFlow<List<TabGroupData>> = combine(
-        tabGroupRepository.observeGroups(),
-        _localGroupOrder,
-    ) { dbGroups, localOrder ->
-        localOrder ?: dbGroups
-    }.stateIn(
-        scope = viewModelScope,
-        started = SharingStarted.Eagerly,
-        initialValue = emptyList(),
-    )
+    private var programmaticScrollTarget: Int? = null
+
+    val eventHandler = Channel<(Event) -> Unit>(Channel.UNLIMITED)
 
     /**
      * 現在アクティブなグループのインデックス。
@@ -48,44 +40,7 @@ class TabsScreenViewModel(
      * UI はこの値が null の間は Pager を描画しないことで、
      * 復元前の 0 で Pager が初期化されてアニメーションが走るのを防ぐ。
      */
-    private val _activeGroupIndex = MutableStateFlow<Int?>(null)
-    val activeGroupIndex: StateFlow<Int?> = _activeGroupIndex.asStateFlow()
-
-    /**
-     * onGroupSelected で設定したプログラム的スクロールの目標ページ。
-     * Pager アニメーション中に settledPage が中間ページを報告した場合に
-     * _activeGroupIndex を誤って上書きしないようにするためのガード。
-     */
-    private var programmaticScrollTarget: Int? = null
-
-    /**
-     * グループ別のタブリスト。
-     * groups・tabStoreState・タブグループ割り当ての3つを combine して算出する。
-     */
-    val groupedTabs: StateFlow<List<List<TabsScreenTabData>>> = combine(
-        groups,
-        tabStore.tabStoreState,
-        tabGroupRepository.observeTabGroupAssignments(),
-    ) { groups, tabState, assignments ->
-        val assignmentMap = assignments.associate { it.tabId to it.groupId }
-        groups.map { group ->
-            tabState.tabs
-                .filter { assignmentMap[it.id] == group.id.value }
-                .map { tab ->
-                    TabsScreenTabData(
-                        id = tab.id,
-                        title = tab.title,
-                        previewBitmapArray = tab.previewBitmapArray,
-                    )
-                }
-        }
-    }.stateIn(
-        scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS),
-        initialValue = emptyList(),
-    )
-
-    val eventHandler = Channel<(Event) -> Unit>(Channel.UNLIMITED)
+    val activeGroupIndex: Int? get() = viewModelStateFlow.value.activeGroupIndex
 
     private val callbacks = object : TabsScreenUiState.Callbacks {
         override fun onCloseTab(tabId: String) {
@@ -131,38 +86,65 @@ class TabsScreenViewModel(
         }
     }
 
-    val uiState: StateFlow<TabsScreenUiState> = combine(
-        groups,
-        groupedTabs,
-        activeGroupIndex,
-    ) { currentGroups, currentGroupedTabs, currentActiveIndex ->
-        TabsScreenUiState(
-            callbacks = callbacks,
-            loadingState = if (currentActiveIndex == null) {
-                TabsScreenUiState.LoadingState.Loading
-            } else {
-                TabsScreenUiState.LoadingState.Loaded(
-                    groupedTabs = currentGroupedTabs,
-                    groups = currentGroups,
-                    // グループが空になる場合も含めて有効範囲にクランプする
-                    activeGroupIndex = currentActiveIndex.coerceIn(0, (currentGroups.size - 1).coerceAtLeast(0)),
-                )
-            },
+    val uiState: StateFlow<TabsScreenUiState> = viewModelStateFlow
+        .map { state ->
+            val groups = state.groups
+            val assignmentMap = state.assignments.associate { it.tabId to it.groupId }
+            val groupedTabs = groups.map { group ->
+                state.tabStoreState.tabs
+                    .filter { assignmentMap[it.id] == group.id.value }
+                    .map { tab ->
+                        TabsScreenTabData(
+                            id = tab.id,
+                            title = tab.title,
+                            previewBitmapArray = tab.previewBitmapArray,
+                        )
+                    }
+            }
+            TabsScreenUiState(
+                callbacks = callbacks,
+                loadingState = if (state.activeGroupIndex == null) {
+                    TabsScreenUiState.LoadingState.Loading
+                } else {
+                    TabsScreenUiState.LoadingState.Loaded(
+                        groupedTabs = groupedTabs,
+                        groups = groups,
+                        // グループが空になる場合も含めて有効範囲にクランプする
+                        activeGroupIndex = state.activeGroupIndex.coerceIn(0, (groups.size - 1).coerceAtLeast(0)),
+                    )
+                },
+            )
+        }
+        .stateIn(
+            viewModelScope,
+            SharingStarted.Eagerly,
+            TabsScreenUiState(
+                callbacks = callbacks,
+                loadingState = TabsScreenUiState.LoadingState.Loading,
+            ),
         )
-    }.stateIn(
-        scope = viewModelScope,
-        started = SharingStarted.Eagerly,
-        initialValue = TabsScreenUiState(
-            callbacks = callbacks,
-            loadingState = TabsScreenUiState.LoadingState.Loading,
-        ),
-    )
 
     interface Event {
         fun closeTab(tabId: String)
     }
 
     init {
+        // 外部フローを ViewModelState に反映する
+        viewModelScope.launch {
+            tabGroupRepository.observeGroups().collect { dbGroups ->
+                viewModelStateFlow.update { it.copy(dbGroups = dbGroups) }
+            }
+        }
+        viewModelScope.launch {
+            tabStore.tabStoreState.collect { tabState ->
+                viewModelStateFlow.update { it.copy(tabStoreState = tabState) }
+            }
+        }
+        viewModelScope.launch {
+            tabGroupRepository.observeTabGroupAssignments().collect { assignments ->
+                viewModelStateFlow.update { it.copy(assignments = assignments) }
+            }
+        }
         viewModelScope.launch {
             // 初回: デフォルトグループを作成する（DBが空のときのみ）
             val initialTabs = tabStore.tabStoreState.first()
@@ -171,45 +153,33 @@ class TabsScreenViewModel(
             // 新規タブの割り当てがスキップされる競合状態を防ぐ。
             // TabGroupDao.setTabGroup は INSERT IGNORE + UPDATE を行うため、
             // TabPersistenceCoordinator が tab_state 行を作成する前でも割り当てが成功する。
-            combine(
-                tabStore.tabStoreState.map { state -> state.tabs.map { it.id }.toSet() },
-                tabGroupRepository.observeTabGroupAssignments(),
-                groups,
-                _activeGroupIndex,
-            ) { allTabIds, assignments, groupList, activeIndex ->
-                val assignedTabIds = assignments
+            viewModelStateFlow.collect { state ->
+                val allTabIds = state.tabStoreState.tabs.map { it.id }.toSet()
+                val assignedTabIds = state.assignments
                     .filter { it.groupId.isNotEmpty() }
                     .map { it.tabId }
                     .toSet()
                 val unassigned = allTabIds - assignedTabIds
-                val activeGroup = groupList.getOrNull(activeIndex ?: 0)
-                Pair(unassigned, activeGroup)
-            }
-                .collect { (unassignedTabIds, activeGroup) ->
-                    if (unassignedTabIds.isEmpty()) return@collect
-                    if (activeGroup == null) return@collect
-                    unassignedTabIds.forEach { tabId ->
-                        tabGroupRepository.assignTabToGroupIfUnassigned(tabId, activeGroup.id)
-                    }
+                val activeGroup = state.groups.getOrNull(state.activeGroupIndex ?: 0)
+                if (unassigned.isEmpty()) return@collect
+                if (activeGroup == null) return@collect
+                unassigned.forEach { tabId ->
+                    tabGroupRepository.assignTabToGroupIfUnassigned(tabId, activeGroup.id)
                 }
+            }
         }
         viewModelScope.launch {
             // 初回: 選択中タブが属するグループを activeGroupIndex に復元する。
             // groups と assignments の両方が揃った時点で判定する。
             val initialSelectedTabId = tabStore.tabStoreState.first().selectedTabId
             if (initialSelectedTabId == null) {
-                _activeGroupIndex.value = 0
+                viewModelStateFlow.update { it.copy(activeGroupIndex = 0) }
             } else {
-                combine(
-                    groups,
-                    tabGroupRepository.observeTabGroupAssignments(),
-                ) { groupList, assignments ->
-                    Pair(groupList, assignments)
-                }.first { (groupList, _) -> groupList.isNotEmpty() }
-                    .let { (groupList, assignments) ->
-                        val groupId = assignments.find { it.tabId == initialSelectedTabId }?.groupId
-                        val index = if (groupId != null) groupList.indexOfFirst { it.id.value == groupId } else -1
-                        _activeGroupIndex.value = if (index >= 0) index else 0
+                viewModelStateFlow.first { it.groups.isNotEmpty() }
+                    .let { state ->
+                        val groupId = state.assignments.find { it.tabId == initialSelectedTabId }?.groupId
+                        val index = if (groupId != null) state.groups.indexOfFirst { it.id.value == groupId } else -1
+                        viewModelStateFlow.update { it.copy(activeGroupIndex = if (index >= 0) index else 0) }
                     }
             }
             // 初回復元後、selectedTabId の変化を継続的に監視して activeGroupIndex を同期する。
@@ -217,15 +187,16 @@ class TabsScreenViewModel(
             // タブ一覧画面を開く前に正しいグループが設定される。
             tabStore.tabStoreState.map { it.selectedTabId }.collect { selectedTabId ->
                 if (selectedTabId == null) return@collect
-                val groupList = groups.value
-                if (groupList.isEmpty()) return@collect
+                val state = viewModelStateFlow.value
+                val groups = state.groups
+                if (groups.isEmpty()) return@collect
                 val assignments = tabGroupRepository.observeTabGroupAssignments().first()
                 val groupId = assignments.find { it.tabId == selectedTabId }?.groupId
-                val index = if (groupId != null) groupList.indexOfFirst { it.id.value == groupId } else -1
+                val index = if (groupId != null) groups.indexOfFirst { it.id.value == groupId } else -1
                 val resolvedIndex = if (index >= 0) index else 0
-                if (_activeGroupIndex.value != resolvedIndex) {
+                if (state.activeGroupIndex != resolvedIndex) {
                     programmaticScrollTarget = resolvedIndex
-                    _activeGroupIndex.value = resolvedIndex
+                    viewModelStateFlow.update { it.copy(activeGroupIndex = resolvedIndex) }
                 }
             }
         }
@@ -234,13 +205,14 @@ class TabsScreenViewModel(
     /**
      * グループを選択する（タブバーのタップ時）。
      * Pager のプログラム的アニメーション中に settledPage が中間ページを報告しても
-     * _activeGroupIndex が上書きされないよう、programmaticScrollTarget を設定する。
+     * activeGroupIndex が上書きされないよう、programmaticScrollTarget を設定する。
      */
     private fun onGroupSelected(index: Int) {
-        if (_activeGroupIndex.value == index) return
-        val coerced = index.coerceIn(0, groups.value.lastIndex.coerceAtLeast(0))
+        val state = viewModelStateFlow.value
+        if (state.activeGroupIndex == index) return
+        val coerced = index.coerceIn(0, state.groups.lastIndex.coerceAtLeast(0))
         programmaticScrollTarget = coerced
-        _activeGroupIndex.value = coerced
+        viewModelStateFlow.update { it.copy(activeGroupIndex = coerced) }
     }
 
     /**
@@ -252,29 +224,35 @@ class TabsScreenViewModel(
         val target = programmaticScrollTarget
         if (target != null) {
             if (page == target) {
-                // アニメーションが目標ページに到達 → ターゲットをクリア
                 programmaticScrollTarget = null
             }
-            // プログラム的スクロール中は _activeGroupIndex を上書きしない
+            // プログラム的スクロール中は activeGroupIndex を上書きしない
             return
         }
-        if (_activeGroupIndex.value == page) return
-        _activeGroupIndex.value = page.coerceIn(0, groups.value.lastIndex.coerceAtLeast(0))
+        val state = viewModelStateFlow.value
+        if (state.activeGroupIndex == page) return
+        viewModelStateFlow.update {
+            it.copy(activeGroupIndex = page.coerceIn(0, it.groups.lastIndex.coerceAtLeast(0)))
+        }
     }
 
     /** 新しいグループを追加する */
     private fun addGroup() {
         viewModelScope.launch {
-            val currentGroups = groups.value
+            val currentGroups = viewModelStateFlow.value.groups
             val newSortOrder = currentGroups.size
             val name = "グループ ${newSortOrder + 1}"
             val newId = tabGroupRepository.addGroup(name, newSortOrder)
-            // ローカル順序に追加してすぐに反映する
-            _localGroupOrder.value = currentGroups + TabGroupData(newId, name)
-            // Pager がアニメーション中に settledPage の中間値で _activeGroupIndex を上書きしないよう
+            // Pager がアニメーション中に settledPage の中間値で activeGroupIndex を上書きしないよう
             // onGroupSelected と同様に programmaticScrollTarget を設定する
             programmaticScrollTarget = newSortOrder
-            _activeGroupIndex.value = newSortOrder
+            viewModelStateFlow.update {
+                it.copy(
+                    // ローカル順序に追加してすぐに反映する
+                    localGroupOrder = currentGroups + TabGroupData(newId, name),
+                    activeGroupIndex = newSortOrder,
+                )
+            }
         }
     }
 
@@ -283,18 +261,25 @@ class TabsScreenViewModel(
      * ローカル順序をすぐに更新して UI を即時反映し、DB へも非同期で保存する。
      */
     private fun reorderGroups(fromIndex: Int, toIndex: Int) {
-        val currentGroups = (_localGroupOrder.value ?: groups.value).toMutableList()
+        val state = viewModelStateFlow.value
+        val currentGroups = state.groups.toMutableList()
         if (fromIndex !in currentGroups.indices || toIndex !in currentGroups.indices) return
         currentGroups.add(toIndex, currentGroups.removeAt(fromIndex))
-        _localGroupOrder.value = currentGroups
 
         // アクティブグループのインデックスを並び替えに合わせて補正する
-        val active = _activeGroupIndex.value ?: 0
-        _activeGroupIndex.value = when {
+        val active = state.activeGroupIndex ?: 0
+        val newActiveIndex = when {
             active == fromIndex -> toIndex
             fromIndex < toIndex && active in (fromIndex + 1)..toIndex -> active - 1
             fromIndex > toIndex && active in toIndex until fromIndex -> active + 1
             else -> active
+        }
+
+        viewModelStateFlow.update {
+            it.copy(
+                localGroupOrder = currentGroups,
+                activeGroupIndex = newActiveIndex,
+            )
         }
 
         viewModelScope.launch {
@@ -311,7 +296,7 @@ class TabsScreenViewModel(
 
     /** タブを別のグループへ移動する */
     private fun moveTabToGroup(tabId: String, targetGroupIndex: Int) {
-        val targetGroup = groups.value.getOrNull(targetGroupIndex) ?: return
+        val targetGroup = viewModelStateFlow.value.groups.getOrNull(targetGroupIndex) ?: return
         viewModelScope.launch {
             tabGroupRepository.assignTabToGroup(tabId, targetGroup.id)
         }
@@ -322,7 +307,19 @@ class TabsScreenViewModel(
      * グローバルリストはグループ順に連結した順序で同期する。
      */
     private fun reorderTabs(groupIndex: Int, fromLocalIndex: Int, toLocalIndex: Int) {
-        val currentGroupedTabs = groupedTabs.value
+        val state = viewModelStateFlow.value
+        val assignmentMap = state.assignments.associate { it.tabId to it.groupId }
+        val currentGroupedTabs = state.groups.map { group ->
+            state.tabStoreState.tabs
+                .filter { assignmentMap[it.id] == group.id.value }
+                .map { tab ->
+                    TabsScreenTabData(
+                        id = tab.id,
+                        title = tab.title,
+                        previewBitmapArray = tab.previewBitmapArray,
+                    )
+                }
+        }
         val tabsInGroup = currentGroupedTabs.getOrNull(groupIndex) ?: return
         if (fromLocalIndex !in tabsInGroup.indices || toLocalIndex !in tabsInGroup.indices) return
         val reordered = tabsInGroup.toMutableList().also {
@@ -346,17 +343,18 @@ class TabsScreenViewModel(
      * ON にした場合は他のグループのデフォルトをすべて解除する。
      */
     private fun toggleDefaultGroup(groupIndex: Int) {
-        val currentGroups = groups.value
+        val currentGroups = viewModelStateFlow.value.groups
         val group = currentGroups.getOrNull(groupIndex) ?: return
         val newIsDefault = !group.isDefault
         // ローカル順序を即座に更新して UI に反映する
-        _localGroupOrder.value = currentGroups.map { g ->
+        val newLocalOrder = currentGroups.map { g ->
             when {
                 g.id == group.id -> g.copy(isDefault = newIsDefault)
                 newIsDefault -> g.copy(isDefault = false) // 他のグループのデフォルトを解除
                 else -> g
             }
         }
+        viewModelStateFlow.update { it.copy(localGroupOrder = newLocalOrder) }
         viewModelScope.launch {
             tabGroupRepository.setDefaultGroup(group.id, newIsDefault)
         }
@@ -364,12 +362,13 @@ class TabsScreenViewModel(
 
     /** グループ名を変更する */
     private fun renameGroup(groupIndex: Int, newName: String) {
-        val currentGroups = groups.value
+        val currentGroups = viewModelStateFlow.value.groups
         val group = currentGroups.getOrNull(groupIndex) ?: return
         // ローカル順序を即座に更新して UI に反映する
-        _localGroupOrder.value = currentGroups.toMutableList().also {
+        val newLocalOrder = currentGroups.toMutableList().also {
             it[groupIndex] = it[groupIndex].copy(name = newName)
         }
+        viewModelStateFlow.update { it.copy(localGroupOrder = newLocalOrder) }
         viewModelScope.launch {
             tabGroupRepository.renameGroup(group.id, newName)
         }
@@ -377,25 +376,39 @@ class TabsScreenViewModel(
 
     /** グループを削除する。タブは隣接グループへ再割り当てされる。 */
     private fun deleteGroup(groupIndex: Int) {
-        val currentGroups = groups.value
+        val state = viewModelStateFlow.value
+        val currentGroups = state.groups
         val group = currentGroups.getOrNull(groupIndex) ?: return
         val fallback = currentGroups.firstOrNull { it.id != group.id }
         val newGroups = currentGroups.toMutableList().also { it.removeAt(groupIndex) }
-        _localGroupOrder.value = newGroups
         // アクティブインデックスを新しいリストに合わせて補正する
-        val active = _activeGroupIndex.value ?: 0
-        _activeGroupIndex.value = when {
+        val active = state.activeGroupIndex ?: 0
+        val newActiveIndex = when {
             active == groupIndex -> (groupIndex - 1).coerceAtLeast(0)
             active > groupIndex -> active - 1
             else -> active
         }.coerceIn(0, (newGroups.size - 1).coerceAtLeast(0))
+
+        viewModelStateFlow.update {
+            it.copy(
+                localGroupOrder = newGroups,
+                activeGroupIndex = newActiveIndex,
+            )
+        }
         viewModelScope.launch {
             tabGroupRepository.deleteGroup(group.id, fallback?.id)
         }
     }
 
-    companion object {
-        private const val STOP_TIMEOUT_MILLIS = 5_000L
+    data class ViewModelState(
+        val dbGroups: List<TabGroupData> = emptyList(),
+        val localGroupOrder: List<TabGroupData>? = null,
+        val activeGroupIndex: Int? = null,
+        val tabStoreState: TabStoreState = TabStoreState(),
+        val assignments: List<TabGroupAssignment> = emptyList(),
+    ) {
+        /** ドラッグ中はローカル順序を優先し、DB の更新が遅れても表示が乱れないようにする。 */
+        val groups: List<TabGroupData> get() = localGroupOrder ?: dbGroups
     }
 }
 

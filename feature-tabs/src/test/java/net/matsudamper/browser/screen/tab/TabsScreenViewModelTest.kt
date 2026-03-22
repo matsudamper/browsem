@@ -324,23 +324,23 @@ class TabsScreenViewModelTest {
 
         // ユーザーが右グループ（index=2）をタップ
         viewModel.uiState.value.callbacks.onGroupSelected(2)
-        assertEquals("onGroupSelected 後は activeGroupIndex=2", 2, viewModel.activeGroupIndex.value)
+        assertEquals("onGroupSelected 後は activeGroupIndex=2", 2, viewModel.activeGroupIndex)
 
         // Pager アニメーション中に中間ページ(1) が報告される
         viewModel.uiState.value.callbacks.onGroupPageChanged(1)
         assertEquals(
             "中間ページ報告後も activeGroupIndex は 2 のまま（上書きされない）",
             2,
-            viewModel.activeGroupIndex.value,
+            viewModel.activeGroupIndex,
         )
 
         // アニメーションが目標ページ(2) に到達
         viewModel.uiState.value.callbacks.onGroupPageChanged(2)
-        assertEquals("目標ページ到達後も activeGroupIndex は 2", 2, viewModel.activeGroupIndex.value)
+        assertEquals("目標ページ到達後も activeGroupIndex は 2", 2, viewModel.activeGroupIndex)
 
         // その後のユーザースワイプ（プログラム的でない）は通常通り反映される
         viewModel.uiState.value.callbacks.onGroupPageChanged(0)
-        assertEquals("ユーザースワイプによるページ変更は反映される", 0, viewModel.activeGroupIndex.value)
+        assertEquals("ユーザースワイプによるページ変更は反映される", 0, viewModel.activeGroupIndex)
     }
 
     /**
@@ -415,7 +415,7 @@ class TabsScreenViewModelTest {
         assertEquals(
             "再起動後に選択中タブ（グループB=index1）のグループに activeGroupIndex が復元されるべき",
             1,
-            viewModel.activeGroupIndex.value,
+            viewModel.activeGroupIndex,
         )
     }
 
@@ -452,7 +452,7 @@ class TabsScreenViewModelTest {
         assertEquals(
             "初期状態ではグループA(index=0)が選択されるべき",
             0,
-            viewModel.activeGroupIndex.value,
+            viewModel.activeGroupIndex,
         )
 
         // 外部リンクで新しいタブをグループBに追加・選択する（ViewModel存続中に発生）
@@ -464,7 +464,7 @@ class TabsScreenViewModelTest {
         assertEquals(
             "外部リンクで開いたタブ（グループB=index1）に activeGroupIndex が更新されるべき",
             1,
-            viewModel.activeGroupIndex.value,
+            viewModel.activeGroupIndex,
         )
     }
 
@@ -488,7 +488,7 @@ class TabsScreenViewModelTest {
         assertEquals(
             "selectedTabId が null の場合 activeGroupIndex は 0 のまま",
             0,
-            viewModel.activeGroupIndex.value,
+            viewModel.activeGroupIndex,
         )
     }
 }
