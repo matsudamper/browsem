@@ -186,6 +186,9 @@ class MainActivity : ComponentActivity() {
                     onDesktopNotificationPermissionRequest = {
                         requestNotificationPermissionIfNeeded()
                     },
+                    onRequestDownloadNotificationPermission = {
+                        requestDownloadNotificationPermission()
+                    },
                 )
             }
             extensionInstaller.installPromptState?.let { prompt ->
@@ -221,6 +224,22 @@ class MainActivity : ComponentActivity() {
                 Log.e("MainActivity", "URL の送信に失敗: $url, reason=${result.exceptionOrNull()}")
             }
         }
+    }
+
+    /**
+     * ダウンロード通知を表示するために POST_NOTIFICATIONS パーミッションを要求する。
+     * GeckoView の通知パーミッション要求が保留中の場合はスキップする。
+     */
+    private fun requestDownloadNotificationPermission() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+        if (ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.POST_NOTIFICATIONS,
+            ) == PackageManager.PERMISSION_GRANTED
+        ) return
+        // GeckoView の通知パーミッション要求が保留中の場合は競合を避けるためスキップ
+        if (pendingNotificationPermissionResult != null) return
+        requestNotificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
     }
 
     private fun requestNotificationPermissionIfNeeded(): GeckoResult<Int> {

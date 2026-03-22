@@ -68,6 +68,7 @@ internal fun GeckoBrowserTab(
     tabCount: Int,
     onInstallExtensionRequest: (String) -> Unit,
     onDesktopNotificationPermissionRequest: (String) -> GeckoResult<Int>,
+    onRequestDownloadNotificationPermission: () -> Unit = {},
     onOpenSettings: () -> Unit,
     onOpenTabs: () -> Unit,
     enableTabUi: Boolean = true,
@@ -94,6 +95,7 @@ internal fun GeckoBrowserTab(
         searchTemplate = searchTemplate,
         onHistoryRecord = onHistoryRecord,
         onHistoryTitleUpdate = onHistoryTitleUpdate,
+        onRequestDownloadNotificationPermission = onRequestDownloadNotificationPermission,
     )
 
     // ツールバー色の輝度に応じてステータスバーアイコン色（黒/白）を動的に切り替える
@@ -399,7 +401,7 @@ internal fun GeckoBrowserTab(
                     onOpenTabs = {
                         if (enableTabUi) {
                             geckoView?.also {
-                                state.flushAndCaptureForTabSwitch(it)
+                                runCatching { state.flushAndCaptureForTabSwitch(it) }
                             }
                             onOpenTabs()
                         }

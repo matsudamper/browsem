@@ -43,6 +43,7 @@ internal fun rememberBrowserTabScreenState(
     searchTemplate: String,
     onHistoryRecord: (suspend (url: String, title: String) -> Long)? = null,
     onHistoryTitleUpdate: (suspend (id: Long, title: String) -> Unit)? = null,
+    onRequestDownloadNotificationPermission: () -> Unit = {},
 ): BrowserTabScreenState {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -59,6 +60,7 @@ internal fun rememberBrowserTabScreenState(
             context = context,
             onHistoryRecord = onHistoryRecord,
             onHistoryTitleUpdate = onHistoryTitleUpdate,
+            onRequestDownloadNotificationPermission = onRequestDownloadNotificationPermission,
         )
     }
     state.homepageUrl = homepageUrl
@@ -77,6 +79,7 @@ internal class BrowserTabScreenState(
     private val geckoDownloadManager: GeckoDownloadManager,
     private val readabilityWebExtension: ReadabilityWebExtension,
     private val context: Context,
+    private val onRequestDownloadNotificationPermission: () -> Unit = {},
     var onHistoryRecord: (suspend (url: String, title: String) -> Long)? = null,
     var onHistoryTitleUpdate: (suspend (id: Long, title: String) -> Unit)? = null,
 ) : BrowserSessionStateCallbacks {
@@ -311,6 +314,8 @@ internal class BrowserTabScreenState(
 
     fun downloadImage(imageUrl: String) {
         imageContextMenuUrl = null
+        // ダウンロード進捗を通知で表示するためにパーミッションを要求する
+        onRequestDownloadNotificationPermission()
         // WorkManagerにエンキューして通知で進捗表示
         geckoDownloadManager.enqueueDownload(
             url = imageUrl,
@@ -328,6 +333,8 @@ internal class BrowserTabScreenState(
     fun confirmPendingDownload() {
         val response = pendingDownloadResponse ?: return
         pendingDownloadResponse = null
+        // ダウンロード進捗を通知で表示するためにパーミッションを要求する
+        onRequestDownloadNotificationPermission()
         geckoDownloadManager.enqueueDownloadFromResponse(
             response = response,
             referrerUrl = currentPageUrl,

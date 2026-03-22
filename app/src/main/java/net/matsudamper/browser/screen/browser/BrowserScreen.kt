@@ -60,6 +60,7 @@ internal fun BrowserScreen(
     mediaWebExtension: MediaWebExtension,
     onInstallExtensionRequest: (String) -> Unit,
     handleNotificationPermission: (uri: String) -> GeckoResult<Int>,
+    onRequestDownloadNotificationPermission: () -> Unit,
     onSelectTab: (tabId: String, beforeTab: AppDestination.Browser?) -> Unit,
     /** グループ順に並べたタブリスト。アドレスバースワイプ時の前後タブ判定に使用する。 */
     orderedTabs: List<BrowserTab>,
@@ -130,6 +131,7 @@ internal fun BrowserScreen(
             tabCount = tabs.size,
             onInstallExtensionRequest = onInstallExtensionRequest,
             onDesktopNotificationPermissionRequest = handleNotificationPermission,
+            onRequestDownloadNotificationPermission = onRequestDownloadNotificationPermission,
             onOpenSettings = { backStack.add(AppDestination.Settings) },
             onOpenTabs = { backStack.add(AppDestination.Tabs) },
             browserSessionController = browserSessionController,

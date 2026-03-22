@@ -20,6 +20,7 @@ import net.matsudamper.browser.data.TabGroupRepository
 import net.matsudamper.browser.data.tab.TabGroupAssignment
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
@@ -175,6 +176,14 @@ class TabsScreenViewModelTest {
         )
     }
 
+    /**
+     * uiState から activeGroupIndex を取得するヘルパー。
+     * Loaded 状態でなければ null を返す。
+     */
+    private fun TabsScreenViewModel.activeGroupIndexFromUiState(): Int? {
+        return (uiState.value.loadingState as? TabsScreenUiState.LoadingState.Loaded)?.activeGroupIndex
+    }
+
     // -----------------------------------------------------------------------
     // バグ2 再現テスト
     // -----------------------------------------------------------------------
@@ -324,23 +333,27 @@ class TabsScreenViewModelTest {
 
         // ユーザーが右グループ（index=2）をタップ
         viewModel.uiState.value.callbacks.onGroupSelected(2)
-        assertEquals("onGroupSelected 後は activeGroupIndex=2", 2, viewModel.activeGroupIndex.value)
+        advanceUntilIdle()
+        assertEquals("onGroupSelected 後は activeGroupIndex=2", 2, viewModel.activeGroupIndexFromUiState())
 
         // Pager アニメーション中に中間ページ(1) が報告される
         viewModel.uiState.value.callbacks.onGroupPageChanged(1)
+        advanceUntilIdle()
         assertEquals(
             "中間ページ報告後も activeGroupIndex は 2 のまま（上書きされない）",
             2,
-            viewModel.activeGroupIndex.value,
+            viewModel.activeGroupIndexFromUiState(),
         )
 
         // アニメーションが目標ページ(2) に到達
         viewModel.uiState.value.callbacks.onGroupPageChanged(2)
-        assertEquals("目標ページ到達後も activeGroupIndex は 2", 2, viewModel.activeGroupIndex.value)
+        advanceUntilIdle()
+        assertEquals("目標ページ到達後も activeGroupIndex は 2", 2, viewModel.activeGroupIndexFromUiState())
 
         // その後のユーザースワイプ（プログラム的でない）は通常通り反映される
         viewModel.uiState.value.callbacks.onGroupPageChanged(0)
-        assertEquals("ユーザースワイプによるページ変更は反映される", 0, viewModel.activeGroupIndex.value)
+        advanceUntilIdle()
+        assertEquals("ユーザースワイプによるページ変更は反映される", 0, viewModel.activeGroupIndexFromUiState())
     }
 
     /**
@@ -415,7 +428,56 @@ class TabsScreenViewModelTest {
         assertEquals(
             "再起動後に選択中タブ（グループB=index1）のグループに activeGroupIndex が復元されるべき",
             1,
-            viewModel.activeGroupIndex.value,
+            viewModel.activeGroupIndexFromUiState(),
+        )
+    }
+
+    /**
+     * 再現シナリオ（外部リンクで開いたタブが別グループに表示される問題）:
+     * 1. グループが2つある（グループA=index0、グループB=index1）
+     * 2. グループAのタブを選択した状態でタブ一覧を開く（ViewModel 生成、activeGroupIndex = 0）
+     * 3. 外部リンクで新規タブが作成され、グループBにプリ割り当てされ、selectedTabId が更新される
+     *    （AppNavigation の処理を模倣: assignTabToGroup → createAndAppendTab → selectTab）
+     * 4. タブ画面を再度開いたとき activeGroupIndex が 1（グループB）に更新されるべき
+     *
+     * バグ: init の復元コルーチンは selectedTabId を一度だけ読み取るため、
+     *       ViewModel 存続中に selectedTabId が変わっても activeGroupIndex が追従しない。
+     *       Navigation 3 で ViewModel が再利用されると、古い activeGroupIndex のまま
+     *       一番左のグループが表示される。
+     */
+    @Test
+    fun activeGroupIndex_updatesWhenSelectedTabChanges_afterInitialization() = runTest(testDispatcher) {
+        val tabStore = FakeTabStore()
+        val repo = FakeTabGroupRepository()
+
+        val groupA = TabGroupData(TabGroupId("gA"), "グループA")
+        val groupB = TabGroupData(TabGroupId("gB"), "グループB")
+        repo.setGroups(listOf(groupA, groupB))
+
+        // 最初にグループAのタブを選択した状態でViewModel作成（タブ一覧を開いた状態を模倣）
+        tabStore.addTab("tab-in-a")
+        tabStore.setSelectedTabId("tab-in-a")
+        repo.assignTabToGroup("tab-in-a", groupA.id)
+
+        val viewModel = buildViewModel(tabStore, repo, this)
+        advanceUntilIdle()
+
+        assertEquals(
+            "初期状態ではグループA(index=0)が選択されるべき",
+            0,
+            viewModel.activeGroupIndexFromUiState(),
+        )
+
+        // 外部リンクで新しいタブをグループBに追加・選択する（ViewModel存続中に発生）
+        tabStore.addTab("tab-external")
+        tabStore.setSelectedTabId("tab-external")
+        repo.assignTabToGroup("tab-external", groupB.id)
+        advanceUntilIdle()
+
+        assertEquals(
+            "外部リンクで開いたタブ（グループB=index1）に activeGroupIndex が更新されるべき",
+            1,
+            viewModel.activeGroupIndexFromUiState(),
         )
     }
 
@@ -439,7 +501,25 @@ class TabsScreenViewModelTest {
         assertEquals(
             "selectedTabId が null の場合 activeGroupIndex は 0 のまま",
             0,
-            viewModel.activeGroupIndex.value,
+            viewModel.activeGroupIndexFromUiState(),
+        )
+    }
+
+    /**
+     * activeGroupIndex が null（復元処理未完了）の間は Loading 状態であること。
+     */
+    @Test
+    fun uiState_isLoading_beforeActiveGroupIndexIsRestored() = runTest(testDispatcher) {
+        val tabStore = FakeTabStore()
+        val repo = FakeTabGroupRepository()
+
+        repo.setGroups(listOf(TabGroupData(TabGroupId("g1"), "グループ1")))
+
+        val viewModel = buildViewModel(tabStore, repo, this)
+        // advanceUntilIdle() を呼ばないことで、復元処理が完了していない状態を確認する
+        assertTrue(
+            "復元処理完了前は Loading 状態であるべき",
+            viewModel.uiState.value.loadingState is TabsScreenUiState.LoadingState.Loading,
         )
     }
 }

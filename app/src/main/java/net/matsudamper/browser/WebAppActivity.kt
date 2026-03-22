@@ -86,6 +86,7 @@ class WebAppActivity : ComponentActivity() {
                     themeColorExtension = runtimeCoordinator.themeColorExtension,
                     mediaWebExtension = runtimeCoordinator.mediaWebExtension,
                     onDesktopNotificationPermissionRequest = { requestNotificationPermissionIfNeeded() },
+                    onRequestDownloadNotificationPermission = { requestDownloadNotificationPermission() },
                 )
             }
         }
@@ -114,6 +115,22 @@ class WebAppActivity : ComponentActivity() {
         val scheme = data.scheme ?: return null
         if (scheme != "http" && scheme != "https") return null
         return data.toString()
+    }
+
+    /**
+     * ダウンロード通知を表示するために POST_NOTIFICATIONS パーミッションを要求する。
+     * GeckoView の通知パーミッション要求が保留中の場合はスキップする。
+     */
+    private fun requestDownloadNotificationPermission() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+        if (ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.POST_NOTIFICATIONS,
+            ) == PackageManager.PERMISSION_GRANTED
+        ) return
+        // GeckoView の通知パーミッション要求が保留中の場合は競合を避けるためスキップ
+        if (pendingNotificationPermissionResult != null) return
+        requestNotificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
     }
 
     private fun requestNotificationPermissionIfNeeded(): GeckoResult<Int> {
