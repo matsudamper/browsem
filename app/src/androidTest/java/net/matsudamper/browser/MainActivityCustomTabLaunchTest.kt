@@ -11,8 +11,11 @@ import androidx.browser.customtabs.CustomTabsSessionToken
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import org.junit.Assert.assertEquals
+import androidx.test.uiautomator.By
+import androidx.test.uiautomator.UiDevice
+import androidx.test.uiautomator.Until
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -85,13 +88,12 @@ class MainActivityCustomTabLaunchTest {
                 token = sessionToken,
                 url = preloadUri,
             )
+            // CustomTabActivity 起動前に準備済みセッションが実際に存在することを確認する。
+            // これにより consumePreparedSession の null が「消費済み」であることを保証できる。
             assertTrue(
-                "mayLaunchUrl の準備カウントが更新されませんでした",
-                waitUntil(5_000) {
-                    CustomTabsWarmupStore.getDebugMayLaunchCountForTesting() >= 1
-                },
+                "onMayLaunchUrl 後に準備済みセッションが存在しません",
+                CustomTabsWarmupStore.hasPreparedSessionForTesting(sessionToken, preloadUri.toString()),
             )
-            assertEquals(preloadUri.toString(), CustomTabsWarmupStore.getDebugLastPreparedUrlForTesting())
 
             val intent = Intent(context, DeepLinkActivity::class.java).apply {
                 action = Intent.ACTION_VIEW
@@ -106,13 +108,30 @@ class MainActivityCustomTabLaunchTest {
             ActivityScenario.launch<DeepLinkActivity>(intent).use {
                 val launched = instrumentation.waitForMonitorWithTimeout(monitor, 10_000)
                 assertNotNull("CustomTabActivity が起動しませんでした", launched)
-                assertTrue(
-                    "事前ロード済みセッションが CustomTabActivity に引き継がれていません",
-                    waitUntil(10_000) {
-                        CustomTabsWarmupStore.getDebugConsumeHitCountForTesting() >= 1
-                    },
-                )
-                launched?.finish()
+
+                try {
+                    // CustomTabScreen の remember 内で consumePreparedSession が呼ばれるまで待機する。
+                    // ツールバーの testTag が描画されれば remember ブロックが実行済みであることを確認できる。
+                    val uiDevice = UiDevice.getInstance(instrumentation)
+                    assertTrue(
+                        "CustomTabActivity のツールバーが描画されていません",
+                        uiDevice.wait(
+                            // Compose の testTagsAsResourceId は viewIdResourceName にタグ値をそのまま設定するため
+                            // By.res(packageName, tag) ではなく By.res(tag) で検索する。
+                            Until.hasObject(By.res(TEST_TAG_CUSTOM_TAB_TOOLBAR)),
+                            10_000,
+                        ),
+                    )
+                    // consumePreparedSession が null を返すことで、セッションが引き継ぎ済みであることを確認する。
+                    // 起動前に hasPreparedSessionForTesting で存在確認済みのため、
+                    // ここで null になるのは CustomTabActivity が消費したことを意味する。
+                    assertNull(
+                        "事前ロード済みセッションが CustomTabActivity に引き継がれていません",
+                        CustomTabsWarmupStore.consumePreparedSession(sessionToken, preloadUri.toString()),
+                    )
+                } finally {
+                    launched?.finish()
+                }
             }
         } finally {
             instrumentation.removeMonitor(monitor)
@@ -124,17 +143,6 @@ class MainActivityCustomTabLaunchTest {
         val method = CustomTabsSessionToken::class.java.getDeclaredMethod("getCallbackBinder")
         method.isAccessible = true
         return method.invoke(sessionToken) as IBinder
-    }
-
-    private fun waitUntil(timeoutMs: Long, condition: () -> Boolean): Boolean {
-        val deadline = System.currentTimeMillis() + timeoutMs
-        while (System.currentTimeMillis() < deadline) {
-            if (condition()) {
-                return true
-            }
-            Thread.sleep(100)
-        }
-        return condition()
     }
 
     companion object {
