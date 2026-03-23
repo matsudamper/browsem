@@ -86,18 +86,6 @@ jobs:
           path: qrcode.png
           archive: false
 
-      - name: Get direct URL of QR code (リダイレクト先を取得)
-        id: qr_direct_url
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          ARTIFACT_URL="${{ steps.upload_qr.outputs.artifact-url }}"
-          # artifact-url からリダイレクトを追跡して最終 URL を取得する
-          DIRECT_URL=$(curl -s -o /dev/null -L -w "%{url_effective}" \
-            -H "Authorization: Bearer $GH_TOKEN" \
-            "$ARTIFACT_URL")
-          echo "url=$DIRECT_URL" >> "$GITHUB_OUTPUT"
-
       - name: Comment APK download URL
         uses: marocchino/sticky-pull-request-comment@70d2764d1a7d5d9560b100cbea0077fc8f633987 # v3.0.2
         with:
@@ -107,9 +95,7 @@ jobs:
 
             - Download URL: ${{ steps.upload_apk.outputs.artifact-url }}
             - Artifact Name: `${{ env.APK_NAME }}`
-
-            ### QR Code
-            ![QR Code](${{ steps.qr_direct_url.outputs.url }})
+            - QR Code: ${{ steps.upload_qr.outputs.artifact-url }}
 
   android-test:
     runs-on: ubuntu-latest
