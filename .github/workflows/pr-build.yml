@@ -95,6 +95,7 @@ jobs:
 
             - Download URL: ${{ steps.upload_apk.outputs.artifact-url }}
             - Artifact Name: `${{ env.APK_NAME }}`
+
             ![QR Code](${{ steps.upload_qr.outputs.artifact-url }})
 
   android-test:
