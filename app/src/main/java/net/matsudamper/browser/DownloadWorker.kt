@@ -35,17 +35,19 @@ internal class DownloadWorker(
     override suspend fun doWork(): Result {
         val url = inputData.getString(KEY_URL) ?: return Result.failure()
         val referrerUrl = inputData.getString(KEY_REFERRER_URL).orEmpty()
+        // inputDataから通知IDを読み出す（GeckoDownloadManagerと共有）
+        val notificationId = inputData.getInt(KEY_NOTIFICATION_ID, NOTIFICATION_ID)
 
         val repository = DownloadRepository(context)
         val enqueuedAt = System.currentTimeMillis()
 
         ensureNotificationChannel(context)
-        setForeground(createForegroundInfo(0, true, context.getString(R.string.download_notification_starting), 0L, -1L))
+        setForeground(createForegroundInfo(notificationId, 0, true, context.getString(R.string.download_notification_starting), 0L, -1L))
 
         repository.insertDownload(workerId = id.toString(), url = url, enqueuedAt = enqueuedAt)
 
         return try {
-            val (fileUri, fileName) = downloadFile(url, referrerUrl, repository)
+            val (fileUri, fileName) = downloadFile(url, referrerUrl, notificationId, repository)
             repository.updateCompleted(id.toString(), fileName, fileUri.toString())
             postCompletionNotification(fileName)
             Result.success()
@@ -86,6 +88,7 @@ internal class DownloadWorker(
     private suspend fun downloadFile(
         urlString: String,
         referrerUrl: String,
+        notificationId: Int,
         repository: DownloadRepository,
     ): Pair<android.net.Uri, String> {
         // GeckoRuntime.getDefault() はUIスレッドでのみ呼び出し可能
@@ -128,7 +131,7 @@ internal class DownloadWorker(
         val fileName = URLUtil.guessFileName(urlString, contentDisposition, mimeType)
             .ifBlank { "download-${System.currentTimeMillis()}" }
 
-        setForeground(createForegroundInfo(0, contentLength <= 0, fileName, 0L, contentLength))
+        setForeground(createForegroundInfo(notificationId, 0, contentLength <= 0, fileName, 0L, contentLength))
 
         val resolver = context.contentResolver
         val values = ContentValues().apply {
@@ -155,7 +158,7 @@ internal class DownloadWorker(
                         if (now - lastUpdateTime >= 1000L) {
                             val progress = if (contentLength > 0) (totalRead * 100 / contentLength).toInt() else 0
                             repository.updateProgress(id.toString(), fileName, progress, totalRead, contentLength)
-                            setForeground(createForegroundInfo(progress, contentLength <= 0, fileName, totalRead, contentLength))
+                            setForeground(createForegroundInfo(notificationId, progress, contentLength <= 0, fileName, totalRead, contentLength))
                             lastUpdateTime = now
                         }
                     }
@@ -174,6 +177,7 @@ internal class DownloadWorker(
     }
 
     private fun createForegroundInfo(
+        notificationId: Int,
         progress: Int,
         indeterminate: Boolean,
         title: String,
@@ -202,7 +206,7 @@ internal class DownloadWorker(
             .setContentIntent(pendingIntent)
             .build()
         return ForegroundInfo(
-            NOTIFICATION_ID,
+            notificationId,
             notification,
             android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC,
         )
@@ -211,6 +215,7 @@ internal class DownloadWorker(
     companion object {
         const val KEY_URL = "url"
         const val KEY_REFERRER_URL = "referrer_url"
+        const val KEY_NOTIFICATION_ID = "notification_id"
         const val CHANNEL_ID = "download_progress_channel"
         const val NOTIFICATION_ID = 9001
         /** 完了通知IDのベース。ワークIDのhashCodeを加算して使用する */
