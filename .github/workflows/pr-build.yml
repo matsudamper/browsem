@@ -4,7 +4,7 @@ on:
   pull_request:
 
 permissions:
-  contents: write
+  contents: read
   actions: read
   pull-requests: write
 
@@ -86,52 +86,6 @@ jobs:
           path: qrcode.png
           archive: false
 
-      - name: Publish QR code to ci-artifacts branch
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          # ci-artifacts ブランチが存在しない場合は空のオーファンブランチを作成する
-          if ! gh api "/repos/${{ github.repository }}/branches/ci-artifacts" > /dev/null 2>&1; then
-            EMPTY_TREE="4b825dc642cb6eb9a060e54bf8d69288fbee4904"
-            COMMIT_SHA=$(gh api \
-              -X POST "/repos/${{ github.repository }}/git/commits" \
-              -f message="ci: initialize ci-artifacts branch" \
-              -f "tree=${EMPTY_TREE}" \
-              --jq '.sha')
-            gh api \
-              -X POST "/repos/${{ github.repository }}/git/refs" \
-              -f ref="refs/heads/ci-artifacts" \
-              -f sha="${COMMIT_SHA}"
-          fi
-
-          # PR番号をファイル名に使い、同一PRの再ビルド時は上書きする
-          QR_FILENAME="pr-${{ github.event.pull_request.number }}-qrcode.png"
-          QR_BASE64=$(base64 -w0 qrcode.png)
-
-          # 既存ファイルの SHA を取得（上書き時に必要）
-          EXISTING_SHA=$(gh api \
-            "/repos/${{ github.repository }}/contents/qr-codes/${QR_FILENAME}?ref=ci-artifacts" \
-            --jq '.sha' 2>/dev/null || true)
-
-          if [ -n "$EXISTING_SHA" ]; then
-            gh api \
-              -X PUT "/repos/${{ github.repository }}/contents/qr-codes/${QR_FILENAME}" \
-              -f message="ci: update QR code for PR #${{ github.event.pull_request.number }}" \
-              -f content="${QR_BASE64}" \
-              -f branch="ci-artifacts" \
-              -f sha="${EXISTING_SHA}" \
-              --silent
-          else
-            gh api \
-              -X PUT "/repos/${{ github.repository }}/contents/qr-codes/${QR_FILENAME}" \
-              -f message="ci: add QR code for PR #${{ github.event.pull_request.number }}" \
-              -f content="${QR_BASE64}" \
-              -f branch="ci-artifacts" \
-              --silent
-          fi
-
-          echo "QR_IMAGE_URL=https://raw.githubusercontent.com/${{ github.repository }}/ci-artifacts/qr-codes/${QR_FILENAME}" >> "$GITHUB_ENV"
-
       - name: Comment APK download URL
         uses: marocchino/sticky-pull-request-comment@70d2764d1a7d5d9560b100cbea0077fc8f633987 # v3.0.2
         with:
@@ -143,7 +97,7 @@ jobs:
             - Artifact Name: `${{ env.APK_NAME }}`
 
             ### QR Code
-            ![QR Code](${{ env.QR_IMAGE_URL }})
+            ![QR Code](${{ steps.upload_qr.outputs.artifact-url }})
 
   android-test:
     runs-on: ubuntu-latest
