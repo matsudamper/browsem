@@ -151,6 +151,8 @@ internal fun BrowserTabOverlayLayer(
     urlBarSuggestions: UrlBarSuggestionsUiState,
     onHistorySuggestionClick: (net.matsudamper.browser.data.history.HistoryEntry) -> Unit,
     onWebSuggestionClick: (String) -> Unit,
+    clipboardUrl: String?,
+    onClipboardUrlClick: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Box(modifier = modifier) {
@@ -167,7 +169,8 @@ internal fun BrowserTabOverlayLayer(
                 isUrlInputFocused = state.isUrlInputFocused,
                 suggestionCount = urlBarSuggestions.historySuggestions.size +
                     urlBarSuggestions.webSuggestions.size +
-                    if (urlBarSuggestions.isLoadingWebSuggestions) 1 else 0,
+                    if (urlBarSuggestions.isLoadingWebSuggestions) 1 else 0 +
+                    if (clipboardUrl != null) 1 else 0,
                 currentPageUrl = state.currentPageUrl,
             )
         ) {
@@ -180,6 +183,8 @@ internal fun BrowserTabOverlayLayer(
                 onWebSuggestionClick = onWebSuggestionClick,
                 onCopyCurrentUrl = state::copyCurrentPageUrl,
                 onRestoreCurrentUrl = state::restoreCurrentPageUrlToInput,
+                clipboardUrl = clipboardUrl,
+                onClipboardUrlClick = onClipboardUrlClick,
                 modifier = Modifier
                     .fillMaxSize()
                     .background(MaterialTheme.colorScheme.surface)
@@ -199,6 +204,8 @@ internal fun UrlSuggestionList(
     onWebSuggestionClick: (String) -> Unit,
     onCopyCurrentUrl: () -> Unit,
     onRestoreCurrentUrl: () -> Unit,
+    clipboardUrl: String?,
+    onClipboardUrlClick: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val hasHistorySuggestions = historySuggestions.isNotEmpty()
@@ -211,6 +218,18 @@ internal fun UrlSuggestionList(
                     currentPageUrl = currentPageUrl,
                     onCopyCurrentUrl = onCopyCurrentUrl,
                     onRestoreCurrentUrl = onRestoreCurrentUrl,
+                )
+                if (clipboardUrl != null || hasHistorySuggestions || hasWebSuggestions) {
+                    HorizontalDivider()
+                }
+            }
+        }
+
+        if (clipboardUrl != null) {
+            item(key = "clipboard_url") {
+                ClipboardUrlListItem(
+                    clipboardUrl = clipboardUrl,
+                    onClick = { onClipboardUrlClick(clipboardUrl) },
                 )
                 if (hasHistorySuggestions || hasWebSuggestions) {
                     HorizontalDivider()
@@ -297,6 +316,31 @@ private fun SuggestionSectionHeader(
             modifier = modifier.padding(horizontal = 16.dp, vertical = 12.dp),
         )
     }
+}
+
+@Composable
+private fun ClipboardUrlListItem(
+    clipboardUrl: String,
+    onClick: () -> Unit,
+) {
+    ListItem(
+        headlineContent = {
+            Text(text = "コピーしたリンク")
+        },
+        supportingContent = {
+            androidx.compose.runtime.CompositionLocalProvider(
+                LocalContentColor provides MaterialTheme.colorScheme.onSurfaceVariant,
+            ) {
+                Text(
+                    text = clipboardUrl,
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        },
+        modifier = Modifier.clickable { onClick() },
+    )
 }
 
 @Composable
