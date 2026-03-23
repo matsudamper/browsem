@@ -15,6 +15,7 @@ import androidx.test.uiautomator.By
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.Until
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -102,12 +103,17 @@ class MainActivityCustomTabLaunchTest {
                 val launched = instrumentation.waitForMonitorWithTimeout(monitor, 10_000)
                 assertNotNull("CustomTabActivity が起動しませんでした", launched)
 
-                // CustomTabScreen の remember 内で consumePreparedSession が呼ばれ、
-                // アドレスバーが描画されることで、セッション引き継ぎが完了したことを確認する。
+                // CustomTabScreen の remember 内で consumePreparedSession が呼ばれるまで待機する。
+                // ツールバー（閉じるボタン）が描画されれば remember ブロックが実行済みであることを確認できる。
                 val uiDevice = UiDevice.getInstance(instrumentation)
                 assertTrue(
+                    "CustomTabActivity のツールバーが描画されていません",
+                    uiDevice.wait(Until.hasObject(By.desc("閉じる")), 10_000),
+                )
+                // consumePreparedSession が null を返すことで、セッションが引き継ぎ済みであることを確認する。
+                assertNull(
                     "事前ロード済みセッションが CustomTabActivity に引き継がれていません",
-                    uiDevice.wait(Until.hasObject(By.desc("Address bar")), 10_000),
+                    CustomTabsWarmupStore.consumePreparedSession(sessionToken, preloadUri.toString()),
                 )
                 launched?.finish()
             }
