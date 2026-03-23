@@ -29,7 +29,6 @@ internal class DownloadManagementScreenViewModel(
         .observeDownloads()
         .map { records ->
             val items = records
-                .filter { record -> record.status != DownloadRecordStatus.CANCELLED }
                 .map { record -> record.toDownloadItem() }
             DownloadManagementScreenUiState(
                 downloads = items,
@@ -78,7 +77,7 @@ internal class DownloadManagementScreenViewModel(
                     isIndeterminate = contentLength <= 0,
                 )
             }
-            DownloadRecordStatus.CANCELLED -> DownloadManagementScreenUiState.DownloadStatus.Failed
+            DownloadRecordStatus.CANCELLED -> DownloadManagementScreenUiState.DownloadStatus.Cancelled
         }
         return DownloadManagementScreenUiState.DownloadItem(
             id = UUID.fromString(workerId),
@@ -93,10 +92,6 @@ internal class DownloadManagementScreenViewModel(
 
     private fun cancelDownload(id: UUID) {
         workManager.cancelWorkById(id)
-        // ENQUEUEDでWorkerが未起動の場合もRoom側を更新する
-        viewModelScope.launch {
-            downloadRepository.updateCancelled(id.toString())
-        }
     }
 
     private fun openFile(fileUri: String) {
