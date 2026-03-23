@@ -6,6 +6,7 @@ import androidx.core.app.NotificationCompat
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.workDataOf
+import java.util.UUID
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import net.matsudamper.browser.data.download.DownloadRepository
@@ -24,11 +25,16 @@ internal class GeckoDownloadManager(
      */
     fun enqueueDownload(url: String, referrerUrl: String, coroutineScope: CoroutineScope) {
         DownloadWorker.ensureNotificationChannel(context)
+        // ダウンロードごとに一意な通知IDを事前に生成し、WorkerとGeckoDownloadManagerで共有する
+        val workId = UUID.randomUUID()
+        val notificationId = workId.hashCode() and 0x7fffffff
         val workRequest = OneTimeWorkRequestBuilder<DownloadWorker>()
+            .setId(workId)
             .setInputData(
                 workDataOf(
                     DownloadWorker.KEY_URL to url,
                     DownloadWorker.KEY_REFERRER_URL to referrerUrl,
+                    DownloadWorker.KEY_NOTIFICATION_ID to notificationId,
                 )
             )
             .addTag(DownloadWorker.TAG_DOWNLOAD)
@@ -51,7 +57,7 @@ internal class GeckoDownloadManager(
             .setOnlyAlertOnce(true)
             .build()
         context.getSystemService(NotificationManager::class.java)
-            .notify(DownloadWorker.NOTIFICATION_ID, notification)
+            .notify(notificationId, notification)
     }
 
     /**
