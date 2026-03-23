@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>通知パーミッションテスト</title>
+</head>
+<body>
+  <button id="request-btn">通知を許可する</button>
+  <script>
+    document.getElementById('request-btn').addEventListener('click', function() {
+      if (!('Notification' in window)) {
+        document.title = 'notification-result:unsupported';
+        return;
+      }
+      Notification.requestPermission().then(function(result) {
+        document.title = 'notification-result:' + result;
+      });
+    });
+  </script>
+</body>
+</html>
