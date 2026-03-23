@@ -11,6 +11,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.browser.customtabs.CustomTabsSessionToken
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -18,6 +19,8 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import net.matsudamper.browser.data.SettingsRepository
@@ -79,6 +82,11 @@ class CustomTabActivity : ComponentActivity() {
             }
 
             BrowserTheme(themeMode = browserSettings.themeMode) {
+                Box(
+                    modifier = Modifier.semantics {
+                        testTagsAsResourceId = true
+                    },
+                ) {
                 CustomTabScreen(
                     initialUrl = initialUrl.takeIf { it.isNotBlank() } ?: browserSettings.resolvedHomepageUrl(),
                     customTabsSessionToken = customTabsSessionToken,
@@ -96,6 +104,7 @@ class CustomTabActivity : ComponentActivity() {
                     onDesktopNotificationPermissionRequest = { requestNotificationPermissionIfNeeded() },
                     onRequestDownloadNotificationPermission = { requestDownloadNotificationPermission() },
                 )
+                }
             }
         }
     }

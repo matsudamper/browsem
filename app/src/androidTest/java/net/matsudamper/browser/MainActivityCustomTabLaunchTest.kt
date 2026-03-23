@@ -104,11 +104,15 @@ class MainActivityCustomTabLaunchTest {
                 assertNotNull("CustomTabActivity が起動しませんでした", launched)
 
                 // CustomTabScreen の remember 内で consumePreparedSession が呼ばれるまで待機する。
-                // ツールバー（閉じるボタン）が描画されれば remember ブロックが実行済みであることを確認できる。
+                // ツールバーの testTag が描画されれば remember ブロックが実行済みであることを確認できる。
                 val uiDevice = UiDevice.getInstance(instrumentation)
+                val packageName = instrumentation.targetContext.packageName
                 assertTrue(
                     "CustomTabActivity のツールバーが描画されていません",
-                    uiDevice.wait(Until.hasObject(By.desc("閉じる")), 10_000),
+                    uiDevice.wait(
+                        Until.hasObject(By.res(packageName, TEST_TAG_CUSTOM_TAB_TOOLBAR)),
+                        10_000,
+                    ),
                 )
                 // consumePreparedSession が null を返すことで、セッションが引き継ぎ済みであることを確認する。
                 assertNull(
