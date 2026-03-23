@@ -153,7 +153,8 @@ class MediaNotificationSmokeTest {
             // Media3が生成する通知にはPlay/Pauseコントロールが含まれる。
             assertTrue(
                 "メディア通知にコントロール（Play/Pause）が表示されること",
-                uiDevice.hasObject(By.descContains("Play")) || uiDevice.hasObject(By.descContains("Pause")),
+                uiDevice.wait(Until.hasObject(By.descContains("Play")), NOTIFICATION_CONTROL_TIMEOUT_MS) ||
+                    uiDevice.wait(Until.hasObject(By.descContains("Pause")), NOTIFICATION_CONTROL_TIMEOUT_MS),
             )
         } finally {
             uiDevice.pressBack()
