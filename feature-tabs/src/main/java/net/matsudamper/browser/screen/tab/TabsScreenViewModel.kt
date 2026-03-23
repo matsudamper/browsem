@@ -6,6 +6,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -177,7 +178,7 @@ class TabsScreenViewModel(
             // 初回復元後、selectedTabId の変化を継続的に監視して activeGroupIndex を同期する。
             // 外部リンク等で別グループにタブが追加された場合にも、
             // タブ一覧画面を開く前に正しいグループが設定される。
-            tabStore.tabStoreState.map { it.selectedTabId }.collect { selectedTabId ->
+            tabStore.tabStoreState.map { it.selectedTabId }.distinctUntilChanged().collect { selectedTabId ->
                 if (selectedTabId == null) return@collect
                 val state = viewModelStateFlow.value
                 val groups = state.groups
