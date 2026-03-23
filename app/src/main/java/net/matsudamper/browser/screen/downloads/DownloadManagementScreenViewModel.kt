@@ -92,10 +92,6 @@ internal class DownloadManagementScreenViewModel(
 
     private fun cancelDownload(id: UUID) {
         workManager.cancelWorkById(id)
-        // ENQUEUEDでWorkerが未起動の場合もRoom側を更新する
-        viewModelScope.launch {
-            downloadRepository.updateCancelled(id.toString())
-        }
     }
 
     private fun openFile(fileUri: String) {
