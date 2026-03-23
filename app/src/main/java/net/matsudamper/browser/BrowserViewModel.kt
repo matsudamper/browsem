@@ -93,10 +93,9 @@ internal class BrowserViewModel(
         uri: String,
         onDesktopNotificationPermissionRequest: () -> GeckoResult<Int>,
     ): GeckoResult<Int> {
-        val allowedOrigins = settings.value?.notificationAllowedOriginsList ?: emptyList()
-        if (allowedOrigins.contains(uri)) {
-            return GeckoResult.fromValue(GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW)
-        }
+        // OS パーミッション（POST_NOTIFICATIONS）の確認を常に onDesktopNotificationPermissionRequest に委譲する。
+        // allowed list の早期リターンは廃止。OS パーミッションが revoke されている場合でも
+        // 正しくダイアログを表示するためには、OS パーミッション確認フローを必ず経由する必要がある。
         val androidResult = onDesktopNotificationPermissionRequest()
         return androidResult.then { value ->
             if (value == GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW) {
