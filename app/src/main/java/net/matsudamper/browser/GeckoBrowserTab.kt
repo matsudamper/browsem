@@ -89,6 +89,8 @@ internal fun GeckoBrowserTab(
 ) {
     val context = LocalContext.current
     val readabilityWebExtension: ReadabilityWebExtension = koinInject()
+    // URLバーフォーカス時にクリップボードから読み取ったURL
+    var clipboardUrl by remember { mutableStateOf<String?>(null) }
     val state = rememberBrowserTabScreenState(
         browserTab = browserTab,
         homepageUrl = homepageUrl,
@@ -384,11 +386,26 @@ internal fun GeckoBrowserTab(
                             if (!state.isUrlInputFocused) {
                                 state.urlInput = ""
                             }
+                            // クリップボードからURLを読み取り、現在のページと異なる場合に表示
+                            val clipManager = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE)
+                                as android.content.ClipboardManager
+                            val clipped = clipManager.primaryClip?.getItemAt(0)
+                                ?.coerceToText(context)?.toString()?.trim()
+                            clipboardUrl = if (
+                                clipped != null &&
+                                (clipped.startsWith("http://") || clipped.startsWith("https://")) &&
+                                clipped != state.currentPageUrl
+                            ) {
+                                clipped
+                            } else {
+                                null
+                            }
                             runCatching { session.setFocused(false) }
                             geckoView?.clearFocus()
                             keyboardController?.show()
                         } else {
                             state.restoreCurrentPageUrlToInput()
+                            clipboardUrl = null
                         }
                         state.isUrlInputFocused = hasFocus
                     },
@@ -483,6 +500,11 @@ internal fun GeckoBrowserTab(
                 },
                 onWebSuggestionClick = { query ->
                     state.onUrlSubmit(query)
+                    closeUrlInput(false)
+                },
+                clipboardUrl = clipboardUrl,
+                onClipboardUrlClick = { url ->
+                    state.onUrlSubmit(url)
                     closeUrlInput(false)
                 },
                 modifier = Modifier.fillMaxSize(),
