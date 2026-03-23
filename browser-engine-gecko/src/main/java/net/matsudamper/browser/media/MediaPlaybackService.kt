@@ -57,14 +57,12 @@ class MediaPlaybackService : MediaSessionService() {
                     actionFactory: MediaNotification.ActionFactory,
                     onNotificationChangedCallback: MediaNotification.Provider.Callback,
                 ): MediaNotification {
-                    val mediaNotification = defaultNotificationProvider.createNotification(
+                    return defaultNotificationProvider.createNotification(
                         mediaSession,
                         customLayout,
                         actionFactory,
                         onNotificationChangedCallback,
                     )
-                    recordGeneratedNotification(mediaNotification.notification)
-                    return mediaNotification
                 }
 
                 override fun handleCustomCommand(
@@ -145,38 +143,10 @@ class MediaPlaybackService : MediaSessionService() {
             .createNotificationChannel(channel)
     }
 
-    private fun recordGeneratedNotification(notification: android.app.Notification) {
-        lastGeneratedNotificationActionCount = notification.actions?.size ?: 0
-        lastGeneratedNotificationTitle =
-            notification.extras?.getCharSequence(android.app.Notification.EXTRA_TITLE)?.toString()
-        lastGeneratedNotificationText =
-            notification.extras?.getCharSequence(android.app.Notification.EXTRA_TEXT)?.toString()
-        lastGeneratedNotificationHasLargeIcon = notification.getLargeIcon() != null
-        Log.d(
-            TAG,
-            "generated notification: actionCount=$lastGeneratedNotificationActionCount, title=$lastGeneratedNotificationTitle, text=$lastGeneratedNotificationText, hasLargeIcon=$lastGeneratedNotificationHasLargeIcon",
-        )
-    }
-
     companion object {
         const val CHANNEL_ID = "media_playback"
         const val EXTRA_REQUIRE_IMMEDIATE_FOREGROUND =
             "net.matsudamper.browser.media.extra.REQUIRE_IMMEDIATE_FOREGROUND"
-        @Volatile
-        var lastGeneratedNotificationActionCount: Int = 0
-        @Volatile
-        var lastGeneratedNotificationTitle: String? = null
-        @Volatile
-        var lastGeneratedNotificationText: String? = null
-        @Volatile
-        var lastGeneratedNotificationHasLargeIcon: Boolean = false
-
-        fun resetGeneratedNotificationDebugState() {
-            lastGeneratedNotificationActionCount = 0
-            lastGeneratedNotificationTitle = null
-            lastGeneratedNotificationText = null
-            lastGeneratedNotificationHasLargeIcon = false
-        }
 
         private const val NOTIFICATION_ID = 1001
         private const val TAG = "MediaPlayback"

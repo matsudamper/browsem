@@ -22,9 +22,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+
+internal const val TEST_TAG_CUSTOM_TAB_TOOLBAR = "custom_tab_toolbar"
 
 @Composable
 internal fun CustomTabToolbar(
@@ -49,7 +52,9 @@ internal fun CustomTabToolbar(
     Surface(
         color = resolvedToolbarColor,
         contentColor = toolbarContentColor,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag(TEST_TAG_CUSTOM_TAB_TOOLBAR),
     ) {
         Row(
             modifier = Modifier

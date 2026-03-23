@@ -18,15 +18,6 @@ object CustomTabsWarmupStore {
     private val lock = Any()
     private val entries = linkedMapOf<CustomTabsSessionToken, Entry>()
 
-    @Volatile
-    private var debugMayLaunchCount = 0
-
-    @Volatile
-    private var debugConsumeHitCount = 0
-
-    @Volatile
-    private var debugLastPreparedUrl: String? = null
-
     private data class Entry(
         var preparedSession: GeckoSession? = null,
         var preparedUrl: String? = null,
@@ -72,8 +63,6 @@ object CustomTabsWarmupStore {
             }
             session.loadUri(targetUrl)
         }
-        debugMayLaunchCount++
-        debugLastPreparedUrl = targetUrl
     }
 
     fun consumePreparedSession(
@@ -98,7 +87,6 @@ object CustomTabsWarmupStore {
                 session.loadUri(launchUrl)
             }
         }
-        debugConsumeHitCount++
         return session
     }
 
@@ -115,8 +103,15 @@ object CustomTabsWarmupStore {
     }
 
     @VisibleForTesting
-    fun resetForTesting() {
-        val sessions = synchronized(lock) {
+    fun hasPreparedSessionForTesting(token: CustomTabsSessionToken, url: String): Boolean {
+        return synchronized(lock) {
+            val entry = entries[token] ?: return false
+            entry.preparedSession != null && entry.preparedUrl == url
+        }
+    }
+
+    @VisibleForTesting
+    fun resetForTesting() {        val sessions = synchronized(lock) {
             val allSessions = entries.values.mapNotNull { it.preparedSession }
             entries.clear()
             allSessions
@@ -126,19 +121,7 @@ object CustomTabsWarmupStore {
                 runCatching { session.close() }
             }
         }
-        debugMayLaunchCount = 0
-        debugConsumeHitCount = 0
-        debugLastPreparedUrl = null
     }
-
-    @VisibleForTesting
-    fun getDebugMayLaunchCountForTesting(): Int = debugMayLaunchCount
-
-    @VisibleForTesting
-    fun getDebugConsumeHitCountForTesting(): Int = debugConsumeHitCount
-
-    @VisibleForTesting
-    fun getDebugLastPreparedUrlForTesting(): String? = debugLastPreparedUrl
 
     private fun ensureEntryLocked(token: CustomTabsSessionToken): Entry {
         return entries.getOrPut(token) {
