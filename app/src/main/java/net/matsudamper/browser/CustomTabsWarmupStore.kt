@@ -103,8 +103,15 @@ object CustomTabsWarmupStore {
     }
 
     @VisibleForTesting
-    fun resetForTesting() {
-        val sessions = synchronized(lock) {
+    fun hasPreparedSessionForTesting(token: CustomTabsSessionToken, url: String): Boolean {
+        return synchronized(lock) {
+            val entry = entries[token] ?: return false
+            entry.preparedSession != null && entry.preparedUrl == url
+        }
+    }
+
+    @VisibleForTesting
+    fun resetForTesting() {        val sessions = synchronized(lock) {
             val allSessions = entries.values.mapNotNull { it.preparedSession }
             entries.clear()
             allSessions
