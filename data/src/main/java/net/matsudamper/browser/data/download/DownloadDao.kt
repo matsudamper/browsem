@@ -30,7 +30,7 @@ interface DownloadDao {
     @Query(
         "UPDATE download SET fileName = :fileName, status = 'RUNNING', " +
             "progress = :progress, totalRead = :totalRead, contentLength = :contentLength " +
-            "WHERE workerId = :workerId",
+            "WHERE workerId = :workerId AND status = 'RUNNING'",
     )
     suspend fun updateProgress(
         workerId: String,
