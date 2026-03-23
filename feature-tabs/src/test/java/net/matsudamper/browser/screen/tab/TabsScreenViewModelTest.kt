@@ -64,6 +64,12 @@ class TabsScreenViewModelTest {
         fun setSelectedTabId(tabId: String?) {
             _state.update { it.copy(selectedTabId = tabId) }
         }
+
+        fun removeTab(id: String) {
+            _state.update { state ->
+                state.copy(tabs = state.tabs.filterNot { it.id == id })
+            }
+        }
     }
 
     private class FakeTabGroupRepository : TabGroupRepository {
@@ -501,6 +507,67 @@ class TabsScreenViewModelTest {
         assertEquals(
             "selectedTabId が null の場合 activeGroupIndex は 0 のまま",
             0,
+            viewModel.activeGroupIndexFromUiState(),
+        )
+    }
+
+    // -----------------------------------------------------------------------
+    // バグ再現テスト: 別グループのタブを閉じると activeGroupIndex が変わる問題
+    // -----------------------------------------------------------------------
+
+    /**
+     * 再現シナリオ:
+     * 1. グループAにアクティブなタブ（tab-a）がある
+     * 2. グループBにタブ（tab-b）がある（選択されていない）
+     * 3. ユーザーがグループBを表示中（activeGroupIndex = 1）
+     * 4. グループBのタブ（tab-b）を閉じる
+     * 5. 期待: activeGroupIndex は 1 のまま（グループBにとどまる）
+     *
+     * バグ: tabStoreState が emit されると selectedTabId の collect が再発火し、
+     * selectedTabId="tab-a" → グループA(index=0) と再計算して
+     * activeGroupIndex を 0 に上書きしてしまう。
+     */
+    @Test
+    fun closingTabInOtherGroup_doesNotJumpToActiveTabGroup() = runTest(testDispatcher) {
+        val tabStore = FakeTabStore()
+        val repo = FakeTabGroupRepository()
+
+        val groupA = TabGroupData(TabGroupId("gA"), "グループA")
+        val groupB = TabGroupData(TabGroupId("gB"), "グループB")
+        repo.setGroups(listOf(groupA, groupB))
+
+        // グループAのタブを追加・選択（アクティブタブ）
+        tabStore.addTab("tab-a")
+        tabStore.setSelectedTabId("tab-a")
+        repo.assignTabToGroup("tab-a", groupA.id)
+
+        // グループBのタブを追加（選択はしない）
+        tabStore.addTab("tab-b")
+        repo.assignTabToGroup("tab-b", groupB.id)
+
+        val viewModel = buildViewModel(tabStore, repo, this)
+        advanceUntilIdle()
+
+        // 初期状態: アクティブタブがグループA → activeGroupIndex = 0
+        assertEquals("初期状態はグループA（index=0）", 0, viewModel.activeGroupIndexFromUiState())
+
+        // ユーザーがグループBを選択して表示する
+        viewModel.uiState.value.callbacks.onGroupSelected(1)
+        advanceUntilIdle()
+        assertEquals("グループBを選択後は activeGroupIndex = 1", 1, viewModel.activeGroupIndexFromUiState())
+
+        // グループBのタブ（tab-b）を閉じる
+        // TabSelectionPolicy により selectedTabId は "tab-a" のまま変わらない
+        viewModel.uiState.value.callbacks.onCloseTab("tab-b")
+        tabStore.removeTab("tab-b")
+        advanceUntilIdle()
+
+        // 期待: グループBのままでいるべき（activeGroupIndex = 1）
+        // バグ: tabStoreState の emit で collect が再発火し、
+        //        selectedTabId="tab-a" → グループA(index=0) に戻ってしまう
+        assertEquals(
+            "アクティブでないグループのタブを閉じても activeGroupIndex は変わらないべき",
+            1,
             viewModel.activeGroupIndexFromUiState(),
         )
     }
