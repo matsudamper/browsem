@@ -1,6 +1,8 @@
 package net.matsudamper.browser.media
 
 import android.content.Intent
+import android.os.Handler
+import android.os.Looper
 import android.os.SystemClock
 import androidx.lifecycle.ViewModelProvider
 import androidx.test.ext.junit.rules.ActivityScenarioRule
@@ -22,6 +24,8 @@ import org.junit.Test
 import org.junit.rules.Timeout
 import org.junit.runner.RunWith
 import java.io.File
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 /**
  * メディア通知機能のスモークテスト。
@@ -49,13 +53,15 @@ class MediaNotificationSmokeTest {
 
     @After
     fun tearDown() {
-        // GeckoView描画中でも後始末できるよう、UIスレッドで直接停止処理を行う。
-        runOnMainThread {
-            MediaSessionBridge.deactivate()
-            runCatching {
-                activity.stopService(Intent(activity, MediaPlaybackService::class.java))
-            }
+        // GeckoViewのメディア再生中にメインスレッドが応答しない場合でもテストがブロックしないよう、
+        // CountDownLatchで最大5秒まで待機する非同期後始末に変更する。
+        val latch = CountDownLatch(1)
+        Handler(Looper.getMainLooper()).post {
+            runCatching { MediaSessionBridge.deactivate() }
+            runCatching { activity.stopService(Intent(activity, MediaPlaybackService::class.java)) }
+            latch.countDown()
         }
+        latch.await(5, TimeUnit.SECONDS)
         // 通知シェードが残っている場合は閉じる。
         UiDevice.getInstance(InstrumentationRegistry.getInstrumentation()).pressBack()
     }

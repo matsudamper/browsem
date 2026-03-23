@@ -113,11 +113,12 @@ class MainActivityCustomTabLaunchTest {
                     // CustomTabScreen の remember 内で consumePreparedSession が呼ばれるまで待機する。
                     // ツールバーの testTag が描画されれば remember ブロックが実行済みであることを確認できる。
                     val uiDevice = UiDevice.getInstance(instrumentation)
-                    val packageName = instrumentation.targetContext.packageName
                     assertTrue(
                         "CustomTabActivity のツールバーが描画されていません",
                         uiDevice.wait(
-                            Until.hasObject(By.res(packageName, TEST_TAG_CUSTOM_TAB_TOOLBAR)),
+                            // Compose の testTagsAsResourceId は viewIdResourceName にタグ値をそのまま設定するため
+                            // By.res(packageName, tag) ではなく By.res(tag) で検索する。
+                            Until.hasObject(By.res(TEST_TAG_CUSTOM_TAB_TOOLBAR)),
                             10_000,
                         ),
                     )
