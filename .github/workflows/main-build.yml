@@ -54,6 +54,7 @@ jobs:
         with:
           name: app-lint-report
           path: app/build/reports/lint-results-debug.html
+          archive: false
 
   android-test:
     runs-on: ubuntu-latest
