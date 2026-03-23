@@ -1,5 +1,6 @@
 package net.matsudamper.browser
 
+import android.Manifest
 import android.os.Build
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.lifecycle.ViewModelProvider
@@ -8,21 +9,27 @@ import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.Until
-import org.junit.Assert.assertTrue
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
 
 /**
- * サイトが通知パーミッションを要求したとき、アプリ側のデリゲートが正しく応答して
- * GeckoResult を解決できるかを確認するテスト。
+ * サイトが通知パーミッションを要求したとき、ユーザーが「許可」を選択すると
+ * Notification.requestPermission() が "granted" を返すことを検証するテスト。
  *
- * 再現シナリオ:
- *   「サイト側の通知を許可するボタンを押してもダイアログが閉じられない」問題を GMD で再現する。
- *   - GeckoView の onContentPermissionRequest デリゲートが呼ばれない、または
- *     GeckoResult が解決されない場合、Notification.requestPermission() の JS コールバックが
- *     呼ばれず、タブのタイトルが変化しないためテストが失敗する。
+ * 正常な動作:
+ *   1. POST_NOTIFICATIONS が未許可の状態でサイトが通知を要求する
+ *   2. Android の OS パーミッションダイアログが表示される
+ *   3. ユーザーが「許可」を押す
+ *   4. Notification.requestPermission() のコールバックが "granted" で呼ばれる
+ *
+ * このテストが失敗する場合、以下のいずれかを示す:
+ *   - onContentPermissionRequest デリゲートが呼ばれていない（OS ダイアログ未表示）
+ *   - GeckoResult が解決されていない（タイムアウト）
+ *   - 許可したにも関わらず "denied" が返されている（実装バグ）
  */
 @RunWith(AndroidJUnit4::class)
 class NotificationPermissionTest {
@@ -31,14 +38,19 @@ class NotificationPermissionTest {
     val composeRule = createAndroidComposeRule<MainActivity>()
 
     /**
-     * テストページのボタンを押して Notification.requestPermission() を呼び出し、
-     * Android の POST_NOTIFICATIONS ダイアログを「許可」した後に
-     * JS コールバックが呼ばれてタブタイトルが更新されることを確認する。
-     *
-     * デリゲートが未実装または GeckoResult が解決されない場合は waitUntil がタイムアウトして失敗する。
+     * POST_NOTIFICATIONS を明示的に revoke してから通知パーミッションフローを実行し、
+     * 「許可」後に "granted" が返ることを検証する。
      */
     @Test
-    fun pressingNotificationAllowButtonCompletesPermissionFlow() {
+    fun allowingNotificationPermissionShouldReturnGranted() {
+        // POST_NOTIFICATIONS を revoke して「OSダイアログが必ず表示される」状態にする
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            InstrumentationRegistry.getInstrumentation().uiAutomation.revokeRuntimePermission(
+                composeRule.activity.packageName,
+                Manifest.permission.POST_NOTIFICATIONS,
+            )
+        }
+
         val browserSessionController = waitForBrowserSessionController()
         val activeTab = waitForActiveTab(browserSessionController)
         val pageUri = prepareLocalNotificationPermissionPageUri()
@@ -60,27 +72,33 @@ class NotificationPermissionTest {
         // JS でボタンをクリックして Notification.requestPermission() を呼び出す
         composeRule.runOnIdle {
             activeTab.session.loadUri(
-                "javascript:document.getElementById('request-btn').click()"
+                "javascript:void(document.getElementById('request-btn').click())"
             )
         }
 
-        // Android 13+ では POST_NOTIFICATIONS 許可ダイアログが表示されるので許可ボタンを押す
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
-            // 許可ボタンを最大 8 秒待って押す
+
+            // OS パーミッションダイアログが表示されることを確認する。
+            // 表示されない場合、onContentPermissionRequest デリゲートが呼ばれていないか、
+            // GeckoResult が resolve される前にダイアログが出ないことを示す。
             val allowButton = device.wait(
                 Until.findObject(
                     By.res("com.android.permissioncontroller:id/permission_allow_button")
                 ),
-                8_000L,
+                10_000L,
             )
-            allowButton?.click()
+            assertNotNull(
+                "OS の通知パーミッションダイアログが表示されませんでした。" +
+                    "onContentPermissionRequest デリゲートが呼ばれていないか、" +
+                    "POST_NOTIFICATIONS の revoke が反映されていない可能性があります。",
+                allowButton,
+            )
+            allowButton!!.click()
         }
 
         // GeckoResult が解決されると JS の Notification.requestPermission() コールバックが呼ばれ、
-        // タブのタイトルが "notification-result:granted" または "notification-result:denied" に更新される。
-        // タイムアウトした場合、onContentPermissionRequest デリゲートが未実装か、
-        // GeckoResult が解決されていないことを示す。
+        // タブのタイトルが "notification-result:granted" に更新される。
         composeRule.waitUntil(timeoutMillis = 15_000) {
             var matched = false
             composeRule.runOnIdle {
@@ -89,13 +107,15 @@ class NotificationPermissionTest {
             matched
         }
 
+        // 「許可」を押した後は必ず "granted" でなければならない。
+        // "denied" が返る場合、GeckoResult が正しい値で resolve されていないことを示す。
         composeRule.runOnIdle {
-            assertTrue(
-                "通知パーミッションフローが完了しませんでした。" +
-                    "onContentPermissionRequest デリゲートが呼ばれないか、GeckoResult が解決されていない可能性があります。" +
-                    " (title=${activeTab.title})",
-                activeTab.title == "notification-result:granted" ||
-                    activeTab.title == "notification-result:denied",
+            assertEquals(
+                "通知を「許可」した後は 'notification-result:granted' を期待しましたが " +
+                    "'${activeTab.title}' でした。" +
+                    "onContentPermissionRequest の GeckoResult が VALUE_ALLOW で resolve されていない可能性があります。",
+                "notification-result:granted",
+                activeTab.title,
             )
         }
     }
