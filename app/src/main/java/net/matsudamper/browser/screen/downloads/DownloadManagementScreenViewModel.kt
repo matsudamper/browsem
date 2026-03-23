@@ -29,7 +29,6 @@ internal class DownloadManagementScreenViewModel(
         .observeDownloads()
         .map { records ->
             val items = records
-                .filter { record -> record.status != DownloadRecordStatus.CANCELLED }
                 .map { record -> record.toDownloadItem() }
             DownloadManagementScreenUiState(
                 downloads = items,
