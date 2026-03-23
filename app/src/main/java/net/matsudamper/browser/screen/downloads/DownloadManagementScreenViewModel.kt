@@ -77,7 +77,7 @@ internal class DownloadManagementScreenViewModel(
                     isIndeterminate = contentLength <= 0,
                 )
             }
-            DownloadRecordStatus.CANCELLED -> DownloadManagementScreenUiState.DownloadStatus.Failed
+            DownloadRecordStatus.CANCELLED -> DownloadManagementScreenUiState.DownloadStatus.Cancelled
         }
         return DownloadManagementScreenUiState.DownloadItem(
             id = UUID.fromString(workerId),

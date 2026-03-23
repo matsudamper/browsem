@@ -140,6 +140,13 @@ private fun DownloadItemRow(
                         color = MaterialTheme.colorScheme.error,
                     )
                 }
+                is DownloadManagementScreenUiState.DownloadStatus.Cancelled -> {
+                    Text(
+                        text = "キャンセル",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
         }
         when (val status = item.status) {
@@ -173,6 +180,7 @@ private fun DownloadItemRow(
                 )
             }
             is DownloadManagementScreenUiState.DownloadStatus.Failed -> Unit
+            is DownloadManagementScreenUiState.DownloadStatus.Cancelled -> Unit
         }
         // ダウンロード開始時刻（完了後も常に表示）
         Text(

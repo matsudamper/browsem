@@ -23,6 +23,9 @@ internal data class DownloadManagementScreenUiState(
 
         /** ダウンロード失敗 */
         data object Failed : DownloadStatus
+
+        /** ダウンロードキャンセル */
+        data object Cancelled : DownloadStatus
     }
 
     @Stable
