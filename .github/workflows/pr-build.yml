@@ -71,6 +71,21 @@ jobs:
           path: app/build/reports/lint-results-debug.html
           archive: false
 
+      - name: Generate QR code for APK download URL
+        run: |
+          pip install "qrcode[pil]" --quiet
+          ARTIFACT_URL="${{ steps.upload_apk.outputs.artifact-url }}"
+          # APKダウンロードURLを埋め込んだ QRコード PNG を生成
+          python3 -c "import qrcode, sys; qrcode.make(sys.argv[1]).save('qrcode.png')" "$ARTIFACT_URL"
+
+      - name: Upload QR code (未圧縮アーティファクト)
+        id: upload_qr
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: apk-qr-code
+          path: qrcode.png
+          archive: false
+
       - name: Comment APK download URL
         uses: marocchino/sticky-pull-request-comment@70d2764d1a7d5d9560b100cbea0077fc8f633987 # v3.0.2
         with:
@@ -80,6 +95,7 @@ jobs:
 
             - Download URL: ${{ steps.upload_apk.outputs.artifact-url }}
             - Artifact Name: `${{ env.APK_NAME }}`
+            - QR Code: ${{ steps.upload_qr.outputs.artifact-url }}
 
   android-test:
     runs-on: ubuntu-latest
