@@ -81,6 +81,8 @@ import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
@@ -848,7 +850,8 @@ private fun GroupBookmarkTab(
     Box(
         modifier = modifier
             .width(120.dp)
-            .height(GroupTabBarHeight),
+            .height(GroupTabBarHeight)
+            .semantics { selected = fraction > 0.5f },
         contentAlignment = Alignment.BottomCenter,
     ) {
         Box(
