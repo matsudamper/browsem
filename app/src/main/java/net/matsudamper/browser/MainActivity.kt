@@ -159,9 +159,13 @@ class MainActivity : ComponentActivity() {
         // ダウンロード通知タップでダウンロード画面へ遷移させるため。
         if (intent.action == DownloadWorker.ACTION_OPEN_DOWNLOADS) {
             openDownloadsChannel.trySend(Unit)
-        } else if (savedInstanceState == null) {
+        } else {
             val url = intent.dataString
-            if (url != null) {
+            // 設定変更（画面回転等）後の再起動では savedInstanceState に処理済み URL が保存されており、
+            // 同じ URL であれば重複タブを作らないようスキップする。
+            // プロセスキル後に新たな deeplink が届いた場合は URL が変わるため、正常に処理される。
+            val processedUrl = savedInstanceState?.getString(KEY_PROCESSED_DEEPLINK_URL)
+            if (url != null && url != processedUrl) {
                 val result = createNewTabChannel.trySend(url)
                 if (result.isFailure) {
                     Log.e("MainActivity", "URL の送信に失敗: $url, reason=${result.exceptionOrNull()}")
@@ -265,6 +269,12 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        // 処理済み deeplink URL を保存して設定変更後の重複タブ作成を防ぐ
+        intent.dataString?.let { outState.putString(KEY_PROCESSED_DEEPLINK_URL, it) }
+    }
+
     override fun onResume() {
         super.onResume()
         if (::extensionInstaller.isInitialized) {
@@ -347,6 +357,7 @@ class MainActivity : ComponentActivity() {
         private const val MAX_WARMUP_RETRIES = 5
         private const val EXTRA_CUSTOM_TABS_SESSION = "android.support.customtabs.extra.SESSION"
         private const val EXTRA_CUSTOM_TABS_SESSION_ID = "androidx.browser.customtabs.extra.SESSION_ID"
+        private const val KEY_PROCESSED_DEEPLINK_URL = "processed_deeplink_url"
     }
 
     private fun Intent.isCustomTabLaunchIntent(): Boolean {
