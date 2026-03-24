@@ -10,6 +10,17 @@
     <uses-permission android:name="android.permission.CREDENTIAL_MANAGER_SET_ORIGIN" />
     <uses-permission android:name="android.permission.CREDENTIAL_MANAGER_QUERY_CANDIDATE_CREDENTIALS" />
 
+    <!--
+        Android 11 (API 30) 以降のパッケージ可視性制限に対応するため、
+        ブラウザとして外部アプリを開く際に resolveActivity が機能するよう宣言する。
+    -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.BROWSABLE" />
+        </intent>
+    </queries>
+
     <application
         android:name=".BrowserApplication"
         android:allowBackup="true"

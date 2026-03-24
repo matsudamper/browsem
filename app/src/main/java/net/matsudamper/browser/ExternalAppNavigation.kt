@@ -48,11 +48,20 @@ internal fun resolveExternalAppNavigationAction(
     val resolvedActivity = packageManager.resolveActivity(intent, PackageManager.MATCH_DEFAULT_ONLY)
         ?: packageManager.resolveActivity(intent, 0)
     if (resolvedActivity == null) {
-        return if (fallbackUrl != null) {
-            ExternalAppNavigationAction.OpenFallback(fallbackUrl)
-        } else {
-            ExternalAppNavigationAction.AppNotFound
+        // fallbackUrl がある場合はフォールバックURLを使用する
+        if (fallbackUrl != null) {
+            return ExternalAppNavigationAction.OpenFallback(fallbackUrl)
         }
+        // Android 11+ ではパッケージ可視性制限により resolveActivity が null を返すことがある。
+        // startActivity は可視性制限なしに動作するため、appName なしで Launch として返し起動を試みる。
+        return ExternalAppNavigationAction.Launch(
+            PendingExternalAppLaunch(
+                sourceUri = uri,
+                intent = intent,
+                appName = null,
+                fallbackUrl = null,
+            )
+        )
     }
 
     val appName = resolvedActivity.loadLabel(packageManager).toString().takeIf { it.isNotBlank() }
