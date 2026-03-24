@@ -578,7 +578,7 @@ internal class BrowserTabScreenState(
     override fun onLoadRequest(
         request: GeckoSession.NavigationDelegate.LoadRequest,
     ): GeckoResult<AllowOrDeny>? {
-        return when (val action = resolveExternalAppNavigationAction(context, request.uri)) {
+        return when (val action = resolveExternalAppNavigationAction(context, request.uri, request.hasUserGesture)) {
             ExternalAppNavigationAction.AllowInBrowser -> null
             ExternalAppNavigationAction.AppNotFound -> {
                 Toast.makeText(context, "対応するアプリが見つかりません", Toast.LENGTH_SHORT).show()

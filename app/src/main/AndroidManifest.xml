@@ -12,12 +12,19 @@
 
     <!--
         Android 11 (API 30) 以降のパッケージ可視性制限に対応するため、
-        ブラウザとして外部アプリを開く際に resolveActivity が機能するよう宣言する。
+        App Links チェックおよびカスタムスキーム解決に必要なアプリを可視化する。
     -->
     <queries>
+        <!-- App Links を持つアプリ（Play Store、YouTube など）および他のブラウザを可視化 -->
         <intent>
             <action android:name="android.intent.action.VIEW" />
             <category android:name="android.intent.category.BROWSABLE" />
+            <data android:scheme="https" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data android:scheme="http" />
         </intent>
     </queries>
 

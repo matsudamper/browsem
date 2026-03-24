@@ -24,11 +24,24 @@ internal sealed interface ExternalAppNavigationAction {
 internal fun resolveExternalAppNavigationAction(
     context: Context,
     uri: String,
+    hasUserGesture: Boolean = false,
 ): ExternalAppNavigationAction {
     val parsedUri = runCatching { Uri.parse(uri) }.getOrNull()
         ?: return ExternalAppNavigationAction.AllowInBrowser
     val scheme = parsedUri.scheme?.lowercase(Locale.US)
         ?: return ExternalAppNavigationAction.AllowInBrowser
+
+    // http/https はユーザー操作時のみ App Links チェックを行う。
+    // ページ内の自動リダイレクトでアプリが意図せず起動するのを防ぐため、
+    // hasUserGesture=false の場合はブラウザで処理する。
+    if (scheme == "http" || scheme == "https") {
+        return if (hasUserGesture) {
+            resolveHttpSchemeAction(context, uri, parsedUri)
+        } else {
+            ExternalAppNavigationAction.AllowInBrowser
+        }
+    }
+
     if (scheme in browserHandledSchemes) {
         return ExternalAppNavigationAction.AllowInBrowser
     }
@@ -75,6 +88,53 @@ internal fun resolveExternalAppNavigationAction(
     )
 }
 
+/**
+ * http/https スキームの URL に対して App Links チェックを行う。
+ * 汎用ブラウザではなく特定アプリが処理する場合（Play Store、YouTube など）は Launch を返す。
+ */
+private fun resolveHttpSchemeAction(
+    context: Context,
+    uri: String,
+    parsedUri: Uri,
+): ExternalAppNavigationAction {
+    val packageManager = context.packageManager
+    val intent = Intent(Intent.ACTION_VIEW, parsedUri).apply {
+        addCategory(Intent.CATEGORY_BROWSABLE)
+    }
+
+    // 汎用 HTTPS URL を処理できるアプリ（ブラウザ）のパッケージ名を収集する。
+    // これに含まれないアプリが resolveActivity で返ってきた場合は App Links とみなす。
+    val genericBrowserIntent = Intent(
+        Intent.ACTION_VIEW,
+        Uri.parse("https://example.com/"),
+    ).apply {
+        addCategory(Intent.CATEGORY_BROWSABLE)
+    }
+    val browserPackages = packageManager.queryIntentActivities(
+        genericBrowserIntent,
+        PackageManager.MATCH_DEFAULT_ONLY,
+    ).map { it.activityInfo.packageName }.toSet()
+
+    val resolvedActivity = packageManager.resolveActivity(intent, PackageManager.MATCH_DEFAULT_ONLY)
+
+    return if (resolvedActivity != null &&
+        resolvedActivity.activityInfo.packageName !in browserPackages
+    ) {
+        // App Links: 非ブラウザアプリが優先的に処理するURL（Play Store、YouTube など）
+        val appName = resolvedActivity.loadLabel(packageManager).toString().takeIf { it.isNotBlank() }
+        ExternalAppNavigationAction.Launch(
+            PendingExternalAppLaunch(
+                sourceUri = uri,
+                intent = intent,
+                appName = appName,
+                fallbackUrl = null,
+            )
+        )
+    } else {
+        ExternalAppNavigationAction.AllowInBrowser
+    }
+}
+
 internal fun launchExternalApp(
     context: Context,
     request: PendingExternalAppLaunch,
@@ -115,8 +175,7 @@ private val browserHandledSchemes = setOf(
     "chrome",
     "data",
     "file",
-    "http",
-    "https",
+    // http と https は App Links チェックのため別途処理する
     "jar",
     "javascript",
     "moz-extension",
