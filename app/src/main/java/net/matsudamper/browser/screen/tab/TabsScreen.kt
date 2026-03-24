@@ -1164,7 +1164,6 @@ private fun TabCard(
                 var bitmap: Bitmap? by remember { mutableStateOf(null) }
                 LaunchedEffect(tab.previewBitmapArray) {
                     val array = tab.previewBitmapArray ?: return@LaunchedEffect
-                    // デコードはCPU負荷が高いのでバックグラウンドスレッドで実行する
                     bitmap = withContext(Dispatchers.Default) {
                         BitmapFactory.decodeByteArray(array, 0, array.size)
                     }
