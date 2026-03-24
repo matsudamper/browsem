@@ -1,16 +1,13 @@
 package net.matsudamper.browser
 
-import android.os.SystemClock
-import android.view.MotionEvent
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.isSelected
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNode
 import androidx.compose.ui.test.performClick
 import androidx.lifecycle.ViewModelProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import androidx.test.platform.app.InstrumentationRegistry
-import androidx.test.uiautomator.UiDevice
 import kotlinx.coroutines.runBlocking
 import net.matsudamper.browser.data.TabGroupRepository
 import net.matsudamper.browser.screen.tab.TabsScreenTestTags
@@ -28,13 +25,13 @@ import org.koin.core.context.GlobalContext
  *
  * テストフロー:
  * 1. タブ一覧を開いて group1 を初期化する
- * 2. バックでブラウザへ戻る
- * 3. Koin 経由で group2 を追加し、選択中タブを group2 に割り当てる
- * 4. 2つめのタブグループのタブを選択する（タブ一覧を開く）
- * 5. 1つめのタブグループを開く
- * 6. バックボタンでタブに戻る
- * 7. タブグループを開く
- * 8. タブグループの2つ目が選択されていることを確認する
+ * 2. ブラウザへ戻る
+ * 3. group2 を追加し、選択中タブを group2 に割り当てる
+ * 4. タブ一覧を再度開く
+ * 5. group1 を選択する
+ * 6. ブラウザへ戻る
+ * 7. タブ一覧を再度開く
+ * 8. group2 が選択されていることを確認する（選択中タブが group2 に属するため）
  */
 @RunWith(AndroidJUnit4::class)
 class TabGroupNavigationTest {
@@ -47,59 +44,50 @@ class TabGroupNavigationTest {
         waitForActiveTab(browserSessionController)
 
         // 1. タブ一覧画面を開いて group1 を初期化する
-        tapTabButton()
+        openTabsScreen()
         waitForTabsScreen()
 
-        // 2. バックでブラウザへ戻る（TabsScreenViewModel が group1 を作成・初期タブを割り当てる）
-        val uiDevice = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
-        uiDevice.pressBack()
-        composeRule.waitForIdle()
+        // 2. バックでブラウザへ戻る
+        pressSystemBack()
+        waitForBrowserScreen()
 
-        // ブラウザ画面が表示されるまで待つ
-        composeRule.waitUntil(timeoutMillis = 20_000) {
-            composeRule.onAllNodes(hasTestTag(TEST_TAG_TOOLBAR)).fetchSemanticsNodes().isNotEmpty()
-        }
-
-        // 3. Koin 経由で group2 を追加し、選択中タブを group2 に割り当てる
+        // 3. group2 を追加し、選択中タブを group2 に割り当てる
+        //    （テストデータのシードは GmdSmokeTest と同じパターンで直接リポジトリを使用する）
         val initialTabId = requireNotNull(
             browserSessionController.selectedTabId
                 ?: browserSessionController.tabs.firstOrNull()?.tabId,
         )
         val tabGroupRepository = GlobalContext.get().get<TabGroupRepository>()
-        runBlocking {
-            val group2Id = tabGroupRepository.addGroup("グループ 2", 1)
-            tabGroupRepository.assignTabToGroup(initialTabId, group2Id)
+        composeRule.runOnIdle {
+            runBlocking {
+                val group2Id = tabGroupRepository.addGroup("グループ 2", 1)
+                tabGroupRepository.assignTabToGroup(initialTabId, group2Id)
+            }
         }
 
-        // 4. 2つめのタブグループのタブを選択する（タブ一覧を開いて group2 に初期タブが属することを確認）
-        tapTabButton()
+        // 4. タブ一覧を再度開く（2回目）
+        openTabsScreen()
         waitForTabsScreen()
 
-        // group2 のタブバーが表示されるまで待つ
+        // group2 タブが表示されるまで待つ
         composeRule.waitUntil(timeoutMillis = 10_000) {
             composeRule.onAllNodes(hasTestTag(TabsScreenTestTags.tabGroupTestTag(1)))
                 .fetchSemanticsNodes().isNotEmpty()
         }
 
-        // 5. 1つめのタブグループを開く
+        // 5. group1 を選択する
         composeRule.onNode(hasTestTag(TabsScreenTestTags.tabGroupTestTag(0))).performClick()
         composeRule.waitForIdle()
 
-        // 6. バックボタンでタブに戻る
-        uiDevice.pressBack()
-        composeRule.waitForIdle()
+        // 6. バックでブラウザへ戻る
+        pressSystemBack()
+        waitForBrowserScreen()
 
-        // ブラウザ画面が表示されるまで待つ
-        composeRule.waitUntil(timeoutMillis = 20_000) {
-            composeRule.onAllNodes(hasTestTag(TEST_TAG_TOOLBAR)).fetchSemanticsNodes().isNotEmpty()
-        }
-
-        // 7. タブグループを開く
-        tapTabButton()
+        // 7. タブ一覧を再度開く（3回目）
+        openTabsScreen()
         waitForTabsScreen()
 
-        // 8. タブグループの2つ目が選択されていることを確認する
-        // 選択中タブは group2 に属しているため、activeGroupIndex = 1 となるはず
+        // 8. 選択中タブは group2 に属しているため activeGroupIndex = 1 になるはず
         composeRule.waitUntil(timeoutMillis = 10_000) {
             composeRule.onAllNodes(
                 hasTestTag(TabsScreenTestTags.tabGroupTestTag(1)).and(isSelected()),
@@ -108,20 +96,17 @@ class TabGroupNavigationTest {
     }
 
     /**
-     * ツールバーのタブボタンをタップする。
+     * タブ一覧ボタンをタップしてタブ一覧画面へ遷移する。
+     * performClick() を使い Compose セマンティクスツリー経由で操作することで、
+     * GeckoView の AndroidView 層に邪魔されずにクリックできる。
      */
-    private fun tapTabButton() {
-        val screenWidth = composeRule.activity.resources.displayMetrics.widthPixels
+    private fun openTabsScreen() {
         composeRule.waitUntil(timeoutMillis = 20_000) {
             composeRule.onAllNodes(hasTestTag(TEST_TAG_OPEN_TABS))
-                .fetchSemanticsNodes()
-                .any { it.boundsInRoot.width > 0 && it.boundsInRoot.right <= screenWidth }
+                .fetchSemanticsNodes().isNotEmpty()
         }
-        val visibleNode = composeRule.onAllNodes(hasTestTag(TEST_TAG_OPEN_TABS))
-            .fetchSemanticsNodes()
-            .first { it.boundsInRoot.width > 0 && it.boundsInRoot.right <= screenWidth }
-        val bounds = visibleNode.boundsInRoot
-        injectTap((bounds.left + bounds.right) / 2f, (bounds.top + bounds.bottom) / 2f)
+        composeRule.onNode(hasTestTag(TEST_TAG_OPEN_TABS)).performClick()
+        composeRule.waitForIdle()
     }
 
     /**
@@ -134,17 +119,23 @@ class TabGroupNavigationTest {
     }
 
     /**
-     * UiAutomation 経由でタップイベントを注入する。
+     * システムの戻る操作を1回発行する。
+     * GmdSmokeTest と同じパターン。
      */
-    private fun injectTap(x: Float, y: Float) {
-        val uiAutomation = InstrumentationRegistry.getInstrumentation().uiAutomation
-        val downTime = SystemClock.uptimeMillis()
-        val down = MotionEvent.obtain(downTime, downTime, MotionEvent.ACTION_DOWN, x, y, 0)
-        val up = MotionEvent.obtain(downTime, downTime + 50, MotionEvent.ACTION_UP, x, y, 0)
-        uiAutomation.injectInputEvent(down, true)
-        uiAutomation.injectInputEvent(up, true)
-        down.recycle()
-        up.recycle()
+    private fun pressSystemBack() {
+        composeRule.runOnIdle {
+            composeRule.activity.onBackPressedDispatcher.onBackPressed()
+        }
+        composeRule.waitForIdle()
+    }
+
+    /**
+     * ブラウザ画面（ツールバー）が表示されるまで待機する。
+     */
+    private fun waitForBrowserScreen() {
+        composeRule.waitUntil(timeoutMillis = 20_000) {
+            composeRule.onAllNodes(hasTestTag(TEST_TAG_TOOLBAR)).fetchSemanticsNodes().isNotEmpty()
+        }
     }
 
     /**
