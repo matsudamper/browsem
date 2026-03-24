@@ -42,7 +42,7 @@ jobs:
       - name: Upload release APK
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
-          name: app-release-apk
+          name: app-release.apk
           path: app/build/outputs/apk/release/app-release.apk
 
       - name: Run Android Lint
