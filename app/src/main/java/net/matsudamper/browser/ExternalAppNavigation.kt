@@ -24,22 +24,15 @@ internal sealed interface ExternalAppNavigationAction {
 internal fun resolveExternalAppNavigationAction(
     context: Context,
     uri: String,
-    hasUserGesture: Boolean = false,
 ): ExternalAppNavigationAction {
     val parsedUri = runCatching { Uri.parse(uri) }.getOrNull()
         ?: return ExternalAppNavigationAction.AllowInBrowser
     val scheme = parsedUri.scheme?.lowercase(Locale.US)
         ?: return ExternalAppNavigationAction.AllowInBrowser
 
-    // http/https はユーザー操作時のみ App Links チェックを行う。
-    // ページ内の自動リダイレクトでアプリが意図せず起動するのを防ぐため、
-    // hasUserGesture=false の場合はブラウザで処理する。
+    // http/https はApp Links（Play Store、YouTubeなど）のチェックを行う
     if (scheme == "http" || scheme == "https") {
-        return if (hasUserGesture) {
-            resolveHttpSchemeAction(context, uri, parsedUri)
-        } else {
-            ExternalAppNavigationAction.AllowInBrowser
-        }
+        return resolveHttpSchemeAction(context, uri, parsedUri)
     }
 
     if (scheme in browserHandledSchemes) {
@@ -91,6 +84,10 @@ internal fun resolveExternalAppNavigationAction(
 /**
  * http/https スキームの URL に対して App Links チェックを行う。
  * 汎用ブラウザではなく特定アプリが処理する場合（Play Store、YouTube など）は Launch を返す。
+ *
+ * 判定方法:
+ * - 汎用 HTTPS URL (https://example.com/) を処理できるアプリをブラウザとして収集する
+ * - 対象 URL の resolveActivity がそのブラウザ一覧に含まれない場合は App Links と判定する
  */
 private fun resolveHttpSchemeAction(
     context: Context,
