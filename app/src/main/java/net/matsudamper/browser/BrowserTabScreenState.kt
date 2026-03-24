@@ -227,22 +227,12 @@ internal class BrowserTabScreenState(
         injectViewportZoom(percent)
     }
 
-    // viewport meta を書き換えてページ全体のズームを適用する
-    // percent=100 のときは width=device-width に戻す
+    // CSS zoom プロパティでページ全体（テキスト・画像）をズームする
     private fun injectViewportZoom(percent: Int) {
-        val viewportContent = if (percent == 100) {
-            "width=device-width,initial-scale=1"
-        } else {
-            val screenWidthDp = (context.resources.displayMetrics.widthPixels / context.resources.displayMetrics.density).toInt()
-            val viewportWidth = screenWidthDp * 100 / percent
-            "width=$viewportWidth,initial-scale=1"
-        }
+        val zoom = percent / 100.0
         val script = "javascript:void((function(){" +
-            "var c='$viewportContent';" +
-            "var m=document.querySelector('meta[name=\"viewport\"]');" +
-            "if(!m){m=document.createElement('meta');m.name='viewport';document.head.appendChild(m);}" +
-            "m.content=c;" +
-            "})()"
+            "document.documentElement.style.zoom='$zoom';" +
+            "})())"
         session.loadUri(script)
     }
 
