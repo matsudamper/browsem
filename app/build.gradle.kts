@@ -111,6 +111,10 @@ tasks.withType<Test>().configureEach {
         }
     }
     systemProperty("paparazzi.filter", System.getProperty("paparazzi.filter", ""))
+    // Paparazzi の PaparazziTestReporter が Gradle 内部 API の変更により HTML レポート生成で
+    // クラッシュするため、HTML レポートを無効化する
+    // https://github.com/cashapp/paparazzi/issues/2227
+    reports.html.required.set(false)
 }
 
 dependencies {
