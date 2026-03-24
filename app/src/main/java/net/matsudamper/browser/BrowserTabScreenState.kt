@@ -505,6 +505,9 @@ internal class BrowserTabScreenState(
         if (pageLoadError?.failingUrl != url) {
             clearPageLoadError()
         }
+        // ダウンロードリンクのように onPageStart だけ発火して onLocationChange が呼ばれない
+        // ケースでは色をリセットしないよう、ここで判定する
+        maybeResetToolbarColorOnPageStart(url)
         currentPageUrl = url
         if (!isUrlInputFocused) {
             urlInput = url
@@ -580,7 +583,6 @@ internal class BrowserTabScreenState(
 
     override fun onPageStart(url: String) {
         clearPageLoadError()
-        maybeResetToolbarColorOnPageStart(url)
         // 新しいページへの遷移時にfaviconをリセット
         browserTab.faviconBitmap = null
     }
