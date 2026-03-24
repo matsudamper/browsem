@@ -41,10 +41,10 @@ internal fun ToolbarMenu(
     onAddToHomeScreen: () -> Unit,
     isSimpleView: Boolean,
     onSimpleView: () -> Unit,
-    textZoomPercent: Int,
-    onTextZoomIn: () -> Unit,
-    onTextZoomOut: () -> Unit,
-    onResetTextZoom: () -> Unit,
+    pageZoomPercent: Int,
+    onPageZoomIn: () -> Unit,
+    onPageZoomOut: () -> Unit,
+    onResetPageZoom: () -> Unit,
 ) {
     DropdownMenu(
         expanded = visibleMenu,
@@ -110,7 +110,7 @@ internal fun ToolbarMenu(
             }
         }
         HorizontalDivider()
-        // テキストズームコントロール行（GeckoRuntimeのfontSizeFactorを使用。全タブ共通・リロード後反映）
+        // ページズームコントロール行（viewport width 操作でテキスト・画像含め全体をズーム）
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -119,28 +119,28 @@ internal fun ToolbarMenu(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                text = "テキストズーム",
+                text = "ページズーム",
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.padding(start = 8.dp),
             )
             Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onTextZoomOut) {
+                IconButton(onClick = onPageZoomOut) {
                     Icon(
                         painter = painterResource(R.drawable.ic_remove_24dp),
                         contentDescription = "縮小",
                     )
                 }
                 TextButton(
-                    onClick = onResetTextZoom,
+                    onClick = onResetPageZoom,
                     modifier = Modifier.widthIn(min = 64.dp),
                 ) {
                     Text(
-                        text = "${textZoomPercent}%",
+                        text = "${pageZoomPercent}%",
                         textAlign = TextAlign.Center,
                         style = MaterialTheme.typography.bodyMedium,
                     )
                 }
-                IconButton(onClick = onTextZoomIn) {
+                IconButton(onClick = onPageZoomIn) {
                     Icon(
                         painter = painterResource(R.drawable.ic_add_24dp),
                         contentDescription = "拡大",

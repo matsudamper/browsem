@@ -37,44 +37,7 @@ import org.mozilla.geckoview.WebResponse
 import java.io.ByteArrayOutputStream
 
 
-// ズームはGeckoRuntimeのグローバル設定のため、全タブで共有するCompose状態
-internal object SharedTextZoomState {
-    private val ZOOM_STEPS = listOf(50, 67, 75, 80, 90, 100, 110, 125, 150, 175, 200)
-
-    var zoomPercent by mutableIntStateOf(100)
-        private set
-
-    fun initialize(runtime: GeckoRuntime) {
-        zoomPercent = (runtime.settings.fontSizeFactor * 100).toInt().let { raw ->
-            ZOOM_STEPS.minByOrNull { kotlin.math.abs(it - raw) } ?: 100
-        }
-    }
-
-    fun zoomIn(runtime: GeckoRuntime): Int {
-        val idx = ZOOM_STEPS.indexOfLast { it <= zoomPercent }
-        val next = if (idx < ZOOM_STEPS.size - 1) ZOOM_STEPS[idx + 1] else ZOOM_STEPS.last()
-        applyZoom(runtime, next)
-        return next
-    }
-
-    fun zoomOut(runtime: GeckoRuntime): Int {
-        val idx = ZOOM_STEPS.indexOfFirst { it >= zoomPercent }
-        val prev = if (idx > 0) ZOOM_STEPS[idx - 1] else ZOOM_STEPS.first()
-        applyZoom(runtime, prev)
-        return prev
-    }
-
-    fun resetZoom(runtime: GeckoRuntime) {
-        applyZoom(runtime, 100)
-    }
-
-    private fun applyZoom(runtime: GeckoRuntime, percent: Int) {
-        // automaticFontSizeAdjustment が有効だと setFontSizeFactor が例外を投げるため先に無効化する
-        runtime.settings.setAutomaticFontSizeAdjustment(false)
-        runtime.settings.setFontSizeFactor(percent / 100f)
-        zoomPercent = percent
-    }
-}
+private val PAGE_ZOOM_STEPS = listOf(50, 67, 75, 80, 90, 100, 110, 125, 150, 175, 200)
 
 @Composable
 internal fun rememberBrowserTabScreenState(
@@ -181,6 +144,10 @@ internal class BrowserTabScreenState(
     var renderReady by mutableStateOf(false)
     var pageLoadError by mutableStateOf<PageLoadError?>(null)
 
+    // --- ページズーム状態（viewport width 操作によりテキスト・画像含め全体をズーム）---
+    var pageZoomPercent by mutableIntStateOf(100)
+        private set
+
     // --- Scroll / Refresh state ---
     var isRefreshing by mutableStateOf(false)
     var scrollY by mutableIntStateOf(0)
@@ -239,19 +206,44 @@ internal class BrowserTabScreenState(
         refreshCurrentPage()
     }
 
-    fun textZoomIn() {
-        SharedTextZoomState.zoomIn(geckoRuntime)
-        session.reload()
+    fun pageZoomIn() {
+        val idx = PAGE_ZOOM_STEPS.indexOfLast { it <= pageZoomPercent }
+        val next = if (idx < PAGE_ZOOM_STEPS.size - 1) PAGE_ZOOM_STEPS[idx + 1] else PAGE_ZOOM_STEPS.last()
+        applyPageZoom(next)
     }
 
-    fun textZoomOut() {
-        SharedTextZoomState.zoomOut(geckoRuntime)
-        session.reload()
+    fun pageZoomOut() {
+        val idx = PAGE_ZOOM_STEPS.indexOfFirst { it >= pageZoomPercent }
+        val prev = if (idx > 0) PAGE_ZOOM_STEPS[idx - 1] else PAGE_ZOOM_STEPS.first()
+        applyPageZoom(prev)
     }
 
-    fun resetTextZoom() {
-        SharedTextZoomState.resetZoom(geckoRuntime)
-        session.reload()
+    fun resetPageZoom() {
+        applyPageZoom(100)
+    }
+
+    private fun applyPageZoom(percent: Int) {
+        pageZoomPercent = percent
+        injectViewportZoom(percent)
+    }
+
+    // viewport meta を書き換えてページ全体のズームを適用する
+    // percent=100 のときは width=device-width に戻す
+    private fun injectViewportZoom(percent: Int) {
+        val viewportContent = if (percent == 100) {
+            "width=device-width,initial-scale=1"
+        } else {
+            val screenWidthDp = (context.resources.displayMetrics.widthPixels / context.resources.displayMetrics.density).toInt()
+            val viewportWidth = screenWidthDp * 100 / percent
+            "width=$viewportWidth,initial-scale=1"
+        }
+        val script = "javascript:void((function(){" +
+            "var c='$viewportContent';" +
+            "var m=document.querySelector('meta[name=\"viewport\"]');" +
+            "if(!m){m=document.createElement('meta');m.name='viewport';document.head.appendChild(m);}" +
+            "m.content=c;" +
+            "})()"
+        session.loadUri(script)
     }
 
     fun openFindInPage() {
@@ -597,6 +589,10 @@ internal class BrowserTabScreenState(
         renderReady = true
         if (success) {
             fetchFavicon(currentPageUrl)
+            // ページ遷移後もズームを維持する
+            if (pageZoomPercent != 100) {
+                injectViewportZoom(pageZoomPercent)
+            }
         }
     }
 
