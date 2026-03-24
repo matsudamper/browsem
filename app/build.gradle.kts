@@ -46,6 +46,16 @@ android {
             }
         }
 
+        // CI配布用。debugと同等だがShrinkを有効にしてAPKサイズを削減する
+        create("debugShrink") {
+            initWith(getByName("debug"))
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            // ライブラリモジュールにdebugShrinkバリアントがないためdebugにフォールバック
+            matchingFallbacks += "debug"
+        }
+
         release {
             isMinifyEnabled = true
             isShrinkResources = true
