@@ -59,6 +59,7 @@ jobs:
         with:
           name: app-debug-apk
           path: ${{ env.APK_PATH }}
+          compression-level: 9
 
       - name: Run Android Lint
         run: ./gradlew :app:lintDebug
