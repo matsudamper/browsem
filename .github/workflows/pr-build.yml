@@ -33,10 +33,10 @@ jobs:
         run: |
           echo "${{ secrets.DEBUG_KEYSTORE_BASE64 }}" | base64 --decode > "${RUNNER_TEMP}/debug.keystore"
 
-      - name: Build debug APK
+      - name: Build release APK
         env:
           DEBUG_KEYSTORE_PATH: ${{ runner.temp }}/debug.keystore
-        run: ./gradlew :app:assembleDebug
+        run: ./gradlew :app:assembleRelease
 
       - name: Rename APK with branch and short hash
         env:
@@ -48,16 +48,16 @@ jobs:
           SAFE_REPO="${REPOSITORY##*/}"
           SAFE_BRANCH="${BRANCH_NAME//\//-}"
           APK_NAME="app-${SAFE_REPO}-${SAFE_BRANCH}-${SHORT_SHA}.apk"
-          mv app/build/outputs/apk/debug/app-debug.apk \
-             "app/build/outputs/apk/debug/${APK_NAME}"
+          mv app/build/outputs/apk/release/app-release.apk \
+             "app/build/outputs/apk/release/${APK_NAME}"
           echo "APK_NAME=${APK_NAME}" >> "$GITHUB_ENV"
-          echo "APK_PATH=app/build/outputs/apk/debug/${APK_NAME}" >> "$GITHUB_ENV"
+          echo "APK_PATH=app/build/outputs/apk/release/${APK_NAME}" >> "$GITHUB_ENV"
 
-      - name: Upload debug APK
+      - name: Upload release APK
         id: upload_apk
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
-          name: app-debug-apk
+          name: app-release-apk
           path: ${{ env.APK_PATH }}
 
       - name: Run Android Lint
@@ -91,7 +91,7 @@ jobs:
         with:
           header: apk-download
           message: |
-            ✅ Debug APK artifact is ready.
+            ✅ Release APK artifact is ready.
 
             - Download URL: ${{ steps.upload_apk.outputs.artifact-url }}
             - Artifact Name: `${{ env.APK_NAME }}`
