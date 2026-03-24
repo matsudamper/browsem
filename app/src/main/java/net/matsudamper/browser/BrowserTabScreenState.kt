@@ -69,6 +69,8 @@ internal object SharedTextZoomState {
     }
 
     private fun applyZoom(runtime: GeckoRuntime, percent: Int) {
+        // automaticFontSizeAdjustment が有効だと setFontSizeFactor が例外を投げるため先に無効化する
+        runtime.settings.setAutomaticFontSizeAdjustment(false)
         runtime.settings.setFontSizeFactor(percent / 100f)
         zoomPercent = percent
     }
