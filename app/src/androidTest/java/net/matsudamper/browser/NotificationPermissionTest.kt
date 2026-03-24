@@ -2,7 +2,10 @@ package net.matsudamper.browser
 
 import android.Manifest
 import android.os.Build
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import androidx.lifecycle.ViewModelProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -22,12 +25,14 @@ import java.io.File
  *
  * 正常な動作:
  *   1. POST_NOTIFICATIONS が未許可の状態でサイトが通知を要求する
- *   2. Android の OS パーミッションダイアログが表示される
+ *   2. アプリ内のサイト別通知許可ダイアログ（「通知の許可」）が表示される
  *   3. ユーザーが「許可」を押す
- *   4. Notification.requestPermission() のコールバックが "granted" で呼ばれる
+ *   4. Android の OS パーミッションダイアログが表示される
+ *   5. ユーザーが「許可」を押す
+ *   6. Notification.requestPermission() のコールバックが "granted" で呼ばれる
  *
  * このテストが失敗する場合、以下のいずれかを示す:
- *   - onContentPermissionRequest デリゲートが呼ばれていない（OS ダイアログ未表示）
+ *   - onContentPermissionRequest デリゲートが呼ばれていない（インアプリダイアログ未表示）
  *   - GeckoResult が解決されていない（タイムアウト）
  *   - 許可したにも関わらず "denied" が返されている（実装バグ）
  */
@@ -75,6 +80,12 @@ class NotificationPermissionTest {
                 "javascript:void(document.getElementById('request-btn').click())"
             )
         }
+
+        // インアプリのサイト別通知許可ダイアログが表示されるまで待機し、「許可」をクリックする。
+        composeRule.waitUntil(timeoutMillis = 10_000) {
+            composeRule.onAllNodes(hasText("通知の許可")).fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithText("許可").performClick()
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())

@@ -98,6 +98,30 @@ internal fun BrowserTabDialogLayer(
         )
     }
 
+    state.pendingNotificationPermissionUri?.let { uri ->
+        AlertDialog(
+            onDismissRequest = state::denyNotificationPermission,
+            title = { Text("通知の許可") },
+            text = {
+                Text(
+                    text = "${uri}の通知を許可しますか？",
+                    maxLines = 4,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = state::allowNotificationPermission) {
+                    Text("許可")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = state::denyNotificationPermission) {
+                    Text("拒否")
+                }
+            },
+        )
+    }
+
     state.pendingDownloadResponse?.let { response ->
         AlertDialog(
             onDismissRequest = state::dismissPendingDownload,

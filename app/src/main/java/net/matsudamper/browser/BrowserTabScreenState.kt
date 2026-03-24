@@ -131,6 +131,11 @@ internal class BrowserTabScreenState(
     // --- プロンプトダイアログ状態（分離済み） ---
     val promptDialogState = PromptDialogState()
 
+    // --- サイト別通知パーミッション確認ダイアログの状態 ---
+    var pendingNotificationPermissionUri by mutableStateOf<String?>(null)
+    private var pendingNotificationPermissionResult: GeckoResult<Int>? = null
+    private var pendingOsPermissionCallback: (() -> GeckoResult<Int>)? = null
+
     // --- ファイルダウンロード確認ダイアログ用state ---
     var pendingDownloadResponse by mutableStateOf<WebResponse?>(null)
     var pendingExternalAppLaunch by mutableStateOf<PendingExternalAppLaunch?>(null)
@@ -345,6 +350,49 @@ internal class BrowserTabScreenState(
     fun dismissPendingDownload() {
         pendingDownloadResponse?.body?.close()
         pendingDownloadResponse = null
+    }
+
+    /**
+     * GeckoView から PERMISSION_DESKTOP_NOTIFICATION 要求が届いたときに呼ぶ。
+     * インアプリのサイト別確認ダイアログを表示し、ユーザーの応答後に OS パーミッション確認へ進む。
+     */
+    fun onNotificationPermissionRequest(
+        uri: String,
+        onRequestOsPermission: () -> GeckoResult<Int>,
+    ): GeckoResult<Int> {
+        val result = GeckoResult<Int>()
+        pendingNotificationPermissionUri = uri
+        pendingNotificationPermissionResult = result
+        pendingOsPermissionCallback = onRequestOsPermission
+        return result
+    }
+
+    /** 通知許可ダイアログで「許可」を選択したとき */
+    fun allowNotificationPermission() {
+        val result = pendingNotificationPermissionResult ?: return
+        val callback = pendingOsPermissionCallback ?: return
+        pendingNotificationPermissionUri = null
+        pendingNotificationPermissionResult = null
+        pendingOsPermissionCallback = null
+        callback().accept(
+            { value ->
+                result.complete(
+                    value ?: GeckoSession.PermissionDelegate.ContentPermission.VALUE_DENY
+                )
+            },
+            { _ ->
+                result.complete(GeckoSession.PermissionDelegate.ContentPermission.VALUE_DENY)
+            },
+        )
+    }
+
+    /** 通知許可ダイアログで「拒否」を選択したとき */
+    fun denyNotificationPermission() {
+        val result = pendingNotificationPermissionResult ?: return
+        pendingNotificationPermissionUri = null
+        pendingNotificationPermissionResult = null
+        pendingOsPermissionCallback = null
+        result.complete(GeckoSession.PermissionDelegate.ContentPermission.VALUE_DENY)
     }
 
     fun confirmPendingExternalAppLaunch() {

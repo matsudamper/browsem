@@ -212,7 +212,11 @@ internal fun GeckoBrowserTab(
         val delegates = createGeckoSessionDelegateBundle(
             callbacks = state,
             onDesktopNotificationPermissionRequest = { uri ->
-                currentOnDesktopNotificationPermissionRequest(uri)
+                // まずインアプリのサイト別確認ダイアログを表示し、
+                // ユーザーが「許可」を選んだ後に OS パーミッション確認へ進む。
+                state.onNotificationPermissionRequest(uri) {
+                    currentOnDesktopNotificationPermissionRequest(uri)
+                }
             },
             onOpenNewSessionRequest = { uri ->
                 currentOnOpenNewSessionRequest(uri)
