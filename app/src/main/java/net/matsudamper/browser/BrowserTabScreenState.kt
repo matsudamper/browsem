@@ -27,6 +27,7 @@ import net.matsudamper.browser.ReadabilityWebExtension
 import org.koin.compose.koinInject
 import org.mozilla.geckoview.AllowOrDeny
 import org.mozilla.geckoview.GeckoResult
+import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.GeckoSessionSettings
 import org.mozilla.geckoview.GeckoView
@@ -35,6 +36,8 @@ import org.mozilla.geckoview.WebRequestError
 import org.mozilla.geckoview.WebResponse
 import java.io.ByteArrayOutputStream
 
+
+private val PAGE_ZOOM_STEPS = listOf(50, 67, 75, 80, 90, 100, 110, 125, 150, 175, 200)
 
 @Composable
 internal fun rememberBrowserTabScreenState(
@@ -49,6 +52,7 @@ internal fun rememberBrowserTabScreenState(
     val coroutineScope = rememberCoroutineScope()
     val geckoDownloadManager: GeckoDownloadManager = koinInject()
     val readabilityWebExtension: ReadabilityWebExtension = koinInject()
+    val geckoRuntime: GeckoRuntime = koinInject()
     val state = remember(browserTab) {
         BrowserTabScreenState(
             browserTab = browserTab,
@@ -57,6 +61,7 @@ internal fun rememberBrowserTabScreenState(
             coroutineScope = coroutineScope,
             geckoDownloadManager = geckoDownloadManager,
             readabilityWebExtension = readabilityWebExtension,
+            geckoRuntime = geckoRuntime,
             context = context,
             onHistoryRecord = onHistoryRecord,
             onHistoryTitleUpdate = onHistoryTitleUpdate,
@@ -78,6 +83,7 @@ internal class BrowserTabScreenState(
     private val coroutineScope: CoroutineScope,
     private val geckoDownloadManager: GeckoDownloadManager,
     private val readabilityWebExtension: ReadabilityWebExtension,
+    private val geckoRuntime: GeckoRuntime,
     private val context: Context,
     private val onRequestDownloadNotificationPermission: () -> Unit = {},
     var onHistoryRecord: (suspend (url: String, title: String) -> Long)? = null,
@@ -138,6 +144,10 @@ internal class BrowserTabScreenState(
     var renderReady by mutableStateOf(false)
     var pageLoadError by mutableStateOf<PageLoadError?>(null)
 
+    // --- ページズーム状態（viewport width 操作によりテキスト・画像含め全体をズーム）---
+    var pageZoomPercent by mutableIntStateOf(100)
+        private set
+
     // --- Scroll / Refresh state ---
     var isRefreshing by mutableStateOf(false)
     var scrollY by mutableIntStateOf(0)
@@ -194,6 +204,46 @@ internal class BrowserTabScreenState(
             GeckoSessionSettings.USER_AGENT_MODE_MOBILE
         }
         refreshCurrentPage()
+    }
+
+    fun pageZoomIn() {
+        val idx = PAGE_ZOOM_STEPS.indexOfLast { it <= pageZoomPercent }
+        val next = if (idx < PAGE_ZOOM_STEPS.size - 1) PAGE_ZOOM_STEPS[idx + 1] else PAGE_ZOOM_STEPS.last()
+        applyPageZoom(next)
+    }
+
+    fun pageZoomOut() {
+        val idx = PAGE_ZOOM_STEPS.indexOfFirst { it >= pageZoomPercent }
+        val prev = if (idx > 0) PAGE_ZOOM_STEPS[idx - 1] else PAGE_ZOOM_STEPS.first()
+        applyPageZoom(prev)
+    }
+
+    fun resetPageZoom() {
+        applyPageZoom(100)
+    }
+
+    private fun applyPageZoom(percent: Int) {
+        pageZoomPercent = percent
+        injectViewportZoom(percent)
+    }
+
+    // viewport meta を書き換えてページ全体のズームを適用する
+    // percent=100 のときは width=device-width に戻す
+    private fun injectViewportZoom(percent: Int) {
+        val viewportContent = if (percent == 100) {
+            "width=device-width,initial-scale=1"
+        } else {
+            val screenWidthDp = (context.resources.displayMetrics.widthPixels / context.resources.displayMetrics.density).toInt()
+            val viewportWidth = screenWidthDp * 100 / percent
+            "width=$viewportWidth,initial-scale=1"
+        }
+        val script = "javascript:void((function(){" +
+            "var c='$viewportContent';" +
+            "var m=document.querySelector('meta[name=\"viewport\"]');" +
+            "if(!m){m=document.createElement('meta');m.name='viewport';document.head.appendChild(m);}" +
+            "m.content=c;" +
+            "})())"
+        session.loadUri(script)
     }
 
     fun openFindInPage() {
@@ -541,6 +591,10 @@ internal class BrowserTabScreenState(
         renderReady = true
         if (success) {
             fetchFavicon(currentPageUrl)
+            // ページ遷移後もズームを維持する
+            if (pageZoomPercent != 100) {
+                injectViewportZoom(pageZoomPercent)
+            }
         }
     }
 

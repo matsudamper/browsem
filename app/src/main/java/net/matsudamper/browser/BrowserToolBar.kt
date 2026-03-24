@@ -78,6 +78,10 @@ internal fun BrowserToolBar(
     onAddToHomeScreen: () -> Unit,
     isSimpleView: Boolean,
     onSimpleView: () -> Unit,
+    pageZoomPercent: Int,
+    onPageZoomIn: () -> Unit,
+    onPageZoomOut: () -> Unit,
+    onResetPageZoom: () -> Unit,
     toolbarColor: Color?,
     onHorizontalDrag: (Float) -> Unit = {},
     onHorizontalDragEnd: () -> Unit = {},
@@ -129,6 +133,10 @@ internal fun BrowserToolBar(
                 onAddToHomeScreen = onAddToHomeScreen,
                 isSimpleView = isSimpleView,
                 onSimpleView = onSimpleView,
+                pageZoomPercent = pageZoomPercent,
+                onPageZoomIn = onPageZoomIn,
+                onPageZoomOut = onPageZoomOut,
+                onResetPageZoom = onResetPageZoom,
             )
         }
     )
@@ -336,6 +344,10 @@ private fun Preview() {
                     onAddToHomeScreen = {},
                     isSimpleView = false,
                     onSimpleView = {},
+                    pageZoomPercent = 100,
+                    onPageZoomIn = {},
+                    onPageZoomOut = {},
+                    onResetPageZoom = {},
                     toolbarColor = null,
                     onRefresh = {},
                     onHome = {},
