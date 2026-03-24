@@ -15,4 +15,8 @@ data class DownloadEntity(
     val totalRead: Long,
     val contentLength: Long,
     val enqueuedAt: Long,
+    /** ダウンロード再開に使用するリファラーURL */
+    val referrerUrl: String = "",
+    /** ダウンロード失敗時に保存した部分ファイルのMediaStore URI。再開時にRangeリクエストで使用 */
+    val partialFileUri: String? = null,
 )

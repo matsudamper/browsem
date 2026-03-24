@@ -89,6 +89,7 @@ internal fun DownloadManagementScreen(
                         item = item,
                         onCancel = { uiState.callbacks.onCancel(item.id) },
                         onOpenFile = { fileUri -> uiState.callbacks.onOpenFile(fileUri) },
+                        onResume = { uiState.callbacks.onResume(item.id) },
                     )
                 }
             }
@@ -101,6 +102,7 @@ private fun DownloadItemRow(
     item: DownloadManagementScreenUiState.DownloadItem,
     onCancel: () -> Unit,
     onOpenFile: (String) -> Unit,
+    onResume: () -> Unit,
 ) {
     val dateFormat = remember { SimpleDateFormat("yyyy/MM/dd HH:mm", Locale.getDefault()) }
     Column(
@@ -134,11 +136,17 @@ private fun DownloadItemRow(
                     }
                 }
                 is DownloadManagementScreenUiState.DownloadStatus.Failed -> {
-                    Text(
-                        text = "失敗",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.error,
-                    )
+                    if (status.canResume) {
+                        TextButton(onClick = onResume) {
+                            Text("再開")
+                        }
+                    } else {
+                        Text(
+                            text = "失敗",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
                 }
                 is DownloadManagementScreenUiState.DownloadStatus.Cancelled -> {
                     Text(
@@ -179,7 +187,15 @@ private fun DownloadItemRow(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            is DownloadManagementScreenUiState.DownloadStatus.Failed -> Unit
+            is DownloadManagementScreenUiState.DownloadStatus.Failed -> {
+                if (!status.canResume) {
+                    Text(
+                        text = "再試行するには再度ダウンロードしてください。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            }
             is DownloadManagementScreenUiState.DownloadStatus.Cancelled -> Unit
         }
         // ダウンロード開始時刻（完了後も常に表示）

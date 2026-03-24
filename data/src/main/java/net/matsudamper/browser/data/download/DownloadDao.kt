@@ -54,4 +54,24 @@ interface DownloadDao {
 
     @Query("SELECT * FROM download WHERE workerId = :workerId")
     suspend fun get(workerId: String): DownloadEntity
+
+    /**
+     * ダウンロード失敗時に部分ファイルURIを保存する。
+     * 再開可能なダウンロードとしてFAILEDステータスで記録する
+     */
+    @Query(
+        "UPDATE download SET status = 'FAILED', partialFileUri = :partialFileUri, " +
+            "fileName = :fileName, totalRead = :totalRead, contentLength = :contentLength " +
+            "WHERE workerId = :workerId",
+    )
+    suspend fun updatePartialFailed(
+        workerId: String,
+        partialFileUri: String,
+        fileName: String,
+        totalRead: Long,
+        contentLength: Long,
+    )
+
+    @Query("DELETE FROM download WHERE workerId = :workerId")
+    suspend fun deleteById(workerId: String)
 }
