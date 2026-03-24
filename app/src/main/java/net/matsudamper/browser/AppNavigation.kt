@@ -401,11 +401,10 @@ private fun <T : NavKey> AnimatedContentTransitionScope<Scene<T>>.popTransition(
         )
     }
 
-    // ブラウザ（ホーム）に戻るときはアニメーションを表示する
     if (target.contentKey is AppDestination.Browser) {
         return ContentTransform(
-            initialContentExit = fadeOut() + slideOut { IntOffset(x = 0, y = it.height / 3) },
-            targetContentEnter = fadeIn(),
+            initialContentExit = ExitTransition.None,
+            targetContentEnter = EnterTransition.None,
         )
     }
 
