@@ -167,7 +167,7 @@ internal fun TabsScreen(
     selectedTabId: String?,
     onSelectTab: (String) -> Unit,
     onCloseTab: (String) -> Unit,
-    onOpenNewTab: () -> Unit,
+    onOpenNewTab: (currentGroupId: TabGroupId?) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val viewModel = viewModel(initializer = {
@@ -457,7 +457,7 @@ private fun TabsScreenContent(
     selectedTabId: String?,
     onSelectTab: (String) -> Unit,
     onCloseTab: (String) -> Unit,
-    onOpenNewTab: () -> Unit,
+    onOpenNewTab: (currentGroupId: TabGroupId?) -> Unit,
     onReorderTabs: (groupIndex: Int, fromLocalIndex: Int, toLocalIndex: Int) -> Unit,
     onReorderGroups: (fromIndex: Int, toIndex: Int) -> Unit,
     onGroupSelected: (Int) -> Unit,
@@ -654,7 +654,7 @@ private fun TabsScreenContent(
         }
 
         FloatingActionButton(
-            onClick = onOpenNewTab,
+            onClick = { onOpenNewTab(groups.getOrNull(activeGroupIndex)?.id) },
             modifier = Modifier
                 .testTag(TabsScreenTestTags.AddTabButton.testTag)
                 .align(Alignment.BottomEnd)
