@@ -58,7 +58,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.withContext
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -1162,7 +1164,10 @@ private fun TabCard(
                 var bitmap: Bitmap? by remember { mutableStateOf(null) }
                 LaunchedEffect(tab.previewBitmapArray) {
                     val array = tab.previewBitmapArray ?: return@LaunchedEffect
-                    bitmap = BitmapFactory.decodeByteArray(array, 0, array.size)
+                    // デコードはCPU負荷が高いのでバックグラウンドスレッドで実行する
+                    bitmap = withContext(Dispatchers.Default) {
+                        BitmapFactory.decodeByteArray(array, 0, array.size)
+                    }
                 }
 
                 val preview = bitmap?.asImageBitmap()
