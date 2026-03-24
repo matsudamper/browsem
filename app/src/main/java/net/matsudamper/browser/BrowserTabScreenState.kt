@@ -27,6 +27,7 @@ import net.matsudamper.browser.ReadabilityWebExtension
 import org.koin.compose.koinInject
 import org.mozilla.geckoview.AllowOrDeny
 import org.mozilla.geckoview.GeckoResult
+import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.GeckoSessionSettings
 import org.mozilla.geckoview.GeckoView
@@ -35,6 +36,43 @@ import org.mozilla.geckoview.WebRequestError
 import org.mozilla.geckoview.WebResponse
 import java.io.ByteArrayOutputStream
 
+
+// ズームはGeckoRuntimeのグローバル設定のため、全タブで共有するCompose状態
+internal object SharedTextZoomState {
+    private val ZOOM_STEPS = listOf(50, 67, 75, 80, 90, 100, 110, 125, 150, 175, 200)
+
+    var zoomPercent by mutableIntStateOf(100)
+        private set
+
+    fun initialize(runtime: GeckoRuntime) {
+        zoomPercent = (runtime.settings.fontSizeFactor * 100).toInt().let { raw ->
+            ZOOM_STEPS.minByOrNull { kotlin.math.abs(it - raw) } ?: 100
+        }
+    }
+
+    fun zoomIn(runtime: GeckoRuntime): Int {
+        val idx = ZOOM_STEPS.indexOfLast { it <= zoomPercent }
+        val next = if (idx < ZOOM_STEPS.size - 1) ZOOM_STEPS[idx + 1] else ZOOM_STEPS.last()
+        applyZoom(runtime, next)
+        return next
+    }
+
+    fun zoomOut(runtime: GeckoRuntime): Int {
+        val idx = ZOOM_STEPS.indexOfFirst { it >= zoomPercent }
+        val prev = if (idx > 0) ZOOM_STEPS[idx - 1] else ZOOM_STEPS.first()
+        applyZoom(runtime, prev)
+        return prev
+    }
+
+    fun resetZoom(runtime: GeckoRuntime) {
+        applyZoom(runtime, 100)
+    }
+
+    private fun applyZoom(runtime: GeckoRuntime, percent: Int) {
+        runtime.settings.setFontSizeFactor(percent / 100f)
+        zoomPercent = percent
+    }
+}
 
 @Composable
 internal fun rememberBrowserTabScreenState(
@@ -49,6 +87,7 @@ internal fun rememberBrowserTabScreenState(
     val coroutineScope = rememberCoroutineScope()
     val geckoDownloadManager: GeckoDownloadManager = koinInject()
     val readabilityWebExtension: ReadabilityWebExtension = koinInject()
+    val geckoRuntime: GeckoRuntime = koinInject()
     val state = remember(browserTab) {
         BrowserTabScreenState(
             browserTab = browserTab,
@@ -57,6 +96,7 @@ internal fun rememberBrowserTabScreenState(
             coroutineScope = coroutineScope,
             geckoDownloadManager = geckoDownloadManager,
             readabilityWebExtension = readabilityWebExtension,
+            geckoRuntime = geckoRuntime,
             context = context,
             onHistoryRecord = onHistoryRecord,
             onHistoryTitleUpdate = onHistoryTitleUpdate,
@@ -78,6 +118,7 @@ internal class BrowserTabScreenState(
     private val coroutineScope: CoroutineScope,
     private val geckoDownloadManager: GeckoDownloadManager,
     private val readabilityWebExtension: ReadabilityWebExtension,
+    private val geckoRuntime: GeckoRuntime,
     private val context: Context,
     private val onRequestDownloadNotificationPermission: () -> Unit = {},
     var onHistoryRecord: (suspend (url: String, title: String) -> Long)? = null,
@@ -194,6 +235,21 @@ internal class BrowserTabScreenState(
             GeckoSessionSettings.USER_AGENT_MODE_MOBILE
         }
         refreshCurrentPage()
+    }
+
+    fun textZoomIn() {
+        SharedTextZoomState.zoomIn(geckoRuntime)
+        session.reload()
+    }
+
+    fun textZoomOut() {
+        SharedTextZoomState.zoomOut(geckoRuntime)
+        session.reload()
+    }
+
+    fun resetTextZoom() {
+        SharedTextZoomState.resetZoom(geckoRuntime)
+        session.reload()
     }
 
     fun openFindInPage() {

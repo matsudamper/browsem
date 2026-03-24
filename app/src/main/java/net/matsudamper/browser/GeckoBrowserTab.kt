@@ -434,6 +434,10 @@ internal fun GeckoBrowserTab(
                     onTranslatePage = { state.onTranslate(translationProvider) },
                     isSimpleView = state.isSimpleViewActive,
                     onSimpleView = state::toggleSimpleView,
+                    textZoomPercent = SharedTextZoomState.zoomPercent,
+                    onTextZoomIn = state::textZoomIn,
+                    onTextZoomOut = state::textZoomOut,
+                    onResetTextZoom = state::resetTextZoom,
                     onHorizontalDrag = onToolbarHorizontalDrag,
                     onHorizontalDragEnd = onToolbarDragEnd,
                     onAddToHomeScreen = {
