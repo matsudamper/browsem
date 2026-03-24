@@ -135,7 +135,7 @@ class TabsScreenViewModel(
         }
         viewModelScope.launch {
             tabGroupRepository.observeTabGroupAssignments().collect { assignments ->
-                viewModelStateFlow.update { it.copy(assignments = assignments) }
+                viewModelStateFlow.update { it.copy(assignments = assignments, assignmentsLoaded = true) }
             }
         }
         viewModelScope.launch {
@@ -168,10 +168,13 @@ class TabsScreenViewModel(
             if (initialSelectedTabId == null) {
                 viewModelStateFlow.update { it.copy(activeGroupIndex = 0) }
             } else {
-                viewModelStateFlow.first { it.groups.isNotEmpty() }
+                // groups と assignments の両方が DB から読み込まれるまで待つ。
+                // observeGroups() と observeTabGroupAssignments() は並行して実行されるため、
+                // groups だけで判断すると assignments が空のまま activeGroupIndex を復元してしまう。
+                viewModelStateFlow.first { it.groups.isNotEmpty() && it.assignmentsLoaded }
                     .let { state ->
                         val groupId = state.assignments.find { it.tabId == initialSelectedTabId }?.groupId
-                        val index = if (groupId != null) state.groups.indexOfFirst { it.id.value == groupId } else -1
+                        val index = if (!groupId.isNullOrEmpty()) state.groups.indexOfFirst { it.id.value == groupId } else -1
                         viewModelStateFlow.update { it.copy(activeGroupIndex = if (index >= 0) index else 0) }
                     }
             }
@@ -399,6 +402,8 @@ class TabsScreenViewModel(
         val activeGroupIndex: Int? = null,
         val tabStoreState: TabStoreState = TabStoreState(),
         val assignments: List<TabGroupAssignment> = emptyList(),
+        /** observeTabGroupAssignments() が最初の値を発行したかどうか */
+        val assignmentsLoaded: Boolean = false,
     ) {
         /** ドラッグ中はローカル順序を優先し、DB の更新が遅れても表示が乱れないようにする。 */
         val groups: List<TabGroupData> get() = localGroupOrder ?: dbGroups
