@@ -33,7 +33,7 @@ class MediaSessionBridgeTest {
     }
 
     @Test
-    fun 初期状態はisActiveがfalse() {
+    fun initialStateIsInactive() {
         val state = MediaSessionBridge.playbackState.value
         assertFalse(state.isActive)
         assertFalse(state.isPlaying)
@@ -47,13 +47,13 @@ class MediaSessionBridgeTest {
     }
 
     @Test
-    fun activate後にisActiveがtrueになる() {
+    fun isActiveBecomesTrueAfterActivate() {
         MediaSessionBridge.activate()
         assertTrue(MediaSessionBridge.playbackState.value.isActive)
     }
 
     @Test
-    fun deactivate後に全状態がリセットされる() {
+    fun allStateResetAfterDeactivate() {
         // 色々な状態を設定してからdeactivate
         MediaSessionBridge.activate()
         MediaSessionBridge.updatePlaying(isPlaying = true)
@@ -79,7 +79,7 @@ class MediaSessionBridgeTest {
     }
 
     @Test
-    fun updateMetadataでタイトル_アーティスト_アルバムが更新される() {
+    fun updateMetadataUpdatesTitleArtistAlbum() {
         MediaSessionBridge.updateMetadata(
             title = "テスト曲",
             artist = "テストアーティスト",
@@ -94,7 +94,7 @@ class MediaSessionBridgeTest {
     }
 
     @Test
-    fun updateMetadataで既存フィールドが上書きされる() {
+    fun updateMetadataOverwritesExistingFields() {
         MediaSessionBridge.updateMetadata(
             title = "曲1",
             artist = "アーティスト1",
@@ -113,20 +113,20 @@ class MediaSessionBridgeTest {
     }
 
     @Test
-    fun updatePlayingでisPlayingがtrueになる() {
+    fun updatePlayingSetIsPlayingTrue() {
         MediaSessionBridge.updatePlaying(isPlaying = true)
         assertTrue(MediaSessionBridge.playbackState.value.isPlaying)
     }
 
     @Test
-    fun updatePlayingでisPlayingがfalseになる() {
+    fun updatePlayingSetIsPlayingFalse() {
         MediaSessionBridge.updatePlaying(isPlaying = true)
         MediaSessionBridge.updatePlaying(isPlaying = false)
         assertFalse(MediaSessionBridge.playbackState.value.isPlaying)
     }
 
     @Test
-    fun updatePositionで再生位置と長さが更新される() {
+    fun updatePositionUpdatesPositionAndDuration() {
         MediaSessionBridge.updatePosition(positionMs = 30_000L, durationMs = 180_000L)
         val state = MediaSessionBridge.playbackState.value
         assertEquals(30_000L, state.positionMs)
@@ -134,14 +134,14 @@ class MediaSessionBridgeTest {
     }
 
     @Test
-    fun updateFeaturesでフィーチャーフラグが更新される() {
+    fun updateFeaturesUpdatesFeatureFlags() {
         val features = MediaSession.Feature.NEXT_TRACK or MediaSession.Feature.PREVIOUS_TRACK
         MediaSessionBridge.updateFeatures(features)
         assertEquals(features, MediaSessionBridge.playbackState.value.features)
     }
 
     @Test
-    fun isActiveを維持したままメタデータ更新ができる() {
+    fun metadataCanBeUpdatedWhileActive() {
         MediaSessionBridge.activate()
         MediaSessionBridge.updateMetadata(
             title = "再生中",
@@ -156,7 +156,7 @@ class MediaSessionBridgeTest {
     }
 
     @Test
-    fun StateFlowがactivate後に新しい値を発行する() = runBlocking {
+    fun stateFlowEmitsNewValueAfterActivate() = runBlocking {
         MediaSessionBridge.activate()
         // StateFlowの現在値がisActive=trueになるまで待機
         val state = MediaSessionBridge.playbackState.first { it.isActive }
@@ -165,7 +165,7 @@ class MediaSessionBridgeTest {
     }
 
     @Test
-    fun StateFlowがupdatePlaying後に新しい値を発行する() = runBlocking {
+    fun stateFlowEmitsNewValueAfterUpdatePlaying() = runBlocking {
         MediaSessionBridge.updatePlaying(isPlaying = true)
         val state = MediaSessionBridge.playbackState.first { it.isPlaying }
         assertTrue(state.isPlaying)
