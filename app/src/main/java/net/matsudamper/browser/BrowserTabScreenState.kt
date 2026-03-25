@@ -37,7 +37,7 @@ import org.mozilla.geckoview.WebResponse
 import java.io.ByteArrayOutputStream
 
 
-private val PAGE_ZOOM_STEPS = listOf(50, 67, 75, 80, 90, 100, 110, 125, 150, 175, 200)
+private val PAGE_ZOOM_STEPS = listOf(20, 25, 33, 50, 67, 75, 80, 90, 100, 110, 125, 150, 175, 200)
 
 @Composable
 internal fun rememberBrowserTabScreenState(
