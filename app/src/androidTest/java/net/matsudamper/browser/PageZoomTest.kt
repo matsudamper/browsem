@@ -133,7 +133,7 @@ class PageZoomTest {
         }
 
         // 初期 viewport 幅を取得
-        val initialWidth = readInnerWidthViaHash(activeTab, callId = 1)
+        val initialWidth = readInnerWidthViaTitle(activeTab, callId = 1)
         assertTrue("初期 window.innerWidth が取得できなかった (got $initialWidth)", initialWidth > 0)
 
         // メニューを開き 200% まで拡大（100→110→125→150→175→200 = 5ステップ）
@@ -153,7 +153,7 @@ class PageZoomTest {
         // JS 実行と viewport 再計算の完了を待つ
         Thread.sleep(2_000)
 
-        val zoomedWidth = readInnerWidthViaHash(activeTab, callId = 2)
+        val zoomedWidth = readInnerWidthViaTitle(activeTab, callId = 2)
         assertTrue(
             "200% ズーム後の window.innerWidth が取得できなかった (got $zoomedWidth)",
             zoomedWidth > 0,
@@ -183,7 +183,7 @@ class PageZoomTest {
         }
 
         // 初期 viewport 幅を記録
-        val initialWidth = readInnerWidthViaHash(activeTab, callId = 1)
+        val initialWidth = readInnerWidthViaTitle(activeTab, callId = 1)
         assertTrue("初期 window.innerWidth が取得できなかった", initialWidth > 0)
 
         // 200% に拡大
@@ -211,7 +211,7 @@ class PageZoomTest {
         // onPageStop の完了とズーム再注入の完了を待つ
         Thread.sleep(4_000)
 
-        val afterNavigationWidth = readInnerWidthViaHash(activeTab, callId = 3)
+        val afterNavigationWidth = readInnerWidthViaTitle(activeTab, callId = 3)
         assertTrue(
             "ナビゲーション後の window.innerWidth が取得できなかった (got $afterNavigationWidth)",
             afterNavigationWidth > 0,
@@ -225,28 +225,32 @@ class PageZoomTest {
     // ─── ヘルパー ───────────────────────────────────────────────────────────
 
     /**
-     * `window.innerWidth` を URL ハッシュ経由で取得する。
+     * `window.innerWidth` を document.title 経由で取得する。
      *
-     * javascript: URI でハッシュをセットし、onLocationChange 経由で
-     * activeTab.currentUrl に反映されるのを待って値を読み取る。
+     * javascript: URI でタイトルをセットし、onTitleChange 経由で
+     * activeTab.title に反映されるのを待って値を読み取る。
      * callId ごとに異なるセンチネル文字列を使い前回の値との混同を防ぐ。
+     *
+     * window.location.hash 方式は session.loadUri("javascript:...") 経由で実行した JS による
+     * ハッシュ変更が onLocationChange を発火しないため使用できない。
+     * document.title の変更は DOM 監視イベントであり onTitleChange が確実に発火する。
      */
-    private fun readInnerWidthViaHash(activeTab: BrowserTab, callId: Int): Int {
+    private fun readInnerWidthViaTitle(activeTab: BrowserTab, callId: Int): Int {
         val sentinel = "ZW$callId"
         composeRule.runOnIdle {
             activeTab.session.loadUri(
-                "javascript:void(window.location.hash='${sentinel}_' + window.innerWidth)",
+                "javascript:void(document.title='${sentinel}_' + window.innerWidth)",
             )
         }
         composeRule.waitUntil(timeoutMillis = 15_000) {
             var matched = false
             composeRule.runOnIdle {
-                matched = activeTab.currentUrl.contains("#$sentinel")
+                matched = activeTab.title.contains(sentinel)
             }
             matched
         }
-        val hash = activeTab.currentUrl.substringAfter("#${sentinel}_", "")
-        return hash.substringBefore("&").toIntOrNull() ?: -1
+        val width = activeTab.title.substringAfter("${sentinel}_", "")
+        return width.toIntOrNull() ?: -1
     }
 
     /**
