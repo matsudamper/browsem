@@ -53,13 +53,19 @@ jobs:
           echo "APK_NAME=${APK_NAME}" >> "$GITHUB_ENV"
           echo "APK_PATH=app/build/outputs/apk/debug/${APK_NAME}" >> "$GITHUB_ENV"
 
+      - name: Compress debug APK
+        run: |
+          7z a -t7z "${{ env.APK_PATH }}.7z" "${{ env.APK_PATH }}"
+          echo "APK_7Z_NAME=${{ env.APK_NAME }}.7z" >> "$GITHUB_ENV"
+          echo "APK_7Z_PATH=${{ env.APK_PATH }}.7z" >> "$GITHUB_ENV"
+
       - name: Upload debug APK
         id: upload_apk
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
-          name: ${{ env.APK_NAME }}
-          path: ${{ env.APK_PATH }}
-          compression-level: 9
+          name: ${{ env.APK_7Z_NAME }}
+          path: ${{ env.APK_7Z_PATH }}
+          archive: false
 
       - name: Run Android Lint
         run: ./gradlew :app:lintDebug
@@ -95,7 +101,7 @@ jobs:
             ✅ Debug APK artifact is ready.
 
             - Download URL: ${{ steps.upload_apk.outputs.artifact-url }}
-            - Artifact Name: `${{ env.APK_NAME }}`
+            - Artifact Name: `${{ env.APK_7Z_NAME }}`
             - QR Code: ${{ steps.upload_qr.outputs.artifact-url }}
 
   android-test:
