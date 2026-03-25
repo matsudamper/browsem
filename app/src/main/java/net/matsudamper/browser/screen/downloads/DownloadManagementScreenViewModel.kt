@@ -114,6 +114,8 @@ internal class DownloadManagementScreenViewModel(
      */
     private fun resumeDownload(id: UUID) {
         val record = currentRecords.find { it.workerId == id } ?: return
+        // FAILED 状態以外は再開しない（二重タップ等による誤操作を防ぐ）
+        if (record.status != DownloadRecordStatus.FAILED) return
         val app = getApplication<Application>()
         DownloadWorker.ensureNotificationChannel(app)
 

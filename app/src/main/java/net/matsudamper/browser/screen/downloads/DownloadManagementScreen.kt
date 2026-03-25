@@ -29,7 +29,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import net.matsudamper.browser.BrowserTheme
 import net.matsudamper.browser.DownloadWorker
 import net.matsudamper.browser.R
 
@@ -203,6 +205,42 @@ private fun DownloadItemRow(
             text = dateFormat.format(Date(item.enqueuedAt)),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Preview(name = "失敗・再開可能")
+@Composable
+private fun PreviewFailedCanResume() {
+    BrowserTheme(themeMode = net.matsudamper.browser.data.ThemeMode.THEME_SYSTEM) {
+        DownloadItemRow(
+            item = DownloadManagementScreenUiState.DownloadItem(
+                id = java.util.UUID.randomUUID(),
+                fileName = "example.zip",
+                status = DownloadManagementScreenUiState.DownloadStatus.Failed(canResume = true),
+                enqueuedAt = 0L,
+            ),
+            onCancel = {},
+            onOpenFile = {},
+            onResume = {},
+        )
+    }
+}
+
+@Preview(name = "失敗・再開不可")
+@Composable
+private fun PreviewFailedCannotResume() {
+    BrowserTheme(themeMode = net.matsudamper.browser.data.ThemeMode.THEME_SYSTEM) {
+        DownloadItemRow(
+            item = DownloadManagementScreenUiState.DownloadItem(
+                id = java.util.UUID.randomUUID(),
+                fileName = "example.zip",
+                status = DownloadManagementScreenUiState.DownloadStatus.Failed(canResume = false),
+                enqueuedAt = 0L,
+            ),
+            onCancel = {},
+            onOpenFile = {},
+            onResume = {},
         )
     }
 }

@@ -62,7 +62,7 @@ interface DownloadDao {
     @Query(
         "UPDATE download SET status = 'FAILED', partialFileUri = :partialFileUri, " +
             "fileName = :fileName, totalRead = :totalRead, contentLength = :contentLength " +
-            "WHERE workerId = :workerId",
+            "WHERE workerId = :workerId AND status = 'RUNNING'",
     )
     suspend fun updatePartialFailed(
         workerId: String,

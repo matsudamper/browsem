@@ -45,9 +45,8 @@ internal class DownloadWorker(
         val referrerUrl = inputData.getString(KEY_REFERRER_URL).orEmpty()
         // inputDataから通知IDを読み出す（GeckoDownloadManagerと共有）
         val notificationId = inputData.getInt(KEY_NOTIFICATION_ID, NOTIFICATION_ID)
-        // 再開モード: 部分ファイルURIと再開バイト位置
+        // 再開モード: 部分ファイルURI
         val partialFileUriString = inputData.getString(KEY_PARTIAL_FILE_URI)
-        val resumeFromBytes = inputData.getLong(KEY_RESUME_FROM_BYTES, 0L)
 
 
         val enqueuedAt = System.currentTimeMillis()
@@ -61,14 +60,13 @@ internal class DownloadWorker(
         repository.insertDownload(workerId = id.toString(), url = url, referrerUrl = referrerUrl, enqueuedAt = enqueuedAt)
 
         return try {
-            val (fileUri, fileName) = if (partialFileUriString != null && resumeFromBytes > 0) {
+            val (fileUri, fileName) = if (partialFileUriString != null) {
                 downloadFileResume(
                     urlString = url,
                     referrerUrl = referrerUrl,
                     notificationId = notificationId,
                     repository = repository,
                     partialUri = Uri.parse(partialFileUriString),
-                    resumeFromBytes = resumeFromBytes,
                 )
             } else {
                 downloadFile(url, referrerUrl, notificationId, repository)
@@ -94,6 +92,8 @@ internal class DownloadWorker(
                     contentLength = partialResultContentLength,
                 )
             } else {
+                // partialResultUri が非null かつ 0バイトの場合は孤立したMediaStoreエントリを削除する
+                savedUri?.let { context.contentResolver.delete(it, null, null) }
                 repository.updateFailed(id.toString())
             }
             Result.failure()
@@ -191,41 +191,37 @@ internal class DownloadWorker(
         val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
             ?: throw IOException("ダウンロードエントリの作成に失敗しました。")
 
-        var totalRead = 0L
         // 失敗時に部分ファイルURIを参照できるよう保存する
         partialResultUri = uri
         partialResultFileName = fileName
         partialResultContentLength = contentLength
 
-        try {
-            resolver.openOutputStream(uri)?.use { outputStream ->
-                body.use { inputStream ->
-                    val buffer = ByteArray(8192)
-                    var bytesRead: Int
-                    // 通知・Room更新のレート制限を避けるため、最後に更新した時刻を記録する
-                    var lastUpdateTime = 0L
-                    while (inputStream.read(buffer).also { bytesRead = it } != -1) {
-                        outputStream.write(buffer, 0, bytesRead)
-                        totalRead += bytesRead
-                        partialResultTotalRead = totalRead
-                        val now = System.currentTimeMillis()
-                        if (now - lastUpdateTime >= 1000L) {
-                            val progress = if (contentLength > 0) (totalRead * 100 / contentLength).toInt() else 0
-                            repository.updateProgress(id.toString(), fileName, progress, totalRead, contentLength)
-                            setForeground(createForegroundInfo(notificationId, progress, contentLength <= 0, fileName, totalRead, contentLength))
-                            lastUpdateTime = now
-                        }
+        resolver.openOutputStream(uri)?.use { outputStream ->
+            body.use { inputStream ->
+                val buffer = ByteArray(8192)
+                var bytesRead: Int
+                var totalRead = 0L
+                // 通知・Room更新のレート制限を避けるため、最後に更新した時刻を記録する
+                var lastUpdateTime = 0L
+                while (inputStream.read(buffer).also { bytesRead = it } != -1) {
+                    outputStream.write(buffer, 0, bytesRead)
+                    totalRead += bytesRead
+                    partialResultTotalRead = totalRead
+                    val now = System.currentTimeMillis()
+                    if (now - lastUpdateTime >= 1000L) {
+                        val progress = if (contentLength > 0) (totalRead * 100 / contentLength).toInt() else 0
+                        repository.updateProgress(id.toString(), fileName, progress, totalRead, contentLength)
+                        setForeground(createForegroundInfo(notificationId, progress, contentLength <= 0, fileName, totalRead, contentLength))
+                        lastUpdateTime = now
                     }
                 }
-            } ?: throw IOException("出力ストリームを開けませんでした。")
+            }
+        } ?: throw IOException("出力ストリームを開けませんでした。")
 
-            val completeValues = ContentValues().apply { put(MediaStore.Downloads.IS_PENDING, 0) }
-            resolver.update(uri, completeValues, null, null)
-            // 完了したので部分ファイル情報をクリアする
-            partialResultUri = null
-        } catch (e: Throwable) {
-            throw e
-        }
+        val completeValues = ContentValues().apply { put(MediaStore.Downloads.IS_PENDING, 0) }
+        resolver.update(uri, completeValues, null, null)
+        // 完了したので部分ファイル情報をクリアする
+        partialResultUri = null
         // IS_PENDING=0 更新後にMediaStoreが重複を避けてリネームした場合に備え、実際のファイル名を取得する
         val actualFileName = resolver.query(
             uri,
@@ -249,7 +245,6 @@ internal class DownloadWorker(
         notificationId: Int,
         repository: DownloadRepository,
         partialUri: Uri,
-        resumeFromBytes: Long,
     ): Pair<Uri, String> {
         val resolver = context.contentResolver
 
@@ -306,35 +301,31 @@ internal class DownloadWorker(
         partialResultContentLength = contentLength
         partialResultTotalRead = rangeStart
 
-        try {
-            // "wa" モードで追記オープンする
-            resolver.openOutputStream(partialUri, "wa")?.use { outputStream ->
-                body.use { inputStream ->
-                    val buffer = ByteArray(8192)
-                    var bytesRead: Int
-                    var totalRead = rangeStart
-                    var lastUpdateTime = 0L
-                    while (inputStream.read(buffer).also { bytesRead = it } != -1) {
-                        outputStream.write(buffer, 0, bytesRead)
-                        totalRead += bytesRead
-                        partialResultTotalRead = totalRead
-                        val now = System.currentTimeMillis()
-                        if (now - lastUpdateTime >= 1000L) {
-                            val progress = if (contentLength > 0) (totalRead * 100 / contentLength).toInt() else 0
-                            repository.updateProgress(id.toString(), fileName, progress, totalRead, contentLength)
-                            setForeground(createForegroundInfo(notificationId, progress, contentLength <= 0, fileName, totalRead, contentLength))
-                            lastUpdateTime = now
-                        }
+        // "wa" モードで追記オープンする
+        resolver.openOutputStream(partialUri, "wa")?.use { outputStream ->
+            body.use { inputStream ->
+                val buffer = ByteArray(8192)
+                var bytesRead: Int
+                var totalRead = rangeStart
+                var lastUpdateTime = 0L
+                while (inputStream.read(buffer).also { bytesRead = it } != -1) {
+                    outputStream.write(buffer, 0, bytesRead)
+                    totalRead += bytesRead
+                    partialResultTotalRead = totalRead
+                    val now = System.currentTimeMillis()
+                    if (now - lastUpdateTime >= 1000L) {
+                        val progress = if (contentLength > 0) (totalRead * 100 / contentLength).toInt() else 0
+                        repository.updateProgress(id.toString(), fileName, progress, totalRead, contentLength)
+                        setForeground(createForegroundInfo(notificationId, progress, contentLength <= 0, fileName, totalRead, contentLength))
+                        lastUpdateTime = now
                     }
                 }
-            } ?: throw IOException("出力ストリームを開けませんでした。")
+            }
+        } ?: throw IOException("出力ストリームを開けませんでした。")
 
-            val completeValues = ContentValues().apply { put(MediaStore.Downloads.IS_PENDING, 0) }
-            resolver.update(partialUri, completeValues, null, null)
-            partialResultUri = null
-        } catch (e: Throwable) {
-            throw e
-        }
+        val completeValues = ContentValues().apply { put(MediaStore.Downloads.IS_PENDING, 0) }
+        resolver.update(partialUri, completeValues, null, null)
+        partialResultUri = null
         return Pair(partialUri, fileName)
     }
 
