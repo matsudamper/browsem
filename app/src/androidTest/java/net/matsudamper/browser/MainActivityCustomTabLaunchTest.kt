@@ -118,7 +118,7 @@ class MainActivityCustomTabLaunchTest {
                         uiDevice.wait(
                             // Compose の testTagsAsResourceId は viewIdResourceName にタグ値をそのまま設定するため
                             // By.res(packageName, tag) ではなく By.res(tag) で検索する。
-                            Until.hasObject(By.res(TEST_TAG_CUSTOM_TAB_TOOLBAR)),
+                            Until.hasObject(By.res(CustomTabToolbarTestTags.Toolbar.testTag)),
                             10_000,
                         ),
                     )

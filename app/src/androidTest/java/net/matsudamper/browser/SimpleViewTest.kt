@@ -9,7 +9,7 @@ import androidx.compose.ui.test.performClick
 import androidx.lifecycle.ViewModelProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import net.matsudamper.browser.screen.browser.TEST_TAG_SIMPLE_VIEW
+import net.matsudamper.browser.screen.browser.SimpleViewScreenTestTags
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -65,12 +65,12 @@ class SimpleViewTest {
 
         // SimpleViewScreen が表示されるまで待機
         composeRule.waitUntil(timeoutMillis = 30_000) {
-            composeRule.onAllNodesWithTag(TEST_TAG_SIMPLE_VIEW).fetchSemanticsNodes().isNotEmpty()
+            composeRule.onAllNodesWithTag(SimpleViewScreenTestTags.SimpleView.testTag).fetchSemanticsNodes().isNotEmpty()
         }
 
         assertTrue(
             "シンプル表示画面が表示されていない",
-            composeRule.onAllNodesWithTag(TEST_TAG_SIMPLE_VIEW).fetchSemanticsNodes().isNotEmpty(),
+            composeRule.onAllNodesWithTag(SimpleViewScreenTestTags.SimpleView.testTag).fetchSemanticsNodes().isNotEmpty(),
         )
     }
 
@@ -100,7 +100,7 @@ class SimpleViewTest {
         composeRule.onNodeWithText("シンプル表示").performClick()
 
         composeRule.waitUntil(timeoutMillis = 30_000) {
-            composeRule.onAllNodesWithTag(TEST_TAG_SIMPLE_VIEW).fetchSemanticsNodes().isNotEmpty()
+            composeRule.onAllNodesWithTag(SimpleViewScreenTestTags.SimpleView.testTag).fetchSemanticsNodes().isNotEmpty()
         }
 
         // 閉じるボタンをタップ
@@ -108,12 +108,12 @@ class SimpleViewTest {
 
         // SimpleViewScreen が消えるまで待機
         composeRule.waitUntil(timeoutMillis = 10_000) {
-            composeRule.onAllNodesWithTag(TEST_TAG_SIMPLE_VIEW).fetchSemanticsNodes().isEmpty()
+            composeRule.onAllNodesWithTag(SimpleViewScreenTestTags.SimpleView.testTag).fetchSemanticsNodes().isEmpty()
         }
 
         assertTrue(
             "シンプル表示画面が閉じられていない",
-            composeRule.onAllNodesWithTag(TEST_TAG_SIMPLE_VIEW).fetchSemanticsNodes().isEmpty(),
+            composeRule.onAllNodesWithTag(SimpleViewScreenTestTags.SimpleView.testTag).fetchSemanticsNodes().isEmpty(),
         )
     }
 

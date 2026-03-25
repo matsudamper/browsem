@@ -481,7 +481,7 @@ internal fun GeckoBrowserTab(
         Box(
             modifier = Modifier
                 .weight(1f)
-                .testTag(TEST_TAG_GECKO_CONTAINER),
+                .testTag(GeckoBrowserTabTestTags.GeckoContainer.testTag),
         ) {
             BrowserContentHost(
                 modifier = Modifier.fillMaxSize(),
@@ -541,6 +541,13 @@ internal fun GeckoBrowserTab(
     }
 
 }
+sealed interface GeckoBrowserTabTestTags {
+    val id: String
+    val testTag get() = "${GeckoBrowserTabTestTags::class.java.name}#$id"
+
+    object GeckoContainer : GeckoBrowserTabTestTags { override val id = "gecko_container" }
+}
+
 private const val URL_BAR_IME_HIDE_GRACE_MS = 700L
 
 // テキスト選択メニューのカスタム項目 ID

@@ -19,7 +19,12 @@ import androidx.compose.ui.viewinterop.AndroidView
 import net.matsudamper.browser.R
 import net.matsudamper.browser.ReadabilityArticle
 
-internal const val TEST_TAG_SIMPLE_VIEW = "SimpleViewScreen"
+internal sealed interface SimpleViewScreenTestTags {
+    val id: String
+    val testTag get() = "${SimpleViewScreenTestTags::class.java.name}#$id"
+
+    object SimpleView : SimpleViewScreenTestTags { override val id = "simple_view" }
+}
 
 @Composable
 internal fun SimpleViewScreen(
@@ -31,7 +36,7 @@ internal fun SimpleViewScreen(
         modifier = modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
-            .testTag(TEST_TAG_SIMPLE_VIEW),
+            .testTag(SimpleViewScreenTestTags.SimpleView.testTag),
     ) {
         AndroidView(
             factory = { context ->

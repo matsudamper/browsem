@@ -29,6 +29,13 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.viewinterop.AndroidView
 
+internal sealed interface UrlTextInputTestTags {
+    val id: String
+    val testTag get() = "${UrlTextInputTestTags::class.java.name}#$id"
+
+    object UrlBar : UrlTextInputTestTags { override val id = "url_bar" }
+}
+
 @Composable
 internal fun UrlTextInput(
     value: String,
@@ -65,7 +72,7 @@ internal fun UrlTextInput(
                             .padding(resolvedPaddingValues)
                             .then(
                                 if (enableSuggest) {
-                                    Modifier.testTag("url_bar")
+                                    Modifier.testTag(UrlTextInputTestTags.UrlBar.testTag)
                                 } else {
                                     Modifier
                                 }

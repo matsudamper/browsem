@@ -27,7 +27,12 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 
-internal const val TEST_TAG_CUSTOM_TAB_TOOLBAR = "custom_tab_toolbar"
+internal sealed interface CustomTabToolbarTestTags {
+    val id: String
+    val testTag get() = "${CustomTabToolbarTestTags::class.java.name}#$id"
+
+    object Toolbar : CustomTabToolbarTestTags { override val id = "custom_tab_toolbar" }
+}
 
 @Composable
 internal fun CustomTabToolbar(
@@ -54,7 +59,7 @@ internal fun CustomTabToolbar(
         contentColor = toolbarContentColor,
         modifier = Modifier
             .fillMaxWidth()
-            .testTag(TEST_TAG_CUSTOM_TAB_TOOLBAR),
+            .testTag(CustomTabToolbarTestTags.Toolbar.testTag),
     ) {
         Row(
             modifier = Modifier

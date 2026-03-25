@@ -188,7 +188,7 @@ internal fun BrowserTabOverlayLayer(
                 modifier = Modifier
                     .fillMaxSize()
                     .background(MaterialTheme.colorScheme.surface)
-                    .testTag(TEST_TAG_URL_SUGGESTION_LIST),
+                    .testTag(BrowserTabSurfaceTestTags.UrlSuggestionList.testTag),
             )
         }
     }
@@ -274,7 +274,7 @@ internal fun UrlSuggestionList(
             item(key = "web_header") {
                 SuggestionSectionHeader(
                     title = "Web検索候補",
-                    modifier = Modifier.testTag(TEST_TAG_WEB_SUGGESTION_SECTION),
+                    modifier = Modifier.testTag(BrowserTabSurfaceTestTags.WebSuggestionSection.testTag),
                 )
             }
             if (isLoadingWebSuggestions && webSuggestions.isEmpty()) {
@@ -362,7 +362,7 @@ private fun CurrentPageUrlListItem(
                     text = currentPageUrl,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.testTag(TEST_TAG_CURRENT_URL_TEXT),
+                    modifier = Modifier.testTag(BrowserTabSurfaceTestTags.CurrentUrlText.testTag),
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     TextButton(onClick = onCopyCurrentUrl) {
@@ -374,7 +374,7 @@ private fun CurrentPageUrlListItem(
                 }
             }
         },
-        modifier = Modifier.testTag(TEST_TAG_CURRENT_URL_ACTIONS),
+        modifier = Modifier.testTag(BrowserTabSurfaceTestTags.CurrentUrlActions.testTag),
     )
 }
 
@@ -386,7 +386,7 @@ internal fun PageLoadErrorOverlay(
     Surface(
         modifier = Modifier
             .fillMaxSize()
-            .testTag(TEST_TAG_PAGE_LOAD_ERROR),
+            .testTag(BrowserTabSurfaceTestTags.PageLoadError.testTag),
         color = MaterialTheme.colorScheme.surface,
         contentColor = MaterialTheme.colorScheme.onSurface,
     ) {
@@ -440,9 +440,13 @@ internal fun PageLoadErrorOverlay(
     }
 }
 
-const val TEST_TAG_GECKO_CONTAINER = "gecko_container"
-const val TEST_TAG_URL_SUGGESTION_LIST = "url_suggestion_list"
-const val TEST_TAG_WEB_SUGGESTION_SECTION = "web_suggestion_section"
-const val TEST_TAG_CURRENT_URL_ACTIONS = "current_url_actions"
-const val TEST_TAG_CURRENT_URL_TEXT = "current_url_text"
-const val TEST_TAG_PAGE_LOAD_ERROR = "page_load_error"
+sealed interface BrowserTabSurfaceTestTags {
+    val id: String
+    val testTag get() = "${BrowserTabSurfaceTestTags::class.java.name}#$id"
+
+    object UrlSuggestionList : BrowserTabSurfaceTestTags { override val id = "url_suggestion_list" }
+    object WebSuggestionSection : BrowserTabSurfaceTestTags { override val id = "web_suggestion_section" }
+    object CurrentUrlActions : BrowserTabSurfaceTestTags { override val id = "current_url_actions" }
+    object CurrentUrlText : BrowserTabSurfaceTestTags { override val id = "current_url_text" }
+    object PageLoadError : BrowserTabSurfaceTestTags { override val id = "page_load_error" }
+}
