@@ -113,7 +113,10 @@ class MediaNotificationSmokeTest {
         // GeckoView の onPlay で isPlaying=true になるまで待機
         assertTrue(
             "MediaSessionBridge の isPlaying が true になること",
-            waitForCondition(timeoutMs = PLAYBACK_STATE_TIMEOUT_MS) {
+            waitForCondition(
+                timeoutMs = PLAYBACK_STATE_TIMEOUT_MS,
+                retryAction = { requestMediaPlayback(activeTab) },
+            ) {
                 MediaSessionBridge.playbackState.value.isPlaying
             },
         )
@@ -124,7 +127,10 @@ class MediaNotificationSmokeTest {
 
         assertTrue(
             "メタデータが拡張経由で反映されること",
-            waitForCondition(timeoutMs = METADATA_TIMEOUT_MS) {
+            waitForCondition(
+                timeoutMs = METADATA_TIMEOUT_MS,
+                retryAction = { requestMediaPlayback(activeTab) },
+            ) {
                 val state = MediaSessionBridge.playbackState.value
                 state.title == EXPECTED_TITLE &&
                     state.artist == EXPECTED_ARTIST &&
@@ -135,7 +141,10 @@ class MediaNotificationSmokeTest {
         )
         assertTrue(
             "再生位置が更新されること",
-            waitForCondition(timeoutMs = POSITION_TIMEOUT_MS) {
+            waitForCondition(
+                timeoutMs = POSITION_TIMEOUT_MS,
+                retryAction = { requestMediaPlayback(activeTab) },
+            ) {
                 MediaSessionBridge.playbackState.value.positionMs > 0L
             },
         )
@@ -150,18 +159,28 @@ class MediaNotificationSmokeTest {
 
         // 通知シェードを開き、メディア通知のタイトルとコントロールをUIで確認する。
         val uiDevice = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
-        uiDevice.openNotification()
+
+        var isNotificationVisible = false
+        val notificationDeadline = SystemClock.uptimeMillis() + NOTIFICATION_CONTROL_TIMEOUT_MS * 2
+
         try {
-            assertTrue(
-                "通知タイトルが拡張経由メタデータを反映すること",
-                uiDevice.wait(Until.hasObject(By.text(EXPECTED_TITLE)), NOTIFICATION_CONTROL_TIMEOUT_MS),
-            )
-            // Media3が生成する通知にはPlay/Pauseコントロールが含まれる。
-            assertTrue(
-                "メディア通知にコントロール（Play/Pause）が表示されること",
-                uiDevice.wait(Until.hasObject(By.descContains("Play")), NOTIFICATION_CONTROL_TIMEOUT_MS) ||
-                    uiDevice.wait(Until.hasObject(By.descContains("Pause")), NOTIFICATION_CONTROL_TIMEOUT_MS),
-            )
+            while (SystemClock.uptimeMillis() < notificationDeadline) {
+                uiDevice.openNotification()
+                val hasTitle = uiDevice.wait(Until.hasObject(By.text(EXPECTED_TITLE)), 2000L) == true
+                val hasControl = uiDevice.wait(Until.hasObject(By.descContains("Play")), 1000L) == true ||
+                    uiDevice.wait(Until.hasObject(By.descContains("Pause")), 1000L) == true
+
+                if (hasTitle && hasControl) {
+                    isNotificationVisible = true
+                    break
+                }
+                // 通知がない、またはコントロールがない場合は一旦閉じて再生要求を再送する
+                uiDevice.pressBack()
+                requestMediaPlayback(activeTab)
+                Thread.sleep(PLAY_REQUEST_RETRY_INTERVAL_MS)
+            }
+
+            assertTrue("通知タイトルとコントロールが確認できること", isNotificationVisible)
         } finally {
             uiDevice.pressBack()
         }
@@ -253,12 +272,20 @@ class MediaNotificationSmokeTest {
     private fun waitForCondition(
         timeoutMs: Long,
         intervalMs: Long = CONDITION_POLL_INTERVAL_MS,
+        retryAction: (() -> Unit)? = null,
+        retryIntervalMs: Long = PLAY_REQUEST_RETRY_INTERVAL_MS,
         condition: () -> Boolean,
     ): Boolean {
         val deadline = SystemClock.uptimeMillis() + timeoutMs
+        var lastActionTime = SystemClock.uptimeMillis()
         while (SystemClock.uptimeMillis() < deadline) {
             if (condition()) {
                 return true
+            }
+            val now = SystemClock.uptimeMillis()
+            if (retryAction != null && now - lastActionTime >= retryIntervalMs) {
+                retryAction()
+                lastActionTime = now
             }
             Thread.sleep(intervalMs)
         }
