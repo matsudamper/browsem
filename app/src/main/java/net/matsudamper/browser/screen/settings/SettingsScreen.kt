@@ -3,6 +3,7 @@ package net.matsudamper.browser.screen.settings
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -30,6 +31,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.ImeAction
@@ -71,7 +73,11 @@ internal fun SettingsScreen(
     ) { paddingValues ->
         Column(
             modifier = Modifier
-                .padding(paddingValues)
+                .padding(
+                    start = paddingValues.calculateStartPadding(LocalLayoutDirection.current),
+                    end = paddingValues.calculateStartPadding(LocalLayoutDirection.current),
+                    top = paddingValues.calculateTopPadding(),
+                )
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 8.dp, vertical = 8.dp),
@@ -299,6 +305,7 @@ internal fun SettingsScreen(
             }
 
             Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.padding(bottom = paddingValues.calculateBottomPadding()))
         }
     }
 }
