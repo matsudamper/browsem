@@ -31,7 +31,7 @@ class PageZoomTest {
      */
     @Test
     fun initialPageZoomIsHundredPercent() {
-        composeRule.onNodeWithContentDescription("Menu").performClick()
+        composeRule.onAllNodesWithContentDescription("Menu")[0].performClick()
         composeRule.waitUntil(timeoutMillis = 10_000) {
             composeRule.onAllNodesWithText("ページズーム").fetchSemanticsNodes().isNotEmpty()
         }
@@ -46,7 +46,7 @@ class PageZoomTest {
      */
     @Test
     fun pageZoomInIncreasesDisplayedPercent() {
-        composeRule.onNodeWithContentDescription("Menu").performClick()
+        composeRule.onAllNodesWithContentDescription("Menu")[0].performClick()
         composeRule.waitUntil(timeoutMillis = 10_000) {
             composeRule.onAllNodesWithText("ページズーム").fetchSemanticsNodes().isNotEmpty()
         }
@@ -67,7 +67,7 @@ class PageZoomTest {
      */
     @Test
     fun pageZoomOutDecreasesDisplayedPercent() {
-        composeRule.onNodeWithContentDescription("Menu").performClick()
+        composeRule.onAllNodesWithContentDescription("Menu")[0].performClick()
         composeRule.waitUntil(timeoutMillis = 10_000) {
             composeRule.onAllNodesWithText("ページズーム").fetchSemanticsNodes().isNotEmpty()
         }
@@ -93,7 +93,7 @@ class PageZoomTest {
      */
     @Test
     fun tappingPercentButtonResetsZoomToHundred() {
-        composeRule.onNodeWithContentDescription("Menu").performClick()
+        composeRule.onAllNodesWithContentDescription("Menu")[0].performClick()
         composeRule.waitUntil(timeoutMillis = 10_000) {
             composeRule.onAllNodesWithText("ページズーム").fetchSemanticsNodes().isNotEmpty()
         }
@@ -137,7 +137,7 @@ class PageZoomTest {
         assertTrue("初期 window.innerWidth が取得できなかった (got $initialWidth)", initialWidth > 0)
 
         // メニューを開き 200% まで拡大（100→110→125→150→175→200 = 5ステップ）
-        composeRule.onNodeWithContentDescription("Menu").performClick()
+        composeRule.onAllNodesWithContentDescription("Menu")[0].performClick()
         composeRule.waitUntil(timeoutMillis = 10_000) {
             composeRule.onAllNodesWithText("ページズーム").fetchSemanticsNodes().isNotEmpty()
         }
@@ -187,7 +187,7 @@ class PageZoomTest {
         assertTrue("初期 window.innerWidth が取得できなかった", initialWidth > 0)
 
         // 200% に拡大
-        composeRule.onNodeWithContentDescription("Menu").performClick()
+        composeRule.onAllNodesWithContentDescription("Menu")[0].performClick()
         composeRule.waitUntil(timeoutMillis = 10_000) {
             composeRule.onAllNodesWithText("ページズーム").fetchSemanticsNodes().isNotEmpty()
         }

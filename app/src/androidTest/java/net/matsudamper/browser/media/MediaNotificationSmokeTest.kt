@@ -58,7 +58,9 @@ class MediaNotificationSmokeTest {
         val latch = CountDownLatch(1)
         Handler(Looper.getMainLooper()).post {
             runCatching { MediaSessionBridge.deactivate() }
-            runCatching { activity.stopService(Intent(activity, MediaPlaybackService::class.java)) }
+            if (::activity.isInitialized) {
+                runCatching { activity.stopService(Intent(activity, MediaPlaybackService::class.java)) }
+            }
             latch.countDown()
         }
         latch.await(5, TimeUnit.SECONDS)
