@@ -125,7 +125,10 @@ internal fun BrowserTabDialogLayer(
 
     state.pendingExternalAppLaunch?.let { request ->
         AlertDialog(
-            onDismissRequest = state::dismissPendingExternalAppLaunch,
+            onDismissRequest = {
+                onOpenNewSessionRequest(request.sourceUri)
+                state.dismissPendingExternalAppLaunch()
+            },
             title = { Text("アプリを開く") },
             text = {
                 Column {
@@ -148,7 +151,10 @@ internal fun BrowserTabDialogLayer(
                 }
             },
             dismissButton = {
-                TextButton(onClick = state::dismissPendingExternalAppLaunch) {
+                TextButton(onClick = {
+                    onOpenNewSessionRequest(request.sourceUri)
+                    state.dismissPendingExternalAppLaunch()
+                }) {
                     Text("キャンセル")
                 }
             },
