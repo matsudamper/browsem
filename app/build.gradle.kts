@@ -8,6 +8,7 @@ plugins {
 val ciDebugKeystorePath = System.getenv("DEBUG_KEYSTORE_PATH")
 val ciDebugKeystoreFile = ciDebugKeystorePath?.let { file(it) }
 val useCiDebugKeystore = ciDebugKeystoreFile != null && ciDebugKeystoreFile.exists()
+val enableShrink = System.getenv("ENABLE_SHRINK") == "true"
 
 android {
     namespace = "net.matsudamper.browser"
@@ -44,16 +45,12 @@ android {
             if (useCiDebugKeystore) {
                 signingConfig = signingConfigs.getByName("debugCi")
             }
-        }
-
-        // CI配布用。debugと同等だがShrinkを有効にしてAPKサイズを削減する
-        create("debugShrink") {
-            initWith(getByName("debug"))
-            isMinifyEnabled = true
-            isShrinkResources = true
-            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            // ライブラリモジュールにdebugShrinkバリアントがないためdebugにフォールバック
-            matchingFallbacks += "debug"
+            // ENABLE_SHRINK=true の場合にShrinkを有効化（CI配布APKのサイズ削減用）
+            if (enableShrink) {
+                isMinifyEnabled = true
+                isShrinkResources = true
+                proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            }
         }
 
         release {
