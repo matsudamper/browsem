@@ -25,9 +25,11 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntOffset
+import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
 import androidx.navigation3.runtime.NavEntry
 import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.rememberNavBackStack
+import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.scene.Scene
 import androidx.navigation3.ui.NavDisplay
 import androidx.navigation3.ui.defaultPopTransitionSpec
@@ -41,6 +43,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import net.matsudamper.browser.BrowserTab
 import net.matsudamper.browser.data.SettingsRepository
+import net.matsudamper.browser.data.TabGroupId
 import net.matsudamper.browser.data.TabGroupRepository
 import net.matsudamper.browser.data.history.HistoryRepository
 import net.matsudamper.browser.data.websuggestion.WebSuggestionRepository
@@ -166,6 +169,10 @@ internal fun BrowserApp(
         NavDisplay(
             backStack = backStack,
             onBack = { navController.back() },
+            entryDecorators = listOf(
+                rememberSaveableStateHolderNavEntryDecorator(),
+                rememberViewModelStoreNavEntryDecorator(),
+            ),
             transitionSpec = {
                 val default = defaultTransitionSpec<NavKey>()(this)
                 val initial = initialState.entries.lastOrNull() ?: return@NavDisplay default
@@ -342,14 +349,18 @@ internal fun BrowserApp(
                                     selectTab(newTab.tabId, null)
                                 }
                             },
-                            onOpenNewTab = {
-                                // デフォルトグループが設定されている場合、タブ作成前に割り当てることで
-                                // TabsScreenViewModel の未割当モニターによるアクティブグループへの上書きを防ぐ
+                            onOpenNewTab = { currentGroupId: TabGroupId? ->
+                                // デフォルトグループが設定されている場合はそちらを優先し、
+                                // 未設定の場合は現在表示中のグループに割り当てる。
+                                // いずれの場合もタブ作成前に割り当てを確定させ、
+                                // selectTab 後の ViewModel 破棄で未割当モニターがキャンセルされても
+                                // 次回タブ画面を開いたときに正しいグループが復元されるようにする。
                                 scope.launch {
                                     val tabId = UUID.randomUUID().toString()
                                     val defaultGroupId = tabGroupRepository.getDefaultGroupId()
-                                    if (defaultGroupId != null) {
-                                        tabGroupRepository.assignTabToGroup(tabId, defaultGroupId)
+                                    val assignGroupId = defaultGroupId ?: currentGroupId
+                                    if (assignGroupId != null) {
+                                        tabGroupRepository.assignTabToGroup(tabId, assignGroupId)
                                     }
                                     // GeckoSession の生成は UI スレッドで行う必要がある
                                     withContext(Dispatchers.Main) {

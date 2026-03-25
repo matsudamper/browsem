@@ -146,6 +146,15 @@ Proto → DataStore/Room → Repository → ViewModel (StateFlow) → Compose
   - **接続デバイス (実機・通常エミュレータ) の使用は禁止**。必ず Gradle Managed Device (`./gradlew :app:pixel6Api34DebugAndroidTest`) を使用すること
 - **Lint**: `./gradlew :app:lintDebug`
 
+### Instrumentation テストの操作ルール
+
+- **UI 操作は `performClick()` など Compose セマンティクス API を使う**
+  - `UiAutomation.injectInputEvent()` や `MotionEvent` による生のタッチイベント注入は禁止
+  - 理由: GeckoView の AndroidView 層でイベントが吸収され、Compose ツールバー等に届かないため
+  - `pressBack()` など物理ボタンは `onBackPressedDispatcher.onBackPressed()` を使う
+- repository等のデータを直接データをいじらない。全てUI操作で行う
+- **待機は `waitUntil { ... }` でセマンティクスノードの存在を確認する**
+
 ## 作業フロー
 
 ### 変更前

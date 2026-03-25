@@ -173,7 +173,17 @@ internal class DownloadWorker(
             resolver.delete(uri, null, null)
             throw e
         }
-        return Pair(uri, fileName)
+        // IS_PENDING=0 更新後にMediaStoreが重複を避けてリネームした場合に備え、実際のファイル名を取得する
+        val actualFileName = resolver.query(
+            uri,
+            arrayOf(MediaStore.MediaColumns.DISPLAY_NAME),
+            null,
+            null,
+            null,
+        )?.use { cursor ->
+            if (cursor.moveToFirst()) cursor.getString(0) else fileName
+        } ?: fileName
+        return Pair(uri, actualFileName)
     }
 
     private fun createForegroundInfo(

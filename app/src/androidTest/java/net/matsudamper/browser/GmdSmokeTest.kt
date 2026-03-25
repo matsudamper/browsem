@@ -613,11 +613,11 @@ class GmdSmokeTest {
     private fun waitForToolbarState(): ToolbarState {
         composeRule.waitUntil(timeoutMillis = 20_000) {
             runCatching {
-                composeRule.onNodeWithTag(TEST_TAG_TOOLBAR).fetchSemanticsNode()
+                composeRule.onNodeWithTag(BrowserToolbarTestTags.Toolbar.testTag).fetchSemanticsNode()
                 true
             }.getOrDefault(false)
         }
-        val node = composeRule.onNodeWithTag(TEST_TAG_TOOLBAR).fetchSemanticsNode()
+        val node = composeRule.onNodeWithTag(BrowserToolbarTestTags.Toolbar.testTag).fetchSemanticsNode()
         val stateDescription = node.config[SemanticsProperties.StateDescription]
         val tokens = stateDescription.split("|")
         require(tokens.size == 3) {

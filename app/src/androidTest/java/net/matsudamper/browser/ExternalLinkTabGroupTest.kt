@@ -1,9 +1,9 @@
 package net.matsudamper.browser
 
-import android.os.SystemClock
-import android.view.MotionEvent
 import androidx.compose.ui.test.assertIsOn
+import androidx.compose.ui.test.hasParent
 import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.isDisplayed
 import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
@@ -12,7 +12,6 @@ import androidx.compose.ui.test.performClick
 import androidx.lifecycle.ViewModelProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import net.matsudamper.browser.screen.tab.TabsScreenTestTags
-import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -62,10 +61,10 @@ class ExternalLinkTabGroupTest {
         // 4. 最初のグループに戻る（グループタブバーの最初のグループをタップ）
         // グループ追加後は新しいグループ（index=1）にいるため、index=0 のグループに移動する。
         composeRule.waitUntil(timeoutMillis = 10_000) {
-            composeRule.onAllNodes(hasTestTag(TabsScreenTestTags.tabGroupTestTag(0)))
+            composeRule.onAllNodes(hasTestTag(TabsScreenTestTags.TabGroupTopButton(0).testTag))
                 .fetchSemanticsNodes().isNotEmpty()
         }
-        composeRule.onNode(hasTestTag(TabsScreenTestTags.tabGroupTestTag(0))).performClick()
+        composeRule.onNode(hasTestTag(TabsScreenTestTags.TabGroupTopButton(0).testTag)).performClick()
         composeRule.waitForIdle()
 
         // 5. 新規タブボタン（FAB）をタップしてブラウザに遷移する
@@ -74,7 +73,7 @@ class ExternalLinkTabGroupTest {
 
         // ブラウザ画面が表示されるまで待つ
         composeRule.waitUntil(timeoutMillis = 20_000) {
-            composeRule.onAllNodes(hasTestTag(TEST_TAG_TOOLBAR))
+            composeRule.onAllNodes(hasTestTag(BrowserToolbarTestTags.Toolbar.testTag))
                 .fetchSemanticsNodes().isNotEmpty()
         }
 
@@ -88,20 +87,18 @@ class ExternalLinkTabGroupTest {
 
     /**
      * ツールバーのタブボタンをタップする。
-     * TabPreviewPage にもボタンがあるため、画面内に表示されているものを選ぶ。
+     * hasParent でツールバー内のボタンに絞ることで GeckoView 層への誤タップを防ぐ。
      */
     private fun tapTabButton() {
-        val screenWidth = composeRule.activity.resources.displayMetrics.widthPixels
+        val node = composeRule.onNode(
+            hasTestTag(BrowserToolbarTestTags.OpenTabsButton.testTag)
+                .and(hasParent(hasTestTag(BrowserToolbarTestTags.Toolbar.testTag)))
+        )
         composeRule.waitUntil(timeoutMillis = 20_000) {
-            composeRule.onAllNodes(hasTestTag(TEST_TAG_OPEN_TABS))
-                .fetchSemanticsNodes()
-                .any { it.boundsInRoot.width > 0 && it.boundsInRoot.right <= screenWidth }
+            node.isDisplayed()
         }
-        val visibleNode = composeRule.onAllNodes(hasTestTag(TEST_TAG_OPEN_TABS))
-            .fetchSemanticsNodes()
-            .first { it.boundsInRoot.width > 0 && it.boundsInRoot.right <= screenWidth }
-        val bounds = visibleNode.boundsInRoot
-        injectTap((bounds.left + bounds.right) / 2f, (bounds.top + bounds.bottom) / 2f)
+        node.performClick()
+        composeRule.waitForIdle()
     }
 
     /**
@@ -112,20 +109,6 @@ class ExternalLinkTabGroupTest {
             composeRule.onAllNodesWithText("名前変更")
                 .fetchSemanticsNodes().isNotEmpty()
         }
-    }
-
-    /**
-     * UiAutomation 経由でタップイベントを注入する。
-     */
-    private fun injectTap(x: Float, y: Float) {
-        val uiAutomation = InstrumentationRegistry.getInstrumentation().uiAutomation
-        val downTime = SystemClock.uptimeMillis()
-        val down = MotionEvent.obtain(downTime, downTime, MotionEvent.ACTION_DOWN, x, y, 0)
-        val up = MotionEvent.obtain(downTime, downTime + 50, MotionEvent.ACTION_UP, x, y, 0)
-        uiAutomation.injectInputEvent(down, true)
-        uiAutomation.injectInputEvent(up, true)
-        down.recycle()
-        up.recycle()
     }
 
     /**
@@ -165,12 +148,5 @@ class ExternalLinkTabGroupTest {
      */
     private fun getBrowserViewModel(): BrowserViewModel {
         return ViewModelProvider(composeRule.activity)[BrowserViewModel::class.java]
-    }
-
-    /**
-     * デバッグ時にユーザーに操作させて確認したい場合に差し込む
-     */
-    private fun waitDebugUserInteractionInfinity() {
-        composeRule.waitUntil(timeoutMillis = Long.MAX_VALUE) { false }
     }
 }

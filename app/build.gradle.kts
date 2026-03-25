@@ -111,10 +111,12 @@ tasks.withType<Test>().configureEach {
         }
     }
     systemProperty("paparazzi.filter", System.getProperty("paparazzi.filter", ""))
-    // Paparazzi の PaparazziTestReporter が Gradle 内部 API の変更により HTML レポート生成で
-    // クラッシュするため、HTML レポートを無効化する
-    // https://github.com/cashapp/paparazzi/issues/2227
-    reports.html.required.set(false)
+    if (hasPaparazziTask) {
+        // Paparazzi の PaparazziTestReporter が Gradle 内部 API の変更により HTML レポート生成で
+        // クラッシュするため、Paparazzi 実行時のみ HTML レポートを無効化する
+        // https://github.com/cashapp/paparazzi/issues/2227
+        reports.html.required.set(false)
+    }
 }
 
 dependencies {
@@ -125,6 +127,7 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.navigation3.runtime)
     implementation(libs.androidx.navigation3.ui)
+    implementation(libs.androidx.lifecycle.viewmodel.navigation3)
     implementation(libs.androidx.browser)
     implementation(libs.mozilla.geckoview)
     implementation(libs.mlkit.translate)
