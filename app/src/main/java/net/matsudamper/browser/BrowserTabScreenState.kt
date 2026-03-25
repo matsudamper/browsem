@@ -161,14 +161,6 @@ internal class BrowserTabScreenState(
 
     fun onUrlSubmit(rawInput: String) {
         val resolved = buildUrlFromInput(rawInput, homepageUrl, searchTemplate)
-        // アドレスバーからの入力時も App Links をチェックする。
-        // session.loadUri() は programmatic load のため onLoadRequest で hasUserGesture=false になり
-        // チェックが届かない場合があるため、ここで事前に判定する。
-        val action = resolveExternalAppNavigationAction(context, resolved)
-        if (action is ExternalAppNavigationAction.Launch) {
-            pendingExternalAppLaunch = action.request
-            return
-        }
         urlInput = resolved
         maybeResetToolbarColor(currentPageUrl, resolved)
         currentPageUrl = resolved
