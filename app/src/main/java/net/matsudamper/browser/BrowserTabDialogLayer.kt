@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.lazy.LazyColumn
@@ -124,16 +125,24 @@ internal fun BrowserTabDialogLayer(
 
     state.pendingExternalAppLaunch?.let { request ->
         AlertDialog(
-            onDismissRequest = state::dismissPendingExternalAppLaunch,
+            onDismissRequest = {
+                state.dismissPendingExternalAppLaunch()
+            },
             title = { Text("アプリを開く") },
             text = {
-                Text(
-                    text = request.appName?.let { appName ->
-                        "$appName をアプリで開きますか？\n\n${request.sourceUri}"
-                    } ?: "このリンクをアプリで開きますか？\n\n${request.sourceUri}",
-                    maxLines = 6,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                Column {
+                    if (request.appName != null) {
+                        Text("${request.appName} をアプリで開きますか？")
+                    } else {
+                        Text("このリンクをアプリで開きますか？")
+                    }
+                    Spacer(modifier = Modifier.height(24.dp))
+                    Text(
+                        request.sourceUri,
+                        maxLines = 4,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             },
             confirmButton = {
                 TextButton(onClick = state::confirmPendingExternalAppLaunch) {
@@ -141,7 +150,9 @@ internal fun BrowserTabDialogLayer(
                 }
             },
             dismissButton = {
-                TextButton(onClick = state::dismissPendingExternalAppLaunch) {
+                TextButton(onClick = {
+                    state.dismissPendingExternalAppLaunchAndLoadInBrowser()
+                }) {
                     Text("キャンセル")
                 }
             },

@@ -3,6 +3,7 @@ package net.matsudamper.browser.screen.settings
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -20,6 +21,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -29,6 +31,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.ImeAction
@@ -70,11 +73,16 @@ internal fun SettingsScreen(
     ) { paddingValues ->
         Column(
             modifier = Modifier
-                .padding(paddingValues)
+                .padding(
+                    start = paddingValues.calculateStartPadding(LocalLayoutDirection.current),
+                    end = paddingValues.calculateStartPadding(LocalLayoutDirection.current),
+                    top = paddingValues.calculateTopPadding(),
+                )
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp, vertical = 8.dp),
+                .padding(horizontal = 8.dp, vertical = 8.dp),
         ) {
+            val betweenPadding = 12.dp
             SettingSection(title = "ホームページ") {
                 Column {
                     Column(Modifier.selectableGroup()) {
@@ -112,7 +120,7 @@ internal fun SettingsScreen(
                 }
             }
 
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(betweenPadding))
 
             SettingSection(title = "検索プロバイダー") {
                 Column {
@@ -153,7 +161,7 @@ internal fun SettingsScreen(
                 }
             }
 
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(betweenPadding))
 
             SettingSection(title = "検索候補") {
                 Row(
@@ -185,7 +193,7 @@ internal fun SettingsScreen(
                 }
             }
 
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(betweenPadding))
 
             SettingSection(title = "テーマ") {
                 Column(Modifier.selectableGroup()) {
@@ -207,7 +215,7 @@ internal fun SettingsScreen(
                 }
             }
 
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(betweenPadding))
 
             SettingSection(title = "翻訳プロバイダー") {
                 Column(Modifier.selectableGroup()) {
@@ -232,7 +240,7 @@ internal fun SettingsScreen(
                 }
             }
 
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(betweenPadding))
 
             SettingSection(title = "セキュリティ") {
                 Row(
@@ -253,7 +261,7 @@ internal fun SettingsScreen(
                 }
             }
 
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(betweenPadding))
 
             SettingSection(title = "ダウンロード") {
                 TextButton(
@@ -264,7 +272,7 @@ internal fun SettingsScreen(
                 }
             }
 
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(betweenPadding))
 
             SettingSection(title = "拡張機能") {
                 TextButton(
@@ -275,7 +283,7 @@ internal fun SettingsScreen(
                 }
             }
 
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(betweenPadding))
 
             SettingSection(title = "履歴") {
                 TextButton(
@@ -286,21 +294,18 @@ internal fun SettingsScreen(
                 }
             }
 
-            Spacer(Modifier.height(24.dp))
-
-            Text(
-                text = "通知",
-                style = MaterialTheme.typography.titleMedium,
-            )
-            Spacer(Modifier.height(8.dp))
-            TextButton(
-                onClick = onOpenNotificationPermissions,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text("通知を許可したサイト")
+            Spacer(Modifier.height(betweenPadding))
+            SettingSection(title = "通知") {
+                TextButton(
+                    onClick = onOpenNotificationPermissions,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("通知を許可したサイト")
+                }
             }
 
             Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.padding(bottom = paddingValues.calculateBottomPadding()))
         }
     }
 }
@@ -310,13 +315,20 @@ private fun SettingSection(
     title: String,
     content: @Composable () -> Unit,
 ) {
-    Column {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.titleMedium,
-        )
-        Spacer(Modifier.height(8.dp))
-        content()
+    Surface(
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.surfaceContainer,
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp)
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleLarge,
+            )
+            Spacer(Modifier.height(8.dp))
+            content()
+        }
     }
 }
 

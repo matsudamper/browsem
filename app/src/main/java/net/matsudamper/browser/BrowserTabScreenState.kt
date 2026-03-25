@@ -37,7 +37,7 @@ import org.mozilla.geckoview.WebResponse
 import java.io.ByteArrayOutputStream
 
 
-private val PAGE_ZOOM_STEPS = listOf(50, 67, 75, 80, 90, 100, 110, 125, 150, 175, 200)
+private val PAGE_ZOOM_STEPS = listOf(20, 25, 33, 50, 67, 75, 80, 90, 100, 110, 125, 150, 175, 200)
 
 @Composable
 internal fun rememberBrowserTabScreenState(
@@ -142,6 +142,8 @@ internal class BrowserTabScreenState(
     // --- ファイルダウンロード確認ダイアログ用state ---
     var pendingDownloadResponse by mutableStateOf<WebResponse?>(null)
     var pendingExternalAppLaunch by mutableStateOf<PendingExternalAppLaunch?>(null)
+    // 外部アプリ確認ダイアログでキャンセルされた場合、次回のロードリクエストで外部アプリチェックをスキップする
+    private var skipExternalAppCheckForNextLoad = false
 
     var renderReady by mutableStateOf(false)
     var pageLoadError by mutableStateOf<PageLoadError?>(null)
@@ -419,6 +421,27 @@ internal class BrowserTabScreenState(
         pendingExternalAppLaunch = null
     }
 
+    /**
+     * 外部アプリ確認ダイアログでキャンセルされた際に、
+     * ブラウザ内で（deep linkではなく）URLを読み込む。
+     * http/https の場合は sourceUri をそのまま使い、
+     * intent:// 等のカスタムスキームの場合は fallbackUrl を使用する。
+     */
+    fun dismissPendingExternalAppLaunchAndLoadInBrowser() {
+        val request = pendingExternalAppLaunch ?: return
+        pendingExternalAppLaunch = null
+
+        val url = if (request.sourceUri.startsWith("http://") || request.sourceUri.startsWith("https://")) {
+            request.sourceUri
+        } else {
+            request.fallbackUrl
+        }
+        if (url != null) {
+            skipExternalAppCheckForNextLoad = true
+            openFallbackUrl(url)
+        }
+    }
+
     fun restoreCurrentPageUrlToInput() {
         urlInput = currentPageUrl
     }
@@ -642,6 +665,10 @@ internal class BrowserTabScreenState(
     override fun onLoadRequest(
         request: GeckoSession.NavigationDelegate.LoadRequest,
     ): GeckoResult<AllowOrDeny>? {
+        if (skipExternalAppCheckForNextLoad) {
+            skipExternalAppCheckForNextLoad = false
+            return null
+        }
         return when (val action = resolveExternalAppNavigationAction(context, request.uri)) {
             ExternalAppNavigationAction.AllowInBrowser -> null
             ExternalAppNavigationAction.AppNotFound -> {
