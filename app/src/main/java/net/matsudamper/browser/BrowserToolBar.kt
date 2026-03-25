@@ -88,7 +88,8 @@ internal fun BrowserToolBar(
 ) {
     var visibleMenu by remember { mutableStateOf(false) }
     BrowserToolbar(
-        modifier = modifier,
+        modifier = modifier
+            .testTag(BrowserToolbarTestTags.Toolbar.testTag),
         isFocused = isFocused,
         gestureState = if (showTabActions) {
             BrowserToolBarGestureState(
@@ -208,7 +209,6 @@ internal fun BrowserToolbar(
         color = toolbarColors.resolvedToolbarColor,
         contentColor = toolbarColors.urlBarBackgroundColor,
         modifier = modifier
-            .testTag(TEST_TAG_TOOLBAR)
             .semantics {
                 stateDescription = "toolbarColor|${toolbarColors.colorSource}|${toolbarColors.resolvedToolbarColor.toArgbHex()}"
             }
@@ -285,7 +285,7 @@ internal fun BrowserToolbar(
                 if (showTabButton) {
                     IconButton(
                         onClick = onOpenTabs,
-                        modifier = Modifier.testTag(TEST_TAG_OPEN_TABS),
+                        modifier = Modifier.testTag(BrowserToolbarTestTags.OpenTabsButton.testTag),
                     ) {
                         Text(
                             text = "$tabCount",
@@ -316,8 +316,15 @@ internal fun BrowserToolbar(
     }
 }
 
-internal const val TEST_TAG_TOOLBAR = "browser_toolbar"
-internal const val TEST_TAG_OPEN_TABS = "open_tabs_button"
+sealed class BrowserToolbarTestTags(val id: String) {
+    val testTag: String = "${BrowserToolbarTestTags::class.java.name}#$id"
+    object Toolbar : BrowserToolbarTestTags(
+        id = "toolbar",
+    )
+    object OpenTabsButton : BrowserToolbarTestTags(
+        id = "open_tabs_button",
+    )
+}
 
 @Preview(name = "Light")
 @Preview(name = "Dark", uiMode = android.content.res.Configuration.UI_MODE_NIGHT_YES)

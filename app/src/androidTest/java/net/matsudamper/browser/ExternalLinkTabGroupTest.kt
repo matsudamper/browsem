@@ -62,10 +62,10 @@ class ExternalLinkTabGroupTest {
         // 4. 最初のグループに戻る（グループタブバーの最初のグループをタップ）
         // グループ追加後は新しいグループ（index=1）にいるため、index=0 のグループに移動する。
         composeRule.waitUntil(timeoutMillis = 10_000) {
-            composeRule.onAllNodes(hasTestTag(TabsScreenTestTags.tabGroupTestTag(0)))
+            composeRule.onAllNodes(hasTestTag(TabsScreenTestTags.TabGroupTopButton(0).testTag))
                 .fetchSemanticsNodes().isNotEmpty()
         }
-        composeRule.onNode(hasTestTag(TabsScreenTestTags.tabGroupTestTag(0))).performClick()
+        composeRule.onNode(hasTestTag(TabsScreenTestTags.TabGroupTopButton(0).testTag)).performClick()
         composeRule.waitForIdle()
 
         // 5. 新規タブボタン（FAB）をタップしてブラウザに遷移する
@@ -74,7 +74,7 @@ class ExternalLinkTabGroupTest {
 
         // ブラウザ画面が表示されるまで待つ
         composeRule.waitUntil(timeoutMillis = 20_000) {
-            composeRule.onAllNodes(hasTestTag(TEST_TAG_TOOLBAR))
+            composeRule.onAllNodes(hasTestTag(BrowserToolbarTestTags.Toolbar.testTag))
                 .fetchSemanticsNodes().isNotEmpty()
         }
 
@@ -93,11 +93,11 @@ class ExternalLinkTabGroupTest {
     private fun tapTabButton() {
         val screenWidth = composeRule.activity.resources.displayMetrics.widthPixels
         composeRule.waitUntil(timeoutMillis = 20_000) {
-            composeRule.onAllNodes(hasTestTag(TEST_TAG_OPEN_TABS))
+            composeRule.onAllNodes(hasTestTag(BrowserToolbarTestTags.OpenTabsButton.testTag))
                 .fetchSemanticsNodes()
                 .any { it.boundsInRoot.width > 0 && it.boundsInRoot.right <= screenWidth }
         }
-        val visibleNode = composeRule.onAllNodes(hasTestTag(TEST_TAG_OPEN_TABS))
+        val visibleNode = composeRule.onAllNodes(hasTestTag(BrowserToolbarTestTags.OpenTabsButton.testTag))
             .fetchSemanticsNodes()
             .first { it.boundsInRoot.width > 0 && it.boundsInRoot.right <= screenWidth }
         val bounds = visibleNode.boundsInRoot
@@ -165,12 +165,5 @@ class ExternalLinkTabGroupTest {
      */
     private fun getBrowserViewModel(): BrowserViewModel {
         return ViewModelProvider(composeRule.activity)[BrowserViewModel::class.java]
-    }
-
-    /**
-     * デバッグ時にユーザーに操作させて確認したい場合に差し込む
-     */
-    private fun waitDebugUserInteractionInfinity() {
-        composeRule.waitUntil(timeoutMillis = Long.MAX_VALUE) { false }
     }
 }

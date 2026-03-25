@@ -83,6 +83,8 @@ import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
@@ -165,7 +167,7 @@ internal fun TabsScreen(
     selectedTabId: String?,
     onSelectTab: (String) -> Unit,
     onCloseTab: (String) -> Unit,
-    onOpenNewTab: () -> Unit,
+    onOpenNewTab: (currentGroupId: TabGroupId?) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val viewModel = viewModel(initializer = {
@@ -455,7 +457,7 @@ private fun TabsScreenContent(
     selectedTabId: String?,
     onSelectTab: (String) -> Unit,
     onCloseTab: (String) -> Unit,
-    onOpenNewTab: () -> Unit,
+    onOpenNewTab: (currentGroupId: TabGroupId?) -> Unit,
     onReorderTabs: (groupIndex: Int, fromLocalIndex: Int, toLocalIndex: Int) -> Unit,
     onReorderGroups: (fromIndex: Int, toIndex: Int) -> Unit,
     onGroupSelected: (Int) -> Unit,
@@ -500,6 +502,7 @@ private fun TabsScreenContent(
                         // 右にはみ出している: はみ出し分 + バッファ分スクロール
                         groupTabListState.animateScrollBy(itemViewportRight - viewportWidth + bufferPx)
                     }
+
                     itemViewportLeft < 0f -> {
                         // 左にはみ出している: バッファ分手前でとめる（負 = 左方向）
                         groupTabListState.animateScrollBy(itemViewportLeft - bufferPx)
@@ -651,8 +654,9 @@ private fun TabsScreenContent(
         }
 
         FloatingActionButton(
-            onClick = onOpenNewTab,
+            onClick = { onOpenNewTab(groups.getOrNull(activeGroupIndex)?.id) },
             modifier = Modifier
+                .testTag(TabsScreenTestTags.AddTabButton.testTag)
                 .align(Alignment.BottomEnd)
                 .padding(16.dp),
         ) {
@@ -785,7 +789,10 @@ private fun GroupTabBar(
                     isDropTarget = isDropTarget,
                     onClick = { onGroupSelected(index) },
                     modifier = Modifier
-                        .testTag(TabsScreenTestTags.tabGroupTestTag(index))
+                        .testTag(TabsScreenTestTags.TabGroupTopButton(index).testTag)
+                        .semantics {
+                            selected = index == activeGroupIndex
+                        }
                         .animateItem()
                         .zIndex(if (index == activeGroupIndex) groups.size.toFloat() else index.toFloat())
                         .then(if (isDraggingThis) Modifier.alpha(0f) else Modifier)
@@ -905,6 +912,7 @@ private fun AddGroupBookmarkTab(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
+                .testTag(TabsScreenTestTags.AddTabGroupButton.testTag)
                 .heightIn(min = GroupTabUnselectedHeight)
                 .graphicsLayer {
                     shadowElevation = with(density) { 2.dp.toPx() }
@@ -1329,6 +1337,18 @@ private fun Preview() {
     )
 }
 
-object TabsScreenTestTags {
-    fun tabGroupTestTag(index: Int): String = "tab_group_$index"
+sealed interface TabsScreenTestTags {
+    val id: String
+
+    val testTag get() = "${TabsScreenTestTags::class.java.name}#$id"
+
+    class TabGroupTopButton(index: Int) : TabsScreenTestTags {
+        override val id: String = "tab_group_$index"
+    }
+    object AddTabButton : TabsScreenTestTags {
+        override val id: String = "add_tab_button"
+    }
+    object AddTabGroupButton : TabsScreenTestTags {
+        override val id: String = "add_tab_group_button"
+    }
 }
