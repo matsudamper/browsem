@@ -175,8 +175,7 @@ class TabsScreenViewModel(
                 viewModelStateFlow.update { it.copy(activeGroupIndex = if (index >= 0) index else 0) }
             }
             // 初回復元後、selectedTabId の変化を継続的に監視して activeGroupIndex を同期する。
-            // 外部リンク等で別グループにタブが追加された場合にも、
-            // タブ一覧画面を開く前に正しいグループが設定される。
+            // タブ画面を開いている間にタブが閉じられて選択タブが切り替わった場合などに対応する。
             tabStore.tabStoreState.map { it.selectedTabId }.distinctUntilChanged().collect { selectedTabId ->
                 if (selectedTabId == null) return@collect
                 val state = viewModelStateFlow.value
