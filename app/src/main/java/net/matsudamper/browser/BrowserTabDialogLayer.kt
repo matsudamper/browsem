@@ -151,8 +151,7 @@ internal fun BrowserTabDialogLayer(
             },
             dismissButton = {
                 TextButton(onClick = {
-                    onOpenNewSessionRequest(request.sourceUri)
-                    state.dismissPendingExternalAppLaunch()
+                    state.dismissPendingExternalAppLaunchAndLoadInBrowser()
                 }) {
                     Text("キャンセル")
                 }
