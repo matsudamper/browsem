@@ -16,6 +16,7 @@ import net.matsudamper.browser.core.TabStoreState
 import net.matsudamper.browser.core.TabSummary
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoSession
+import org.mozilla.geckoview.GeckoSessionSettings
 import java.util.UUID
 
 @Stable
@@ -84,7 +85,7 @@ class BrowserSessionController(runtime: GeckoRuntime) : TabStore {
         openerTabId: String? = null,
     ): BrowserTab {
         val normalizedInitialUrl = initialUrl.ifBlank { "about:blank" }
-        val session = GeckoSession()  // open() はここでは呼ばない（遅延ロード）
+        val session = GeckoSession(GeckoSessionSettings.Builder().forceUserScalable(true).build())  // open() はここでは呼ばない（遅延ロード）
         val tab = appendTab(
             tabId = tabId,
             session = session,
@@ -120,7 +121,7 @@ class BrowserSessionController(runtime: GeckoRuntime) : TabStore {
 
     fun createTabForNewSession(initialUrl: String, openerTabId: String? = null): BrowserTab {
         val normalizedInitialUrl = initialUrl.ifBlank { "about:blank" }
-        val session = GeckoSession()
+        val session = GeckoSession(GeckoSessionSettings.Builder().forceUserScalable(true).build())
         // リンクから開く新しいタブはオープナーの次に挿入する
         val insertIndex = TabInsertionPolicy.resolveInsertionIndex(
             tabIds = tabList.map { it.tabId },

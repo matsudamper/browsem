@@ -8,6 +8,7 @@ import androidx.annotation.VisibleForTesting
 import androidx.browser.customtabs.CustomTabsSessionToken
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoSession
+import org.mozilla.geckoview.GeckoSessionSettings
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
@@ -54,7 +55,7 @@ object CustomTabsWarmupStore {
                     entry.preparedUrl = targetUrl
                     existing
                 } else {
-                    GeckoSession().also { newSession ->
+                    GeckoSession(GeckoSessionSettings.Builder().forceUserScalable(true).build()).also { newSession ->
                         newSession.open(runtime)
                         entry.preparedSession = newSession
                         entry.preparedUrl = targetUrl
