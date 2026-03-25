@@ -615,9 +615,11 @@ private fun TabsScreenLoadedContent(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
+                        val buttonPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
                         FilledTonalButton(
                             onClick = { renameDialogGroupIndex = page },
                             modifier = Modifier.weight(1f),
+                            contentPadding = buttonPadding,
                         ) {
                             Text("名前変更")
                         }
@@ -625,6 +627,7 @@ private fun TabsScreenLoadedContent(
                             onClick = { deleteDialogGroupIndex = page },
                             modifier = Modifier.weight(1f),
                             enabled = groups.size > 1,
+                            contentPadding = buttonPadding,
                         ) {
                             Text("削除")
                         }
