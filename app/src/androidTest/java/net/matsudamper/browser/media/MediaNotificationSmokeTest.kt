@@ -97,17 +97,15 @@ class MediaNotificationSmokeTest {
         }
 
         // ウォームアップ後、最終再生要求とアクティベーションのリトライ
-        val activationRetryDeadline = SystemClock.uptimeMillis() + SESSION_ACTIVATION_TIMEOUT_MS
-        while (
-            !MediaSessionBridge.playbackState.value.isActive &&
-            SystemClock.uptimeMillis() < activationRetryDeadline
-        ) {
-            requestMediaPlayback(activeTab)
-            Thread.sleep(PLAY_REQUEST_RETRY_INTERVAL_MS)
-        }
         assertTrue(
             "ビデオ再生後に MediaSessionBridge がアクティブになること",
-            MediaSessionBridge.playbackState.value.isActive,
+            waitForCondition(
+                timeoutMs = SESSION_ACTIVATION_TIMEOUT_MS,
+                retryAction = { requestMediaPlayback(activeTab) },
+                retryIntervalMs = PLAY_REQUEST_RETRY_INTERVAL_MS
+            ) {
+                MediaSessionBridge.playbackState.value.isActive
+            }
         )
 
         // GeckoView の onPlay で isPlaying=true になるまで待機
