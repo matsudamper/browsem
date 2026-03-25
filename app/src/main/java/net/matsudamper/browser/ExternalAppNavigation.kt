@@ -29,6 +29,12 @@ internal fun resolveExternalAppNavigationAction(
         ?: return ExternalAppNavigationAction.AllowInBrowser
     val scheme = parsedUri.scheme?.lowercase(Locale.US)
         ?: return ExternalAppNavigationAction.AllowInBrowser
+
+    // http/https はApp Links（Play Store、YouTubeなど）のチェックを行う
+    if (scheme == "http" || scheme == "https") {
+        return resolveHttpSchemeAction(context, uri, parsedUri)
+    }
+
     if (scheme in browserHandledSchemes) {
         return ExternalAppNavigationAction.AllowInBrowser
     }
@@ -48,11 +54,20 @@ internal fun resolveExternalAppNavigationAction(
     val resolvedActivity = packageManager.resolveActivity(intent, PackageManager.MATCH_DEFAULT_ONLY)
         ?: packageManager.resolveActivity(intent, 0)
     if (resolvedActivity == null) {
-        return if (fallbackUrl != null) {
-            ExternalAppNavigationAction.OpenFallback(fallbackUrl)
-        } else {
-            ExternalAppNavigationAction.AppNotFound
+        // fallbackUrl がある場合はフォールバックURLを使用する
+        if (fallbackUrl != null) {
+            return ExternalAppNavigationAction.OpenFallback(fallbackUrl)
         }
+        // Android 11+ ではパッケージ可視性制限により resolveActivity が null を返すことがある。
+        // startActivity は可視性制限なしに動作するため、appName なしで Launch として返し起動を試みる。
+        return ExternalAppNavigationAction.Launch(
+            PendingExternalAppLaunch(
+                sourceUri = uri,
+                intent = intent,
+                appName = null,
+                fallbackUrl = null,
+            )
+        )
     }
 
     val appName = resolvedActivity.loadLabel(packageManager).toString().takeIf { it.isNotBlank() }
@@ -64,6 +79,57 @@ internal fun resolveExternalAppNavigationAction(
             fallbackUrl = fallbackUrl,
         )
     )
+}
+
+/**
+ * http/https スキームの URL に対して App Links チェックを行う。
+ * 汎用ブラウザではなく特定アプリが処理する場合（Play Store、YouTube など）は Launch を返す。
+ *
+ * 判定方法:
+ * - 汎用 HTTPS URL (https://example.com/) を処理できるアプリをブラウザとして収集する
+ * - 対象 URL の resolveActivity がそのブラウザ一覧に含まれない場合は App Links と判定する
+ */
+private fun resolveHttpSchemeAction(
+    context: Context,
+    uri: String,
+    parsedUri: Uri,
+): ExternalAppNavigationAction {
+    val packageManager = context.packageManager
+    val intent = Intent(Intent.ACTION_VIEW, parsedUri).apply {
+        addCategory(Intent.CATEGORY_BROWSABLE)
+    }
+
+    // 汎用 HTTPS URL を処理できるアプリ（ブラウザ）のパッケージ名を収集する。
+    // これに含まれないアプリが resolveActivity で返ってきた場合は App Links とみなす。
+    val genericBrowserIntent = Intent(
+        Intent.ACTION_VIEW,
+        Uri.parse("https://example.com/"),
+    ).apply {
+        addCategory(Intent.CATEGORY_BROWSABLE)
+    }
+    val browserPackages = packageManager.queryIntentActivities(
+        genericBrowserIntent,
+        PackageManager.MATCH_DEFAULT_ONLY,
+    ).map { it.activityInfo.packageName }.toSet()
+
+    val resolvedActivity = packageManager.resolveActivity(intent, PackageManager.MATCH_DEFAULT_ONLY)
+
+    return if (resolvedActivity != null &&
+        resolvedActivity.activityInfo.packageName !in browserPackages
+    ) {
+        // App Links: 非ブラウザアプリが優先的に処理するURL（Play Store、YouTube など）
+        val appName = resolvedActivity.loadLabel(packageManager).toString().takeIf { it.isNotBlank() }
+        ExternalAppNavigationAction.Launch(
+            PendingExternalAppLaunch(
+                sourceUri = uri,
+                intent = intent,
+                appName = appName,
+                fallbackUrl = null,
+            )
+        )
+    } else {
+        ExternalAppNavigationAction.AllowInBrowser
+    }
 }
 
 internal fun launchExternalApp(
@@ -106,8 +172,7 @@ private val browserHandledSchemes = setOf(
     "chrome",
     "data",
     "file",
-    "http",
-    "https",
+    // http と https は App Links チェックのため別途処理する
     "jar",
     "javascript",
     "moz-extension",
