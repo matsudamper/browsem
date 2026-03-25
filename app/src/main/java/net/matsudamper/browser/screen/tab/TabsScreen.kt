@@ -631,7 +631,6 @@ private fun TabsScreenLoadedContent(
                         ) {
                             Text("削除")
                         }
-                        // デフォルトグループ設定トグル
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(4.dp),
