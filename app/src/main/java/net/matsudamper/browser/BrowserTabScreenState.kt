@@ -110,6 +110,8 @@ internal class BrowserTabScreenState(
         get() = browserTab.themeColor?.let { Color(it) }
         set(value) { browserTab.themeColor = value?.toArgb() }
     private var lastPageStartUrlKey: String = normalizedBrowserPageKey(browserTab.currentUrl)
+    // フルページロード開始フラグ（SPA の pushState 遷移と区別するため）
+    private var isFullPageLoadPending: Boolean = false
 
     // --- Translation state ---
     var translationState by mutableStateOf(TranslationState.Idle)
@@ -505,9 +507,14 @@ internal class BrowserTabScreenState(
         if (pageLoadError?.failingUrl != url) {
             clearPageLoadError()
         }
+        // フルページロード（onPageStart が先行した場合）のみ色をリセット
+        // SPA 遷移（pushState）では onPageStart が発火しないためリセットしない
         // ダウンロードリンクのように onPageStart だけ発火して onLocationChange が呼ばれない
-        // ケースでは色をリセットしないよう、ここで判定する
-        maybeResetToolbarColorOnPageStart(url)
+        // ケースは isFullPageLoadPending が onPageStop でクリアされるため色をリセットしない
+        if (isFullPageLoadPending) {
+            maybeResetToolbarColorOnPageStart(url)
+            isFullPageLoadPending = false
+        }
         currentPageUrl = url
         if (!isUrlInputFocused) {
             urlInput = url
@@ -585,9 +592,12 @@ internal class BrowserTabScreenState(
         clearPageLoadError()
         // 新しいページへの遷移時にfaviconをリセット
         browserTab.faviconBitmap = null
+        isFullPageLoadPending = true
     }
 
     override fun onPageStop(success: Boolean) {
+        // ダウンロードリンク等で onLocationChange が来ない場合のフラグをクリア
+        isFullPageLoadPending = false
         renderReady = true
         if (success) {
             fetchFavicon(currentPageUrl)
