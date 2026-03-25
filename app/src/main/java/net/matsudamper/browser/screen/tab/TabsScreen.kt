@@ -51,6 +51,7 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -199,7 +200,7 @@ internal fun TabsScreen(
         }
 
         is TabsScreenUiState.LoadingState.Loaded -> {
-            TabsScreenContent(
+            TabsScreenLoadedContent(
                 groupedTabs = loadingState.groupedTabs,
                 groups = loadingState.groups,
                 activeGroupIndex = loadingState.activeGroupIndex,
@@ -450,7 +451,7 @@ private fun rememberGroupDragDropState(
 }
 
 @Composable
-private fun TabsScreenContent(
+private fun TabsScreenLoadedContent(
     groupedTabs: List<List<TabsScreenTabData>>,
     groups: List<TabGroupData>,
     activeGroupIndex: Int,
@@ -550,12 +551,29 @@ private fun TabsScreenContent(
     // 削除確認ダイアログの対象グループインデックス
     var deleteDialogGroupIndex by remember { mutableStateOf<Int?>(null) }
 
-    Box(
+    Scaffold(
         modifier = modifier
-            .fillMaxSize()
-            .windowInsetsPadding(WindowInsets.safeDrawing),
-    ) {
-        Column(modifier = Modifier.fillMaxSize()) {
+            .fillMaxSize(),
+        contentWindowInsets = WindowInsets.safeDrawing,
+        floatingActionButton = {
+            FloatingActionButton(
+                onClick = { onOpenNewTab(groups.getOrNull(activeGroupIndex)?.id) },
+                modifier = Modifier
+                    .testTag(TabsScreenTestTags.AddTabButton.testTag)
+                    .padding(16.dp),
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_add_24dp),
+                    contentDescription = "新規タブ",
+                )
+            }
+        }
+    ) { paddingValues ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+        ) {
             // グループタブバー（上辺角丸タブ）
             GroupTabBar(
                 groups = groups,
@@ -597,9 +615,11 @@ private fun TabsScreenContent(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
+                        val buttonPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
                         FilledTonalButton(
                             onClick = { renameDialogGroupIndex = page },
                             modifier = Modifier.weight(1f),
+                            contentPadding = buttonPadding,
                         ) {
                             Text("名前変更")
                         }
@@ -607,10 +627,10 @@ private fun TabsScreenContent(
                             onClick = { deleteDialogGroupIndex = page },
                             modifier = Modifier.weight(1f),
                             enabled = groups.size > 1,
+                            contentPadding = buttonPadding,
                         ) {
                             Text("削除")
                         }
-                        // デフォルトグループ設定トグル
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -651,19 +671,6 @@ private fun TabsScreenContent(
                     )
                 }
             }
-        }
-
-        FloatingActionButton(
-            onClick = { onOpenNewTab(groups.getOrNull(activeGroupIndex)?.id) },
-            modifier = Modifier
-                .testTag(TabsScreenTestTags.AddTabButton.testTag)
-                .align(Alignment.BottomEnd)
-                .padding(16.dp),
-        ) {
-            Icon(
-                painter = painterResource(R.drawable.ic_add_24dp),
-                contentDescription = "新規タブ",
-            )
         }
     }
 
@@ -1317,7 +1324,7 @@ private fun Preview() {
             ),
         )
     }
-    TabsScreenContent(
+    TabsScreenLoadedContent(
         groupedTabs = groupedTabs,
         groups = groups,
         activeGroupIndex = 0,
@@ -1345,9 +1352,11 @@ sealed interface TabsScreenTestTags {
     class TabGroupTopButton(index: Int) : TabsScreenTestTags {
         override val id: String = "tab_group_$index"
     }
+
     object AddTabButton : TabsScreenTestTags {
         override val id: String = "add_tab_button"
     }
+
     object AddTabGroupButton : TabsScreenTestTags {
         override val id: String = "add_tab_group_button"
     }
