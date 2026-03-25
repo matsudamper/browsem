@@ -85,8 +85,8 @@ class GmdSmokeTest {
 
         seedHistoryEntry(url = suggestionUrl, title = suggestionTitle)
 
-        composeRule.onNodeWithTag("url_bar").performClick()
-        composeRule.onNodeWithTag("url_bar").performTextReplacement(query)
+        composeRule.onNodeWithTag(UrlTextInputTestTags.UrlBar.testTag).performClick()
+        composeRule.onNodeWithTag(UrlTextInputTestTags.UrlBar.testTag).performTextReplacement(query)
 
         waitForHistorySuggestionsVisible(suggestionTitle)
         assertTrue(composeRule.onAllNodesWithText(suggestionTitle).fetchSemanticsNodes().isNotEmpty())
@@ -116,13 +116,13 @@ class GmdSmokeTest {
             currentUrl = activeTab.currentUrl
         }
 
-        composeRule.onNodeWithTag("url_bar").performClick()
+        composeRule.onNodeWithTag(UrlTextInputTestTags.UrlBar.testTag).performClick()
         waitForUrlBarFocused()
         waitForUrlBarText("")
         composeRule.waitUntil(timeoutMillis = 20_000) {
-            composeRule.onAllNodesWithTag(TEST_TAG_CURRENT_URL_ACTIONS).fetchSemanticsNodes().isNotEmpty() &&
+            composeRule.onAllNodesWithTag(BrowserTabSurfaceTestTags.CurrentUrlActions.testTag).fetchSemanticsNodes().isNotEmpty() &&
                 // ListItem の mergeDescendants により子ノードは merged tree で不可視のため unmerged tree を使用
-                composeRule.onAllNodesWithTag(TEST_TAG_CURRENT_URL_TEXT, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() &&
+                composeRule.onAllNodesWithTag(BrowserTabSurfaceTestTags.CurrentUrlText.testTag, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() &&
                 composeRule.onAllNodesWithText("コピー").fetchSemanticsNodes().isNotEmpty() &&
                 composeRule.onAllNodesWithText("URLバーに戻す").fetchSemanticsNodes().isNotEmpty() &&
                 composeRule.onAllNodesWithText(currentUrl).fetchSemanticsNodes().isNotEmpty()
@@ -149,11 +149,11 @@ class GmdSmokeTest {
         val historyUrl = "https://$token.example/path"
         seedHistoryEntry(url = historyUrl, title = historyTitle)
 
-        composeRule.onNodeWithTag("url_bar").performClick()
-        composeRule.onNodeWithTag("url_bar").performTextReplacement(searchQuery)
+        composeRule.onNodeWithTag(UrlTextInputTestTags.UrlBar.testTag).performClick()
+        composeRule.onNodeWithTag(UrlTextInputTestTags.UrlBar.testTag).performTextReplacement(searchQuery)
         waitForHistorySuggestionsVisible(historyTitle)
 
-        composeRule.onNodeWithTag("url_bar").performImeAction()
+        composeRule.onNodeWithTag(UrlTextInputTestTags.UrlBar.testTag).performImeAction()
 
         waitForActiveTabUrl(timeoutMillis = 30_000, activeTab = activeTab) { currentUrl ->
             currentUrl.contains(token) && !currentUrl.startsWith(historyUrl)
@@ -181,8 +181,8 @@ class GmdSmokeTest {
 
         seedHistoryEntry(url = historyUrl, title = historyTitle)
 
-        composeRule.onNodeWithTag("url_bar").performClick()
-        composeRule.onNodeWithTag("url_bar").performTextReplacement(token)
+        composeRule.onNodeWithTag(UrlTextInputTestTags.UrlBar.testTag).performClick()
+        composeRule.onNodeWithTag(UrlTextInputTestTags.UrlBar.testTag).performTextReplacement(token)
         waitForHistorySuggestionsVisible(historyTitle)
 
         composeRule.onNodeWithText(historyTitle).performClick()
@@ -224,7 +224,7 @@ class GmdSmokeTest {
         focusPageSearchInput(activeTab)
         val imeWasVisibleBeforeTap = waitForImeVisible(timeoutMillis = 5_000)
 
-        composeRule.onNodeWithTag("url_bar").performClick()
+        composeRule.onNodeWithTag(UrlTextInputTestTags.UrlBar.testTag).performClick()
         waitForUrlBarFocused()
         assertUrlBarFocusAndImeStayStableAfterOpening(
             requireImeWasVisibleBeforeTap = imeWasVisibleBeforeTap,
@@ -243,8 +243,8 @@ class GmdSmokeTest {
 
         seedHistoryEntry(url = suggestionUrl, title = suggestionTitle)
 
-        composeRule.onNodeWithTag("url_bar").performClick()
-        composeRule.onNodeWithTag("url_bar").performTextReplacement(query)
+        composeRule.onNodeWithTag(UrlTextInputTestTags.UrlBar.testTag).performClick()
+        composeRule.onNodeWithTag(UrlTextInputTestTags.UrlBar.testTag).performTextReplacement(query)
         waitForHistorySuggestionsVisible(suggestionTitle)
 
         pressSystemBack()
@@ -327,7 +327,7 @@ class GmdSmokeTest {
     private fun waitForHistorySuggestionsVisible(suggestionTitle: String) {
         composeRule.waitUntil(timeoutMillis = 20_000) {
             val overlayVisible = composeRule
-                .onAllNodesWithTag(TEST_TAG_URL_SUGGESTION_LIST)
+                .onAllNodesWithTag(BrowserTabSurfaceTestTags.UrlSuggestionList.testTag)
                 .fetchSemanticsNodes()
                 .isNotEmpty()
             val itemVisible = composeRule
@@ -344,7 +344,7 @@ class GmdSmokeTest {
     private fun waitForHistorySuggestionsHidden() {
         composeRule.waitUntil(timeoutMillis = 20_000) {
             composeRule
-                .onAllNodesWithTag(TEST_TAG_URL_SUGGESTION_LIST)
+                .onAllNodesWithTag(BrowserTabSurfaceTestTags.UrlSuggestionList.testTag)
                 .fetchSemanticsNodes()
                 .isEmpty()
         }
@@ -356,11 +356,11 @@ class GmdSmokeTest {
     private fun waitForPageLoadErrorVisible(failingUrl: String) {
         composeRule.waitUntil(timeoutMillis = 30_000) {
             composeRule
-                .onAllNodesWithTag(TEST_TAG_PAGE_LOAD_ERROR)
+                .onAllNodesWithTag(BrowserTabSurfaceTestTags.PageLoadError.testTag)
                 .filter(hasAnyDescendant(hasText(failingUrl)))
                 .fetchSemanticsNodes()
                 .isNotEmpty() &&
-                composeRule.onAllNodesWithTag(TEST_TAG_PAGE_LOAD_ERROR).fetchSemanticsNodes().isNotEmpty()
+                composeRule.onAllNodesWithTag(BrowserTabSurfaceTestTags.PageLoadError.testTag).fetchSemanticsNodes().isNotEmpty()
         }
     }
 
@@ -479,7 +479,7 @@ class GmdSmokeTest {
      */
     private fun isUrlBarFocused(): Boolean {
         return runCatching {
-            composeRule.onNodeWithTag("url_bar")
+            composeRule.onNodeWithTag(UrlTextInputTestTags.UrlBar.testTag)
                 .fetchSemanticsNode()
                 .config[SemanticsProperties.Focused]
         }.getOrDefault(false)
@@ -499,7 +499,7 @@ class GmdSmokeTest {
      */
     private fun getUrlBarText(): String {
         return runCatching {
-            composeRule.onNodeWithTag("url_bar")
+            composeRule.onNodeWithTag(UrlTextInputTestTags.UrlBar.testTag)
                 .fetchSemanticsNode()
                 .config[SemanticsProperties.EditableText]
                 .text
@@ -527,10 +527,10 @@ class GmdSmokeTest {
      */
     private fun assertGeckoViewInFront() {
         assertTrue(
-            composeRule.onAllNodesWithTag(TEST_TAG_GECKO_CONTAINER).fetchSemanticsNodes().isNotEmpty()
+            composeRule.onAllNodesWithTag(GeckoBrowserTabTestTags.GeckoContainer.testTag).fetchSemanticsNodes().isNotEmpty()
         )
         assertTrue(
-            composeRule.onAllNodesWithTag(TEST_TAG_URL_SUGGESTION_LIST).fetchSemanticsNodes().isEmpty()
+            composeRule.onAllNodesWithTag(BrowserTabSurfaceTestTags.UrlSuggestionList.testTag).fetchSemanticsNodes().isEmpty()
         )
     }
 
