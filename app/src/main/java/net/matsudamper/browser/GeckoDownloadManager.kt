@@ -2,6 +2,7 @@ package net.matsudamper.browser
 
 import android.app.NotificationManager
 import android.content.Context
+import android.webkit.URLUtil
 import androidx.core.app.NotificationCompat
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
@@ -15,7 +16,6 @@ import org.mozilla.geckoview.WebResponse
 
 internal class GeckoDownloadManager(
     private val context: Context,
-    private val runtime: GeckoRuntime,
     private val downloadRepository: DownloadRepository,
 ) {
     /**
@@ -40,10 +40,12 @@ internal class GeckoDownloadManager(
             .addTag(DownloadWorker.TAG_DOWNLOAD)
             .build()
         // WorkerがENQUEUED状態の間もUI上に表示するため、事前にレコードを挿入する
+        val fileName = URLUtil.guessFileName(url, null, null)
         coroutineScope.launch {
             downloadRepository.insertEnqueued(
-                workerId = workRequest.id.toString(),
+                workerId = workRequest.id,
                 url = url,
+                fileName = fileName,
                 enqueuedAt = System.currentTimeMillis(),
             )
         }
