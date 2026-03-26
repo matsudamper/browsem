@@ -44,8 +44,13 @@ class LocalAITranslator(
             .take(4500)
         if (plainText.isBlank()) return null
 
-        // 3. 言語検出
-        val sourceLang = detectLanguage(plainText)
+        // 3. 言語検出（不明な場合はHTMLのlang属性に決め打ち）
+        val detectedLang = detectLanguage(plainText)
+        val sourceLang = if (detectedLang.isBlank() || detectedLang == "und") {
+            extractHtmlLang(rawHtml)
+        } else {
+            detectedLang
+        }
         val sourceTranslateLang = toTranslateLanguageTag(sourceLang) ?: return null
         val toTranslateLanguage = toLanguage.let { lang ->
             TranslateLanguage.fromLanguageTag(lang)
@@ -89,6 +94,12 @@ class LocalAITranslator(
             "})())"
         session.loadUri(script)
         return TranslationLanguages(sourceLang, toTranslateLanguage)
+    }
+
+    /** HTMLの&lt;html lang="..."&gt;属性から言語タグを抽出する */
+    private fun extractHtmlLang(html: String): String {
+        val match = Regex("<html[^>]+lang=[\"']([^\"']+)[\"']", RegexOption.IGNORE_CASE).find(html)
+        return match?.groupValues?.getOrNull(1).orEmpty()
     }
 
     private suspend fun detectLanguage(text: String): String = withContext(Dispatchers.IO) {
