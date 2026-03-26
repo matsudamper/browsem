@@ -8,7 +8,7 @@ import java.util.UUID
 enum class DownloadRecordStatus { ENQUEUED, RUNNING, SUCCEEDED, FAILED, CANCELLED }
 
 data class DownloadRecord(
-    val workerId: String,
+    val workerId: UUID,
     val url: String,
     val fileName: String,
     val fileUri: String?,
@@ -28,10 +28,10 @@ class DownloadRepository(context: Context) {
     }
 
     /** エンキュー時に ENQUEUED 状態でレコードを事前挿入する。既存レコードがある場合は何もしない */
-    suspend fun insertEnqueued(workerId: String, url: String, fileName: String, enqueuedAt: Long) {
+    suspend fun insertEnqueued(workerId: UUID, url: String, fileName: String, enqueuedAt: Long) {
         dao.insertIgnoreConflict(
             DownloadEntity(
-                workerId = workerId,
+                workerId = workerId.toString(),
                 url = url,
                 fileName = fileName,
                 fileUri = null,
@@ -45,11 +45,11 @@ class DownloadRepository(context: Context) {
     }
 
     /** Worker 開始時に RUNNING 状態に遷移する。ENQUEUED レコードがあれば遷移、なければ新規挿入する */
-    suspend fun insertDownload(workerId: String, url: String, fileName: String, enqueuedAt: Long) {
+    suspend fun insertDownload(workerId: UUID, url: String, fileName: String, enqueuedAt: Long) {
         // ENQUEUEDレコードがない場合に備えてRUNNINGで新規挿入（競合時は無視）
         dao.insertIgnoreConflict(
             DownloadEntity(
-                workerId = workerId,
+                workerId = workerId.toString(),
                 url = url,
                 fileName = fileName,
                 fileUri = null,
@@ -61,18 +61,18 @@ class DownloadRepository(context: Context) {
             ),
         )
         // ENQUEUEDからRUNNINGへの状態遷移（既にRUNNINGの場合は何もしない）
-        dao.updateEnqueuedToRunning(workerId)
+        dao.updateEnqueuedToRunning(workerId.toString())
     }
 
     suspend fun updateProgress(
-        workerId: String,
+        workerId: UUID,
         fileName: String,
         progress: Int,
         totalRead: Long,
         contentLength: Long,
     ) {
         dao.updateProgress(
-            workerId = workerId,
+            workerId = workerId.toString(),
             fileName = fileName,
             progress = progress,
             totalRead = totalRead,
@@ -80,17 +80,17 @@ class DownloadRepository(context: Context) {
         )
     }
 
-    suspend fun updateCompleted(workerId: String, fileName: String, fileUri: String) {
-        dao.updateCompleted(workerId = workerId, fileName = fileName, fileUri = fileUri)
+    suspend fun updateCompleted(workerId: UUID, fileName: String, fileUri: String) {
+        dao.updateCompleted(workerId = workerId.toString(), fileName = fileName, fileUri = fileUri)
     }
 
-    suspend fun updateFailed(workerId: String) {
-        dao.updateFailed(workerId = workerId)
+    suspend fun updateFailed(workerId: UUID) {
+        dao.updateFailed(workerId = workerId.toString())
     }
 
     /** SUCCEEDED/FAILED 以外の状態のときのみキャンセル状態に更新する */
-    suspend fun updateCancelled(workerId: String) {
-        dao.cancelIfActive(workerId)
+    suspend fun updateCancelled(workerId: UUID) {
+        dao.cancelIfActive(workerId.toString())
     }
 
     suspend fun get(workerId: UUID): DownloadEntity {
@@ -104,7 +104,7 @@ class DownloadRepository(context: Context) {
             DownloadRecordStatus.FAILED
         }
         return DownloadRecord(
-            workerId = workerId,
+            workerId = UUID.fromString(workerId),
             url = url,
             fileName = fileName,
             fileUri = fileUri,

@@ -47,19 +47,19 @@ internal class DownloadWorker(
         ensureNotificationChannel(context)
         setForeground(createForegroundInfo(notificationId, 0, true, context.getString(R.string.download_notification_starting), 0L, -1L))
 
-        repository.insertDownload(workerId = id.toString(), url = url, fileName = guessedFileName, enqueuedAt = enqueuedAt)
+        repository.insertDownload(workerId = id, url = url, fileName = guessedFileName, enqueuedAt = enqueuedAt)
 
         return try {
             val downloadFile = downloadFile(url, referrerUrl, notificationId, repository)
-            repository.updateCompleted(id.toString(), downloadFile.fileName, downloadFile.fileUri.toString())
+            repository.updateCompleted(id, downloadFile.fileName, downloadFile.fileUri.toString())
             postCompletionNotification(downloadFile.fileName, downloadFile.totalRead)
             Result.success()
         } catch (e: CancellationException) {
-            repository.updateCancelled(id.toString())
+            repository.updateCancelled(id)
             throw e
         } catch (e: Exception) {
             e.printStackTrace()
-            repository.updateFailed(id.toString())
+            repository.updateFailed(id)
             postFailureNotification()
             Result.failure()
         }
@@ -86,7 +86,7 @@ internal class DownloadWorker(
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
             .build()
-        val notificationManager = context.getSystemService(android.app.NotificationManager::class.java)
+        val notificationManager = context.getSystemService(NotificationManager::class.java)
         notificationManager.notify(NOTIFICATION_ID_COMPLETE_BASE + positiveHash, notification)
     }
 
@@ -114,7 +114,7 @@ internal class DownloadWorker(
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
             .build()
-        val notificationManager = context.getSystemService(android.app.NotificationManager::class.java)
+        val notificationManager = context.getSystemService(NotificationManager::class.java)
         notificationManager.notify(NOTIFICATION_ID_FAILURE_BASE + positiveHash, notification)
     }
 
@@ -162,7 +162,7 @@ internal class DownloadWorker(
             .ifBlank { "download-${System.currentTimeMillis()}" }
 
         setForeground(createForegroundInfo(notificationId, 0, contentLength <= 0, fileName, 0L, contentLength))
-        repository.updateProgress(id.toString(), fileName, 0, 0L, contentLength)
+        repository.updateProgress(id, fileName, 0, 0L, contentLength)
 
         val resolver = context.contentResolver
         val values = ContentValues().apply {
@@ -188,7 +188,7 @@ internal class DownloadWorker(
                         val now = System.currentTimeMillis()
                         if (now - lastUpdateTime >= 1000L) {
                             val progress = if (contentLength > 0) (totalRead * 100 / contentLength).toInt() else 0
-                            repository.updateProgress(id.toString(), fileName, progress, totalRead, contentLength)
+                            repository.updateProgress(id, fileName, progress, totalRead, contentLength)
                             setForeground(createForegroundInfo(notificationId, progress, contentLength <= 0, fileName, totalRead, contentLength))
                             lastUpdateTime = now
                         }

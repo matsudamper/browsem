@@ -16,7 +16,6 @@ import org.mozilla.geckoview.WebResponse
 
 internal class GeckoDownloadManager(
     private val context: Context,
-    private val runtime: GeckoRuntime,
     private val downloadRepository: DownloadRepository,
 ) {
     /**
@@ -44,7 +43,7 @@ internal class GeckoDownloadManager(
         val fileName = URLUtil.guessFileName(url, null, null)
         coroutineScope.launch {
             downloadRepository.insertEnqueued(
-                workerId = workRequest.id.toString(),
+                workerId = workRequest.id,
                 url = url,
                 fileName = fileName,
                 enqueuedAt = System.currentTimeMillis(),

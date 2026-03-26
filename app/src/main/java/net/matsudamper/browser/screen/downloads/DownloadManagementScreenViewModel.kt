@@ -16,6 +16,7 @@ import net.matsudamper.browser.data.download.DownloadRecord
 import net.matsudamper.browser.data.download.DownloadRecordStatus
 import net.matsudamper.browser.data.download.DownloadRepository
 import java.util.UUID
+import androidx.core.net.toUri
 
 internal class DownloadManagementScreenViewModel(
     application: Application,
@@ -80,7 +81,7 @@ internal class DownloadManagementScreenViewModel(
             DownloadRecordStatus.CANCELLED -> DownloadManagementScreenUiState.DownloadStatus.Cancelled
         }
         return DownloadManagementScreenUiState.DownloadItem(
-            id = UUID.fromString(workerId),
+            id = workerId,
             fileName = fileName.ifEmpty {
                 // FAILEDかつファイル名未取得の場合は失敗を明示する
                 if (status == DownloadRecordStatus.FAILED) "ダウンロード失敗" else "ダウンロード中..."
@@ -96,7 +97,7 @@ internal class DownloadManagementScreenViewModel(
 
     private fun openFile(fileUri: String) {
         val app = getApplication<Application>()
-        val uri = android.net.Uri.parse(fileUri)
+        val uri = fileUri.toUri()
         val mimeType = app.contentResolver.getType(uri) ?: "*/*"
         val intent = Intent(Intent.ACTION_VIEW).apply {
             setDataAndType(uri, mimeType)
