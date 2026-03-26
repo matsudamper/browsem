@@ -1,5 +1,7 @@
 package net.matsudamper.browser
 
+import android.content.Context
+import android.net.Uri
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -37,6 +39,10 @@ internal class PromptDialogState {
     // --- DateTime (<input type="date/time/...">) ---
     var pendingDateTimePrompt by mutableStateOf<GeckoSession.PromptDelegate.DateTimePrompt?>(null)
     var pendingDateTimeResult by mutableStateOf<GeckoResult<GeckoSession.PromptDelegate.PromptResponse>?>(null)
+
+    // --- File (<input type="file">) ---
+    var pendingFilePrompt by mutableStateOf<GeckoSession.PromptDelegate.FilePrompt?>(null)
+    var pendingFileResult by mutableStateOf<GeckoResult<GeckoSession.PromptDelegate.PromptResponse>?>(null)
 
     // ================================================================
     // Actions
@@ -128,6 +134,20 @@ internal class PromptDialogState {
         pendingDateTimeResult = null
     }
 
+    fun confirmFilePromptWithUri(context: Context, uri: Uri) {
+        val prompt = pendingFilePrompt ?: return
+        pendingFileResult?.complete(prompt.confirm(context, uri))
+        pendingFilePrompt = null
+        pendingFileResult = null
+    }
+
+    fun dismissFilePrompt() {
+        val prompt = pendingFilePrompt ?: return
+        pendingFileResult?.complete(prompt.dismiss())
+        pendingFilePrompt = null
+        pendingFileResult = null
+    }
+
     // ================================================================
     // Delegate 生成
     // ================================================================
@@ -191,6 +211,16 @@ internal class PromptDialogState {
                 val result = GeckoResult<GeckoSession.PromptDelegate.PromptResponse>()
                 pendingDateTimePrompt = prompt
                 pendingDateTimeResult = result
+                return result
+            }
+
+            override fun onFilePrompt(
+                session: GeckoSession,
+                prompt: GeckoSession.PromptDelegate.FilePrompt,
+            ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse> {
+                val result = GeckoResult<GeckoSession.PromptDelegate.PromptResponse>()
+                pendingFilePrompt = prompt
+                pendingFileResult = result
                 return result
             }
         }

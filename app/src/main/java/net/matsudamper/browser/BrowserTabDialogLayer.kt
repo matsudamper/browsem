@@ -1,5 +1,10 @@
 package net.matsudamper.browser
 
+import android.content.ClipboardManager
+import android.content.Context
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -24,6 +29,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.toColorInt
@@ -36,6 +48,19 @@ internal fun BrowserTabDialogLayer(
     enableTabUi: Boolean,
     onOpenNewSessionRequest: (String) -> GeckoSession,
 ) {
+    val context = LocalContext.current
+
+    // ファイルピッカー（ActivityResultLauncher）をトップレベルで登録
+    val filePickerLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri != null) {
+            dialogState.confirmFilePromptWithUri(context, uri)
+        } else {
+            dialogState.dismissFilePrompt()
+        }
+    }
+
     state.imageContextMenuUrl?.let { imageUrl ->
         AlertDialog(
             onDismissRequest = { state.imageContextMenuUrl = null },
@@ -307,6 +332,63 @@ internal fun BrowserTabDialogLayer(
             },
         )
     }
+
+    dialogState.pendingFilePrompt?.let { prompt ->
+        // クリップボードに画像があるか確認
+        val clipboardImageUri = remember(prompt) { getClipboardImageUri(context) }
+        AlertDialog(
+            modifier = Modifier.onPreviewKeyEvent { keyEvent ->
+                // Ctrl+V でクリップボードから画像を貼り付け
+                if (keyEvent.type == KeyEventType.KeyDown &&
+                    keyEvent.isCtrlPressed &&
+                    keyEvent.key == Key.V
+                ) {
+                    val uri = getClipboardImageUri(context)
+                    if (uri != null) {
+                        dialogState.confirmFilePromptWithUri(context, uri)
+                        true
+                    } else {
+                        false
+                    }
+                } else {
+                    false
+                }
+            },
+            onDismissRequest = dialogState::dismissFilePrompt,
+            title = { Text("ファイルを選択") },
+            text = {
+                if (clipboardImageUri != null) {
+                    Text("ファイルを選択するか、クリップボードの画像を貼り付けてください。")
+                } else {
+                    Text("アップロードするファイルを選択してください。")
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val mimeTypes = prompt.mimeTypes?.takeIf { it.isNotEmpty() } ?: arrayOf("*/*")
+                        filePickerLauncher.launch(mimeTypes)
+                    },
+                ) {
+                    Text("ファイルを選択")
+                }
+            },
+            dismissButton = {
+                Column {
+                    if (clipboardImageUri != null) {
+                        TextButton(
+                            onClick = { dialogState.confirmFilePromptWithUri(context, clipboardImageUri) },
+                        ) {
+                            Text("クリップボードから貼り付け (Ctrl+V)")
+                        }
+                    }
+                    TextButton(onClick = dialogState::dismissFilePrompt) {
+                        Text("キャンセル")
+                    }
+                }
+            },
+        )
+    }
 }
 
 @Composable
@@ -387,4 +469,18 @@ private fun flattenChoices(
             listOf(choice)
         }
     }
+}
+
+/**
+ * クリップボードに画像の content:// URI が含まれている場合にそれを返す。
+ * 画像でない場合や URI が存在しない場合は null を返す。
+ */
+private fun getClipboardImageUri(context: Context): Uri? {
+    val clipManager = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+    val clip = clipManager.primaryClip ?: return null
+    if (clip.itemCount == 0) return null
+    val item = clip.getItemAt(0) ?: return null
+    val uri = item.uri ?: return null
+    val mimeType = runCatching { context.contentResolver.getType(uri) }.getOrNull() ?: return null
+    return if (mimeType.startsWith("image/")) uri else null
 }
