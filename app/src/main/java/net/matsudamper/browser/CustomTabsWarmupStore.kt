@@ -6,6 +6,7 @@ import android.os.Handler
 import android.os.Looper
 import androidx.annotation.VisibleForTesting
 import androidx.browser.customtabs.CustomTabsSessionToken
+import org.koin.core.context.GlobalContext
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoSession
 import java.util.concurrent.CountDownLatch
@@ -25,9 +26,7 @@ object CustomTabsWarmupStore {
     )
 
     fun onWarmup(context: Context) {
-        runOnMainThreadBlocking {
-            GeckoRuntime.getDefault(context.applicationContext)
-        }
+        GlobalContext.get().get<GeckoRuntime>()
     }
 
     fun onNewSession(token: CustomTabsSessionToken) {
@@ -44,7 +43,7 @@ object CustomTabsWarmupStore {
     ) {
         val targetUrl = url?.toString()?.takeIf { it.isNotBlank() } ?: return
         runOnMainThreadBlocking {
-            val runtime = GeckoRuntime.getDefault(context.applicationContext)
+            val runtime = GlobalContext.get().get<GeckoRuntime>()
             val session = synchronized(lock) {
                 cleanupLocked()
                 val entry = ensureEntryLocked(token)

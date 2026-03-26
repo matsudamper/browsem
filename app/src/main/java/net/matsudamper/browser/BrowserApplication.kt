@@ -4,6 +4,7 @@ import android.app.Application
 import net.matsudamper.browser.di.appModule
 import net.matsudamper.browser.di.dataModule
 import org.koin.android.ext.koin.androidContext
+import org.koin.androidx.workmanager.koin.workManagerFactory
 import org.koin.core.context.startKoin
 
 class BrowserApplication : Application() {
@@ -11,6 +12,7 @@ class BrowserApplication : Application() {
         super.onCreate()
         startKoin {
             androidContext(this@BrowserApplication)
+            workManagerFactory()
             modules(dataModule, appModule)
         }
     }

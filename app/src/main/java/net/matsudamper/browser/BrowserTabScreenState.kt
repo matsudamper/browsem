@@ -52,7 +52,6 @@ internal fun rememberBrowserTabScreenState(
     val coroutineScope = rememberCoroutineScope()
     val geckoDownloadManager: GeckoDownloadManager = koinInject()
     val readabilityWebExtension: ReadabilityWebExtension = koinInject()
-    val geckoRuntime: GeckoRuntime = koinInject()
     val state = remember(browserTab) {
         BrowserTabScreenState(
             browserTab = browserTab,
@@ -61,7 +60,6 @@ internal fun rememberBrowserTabScreenState(
             coroutineScope = coroutineScope,
             geckoDownloadManager = geckoDownloadManager,
             readabilityWebExtension = readabilityWebExtension,
-            geckoRuntime = geckoRuntime,
             context = context,
             onHistoryRecord = onHistoryRecord,
             onHistoryTitleUpdate = onHistoryTitleUpdate,
@@ -83,7 +81,6 @@ internal class BrowserTabScreenState(
     private val coroutineScope: CoroutineScope,
     private val geckoDownloadManager: GeckoDownloadManager,
     private val readabilityWebExtension: ReadabilityWebExtension,
-    private val geckoRuntime: GeckoRuntime,
     private val context: Context,
     private val onRequestDownloadNotificationPermission: () -> Unit = {},
     var onHistoryRecord: (suspend (url: String, title: String) -> Long)? = null,

@@ -143,6 +143,7 @@ dependencies {
     implementation(libs.androidx.work.runtime)
     implementation(libs.koin.android)
     implementation(libs.koin.androidx.compose)
+    implementation(libs.koinAndroidWorkManager)
 
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)

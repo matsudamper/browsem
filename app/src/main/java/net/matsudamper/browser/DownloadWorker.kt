@@ -17,6 +17,9 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import net.matsudamper.browser.data.download.DownloadRepository
+import org.koin.compose.koinInject
+import org.koin.core.Koin
+import org.koin.core.component.KoinComponent
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoWebExecutor
 import org.mozilla.geckoview.WebRequest
@@ -30,6 +33,7 @@ import java.io.IOException
 internal class DownloadWorker(
     private val context: Context,
     params: WorkerParameters,
+    private val geckoRuntime: GeckoRuntime,
 ) : CoroutineWorker(context, params) {
 
     override suspend fun doWork(): Result {
@@ -92,11 +96,8 @@ internal class DownloadWorker(
         repository: DownloadRepository,
     ): Pair<android.net.Uri, String> {
         // GeckoRuntime.getDefault() はUIスレッドでのみ呼び出し可能
-        val executor = withContext(Dispatchers.Main) {
-            val runtime = GeckoRuntime.getDefault(context)
-            GeckoWebExecutor(runtime)
-        }
 
+        val executor = GeckoWebExecutor(geckoRuntime)
         val request = WebRequest.Builder(urlString)
             .apply {
                 if (referrerUrl.isNotBlank()) {
