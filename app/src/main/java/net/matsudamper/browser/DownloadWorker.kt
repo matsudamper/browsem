@@ -14,12 +14,7 @@ import androidx.work.CoroutineWorker
 import androidx.work.ForegroundInfo
 import androidx.work.WorkerParameters
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import net.matsudamper.browser.data.download.DownloadRepository
-import org.koin.compose.koinInject
-import org.koin.core.Koin
-import org.koin.core.component.KoinComponent
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoWebExecutor
 import org.mozilla.geckoview.WebRequest
@@ -35,6 +30,7 @@ internal class DownloadWorker(
     params: WorkerParameters,
     private val geckoRuntime: GeckoRuntime,
 ) : CoroutineWorker(context, params) {
+    private val repository get() = DownloadRepository(context)
 
     override suspend fun doWork(): Result {
         val url = inputData.getString(KEY_URL) ?: return Result.failure()
@@ -42,18 +38,21 @@ internal class DownloadWorker(
         // inputDataから通知IDを読み出す（GeckoDownloadManagerと共有）
         val notificationId = inputData.getInt(KEY_NOTIFICATION_ID, NOTIFICATION_ID)
 
-        val repository = DownloadRepository(context)
+
         val enqueuedAt = System.currentTimeMillis()
+
+        // URLからファイル名を推測して最初から保存しておく
+        val guessedFileName = URLUtil.guessFileName(url, null, null)
 
         ensureNotificationChannel(context)
         setForeground(createForegroundInfo(notificationId, 0, true, context.getString(R.string.download_notification_starting), 0L, -1L))
 
-        repository.insertDownload(workerId = id.toString(), url = url, enqueuedAt = enqueuedAt)
+        repository.insertDownload(workerId = id.toString(), url = url, fileName = guessedFileName, enqueuedAt = enqueuedAt)
 
         return try {
-            val (fileUri, fileName) = downloadFile(url, referrerUrl, notificationId, repository)
-            repository.updateCompleted(id.toString(), fileName, fileUri.toString())
-            postCompletionNotification(fileName)
+            val downloadFile = downloadFile(url, referrerUrl, notificationId, repository)
+            repository.updateCompleted(id.toString(), downloadFile.fileName, downloadFile.fileUri.toString())
+            postCompletionNotification(downloadFile.fileName, downloadFile.totalRead)
             Result.success()
         } catch (e: CancellationException) {
             repository.updateCancelled(id.toString())
@@ -61,11 +60,12 @@ internal class DownloadWorker(
         } catch (e: Exception) {
             e.printStackTrace()
             repository.updateFailed(id.toString())
+            postFailureNotification()
             Result.failure()
         }
     }
 
-    private fun postCompletionNotification(fileName: String) {
+    private fun postCompletionNotification(fileName: String, totalRead: Long) {
         // 負のhashCodeによる通知ID衝突を防ぐため、非負の値に変換する
         val positiveHash = id.hashCode() and 0x7fffffff
         val openDownloadsIntent = Intent(context, MainActivity::class.java).apply {
@@ -81,7 +81,8 @@ internal class DownloadWorker(
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_sys_download_done)
             .setContentTitle(fileName)
-            .setContentText(context.getString(R.string.download_notification_complete))
+            .setContentText(buildSizeText(totalRead, totalRead))
+            .setProgress(100, 100, false)
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
             .build()
@@ -89,12 +90,40 @@ internal class DownloadWorker(
         notificationManager.notify(NOTIFICATION_ID_COMPLETE_BASE + positiveHash, notification)
     }
 
+    private suspend fun postFailureNotification() {
+        // フォアグラウンド通知と異なるIDを使う。
+        // フォアグラウンド通知と同じIDを使うと、WorkManager がフォアグラウンドサービス停止時に
+        // stopForeground(STOP_FOREGROUND_REMOVE) で同IDの通知を削除してしまうため。
+        val positiveHash = id.hashCode() and 0x7fffffff
+        val openDownloadsIntent = Intent(context, MainActivity::class.java).apply {
+            action = ACTION_OPEN_DOWNLOADS
+            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_NEW_TASK
+        }
+        val pendingIntent = PendingIntent.getActivity(
+            context,
+            positiveHash,
+            openDownloadsIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        val fileName = repository.get(id).fileName
+
+        val notification = NotificationCompat.Builder(context, CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.stat_notify_error)
+            .setContentTitle(fileName)
+            .setContentText(context.getString(R.string.download_notification_failed))
+            .setContentIntent(pendingIntent)
+            .setAutoCancel(true)
+            .build()
+        val notificationManager = context.getSystemService(android.app.NotificationManager::class.java)
+        notificationManager.notify(NOTIFICATION_ID_FAILURE_BASE + positiveHash, notification)
+    }
+
     private suspend fun downloadFile(
         urlString: String,
         referrerUrl: String,
         notificationId: Int,
         repository: DownloadRepository,
-    ): Pair<android.net.Uri, String> {
+    ): DownloadResult {
         // GeckoRuntime.getDefault() はUIスレッドでのみ呼び出し可能
 
         val executor = GeckoWebExecutor(geckoRuntime)
@@ -116,7 +145,7 @@ internal class DownloadWorker(
         }
 
         val statusCode = response.statusCode
-        if (statusCode !in 200..299) {
+        if (statusCode !in 200 until 300) {
             response.body?.close()
             throw IOException("HTTP エラー: $statusCode")
         }
@@ -133,6 +162,7 @@ internal class DownloadWorker(
             .ifBlank { "download-${System.currentTimeMillis()}" }
 
         setForeground(createForegroundInfo(notificationId, 0, contentLength <= 0, fileName, 0L, contentLength))
+        repository.updateProgress(id.toString(), fileName, 0, 0L, contentLength)
 
         val resolver = context.contentResolver
         val values = ContentValues().apply {
@@ -144,12 +174,12 @@ internal class DownloadWorker(
         val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
             ?: throw IOException("ダウンロードエントリの作成に失敗しました。")
 
+        var totalRead = 0L
         try {
             resolver.openOutputStream(uri)?.use { outputStream ->
                 body.use { inputStream ->
                     val buffer = ByteArray(8192)
                     var bytesRead: Int
-                    var totalRead = 0L
                     // 通知・Room更新のレート制限を避けるため、最後に更新した時刻を記録する
                     var lastUpdateTime = 0L
                     while (inputStream.read(buffer).also { bytesRead = it } != -1) {
@@ -182,9 +212,13 @@ internal class DownloadWorker(
             null,
             null,
         )?.use { cursor ->
-            if (cursor.moveToFirst()) cursor.getString(0) else fileName
-        } ?: fileName
-        return Pair(uri, actualFileName)
+            if (cursor.moveToFirst()) cursor.getString(0) else null
+        }
+        return DownloadResult(
+            fileUri = uri,
+            fileName = actualFileName ?: fileName,
+            totalRead = totalRead,
+        )
     }
 
     private fun createForegroundInfo(
@@ -229,8 +263,12 @@ internal class DownloadWorker(
         const val KEY_NOTIFICATION_ID = "notification_id"
         const val CHANNEL_ID = "download_progress_channel"
         const val NOTIFICATION_ID = 9001
+
         /** 完了通知IDのベース。ワークIDのhashCodeを加算して使用する */
         const val NOTIFICATION_ID_COMPLETE_BASE = 10000
+
+        /** 失敗通知IDのベース。ワークIDのhashCodeを加算して使用する */
+        const val NOTIFICATION_ID_FAILURE_BASE = 20000
         const val TAG_DOWNLOAD = "download"
 
         /** ダウンロード管理画面を開くためのActionキー */
@@ -267,3 +305,9 @@ internal class DownloadWorker(
         }
     }
 }
+
+private data class DownloadResult(
+    val fileUri: android.net.Uri,
+    val fileName: String,
+    val totalRead: Long,
+)

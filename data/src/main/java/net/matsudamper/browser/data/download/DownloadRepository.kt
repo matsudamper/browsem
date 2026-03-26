@@ -3,6 +3,7 @@ package net.matsudamper.browser.data.download
 import android.content.Context
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import java.util.UUID
 
 enum class DownloadRecordStatus { ENQUEUED, RUNNING, SUCCEEDED, FAILED, CANCELLED }
 
@@ -27,12 +28,12 @@ class DownloadRepository(context: Context) {
     }
 
     /** エンキュー時に ENQUEUED 状態でレコードを事前挿入する。既存レコードがある場合は何もしない */
-    suspend fun insertEnqueued(workerId: String, url: String, enqueuedAt: Long) {
+    suspend fun insertEnqueued(workerId: String, url: String, fileName: String, enqueuedAt: Long) {
         dao.insertIgnoreConflict(
             DownloadEntity(
                 workerId = workerId,
                 url = url,
-                fileName = "",
+                fileName = fileName,
                 fileUri = null,
                 status = DownloadRecordStatus.ENQUEUED.name,
                 progress = 0,
@@ -44,13 +45,13 @@ class DownloadRepository(context: Context) {
     }
 
     /** Worker 開始時に RUNNING 状態に遷移する。ENQUEUED レコードがあれば遷移、なければ新規挿入する */
-    suspend fun insertDownload(workerId: String, url: String, enqueuedAt: Long) {
+    suspend fun insertDownload(workerId: String, url: String, fileName: String, enqueuedAt: Long) {
         // ENQUEUEDレコードがない場合に備えてRUNNINGで新規挿入（競合時は無視）
         dao.insertIgnoreConflict(
             DownloadEntity(
                 workerId = workerId,
                 url = url,
-                fileName = "",
+                fileName = fileName,
                 fileUri = null,
                 status = DownloadRecordStatus.RUNNING.name,
                 progress = 0,
@@ -84,12 +85,16 @@ class DownloadRepository(context: Context) {
     }
 
     suspend fun updateFailed(workerId: String) {
-        dao.updateStatus(workerId, DownloadRecordStatus.FAILED.name)
+        dao.updateFailed(workerId = workerId)
     }
 
     /** SUCCEEDED/FAILED 以外の状態のときのみキャンセル状態に更新する */
     suspend fun updateCancelled(workerId: String) {
         dao.cancelIfActive(workerId)
+    }
+
+    suspend fun get(workerId: UUID): DownloadEntity {
+        return dao.get(workerId = workerId.toString())
     }
 
     private fun DownloadEntity.toRecord(): DownloadRecord {
