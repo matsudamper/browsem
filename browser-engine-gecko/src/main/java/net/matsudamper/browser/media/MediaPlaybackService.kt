@@ -97,16 +97,12 @@ class MediaPlaybackService : MediaSessionService() {
     }
 
     override fun onStartCommand(intent: android.content.Intent?, flags: Int, startId: Int): Int {
-        val requiresImmediateForeground =
-            intent?.getBooleanExtra(EXTRA_REQUIRE_IMMEDIATE_FOREGROUND, false) == true
-        Log.d(
-            TAG,
-            "onStartCommand: flags=$flags, startId=$startId, requiresImmediateForeground=$requiresImmediateForeground",
-        )
+        Log.d(TAG, "onStartCommand: flags=$flags, startId=$startId")
 
-        // startForegroundService() フォールバック経路で起動した場合のみ、
+        // startForegroundService() 経由で起動された場合（フラグの有無に関わらず）、
         // タイムアウト回避のため先にプレースホルダ通知で foreground 化する。
-        if (requiresImmediateForeground) {
+        // Media3 が後から正式な通知で上書きする。
+        try {
             startForeground(
                 NOTIFICATION_ID,
                 android.app.Notification.Builder(this, CHANNEL_ID)
@@ -116,7 +112,10 @@ class MediaPlaybackService : MediaSessionService() {
                     .setOngoing(true)
                     .build(),
             )
+        } catch (e: Exception) {
+            Log.w(TAG, "startForeground failed (may not be a foreground service)", e)
         }
+
         return super.onStartCommand(intent, flags, startId)
     }
 
@@ -145,9 +144,6 @@ class MediaPlaybackService : MediaSessionService() {
 
     companion object {
         const val CHANNEL_ID = "media_playback"
-        const val EXTRA_REQUIRE_IMMEDIATE_FOREGROUND =
-            "net.matsudamper.browser.media.extra.REQUIRE_IMMEDIATE_FOREGROUND"
-
         private const val NOTIFICATION_ID = 1001
         private const val TAG = "MediaPlayback"
     }
