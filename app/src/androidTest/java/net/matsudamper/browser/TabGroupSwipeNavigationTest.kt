@@ -15,6 +15,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
+import kotlin.time.Duration.Companion.seconds
 
 /**
  * target="_blank" で開いたタブの URL バースワイプ前後タブが、
@@ -29,146 +30,167 @@ class TabGroupSwipeNavigationTest {
     @get:Rule
     val composeRule = createAndroidComposeRule<MainActivity>()
 
+    private val userDebug = false
+
     @Test
     fun targetBlankTabShouldHavePrevTabFromSameGroup() {
         val browserSessionController = waitForBrowserSessionController()
         waitForActiveTab(browserSessionController)
 
-        // タブリスト画面を開く
-        openTabsScreen()
-        waitForTabsScreen()
+        group("タブリスト画面を開く") {
+            openTabsScreen()
+            waitForTabsScreen()
+        }
 
-        // 新しいタブグループを作るボタンを押す
-        composeRule.waitUntil(timeoutMillis = 10_000) {
+        group("新しいタブグループを作るボタンを押す") {
+            composeRule.waitUntil(timeoutMillis = 10_000) {
+                composeRule.onNode(hasTestTag(TabsScreenTestTags.AddTabGroupButton.testTag))
+                    .isDisplayed()
+            }
             composeRule.onNode(hasTestTag(TabsScreenTestTags.AddTabGroupButton.testTag))
-                .isDisplayed()
-        }
-        composeRule.onNode(hasTestTag(TabsScreenTestTags.AddTabGroupButton.testTag))
-            .performClick()
-        composeRule.waitForIdle()
-
-        // タブグループ 1 が表示されていることを確認する
-        composeRule.waitUntil(timeoutMillis = 10_000) {
-            runCatching {
-                composeRule.onNode(
-                    hasTestTag(TabsScreenTestTags.TabGroupTopButton(1).testTag)
-                ).assertIsSelected()
-                true
-            }.getOrDefault(false)
+                .performClick()
+            composeRule.waitForIdle()
         }
 
-        // タブの新規追加ボタンを押す
-        composeRule.onNode(hasTestTag(TabsScreenTestTags.AddTabButton.testTag))
-            .performClick()
-        composeRule.waitForIdle()
-
-        // タブ画面が開かれていることを確認する
-        waitForBrowserScreen()
-
-        // タブリスト画面を開く
-        openTabsScreen()
-        waitForTabsScreen()
-
-        // タブグループ 1 が表示されていることを確認する
-        composeRule.waitUntil(timeoutMillis = 10_000) {
-            runCatching {
-                composeRule.onNode(
-                    hasTestTag(TabsScreenTestTags.TabGroupTopButton(1).testTag)
-                ).assertIsSelected()
-                true
-            }.getOrDefault(false)
-        }
-
-        // タブグループ 0 に移動するボタンを押す
-        composeRule.onNode(
-            hasTestTag(TabsScreenTestTags.TabGroupTopButton(0).testTag)
-        ).performClick()
-        composeRule.waitForIdle()
-
-        // タブグループ 0 が表示されていることを確認する
-        composeRule.waitUntil(timeoutMillis = 10_000) {
-            runCatching {
-                composeRule.onNode(
-                    hasTestTag(TabsScreenTestTags.TabGroupTopButton(0).testTag)
-                ).assertIsSelected()
-                true
-            }.getOrDefault(false)
-        }
-
-        // タブを新規追加するボタンを押す
-        composeRule.onNode(hasTestTag(TabsScreenTestTags.AddTabButton.testTag))
-            .performClick()
-        composeRule.waitForIdle()
-
-        // タブ画面が開かれていることを確認する
-        waitForBrowserScreen()
-
-        // ローカル HTML を読み込む
-        val activeTab = getCurrentActiveTab(browserSessionController)
-        val localPageUri = prepareLocalNewTabLinkPageUri()
-        composeRule.runOnIdle {
-            activeTab.session.loadUri(localPageUri)
-        }
-        waitForActiveTabUrl(timeoutMillis = 60_000, activeTab = activeTab) { currentUrl ->
-            currentUrl.startsWith("file:") && currentUrl.contains(INDEX_FILE_NAME)
-        }
-
-        // グループ 0 に追加したタブの ID を記録
-        val openerTabId = activeTab.tabId
-        val tabCountBefore = browserSessionController.tabs.size
-
-        // リンクをクリックする（target="_blank"）
-        composeRule.runOnIdle {
-            activeTab.session.loadUri(
-                "javascript:void(document.getElementById('newTabLink').click())"
-            )
-        }
-
-        // 新しいタブが作成されるまで待つ
-        composeRule.waitUntil(timeoutMillis = 30_000) {
-            var result = false
-            composeRule.runOnIdle {
-                result = browserSessionController.tabs.size > tabCountBefore
+        group("タブグループ 1 が表示されていることを確認する") {
+            composeRule.waitUntil(timeoutMillis = 10_000) {
+                runCatching {
+                    composeRule.onNode(
+                        hasTestTag(TabsScreenTestTags.TabGroupTopButton(1).testTag)
+                    ).assertIsSelected()
+                    true
+                }.getOrDefault(false)
             }
-            result
         }
 
-        // 新しいタブに遷移するまで待つ
-        composeRule.waitUntil(timeoutMillis = 10_000) {
-            var result = false
-            composeRule.runOnIdle {
-                result = browserSessionController.selectedTabId != openerTabId
+        group("タブの新規追加ボタンを押す") {
+            composeRule.onNode(hasTestTag(TabsScreenTestTags.AddTabButton.testTag))
+                .performClick()
+            composeRule.waitForIdle()
+        }
+
+        group("タブ画面が開かれていることを確認する") {
+            waitForBrowserScreen()
+        }
+
+        group("タブリスト画面を開く") {
+            openTabsScreen()
+            waitForTabsScreen()
+        }
+
+        group("タブグループ 1 が表示されていることを確認する") {
+            composeRule.waitUntil(timeoutMillis = 10_000) {
+                runCatching {
+                    composeRule.onNode(
+                        hasTestTag(TabsScreenTestTags.TabGroupTopButton(1).testTag)
+                    ).assertIsSelected()
+                    true
+                }.getOrDefault(false)
             }
-            result
         }
 
-        // 割り当て処理が非同期で走るので少し待つ
-        Thread.sleep(3_000)
-        composeRule.waitForIdle()
-
-        // タブ一覧画面を開いて、新しいタブがグループ 0 に表示されることを確認する
-        openTabsScreen()
-        waitForTabsScreen()
-
-        // グループ 0 を選択する
-        composeRule.onNode(
-            hasTestTag(TabsScreenTestTags.TabGroupTopButton(0).testTag)
-        ).performClick()
-        composeRule.waitForIdle()
-
-        composeRule.waitUntil(timeoutMillis = 10_000) {
-            runCatching {
-                composeRule.onNode(
-                    hasTestTag(TabsScreenTestTags.TabGroupTopButton(0).testTag)
-                ).assertIsSelected()
-                true
-            }.getOrDefault(false)
+        group("タブグループ 0 に移動するボタンを押す") {
+            composeRule.onNode(
+                hasTestTag(TabsScreenTestTags.TabGroupTopButton(0).testTag)
+            ).performClick()
+            composeRule.waitForIdle()
         }
 
-        // target="_blank" で開いたタブ ("Target Page") がグループ 0 に表示されていることを確認する
-        composeRule.waitUntil(timeoutMillis = 10_000) {
-            composeRule.onAllNodesWithText("Target Page")
-                .fetchSemanticsNodes().isNotEmpty()
+        group("タブグループ 0 が表示されていることを確認する") {
+            composeRule.waitUntil(timeoutMillis = 10_000) {
+                runCatching {
+                    composeRule.onNode(
+                        hasTestTag(TabsScreenTestTags.TabGroupTopButton(0).testTag)
+                    ).assertIsSelected()
+                    true
+                }.getOrDefault(false)
+            }
+        }
+
+        group("タブを新規追加するボタンを押す") {
+            composeRule.onNode(hasTestTag(TabsScreenTestTags.AddTabButton.testTag))
+                .performClick()
+            composeRule.waitForIdle()
+        }
+
+        group("タブ画面が開かれていることを確認する") {
+            waitForBrowserScreen()
+        }
+
+        group("ローカル HTML を読み込む") {
+            val activeTab = getCurrentActiveTab(browserSessionController)
+            val localPageUri = prepareLocalNewTabLinkPageUri()
+            composeRule.runOnIdle {
+                activeTab.session.loadUri(localPageUri)
+            }
+            waitForActiveTabUrl(timeoutMillis = 60_000, activeTab = activeTab) { currentUrl ->
+                currentUrl.startsWith("file:") && currentUrl.contains(INDEX_FILE_NAME)
+            }
+            // グループ 0 に追加したタブの ID を記録
+            val openerTabId = activeTab.tabId
+            val tabCountBefore = browserSessionController.tabs.size
+
+            // リンクをクリックする（target="_blank"）
+            composeRule.runOnIdle {
+                activeTab.session.loadUri(
+                    "javascript:void(document.getElementById('newTabLink').click())"
+                )
+            }
+
+            // ここで失敗している
+            group("新しいタブが作成されるまで待つ") {
+                composeRule.waitUntil(timeoutMillis = 30_000) {
+                    var result = false
+                    composeRule.runOnIdle {
+                        result = browserSessionController.tabs.size > tabCountBefore
+                    }
+                    result
+                }
+            }
+
+            group("新しいタブに遷移するまで待つ") {
+                composeRule.waitUntil(timeoutMillis = 10_000) {
+                    var result = false
+                    composeRule.runOnIdle {
+                        result = browserSessionController.selectedTabId != openerTabId
+                    }
+                    result
+                }
+            }
+        }
+
+        group("割り当て処理が非同期で走るので少し待つ") {
+            Thread.sleep(3_000)
+            composeRule.waitForIdle()
+        }
+
+        group("タブ一覧画面を開いて、新しいタブがグループ 0 に表示されることを確認する") {
+            openTabsScreen()
+            waitForTabsScreen()
+        }
+
+        group("グループ 0 を選択する") {
+            composeRule.onNode(
+                hasTestTag(TabsScreenTestTags.TabGroupTopButton(0).testTag)
+            ).performClick()
+            composeRule.waitForIdle()
+
+            composeRule.waitUntil(timeoutMillis = 10_000) {
+                runCatching {
+                    composeRule.onNode(
+                        hasTestTag(TabsScreenTestTags.TabGroupTopButton(0).testTag)
+                    ).assertIsSelected()
+                    true
+                }.getOrDefault(false)
+            }
+        }
+
+
+        group("target=\"_blank\" で開いたタブ (\"Target Page\") がグループ 0 に表示されていることを確認する") {
+            composeRule.waitUntil(timeoutMillis = 10_000) {
+                composeRule.onAllNodesWithText("Target Page")
+                    .fetchSemanticsNodes().isNotEmpty()
+            }
         }
     }
 
@@ -295,6 +317,16 @@ class TabGroupSwipeNavigationTest {
      */
     private fun getBrowserViewModel(): BrowserViewModel {
         return ViewModelProvider(composeRule.activity)[BrowserViewModel::class.java]
+    }
+
+    private fun group(
+        @Suppress("unused") title: String = "",
+        block: () -> Unit
+    ) {
+        if (userDebug) {
+            Thread.sleep(5.seconds.inWholeMilliseconds)
+        }
+        block()
     }
 
     companion object {
