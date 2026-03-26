@@ -429,6 +429,8 @@ internal fun GeckoBrowserTab(
                     onPcModeToggle = state::togglePcMode,
                     onFindInPage = state::openFindInPage,
                     toolbarColor = state.toolbarColor,
+                    onBack = state::onGoBack,
+                    canGoBack = state.canGoBack,
                     onHome = state::onHome,
                     onForward = state::onGoForward,
                     canGoForward = state.canGoForward,

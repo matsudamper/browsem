@@ -6,16 +6,19 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
@@ -26,6 +29,8 @@ import androidx.compose.ui.unit.dp
 internal fun ToolbarMenu(
     visibleMenu: Boolean,
     onDismissRequest: () -> Unit,
+    onBack: () -> Unit,
+    canGoBack: Boolean,
     onRefresh: () -> Unit,
     onHome: () -> Unit,
     onForward: () -> Unit,
@@ -57,6 +62,38 @@ internal fun ToolbarMenu(
                 .padding(horizontal = 8.dp, vertical = 4.dp),
             horizontalArrangement = Arrangement.SpaceEvenly,
         ) {
+            // 戻るボタン：タップで戻る、長押しでタブ内履歴を表示
+            val backContentColor = if (canGoBack) {
+                LocalContentColor.current
+            } else {
+                LocalContentColor.current.copy(alpha = 0.38f)
+            }
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.combinedClickable(
+                    enabled = canGoBack,
+                    onClick = {
+                        onDismissRequest()
+                        onBack()
+                    },
+                    onLongClick = {
+                        onDismissRequest()
+                        onShowTabHistory()
+                    },
+                ),
+            ) {
+                CompositionLocalProvider(LocalContentColor provides backContentColor) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_arrow_back_24dp),
+                        contentDescription = null,
+                    )
+                }
+                Text(
+                    text = "戻る",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = backContentColor,
+                )
+            }
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 IconButton(
                     onClick = {
@@ -260,21 +297,6 @@ internal fun ToolbarMenu(
             onClick = {
                 onDismissRequest()
                 onFindInPage()
-            },
-        )
-        DropdownMenuItem(
-            text = {
-                Text(text = "タブの履歴")
-            },
-            leadingIcon = {
-                Icon(
-                    painter = painterResource(id = R.drawable.ic_arrow_back_24dp),
-                    contentDescription = null,
-                )
-            },
-            onClick = {
-                onDismissRequest()
-                onShowTabHistory()
             },
         )
         DropdownMenuItem(
