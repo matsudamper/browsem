@@ -228,7 +228,6 @@ internal fun GeckoBrowserTab(
         session.progressDelegate = delegates.progressDelegate
         session.translationsSessionDelegate = delegates.translationsDelegate
         session.scrollDelegate = delegates.scrollDelegate
-        session.historyDelegate = delegates.historyDelegate
         session.promptDelegate = promptDelegate
         // MediaSession の初回イベントを取りこぼさないよう、ページ読み込み前に delegate を設定する。
         session.mediaSessionDelegate = mediaSessionDelegate
@@ -242,7 +241,6 @@ internal fun GeckoBrowserTab(
             session.progressDelegate = null
             session.translationsSessionDelegate = null
             session.scrollDelegate = null
-            session.historyDelegate = null
             session.promptDelegate = null
             if (session.mediaSessionDelegate === mediaSessionDelegate) {
                 session.mediaSessionDelegate = null

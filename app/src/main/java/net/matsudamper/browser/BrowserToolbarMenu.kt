@@ -73,6 +73,7 @@ internal fun ToolbarMenu(
                 .padding(horizontal = 8.dp, vertical = 4.dp),
             horizontalArrangement = Arrangement.SpaceEvenly,
         ) {
+            // 戻るボタン：タップで戻る、長押しでタブ内履歴を表示
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 LongClickIconButton(
                     enabled = canGoBack,
@@ -335,9 +336,9 @@ private fun LongClickIconButton(
             .clip(shape)
             .background(color = if (enabled) colors.containerColor else colors.disabledContainerColor, shape = shape)
             .combinedClickable(
-                onClick = onClick,
+                // enabledがfalseでもonLongClickは常に受け付けるためenabledは渡さない
+                onClick = { if (enabled) onClick() },
                 onLongClick = onLongClick,
-                enabled = enabled,
                 role = Role.Button,
                 interactionSource = remember { MutableInteractionSource() },
                 indication = ripple(),

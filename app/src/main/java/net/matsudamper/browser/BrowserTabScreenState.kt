@@ -25,7 +25,6 @@ import java.net.URL
 import net.matsudamper.browser.data.TranslationProvider
 import net.matsudamper.browser.ReadabilityArticle
 import net.matsudamper.browser.ReadabilityWebExtension
-import net.matsudamper.browser.TabHistoryEntry
 import org.koin.compose.koinInject
 import org.mozilla.geckoview.AllowOrDeny
 import org.mozilla.geckoview.GeckoResult
@@ -132,9 +131,14 @@ internal class BrowserTabScreenState(
     var findMatchTotal by mutableIntStateOf(0)
 
     // --- タブ内履歴状態 ---
+    // onLocationChange / onGoBack / onGoForward を元に自前追跡する
     val tabHistory = mutableStateListOf<TabHistoryEntry>()
     var tabHistoryCurrentIndex by mutableIntStateOf(-1)
     var showTabHistory by mutableStateOf(false)
+    // 次の onLocationChange がどの種類のナビゲーションかを示す
+    private enum class NavDirection { NEW, BACK, FORWARD, JUMP }
+    private var pendingNavDirection = NavDirection.NEW
+    private var pendingJumpIndex = 0
 
     // --- Context menu state ---
     var imageContextMenuUrl by mutableStateOf<String?>(null)
@@ -194,11 +198,13 @@ internal class BrowserTabScreenState(
     }
 
     fun onGoForward() {
+        pendingNavDirection = NavDirection.FORWARD
         clearPageLoadError()
         session.goForward()
     }
 
     fun onGoBack() {
+        pendingNavDirection = NavDirection.BACK
         clearPageLoadError()
         session.goBack()
     }
@@ -476,9 +482,14 @@ internal class BrowserTabScreenState(
         showTabHistory = false
     }
 
-    fun navigateToHistoryIndex(index: Int) {
+    fun navigateToHistoryIndex(targetIndex: Int) {
         showTabHistory = false
-        session.gotoHistoryIndex(index)
+        val delta = targetIndex - tabHistoryCurrentIndex
+        if (delta == 0) return
+        pendingNavDirection = NavDirection.JUMP
+        pendingJumpIndex = targetIndex
+        // gotoHistoryIndex は現在位置からの相対ステップ数を受け取る
+        session.gotoHistoryIndex(delta)
     }
 
     fun copyCurrentPageUrl() {
@@ -574,13 +585,47 @@ internal class BrowserTabScreenState(
         if (!url.startsWith("data:")) {
             detectedPageLanguage = null
         }
-        // 履歴を記録（about:blank や data: URL は除外）
+        // グローバル履歴への記録と、タブ内履歴の自前追跡（about:blank / data: URL は除外）
         if (url.isNotBlank() && !url.startsWith("about:") && !url.startsWith("data:")) {
             currentHistoryEntryId = null
             val callback = onHistoryRecord
             if (callback != null) {
                 coroutineScope.launch {
                     currentHistoryEntryId = callback(url, currentPageTitle)
+                }
+            }
+            // タブ内履歴を方向に応じて更新
+            val direction = pendingNavDirection
+            pendingNavDirection = NavDirection.NEW
+            when (direction) {
+                NavDirection.BACK -> {
+                    if (tabHistoryCurrentIndex > 0) {
+                        tabHistoryCurrentIndex--
+                    } else {
+                        // 追跡開始より前のページへ戻った場合は先頭に挿入
+                        tabHistory.add(0, TabHistoryEntry(title = "", url = url))
+                    }
+                }
+                NavDirection.FORWARD -> {
+                    if (tabHistoryCurrentIndex < tabHistory.lastIndex) {
+                        tabHistoryCurrentIndex++
+                    } else {
+                        tabHistory.add(TabHistoryEntry(title = "", url = url))
+                        tabHistoryCurrentIndex = tabHistory.lastIndex
+                    }
+                }
+                NavDirection.JUMP -> {
+                    tabHistoryCurrentIndex = pendingJumpIndex
+                }
+                NavDirection.NEW -> {
+                    // 前進履歴を削除してから新エントリを追加
+                    if (tabHistoryCurrentIndex >= 0 && tabHistoryCurrentIndex < tabHistory.lastIndex) {
+                        repeat(tabHistory.size - tabHistoryCurrentIndex - 1) {
+                            tabHistory.removeAt(tabHistory.lastIndex)
+                        }
+                    }
+                    tabHistory.add(TabHistoryEntry(title = "", url = url))
+                    tabHistoryCurrentIndex = tabHistory.lastIndex
                 }
             }
         }
@@ -594,6 +639,11 @@ internal class BrowserTabScreenState(
             coroutineScope.launch {
                 callback(entryId, title)
             }
+        }
+        // タブ内履歴の現在エントリのタイトルを更新
+        val idx = tabHistoryCurrentIndex
+        if (title.isNotBlank() && idx >= 0 && idx < tabHistory.size) {
+            tabHistory[idx] = tabHistory[idx].copy(title = title)
         }
     }
 
@@ -714,12 +764,6 @@ internal class BrowserTabScreenState(
 
     override fun onScrollChanged(scrollY: Int) {
         this.scrollY = scrollY
-    }
-
-    override fun onHistoryStateChange(historyItems: List<TabHistoryEntry>, currentIndex: Int) {
-        tabHistory.clear()
-        tabHistory.addAll(historyItems)
-        tabHistoryCurrentIndex = currentIndex
     }
 
     private fun maybeResetToolbarColor(fromUrl: String, toUrl: String) {

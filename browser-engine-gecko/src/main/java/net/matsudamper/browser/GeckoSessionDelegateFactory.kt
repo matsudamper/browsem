@@ -8,12 +8,6 @@ import org.mozilla.geckoview.TranslationsController
 import org.mozilla.geckoview.WebRequestError
 import org.mozilla.geckoview.WebResponse
 
-/** タブ内の履歴エントリを表すデータクラス */
-data class TabHistoryEntry(
-    val title: String,
-    val url: String,
-)
-
 interface BrowserSessionStateCallbacks {
     fun onCanGoBackChanged(value: Boolean)
     fun onCanGoForwardChanged(value: Boolean)
@@ -33,7 +27,6 @@ interface BrowserSessionStateCallbacks {
     fun onLoadRequest(
         request: GeckoSession.NavigationDelegate.LoadRequest,
     ): GeckoResult<AllowOrDeny>?
-    fun onHistoryStateChange(historyItems: List<TabHistoryEntry>, currentIndex: Int)
 }
 
 data class GeckoSessionDelegateBundle(
@@ -43,7 +36,6 @@ data class GeckoSessionDelegateBundle(
     val progressDelegate: GeckoSession.ProgressDelegate,
     val translationsDelegate: TranslationsController.SessionTranslation.Delegate,
     val scrollDelegate: GeckoSession.ScrollDelegate,
-    val historyDelegate: GeckoSession.HistoryDelegate,
 )
 
 fun createGeckoSessionDelegateBundle(
@@ -183,21 +175,6 @@ fun createGeckoSessionDelegateBundle(
                 scrollY: Int,
             ) {
                 callbacks.onScrollChanged(scrollY)
-            }
-        },
-        historyDelegate = object : GeckoSession.HistoryDelegate {
-            override fun onHistoryStateChange(
-                session: GeckoSession,
-                historyList: GeckoSession.HistoryDelegate.HistoryList,
-            ) {
-                val items = (0 until historyList.size).map { i ->
-                    val item = historyList[i]
-                    TabHistoryEntry(
-                        title = item.title.orEmpty(),
-                        url = item.uri,
-                    )
-                }
-                callbacks.onHistoryStateChange(items, historyList.currentIndex)
             }
         },
     )

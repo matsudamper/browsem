@@ -21,8 +21,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import net.matsudamper.browser.TabHistoryEntry
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun TabHistorySheet(
