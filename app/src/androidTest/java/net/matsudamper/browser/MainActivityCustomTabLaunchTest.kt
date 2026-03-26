@@ -84,7 +84,6 @@ class MainActivityCustomTabLaunchTest {
 
             CustomTabsWarmupStore.onNewSession(sessionToken)
             CustomTabsWarmupStore.onMayLaunchUrl(
-                context = context,
                 token = sessionToken,
                 url = preloadUri,
             )

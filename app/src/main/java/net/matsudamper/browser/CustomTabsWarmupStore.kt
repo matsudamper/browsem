@@ -25,7 +25,7 @@ object CustomTabsWarmupStore {
         var updatedAt: Long = System.currentTimeMillis(),
     )
 
-    fun onWarmup(context: Context) {
+    fun onWarmup() {
         GlobalContext.get().get<GeckoRuntime>()
     }
 
@@ -37,7 +37,6 @@ object CustomTabsWarmupStore {
     }
 
     fun onMayLaunchUrl(
-        context: Context,
         token: CustomTabsSessionToken,
         url: Uri?,
     ) {

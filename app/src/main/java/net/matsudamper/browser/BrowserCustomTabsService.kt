@@ -7,7 +7,7 @@ import androidx.browser.customtabs.CustomTabsSessionToken
 
 class BrowserCustomTabsService : CustomTabsService() {
     override fun warmup(flags: Long): Boolean {
-        CustomTabsWarmupStore.onWarmup(this)
+        CustomTabsWarmupStore.onWarmup()
         return true
     }
 
@@ -23,7 +23,6 @@ class BrowserCustomTabsService : CustomTabsService() {
         otherLikelyBundles: List<Bundle>?,
     ): Boolean {
         CustomTabsWarmupStore.onMayLaunchUrl(
-            context = this,
             token = sessionToken,
             url = url,
         )
