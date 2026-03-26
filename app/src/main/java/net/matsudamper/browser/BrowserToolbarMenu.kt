@@ -66,7 +66,7 @@ internal fun ToolbarMenu(
                 ) {
                     Icon(
                         painter = painterResource(R.drawable.ic_arrow_forward_24dp),
-                        contentDescription = "進む",
+                        contentDescription = null,
                     )
                 }
                 Text(
@@ -83,7 +83,7 @@ internal fun ToolbarMenu(
                 ) {
                     Icon(
                         painter = painterResource(R.drawable.ic_home_24dp),
-                        contentDescription = "ホーム",
+                        contentDescription = null,
                     )
                 }
                 Text(
@@ -100,7 +100,7 @@ internal fun ToolbarMenu(
                 ) {
                     Icon(
                         painter = painterResource(R.drawable.ic_refresh_24dp),
-                        contentDescription = "更新",
+                        contentDescription = null,
                     )
                 }
                 Text(
@@ -154,7 +154,7 @@ internal fun ToolbarMenu(
             leadingIcon = {
                 Icon(
                     painter = painterResource(id = R.drawable.ic_computer_24dp),
-                    contentDescription = "PCページ",
+                    contentDescription = null,
                 )
             },
             trailingIcon = {
@@ -170,7 +170,7 @@ internal fun ToolbarMenu(
             leadingIcon = {
                 Icon(
                     painter = painterResource(id = R.drawable.ic_article_24dp),
-                    contentDescription = "シンプル表示",
+                    contentDescription = null,
                 )
             },
             trailingIcon = {
@@ -192,7 +192,7 @@ internal fun ToolbarMenu(
                 leadingIcon = {
                     Icon(
                         painter = painterResource(id = R.drawable.ic_extension_24dp),
-                        contentDescription = "拡張機能をインストール",
+                        contentDescription = null,
                     )
                 },
                 onClick = {
@@ -208,7 +208,7 @@ internal fun ToolbarMenu(
             leadingIcon = {
                 Icon(
                     painter = painterResource(id = R.drawable.ic_translate_24dp),
-                    contentDescription = "翻訳",
+                    contentDescription = null,
                 )
             },
             onClick = {
@@ -223,7 +223,7 @@ internal fun ToolbarMenu(
             leadingIcon = {
                 Icon(
                     painter = painterResource(id = R.drawable.ic_share_24dp),
-                    contentDescription = "共有",
+                    contentDescription = null,
                 )
             },
             onClick = {
@@ -238,7 +238,7 @@ internal fun ToolbarMenu(
             leadingIcon = {
                 Icon(
                     painter = painterResource(id = R.drawable.ic_add_to_home_screen_24dp),
-                    contentDescription = "ホームに追加",
+                    contentDescription = null,
                 )
             },
             onClick = {
@@ -253,7 +253,7 @@ internal fun ToolbarMenu(
             leadingIcon = {
                 Icon(
                     painter = painterResource(id = R.drawable.ic_search_24dp),
-                    contentDescription = "ページ内検索",
+                    contentDescription = null,
                 )
             },
             onClick = {
@@ -268,7 +268,7 @@ internal fun ToolbarMenu(
             leadingIcon = {
                 Icon(
                     painter = painterResource(id = R.drawable.ic_settings_24dp),
-                    contentDescription = "設定",
+                    contentDescription = null,
                 )
             },
             onClick = {
