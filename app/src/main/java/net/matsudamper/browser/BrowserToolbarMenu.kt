@@ -45,6 +45,7 @@ internal fun ToolbarMenu(
     onPageZoomIn: () -> Unit,
     onPageZoomOut: () -> Unit,
     onResetPageZoom: () -> Unit,
+    onShowTabHistory: () -> Unit,
 ) {
     DropdownMenu(
         expanded = visibleMenu,
@@ -259,6 +260,21 @@ internal fun ToolbarMenu(
             onClick = {
                 onDismissRequest()
                 onFindInPage()
+            },
+        )
+        DropdownMenuItem(
+            text = {
+                Text(text = "タブの履歴")
+            },
+            leadingIcon = {
+                Icon(
+                    painter = painterResource(id = R.drawable.ic_arrow_back_24dp),
+                    contentDescription = null,
+                )
+            },
+            onClick = {
+                onDismissRequest()
+                onShowTabHistory()
             },
         )
         DropdownMenuItem(

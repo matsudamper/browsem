@@ -228,6 +228,7 @@ internal fun GeckoBrowserTab(
         session.progressDelegate = delegates.progressDelegate
         session.translationsSessionDelegate = delegates.translationsDelegate
         session.scrollDelegate = delegates.scrollDelegate
+        session.historyDelegate = delegates.historyDelegate
         session.promptDelegate = promptDelegate
         // MediaSession の初回イベントを取りこぼさないよう、ページ読み込み前に delegate を設定する。
         session.mediaSessionDelegate = mediaSessionDelegate
@@ -241,6 +242,7 @@ internal fun GeckoBrowserTab(
             session.progressDelegate = null
             session.translationsSessionDelegate = null
             session.scrollDelegate = null
+            session.historyDelegate = null
             session.promptDelegate = null
             if (session.mediaSessionDelegate === mediaSessionDelegate) {
                 session.mediaSessionDelegate = null
@@ -446,6 +448,7 @@ internal fun GeckoBrowserTab(
                         addToHomeFavicon = browserTab.faviconBitmap
                         showAddToHomeScreenDialog = true
                     },
+                    onShowTabHistory = state::openTabHistory,
                 )
             }
             // 翻訳元・翻訳先の選択肢：検出済み言語＋英語＋日本語（重複除去）
@@ -537,6 +540,16 @@ internal fun GeckoBrowserTab(
             title = addToHomeTitle,
             favicon = addToHomeFavicon,
             onDismiss = { showAddToHomeScreenDialog = false },
+        )
+    }
+
+    // タブ内履歴シート
+    if (state.showTabHistory) {
+        TabHistorySheet(
+            historyItems = state.tabHistory,
+            currentIndex = state.tabHistoryCurrentIndex,
+            onNavigateTo = state::navigateToHistoryIndex,
+            onDismiss = state::closeTabHistory,
         )
     }
 

@@ -83,6 +83,7 @@ internal fun BrowserToolBar(
     onPageZoomOut: () -> Unit,
     onResetPageZoom: () -> Unit,
     toolbarColor: Color?,
+    onShowTabHistory: () -> Unit = {},
     onHorizontalDrag: (Float) -> Unit = {},
     onHorizontalDragEnd: () -> Unit = {},
 ) {
@@ -138,6 +139,7 @@ internal fun BrowserToolBar(
                 onPageZoomIn = onPageZoomIn,
                 onPageZoomOut = onPageZoomOut,
                 onResetPageZoom = onResetPageZoom,
+                onShowTabHistory = onShowTabHistory,
             )
         }
     )

@@ -10,6 +10,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -24,6 +25,7 @@ import java.net.URL
 import net.matsudamper.browser.data.TranslationProvider
 import net.matsudamper.browser.ReadabilityArticle
 import net.matsudamper.browser.ReadabilityWebExtension
+import net.matsudamper.browser.TabHistoryEntry
 import org.koin.compose.koinInject
 import org.mozilla.geckoview.AllowOrDeny
 import org.mozilla.geckoview.GeckoResult
@@ -128,6 +130,11 @@ internal class BrowserTabScreenState(
     var findQuery by mutableStateOf("")
     var findMatchCurrent by mutableIntStateOf(0)
     var findMatchTotal by mutableIntStateOf(0)
+
+    // --- タブ内履歴状態 ---
+    val tabHistory = mutableStateListOf<TabHistoryEntry>()
+    var tabHistoryCurrentIndex by mutableIntStateOf(-1)
+    var showTabHistory by mutableStateOf(false)
 
     // --- Context menu state ---
     var imageContextMenuUrl by mutableStateOf<String?>(null)
@@ -461,6 +468,19 @@ internal class BrowserTabScreenState(
         simpleViewArticle = null
     }
 
+    fun openTabHistory() {
+        showTabHistory = true
+    }
+
+    fun closeTabHistory() {
+        showTabHistory = false
+    }
+
+    fun navigateToHistoryIndex(index: Int) {
+        showTabHistory = false
+        session.gotoHistoryIndex(index)
+    }
+
     fun copyCurrentPageUrl() {
         if (currentPageUrl.isBlank()) return
         copyUrlToClipboard(currentPageUrl)
@@ -694,6 +714,12 @@ internal class BrowserTabScreenState(
 
     override fun onScrollChanged(scrollY: Int) {
         this.scrollY = scrollY
+    }
+
+    override fun onHistoryStateChange(historyItems: List<TabHistoryEntry>, currentIndex: Int) {
+        tabHistory.clear()
+        tabHistory.addAll(historyItems)
+        tabHistoryCurrentIndex = currentIndex
     }
 
     private fun maybeResetToolbarColor(fromUrl: String, toUrl: String) {
