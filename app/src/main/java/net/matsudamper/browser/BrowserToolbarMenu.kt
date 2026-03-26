@@ -66,7 +66,7 @@ internal fun ToolbarMenu(
                 ) {
                     Icon(
                         painter = painterResource(R.drawable.ic_arrow_forward_24dp),
-                        contentDescription = "進む",
+                        contentDescription = null,
                     )
                 }
                 Text(
@@ -83,7 +83,7 @@ internal fun ToolbarMenu(
                 ) {
                     Icon(
                         painter = painterResource(R.drawable.ic_home_24dp),
-                        contentDescription = "ホーム",
+                        contentDescription = null,
                     )
                 }
                 Text(
@@ -100,7 +100,7 @@ internal fun ToolbarMenu(
                 ) {
                     Icon(
                         painter = painterResource(R.drawable.ic_refresh_24dp),
-                        contentDescription = "更新",
+                        contentDescription = null,
                     )
                 }
                 Text(
@@ -152,6 +152,12 @@ internal fun ToolbarMenu(
         DropdownMenuItem(
             text = { Text(text = "PCページ") },
             leadingIcon = {
+                Icon(
+                    painter = painterResource(id = R.drawable.ic_computer_24dp),
+                    contentDescription = null,
+                )
+            },
+            trailingIcon = {
                 Checkbox(
                     checked = isPcMode,
                     onCheckedChange = null,
@@ -162,6 +168,12 @@ internal fun ToolbarMenu(
         DropdownMenuItem(
             text = { Text(text = "シンプル表示") },
             leadingIcon = {
+                Icon(
+                    painter = painterResource(id = R.drawable.ic_article_24dp),
+                    contentDescription = null,
+                )
+            },
+            trailingIcon = {
                 Checkbox(
                     checked = isSimpleView,
                     onCheckedChange = null,
@@ -177,6 +189,12 @@ internal fun ToolbarMenu(
                 text = {
                     Text(text = "拡張機能をインストール")
                 },
+                leadingIcon = {
+                    Icon(
+                        painter = painterResource(id = R.drawable.ic_extension_24dp),
+                        contentDescription = null,
+                    )
+                },
                 onClick = {
                     onDismissRequest()
                     onInstallExtension()
@@ -187,6 +205,12 @@ internal fun ToolbarMenu(
             text = {
                 Text(text = "翻訳")
             },
+            leadingIcon = {
+                Icon(
+                    painter = painterResource(id = R.drawable.ic_translate_24dp),
+                    contentDescription = null,
+                )
+            },
             onClick = {
                 onDismissRequest()
                 onTranslatePage()
@@ -195,6 +219,12 @@ internal fun ToolbarMenu(
         DropdownMenuItem(
             text = {
                 Text(text = "共有")
+            },
+            leadingIcon = {
+                Icon(
+                    painter = painterResource(id = R.drawable.ic_share_24dp),
+                    contentDescription = null,
+                )
             },
             onClick = {
                 onDismissRequest()
@@ -205,6 +235,12 @@ internal fun ToolbarMenu(
             text = {
                 Text(text = "ホームに追加")
             },
+            leadingIcon = {
+                Icon(
+                    painter = painterResource(id = R.drawable.ic_add_to_home_screen_24dp),
+                    contentDescription = null,
+                )
+            },
             onClick = {
                 onDismissRequest()
                 onAddToHomeScreen()
@@ -214,6 +250,12 @@ internal fun ToolbarMenu(
             text = {
                 Text(text = "ページ内検索")
             },
+            leadingIcon = {
+                Icon(
+                    painter = painterResource(id = R.drawable.ic_search_24dp),
+                    contentDescription = null,
+                )
+            },
             onClick = {
                 onDismissRequest()
                 onFindInPage()
@@ -222,6 +264,12 @@ internal fun ToolbarMenu(
         DropdownMenuItem(
             text = {
                 Text(text = "設定")
+            },
+            leadingIcon = {
+                Icon(
+                    painter = painterResource(id = R.drawable.ic_settings_24dp),
+                    contentDescription = null,
+                )
             },
             onClick = {
                 onDismissRequest()
