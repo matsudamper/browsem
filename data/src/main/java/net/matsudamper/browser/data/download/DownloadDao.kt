@@ -23,6 +23,9 @@ interface DownloadDao {
     @Query("UPDATE download SET status = :status WHERE workerId = :workerId")
     suspend fun updateStatus(workerId: String, status: String)
 
+    @Query("UPDATE download SET status = 'FAILED' WHERE workerId = :workerId")
+    suspend fun updateFailed(workerId: String)
+
     /** SUCCEEDED/FAILED 以外の状態のときのみキャンセルする。完了済みの上書きを防ぐ */
     @Query("UPDATE download SET status = 'CANCELLED' WHERE workerId = :workerId AND status NOT IN ('SUCCEEDED', 'FAILED', 'CANCELLED')")
     suspend fun cancelIfActive(workerId: String)
@@ -48,4 +51,7 @@ interface DownloadDao {
 
     @Query("SELECT * FROM download ORDER BY enqueuedAt DESC")
     fun observeAll(): Flow<List<DownloadEntity>>
+
+    @Query("SELECT * FROM download WHERE workerId = :workerId")
+    suspend fun get(workerId: String): DownloadEntity
 }
