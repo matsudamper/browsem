@@ -117,8 +117,12 @@ class TabGroupSwipeNavigationTest {
             waitForBrowserScreen()
         }
 
-        group("ローカル HTML を読み込む") {
-            val activeTab = getCurrentActiveTab(browserSessionController)
+        // グループ 0 に追加したタブの ID を記録
+        val activeTab = getCurrentActiveTab(browserSessionController)
+        val openerTabId = activeTab.tabId
+        val tabCountBefore = browserSessionController.tabs.size
+
+        group("ローカル HTML を読み込む（ページ内 JS が自動で target=_blank リンクをクリックする）") {
             val localPageUri = prepareLocalNewTabLinkPageUri()
             composeRule.runOnIdle {
                 activeTab.session.loadUri(localPageUri)
@@ -126,36 +130,25 @@ class TabGroupSwipeNavigationTest {
             waitForActiveTabUrl(timeoutMillis = 60_000, activeTab = activeTab) { currentUrl ->
                 currentUrl.startsWith("file:") && currentUrl.contains(INDEX_FILE_NAME)
             }
-            // グループ 0 に追加したタブの ID を記録
-            val openerTabId = activeTab.tabId
-            val tabCountBefore = browserSessionController.tabs.size
+        }
 
-            // リンクをクリックする（target="_blank"）
-            composeRule.runOnIdle {
-                activeTab.session.loadUri(
-                    "javascript:void(document.getElementById('newTabLink').click())"
-                )
-            }
-
-            // ここで失敗している
-            group("新しいタブが作成されるまで待つ") {
-                composeRule.waitUntil(timeoutMillis = 30_000) {
-                    var result = false
-                    composeRule.runOnIdle {
-                        result = browserSessionController.tabs.size > tabCountBefore
-                    }
-                    result
+        group("ページ内 JS による target=_blank クリックで新しいタブが作成されるまで待つ") {
+            composeRule.waitUntil(timeoutMillis = 30_000) {
+                var result = false
+                composeRule.runOnIdle {
+                    result = browserSessionController.tabs.size > tabCountBefore
                 }
+                result
             }
+        }
 
-            group("新しいタブに遷移するまで待つ") {
-                composeRule.waitUntil(timeoutMillis = 10_000) {
-                    var result = false
-                    composeRule.runOnIdle {
-                        result = browserSessionController.selectedTabId != openerTabId
-                    }
-                    result
+        group("新しいタブに遷移するまで待つ") {
+            composeRule.waitUntil(timeoutMillis = 10_000) {
+                var result = false
+                composeRule.runOnIdle {
+                    result = browserSessionController.selectedTabId != openerTabId
                 }
+                result
             }
         }
 

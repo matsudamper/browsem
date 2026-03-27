@@ -3,5 +3,11 @@
 <head><title>New Tab Link Test</title></head>
 <body>
 <a id="newTabLink" href="target.html" target="_blank">Open in new tab</a>
+<script>
+// ページ読み込み後にリンクを自動クリックして target="_blank" で新しいタブを開く
+setTimeout(function() {
+    document.getElementById('newTabLink').click();
+}, 500);
+</script>
 </body>
 </html>
