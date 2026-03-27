@@ -49,7 +49,7 @@ class TabGroupSwipeNavigationTest {
         }
 
         group("新しいタブグループを作るボタンを押す") {
-            composeRule.waitUntil(timeoutMillis = 10_000) {
+            composeRule.waitUntil(timeoutMillis = 10.seconds.inWholeMilliseconds) {
                 composeRule.onNode(hasTestTag(TabsScreenTestTags.AddTabGroupButton.testTag))
                     .isDisplayed()
             }
@@ -58,7 +58,7 @@ class TabGroupSwipeNavigationTest {
             composeRule.waitForIdle()
 
             // タブグループ 1 が表示されていることを確認する
-            composeRule.waitUntil(timeoutMillis = 10_000) {
+            composeRule.waitUntil(timeoutMillis = 10.seconds.inWholeMilliseconds) {
                 runCatching {
                     composeRule.onNode(
                         hasTestTag(TabsScreenTestTags.TabGroupTopButton(1).testTag)
@@ -69,7 +69,7 @@ class TabGroupSwipeNavigationTest {
         }
 
         group("グループ 1 のデフォルトスイッチを ON にする") {
-            composeRule.waitUntil(timeoutMillis = 10_000) {
+            composeRule.waitUntil(timeoutMillis = 10.seconds.inWholeMilliseconds) {
                 composeRule.onAllNodes(hasTestTag(TabsScreenTestTags.DefaultGroupSwitch(1).testTag))
                     .fetchSemanticsNodes().isNotEmpty()
             }
@@ -92,7 +92,7 @@ class TabGroupSwipeNavigationTest {
             waitForTabsScreen()
 
             // タブグループ 1 が表示されていることを確認する
-            composeRule.waitUntil(timeoutMillis = 10_000) {
+            composeRule.waitUntil(timeoutMillis = 10.seconds.inWholeMilliseconds) {
                 runCatching {
                     composeRule.onNode(
                         hasTestTag(TabsScreenTestTags.TabGroupTopButton(1).testTag)
@@ -109,7 +109,7 @@ class TabGroupSwipeNavigationTest {
             composeRule.waitForIdle()
 
             // タブグループ 0 が表示されていることを確認する
-            composeRule.waitUntil(timeoutMillis = 10_000) {
+            composeRule.waitUntil(timeoutMillis = 10.seconds.inWholeMilliseconds) {
                 runCatching {
                     composeRule.onNode(
                         hasTestTag(TabsScreenTestTags.TabGroupTopButton(0).testTag)
@@ -184,7 +184,7 @@ class TabGroupSwipeNavigationTest {
         }
 
         group("target=\"_blank\" で開いたタブ (\"Target Page\") がグループ 0 に表示されていることを確認する") {
-            composeRule.waitUntil(timeoutMillis = 10_000) {
+            composeRule.waitUntil(timeoutMillis = 10.seconds.inWholeMilliseconds) {
                 composeRule.onAllNodesWithText("Target Page")
                     .fetchSemanticsNodes().isNotEmpty()
             }
