@@ -26,20 +26,16 @@ import kotlin.time.Duration.Companion.seconds
 /**
  * target="_blank" で開いたタブの URL バースワイプ前後タブが、
  * オープナーと同じグループ内のタブになることを検証する。
- *
- * バグ: タブグループ 0 のタブから target="_blank" で開いた子タブが
- * グループに割り当てられず、orderedTabs の末尾（ungrouped）に配置される。
- * そのため URL バーの左スワイプがグループ 1 のタブに遷移してしまう。
  */
 @RunWith(AndroidJUnit4::class)
-class TabGroupSwipeNavigationTest {
+class AboutBlankNewTabLocationTest {
     @get:Rule
     val composeRule = createAndroidComposeRule<MainActivity>()
 
     private val userDebug = false
 
     @Test
-    fun targetBlankTabShouldHavePrevTabFromSameGroup() {
+    fun test() {
         val browserSessionController = waitForBrowserSessionController()
         waitForActiveTab(browserSessionController)
 
