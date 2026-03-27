@@ -16,7 +16,7 @@ import net.matsudamper.browser.data.TranslationProvider
 import net.matsudamper.browser.data.history.HistoryRepository
 import net.matsudamper.browser.data.websuggestion.WebSuggestionRepository
 import net.matsudamper.browser.media.MediaWebExtension
-import net.matsudamper.browser.screen.browser.BrowserScreenViewModel
+import net.matsudamper.browser.screen.browser.WebAppScreenViewModel
 import org.mozilla.geckoview.GeckoResult
 
 @Composable
@@ -35,7 +35,7 @@ internal fun WebAppScreen(
     onRequestDownloadNotificationPermission: () -> Unit,
 ) {
     val viewModel = viewModel(initializer = {
-        BrowserScreenViewModel(
+        WebAppScreenViewModel(
             historyRepository = historyRepository,
             settingsRepository = settingsRepository,
             webSuggestionRepository = webSuggestionRepository,
