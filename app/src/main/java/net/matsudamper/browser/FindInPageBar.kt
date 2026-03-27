@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
@@ -41,7 +42,11 @@ internal fun FindInPageBar(
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+            // ステータスバー領域の高さ分だけコンテンツを下に押し出す。
+            // Surface の背景色はステータスバー領域まで延びて塗りつぶされる。
+            modifier = Modifier
+                .statusBarsPadding()
+                .padding(horizontal = 8.dp, vertical = 4.dp),
         ) {
             BasicTextField(
                 value = query,
