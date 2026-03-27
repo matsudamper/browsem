@@ -6,7 +6,9 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.isDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
 import androidx.lifecycle.ViewModelProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -114,10 +116,9 @@ class TabGroupSwipeNavigationTest {
 
         // グループ 0 に追加したタブの ID を記録
         val activeTab = getCurrentActiveTab(browserSessionController)
-        val openerTabId = activeTab.tabId
         val tabCountBefore = browserSessionController.tabs.size
 
-        group("ローカル HTML を読み込む（ページ内 JS が自動で target=_blank リンクをクリックする）") {
+        group("ローカル HTML を読み込む") {
             val localPageUri = prepareLocalNewTabLinkPageUri()
             composeRule.runOnIdle {
                 activeTab.session.loadUri(localPageUri)
@@ -125,6 +126,11 @@ class TabGroupSwipeNavigationTest {
             waitForActiveTabUrl(timeoutMillis = 10_000, activeTab = activeTab) { currentUrl ->
                 currentUrl.startsWith("file:") && currentUrl.contains(INDEX_FILE_NAME)
             }
+        }
+
+        group("全面リンクをクリックして target=_blank で新しいタブを開く") {
+            composeRule.onNode(hasTestTag(GeckoBrowserTabTestTags.GeckoContainer.testTag))
+                .performTouchInput { click() }
 
             // 新しいタブに遷移するまで待つ
             composeRule.waitUntil(timeoutMillis = 10_000) {
