@@ -3,6 +3,7 @@ package net.matsudamper.browser
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasParent
 import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
@@ -119,7 +120,6 @@ class TabGroupSwipeNavigationTest {
 
         // グループ 0 に追加したタブの ID を記録
         val activeTab = getCurrentActiveTab(browserSessionController)
-        val tabCountBefore = browserSessionController.tabs.size
 
         group("ローカル HTML を読み込む") {
             val localPageUri = prepareLocalNewTabLinkPageUri()
@@ -135,13 +135,12 @@ class TabGroupSwipeNavigationTest {
             composeRule.onNode(hasTestTag(GeckoBrowserTabTestTags.GeckoContainer.testTag))
                 .performTouchInput { click() }
 
-            // 新しいタブに遷移するまで待つ
+            // 新しいタブの URL がURLバーに表示されるまで待つ
             composeRule.waitUntil(timeoutMillis = 10_000) {
-                var result = false
-                composeRule.runOnIdle {
-                    result = browserSessionController.tabs.size > tabCountBefore
-                }
-                result
+                composeRule.onAllNodes(
+                    hasTestTag(UrlTextInputTestTags.UrlBar.testTag)
+                        .and(hasText(TARGET_FILE_NAME, substring = true))
+                ).fetchSemanticsNodes().isNotEmpty()
             }
         }
 
