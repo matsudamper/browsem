@@ -34,10 +34,9 @@ import java.util.concurrent.ConcurrentHashMap
 
 @Stable
 class BrowserSessionController(
-    runtime: GeckoRuntime,
+    private val geckoRuntime: GeckoRuntime,
     private val tabRepository: TabRepository? = null,
 ) : TabStore {
-    private val geckoRuntime = runtime
     private val controllerScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val persistenceMutex = Mutex()
     private val pendingCreatedTabIds = ConcurrentHashMap.newKeySet<String>()
