@@ -40,7 +40,8 @@ class WebAppActivity : ComponentActivity() {
     private val historyRepository: HistoryRepository by inject()
     private val webSuggestionRepository: WebSuggestionRepository by inject()
 
-    private lateinit var runtimeCoordinator: BrowserRuntimeCoordinator
+    private lateinit var browserTabController: BrowserTabController
+    private lateinit var browserSessionLifecycleController: BrowserSessionLifecycleController
 
     private var pendingNotificationPermissionResult: GeckoResult<Int>? = null
 
@@ -63,12 +64,8 @@ class WebAppActivity : ComponentActivity() {
         runtime.settings.setExtensionsWebAPIEnabled(true)
 
         // 拡張機能は Koin の single で管理されるため、ここではセッション管理のみ担当する
-        runtimeCoordinator = BrowserRuntimeCoordinator(
-            runtime = runtime,
-            themeColorExtension = themeColorExtension,
-            mediaWebExtension = mediaWebExtension,
-            tabRepository = tabRepository,
-        )
+        browserTabController = BrowserTabController(tabRepository)
+        browserSessionLifecycleController = BrowserSessionLifecycleController(runtime)
 
         // 外部アプリから任意のURLが渡されないよう、http/https スキームのみ許可する
         val initialUrl = resolveInitialUrl()
@@ -77,7 +74,7 @@ class WebAppActivity : ComponentActivity() {
             val browserSettings = settings ?: return@setContent
 
             LaunchedEffect(browserSettings.enableThirdPartyCa) {
-                runtimeCoordinator.applyRuntimeSettings(browserSettings.enableThirdPartyCa)
+                runtime.settings.setEnterpriseRootsEnabled(browserSettings.enableThirdPartyCa)
             }
 
             BrowserTheme(themeMode = browserSettings.themeMode) {
@@ -86,13 +83,13 @@ class WebAppActivity : ComponentActivity() {
                     homepageUrl = browserSettings.resolvedHomepageUrl(),
                     searchTemplate = browserSettings.resolvedSearchTemplate(),
                     translationProvider = browserSettings.translationProvider,
-                    browserTabController = runtimeCoordinator.browserTabController,
-                    browserSessionLifecycleController = runtimeCoordinator.browserSessionLifecycleController,
+                    browserTabController = browserTabController,
+                    browserSessionLifecycleController = browserSessionLifecycleController,
                     settingsRepository = settingsRepository,
                     historyRepository = historyRepository,
                     webSuggestionRepository = webSuggestionRepository,
-                    themeColorExtension = runtimeCoordinator.themeColorExtension,
-                    mediaWebExtension = runtimeCoordinator.mediaWebExtension,
+                    themeColorExtension = themeColorExtension,
+                    mediaWebExtension = mediaWebExtension,
                     onDesktopNotificationPermissionRequest = { requestNotificationPermissionIfNeeded() },
                     onRequestDownloadNotificationPermission = { requestDownloadNotificationPermission() },
                 )
@@ -106,8 +103,8 @@ class WebAppActivity : ComponentActivity() {
         )
         pendingNotificationPermissionResult = null
         // セッションのみ閉じる。拡張機能はプロセススコープで管理されるため解放しない。
-        if (::runtimeCoordinator.isInitialized) {
-            runtimeCoordinator.close()
+        if (::browserTabController.isInitialized) {
+            browserTabController.close()
         }
         super.onDestroy()
     }

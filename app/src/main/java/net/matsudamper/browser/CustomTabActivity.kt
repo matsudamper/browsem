@@ -49,7 +49,8 @@ class CustomTabActivity : ComponentActivity() {
     private val historyRepository: HistoryRepository by inject()
     private val webSuggestionRepository: WebSuggestionRepository by inject()
 
-    private lateinit var runtimeCoordinator: BrowserRuntimeCoordinator
+    private lateinit var browserTabController: BrowserTabController
+    private lateinit var browserSessionLifecycleController: BrowserSessionLifecycleController
 
     private var pendingNotificationPermissionResult: GeckoResult<Int>? = null
 
@@ -73,12 +74,8 @@ class CustomTabActivity : ComponentActivity() {
         runtime.settings.setExtensionsWebAPIEnabled(true)
 
         // 拡張機能は Koin の single で管理されるため、ここではセッション管理のみ担当する
-        runtimeCoordinator = BrowserRuntimeCoordinator(
-            runtime = runtime,
-            themeColorExtension = themeColorExtension,
-            mediaWebExtension = mediaWebExtensionInstance,
-            tabRepository = tabRepository,
-        )
+        browserTabController = BrowserTabController(tabRepository)
+        browserSessionLifecycleController = BrowserSessionLifecycleController(runtime)
 
         val initialUrl = intent.dataString.orEmpty()
         val customTabsSessionToken = CustomTabsSessionToken.getSessionTokenFromIntent(intent)
@@ -87,7 +84,7 @@ class CustomTabActivity : ComponentActivity() {
             val browserSettings = settings ?: return@setContent
 
             LaunchedEffect(browserSettings.enableThirdPartyCa) {
-                runtimeCoordinator.applyRuntimeSettings(browserSettings.enableThirdPartyCa)
+                runtime.settings.setEnterpriseRootsEnabled(browserSettings.enableThirdPartyCa)
             }
 
             BrowserTheme(themeMode = browserSettings.themeMode) {
@@ -102,13 +99,13 @@ class CustomTabActivity : ComponentActivity() {
                     homepageUrl = browserSettings.resolvedHomepageUrl(),
                     searchTemplate = browserSettings.resolvedSearchTemplate(),
                     translationProvider = browserSettings.translationProvider,
-                    browserTabController = runtimeCoordinator.browserTabController,
-                    browserSessionLifecycleController = runtimeCoordinator.browserSessionLifecycleController,
+                    browserTabController = browserTabController,
+                    browserSessionLifecycleController = browserSessionLifecycleController,
                     settingsRepository = settingsRepository,
                     historyRepository = historyRepository,
                     webSuggestionRepository = webSuggestionRepository,
-                    themeColorExtension = runtimeCoordinator.themeColorExtension,
-                    mediaWebExtension = runtimeCoordinator.mediaWebExtension,
+                    themeColorExtension = themeColorExtension,
+                    mediaWebExtension = mediaWebExtensionInstance,
                     onClose = ::finish,
                     onOpenInBrowser = ::openInMainBrowser,
                     onDesktopNotificationPermissionRequest = { requestNotificationPermissionIfNeeded() },
@@ -124,8 +121,8 @@ class CustomTabActivity : ComponentActivity() {
             CancellationException("Activity was destroyed before notification permission completed.")
         )
         pendingNotificationPermissionResult = null
-        if (::runtimeCoordinator.isInitialized) {
-            runtimeCoordinator.close()
+        if (::browserTabController.isInitialized) {
+            browserTabController.close()
         }
         super.onDestroy()
     }

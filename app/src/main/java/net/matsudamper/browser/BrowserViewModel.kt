@@ -55,17 +55,8 @@ internal class BrowserViewModel(
     private val tabRepository: TabRepository,
     internal val historyRepository: net.matsudamper.browser.data.history.HistoryRepository,
 ) : ViewModel() {
-    private val runtimeCoordinator =
-        BrowserRuntimeCoordinator(runtime, themeColorExtension, mediaWebExtension, tabRepository)
-
-    val browserTabController: BrowserTabController
-        get() = runtimeCoordinator.browserTabController
-
-    val browserSessionLifecycleController: BrowserSessionLifecycleController
-        get() = runtimeCoordinator.browserSessionLifecycleController
-
-    val browserSessionController: BrowserSessionController
-        get() = runtimeCoordinator.browserSessionController
+    val browserTabController = BrowserTabController(tabRepository)
+    val browserSessionLifecycleController = BrowserSessionLifecycleController(runtime)
 
     // 構成変更を経ても破棄されないよう ViewModel で保持するセットアップ完了シグナル
     val setupComplete = CompletableDeferred<Unit>()
@@ -94,7 +85,7 @@ internal class BrowserViewModel(
                 .filterNotNull()
                 .distinctUntilChanged()
                 .collect { enableThirdPartyCa ->
-                    runtimeCoordinator.applyRuntimeSettings(enableThirdPartyCa)
+                    runtime.settings.setEnterpriseRootsEnabled(enableThirdPartyCa)
                 }
         }
     }
@@ -157,7 +148,7 @@ internal class BrowserViewModel(
 
     override fun onCleared() {
         super.onCleared()
-        runtimeCoordinator.close()
+        browserTabController.close()
     }
 }
 
