@@ -129,6 +129,8 @@ internal fun BrowserApp(
             // グループを確定させる。こうすることで TabsScreenViewModel のウォッチャーが発火した際に
             // このタブはすでに assignedTabIds に含まれ、アクティブグループへの上書きを防ぐ。
             val tabId = UUID.randomUUID().toString()
+            // デフォルトグループは外部アプリ（Intent）経由でURLを開いた場合にのみ適用する。
+            // タブ一覧での新規追加・履歴・拡張機能など、アプリ内操作には使用しない。
             val defaultGroupId = tabGroupRepository.getDefaultGroupId()
             if (defaultGroupId != null) {
                 tabGroupRepository.assignTabToGroup(tabId, defaultGroupId)
@@ -260,19 +262,17 @@ internal fun BrowserApp(
                             },
                             orderedTabs = orderedBrowserTabs,
                             onNewSessionTabCreated = { newTabId, openerTabId ->
-                                // オープナーと同じグループに即座に割り当てる。
-                                // デフォルトグループが設定されている場合はそちらを優先する。
+                                // target="_blank" で開いたタブはオープナーと同じグループに割り当てる。
+                                // デフォルトグループは外部 Intent 経由の場合にのみ適用するため、ここでは使用しない。
                                 scope.launch {
-                                    val defaultGroupId = tabGroupRepository.getDefaultGroupId()
                                     val openerGroupId = tabGroupRepository.observeTabGroupAssignments()
                                         .first()
                                         .find { it.tabId == openerTabId }
                                         ?.groupId
                                         ?.takeIf { it.isNotEmpty() }
                                         ?.let { TabGroupId(it) }
-                                    val assignGroupId = defaultGroupId ?: openerGroupId
-                                    if (assignGroupId != null) {
-                                        tabGroupRepository.assignTabToGroup(newTabId, assignGroupId)
+                                    if (openerGroupId != null) {
+                                        tabGroupRepository.assignTabToGroup(newTabId, openerGroupId)
                                     }
                                 }
                             },
@@ -304,10 +304,6 @@ internal fun BrowserApp(
                             onNavigateToUrl = { url ->
                                 scope.launch {
                                     val tabId = UUID.randomUUID().toString()
-                                    val defaultGroupId = tabGroupRepository.getDefaultGroupId()
-                                    if (defaultGroupId != null) {
-                                        tabGroupRepository.assignTabToGroup(tabId, defaultGroupId)
-                                    }
                                     withContext(Dispatchers.Main) {
                                         browserSessionController.createAndAppendTab(
                                             tabId = tabId,
@@ -331,10 +327,6 @@ internal fun BrowserApp(
                             onOpenExtensionSettings = { optionsPageUrl ->
                                 scope.launch {
                                     val tabId = UUID.randomUUID().toString()
-                                    val defaultGroupId = tabGroupRepository.getDefaultGroupId()
-                                    if (defaultGroupId != null) {
-                                        tabGroupRepository.assignTabToGroup(tabId, defaultGroupId)
-                                    }
                                     withContext(Dispatchers.Main) {
                                         browserSessionController.createAndAppendTab(
                                             tabId = tabId,
@@ -383,10 +375,6 @@ internal fun BrowserApp(
                                 if (browserSessionController.tabs.isEmpty()) {
                                     scope.launch {
                                         val newTabId = UUID.randomUUID().toString()
-                                        val defaultGroupId = tabGroupRepository.getDefaultGroupId()
-                                        if (defaultGroupId != null) {
-                                            tabGroupRepository.assignTabToGroup(newTabId, defaultGroupId)
-                                        }
                                         withContext(Dispatchers.Main) {
                                             browserSessionController.createAndAppendTab(
                                                 tabId = newTabId,
@@ -398,17 +386,13 @@ internal fun BrowserApp(
                                 }
                             },
                             onOpenNewTab = { currentGroupId: TabGroupId? ->
-                                // デフォルトグループが設定されている場合はそちらを優先し、
-                                // 未設定の場合は現在表示中のグループに割り当てる。
-                                // いずれの場合もタブ作成前に割り当てを確定させ、
-                                // selectTab 後の ViewModel 破棄で未割当モニターがキャンセルされても
-                                // 次回タブ画面を開いたときに正しいグループが復元されるようにする。
+                                // タブ一覧画面からの新規タブ追加。現在表示中のグループに割り当てる。
+                                // タブ作成前に割り当てを確定させ、selectTab 後の ViewModel 破棄で
+                                // 未割当モニターがキャンセルされても正しいグループが復元されるようにする。
                                 scope.launch {
                                     val tabId = UUID.randomUUID().toString()
-                                    val defaultGroupId = tabGroupRepository.getDefaultGroupId()
-                                    val assignGroupId = defaultGroupId ?: currentGroupId
-                                    if (assignGroupId != null) {
-                                        tabGroupRepository.assignTabToGroup(tabId, assignGroupId)
+                                    if (currentGroupId != null) {
+                                        tabGroupRepository.assignTabToGroup(tabId, currentGroupId)
                                     }
                                     // GeckoSession の生成は UI スレッドで行う必要がある
                                     withContext(Dispatchers.Main) {

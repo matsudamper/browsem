@@ -357,6 +357,8 @@ private fun TabsScreenLoadedContent(
                                 text = "デフォルト",
                                 style = MaterialTheme.typography.labelMedium,
                             )
+                            // 外部アプリ（Intent）経由でURLを開いた際に割り当てるグループを指定する。
+                            // タブ一覧での新規追加・target=_blank など、アプリ内操作には適用されない。
                             Switch(
                                 checked = groups.getOrNull(page)?.isDefault ?: false,
                                 onCheckedChange = { onToggleDefaultGroup(page) },
