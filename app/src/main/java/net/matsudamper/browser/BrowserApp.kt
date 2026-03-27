@@ -226,7 +226,7 @@ internal fun BrowserApp(
                                 .map { browserTabController.tabs.toList() }
                                 .distinctUntilChanged()
                         }
-                        val browserScreenViewModel = remember(viewModel, key.tabId, tabGroupRepository, browserTabsFlow) {
+                        val browserScreenViewModel = remember(tabGroupRepository, browserTabsFlow) {
                             BrowserScreenViewModel(
                                 historyRepository = historyRepository,
                                 settingsRepository = settingsRepository,
