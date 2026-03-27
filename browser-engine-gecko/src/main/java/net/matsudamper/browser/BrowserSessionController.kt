@@ -648,6 +648,13 @@ class BrowserTabController(
 class BrowserSessionLifecycleController(
     private val geckoRuntime: GeckoRuntime,
 ) {
+    /**
+     * タブを前面表示して利用可能にする直前に呼ぶ。
+     *
+     * 主な利用タイミング:
+     * - タブ切り替えで対象タブを表示するとき
+     * - 画面再表示で現在タブを再アタッチするとき
+     */
     fun restoreSession(tab: BrowserTab) {
         if (tab.session.isOpen) {
             val url = tab.pendingInitialUrl
