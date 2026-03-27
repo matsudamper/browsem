@@ -171,7 +171,6 @@ class TabGroupSwipeNavigationTest {
             }
         }
 
-
         group("target=\"_blank\" で開いたタブ (\"Target Page\") がグループ 0 に表示されていることを確認する") {
             composeRule.waitUntil(timeoutMillis = 10_000) {
                 composeRule.onAllNodesWithText("Target Page")
