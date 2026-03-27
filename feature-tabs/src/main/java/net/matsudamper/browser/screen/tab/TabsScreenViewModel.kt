@@ -126,7 +126,6 @@ class TabsScreenViewModel(
     }
 
     init {
-        // 外部フローを ViewModelState に反映する
         viewModelScope.launch {
             tabGroupRepository.observeGroups().collect { dbGroups ->
                 viewModelStateFlow.update { it.copy(dbGroups = dbGroups) }
