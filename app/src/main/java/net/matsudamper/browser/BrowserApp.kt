@@ -76,11 +76,9 @@ internal fun BrowserApp(
     onDesktopNotificationPermissionRequest: () -> GeckoResult<Int>,
     onRequestDownloadNotificationPermission: () -> Unit,
 ) {
-    val currentSettings by viewModel.settingsUiState.collectAsState()
-    val settingsUiState = currentSettings ?: return
+    val currentUiState by viewModel.uiState.collectAsState()
+    val uiState = currentUiState ?: return
 
-    val homepageUrl = settingsUiState.homepageUrl
-    val searchTemplate = settingsUiState.searchTemplate
     val browserTabController = viewModel.browserTabController
     val browserSessionLifecycleController = viewModel.browserSessionLifecycleController
     val themeColorExtension = viewModel.themeColorExtension
@@ -92,10 +90,6 @@ internal fun BrowserApp(
     val historyRepository: HistoryRepository = koinInject()
     val webSuggestionRepository: WebSuggestionRepository = koinInject()
     val tabGroupRepository: TabGroupRepository = koinInject()
-
-    LaunchedEffect(settingsUiState.enableThirdPartyCa) {
-        viewModel.applyRuntimeSettings()
-    }
 
     val backStack = rememberNavBackStack(AppDestination.Setup)
     val navController = remember(backStack) { NavController(backStack = backStack) }
@@ -166,12 +160,12 @@ internal fun BrowserApp(
     BackHandler(enabled = !navController.isLastBackHandled && currentExternalTabId != null) {
         val tabId = currentExternalTabId ?: return@BackHandler
         scope.launch {
-            viewModel.closeTabAndSaveImmediately(tabId, homepageUrl)
+            viewModel.closeTabAndSaveImmediately(tabId)
             (context as ComponentActivity).finish()
         }
     }
 
-    BrowserTheme(themeMode = settingsUiState.themeMode) {
+    BrowserTheme(themeMode = uiState.themeMode) {
         NavDisplay(
             backStack = backStack,
             onBack = { navController.back() },
@@ -242,14 +236,14 @@ internal fun BrowserApp(
                         }
                         BrowserScreen(
                             key = key,
-                            homepageUrl = homepageUrl,
-                            searchTemplate = searchTemplate,
+                            homepageUrl = uiState.homepageUrl,
+                            searchTemplate = uiState.searchTemplate,
                             backStack = backStack,
                             browserTabController = browserTabController,
                             browserSessionLifecycleController = browserSessionLifecycleController,
                             viewModel = browserScreenViewModel,
                             navController = navController,
-                            translationProvider = settingsUiState.translationProvider,
+                            translationProvider = uiState.translationProvider,
                             themeColorExtension = themeColorExtension,
                             mediaWebExtension = mediaWebExtension,
                             onInstallExtensionRequest = onInstallExtensionRequest,
@@ -371,14 +365,10 @@ internal fun BrowserApp(
                                 val nextSelectedTabId = browserTabController.closeTab(tabId)
                                 if (nextSelectedTabId == null) {
                                     scope.launch {
-                                        val newTabId = UUID.randomUUID().toString()
-                                        withContext(Dispatchers.Main) {
-                                            browserTabController.createAndAppendTab(
-                                                tabId = newTabId,
-                                                initialUrl = homepageUrl,
-                                            )
-                                            selectTab(newTabId, null)
-                                        }
+                                        val newTab = viewModel.createTabWithHomepage(
+                                            tabId = UUID.randomUUID().toString(),
+                                        )
+                                        selectTab(newTab.tabId, null)
                                     }
                                 }
                             },
@@ -391,14 +381,8 @@ internal fun BrowserApp(
                                     if (currentGroupId != null) {
                                         tabGroupRepository.assignTabToGroup(tabId, currentGroupId)
                                     }
-                                    // GeckoSession の生成は UI スレッドで行う必要がある
-                                    withContext(Dispatchers.Main) {
-                                        val newTab = browserTabController.createAndAppendTab(
-                                            tabId = tabId,
-                                            initialUrl = homepageUrl,
-                                        )
-                                        selectTab(newTab.tabId, null)
-                                    }
+                                    val newTab = viewModel.createTabWithHomepage(tabId = tabId)
+                                    selectTab(newTab.tabId, null)
                                 }
                             },
                             modifier = Modifier

@@ -127,6 +127,24 @@ class SettingsRepository(context: Context) {
     }
 }
 
+data class ResolvedBrowserSettings(
+    val homepageUrl: String,
+    val searchTemplate: String,
+    val translationProvider: TranslationProvider,
+    val enableThirdPartyCa: Boolean,
+    val themeMode: ThemeMode,
+    val notificationAllowedOrigins: List<String>,
+)
+
+fun BrowserSettings.resolvedBrowserSettings(): ResolvedBrowserSettings = ResolvedBrowserSettings(
+    homepageUrl = resolvedHomepageUrl(),
+    searchTemplate = resolvedSearchTemplate(),
+    translationProvider = translationProvider,
+    enableThirdPartyCa = enableThirdPartyCa,
+    themeMode = themeMode,
+    notificationAllowedOrigins = notificationAllowedOriginsList,
+)
+
 fun BrowserSettings.resolvedHomepageUrl(): String = when (homepageType) {
     HomepageType.HOMEPAGE_DUCKDUCKGO -> "https://duckduckgo.com"
     HomepageType.HOMEPAGE_CUSTOM -> customHomepageUrl.ifBlank { "https://www.google.com" }
