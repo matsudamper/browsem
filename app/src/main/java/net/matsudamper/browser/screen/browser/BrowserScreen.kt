@@ -63,13 +63,12 @@ internal fun BrowserScreen(
     handleNotificationPermission: (uri: String) -> GeckoResult<Int>,
     onRequestDownloadNotificationPermission: () -> Unit,
     onSelectTab: (tabId: String, beforeTab: AppDestination.Browser?) -> Unit,
-    /** グループ順に並べたタブリスト。アドレスバースワイプ時の前後タブ判定に使用する。 */
-    orderedTabs: List<BrowserTab>,
     /** target="_blank" 等でタブが新規作成された際に呼ばれる。グループ割り当てに使用する。 */
     onNewSessionTabCreated: (newTabId: String, openerTabId: String) -> Unit,
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val tabs = browserSessionController.tabs
+    val orderedTabs = uiState.orderedBrowserTabs
 
     val selectedTab = tabs.firstOrNull { it.tabId == key.tabId }
     LaunchedEffect(key.tabId, homepageUrl, selectedTab) {

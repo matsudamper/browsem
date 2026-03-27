@@ -24,6 +24,7 @@ kotlin {
 
 dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.ktx)
+    implementation(project(":browser-engine-gecko"))
     implementation(project(":data"))
     testImplementation(libs.junit4)
 }

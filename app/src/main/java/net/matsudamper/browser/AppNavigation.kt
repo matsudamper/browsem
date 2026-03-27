@@ -22,6 +22,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateSetOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntOffset
@@ -36,13 +37,13 @@ import androidx.navigation3.ui.defaultPopTransitionSpec
 import androidx.navigation3.ui.defaultTransitionSpec
 import java.util.UUID
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import net.matsudamper.browser.BrowserTab
 import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.TabGroupId
 import net.matsudamper.browser.data.TabGroupRepository
@@ -219,29 +220,22 @@ internal fun BrowserApp(
                     }
 
                     is AppDestination.Browser -> navEntry(key) {
-                        val browserScreenViewModel = remember(viewModel, key.tabId) {
+                        val browserTabsFlow = remember(browserSessionController) {
+                            snapshotFlow { browserSessionController.tabs.toList() }
+                                .distinctUntilChanged()
+                        }
+                        val browserScreenViewModel = remember(viewModel, key.tabId, tabGroupRepository, browserTabsFlow) {
                             BrowserScreenViewModel(
                                 historyRepository = historyRepository,
                                 settingsRepository = settingsRepository,
                                 webSuggestionRepository = webSuggestionRepository,
+                                tabGroupRepository = tabGroupRepository,
+                                browserTabsFlow = browserTabsFlow,
                             )
                         }
                         // タブが閉じられた際にコルーチンスコープをキャンセルしてリークを防ぐ
                         DisposableEffect(key.tabId) {
                             onDispose { browserScreenViewModel.close() }
-                        }
-                        // グループ表示順のタブリストを構築する（アドレスバースワイプ時の前後タブ判定に使用）
-                        val tabGroups by tabGroupRepository.observeGroups().collectAsState(emptyList())
-                        val tabGroupAssignments by tabGroupRepository.observeTabGroupAssignments().collectAsState(emptyList())
-                        val orderedBrowserTabs: List<BrowserTab> = run {
-                            val assignmentMap = tabGroupAssignments.associate { it.tabId to it.groupId }
-                            val allTabs = browserSessionController.tabs
-                            val groupedTabs = tabGroups.flatMap { group ->
-                                allTabs.filter { tab -> assignmentMap[tab.tabId] == group.id.value }
-                            }
-                            val groupedIds = groupedTabs.map { it.tabId }.toSet()
-                            val ungroupedTabs = allTabs.filter { it.tabId !in groupedIds }
-                            groupedTabs + ungroupedTabs
                         }
                         BrowserScreen(
                             key = key,
@@ -260,7 +254,6 @@ internal fun BrowserApp(
                             onSelectTab = { tabId, beforeTab ->
                                 selectTab(tabId, beforeTab)
                             },
-                            orderedTabs = orderedBrowserTabs,
                             onNewSessionTabCreated = { newTabId, openerTabId ->
                                 // target="_blank" で開いたタブはオープナーと同じグループに割り当てる。
                                 // デフォルトグループは外部 Intent 経由の場合にのみ適用するため、ここでは使用しない。

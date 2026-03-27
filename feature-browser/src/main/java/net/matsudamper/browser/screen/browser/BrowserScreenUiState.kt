@@ -1,7 +1,10 @@
 package net.matsudamper.browser.screen.browser
 
+import net.matsudamper.browser.BrowserTab
+
 data class BrowserScreenUiState(
     val urlBarSuggestions: UrlBarSuggestionsUiState,
+    val orderedBrowserTabs: List<BrowserTab> = emptyList(),
     val callbacks: Callbacks,
 ) {
     interface Callbacks {
