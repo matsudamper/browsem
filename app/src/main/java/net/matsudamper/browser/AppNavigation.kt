@@ -81,7 +81,8 @@ internal fun BrowserApp(
 
     val homepageUrl = settingsUiState.homepageUrl
     val searchTemplate = settingsUiState.searchTemplate
-    val browserSessionController = viewModel.browserSessionController
+    val browserTabController = viewModel.browserTabController
+    val browserSessionLifecycleController = viewModel.browserSessionLifecycleController
     val themeColorExtension = viewModel.themeColorExtension
     val mediaWebExtension = viewModel.mediaWebExtension
 
@@ -136,7 +137,7 @@ internal fun BrowserApp(
             if (defaultGroupId != null) {
                 tabGroupRepository.assignTabToGroup(tabId, defaultGroupId)
             }
-            val newTab = browserSessionController.createAndAppendTab(tabId = tabId, initialUrl = url)
+            val newTab = browserTabController.createAndAppendTab(tabId = tabId, initialUrl = url)
             // 外部から開いたタブとして記録する
             externalTabIds.add(newTab.tabId)
             selectTab(newTab.tabId, null)
@@ -220,9 +221,9 @@ internal fun BrowserApp(
                     }
 
                     is AppDestination.Browser -> navEntry(key) {
-                        val browserTabsFlow = remember(browserSessionController) {
-                            browserSessionController.tabStoreState
-                                .map { browserSessionController.tabs.toList() }
+                        val browserTabsFlow = remember(browserTabController) {
+                            browserTabController.tabStoreState
+                                .map { browserTabController.tabs.toList() }
                                 .distinctUntilChanged()
                         }
                         val browserScreenViewModel = remember(viewModel, key.tabId, tabGroupRepository, browserTabsFlow) {
@@ -243,7 +244,8 @@ internal fun BrowserApp(
                             homepageUrl = homepageUrl,
                             searchTemplate = searchTemplate,
                             backStack = backStack,
-                            browserSessionController = browserSessionController,
+                            browserTabController = browserTabController,
+                            browserSessionLifecycleController = browserSessionLifecycleController,
                             viewModel = browserScreenViewModel,
                             navController = navController,
                             translationProvider = settingsUiState.translationProvider,
@@ -299,7 +301,7 @@ internal fun BrowserApp(
                                 scope.launch {
                                     val tabId = UUID.randomUUID().toString()
                                     withContext(Dispatchers.Main) {
-                                        browserSessionController.createAndAppendTab(
+                                        browserTabController.createAndAppendTab(
                                             tabId = tabId,
                                             initialUrl = url,
                                         )
@@ -322,7 +324,7 @@ internal fun BrowserApp(
                                 scope.launch {
                                     val tabId = UUID.randomUUID().toString()
                                     withContext(Dispatchers.Main) {
-                                        browserSessionController.createAndAppendTab(
+                                        browserTabController.createAndAppendTab(
                                             tabId = tabId,
                                             initialUrl = optionsPageUrl,
                                         )
@@ -358,19 +360,19 @@ internal fun BrowserApp(
                             onDispose { navController.disposeTabs() }
                         }
                         TabsScreen(
-                            browserSessionController = browserSessionController,
+                            tabStore = browserTabController,
                             tabGroupRepository = tabGroupRepository,
-                            selectedTabId = browserSessionController.selectedTabId,
+                            selectedTabId = browserTabController.selectedTabId,
                             onSelectTab = { tabId ->
                                 selectTab(tabId, null)
                             },
                             onCloseTab = { tabId ->
-                                val nextSelectedTabId = browserSessionController.closeTab(tabId)
+                                val nextSelectedTabId = browserTabController.closeTab(tabId)
                                 if (nextSelectedTabId == null) {
                                     scope.launch {
                                         val newTabId = UUID.randomUUID().toString()
                                         withContext(Dispatchers.Main) {
-                                            browserSessionController.createAndAppendTab(
+                                            browserTabController.createAndAppendTab(
                                                 tabId = newTabId,
                                                 initialUrl = homepageUrl,
                                             )
@@ -390,7 +392,7 @@ internal fun BrowserApp(
                                     }
                                     // GeckoSession の生成は UI スレッドで行う必要がある
                                     withContext(Dispatchers.Main) {
-                                        val newTab = browserSessionController.createAndAppendTab(
+                                        val newTab = browserTabController.createAndAppendTab(
                                             tabId = tabId,
                                             initialUrl = homepageUrl,
                                         )

@@ -3,12 +3,14 @@ package net.matsudamper.browser.screen.webapp
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.runBlocking
-import net.matsudamper.browser.BrowserSessionController
+import net.matsudamper.browser.BrowserSessionLifecycleController
+import net.matsudamper.browser.BrowserTabController
 import net.matsudamper.browser.GeckoBrowserTab
 import net.matsudamper.browser.ThemeColorWebExtension
 import net.matsudamper.browser.data.SettingsRepository
@@ -25,7 +27,8 @@ internal fun WebAppScreen(
     homepageUrl: String,
     searchTemplate: String,
     translationProvider: TranslationProvider,
-    browserSessionController: BrowserSessionController,
+    browserTabController: BrowserTabController,
+    browserSessionLifecycleController: BrowserSessionLifecycleController,
     settingsRepository: SettingsRepository,
     historyRepository: HistoryRepository,
     webSuggestionRepository: WebSuggestionRepository,
@@ -42,10 +45,15 @@ internal fun WebAppScreen(
         )
     })
     val uiState by viewModel.uiState.collectAsState()
-    val browserTab = remember(browserSessionController, initialUrl) {
+    val browserTab = remember(browserTabController, initialUrl) {
         // TODO runBlocking使わない
         runBlocking {
-            browserSessionController.createAndAppendTab(initialUrl = initialUrl)
+            browserTabController.createAndAppendTab(initialUrl = initialUrl)
+        }
+    }
+    DisposableEffect(browserTabController, browserTab.tabId) {
+        onDispose {
+            browserTabController.closeTab(browserTab.tabId)
         }
     }
 
@@ -57,7 +65,7 @@ internal fun WebAppScreen(
         translationProvider = translationProvider,
         themeColorExtension = themeColorExtension,
         mediaWebExtension = mediaWebExtension,
-        browserSessionController = browserSessionController,
+        browserSessionLifecycleController = browserSessionLifecycleController,
         tabCount = 1,
         onInstallExtensionRequest = {},
         onDesktopNotificationPermissionRequest = { _ ->

@@ -47,8 +47,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.flow.receiveAsFlow
-import net.matsudamper.browser.BrowserSessionController
 import net.matsudamper.browser.R
+import net.matsudamper.browser.core.TabStore
 import net.matsudamper.browser.data.TabGroupData
 import net.matsudamper.browser.data.TabGroupId
 import net.matsudamper.browser.data.TabGroupRepository
@@ -104,7 +104,7 @@ internal fun calculatePagerIndicatorBounds(
 
 @Composable
 internal fun TabsScreen(
-    browserSessionController: BrowserSessionController,
+    tabStore: TabStore,
     tabGroupRepository: TabGroupRepository,
     selectedTabId: String?,
     onSelectTab: (String) -> Unit,
@@ -114,7 +114,7 @@ internal fun TabsScreen(
 ) {
     val viewModel = viewModel(initializer = {
         TabsScreenViewModel(
-            tabStore = browserSessionController,
+            tabStore = tabStore,
             tabGroupRepository = tabGroupRepository,
         )
     })

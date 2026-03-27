@@ -8,15 +8,17 @@ import org.mozilla.geckoview.GeckoRuntime
  *
  * 拡張機能（ThemeColorWebExtension, MediaWebExtension）はプロセスに1つの GeckoRuntime に
  * 対してインストールされるため、Koin の single で管理し、外部から注入する。
- * BrowserSessionController は Activity ごとに独立して生成される。
+ * BrowserTabController / BrowserSessionLifecycleController は Activity ごとに独立して生成される。
  */
 class BrowserRuntimeCoordinator(
     val runtime: GeckoRuntime,
     val themeColorExtension: ThemeColorWebExtension,
     val mediaWebExtension: MediaWebExtension,
-    tabRepository: net.matsudamper.browser.data.TabRepository? = null,
+    tabRepository: net.matsudamper.browser.data.TabRepository,
 ) {
-    val browserSessionController = BrowserSessionController(runtime, tabRepository)
+    val browserTabController = BrowserTabController(tabRepository)
+    val browserSessionLifecycleController = BrowserSessionLifecycleController(runtime)
+    val browserSessionController = BrowserSessionController(browserTabController, browserSessionLifecycleController)
 
     fun applyRuntimeSettings(enableThirdPartyCa: Boolean) {
         runtime.settings.setEnterpriseRootsEnabled(enableThirdPartyCa)
@@ -27,6 +29,6 @@ class BrowserRuntimeCoordinator(
      * 拡張機能はプロセススコープで管理されるため、ここでは解放しない。
      */
     fun close() {
-        browserSessionController.close()
+        browserTabController.close()
     }
 }

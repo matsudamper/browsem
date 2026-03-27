@@ -63,7 +63,7 @@ internal fun GeckoBrowserTab(
     translationProvider: TranslationProvider,
     themeColorExtension: ThemeColorWebExtension,
     mediaWebExtension: MediaWebExtension,
-    browserSessionController: BrowserSessionController,
+    browserSessionLifecycleController: BrowserSessionLifecycleController,
     modifier: Modifier = Modifier,
     tabCount: Int,
     onInstallExtensionRequest: (String) -> Unit,
@@ -233,7 +233,7 @@ internal fun GeckoBrowserTab(
         // MediaSession の初回イベントを取りこぼさないよう、ページ読み込み前に delegate を設定する。
         session.mediaSessionDelegate = mediaSessionDelegate
 
-        browserSessionController.restoreSession(browserTab)
+        browserSessionLifecycleController.restoreSession(browserTab)
 
         onDispose {
             session.permissionDelegate = null

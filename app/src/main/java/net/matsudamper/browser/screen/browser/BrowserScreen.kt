@@ -34,7 +34,8 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.navigation3.runtime.NavKey
 import kotlinx.coroutines.launch
-import net.matsudamper.browser.BrowserSessionController
+import net.matsudamper.browser.BrowserSessionLifecycleController
+import net.matsudamper.browser.BrowserTabController
 import net.matsudamper.browser.BrowserTab
 import net.matsudamper.browser.BrowserToolbar
 import net.matsudamper.browser.GeckoBrowserTab
@@ -53,7 +54,8 @@ internal fun BrowserScreen(
     homepageUrl: String,
     searchTemplate: String,
     backStack: MutableList<NavKey>,
-    browserSessionController: BrowserSessionController,
+    browserTabController: BrowserTabController,
+    browserSessionLifecycleController: BrowserSessionLifecycleController,
     viewModel: BrowserScreenViewModel,
     navController: NavController,
     translationProvider: TranslationProvider,
@@ -67,14 +69,14 @@ internal fun BrowserScreen(
     onNewSessionTabCreated: (newTabId: String, openerTabId: String) -> Unit,
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    val tabStoreState by browserSessionController.tabStoreState.collectAsState()
-    val tabs = remember(tabStoreState, browserSessionController) { browserSessionController.tabs }
+    val tabStoreState by browserTabController.tabStoreState.collectAsState()
+    val tabs = remember(tabStoreState, browserTabController) { browserTabController.tabs }
     val orderedTabs = uiState.orderedBrowserTabs
 
-    val selectedTab = tabs.firstOrNull { it.tabId == key.tabId }
+    val selectedTab = browserTabController.findTab(key.tabId)
     LaunchedEffect(key.tabId, homepageUrl, selectedTab) {
         if (selectedTab == null) {
-            browserSessionController.getOrCreateTab(
+            browserTabController.getOrCreateTab(
                 tabId = key.tabId,
                 homepageUrl = homepageUrl,
             )
@@ -143,9 +145,9 @@ internal fun BrowserScreen(
             onRequestDownloadNotificationPermission = onRequestDownloadNotificationPermission,
             onOpenSettings = { backStack.add(AppDestination.Settings) },
             onOpenTabs = { backStack.add(AppDestination.Tabs) },
-            browserSessionController = browserSessionController,
+            browserSessionLifecycleController = browserSessionLifecycleController,
             onOpenNewSessionRequest = { uri ->
-                val newTab = browserSessionController.createTabForNewSession(
+                val newTab = browserTabController.createTabForNewSession(
                     initialUrl = uri,
                     openerTabId = key.tabId,
                 )
@@ -154,7 +156,7 @@ internal fun BrowserScreen(
                 newTab.session
             },
             onCloseTab = {
-                val targetTabId = browserSessionController.closeTab(key.tabId)
+                val targetTabId = browserTabController.closeTab(key.tabId)
                 if (targetTabId != null) {
                     onSelectTab(targetTabId, null)
                 }

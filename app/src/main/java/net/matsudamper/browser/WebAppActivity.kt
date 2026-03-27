@@ -13,6 +13,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.core.content.ContextCompat
 import net.matsudamper.browser.data.SettingsRepository
+import net.matsudamper.browser.data.TabRepository
 import net.matsudamper.browser.data.history.HistoryRepository
 import net.matsudamper.browser.data.resolvedHomepageUrl
 import net.matsudamper.browser.data.resolvedSearchTemplate
@@ -35,6 +36,7 @@ class WebAppActivity : ComponentActivity() {
     private val themeColorExtension: ThemeColorWebExtension by inject()
     private val mediaWebExtension: MediaWebExtension by inject()
     private val settingsRepository: SettingsRepository by inject()
+    private val tabRepository: TabRepository by inject()
     private val historyRepository: HistoryRepository by inject()
     private val webSuggestionRepository: WebSuggestionRepository by inject()
 
@@ -61,7 +63,12 @@ class WebAppActivity : ComponentActivity() {
         runtime.settings.setExtensionsWebAPIEnabled(true)
 
         // 拡張機能は Koin の single で管理されるため、ここではセッション管理のみ担当する
-        runtimeCoordinator = BrowserRuntimeCoordinator(runtime, themeColorExtension, mediaWebExtension)
+        runtimeCoordinator = BrowserRuntimeCoordinator(
+            runtime = runtime,
+            themeColorExtension = themeColorExtension,
+            mediaWebExtension = mediaWebExtension,
+            tabRepository = tabRepository,
+        )
 
         // 外部アプリから任意のURLが渡されないよう、http/https スキームのみ許可する
         val initialUrl = resolveInitialUrl()
@@ -79,7 +86,8 @@ class WebAppActivity : ComponentActivity() {
                     homepageUrl = browserSettings.resolvedHomepageUrl(),
                     searchTemplate = browserSettings.resolvedSearchTemplate(),
                     translationProvider = browserSettings.translationProvider,
-                    browserSessionController = runtimeCoordinator.browserSessionController,
+                    browserTabController = runtimeCoordinator.browserTabController,
+                    browserSessionLifecycleController = runtimeCoordinator.browserSessionLifecycleController,
                     settingsRepository = settingsRepository,
                     historyRepository = historyRepository,
                     webSuggestionRepository = webSuggestionRepository,

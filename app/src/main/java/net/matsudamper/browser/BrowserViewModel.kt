@@ -55,6 +55,12 @@ internal class BrowserViewModel(
     private val runtimeCoordinator =
         BrowserRuntimeCoordinator(runtime, themeColorExtension, mediaWebExtension, tabRepository)
 
+    val browserTabController: BrowserTabController
+        get() = runtimeCoordinator.browserTabController
+
+    val browserSessionLifecycleController: BrowserSessionLifecycleController
+        get() = runtimeCoordinator.browserSessionLifecycleController
+
     val browserSessionController: BrowserSessionController
         get() = runtimeCoordinator.browserSessionController
 
@@ -77,18 +83,18 @@ internal class BrowserViewModel(
      * NavController での画面遷移とは別に、タブ store にも通知する。
      */
     fun selectTab(tabId: String) {
-        browserSessionController.selectTab(tabId)
+        browserTabController.selectTab(tabId)
     }
 
     suspend fun restoreTabs(): String {
         val currentSettings = settings.filterNotNull().first()
         val homepageUrl = currentSettings.resolvedHomepageUrl()
 
-        return browserSessionController.restoreTabs(
+        return browserTabController.restoreTabs(
             homepageUrl = homepageUrl,
         ).also { tabId ->
-            if (browserSessionController.selectedTabId != tabId) {
-                browserSessionController.selectTab(tabId)
+            if (browserTabController.selectedTabId != tabId) {
+                browserTabController.selectTab(tabId)
             }
             setupComplete.complete(Unit)
         }
@@ -113,12 +119,12 @@ internal class BrowserViewModel(
 
     /** タブを閉じ、即座に永続化する（外部URL タブをバックで閉じるときに使用）。 */
     suspend fun closeTabAndSaveImmediately(tabId: String, homepageUrl: String) {
-        val nextSelectedTabId = browserSessionController.closeTab(tabId)
+        val nextSelectedTabId = browserTabController.closeTab(tabId)
         // タブが空になった場合はホームタブを作成して空状態での保存を避ける
         if (nextSelectedTabId == null) {
-            browserSessionController.createAndAppendTab(initialUrl = homepageUrl)
+            browserTabController.createAndAppendTab(initialUrl = homepageUrl)
         }
-        browserSessionController.awaitPersistenceIdle()
+        browserTabController.awaitPersistenceIdle()
     }
 
     fun applyRuntimeSettings() {

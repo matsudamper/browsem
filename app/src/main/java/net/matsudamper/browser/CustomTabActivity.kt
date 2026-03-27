@@ -14,6 +14,7 @@ import androidx.browser.customtabs.CustomTabsSessionToken
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -25,6 +26,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.runBlocking
 import net.matsudamper.browser.data.SettingsRepository
+import net.matsudamper.browser.data.TabRepository
 import net.matsudamper.browser.data.TranslationProvider
 import net.matsudamper.browser.data.history.HistoryRepository
 import net.matsudamper.browser.data.resolvedHomepageUrl
@@ -43,6 +45,7 @@ class CustomTabActivity : ComponentActivity() {
     private val themeColorExtension: ThemeColorWebExtension by inject()
     private val mediaWebExtensionInstance: MediaWebExtension by inject()
     private val settingsRepository: SettingsRepository by inject()
+    private val tabRepository: TabRepository by inject()
     private val historyRepository: HistoryRepository by inject()
     private val webSuggestionRepository: WebSuggestionRepository by inject()
 
@@ -70,7 +73,12 @@ class CustomTabActivity : ComponentActivity() {
         runtime.settings.setExtensionsWebAPIEnabled(true)
 
         // 拡張機能は Koin の single で管理されるため、ここではセッション管理のみ担当する
-        runtimeCoordinator = BrowserRuntimeCoordinator(runtime, themeColorExtension, mediaWebExtensionInstance)
+        runtimeCoordinator = BrowserRuntimeCoordinator(
+            runtime = runtime,
+            themeColorExtension = themeColorExtension,
+            mediaWebExtension = mediaWebExtensionInstance,
+            tabRepository = tabRepository,
+        )
 
         val initialUrl = intent.dataString.orEmpty()
         val customTabsSessionToken = CustomTabsSessionToken.getSessionTokenFromIntent(intent)
@@ -94,7 +102,8 @@ class CustomTabActivity : ComponentActivity() {
                     homepageUrl = browserSettings.resolvedHomepageUrl(),
                     searchTemplate = browserSettings.resolvedSearchTemplate(),
                     translationProvider = browserSettings.translationProvider,
-                    browserSessionController = runtimeCoordinator.browserSessionController,
+                    browserTabController = runtimeCoordinator.browserTabController,
+                    browserSessionLifecycleController = runtimeCoordinator.browserSessionLifecycleController,
                     settingsRepository = settingsRepository,
                     historyRepository = historyRepository,
                     webSuggestionRepository = webSuggestionRepository,
@@ -179,7 +188,8 @@ private fun CustomTabScreen(
     homepageUrl: String,
     searchTemplate: String,
     translationProvider: TranslationProvider,
-    browserSessionController: BrowserSessionController,
+    browserTabController: BrowserTabController,
+    browserSessionLifecycleController: BrowserSessionLifecycleController,
     settingsRepository: SettingsRepository,
     historyRepository: HistoryRepository,
     webSuggestionRepository: WebSuggestionRepository,
@@ -206,17 +216,22 @@ private fun CustomTabScreen(
             )
         }
     }
-    val browserTab = remember(browserSessionController, initialUrl, prewarmedSession) {
+    val browserTab = remember(browserTabController, initialUrl, prewarmedSession) {
         if (prewarmedSession != null) {
-            browserSessionController.createAndAppendTabWithSession(
+            browserTabController.createAndAppendTabWithSession(
                 session = prewarmedSession,
                 initialUrl = initialUrl,
             )
         } else {
             // TODO runBlocking使わない
             runBlocking {
-                browserSessionController.createAndAppendTab(initialUrl = initialUrl)
+                browserTabController.createAndAppendTab(initialUrl = initialUrl)
             }
+        }
+    }
+    DisposableEffect(browserTabController, browserTab.tabId) {
+        onDispose {
+            browserTabController.closeTab(browserTab.tabId)
         }
     }
 
@@ -228,7 +243,7 @@ private fun CustomTabScreen(
         translationProvider = translationProvider,
         themeColorExtension = themeColorExtension,
         mediaWebExtension = mediaWebExtension,
-        browserSessionController = browserSessionController,
+        browserSessionLifecycleController = browserSessionLifecycleController,
         tabCount = 1,
         onInstallExtensionRequest = {},
         onDesktopNotificationPermissionRequest = { _ ->
