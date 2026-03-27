@@ -113,9 +113,9 @@ internal class BrowserViewModel(
 
     /** タブを閉じ、即座に永続化する（外部URL タブをバックで閉じるときに使用）。 */
     suspend fun closeTabAndSaveImmediately(tabId: String, homepageUrl: String) {
-        browserSessionController.closeTab(tabId)
+        val nextSelectedTabId = browserSessionController.closeTab(tabId)
         // タブが空になった場合はホームタブを作成して空状態での保存を避ける
-        if (browserSessionController.tabs.isEmpty()) {
+        if (nextSelectedTabId == null) {
             browserSessionController.createAndAppendTab(initialUrl = homepageUrl)
         }
         browserSessionController.awaitPersistenceIdle()

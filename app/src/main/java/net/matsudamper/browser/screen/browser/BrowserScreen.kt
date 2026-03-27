@@ -67,7 +67,8 @@ internal fun BrowserScreen(
     onNewSessionTabCreated: (newTabId: String, openerTabId: String) -> Unit,
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    val tabs = browserSessionController.tabs
+    val tabStoreState by browserSessionController.tabStoreState.collectAsState()
+    val tabs = remember(tabStoreState, browserSessionController) { browserSessionController.tabs }
     val orderedTabs = uiState.orderedBrowserTabs
 
     val selectedTab = tabs.firstOrNull { it.tabId == key.tabId }

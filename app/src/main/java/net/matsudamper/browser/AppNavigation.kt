@@ -22,7 +22,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateSetOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntOffset
@@ -40,6 +39,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -221,7 +221,8 @@ internal fun BrowserApp(
 
                     is AppDestination.Browser -> navEntry(key) {
                         val browserTabsFlow = remember(browserSessionController) {
-                            snapshotFlow { browserSessionController.tabs.toList() }
+                            browserSessionController.tabStoreState
+                                .map { browserSessionController.tabs.toList() }
                                 .distinctUntilChanged()
                         }
                         val browserScreenViewModel = remember(viewModel, key.tabId, tabGroupRepository, browserTabsFlow) {
@@ -364,8 +365,8 @@ internal fun BrowserApp(
                                 selectTab(tabId, null)
                             },
                             onCloseTab = { tabId ->
-                                browserSessionController.closeTab(tabId)
-                                if (browserSessionController.tabs.isEmpty()) {
+                                val nextSelectedTabId = browserSessionController.closeTab(tabId)
+                                if (nextSelectedTabId == null) {
                                     scope.launch {
                                         val newTabId = UUID.randomUUID().toString()
                                         withContext(Dispatchers.Main) {
