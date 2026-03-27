@@ -6,7 +6,6 @@ import net.matsudamper.browser.core.TabStore
 import net.matsudamper.browser.core.TabStoreState
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoSession
-import java.util.UUID
 
 @Stable
 class BrowserSessionController internal constructor(
