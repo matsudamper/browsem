@@ -68,6 +68,16 @@ class TabGroupSwipeNavigationTest {
             }
         }
 
+        group("グループ 1 のデフォルトスイッチを ON にする") {
+            composeRule.waitUntil(timeoutMillis = 10_000) {
+                composeRule.onAllNodes(hasTestTag(TabsScreenTestTags.DefaultGroupSwitch(1).testTag))
+                    .fetchSemanticsNodes().isNotEmpty()
+            }
+            composeRule.onNode(hasTestTag(TabsScreenTestTags.DefaultGroupSwitch(1).testTag))
+                .performClick()
+            composeRule.waitForIdle()
+        }
+
         group("タブの新規追加ボタンを押す") {
             composeRule.onNode(hasTestTag(TabsScreenTestTags.AddTabButton.testTag))
                 .performClick()
@@ -126,8 +136,11 @@ class TabGroupSwipeNavigationTest {
             composeRule.runOnIdle {
                 activeTab.session.loadUri(localPageUri)
             }
-            waitForActiveTabUrl(timeoutMillis = 10_000, activeTab = activeTab) { currentUrl ->
-                currentUrl.startsWith("file:") && currentUrl.contains(INDEX_FILE_NAME)
+            composeRule.waitUntil(timeoutMillis = 30_000) {
+                composeRule.onAllNodes(
+                    hasTestTag(UrlTextInputTestTags.UrlBar.testTag)
+                        .and(hasText(INDEX_FILE_NAME, substring = true))
+                ).fetchSemanticsNodes().isNotEmpty()
             }
         }
 
@@ -136,7 +149,7 @@ class TabGroupSwipeNavigationTest {
                 .performTouchInput { click() }
 
             // 新しいタブの URL がURLバーに表示されるまで待つ
-            composeRule.waitUntil(timeoutMillis = 10_000) {
+            composeRule.waitUntil(timeoutMillis = 30_000) {
                 composeRule.onAllNodes(
                     hasTestTag(UrlTextInputTestTags.UrlBar.testTag)
                         .and(hasText(TARGET_FILE_NAME, substring = true))

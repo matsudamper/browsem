@@ -360,6 +360,7 @@ private fun TabsScreenLoadedContent(
                             Switch(
                                 checked = groups.getOrNull(page)?.isDefault ?: false,
                                 onCheckedChange = { onToggleDefaultGroup(page) },
+                                modifier = Modifier.testTag(TabsScreenTestTags.DefaultGroupSwitch(page).testTag),
                             )
                         }
                     }
@@ -530,5 +531,9 @@ sealed interface TabsScreenTestTags {
 
     object AddTabGroupButton : TabsScreenTestTags {
         override val id: String = "add_tab_group_button"
+    }
+
+    class DefaultGroupSwitch(index: Int) : TabsScreenTestTags {
+        override val id: String = "default_group_switch_$index"
     }
 }
