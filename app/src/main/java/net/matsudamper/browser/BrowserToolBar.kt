@@ -51,6 +51,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
+import kotlin.jvm.java
 
 @Composable
 internal fun BrowserToolBar(
@@ -303,7 +304,8 @@ internal fun BrowserToolbar(
                     }
                 }
                 IconButton(
-                    onClick = { updateVisibleMenu(true) }
+                    modifier = Modifier.testTag(BrowserToolbarTestTags.MenuButton.testTag),
+                    onClick = { updateVisibleMenu(true) },
                 ) {
                     Icon(
                         painter = painterResource(R.drawable.ic_more_vert_24dp),
@@ -323,6 +325,10 @@ sealed class BrowserToolbarTestTags(val id: String) {
     )
     object OpenTabsButton : BrowserToolbarTestTags(
         id = "open_tabs_button",
+    )
+
+    object MenuButton : BrowserToolbarTestTags(
+        id = "MenuButton",
     )
 }
 

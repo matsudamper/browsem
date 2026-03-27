@@ -1,7 +1,8 @@
 package net.matsudamper.browser
 
+import androidx.compose.ui.test.hasParent
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
-import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
@@ -31,7 +32,10 @@ class PageZoomTest {
      */
     @Test
     fun initialPageZoomIsHundredPercent() {
-        composeRule.onNodeWithContentDescription("Menu").performClick()
+        composeRule.onNode(
+            hasTestTag(BrowserToolbarTestTags.MenuButton.testTag)
+                .and(hasParent(hasTestTag(BrowserToolbarTestTags.Toolbar.testTag)))
+        ).performClick()
         composeRule.waitUntil(timeoutMillis = 10_000) {
             composeRule.onAllNodesWithText("ページズーム").fetchSemanticsNodes().isNotEmpty()
         }
@@ -46,7 +50,10 @@ class PageZoomTest {
      */
     @Test
     fun pageZoomInIncreasesDisplayedPercent() {
-        composeRule.onNodeWithContentDescription("Menu").performClick()
+        composeRule.onNode(
+            hasTestTag(BrowserToolbarTestTags.MenuButton.testTag)
+                .and(hasParent(hasTestTag(BrowserToolbarTestTags.Toolbar.testTag)))
+        ).performClick()
         composeRule.waitUntil(timeoutMillis = 10_000) {
             composeRule.onAllNodesWithText("ページズーム").fetchSemanticsNodes().isNotEmpty()
         }
@@ -67,7 +74,10 @@ class PageZoomTest {
      */
     @Test
     fun pageZoomOutDecreasesDisplayedPercent() {
-        composeRule.onNodeWithContentDescription("Menu").performClick()
+        composeRule.onNode(
+            hasTestTag(BrowserToolbarTestTags.MenuButton.testTag)
+                .and(hasParent(hasTestTag(BrowserToolbarTestTags.Toolbar.testTag)))
+        ).performClick()
         composeRule.waitUntil(timeoutMillis = 10_000) {
             composeRule.onAllNodesWithText("ページズーム").fetchSemanticsNodes().isNotEmpty()
         }
@@ -93,7 +103,10 @@ class PageZoomTest {
      */
     @Test
     fun tappingPercentButtonResetsZoomToHundred() {
-        composeRule.onNodeWithContentDescription("Menu").performClick()
+        composeRule.onNode(
+            hasTestTag(BrowserToolbarTestTags.MenuButton.testTag)
+                .and(hasParent(hasTestTag(BrowserToolbarTestTags.Toolbar.testTag)))
+        ).performClick()
         composeRule.waitUntil(timeoutMillis = 10_000) {
             composeRule.onAllNodesWithText("ページズーム").fetchSemanticsNodes().isNotEmpty()
         }
@@ -137,7 +150,10 @@ class PageZoomTest {
         assertTrue("初期 window.innerWidth が取得できなかった (got $initialWidth)", initialWidth > 0)
 
         // メニューを開き 200% まで拡大（100→110→125→150→175→200 = 5ステップ）
-        composeRule.onNodeWithContentDescription("Menu").performClick()
+        composeRule.onNode(
+            hasTestTag(BrowserToolbarTestTags.MenuButton.testTag)
+                .and(hasParent(hasTestTag(BrowserToolbarTestTags.Toolbar.testTag)))
+        ).performClick()
         composeRule.waitUntil(timeoutMillis = 10_000) {
             composeRule.onAllNodesWithText("ページズーム").fetchSemanticsNodes().isNotEmpty()
         }
@@ -187,7 +203,10 @@ class PageZoomTest {
         assertTrue("初期 window.innerWidth が取得できなかった", initialWidth > 0)
 
         // 200% に拡大
-        composeRule.onNodeWithContentDescription("Menu").performClick()
+        composeRule.onNode(
+            hasTestTag(BrowserToolbarTestTags.MenuButton.testTag)
+                .and(hasParent(hasTestTag(BrowserToolbarTestTags.Toolbar.testTag)))
+        ).performClick()
         composeRule.waitUntil(timeoutMillis = 10_000) {
             composeRule.onAllNodesWithText("ページズーム").fetchSemanticsNodes().isNotEmpty()
         }

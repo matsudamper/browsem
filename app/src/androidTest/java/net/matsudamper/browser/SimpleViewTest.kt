@@ -1,5 +1,7 @@
 package net.matsudamper.browser
 
+import androidx.compose.ui.test.hasParent
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
@@ -54,12 +56,15 @@ class SimpleViewTest {
         Thread.sleep(3_000)
 
         // メニューを開く
-        composeRule.onNodeWithContentDescription("Menu").performClick()
+        composeRule.onNode(
+            hasTestTag(BrowserToolbarTestTags.MenuButton.testTag)
+                .and(hasParent(hasTestTag(BrowserToolbarTestTags.Toolbar.testTag)))
+        ).performClick()
 
         // 「シンプル表示」をタップ
         composeRule.waitUntil(timeoutMillis = 10_000) {
             composeRule.onAllNodesWithTag("シンプル表示").fetchSemanticsNodes().isNotEmpty() ||
-                composeRule.onAllNodesWithText("シンプル表示").fetchSemanticsNodes().isNotEmpty()
+                    composeRule.onAllNodesWithText("シンプル表示").fetchSemanticsNodes().isNotEmpty()
         }
         composeRule.onNodeWithText("シンプル表示").performClick()
 
@@ -96,7 +101,10 @@ class SimpleViewTest {
         Thread.sleep(3_000)
 
         // シンプル表示を開く
-        composeRule.onNodeWithContentDescription("Menu").performClick()
+        composeRule.onNode(
+            hasTestTag(BrowserToolbarTestTags.MenuButton.testTag)
+                .and(hasParent(hasTestTag(BrowserToolbarTestTags.Toolbar.testTag)))
+        ).performClick()
         composeRule.onNodeWithText("シンプル表示").performClick()
 
         composeRule.waitUntil(timeoutMillis = 30_000) {

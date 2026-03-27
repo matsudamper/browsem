@@ -15,6 +15,7 @@ import net.matsudamper.browser.screen.tab.TabsScreenTestTags
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import kotlin.time.Duration.Companion.seconds
 
 /**
  * 外部リンクで開いたタブが属するグループがタブ一覧画面で正しく表示されることを検証する。
@@ -40,15 +41,19 @@ class ExternalLinkTabGroupTest {
         val browserSessionController = waitForBrowserSessionController()
         waitForActiveTab(browserSessionController)
 
-        // 1. タブボタンをタップしてタブ一覧画面を開く
+        // タブボタンをタップしてタブ一覧画面を開く
         tapTabButton()
         waitForTabsScreen()
 
-        // 2. グループを追加する
-        composeRule.onAllNodesWithContentDescription("グループを追加")[0].performClick()
+        // グループを追加する
+        composeRule.waitUntil(timeoutMillis = 2.seconds.inWholeMilliseconds) {
+            composeRule.onNode(hasTestTag(TabsScreenTestTags.AddTabGroupButton.testTag))
+                .isDisplayed()
+        }
+        composeRule.onNode(hasTestTag(TabsScreenTestTags.AddTabGroupButton.testTag)).performClick()
         composeRule.waitForIdle()
 
-        // 3. 追加したグループのデフォルトスイッチを ON にする
+        // 追加したグループのデフォルトスイッチを ON にする
         // グループ追加後、自動的に新しいグループページに遷移するため、
         // 表示中のページのデフォルトスイッチをタップする。
         composeRule.waitUntil(timeoutMillis = 10_000) {
@@ -58,7 +63,7 @@ class ExternalLinkTabGroupTest {
         composeRule.onAllNodes(isToggleable())[0].performClick()
         composeRule.waitForIdle()
 
-        // 4. 最初のグループに戻る（グループタブバーの最初のグループをタップ）
+        // 最初のグループに戻る（グループタブバーの最初のグループをタップ）
         // グループ追加後は新しいグループ（index=1）にいるため、index=0 のグループに移動する。
         composeRule.waitUntil(timeoutMillis = 10_000) {
             composeRule.onAllNodes(hasTestTag(TabsScreenTestTags.TabGroupTopButton(0).testTag))
@@ -67,7 +72,7 @@ class ExternalLinkTabGroupTest {
         composeRule.onNode(hasTestTag(TabsScreenTestTags.TabGroupTopButton(0).testTag)).performClick()
         composeRule.waitForIdle()
 
-        // 5. 新規タブボタン（FAB）をタップしてブラウザに遷移する
+        // 新規タブボタン（FAB）をタップしてブラウザに遷移する
         composeRule.onAllNodesWithContentDescription("新規タブ")[0].performClick()
         composeRule.waitForIdle()
 
@@ -77,11 +82,11 @@ class ExternalLinkTabGroupTest {
                 .fetchSemanticsNodes().isNotEmpty()
         }
 
-        // 5. 再びタブボタンをタップしてタブ一覧画面を開く
+        // 再びタブボタンをタップしてタブ一覧画面を開く
         tapTabButton()
         waitForTabsScreen()
 
-        // 6. 表示中のグループのデフォルトスイッチが ON であることを確認する
+        // 表示中のグループのデフォルトスイッチが ON であることを確認する
         composeRule.onAllNodes(isToggleable())[0].assertIsOn()
     }
 
