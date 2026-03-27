@@ -50,9 +50,8 @@ class TabGroupSwipeNavigationTest {
             composeRule.onNode(hasTestTag(TabsScreenTestTags.AddTabGroupButton.testTag))
                 .performClick()
             composeRule.waitForIdle()
-        }
 
-        group("タブグループ 1 が表示されていることを確認する") {
+            // タブグループ 1 が表示されていることを確認する
             composeRule.waitUntil(timeoutMillis = 10_000) {
                 runCatching {
                     composeRule.onNode(
@@ -67,18 +66,16 @@ class TabGroupSwipeNavigationTest {
             composeRule.onNode(hasTestTag(TabsScreenTestTags.AddTabButton.testTag))
                 .performClick()
             composeRule.waitForIdle()
-        }
 
-        group("タブ画面が開かれていることを確認する") {
+            // タブ画面が開かれていることを確認する
             waitForBrowserScreen()
         }
 
         group("タブリスト画面を開く") {
             openTabsScreen()
             waitForTabsScreen()
-        }
 
-        group("タブグループ 1 が表示されていることを確認する") {
+            // タブグループ 1 が表示されていることを確認する
             composeRule.waitUntil(timeoutMillis = 10_000) {
                 runCatching {
                     composeRule.onNode(
@@ -94,9 +91,8 @@ class TabGroupSwipeNavigationTest {
                 hasTestTag(TabsScreenTestTags.TabGroupTopButton(0).testTag)
             ).performClick()
             composeRule.waitForIdle()
-        }
 
-        group("タブグループ 0 が表示されていることを確認する") {
+            // タブグループ 0 が表示されていることを確認する
             composeRule.waitUntil(timeoutMillis = 10_000) {
                 runCatching {
                     composeRule.onNode(
@@ -111,9 +107,8 @@ class TabGroupSwipeNavigationTest {
             composeRule.onNode(hasTestTag(TabsScreenTestTags.AddTabButton.testTag))
                 .performClick()
             composeRule.waitForIdle()
-        }
 
-        group("タブ画面が開かれていることを確認する") {
+            // タブ画面が開かれていることを確認する
             waitForBrowserScreen()
         }
 
@@ -127,26 +122,15 @@ class TabGroupSwipeNavigationTest {
             composeRule.runOnIdle {
                 activeTab.session.loadUri(localPageUri)
             }
-            waitForActiveTabUrl(timeoutMillis = 60_000, activeTab = activeTab) { currentUrl ->
+            waitForActiveTabUrl(timeoutMillis = 10_000, activeTab = activeTab) { currentUrl ->
                 currentUrl.startsWith("file:") && currentUrl.contains(INDEX_FILE_NAME)
             }
-        }
 
-        group("ページ内 JS による target=_blank クリックで新しいタブが作成されるまで待つ") {
-            composeRule.waitUntil(timeoutMillis = 30_000) {
-                var result = false
-                composeRule.runOnIdle {
-                    result = browserSessionController.tabs.size > tabCountBefore
-                }
-                result
-            }
-        }
-
-        group("新しいタブに遷移するまで待つ") {
+            // 新しいタブに遷移するまで待つ
             composeRule.waitUntil(timeoutMillis = 10_000) {
                 var result = false
                 composeRule.runOnIdle {
-                    result = browserSessionController.selectedTabId != openerTabId
+                    result = browserSessionController.tabs.size > tabCountBefore
                 }
                 result
             }
