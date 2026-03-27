@@ -6,6 +6,8 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -79,43 +81,45 @@ class TabsScreenViewModel(
         }
     }
 
-    val uiState: StateFlow<TabsScreenUiState> = viewModelStateFlow
-        .map { state ->
-            val groups = state.groups
-            val assignmentMap = state.assignments.associate { it.tabId to it.groupId }
-            val groupedTabs = groups.map { group ->
-                state.tabStoreState.tabs
-                    .filter { assignmentMap[it.id] == group.id.value }
-                    .map { tab ->
-                        TabsScreenTabData(
-                            id = tab.id,
-                            title = tab.title,
-                            previewBitmapArray = tab.previewBitmapArray,
-                        )
-                    }
-            }
-            TabsScreenUiState(
-                callbacks = callbacks,
-                loadingState = if (state.activeGroupIndex == null) {
-                    TabsScreenUiState.LoadingState.Loading
-                } else {
-                    TabsScreenUiState.LoadingState.Loaded(
-                        groupedTabs = groupedTabs,
-                        groups = groups,
-                        // グループが空になる場合も含めて有効範囲にクランプする
-                        activeGroupIndex = state.activeGroupIndex.coerceIn(0, (groups.size - 1).coerceAtLeast(0)),
-                    )
-                },
-            )
-        }
-        .stateIn(
-            viewModelScope,
-            SharingStarted.Eagerly,
-            TabsScreenUiState(
-                callbacks = callbacks,
-                loadingState = TabsScreenUiState.LoadingState.Loading,
-            ),
+    val uiState: StateFlow<TabsScreenUiState> = MutableStateFlow(
+        TabsScreenUiState(
+            callbacks = callbacks,
+            loadingState = TabsScreenUiState.LoadingState.Loading,
         )
+    ).also { uiStateFlow ->
+        viewModelScope.launch {
+            viewModelStateFlow.collectLatest { state ->
+                val groups = state.groups
+                val assignmentMap = state.assignments.associate { it.tabId to it.groupId }
+                val groupedTabs = groups.map { group ->
+                    state.tabStoreState.tabs
+                        .filter { assignmentMap[it.id] == group.id.value }
+                        .map { tab ->
+                            TabsScreenTabData(
+                                id = tab.id,
+                                title = tab.title,
+                                previewBitmapArray = tab.previewBitmapArray,
+                            )
+                        }
+                }
+                uiStateFlow.update {
+                    TabsScreenUiState(
+                        callbacks = callbacks,
+                        loadingState = if (state.activeGroupIndex == null) {
+                            TabsScreenUiState.LoadingState.Loading
+                        } else {
+                            TabsScreenUiState.LoadingState.Loaded(
+                                groupedTabs = groupedTabs,
+                                groups = groups,
+                                // グループが空になる場合も含めて有効範囲にクランプする
+                                activeGroupIndex = state.activeGroupIndex.coerceIn(0, (groups.size - 1).coerceAtLeast(0)),
+                            )
+                        },
+                    )
+                }
+            }
+        }
+    }.asStateFlow()
 
     interface Event {
         fun closeTab(tabId: String)
