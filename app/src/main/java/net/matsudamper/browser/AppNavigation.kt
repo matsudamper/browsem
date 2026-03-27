@@ -36,6 +36,7 @@ import androidx.navigation3.ui.defaultPopTransitionSpec
 import androidx.navigation3.ui.defaultTransitionSpec
 import java.util.UUID
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.Dispatchers
@@ -258,6 +259,23 @@ internal fun BrowserApp(
                                 selectTab(tabId, beforeTab)
                             },
                             orderedTabs = orderedBrowserTabs,
+                            onNewSessionTabCreated = { newTabId, openerTabId ->
+                                // オープナーと同じグループに即座に割り当てる。
+                                // デフォルトグループが設定されている場合はそちらを優先する。
+                                scope.launch {
+                                    val defaultGroupId = tabGroupRepository.getDefaultGroupId()
+                                    val openerGroupId = tabGroupRepository.observeTabGroupAssignments()
+                                        .first()
+                                        .find { it.tabId == openerTabId }
+                                        ?.groupId
+                                        ?.takeIf { it.isNotEmpty() }
+                                        ?.let { TabGroupId(it) }
+                                    val assignGroupId = defaultGroupId ?: openerGroupId
+                                    if (assignGroupId != null) {
+                                        tabGroupRepository.assignTabToGroup(newTabId, assignGroupId)
+                                    }
+                                }
+                            },
                         )
                     }
 
@@ -284,10 +302,20 @@ internal fun BrowserApp(
                         HistoryScreen(
                             viewModel = historyViewModel,
                             onNavigateToUrl = { url ->
-                                val newTab = browserSessionController.createAndAppendTab(
-                                    initialUrl = url,
-                                )
-                                navController.selectTab(newTab.tabId)
+                                scope.launch {
+                                    val tabId = UUID.randomUUID().toString()
+                                    val defaultGroupId = tabGroupRepository.getDefaultGroupId()
+                                    if (defaultGroupId != null) {
+                                        tabGroupRepository.assignTabToGroup(tabId, defaultGroupId)
+                                    }
+                                    withContext(Dispatchers.Main) {
+                                        browserSessionController.createAndAppendTab(
+                                            tabId = tabId,
+                                            initialUrl = url,
+                                        )
+                                        navController.selectTab(tabId)
+                                    }
+                                }
                             },
                             onBack = { backStack.removeLastOrNull() },
                         )
@@ -301,10 +329,20 @@ internal fun BrowserApp(
                             viewModel = extensionsViewModel,
                             onBack = { backStack.removeLastOrNull() },
                             onOpenExtensionSettings = { optionsPageUrl ->
-                                val tab = browserSessionController.createAndAppendTab(
-                                    initialUrl = optionsPageUrl,
-                                )
-                                selectTab(tab.tabId, null)
+                                scope.launch {
+                                    val tabId = UUID.randomUUID().toString()
+                                    val defaultGroupId = tabGroupRepository.getDefaultGroupId()
+                                    if (defaultGroupId != null) {
+                                        tabGroupRepository.assignTabToGroup(tabId, defaultGroupId)
+                                    }
+                                    withContext(Dispatchers.Main) {
+                                        browserSessionController.createAndAppendTab(
+                                            tabId = tabId,
+                                            initialUrl = optionsPageUrl,
+                                        )
+                                        selectTab(tabId, null)
+                                    }
+                                }
                             },
                         )
                     }
@@ -343,10 +381,20 @@ internal fun BrowserApp(
                             onCloseTab = { tabId ->
                                 browserSessionController.closeTab(tabId)
                                 if (browserSessionController.tabs.isEmpty()) {
-                                    val newTab = browserSessionController.createAndAppendTab(
-                                        initialUrl = homepageUrl,
-                                    )
-                                    selectTab(newTab.tabId, null)
+                                    scope.launch {
+                                        val newTabId = UUID.randomUUID().toString()
+                                        val defaultGroupId = tabGroupRepository.getDefaultGroupId()
+                                        if (defaultGroupId != null) {
+                                            tabGroupRepository.assignTabToGroup(newTabId, defaultGroupId)
+                                        }
+                                        withContext(Dispatchers.Main) {
+                                            browserSessionController.createAndAppendTab(
+                                                tabId = newTabId,
+                                                initialUrl = homepageUrl,
+                                            )
+                                            selectTab(newTabId, null)
+                                        }
+                                    }
                                 }
                             },
                             onOpenNewTab = { currentGroupId: TabGroupId? ->

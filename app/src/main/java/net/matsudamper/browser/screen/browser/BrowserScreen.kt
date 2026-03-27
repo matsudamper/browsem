@@ -64,6 +64,8 @@ internal fun BrowserScreen(
     onSelectTab: (tabId: String, beforeTab: AppDestination.Browser?) -> Unit,
     /** グループ順に並べたタブリスト。アドレスバースワイプ時の前後タブ判定に使用する。 */
     orderedTabs: List<BrowserTab>,
+    /** target="_blank" 等でタブが新規作成された際に呼ばれる。グループ割り当てに使用する。 */
+    onNewSessionTabCreated: (newTabId: String, openerTabId: String) -> Unit,
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
@@ -140,6 +142,7 @@ internal fun BrowserScreen(
                     initialUrl = uri,
                     openerTabId = key.tabId,
                 )
+                onNewSessionTabCreated(newTab.tabId, key.tabId)
                 onSelectTab(newTab.tabId, key)
                 newTab.session
             },
