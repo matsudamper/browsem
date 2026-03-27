@@ -49,8 +49,8 @@ internal class BrowserViewModel(
     private val tabRepository: TabRepository,
     internal val historyRepository: net.matsudamper.browser.data.history.HistoryRepository,
 ) : ViewModel() {
-    private val runtimeCoordinator = BrowserRuntimeCoordinator(runtime, themeColorExtension, mediaWebExtension)
-    private val tabPersistenceCoordinator = TabPersistenceCoordinator(tabRepository)
+    private val runtimeCoordinator =
+        BrowserRuntimeCoordinator(runtime, themeColorExtension, mediaWebExtension, tabRepository)
 
     val browserSessionController: BrowserSessionController
         get() = runtimeCoordinator.browserSessionController
@@ -76,15 +76,12 @@ internal class BrowserViewModel(
         val currentSettings = settings.filterNotNull().first()
         val homepageUrl = currentSettings.resolvedHomepageUrl()
 
-        return tabPersistenceCoordinator.restoreTabs(
+        return browserSessionController.restoreTabs(
             homepageUrl = homepageUrl,
-            browserSessionController = browserSessionController,
         ).also { tabId ->
-            browserSessionController.selectTab(tabId)
-            tabPersistenceCoordinator.bind(
-                scope = viewModelScope,
-                browserSessionController = browserSessionController,
-            )
+            if (browserSessionController.selectedTabId != tabId) {
+                browserSessionController.selectTab(tabId)
+            }
             setupComplete.complete(Unit)
         }
     }
@@ -113,7 +110,7 @@ internal class BrowserViewModel(
         if (browserSessionController.tabs.isEmpty()) {
             browserSessionController.createAndAppendTab(initialUrl = homepageUrl)
         }
-        tabPersistenceCoordinator.saveNow(browserSessionController)
+        browserSessionController.awaitPersistenceIdle()
     }
 
     fun applyRuntimeSettings() {

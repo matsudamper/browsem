@@ -35,8 +35,8 @@ abstract class TabGroupDao {
     abstract suspend fun updateTabGroupIfUnassigned(tabId: String, groupId: String)
 
     /**
-     * tab_state 行がまだ存在しない場合（TabPersistenceCoordinator の 500ms デバウンス待ち）に
-     * プレースホルダ行を作成する。既に行がある場合は IGNORE で何もしない。
+     * tab_state 行がまだ存在しない場合に、グループ先行確定用のプレースホルダ行を作成する。
+     * 既に行がある場合は IGNORE で何もしない。
      */
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     abstract suspend fun insertTabIfNotExists(tab: TabStateEntity)
@@ -44,7 +44,7 @@ abstract class TabGroupDao {
     /**
      * タブをグループに割り当てる。
      * tab_state 行が存在しない場合はプレースホルダ行を INSERT してから UPDATE する。
-     * これにより、TabPersistenceCoordinator が行を作成する前でも割り当てが成功する。
+     * これにより、タブ生成前にグループを先行確定できる。
      */
     @Transaction
     open suspend fun setTabGroup(tabId: String, groupId: String) {

@@ -1,65 +1,119 @@
 package net.matsudamper.browser.data
 
 import android.content.Context
-import android.util.Log
 import androidx.room.withTransaction
+import java.io.File
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 import net.matsudamper.browser.data.tab.TabDatabase
 import net.matsudamper.browser.data.tab.TabStateEntity
-import java.io.File
 
 class TabRepository(context: Context) {
     private val db = TabDatabase.getInstance(context)
     private val dao = db.tabDao()
     private val thumbnailDir = File(context.cacheDir, "tab_thumbnails").apply { mkdirs() }
 
-    /** 起動時にDBからタブ一覧と選択タブIDを読み込む */
-    suspend fun loadTabsForRestoration(): Pair<List<PersistedTabState>, String?> {
-        val entities = dao.getAllTabs()
-        val tabs = entities.map { it.toPersistedTabState() }
-        val selectedTabId = entities.firstOrNull { it.isSelected == 1 }?.tabId
-            ?: entities.lastOrNull()?.tabId
-        return Pair(tabs, selectedTabId)
+    fun observeTabs(): Flow<PersistedTabStateContainer> {
+        return dao.observeAllTabs().map { entities ->
+            entities.toPersistedTabStateContainer()
+        }
     }
 
-    /**
-     * 現在のタブ一覧と選択タブをDBに同期する。
-     * 差分を比較し、変更があった部分のみ更新する。
-     */
-    suspend fun syncTabs(tabs: List<PersistedTabState>, selectedTabId: String?) {
-        if (tabs.isEmpty()) {
-            Log.w("TabRepository", "空のタブリストは保存しない")
-            return
-        }
+    suspend fun loadTabs(): PersistedTabStateContainer {
+        return dao.getAllTabs().toPersistedTabStateContainer()
+    }
+
+    suspend fun createOrUpdateTab(
+        tab: PersistedTabState,
+        insertIndex: Int,
+        selected: Boolean,
+    ) {
         db.withTransaction {
-            val currentEntities = dao.getAllTabs().associateBy { it.tabId }
-            val currentTabIds = tabs.map { it.tabId }.toSet()
+            val currentEntities = dao.getAllTabs()
+            val existing = currentEntities.firstOrNull { it.tabId == tab.tabId }
+            val visibleTabs = currentEntities.filterNot(TabStateEntity::isPlaceholderForPreAssignment)
+            val targetIndex = insertIndex.coerceIn(0, visibleTabs.size)
 
-            // 削除されたタブをDBから消す
-            val deletedTabIds = currentEntities.keys - currentTabIds
-            deletedTabIds.forEach { dao.deleteTab(it) }
+            dao.upsertTab(
+                TabStateEntity(
+                    tabId = tab.tabId,
+                    url = tab.url,
+                    sessionState = tab.sessionState,
+                    title = tab.title,
+                    openerTabId = tab.openerTabId,
+                    themeColor = tab.themeColor,
+                    sortOrder = existing?.sortOrder ?: targetIndex,
+                    isSelected = when {
+                        selected -> 1
+                        existing != null -> existing.isSelected
+                        else -> 0
+                    },
+                    groupId = existing?.groupId.orEmpty(),
+                ),
+            )
 
-            // 変更または新規タブのみを保存する
-            tabs.forEachIndexed { index, tab ->
-                val existing = currentEntities[tab.tabId]
-                if (existing == null) {
-                    dao.upsertTab(tab.toEntity(sortOrder = index, isSelected = 0))
-                } else {
-                    if (existing.url != tab.url) dao.updateUrl(tab.tabId, tab.url)
-                    if (existing.title != tab.title) dao.updateTitle(tab.tabId, tab.title)
-                    if (existing.sessionState != tab.sessionState) dao.updateSessionState(tab.tabId, tab.sessionState)
-                    if (existing.themeColor != tab.themeColor) dao.updateThemeColor(tab.tabId, tab.themeColor)
-                    if (existing.sortOrder != index) dao.updateSortOrder(tab.tabId, index)
-                }
+            reorderVisibleTabs(moveTabId = tab.tabId, targetIndex = targetIndex)
+
+            if (selected) {
+                dao.setSelectedTab(tab.tabId)
             }
+        }
+    }
 
-            // 選択タブが変わった場合のみ更新する
-            if (selectedTabId != null) {
-                val currentSelectedId = currentEntities.values.firstOrNull { it.isSelected == 1 }?.tabId
-                if (currentSelectedId != selectedTabId) {
-                    dao.setSelectedTab(selectedTabId)
+    suspend fun updateUrl(tabId: String, url: String) {
+        dao.updateUrl(tabId, url)
+    }
+
+    suspend fun updateTitle(tabId: String, title: String) {
+        dao.updateTitle(tabId, title)
+    }
+
+    suspend fun updateSessionState(tabId: String, sessionState: String) {
+        dao.updateSessionState(tabId, sessionState)
+    }
+
+    suspend fun updateThemeColor(tabId: String, themeColor: Int?) {
+        dao.updateThemeColor(tabId, themeColor)
+    }
+
+    suspend fun selectTab(tabId: String?) {
+        db.withTransaction {
+            if (tabId == null) {
+                dao.clearSelectedTab()
+            } else {
+                dao.setSelectedTab(tabId)
+            }
+        }
+    }
+
+    suspend fun moveTab(fromIndex: Int, toIndex: Int) {
+        db.withTransaction {
+            val visibleTabs = dao.getAllTabs()
+                .filterNot(TabStateEntity::isPlaceholderForPreAssignment)
+                .toMutableList()
+            if (fromIndex !in visibleTabs.indices || toIndex !in visibleTabs.indices) {
+                return@withTransaction
+            }
+            visibleTabs.add(toIndex, visibleTabs.removeAt(fromIndex))
+            visibleTabs.forEachIndexed { index, entity ->
+                if (entity.sortOrder != index) {
+                    dao.updateSortOrder(entity.tabId, index)
                 }
             }
         }
+    }
+
+    suspend fun closeTab(tabId: String, nextSelectedTabId: String?) {
+        db.withTransaction {
+            dao.deleteTab(tabId)
+            if (nextSelectedTabId == null) {
+                dao.clearSelectedTab()
+            } else {
+                dao.setSelectedTab(nextSelectedTabId)
+            }
+            reorderVisibleTabs()
+        }
+        deleteTabThumbnail(tabId)
     }
 
     /** サムネイル画像をキャッシュファイルに保存する */
@@ -74,13 +128,41 @@ class TabRepository(context: Context) {
         return if (file.exists()) file.readBytes() else null
     }
 
-    /** 現在存在しないタブのサムネイルファイルを削除する */
-    fun deleteOrphanedThumbnails(validTabIds: Set<String>) {
-        thumbnailDir.listFiles()?.forEach { file ->
-            if (file.nameWithoutExtension !in validTabIds) {
-                file.delete()
+    fun deleteTabThumbnail(tabId: String) {
+        File(thumbnailDir, "$tabId.webp").delete()
+    }
+
+    private suspend fun reorderVisibleTabs(
+        moveTabId: String? = null,
+        targetIndex: Int? = null,
+    ) {
+        val visibleTabs = dao.getAllTabs()
+            .filterNot(TabStateEntity::isPlaceholderForPreAssignment)
+            .toMutableList()
+
+        if (moveTabId != null && targetIndex != null) {
+            val currentIndex = visibleTabs.indexOfFirst { it.tabId == moveTabId }
+            if (currentIndex >= 0) {
+                val entity = visibleTabs.removeAt(currentIndex)
+                visibleTabs.add(targetIndex.coerceIn(0, visibleTabs.size), entity)
             }
         }
+
+        visibleTabs.forEachIndexed { index, entity ->
+            if (entity.sortOrder != index) {
+                dao.updateSortOrder(entity.tabId, index)
+            }
+        }
+    }
+
+    private fun List<TabStateEntity>.toPersistedTabStateContainer(): PersistedTabStateContainer {
+        val visibleEntities = filterNot(TabStateEntity::isPlaceholderForPreAssignment)
+        val selectedTabId = visibleEntities.firstOrNull { it.isSelected == 1 }?.tabId
+            ?: visibleEntities.lastOrNull()?.tabId
+        return PersistedTabStateContainer(
+            tabs = visibleEntities.map { it.toPersistedTabState() },
+            selectedTabId = selectedTabId,
+        )
     }
 
     private fun TabStateEntity.toPersistedTabState() = PersistedTabState(
@@ -91,19 +173,12 @@ class TabRepository(context: Context) {
         openerTabId = openerTabId,
         themeColor = themeColor,
     )
-
-    private fun PersistedTabState.toEntity(sortOrder: Int, isSelected: Int) = TabStateEntity(
-        tabId = tabId,
-        url = url,
-        sessionState = sessionState,
-        title = title,
-        openerTabId = openerTabId,
-        themeColor = themeColor,
-        sortOrder = sortOrder,
-        isSelected = isSelected,
-        groupId = "", // グループ管理は TabGroupRepository が担う
-    )
 }
+
+data class PersistedTabStateContainer(
+    val tabs: List<PersistedTabState>,
+    val selectedTabId: String?,
+)
 
 data class PersistedTabState(
     val url: String,
@@ -113,3 +188,11 @@ data class PersistedTabState(
     val openerTabId: String = "",
     val themeColor: Int? = null,
 )
+
+private fun TabStateEntity.isPlaceholderForPreAssignment(): Boolean {
+    return url.isBlank() &&
+        title.isBlank() &&
+        sessionState.isBlank() &&
+        openerTabId.isBlank() &&
+        themeColor == null
+}

@@ -14,8 +14,9 @@ class BrowserRuntimeCoordinator(
     val runtime: GeckoRuntime,
     val themeColorExtension: ThemeColorWebExtension,
     val mediaWebExtension: MediaWebExtension,
+    tabRepository: net.matsudamper.browser.data.TabRepository? = null,
 ) {
-    val browserSessionController = BrowserSessionController(runtime)
+    val browserSessionController = BrowserSessionController(runtime, tabRepository)
 
     fun applyRuntimeSettings(enableThirdPartyCa: Boolean) {
         runtime.settings.setEnterpriseRootsEnabled(enableThirdPartyCa)

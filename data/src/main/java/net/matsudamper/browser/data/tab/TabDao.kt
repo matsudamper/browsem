@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface TabDao {
@@ -12,6 +13,12 @@ interface TabDao {
 
     @Query("SELECT * FROM tab_state ORDER BY sortOrder ASC")
     suspend fun getAllTabs(): List<TabStateEntity>
+
+    @Query("SELECT * FROM tab_state ORDER BY sortOrder ASC")
+    fun observeAllTabs(): Flow<List<TabStateEntity>>
+
+    @Query("SELECT * FROM tab_state WHERE tabId = :tabId LIMIT 1")
+    suspend fun getTab(tabId: String): TabStateEntity?
 
     @Query("DELETE FROM tab_state WHERE tabId = :tabId")
     suspend fun deleteTab(tabId: String)
@@ -34,4 +41,7 @@ interface TabDao {
     /** 指定したタブを選択中にし、他は未選択にする */
     @Query("UPDATE tab_state SET isSelected = CASE WHEN tabId = :tabId THEN 1 ELSE 0 END")
     suspend fun setSelectedTab(tabId: String)
+
+    @Query("UPDATE tab_state SET isSelected = 0")
+    suspend fun clearSelectedTab()
 }

@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -33,7 +34,6 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.navigation3.runtime.NavKey
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import net.matsudamper.browser.BrowserSessionController
 import net.matsudamper.browser.BrowserTab
 import net.matsudamper.browser.BrowserToolbar
@@ -69,19 +69,21 @@ internal fun BrowserScreen(
     onNewSessionTabCreated: (newTabId: String, openerTabId: String) -> Unit,
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val tabs = browserSessionController.tabs
 
-    val selectedTab = remember(key.tabId) {
-        // TODO runBlocking使わない
-        val tab = runBlocking {
+    val selectedTab = tabs.firstOrNull { it.tabId == key.tabId }
+    LaunchedEffect(key.tabId, homepageUrl, selectedTab) {
+        if (selectedTab == null) {
             browserSessionController.getOrCreateTab(
                 tabId = key.tabId,
                 homepageUrl = homepageUrl,
             )
-
         }
-        tab
     }
-    val tabs = browserSessionController.tabs
+    if (selectedTab == null) {
+        Box(modifier = Modifier.fillMaxSize())
+        return
+    }
 
     // 前後タブの取得（グループ表示順を尊重する）
     val currentIndex = orderedTabs.indexOfFirst { it.tabId == key.tabId }
