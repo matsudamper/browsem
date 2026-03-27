@@ -490,14 +490,6 @@ internal class BrowserTabScreenState(
         captureTabPreview(geckoViewRef)
     }
 
-    fun syncTitleToTab() {
-        browserTab.title = currentPageTitle
-    }
-
-    fun syncUrlToTab() {
-        browserTab.currentUrl = currentPageUrl
-    }
-
     override fun onCanGoBackChanged(value: Boolean) {
         canGoBack = value
     }

@@ -144,16 +144,6 @@ internal fun GeckoBrowserTab(
         geckoView?.requestFocus()
     }
 
-    // Sync title/url changes to BrowserTab for persistence
-    LaunchedEffect(state) {
-        snapshotFlow { state.currentPageTitle }
-            .collectLatest { state.syncTitleToTab() }
-    }
-    LaunchedEffect(state) {
-        snapshotFlow { state.currentPageUrl }
-            .collectLatest { state.syncUrlToTab() }
-    }
-
     // URLバー入力変更時にサジェスト検索を発火
     LaunchedEffect(state, onUrlInputChanged) {
         snapshotFlow { state.urlInput to state.isUrlInputFocused }
@@ -209,26 +199,27 @@ internal fun GeckoBrowserTab(
     }
 
     DisposableEffect(session, state, browserTab, mediaWebExtension) {
-        val delegates = createGeckoSessionDelegateBundle(
+        browserTab.attachSessionCallbacks(
             callbacks = state,
-            browserTab = browserTab,
             onDesktopNotificationPermissionRequest = { uri ->
-                currentOnDesktopNotificationPermissionRequest(uri)
+                runCatching {
+                    currentOnDesktopNotificationPermissionRequest(uri)
+                }.getOrElse { error ->
+                    GeckoResult.fromException(error)
+                }
             },
             onOpenNewSessionRequest = { uri ->
-                currentOnOpenNewSessionRequest(uri)
+                runCatching {
+                    GeckoResult.fromValue(currentOnOpenNewSessionRequest(uri))
+                }.getOrElse { error ->
+                    GeckoResult.fromException(error)
+                }
             },
             onCloseRequest = { currentOnCloseTab?.invoke() },
         )
         val promptDelegate = dialogState.createPromptDelegate()
         val mediaSessionDelegate = GeckoMediaSessionDelegate(mediaWebExtension)
 
-        session.permissionDelegate = delegates.permissionDelegate
-        session.navigationDelegate = delegates.navigationDelegate
-        session.contentDelegate = delegates.contentDelegate
-        session.progressDelegate = delegates.progressDelegate
-        session.translationsSessionDelegate = delegates.translationsDelegate
-        session.scrollDelegate = delegates.scrollDelegate
         session.promptDelegate = promptDelegate
         // MediaSession の初回イベントを取りこぼさないよう、ページ読み込み前に delegate を設定する。
         session.mediaSessionDelegate = mediaSessionDelegate
@@ -236,12 +227,7 @@ internal fun GeckoBrowserTab(
         browserSessionLifecycleController.restoreSession(browserTab)
 
         onDispose {
-            session.permissionDelegate = null
-            session.navigationDelegate = null
-            session.contentDelegate = null
-            session.progressDelegate = null
-            session.translationsSessionDelegate = null
-            session.scrollDelegate = null
+            browserTab.detachSessionCallbacks()
             session.promptDelegate = null
             if (session.mediaSessionDelegate === mediaSessionDelegate) {
                 session.mediaSessionDelegate = null

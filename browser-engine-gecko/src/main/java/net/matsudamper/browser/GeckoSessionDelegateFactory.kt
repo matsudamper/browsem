@@ -42,7 +42,7 @@ fun createGeckoSessionDelegateBundle(
     callbacks: BrowserSessionStateCallbacks,
     browserTab: BrowserTab,
     onDesktopNotificationPermissionRequest: (String) -> GeckoResult<Int>,
-    onOpenNewSessionRequest: (String) -> GeckoSession,
+    onOpenNewSessionRequest: (String) -> GeckoResult<GeckoSession>,
     onCloseRequest: (() -> Unit)? = null,
 ): GeckoSessionDelegateBundle {
     return GeckoSessionDelegateBundle(
@@ -87,7 +87,7 @@ fun createGeckoSessionDelegateBundle(
                 session: GeckoSession,
                 uri: String,
             ): GeckoResult<GeckoSession> {
-                return GeckoResult.fromValue(onOpenNewSessionRequest(uri))
+                return onOpenNewSessionRequest(uri)
             }
 
             override fun onLoadError(
@@ -183,5 +183,260 @@ fun createGeckoSessionDelegateBundle(
                 callbacks.onScrollChanged(scrollY)
             }
         },
+    )
+}
+
+internal class BrowserTabSessionDelegateHost(
+    private val browserTab: BrowserTab,
+) {
+    private val lock = Any()
+    private var callbacks: BrowserSessionStateCallbacks? = null
+    private var onDesktopNotificationPermissionRequest: ((String) -> GeckoResult<Int>)? = null
+    private var onOpenNewSessionRequest: ((String) -> GeckoResult<GeckoSession>)? = null
+    private var onCloseRequest: (() -> Unit)? = null
+    private val pendingPermissionRequests = ArrayDeque<PendingPermissionRequest>()
+    private val pendingNewSessionRequests = ArrayDeque<PendingNewSessionRequest>()
+
+    private val delegateBundle = createGeckoSessionDelegateBundle(
+        callbacks = object : BrowserSessionStateCallbacks {
+            override fun onCanGoBackChanged(value: Boolean) {
+                currentCallbacks()?.onCanGoBackChanged(value)
+            }
+
+            override fun onCanGoForwardChanged(value: Boolean) {
+                currentCallbacks()?.onCanGoForwardChanged(value)
+            }
+
+            override fun onLoadError(uri: String?, error: WebRequestError) {
+                currentCallbacks()?.onLoadError(uri, error)
+            }
+
+            override fun onLocationChange(url: String) {
+                if (!(url == "about:blank" && browserTab.currentUrl != "about:blank")) {
+                    browserTab.currentUrl = url
+                }
+                if (url.isNotBlank() && url != "about:blank") {
+                    browserTab.pendingInitialUrl = null
+                }
+                currentCallbacks()?.onLocationChange(url)
+            }
+
+            override fun onTitleChange(title: String) {
+                browserTab.title = title
+                currentCallbacks()?.onTitleChange(title)
+            }
+
+            override fun onContextMenu(element: GeckoSession.ContentDelegate.ContextElement) {
+                currentCallbacks()?.onContextMenu(element)
+            }
+
+            override fun onRenderReady() {
+                currentCallbacks()?.onRenderReady()
+            }
+
+            override fun onExternalResponse(response: WebResponse) {
+                currentCallbacks()?.onExternalResponse(response)
+            }
+
+            override fun onSessionStateChange(sessionState: GeckoSession.SessionState) {
+                browserTab.sessionState = sessionState.toString().orEmpty()
+                currentCallbacks()?.onSessionStateChange(sessionState)
+            }
+
+            override fun onPageStart(url: String) {
+                currentCallbacks()?.onPageStart(url)
+            }
+
+            override fun onPageStop(success: Boolean) {
+                currentCallbacks()?.onPageStop(success)
+            }
+
+            override fun onTranslationStateChange(
+                translationState: TranslationsController.SessionTranslation.TranslationState?,
+            ) {
+                currentCallbacks()?.onTranslationStateChange(translationState)
+            }
+
+            override fun onScrollChanged(scrollY: Int) {
+                currentCallbacks()?.onScrollChanged(scrollY)
+            }
+
+            override fun onLoadRequest(
+                request: GeckoSession.NavigationDelegate.LoadRequest,
+            ): GeckoResult<AllowOrDeny>? {
+                return currentCallbacks()?.onLoadRequest(request)
+            }
+        },
+        browserTab = browserTab,
+        onDesktopNotificationPermissionRequest = { uri ->
+            resolveDesktopNotificationPermission(uri)
+        },
+        onOpenNewSessionRequest = { uri ->
+            resolveNewSession(uri)
+        },
+        onCloseRequest = {
+            synchronized(lock) {
+                onCloseRequest
+            }?.invoke()
+        },
+    )
+
+    fun bindToSession(session: GeckoSession) {
+        session.permissionDelegate = delegateBundle.permissionDelegate
+        session.navigationDelegate = delegateBundle.navigationDelegate
+        session.contentDelegate = delegateBundle.contentDelegate
+        session.progressDelegate = delegateBundle.progressDelegate
+        session.translationsSessionDelegate = delegateBundle.translationsDelegate
+        session.scrollDelegate = delegateBundle.scrollDelegate
+    }
+
+    fun attachUi(
+        callbacks: BrowserSessionStateCallbacks,
+        onDesktopNotificationPermissionRequest: (String) -> GeckoResult<Int>,
+        onOpenNewSessionRequest: (String) -> GeckoResult<GeckoSession>,
+        onCloseRequest: (() -> Unit)? = null,
+    ) {
+        synchronized(lock) {
+            this.callbacks = callbacks
+            this.onDesktopNotificationPermissionRequest = onDesktopNotificationPermissionRequest
+            this.onOpenNewSessionRequest = onOpenNewSessionRequest
+            this.onCloseRequest = onCloseRequest
+        }
+        flushPendingRequests()
+    }
+
+    fun detachUi() {
+        synchronized(lock) {
+            callbacks = null
+            onDesktopNotificationPermissionRequest = null
+            onOpenNewSessionRequest = null
+            onCloseRequest = null
+        }
+    }
+
+    fun failPendingRequests(cause: Throwable) {
+        val permissions: List<PendingPermissionRequest>
+        val newSessions: List<PendingNewSessionRequest>
+        synchronized(lock) {
+            permissions = pendingPermissionRequests.toList()
+            newSessions = pendingNewSessionRequests.toList()
+            pendingPermissionRequests.clear()
+            pendingNewSessionRequests.clear()
+        }
+        permissions.forEach { pending ->
+            pending.result.completeExceptionally(cause)
+        }
+        newSessions.forEach { pending ->
+            pending.result.completeExceptionally(cause)
+        }
+    }
+
+    private fun resolveDesktopNotificationPermission(uri: String): GeckoResult<Int> {
+        val handler = synchronized(lock) {
+            onDesktopNotificationPermissionRequest
+        }
+        if (handler != null) {
+            return runCatching {
+                handler(uri)
+            }.getOrElse { error ->
+                GeckoResult.fromException(error)
+            }
+        }
+        return GeckoResult<Int>().also { result ->
+            synchronized(lock) {
+                pendingPermissionRequests.addLast(PendingPermissionRequest(uri, result))
+            }
+        }
+    }
+
+    private fun resolveNewSession(uri: String): GeckoResult<GeckoSession> {
+        val handler = synchronized(lock) {
+            onOpenNewSessionRequest
+        }
+        if (handler != null) {
+            return runCatching {
+                handler(uri)
+            }.getOrElse { error ->
+                GeckoResult.fromException(error)
+            }
+        }
+        return GeckoResult<GeckoSession>().also { result ->
+            synchronized(lock) {
+                pendingNewSessionRequests.addLast(PendingNewSessionRequest(uri, result))
+            }
+        }
+    }
+
+    private fun flushPendingRequests() {
+        flushPendingPermissionRequests()
+        flushPendingNewSessionRequests()
+    }
+
+    private fun flushPendingPermissionRequests() {
+        while (true) {
+            val current = synchronized(lock) {
+                val handler = onDesktopNotificationPermissionRequest
+                val pending = pendingPermissionRequests.removeFirstOrNull()
+                if (handler == null || pending == null) null else handler to pending
+            } ?: break
+            val (handler, pending) = current
+            val upstream = runCatching {
+                handler(pending.uri)
+            }.getOrElse { error ->
+                pending.result.completeExceptionally(error)
+                continue
+            }
+            bridgeResult(upstream, pending.result)
+        }
+    }
+
+    private fun flushPendingNewSessionRequests() {
+        while (true) {
+            val current = synchronized(lock) {
+                val handler = onOpenNewSessionRequest
+                val pending = pendingNewSessionRequests.removeFirstOrNull()
+                if (handler == null || pending == null) null else handler to pending
+            } ?: break
+            val (handler, pending) = current
+            val upstream = runCatching {
+                handler(pending.uri)
+            }.getOrElse { error ->
+                pending.result.completeExceptionally(error)
+                continue
+            }
+            bridgeResult(upstream, pending.result)
+        }
+    }
+
+    private fun currentCallbacks(): BrowserSessionStateCallbacks? {
+        return synchronized(lock) {
+            callbacks
+        }
+    }
+
+    private fun <T> bridgeResult(
+        source: GeckoResult<T>,
+        target: GeckoResult<T>,
+    ) {
+        source.accept(
+            { value ->
+                target.complete(value)
+            },
+            { throwable ->
+                target.completeExceptionally(
+                    throwable ?: IllegalStateException("GeckoResult が null 例外で失敗しました")
+                )
+            },
+        )
+    }
+
+    private data class PendingPermissionRequest(
+        val uri: String,
+        val result: GeckoResult<Int>,
+    )
+
+    private data class PendingNewSessionRequest(
+        val uri: String,
+        val result: GeckoResult<GeckoSession>,
     )
 }

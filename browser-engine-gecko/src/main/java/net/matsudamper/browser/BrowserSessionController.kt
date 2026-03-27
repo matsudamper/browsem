@@ -7,6 +7,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
@@ -27,6 +28,7 @@ import net.matsudamper.browser.core.TabSummary
 import net.matsudamper.browser.data.PersistedTabState
 import net.matsudamper.browser.data.PersistedTabStateContainer
 import net.matsudamper.browser.data.TabRepository
+import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoSession
 import java.util.UUID
@@ -331,6 +333,7 @@ class BrowserTabController(
         if (removed == null) {
             return selectedTabId
         }
+        removed.disposeSessionDelegates(CancellationException("タブが閉じられました: $tabId"))
         if (removed.session.isOpen) {
             removed.session.close()
         }
@@ -349,6 +352,7 @@ class BrowserTabController(
 
     fun close() {
         tabRegistry.values.forEach { tab ->
+            tab.disposeSessionDelegates(CancellationException("BrowserTabController が終了しました"))
             if (tab.session.isOpen) {
                 tab.session.close()
             }
@@ -418,6 +422,7 @@ class BrowserTabController(
         }
         removedTabIds.forEach { tabId ->
             tabRegistry.remove(tabId)?.let { removed ->
+                removed.disposeSessionDelegates(CancellationException("リポジトリからタブが削除されました: $tabId"))
                 if (removed.session.isOpen) {
                     removed.session.close()
                 }
@@ -525,6 +530,7 @@ class BrowserTabController(
                 }
             },
         )
+        tab.bindSessionDelegates()
         tab.pendingSessionState = persistedTabState.sessionState.takeIf { it.isNotBlank() }
         return tab
     }
@@ -578,6 +584,7 @@ class BrowserTabController(
                 }
             },
         )
+        tab.bindSessionDelegates()
         insertTabIntoRegistry(tab = tab, insertIndex = insertIndex)
         return tab
     }
@@ -768,6 +775,35 @@ class BrowserTab(
     // GeckoView が session.open() を実行するため restoreSession では isOpen==true になるが、
     // GeckoView が target URL に自動遷移しないケースに備えて明示的に loadUri を呼ぶ。
     internal var pendingInitialUrl: String? by mutableStateOf(null)
+
+    private val sessionDelegateHost = BrowserTabSessionDelegateHost(this)
+
+    internal fun bindSessionDelegates() {
+        sessionDelegateHost.bindToSession(session)
+    }
+
+    internal fun disposeSessionDelegates(cause: Throwable) {
+        sessionDelegateHost.failPendingRequests(cause)
+        sessionDelegateHost.detachUi()
+    }
+
+    fun attachSessionCallbacks(
+        callbacks: BrowserSessionStateCallbacks,
+        onDesktopNotificationPermissionRequest: (String) -> GeckoResult<Int>,
+        onOpenNewSessionRequest: (String) -> GeckoResult<GeckoSession>,
+        onCloseRequest: (() -> Unit)? = null,
+    ) {
+        sessionDelegateHost.attachUi(
+            callbacks = callbacks,
+            onDesktopNotificationPermissionRequest = onDesktopNotificationPermissionRequest,
+            onOpenNewSessionRequest = onOpenNewSessionRequest,
+            onCloseRequest = onCloseRequest,
+        )
+    }
+
+    fun detachSessionCallbacks() {
+        sessionDelegateHost.detachUi()
+    }
 
     internal fun syncPersistedState(persistedTabState: PersistedTabState) {
         suppressPersistence = true
