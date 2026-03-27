@@ -11,7 +11,6 @@ import java.util.UUID
 @Stable
 class BrowserSessionController internal constructor(
     val browserTabController: BrowserTabController,
-    val browserSessionLifecycleController: BrowserSessionLifecycleController,
 ) : TabStore {
     override val tabStoreState: StateFlow<TabStoreState>
         get() = browserTabController.tabStoreState
@@ -22,72 +21,9 @@ class BrowserSessionController internal constructor(
     val tabs: List<BrowserTab>
         get() = browserTabController.tabs
 
-    fun findTab(tabId: String): BrowserTab? = browserTabController.findTab(tabId)
-
-    suspend fun restoreTabs(homepageUrl: String): String {
-        return browserTabController.restoreTabs(homepageUrl)
-    }
-
-    suspend fun awaitPersistenceIdle() {
-        browserTabController.awaitPersistenceIdle()
-    }
-
-    suspend fun getOrCreateTab(tabId: String, homepageUrl: String): BrowserTab {
-        return browserTabController.getOrCreateTab(tabId, homepageUrl)
-    }
-
-    fun selectTab(tabId: String?) {
-        browserTabController.selectTab(tabId)
-    }
-
-    suspend fun createAndAppendTab(
-        tabId: String = UUID.randomUUID().toString(),
-        initialUrl: String,
-        restoredSessionState: String? = null,
-        restoredTitle: String = "",
-        restoredPreviewImage: ByteArray = byteArrayOf(),
-        restoredThemeColor: Int? = null,
-        openerTabId: String? = null,
-    ): BrowserTab {
-        return browserTabController.createAndAppendTab(
-            tabId = tabId,
-            initialUrl = initialUrl,
-            restoredSessionState = restoredSessionState,
-            restoredTitle = restoredTitle,
-            restoredPreviewImage = restoredPreviewImage,
-            restoredThemeColor = restoredThemeColor,
-            openerTabId = openerTabId,
-        )
-    }
-
-    fun restoreSession(tab: BrowserTab) {
-        browserSessionLifecycleController.restoreSession(tab)
-    }
-
-    fun createTabForNewSession(initialUrl: String, openerTabId: String? = null): BrowserTab {
-        return browserTabController.createTabForNewSession(initialUrl, openerTabId)
-    }
-
-    fun createAndAppendTabWithSession(
-        session: GeckoSession,
-        tabId: String = UUID.randomUUID().toString(),
-        initialUrl: String,
-        openerTabId: String? = null,
-    ): BrowserTab {
-        return browserTabController.createAndAppendTabWithSession(
-            session = session,
-            tabId = tabId,
-            initialUrl = initialUrl,
-            openerTabId = openerTabId,
-        )
-    }
 
     override fun moveTab(fromIndex: Int, toIndex: Int) {
         browserTabController.moveTab(fromIndex, toIndex)
-    }
-
-    fun closeTab(tabId: String): String? {
-        return browserTabController.closeTab(tabId)
     }
 
     fun close() {

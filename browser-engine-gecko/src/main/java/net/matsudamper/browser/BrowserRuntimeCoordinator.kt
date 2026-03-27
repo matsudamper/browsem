@@ -18,7 +18,7 @@ class BrowserRuntimeCoordinator(
 ) {
     val browserTabController = BrowserTabController(tabRepository)
     val browserSessionLifecycleController = BrowserSessionLifecycleController(runtime)
-    val browserSessionController = BrowserSessionController(browserTabController, browserSessionLifecycleController)
+    val browserSessionController = BrowserSessionController(browserTabController)
 
     fun applyRuntimeSettings(enableThirdPartyCa: Boolean) {
         runtime.settings.setEnterpriseRootsEnabled(enableThirdPartyCa)
