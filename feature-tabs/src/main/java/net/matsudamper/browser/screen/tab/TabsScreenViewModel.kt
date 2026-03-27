@@ -298,7 +298,7 @@ class TabsScreenViewModel(
 
     /**
      * グループ内でタブを並び替える。
-     * グローバルリストはグループ順に連結した順序で同期する。
+     * 非同期実装の TabStore でも順序が戻らないよう、対象タブの移動を1回だけ行う。
      */
     private fun reorderTabs(groupIndex: Int, fromLocalIndex: Int, toLocalIndex: Int) {
         val state = viewModelStateFlow.value
@@ -316,20 +316,13 @@ class TabsScreenViewModel(
         }
         val tabsInGroup = currentGroupedTabs.getOrNull(groupIndex) ?: return
         if (fromLocalIndex !in tabsInGroup.indices || toLocalIndex !in tabsInGroup.indices) return
-        val reordered = tabsInGroup.toMutableList().also {
-            it.add(toLocalIndex, it.removeAt(fromLocalIndex))
-        }
-        // グローバルリストをグループ連結順で再構築する
-        val globalOrder = currentGroupedTabs.flatMapIndexed { idx, tabs ->
-            if (idx == groupIndex) reordered else tabs
-        }
-        // moveTab 後に tabStoreState が更新されるため、各イテレーションで最新の状態を再取得する
-        globalOrder.forEachIndexed { targetIdx, tab ->
-            val currentIdx = tabStore.tabStoreState.value.tabs.indexOfFirst { it.id == tab.id }
-            if (currentIdx >= 0 && currentIdx != targetIdx) {
-                tabStore.moveTab(currentIdx, targetIdx)
-            }
-        }
+        val fromTabId = tabsInGroup[fromLocalIndex].id
+        val toTabId = tabsInGroup[toLocalIndex].id
+        val currentTabs = tabStore.tabStoreState.value.tabs
+        val fromGlobalIndex = currentTabs.indexOfFirst { it.id == fromTabId }
+        val toGlobalIndex = currentTabs.indexOfFirst { it.id == toTabId }
+        if (fromGlobalIndex < 0 || toGlobalIndex < 0 || fromGlobalIndex == toGlobalIndex) return
+        tabStore.moveTab(fromGlobalIndex, toGlobalIndex)
     }
 
     /**

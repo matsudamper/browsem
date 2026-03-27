@@ -72,6 +72,23 @@ class TabsScreenViewModelTest {
         }
     }
 
+    private class FakeLaggyTabStore : TabStore {
+        private val _state = MutableStateFlow(TabStoreState())
+        override val tabStoreState: StateFlow<TabStoreState> = _state
+
+        val moveRequests = mutableListOf<Pair<Int, Int>>()
+
+        override fun moveTab(fromIndex: Int, toIndex: Int) {
+            moveRequests += fromIndex to toIndex
+        }
+
+        fun addTab(id: String, title: String = id) {
+            _state.update { state ->
+                state.copy(tabs = state.tabs + TabSummary(id = id, title = title, url = "https://example.com"))
+            }
+        }
+    }
+
     private class FakeTabGroupRepository : TabGroupRepository {
         private val groupsFlow = MutableStateFlow<List<TabGroupData>>(emptyList())
         private val assignmentsFlow = MutableStateFlow<List<TabGroupAssignment>>(emptyList())
@@ -588,5 +605,38 @@ class TabsScreenViewModelTest {
             "復元処理完了前は Loading 状態であるべき",
             viewModel.uiState.value.loadingState is TabsScreenUiState.LoadingState.Loading,
         )
+    }
+
+    /**
+     * グループ内並び替え時に moveTab を1回だけ発行すること。
+     * 非同期 TabStore 実装でも逆順の move が連続発行されず、順序が戻らないことを保証する。
+     */
+    @Test
+    fun reorderTabs_emitsSingleMoveRequest_forLaggyTabStore() = runTest(testDispatcher) {
+        val tabStore = FakeLaggyTabStore()
+        val repo = FakeTabGroupRepository()
+        val group = TabGroupData(TabGroupId("g1"), "グループ1")
+        repo.setGroups(listOf(group))
+        tabStore.addTab("tab-a")
+        tabStore.addTab("tab-b")
+        tabStore.addTab("tab-c")
+        repo.assignTabToGroup("tab-a", group.id)
+        repo.assignTabToGroup("tab-b", group.id)
+        repo.assignTabToGroup("tab-c", group.id)
+
+        val viewModel = TabsScreenViewModel(
+            tabStore = tabStore,
+            tabGroupRepository = repo,
+        )
+        advanceUntilIdle()
+
+        viewModel.uiState.value.callbacks.onReorderTabs(
+            groupIndex = 0,
+            fromLocalIndex = 0,
+            toLocalIndex = 1,
+        )
+
+        assertEquals("moveTab は1回だけ呼ばれるべき", 1, tabStore.moveRequests.size)
+        assertEquals("先頭タブを2番目に移動する要求が発行されるべき", 0 to 1, tabStore.moveRequests.single())
     }
 }
