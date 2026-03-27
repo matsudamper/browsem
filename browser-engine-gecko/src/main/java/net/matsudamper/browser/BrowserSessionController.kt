@@ -104,7 +104,21 @@ class BrowserSessionController(runtime: GeckoRuntime) : TabStore {
     }
 
     fun restoreSession(tab: BrowserTab) {
-        if (tab.session.isOpen) return
+        if (tab.session.isOpen) {
+            // GeckoView が onNewSession でセッションを開いた場合、pendingInitialUrl が
+            // 設定されていれば target URL に明示的に遷移する（GeckoView が自動遷移しないため）
+            val url = tab.pendingInitialUrl
+            if (url != null) {
+                tab.pendingInitialUrl = null
+                tab.session.loadUri(url)
+            }
+            return
+        }
+        // onNewSession 経由で作成されたタブは GeckoView が session.open() と
+        // ナビゲーションを担当するため、ここで open() を呼ぶと二重 open になる。
+        if (tab.pendingInitialUrl != null) {
+            return
+        }
         tab.session.open(geckoRuntime)
         val state = tab.pendingSessionState
         if (state != null) {
@@ -126,7 +140,7 @@ class BrowserSessionController(runtime: GeckoRuntime) : TabStore {
             tabIds = tabList.map { it.tabId },
             openerTabId = openerTabId,
         )
-        return appendTab(
+        val tab = appendTab(
             tabId = UUID.randomUUID().toString(),
             session = session,
             initialUrl = normalizedInitialUrl,
@@ -136,6 +150,10 @@ class BrowserSessionController(runtime: GeckoRuntime) : TabStore {
             openerTabId = openerTabId,
             insertIndex = insertIndex,
         )
+        // GeckoView が onNewSession でこのセッションを開いても target URL に自動遷移しないため、
+        // restoreSession 側で明示的に loadUri を呼ぶよう URL を記録しておく
+        tab.pendingInitialUrl = normalizedInitialUrl
+        return tab
     }
 
     fun createAndAppendTabWithSession(
@@ -307,6 +325,10 @@ class BrowserTab(
     var faviconBitmap: Bitmap? by mutableStateOf(null)
     // 未オープンタブのセッション復元情報を保持
     internal var pendingSessionState: String? by mutableStateOf(null)
+    // onNewSession 経由で作成されたタブの初回ロード URL を保持。
+    // GeckoView が session.open() を実行するため restoreSession では isOpen==true になるが、
+    // GeckoView が target URL に自動遷移しないケースに備えて明示的に loadUri を呼ぶ。
+    internal var pendingInitialUrl: String? by mutableStateOf(null)
 }
 
 internal data class PersistedBrowserTab(
