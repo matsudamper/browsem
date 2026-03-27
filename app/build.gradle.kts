@@ -70,7 +70,7 @@ android {
         execution = "ANDROIDX_TEST_ORCHESTRATOR"
         managedDevices {
             localDevices {
-                maybeCreate("pixel6Api34").apply {
+                maybeCreate("pixel7Api34").apply {
                     device = "Pixel 6"
                     apiLevel = 34
                     systemImageSource = "aosp-atd"
@@ -80,7 +80,7 @@ android {
             }
             groups {
                 maybeCreate("gmd").apply {
-                    targetDevices.add(localDevices["pixel6Api34"])
+                    targetDevices.add(localDevices["pixel7Api34"])
                 }
             }
         }

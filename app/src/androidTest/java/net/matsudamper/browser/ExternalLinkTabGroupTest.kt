@@ -1,15 +1,18 @@
 package net.matsudamper.browser
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.hasParent
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.isDisplayed
 import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
-import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.performClick
+import androidx.core.net.toUri
 import androidx.lifecycle.ViewModelProvider
+import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import net.matsudamper.browser.screen.tab.TabsScreenTestTags
 import org.junit.Rule
@@ -18,19 +21,8 @@ import org.junit.runner.RunWith
 import kotlin.time.Duration.Companion.seconds
 
 /**
- * 外部リンクで開いたタブが属するグループがタブ一覧画面で正しく表示されることを検証する。
- *
- * バグ: タブ一覧画面でグループ追加 → デフォルト設定 → 新規タブ作成後、
- * 再度タブ一覧を開くと activeGroupIndex が更新されず最初のグループが表示される。
- *
- * テストフロー:
- * 1. タブボタンをタップしてタブ一覧画面を開く
- * 2. グループを追加する
- * 3. 追加したグループのデフォルトスイッチを ON にする
- * 4. 新規タブボタン（FAB）をタップしてブラウザに遷移する
- * 5. 再びタブボタンをタップしてタブ一覧画面を開く
- * 6. 表示中のグループのデフォルトスイッチが ON であることを確認する
- */
+ * 外部リンクで開いたタブがデフォルトグループで表示されることを確認する
+ **/
 @RunWith(AndroidJUnit4::class)
 class ExternalLinkTabGroupTest {
     @get:Rule
@@ -53,27 +45,27 @@ class ExternalLinkTabGroupTest {
         composeRule.onNode(hasTestTag(TabsScreenTestTags.AddTabGroupButton.testTag)).performClick()
         composeRule.waitForIdle()
 
-        // 追加したグループのデフォルトスイッチを ON にする
-        // グループ追加後、自動的に新しいグループページに遷移するため、
-        // 表示中のページのデフォルトスイッチをタップする。
-        composeRule.waitUntil(timeoutMillis = 10_000) {
-            composeRule.onAllNodes(isToggleable())
-                .fetchSemanticsNodes().isNotEmpty()
+        // 追加したグループ1のデフォルトスイッチを ON にする
+        composeRule.waitUntil(timeoutMillis = 10.seconds.inWholeMilliseconds) {
+            composeRule.onNode(
+                hasTestTag(TabsScreenTestTags.DefaultGroupSwitch(1).testTag)
+            ).isDisplayed()
         }
-        composeRule.onAllNodes(isToggleable())[0].performClick()
+        composeRule.onNode(
+            hasTestTag(TabsScreenTestTags.DefaultGroupSwitch(1).testTag)
+        ).performClick()
         composeRule.waitForIdle()
 
-        // 最初のグループに戻る（グループタブバーの最初のグループをタップ）
-        // グループ追加後は新しいグループ（index=1）にいるため、index=0 のグループに移動する。
-        composeRule.waitUntil(timeoutMillis = 10_000) {
-            composeRule.onAllNodes(hasTestTag(TabsScreenTestTags.TabGroupTopButton(0).testTag))
-                .fetchSemanticsNodes().isNotEmpty()
+        // 最初のグループ0に戻る
+        composeRule.waitUntil(timeoutMillis = 10.seconds.inWholeMilliseconds) {
+            composeRule.onNode(hasTestTag(TabsScreenTestTags.TabGroupTopButton(0).testTag))
+                .isDisplayed()
         }
         composeRule.onNode(hasTestTag(TabsScreenTestTags.TabGroupTopButton(0).testTag)).performClick()
         composeRule.waitForIdle()
 
         // 新規タブボタン（FAB）をタップしてブラウザに遷移する
-        composeRule.onAllNodesWithContentDescription("新規タブ")[0].performClick()
+        composeRule.onNode(hasTestTag(TabsScreenTestTags.AddTabButton.testTag)).performClick()
         composeRule.waitForIdle()
 
         // ブラウザ画面が表示されるまで待つ
@@ -86,8 +78,28 @@ class ExternalLinkTabGroupTest {
         tapTabButton()
         waitForTabsScreen()
 
-        // 表示中のグループのデフォルトスイッチが ON であることを確認する
-        composeRule.onAllNodes(isToggleable())[0].assertIsOn()
+        // 外部からリンクを表示する
+        ActivityScenario.launch<MainActivity>(
+            Intent(Intent.ACTION_VIEW).also { intent ->
+                intent.data = "https://www.example.com".toUri()
+                intent.addCategory(Intent.CATEGORY_BROWSABLE)
+                intent.setClass(composeRule.activity, MainActivity::class.java)
+            }
+        )
+
+        // ページが開かれている事を確認する
+        composeRule.waitUntil(timeoutMillis = 10_000) {
+            composeRule.onNode(hasTestTag(BrowserToolbarTestTags.Url("https://www.example.com").testTag)).isDisplayed()
+        }
+
+        // 再びタブボタンをタップしてタブ一覧画面を開く
+        tapTabButton()
+        waitForTabsScreen()
+
+        // 表示中のグループのデフォルトスイッチが ON なグループ1な事を確認する
+        composeRule.waitUntil(timeoutMillis = 10_000) {
+            composeRule.onNode(hasTestTag(TabsScreenTestTags.Page(1).testTag)).isDisplayed()
+        }
     }
 
     /**

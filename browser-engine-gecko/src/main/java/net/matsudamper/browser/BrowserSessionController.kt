@@ -6,9 +6,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.withContext
 import net.matsudamper.browser.core.TabInsertionPolicy
 import net.matsudamper.browser.core.TabSelectionPolicy
 import net.matsudamper.browser.core.TabStore
@@ -31,7 +33,7 @@ class BrowserSessionController(runtime: GeckoRuntime) : TabStore {
     val tabs: List<BrowserTab>
         get() = tabList
 
-    fun getOrCreateTab(tabId: String, homepageUrl: String): BrowserTab {
+    suspend fun getOrCreateTab(tabId: String, homepageUrl: String): BrowserTab {
         val alreadyCreatedTab = tabList.firstOrNull { it.tabId == tabId }
         if (alreadyCreatedTab != null) return alreadyCreatedTab
 
@@ -47,7 +49,7 @@ class BrowserSessionController(runtime: GeckoRuntime) : TabStore {
         publishState()
     }
 
-    internal fun restoreTabs(
+    internal suspend fun restoreTabs(
         homepageUrl: String,
         persistedTabs: List<PersistedBrowserTab>,
         persistedSelectedTabIndex: Int,
@@ -74,7 +76,7 @@ class BrowserSessionController(runtime: GeckoRuntime) : TabStore {
         return tabs[index].tabId.also(::selectTab)
     }
 
-    fun createAndAppendTab(
+    suspend fun createAndAppendTab(
         tabId: String = UUID.randomUUID().toString(),
         initialUrl: String,
         restoredSessionState: String? = null,
@@ -83,24 +85,26 @@ class BrowserSessionController(runtime: GeckoRuntime) : TabStore {
         restoredThemeColor: Int? = null,
         openerTabId: String? = null,
     ): BrowserTab {
-        val normalizedInitialUrl = initialUrl.ifBlank { "about:blank" }
-        val session = GeckoSession()  // open() はここでは呼ばない（遅延ロード）
-        val tab = appendTab(
-            tabId = tabId,
-            session = session,
-            initialUrl = normalizedInitialUrl,
-            sessionState = restoredSessionState.orEmpty(),
-            title = restoredTitle,
-            previewBitmapArray = restoredPreviewImage,
-            themeColor = restoredThemeColor,
-            openerTabId = openerTabId,
-        )
-        // 復元情報を保持（ensureSessionOpen で使用）
-        tab.pendingSessionState = restoredSessionState?.takeIf { it.isNotBlank() }
-        if (selectedTabId == null) {
-            selectTab(tab.tabId)
+        return withContext(Dispatchers.Main) {
+            val normalizedInitialUrl = initialUrl.ifBlank { "about:blank" }
+            val session = GeckoSession()  // open() はここでは呼ばない（遅延ロード）
+            val tab = appendTab(
+                tabId = tabId,
+                session = session,
+                initialUrl = normalizedInitialUrl,
+                sessionState = restoredSessionState.orEmpty(),
+                title = restoredTitle,
+                previewBitmapArray = restoredPreviewImage,
+                themeColor = restoredThemeColor,
+                openerTabId = openerTabId,
+            )
+            // 復元情報を保持（ensureSessionOpen で使用）
+            tab.pendingSessionState = restoredSessionState?.takeIf { it.isNotBlank() }
+            if (selectedTabId == null) {
+                selectTab(tab.tabId)
+            }
+            tab
         }
-        return tab
     }
 
     fun restoreSession(tab: BrowserTab) {

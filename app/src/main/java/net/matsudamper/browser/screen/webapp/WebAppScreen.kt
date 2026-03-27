@@ -7,6 +7,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.runBlocking
 import net.matsudamper.browser.BrowserSessionController
 import net.matsudamper.browser.GeckoBrowserTab
 import net.matsudamper.browser.ThemeColorWebExtension
@@ -42,7 +43,10 @@ internal fun WebAppScreen(
     })
     val uiState by viewModel.uiState.collectAsState()
     val browserTab = remember(browserSessionController, initialUrl) {
-        browserSessionController.createAndAppendTab(initialUrl = initialUrl)
+        // TODO runBlocking使わない
+        runBlocking {
+            browserSessionController.createAndAppendTab(initialUrl = initialUrl)
+        }
     }
 
     GeckoBrowserTab(

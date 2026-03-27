@@ -23,6 +23,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.runBlocking
 import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.TranslationProvider
 import net.matsudamper.browser.data.history.HistoryRepository
@@ -212,7 +213,10 @@ private fun CustomTabScreen(
                 initialUrl = initialUrl,
             )
         } else {
-            browserSessionController.createAndAppendTab(initialUrl = initialUrl)
+            // TODO runBlocking使わない
+            runBlocking {
+                browserSessionController.createAndAppendTab(initialUrl = initialUrl)
+            }
         }
     }
 

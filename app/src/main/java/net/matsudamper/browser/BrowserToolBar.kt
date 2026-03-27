@@ -246,6 +246,7 @@ internal fun BrowserToolbar(
                 ) {
                     UrlTextInput(
                         modifier = Modifier
+                            .testTag(BrowserToolbarTestTags.Url(urlInputState.value).testTag)
                             .weight(1f),
                         enableSuggest = urlInputState.enableSuggest,
                         paddingValues = PaddingValues(
@@ -320,6 +321,11 @@ internal fun BrowserToolbar(
 
 sealed class BrowserToolbarTestTags(val id: String) {
     val testTag: String = "${BrowserToolbarTestTags::class.java.name}#$id"
+
+    class Url(value: String) : BrowserToolbarTestTags(
+        id = "url#$value",
+    )
+
     object Toolbar : BrowserToolbarTestTags(
         id = "toolbar",
     )

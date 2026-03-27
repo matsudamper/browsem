@@ -324,7 +324,10 @@ private fun TabsScreenLoadedContent(
                 userScrollEnabled = !isTabDragging,
             ) { page ->
                 val tabsForPage = groupedTabs.getOrElse(page) { emptyList() }
-                Column(modifier = Modifier.fillMaxSize()) {
+                Column(
+                    modifier = Modifier.fillMaxSize()
+                        .testTag(TabsScreenTestTags.Page(page).testTag),
+                ) {
                     // ページヘッダー: 名前変更・削除ボタン・デフォルトトグル
                     Row(
                         modifier = Modifier
@@ -522,6 +525,10 @@ sealed interface TabsScreenTestTags {
     val id: String
 
     val testTag get() = "${TabsScreenTestTags::class.java.name}#$id"
+
+    class Page(index: Int): TabsScreenTestTags {
+        override val id: String = "page_$index"
+    }
 
     class TabGroupTopButton(index: Int) : TabsScreenTestTags {
         override val id: String = "tab_group_$index"

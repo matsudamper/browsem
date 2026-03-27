@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.navigation3.runtime.NavKey
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import net.matsudamper.browser.BrowserSessionController
 import net.matsudamper.browser.BrowserTab
 import net.matsudamper.browser.BrowserToolbar
@@ -70,10 +71,14 @@ internal fun BrowserScreen(
     val uiState by viewModel.uiState.collectAsState()
 
     val selectedTab = remember(key.tabId) {
-        val tab = browserSessionController.getOrCreateTab(
-            tabId = key.tabId,
-            homepageUrl = homepageUrl,
-        )
+        // TODO runBlocking使わない
+        val tab = runBlocking {
+            browserSessionController.getOrCreateTab(
+                tabId = key.tabId,
+                homepageUrl = homepageUrl,
+            )
+
+        }
         tab
     }
     val tabs = browserSessionController.tabs
