@@ -85,6 +85,7 @@ internal fun BrowserApp(
     val browserSessionLifecycleController = viewModel.browserSessionLifecycleController
     val themeColorExtension = viewModel.themeColorExtension
     val mediaWebExtension = viewModel.mediaWebExtension
+    val runtime = viewModel.runtime
 
     // Koin からリポジトリを取得（画面 ViewModel に直接渡す）
     val settingsRepository: SettingsRepository = koinInject()
@@ -102,10 +103,10 @@ internal fun BrowserApp(
     val setupComplete = viewModel.setupComplete
 
     // ナビゲーションとViewModelの両方にタブ選択を通知するヘルパー
-    val selectTab: (String, AppDestination.Browser?) -> Unit = remember(navController, viewModel) {
+    val selectTab: (String, AppDestination.Browser?) -> Unit = remember(navController, browserTabController) {
         { tabId, beforeTab ->
             navController.selectTab(tabId, beforeTab)
-            viewModel.selectTab(tabId)
+            browserTabController.selectTab(tabId)
         }
     }
 
@@ -276,8 +277,8 @@ internal fun BrowserApp(
                     }
 
                     AppDestination.Settings -> navEntry(key) {
-                        val settingsViewModel = remember(viewModel) {
-                            SettingsScreenViewModel(settingsRepository, viewModel.settingsUiState)
+                        val settingsViewModel = remember(settingsRepository) {
+                            SettingsScreenViewModel(settingsRepository)
                         }
                         SettingsScreen(
                             viewModel = settingsViewModel,
@@ -314,8 +315,8 @@ internal fun BrowserApp(
                     }
 
                     AppDestination.Extensions -> navEntry(key) {
-                        val extensionsViewModel = remember(viewModel) {
-                            ExtensionsScreenViewModel(runtime = viewModel.runtime)
+                        val extensionsViewModel = remember(runtime) {
+                            ExtensionsScreenViewModel(runtime = runtime)
                         }
                         ExtensionsScreen(
                             viewModel = extensionsViewModel,
@@ -336,8 +337,8 @@ internal fun BrowserApp(
                     }
 
                     AppDestination.NotificationPermissions -> navEntry(key) {
-                        val notificationPermissionsViewModel = remember(viewModel) {
-                            NotificationPermissionsScreenViewModel(settingsRepository, viewModel.settingsUiState)
+                        val notificationPermissionsViewModel = remember(settingsRepository) {
+                            NotificationPermissionsScreenViewModel(settingsRepository)
                         }
                         NotificationPermissionsScreen(
                             viewModel = notificationPermissionsViewModel,

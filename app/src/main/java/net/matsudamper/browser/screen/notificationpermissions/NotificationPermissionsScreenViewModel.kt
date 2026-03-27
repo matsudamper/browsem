@@ -9,12 +9,10 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import net.matsudamper.browser.SettingsUiState
 import net.matsudamper.browser.data.SettingsRepository
 
 internal class NotificationPermissionsScreenViewModel(
     private val settingsRepository: SettingsRepository,
-    settingsUiState: StateFlow<SettingsUiState?>,
 ) : ViewModel() {
 
     val eventHandler = Channel<(Event) -> Unit>(Channel.UNLIMITED)
@@ -32,11 +30,11 @@ internal class NotificationPermissionsScreenViewModel(
         )
     ).also { uiStateFlow ->
         viewModelScope.launch {
-            settingsUiState.collectLatest { settings ->
+            settingsRepository.settings.collectLatest { settings ->
                 uiStateFlow.update {
                     NotificationPermissionsScreenUiState(
                         callbacks = callbacks,
-                        allowedOrigins = settings?.notificationAllowedOrigins ?: emptyList(),
+                        allowedOrigins = settings.notificationAllowedOriginsList,
                     )
                 }
             }

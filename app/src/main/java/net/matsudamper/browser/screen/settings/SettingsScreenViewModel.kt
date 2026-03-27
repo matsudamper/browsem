@@ -9,16 +9,16 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import net.matsudamper.browser.SettingsUiState
+import net.matsudamper.browser.data.BrowserSettings
 import net.matsudamper.browser.data.HomepageType
 import net.matsudamper.browser.data.SearchProvider
 import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.ThemeMode
 import net.matsudamper.browser.data.TranslationProvider
+import net.matsudamper.browser.data.resolvedEnableWebSuggestions
 
 internal class SettingsScreenViewModel(
     private val settingsRepository: SettingsRepository,
-    settingsUiState: StateFlow<SettingsUiState?>,
 ) : ViewModel() {
 
     val eventHandler = Channel<(Event) -> Unit>(Channel.UNLIMITED)
@@ -60,25 +60,29 @@ internal class SettingsScreenViewModel(
     val uiState: StateFlow<SettingsScreenUiState?> = MutableStateFlow<SettingsScreenUiState?>(null)
         .also { uiStateFlow ->
             viewModelScope.launch {
-                settingsUiState.collectLatest { settings ->
+                settingsRepository.settings.collectLatest { settings ->
                     uiStateFlow.update {
-                        settings?.let {
-                            SettingsScreenUiState(
-                                callbacks = callbacks,
-                                homepageType = it.homepageType,
-                                customHomepageUrl = it.customHomepageUrl,
-                                searchProvider = it.searchProvider,
-                                customSearchUrl = it.customSearchUrl,
-                                themeMode = it.themeMode,
-                                translationProvider = it.translationProvider,
-                                enableThirdPartyCa = it.enableThirdPartyCa,
-                                enableWebSuggestions = it.enableWebSuggestions,
-                            )
-                        }
+                        settings.toUiState(callbacks)
                     }
                 }
             }
         }.asStateFlow()
 
     interface Event
+}
+
+private fun BrowserSettings.toUiState(
+    callbacks: SettingsScreenUiState.Callbacks,
+): SettingsScreenUiState {
+    return SettingsScreenUiState(
+        callbacks = callbacks,
+        homepageType = homepageType,
+        customHomepageUrl = customHomepageUrl,
+        searchProvider = searchProvider,
+        customSearchUrl = customSearchUrl,
+        themeMode = themeMode,
+        translationProvider = translationProvider,
+        enableThirdPartyCa = enableThirdPartyCa,
+        enableWebSuggestions = resolvedEnableWebSuggestions(),
+    )
 }
