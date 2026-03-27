@@ -153,30 +153,18 @@ class AboutBlankNewTabLocationTest {
             }
         }
 
-        group("割り当て処理が非同期で走るので少し待つ") {
-            Thread.sleep(3_000)
-            composeRule.waitForIdle()
-        }
+        // タブ一覧画面を開く
+        openTabsScreen()
+        waitForTabsScreen()
 
-        group("タブ一覧画面を開いて、新しいタブがグループ 0 に表示されることを確認する") {
-            openTabsScreen()
-            waitForTabsScreen()
-        }
-
-        group("グループ 0 を選択する") {
-            composeRule.onNode(
-                hasTestTag(TabsScreenTestTags.TabGroupTopButton(0).testTag)
-            ).performClick()
-            composeRule.waitForIdle()
-
-            composeRule.waitUntil(timeoutMillis = 10_000) {
-                runCatching {
-                    composeRule.onNode(
-                        hasTestTag(TabsScreenTestTags.TabGroupTopButton(0).testTag)
-                    ).assertIsSelected()
-                    true
-                }.getOrDefault(false)
-            }
+        // タブグループ 0 が表示されていることを確認する
+        composeRule.waitUntil(timeoutMillis = 10.seconds.inWholeMilliseconds) {
+            runCatching {
+                composeRule.onNode(
+                    hasTestTag(TabsScreenTestTags.TabGroupTopButton(0).testTag)
+                ).assertIsSelected()
+                true
+            }.getOrDefault(false)
         }
 
         group("target=\"_blank\" で開いたタブ (\"Target Page\") がグループ 0 に表示されていることを確認する") {
