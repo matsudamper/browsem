@@ -3,10 +3,11 @@ package net.matsudamper.browser.screen.notificationpermissions
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import net.matsudamper.browser.SettingsUiState
 import net.matsudamper.browser.data.SettingsRepository
@@ -24,21 +25,23 @@ internal class NotificationPermissionsScreenViewModel(
         }
     }
 
-    val uiState: StateFlow<NotificationPermissionsScreenUiState> = settingsUiState
-        .map { settings ->
-            NotificationPermissionsScreenUiState(
-                callbacks = callbacks,
-                allowedOrigins = settings?.notificationAllowedOrigins ?: emptyList(),
-            )
-        }
-        .stateIn(
-            viewModelScope,
-            SharingStarted.Eagerly,
-            NotificationPermissionsScreenUiState(
-                callbacks = callbacks,
-                allowedOrigins = emptyList(),
-            ),
+    val uiState: StateFlow<NotificationPermissionsScreenUiState> = MutableStateFlow(
+        NotificationPermissionsScreenUiState(
+            callbacks = callbacks,
+            allowedOrigins = emptyList(),
         )
+    ).also { uiStateFlow ->
+        viewModelScope.launch {
+            settingsUiState.collectLatest { settings ->
+                uiStateFlow.update {
+                    NotificationPermissionsScreenUiState(
+                        callbacks = callbacks,
+                        allowedOrigins = settings?.notificationAllowedOrigins ?: emptyList(),
+                    )
+                }
+            }
+        }
+    }.asStateFlow()
 
     interface Event
 }

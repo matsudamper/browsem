@@ -11,12 +11,16 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import java.io.Closeable
 import net.matsudamper.browser.data.SearchProvider
 import net.matsudamper.browser.data.SettingsRepository
@@ -141,21 +145,23 @@ class BrowserScreenViewModel(
             initialValue = UrlBarSuggestionsUiState(),
         )
 
-    val uiState: StateFlow<BrowserScreenUiState> = urlBarSuggestions
-        .map { suggestions ->
-            BrowserScreenUiState(
-                urlBarSuggestions = suggestions,
-                callbacks = callbacks,
-            )
-        }
-        .stateIn(
-            scope = scope,
-            started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MILLIS),
-            initialValue = BrowserScreenUiState(
-                urlBarSuggestions = UrlBarSuggestionsUiState(),
-                callbacks = callbacks,
-            ),
+    val uiState: StateFlow<BrowserScreenUiState> = MutableStateFlow(
+        BrowserScreenUiState(
+            urlBarSuggestions = UrlBarSuggestionsUiState(),
+            callbacks = callbacks,
         )
+    ).also { uiStateFlow ->
+        scope.launch {
+            urlBarSuggestions.collectLatest { suggestions ->
+                uiStateFlow.update {
+                    BrowserScreenUiState(
+                        urlBarSuggestions = suggestions,
+                        callbacks = callbacks,
+                    )
+                }
+            }
+        }
+    }.asStateFlow()
 
     interface Event
 

@@ -3,20 +3,21 @@ package net.matsudamper.browser.screen.downloads
 import android.app.Application
 import android.app.DownloadManager
 import android.content.Intent
+import androidx.core.net.toUri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.work.WorkManager
-import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import net.matsudamper.browser.DownloadWorker
 import net.matsudamper.browser.data.download.DownloadRecord
 import net.matsudamper.browser.data.download.DownloadRecordStatus
 import net.matsudamper.browser.data.download.DownloadRepository
 import java.util.UUID
-import androidx.core.net.toUri
 
 internal class DownloadManagementScreenViewModel(
     application: Application,
@@ -25,25 +26,26 @@ internal class DownloadManagementScreenViewModel(
     // キャンセル操作のみWorkManagerを使用する
     private val workManager = WorkManager.getInstance(application)
     private val downloadRepository = DownloadRepository(application)
+    private val callbacks = buildCallbacks()
 
-    val uiState: StateFlow<DownloadManagementScreenUiState> = downloadRepository
-        .observeDownloads()
-        .map { records ->
-            val items = records
-                .map { record -> record.toDownloadItem() }
-            DownloadManagementScreenUiState(
-                downloads = items,
-                callbacks = buildCallbacks(),
-            )
-        }
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5_000),
-            initialValue = DownloadManagementScreenUiState(
-                downloads = emptyList(),
-                callbacks = buildCallbacks(),
-            ),
+    val uiState: StateFlow<DownloadManagementScreenUiState> = MutableStateFlow(
+        DownloadManagementScreenUiState(
+            downloads = emptyList(),
+            callbacks = callbacks,
         )
+    ).also { uiStateFlow ->
+        viewModelScope.launch {
+            downloadRepository.observeDownloads().collectLatest { records ->
+                val items = records.map { record -> record.toDownloadItem() }
+                uiStateFlow.update {
+                    DownloadManagementScreenUiState(
+                        downloads = items,
+                        callbacks = callbacks,
+                    )
+                }
+            }
+        }
+    }.asStateFlow()
 
     private fun buildCallbacks() = DownloadManagementScreenUiState.Callbacks(
         onCancel = { id -> cancelDownload(id) },

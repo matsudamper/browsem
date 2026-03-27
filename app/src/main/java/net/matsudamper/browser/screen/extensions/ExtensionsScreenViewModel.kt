@@ -4,11 +4,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.WebExtension
 
@@ -60,38 +60,40 @@ internal class ExtensionsScreenViewModel(
         }
     }
 
-    val uiState: StateFlow<ExtensionsScreenUiState> = viewModelStateFlow
-        .map { state ->
-            ExtensionsScreenUiState(
-                callbacks = callbacks,
-                loadingState = if (state.isLoading) {
-                    ExtensionsScreenUiState.LoadingState.Loading
-                } else {
-                    ExtensionsScreenUiState.LoadingState.Loaded(
-                        extensions = state.extensions.map { ext ->
-                            ExtensionsScreenUiState.ExtensionUiState(
-                                id = ext.id,
-                                displayName = ext.metaData.name?.takeIf { it.isNotBlank() } ?: ext.id,
-                                version = ext.metaData.version,
-                                hasSettingsPage = ext.metaData.optionsPageUrl?.isNotBlank() == true,
+    val uiState: StateFlow<ExtensionsScreenUiState> = MutableStateFlow(
+        ExtensionsScreenUiState(
+            callbacks = callbacks,
+            loadingState = ExtensionsScreenUiState.LoadingState.Loading,
+            errorMessage = null,
+            uninstallingId = null,
+        )
+    ).also { uiStateFlow ->
+        viewModelScope.launch {
+            viewModelStateFlow.collectLatest { state ->
+                uiStateFlow.update {
+                    ExtensionsScreenUiState(
+                        callbacks = callbacks,
+                        loadingState = if (state.isLoading) {
+                            ExtensionsScreenUiState.LoadingState.Loading
+                        } else {
+                            ExtensionsScreenUiState.LoadingState.Loaded(
+                                extensions = state.extensions.map { ext ->
+                                    ExtensionsScreenUiState.ExtensionUiState(
+                                        id = ext.id,
+                                        displayName = ext.metaData.name?.takeIf { it.isNotBlank() } ?: ext.id,
+                                        version = ext.metaData.version,
+                                        hasSettingsPage = ext.metaData.optionsPageUrl?.isNotBlank() == true,
+                                    )
+                                },
                             )
                         },
+                        errorMessage = state.errorMessage,
+                        uninstallingId = state.uninstallingId,
                     )
-                },
-                errorMessage = state.errorMessage,
-                uninstallingId = state.uninstallingId,
-            )
+                }
+            }
         }
-        .stateIn(
-            viewModelScope,
-            SharingStarted.Eagerly,
-            ExtensionsScreenUiState(
-                callbacks = callbacks,
-                loadingState = ExtensionsScreenUiState.LoadingState.Loading,
-                errorMessage = null,
-                uninstallingId = null,
-            ),
-        )
+    }.asStateFlow()
 
     init {
         loadExtensions()

@@ -3,10 +3,11 @@ package net.matsudamper.browser.screen.settings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import net.matsudamper.browser.SettingsUiState
 import net.matsudamper.browser.data.HomepageType
@@ -56,23 +57,28 @@ internal class SettingsScreenViewModel(
         }
     }
 
-    val uiState: StateFlow<SettingsScreenUiState?> = settingsUiState
-        .map { settings ->
-            settings?.let {
-                SettingsScreenUiState(
-                    callbacks = callbacks,
-                    homepageType = it.homepageType,
-                    customHomepageUrl = it.customHomepageUrl,
-                    searchProvider = it.searchProvider,
-                    customSearchUrl = it.customSearchUrl,
-                    themeMode = it.themeMode,
-                    translationProvider = it.translationProvider,
-                    enableThirdPartyCa = it.enableThirdPartyCa,
-                    enableWebSuggestions = it.enableWebSuggestions,
-                )
+    val uiState: StateFlow<SettingsScreenUiState?> = MutableStateFlow<SettingsScreenUiState?>(null)
+        .also { uiStateFlow ->
+            viewModelScope.launch {
+                settingsUiState.collectLatest { settings ->
+                    uiStateFlow.update {
+                        settings?.let {
+                            SettingsScreenUiState(
+                                callbacks = callbacks,
+                                homepageType = it.homepageType,
+                                customHomepageUrl = it.customHomepageUrl,
+                                searchProvider = it.searchProvider,
+                                customSearchUrl = it.customSearchUrl,
+                                themeMode = it.themeMode,
+                                translationProvider = it.translationProvider,
+                                enableThirdPartyCa = it.enableThirdPartyCa,
+                                enableWebSuggestions = it.enableWebSuggestions,
+                            )
+                        }
+                    }
+                }
             }
-        }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+        }.asStateFlow()
 
     interface Event
 }

@@ -5,11 +5,10 @@ import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import net.matsudamper.browser.data.history.HistoryEntry
@@ -49,25 +48,27 @@ internal class HistoryScreenViewModel(
         }
     }
 
-    val uiState: StateFlow<HistoryScreenUiState> = viewModelStateFlow
-        .map { state ->
-            HistoryScreenUiState(
-                callbacks = callbacks,
-                searchQuery = state.searchQuery,
-                entries = state.entries,
-                showDeleteAllDialog = state.showDeleteAllDialog,
-            )
-        }
-        .stateIn(
-            viewModelScope,
-            SharingStarted.Eagerly,
-            HistoryScreenUiState(
-                callbacks = callbacks,
-                searchQuery = "",
-                entries = emptyList(),
-                showDeleteAllDialog = false,
-            ),
+    val uiState: StateFlow<HistoryScreenUiState> = MutableStateFlow(
+        HistoryScreenUiState(
+            callbacks = callbacks,
+            searchQuery = "",
+            entries = emptyList(),
+            showDeleteAllDialog = false,
         )
+    ).also { uiStateFlow ->
+        viewModelScope.launch {
+            viewModelStateFlow.collectLatest { state ->
+                uiStateFlow.update {
+                    HistoryScreenUiState(
+                        callbacks = callbacks,
+                        searchQuery = state.searchQuery,
+                        entries = state.entries,
+                        showDeleteAllDialog = state.showDeleteAllDialog,
+                    )
+                }
+            }
+        }
+    }.asStateFlow()
 
     init {
         @OptIn(ExperimentalCoroutinesApi::class)

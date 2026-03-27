@@ -4,12 +4,15 @@ import androidx.compose.runtime.Stable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import net.matsudamper.browser.data.BrowserSettings
 import net.matsudamper.browser.data.HomepageType
@@ -60,9 +63,14 @@ internal class BrowserViewModel(
 
     private val settings: StateFlow<BrowserSettings?> = settingsRepository.settings
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
-    val settingsUiState: StateFlow<SettingsUiState?> = settings
-        .map { current -> current?.toUiState() }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+    val settingsUiState: StateFlow<SettingsUiState?> = MutableStateFlow<SettingsUiState?>(null)
+        .also { uiStateFlow ->
+            viewModelScope.launch {
+                settings.collectLatest { current ->
+                    uiStateFlow.update { current?.toUiState() }
+                }
+            }
+        }.asStateFlow()
 
     /**
      * 選択タブを更新する。
