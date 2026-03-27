@@ -17,6 +17,9 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
+import kotlin.contracts.ExperimentalContracts
+import kotlin.contracts.InvocationKind
+import kotlin.contracts.contract
 import kotlin.time.Duration.Companion.seconds
 
 /**
@@ -302,10 +305,14 @@ class TabGroupSwipeNavigationTest {
         return ViewModelProvider(composeRule.activity)[BrowserViewModel::class.java]
     }
 
+    @OptIn(ExperimentalContracts::class)
     private fun group(
         @Suppress("unused") title: String = "",
         block: () -> Unit
     ) {
+        contract {
+            callsInPlace(block, InvocationKind.EXACTLY_ONCE)
+        }
         if (userDebug) {
             Thread.sleep(5.seconds.inWholeMilliseconds)
         }
