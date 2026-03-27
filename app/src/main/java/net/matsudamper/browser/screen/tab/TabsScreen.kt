@@ -357,9 +357,12 @@ private fun TabsScreenLoadedContent(
                                 text = "デフォルト",
                                 style = MaterialTheme.typography.labelMedium,
                             )
+                            // 外部アプリ（Intent）経由でURLを開いた際に割り当てるグループを指定する。
+                            // タブ一覧での新規追加・target=_blank など、アプリ内操作には適用されない。
                             Switch(
                                 checked = groups.getOrNull(page)?.isDefault ?: false,
                                 onCheckedChange = { onToggleDefaultGroup(page) },
+                                modifier = Modifier.testTag(TabsScreenTestTags.DefaultGroupSwitch(page).testTag),
                             )
                         }
                     }
@@ -530,5 +533,9 @@ sealed interface TabsScreenTestTags {
 
     object AddTabGroupButton : TabsScreenTestTags {
         override val id: String = "add_tab_group_button"
+    }
+
+    class DefaultGroupSwitch(index: Int) : TabsScreenTestTags {
+        override val id: String = "default_group_switch_$index"
     }
 }

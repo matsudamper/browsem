@@ -211,6 +211,7 @@ internal fun GeckoBrowserTab(
     DisposableEffect(session, state, browserTab, mediaWebExtension) {
         val delegates = createGeckoSessionDelegateBundle(
             callbacks = state,
+            browserTab = browserTab,
             onDesktopNotificationPermissionRequest = { uri ->
                 currentOnDesktopNotificationPermissionRequest(uri)
             },

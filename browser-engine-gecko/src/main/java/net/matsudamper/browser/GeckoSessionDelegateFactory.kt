@@ -40,6 +40,7 @@ data class GeckoSessionDelegateBundle(
 
 fun createGeckoSessionDelegateBundle(
     callbacks: BrowserSessionStateCallbacks,
+    browserTab: BrowserTab,
     onDesktopNotificationPermissionRequest: (String) -> GeckoResult<Int>,
     onOpenNewSessionRequest: (String) -> GeckoSession,
     onCloseRequest: (() -> Unit)? = null,
@@ -111,6 +112,11 @@ fun createGeckoSessionDelegateBundle(
                 perms: MutableList<GeckoSession.PermissionDelegate.ContentPermission>,
                 hasUserGesture: Boolean,
             ) {
+                // onNewSession 経由タブのナビゲーション完了時に pendingInitialUrl をクリア。
+                // GeckoView は about:blank の後に実 URL を発火するため、実 URL の発火でクリアする。
+                if (url != null && url != "about:blank") {
+                    browserTab.pendingInitialUrl = null
+                }
                 callbacks.onLocationChange(url.orEmpty())
             }
         },
