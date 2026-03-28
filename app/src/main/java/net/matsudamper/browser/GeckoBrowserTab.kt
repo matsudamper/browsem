@@ -7,6 +7,7 @@ import android.view.Menu
 import android.view.MenuItem
 import android.view.View
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
@@ -545,10 +546,12 @@ internal fun GeckoBrowserTab(
     // タブ履歴BottomSheet
     if (showTabHistorySheet) {
         TabHistoryBottomSheet(
-            items = state.tabHistoryItems.take(state.tabHistoryCurrentIndex + 1).asReversed(),
+            items = state.tabHistoryItems.asReversed(),
+            currentReversedIndex = state.tabHistoryItems.lastIndex - state.tabHistoryCurrentIndex,
             onNavigateTo = { reversedIndex ->
                 showTabHistorySheet = false
-                state.jumpToHistoryEntry(state.tabHistoryCurrentIndex - reversedIndex)
+                val originalIndex = state.tabHistoryItems.lastIndex - reversedIndex
+                state.jumpToHistoryEntry(originalIndex)
             },
             onDismiss = { showTabHistorySheet = false },
         )
@@ -559,6 +562,7 @@ internal fun GeckoBrowserTab(
 @Composable
 private fun TabHistoryBottomSheet(
     items: List<BrowserTabScreenState.TabHistoryItem>,
+    currentReversedIndex: Int,
     onNavigateTo: (index: Int) -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -571,14 +575,22 @@ private fun TabHistoryBottomSheet(
         Text(
             text = "このタブの履歴",
             style = MaterialTheme.typography.titleMedium,
-            modifier = androidx.compose.ui.Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
         )
         HorizontalDivider()
         LazyColumn {
             itemsIndexed(items) { index, entry ->
+                val isCurrent = index == currentReversedIndex
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .then(
+                            if (isCurrent) {
+                                Modifier.background(MaterialTheme.colorScheme.primaryContainer)
+                            } else {
+                                Modifier
+                            }
+                        )
                         .clickable { onNavigateTo(index) }
                         .padding(horizontal = 16.dp, vertical = 12.dp),
                 ) {
