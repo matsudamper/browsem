@@ -135,6 +135,8 @@ internal fun BrowserApp(
             val newTab = browserTabController.createAndAppendTab(tabId = tabId, initialUrl = url)
             // 外部から開いたタブとして記録する
             externalTabIds.add(newTab.tabId)
+            // selectTab より前に呼ぶことで、外部タブ開封前の selectedTabId を記録できる
+            viewModel.registerExternalTab(newTab.tabId)
             selectTab(newTab.tabId, null)
         }
     }
@@ -160,6 +162,13 @@ internal fun BrowserApp(
     BackHandler(enabled = !navController.isLastBackHandled && currentExternalTabId != null) {
         val tabId = currentExternalTabId ?: return@BackHandler
         scope.launch {
+            // 外部タブを閉じる前にバック先へ遷移して BrowserScreen(外部タブ) を破棄する。
+            // そうしないと closeTab 後に BrowserScreen が selectedTab=null を検知し、
+            // getOrCreateTab でホームページタブを再作成してしまうため。
+            val backTargetId = viewModel.resolveBackTargetForExternalTab(tabId)
+            if (backTargetId != null) {
+                selectTab(backTargetId, null)
+            }
             viewModel.closeTabAndSaveImmediately(tabId)
             (context as ComponentActivity).finish()
         }
