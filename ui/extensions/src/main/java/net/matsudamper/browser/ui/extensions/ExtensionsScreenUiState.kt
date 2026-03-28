@@ -1,6 +1,6 @@
-package net.matsudamper.browser.screen.extensions
+package net.matsudamper.browser.ui.extensions
 
-internal data class ExtensionsScreenUiState(
+data class ExtensionsScreenUiState(
     val callbacks: Callbacks,
     val loadingState: LoadingState,
     val errorMessage: String?,
@@ -14,7 +14,8 @@ internal data class ExtensionsScreenUiState(
     }
 
     sealed interface LoadingState {
-        object Loading : LoadingState
+        data object Loading : LoadingState
+
         data class Loaded(
             val extensions: List<ExtensionUiState>,
         ) : LoadingState

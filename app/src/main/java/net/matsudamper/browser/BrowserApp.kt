@@ -41,6 +41,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -53,16 +54,16 @@ import net.matsudamper.browser.navigation.AppDestination
 import net.matsudamper.browser.navigation.NavController
 import net.matsudamper.browser.screen.browser.BrowserScreen
 import net.matsudamper.browser.screen.browser.BrowserScreenViewModel
-import net.matsudamper.browser.screen.extensions.ExtensionsScreen
 import net.matsudamper.browser.screen.extensions.ExtensionsScreenViewModel
-import net.matsudamper.browser.screen.history.HistoryScreen
 import net.matsudamper.browser.screen.history.HistoryScreenViewModel
-import net.matsudamper.browser.screen.notificationpermissions.NotificationPermissionsScreen
 import net.matsudamper.browser.screen.notificationpermissions.NotificationPermissionsScreenViewModel
-import net.matsudamper.browser.screen.downloads.DownloadManagementScreen
 import net.matsudamper.browser.screen.downloads.DownloadManagementScreenViewModel
 import net.matsudamper.browser.screen.settings.SettingsScreenViewModel
 import net.matsudamper.browser.screen.tab.TabsScreen
+import net.matsudamper.browser.ui.downloads.DownloadManagementScreen
+import net.matsudamper.browser.ui.extensions.ExtensionsScreen
+import net.matsudamper.browser.ui.history.HistoryScreen
+import net.matsudamper.browser.ui.notifications.NotificationPermissionsScreen
 import net.matsudamper.browser.ui.settings.SettingsScreen
 import org.koin.compose.koinInject
 import org.mozilla.geckoview.GeckoResult
@@ -299,20 +300,27 @@ internal fun BrowserApp(
                         val historyViewModel = remember {
                             HistoryScreenViewModel(historyRepository)
                         }
-                        HistoryScreen(
-                            viewModel = historyViewModel,
-                            onNavigateToUrl = { url ->
-                                scope.launch {
-                                    val tabId = UUID.randomUUID().toString()
-                                    withContext(Dispatchers.Main) {
-                                        browserTabController.createAndAppendTab(
-                                            tabId = tabId,
-                                            initialUrl = url,
-                                        )
-                                        navController.selectTab(tabId)
+                        val historyUiState by historyViewModel.uiState.collectAsState()
+                        LaunchedEffect(historyViewModel) {
+                            historyViewModel.eventHandler.receiveAsFlow().collect {
+                                it(object : HistoryScreenViewModel.Event {
+                                    override fun navigateToUrl(url: String) {
+                                        scope.launch {
+                                            val tabId = UUID.randomUUID().toString()
+                                            withContext(Dispatchers.Main) {
+                                                browserTabController.createAndAppendTab(
+                                                    tabId = tabId,
+                                                    initialUrl = url,
+                                                )
+                                                navController.selectTab(tabId)
+                                            }
+                                        }
                                     }
-                                }
-                            },
+                                })
+                            }
+                        }
+                        HistoryScreen(
+                            uiState = historyUiState,
                             onBack = { backStack.removeLastOrNull() },
                         )
                     }
@@ -321,21 +329,28 @@ internal fun BrowserApp(
                         val extensionsViewModel = remember(runtime) {
                             ExtensionsScreenViewModel(runtime = runtime)
                         }
-                        ExtensionsScreen(
-                            viewModel = extensionsViewModel,
-                            onBack = { backStack.removeLastOrNull() },
-                            onOpenExtensionSettings = { optionsPageUrl ->
-                                scope.launch {
-                                    val tabId = UUID.randomUUID().toString()
-                                    withContext(Dispatchers.Main) {
-                                        browserTabController.createAndAppendTab(
-                                            tabId = tabId,
-                                            initialUrl = optionsPageUrl,
-                                        )
-                                        selectTab(tabId, null)
+                        val extensionsUiState by extensionsViewModel.uiState.collectAsState()
+                        LaunchedEffect(extensionsViewModel) {
+                            extensionsViewModel.eventHandler.receiveAsFlow().collect {
+                                it(object : ExtensionsScreenViewModel.Event {
+                                    override fun navigateToExtensionSettings(url: String) {
+                                        scope.launch {
+                                            val tabId = UUID.randomUUID().toString()
+                                            withContext(Dispatchers.Main) {
+                                                browserTabController.createAndAppendTab(
+                                                    tabId = tabId,
+                                                    initialUrl = url,
+                                                )
+                                                selectTab(tabId, null)
+                                            }
+                                        }
                                     }
-                                }
-                            },
+                                })
+                            }
+                        }
+                        ExtensionsScreen(
+                            uiState = extensionsUiState,
+                            onBack = { backStack.removeLastOrNull() },
                         )
                     }
 
@@ -343,8 +358,9 @@ internal fun BrowserApp(
                         val notificationPermissionsViewModel = remember(settingsRepository) {
                             NotificationPermissionsScreenViewModel(settingsRepository)
                         }
+                        val notificationPermissionsUiState by notificationPermissionsViewModel.uiState.collectAsState()
                         NotificationPermissionsScreen(
-                            viewModel = notificationPermissionsViewModel,
+                            uiState = notificationPermissionsUiState,
                             onBack = { backStack.removeLastOrNull() },
                         )
                     }
@@ -353,8 +369,9 @@ internal fun BrowserApp(
                         val downloadsViewModel = remember {
                             DownloadManagementScreenViewModel(context.applicationContext as android.app.Application)
                         }
+                        val downloadsUiState by downloadsViewModel.uiState.collectAsState()
                         DownloadManagementScreen(
-                            viewModel = downloadsViewModel,
+                            uiState = downloadsUiState,
                             onBack = { backStack.removeLastOrNull() },
                         )
                     }

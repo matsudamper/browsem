@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import net.matsudamper.browser.ui.extensions.ExtensionsScreenUiState
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.WebExtension
 
