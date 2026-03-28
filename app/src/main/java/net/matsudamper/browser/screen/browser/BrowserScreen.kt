@@ -71,7 +71,8 @@ internal fun BrowserScreen(
     val uiState by viewModel.uiState.collectAsState()
     val tabStoreState by browserTabController.tabStoreState.collectAsState()
     val tabs = remember(tabStoreState, browserTabController) { browserTabController.tabs }
-    val orderedTabs = uiState.orderedBrowserTabs
+    val prevTab = uiState.swipePreview.previousTab
+    val nextTab = uiState.swipePreview.nextTab
 
     val selectedTab = browserTabController.findTab(key.tabId)
     LaunchedEffect(key.tabId, homepageUrl, selectedTab) {
@@ -86,11 +87,6 @@ internal fun BrowserScreen(
         Box(modifier = Modifier.fillMaxSize())
         return
     }
-
-    // 前後タブの取得（グループ表示順を尊重する）
-    val currentIndex = orderedTabs.indexOfFirst { it.tabId == key.tabId }
-    val prevTab = if (currentIndex > 0) orderedTabs[currentIndex - 1] else null
-    val nextTab = if (currentIndex >= 0 && currentIndex < orderedTabs.lastIndex) orderedTabs[currentIndex + 1] else null
 
     val coroutineScope = rememberCoroutineScope()
     // URLバースワイプのオフセット（ピクセル単位）タブ切替時にリセット
@@ -166,7 +162,6 @@ internal fun BrowserScreen(
             urlBarSuggestions = uiState.urlBarSuggestions,
             onUrlInputChanged = uiState.callbacks::onUrlInputChanged,
             onToolbarHorizontalDrag = { delta ->
-                // URLバーの水平ドラッグをスワイプオフセットに反映
                 coroutineScope.launch {
                     val maxOffset = if (prevTab != null) pageWidthPx else 0f
                     val minOffset = if (nextTab != null) -pageWidthPx else 0f
@@ -176,10 +171,8 @@ internal fun BrowserScreen(
                 }
             },
             onToolbarDragEnd = {
-                // スワイプ完了時のタブ切替判定
                 when {
                     swipeOffset.value > swipeThreshold && prevTab != null -> {
-                        // 端までアニメーション完了後に前のタブへ切り替え
                         coroutineScope.launch {
                             swipeOffset.animateTo(pageWidthPx)
                             onSelectTab(prevTab.tabId, null)
@@ -187,7 +180,6 @@ internal fun BrowserScreen(
                     }
 
                     swipeOffset.value < -swipeThreshold && nextTab != null -> {
-                        // 端までアニメーション完了後に次のタブへ切り替え
                         coroutineScope.launch {
                             swipeOffset.animateTo(-pageWidthPx)
                             onSelectTab(nextTab.tabId, null)
@@ -195,7 +187,6 @@ internal fun BrowserScreen(
                     }
 
                     else -> {
-                        // しきい値未満の場合は元の位置へスナップバック
                         coroutineScope.launch {
                             swipeOffset.animateTo(0f)
                         }

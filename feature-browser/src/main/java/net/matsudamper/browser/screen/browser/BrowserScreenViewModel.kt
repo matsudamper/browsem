@@ -6,7 +6,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -27,8 +26,9 @@ class BrowserScreenViewModel(
     historyRepository: HistoryRepository,
     settingsRepository: SettingsRepository,
     webSuggestionRepository: WebSuggestionRepository,
-    private val tabGroupRepository: TabGroupRepository,
+    tabGroupRepository: TabGroupRepository,
     browserTabsFlow: Flow<List<BrowserTab>>,
+    selectedTabIdFlow: Flow<String?>,
 ) : ViewModel(), Closeable {
     // ViewModel継承時はonCleared()でキャンセル、remember()使用時はclose()でキャンセル
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -40,7 +40,7 @@ class BrowserScreenViewModel(
     )
     private val callbacks = urlBarSuggestionsStateOwner.callbacks
 
-    private val viewModelStateFlow = MutableStateFlow(BrowserScreenViewModelState())
+    private val viewModelStateFlow = MutableStateFlow(ViewModelState())
 
     override fun onCleared() {
         super.onCleared()
@@ -62,9 +62,13 @@ class BrowserScreenViewModel(
         scope.launch {
             viewModelStateFlow.collectLatest { state ->
                 uiStateFlow.update {
+                    val adjacentTabs = state.resolveAdjacentTabs()
                     BrowserScreenUiState(
                         urlBarSuggestions = state.urlBarSuggestions,
-                        orderedBrowserTabs = state.resolveOrderedBrowserTabs(),
+                        swipePreview = BrowserScreenUiState.SwipePreviewUiState(
+                            previousTab = adjacentTabs.previousTab,
+                            nextTab = adjacentTabs.nextTab,
+                        ),
                         callbacks = callbacks,
                     )
                 }
@@ -79,20 +83,33 @@ class BrowserScreenViewModel(
             }
         }
         scope.launch {
+            selectedTabIdFlow
+                .distinctUntilChanged()
+                .collectLatest { selectedTabId ->
+                    viewModelStateFlow.update { it.copy(currentTabId = selectedTabId) }
+                }
+        }
+        scope.launch {
             browserTabsFlow
                 .distinctUntilChanged()
                 .collectLatest { browserTabs ->
-                    viewModelStateFlow.update { it.copy(browserTabs = browserTabs) }
+                    viewModelStateFlow.update {
+                        it.copy(browserTabs = browserTabs).withResolvedOrderedBrowserTabs()
+                    }
                 }
         }
         scope.launch {
             tabGroupRepository.observeGroups().collectLatest { groups ->
-                viewModelStateFlow.update { it.copy(tabGroups = groups) }
+                viewModelStateFlow.update {
+                    it.copy(tabGroups = groups).withResolvedOrderedBrowserTabs()
+                }
             }
         }
         scope.launch {
             tabGroupRepository.observeTabGroupAssignments().collectLatest { assignments ->
-                viewModelStateFlow.update { it.copy(tabGroupAssignments = assignments) }
+                viewModelStateFlow.update {
+                    it.copy(tabGroupAssignments = assignments).withResolvedOrderedBrowserTabs()
+                }
             }
         }
     }
@@ -100,13 +117,32 @@ class BrowserScreenViewModel(
     interface Event
 }
 
-private data class BrowserScreenViewModelState(
+private data class ViewModelState(
     val urlBarSuggestions: UrlBarSuggestionsUiState = UrlBarSuggestionsUiState(),
     val tabGroups: List<TabGroupData> = emptyList(),
     val tabGroupAssignments: List<TabGroupAssignment> = emptyList(),
     val browserTabs: List<BrowserTab> = emptyList(),
+    val orderedBrowserTabs: List<BrowserTab> = emptyList(),
+    val currentTabId: String? = null,
 ) {
-    fun resolveOrderedBrowserTabs(): List<BrowserTab> {
+    fun withResolvedOrderedBrowserTabs(): ViewModelState {
+        val orderedBrowserTabs = resolveOrderedBrowserTabs()
+        return copy(
+            orderedBrowserTabs = orderedBrowserTabs,
+        )
+    }
+
+    fun resolveAdjacentTabs(): AdjacentTabs {
+        val tabId = currentTabId ?: return AdjacentTabs()
+        val currentIndex = orderedBrowserTabs.indexOfFirst { it.tabId == tabId }
+        if (currentIndex < 0) return AdjacentTabs()
+        return AdjacentTabs(
+            previousTab = if (currentIndex > 0) orderedBrowserTabs[currentIndex - 1] else null,
+            nextTab = if (currentIndex < orderedBrowserTabs.lastIndex) orderedBrowserTabs[currentIndex + 1] else null,
+        )
+    }
+
+    private fun resolveOrderedBrowserTabs(): List<BrowserTab> {
         val assignmentMap = tabGroupAssignments.associate { it.tabId to it.groupId }
         val groupedTabs = tabGroups.flatMap { group ->
             browserTabs.filter { tab -> assignmentMap[tab.tabId] == group.id.value }
@@ -116,3 +152,8 @@ private data class BrowserScreenViewModelState(
         return groupedTabs + ungroupedTabs
     }
 }
+
+private data class AdjacentTabs(
+    val previousTab: BrowserTab? = null,
+    val nextTab: BrowserTab? = null,
+)
