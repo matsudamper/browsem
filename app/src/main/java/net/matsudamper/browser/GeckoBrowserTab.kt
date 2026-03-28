@@ -7,10 +7,12 @@ import android.view.Menu
 import android.view.MenuItem
 import android.view.View
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
@@ -18,9 +20,17 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -32,6 +42,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -91,6 +102,8 @@ internal fun GeckoBrowserTab(
     val readabilityWebExtension: ReadabilityWebExtension = koinInject()
     // URLバーフォーカス時にクリップボードから読み取ったURL
     var clipboardUrl by remember { mutableStateOf<String?>(null) }
+    // タブ履歴BottomSheetの表示状態
+    var showTabHistorySheet by remember { mutableStateOf(false) }
     val state = rememberBrowserTabScreenState(
         browserTab = browserTab,
         homepageUrl = homepageUrl,
@@ -223,12 +236,28 @@ internal fun GeckoBrowserTab(
         session.promptDelegate = promptDelegate
         // MediaSession の初回イベントを取りこぼさないよう、ページ読み込み前に delegate を設定する。
         session.mediaSessionDelegate = mediaSessionDelegate
+        // タブ内ナビゲーション履歴を GeckoView から同期する
+        session.historyDelegate = object : GeckoSession.HistoryDelegate {
+            override fun onHistoryStateChange(
+                session: GeckoSession,
+                historyList: GeckoSession.HistoryDelegate.HistoryList,
+            ) {
+                state.tabHistoryItems = historyList.map { item ->
+                    BrowserTabScreenState.TabHistoryItem(
+                        uri = item.uri.orEmpty(),
+                        title = item.title.orEmpty(),
+                    )
+                }
+                state.tabHistoryCurrentIndex = historyList.currentIndex
+            }
+        }
 
         browserSessionLifecycleController.restoreSession(browserTab)
 
         onDispose {
             browserTab.detachSessionCallbacks()
             session.promptDelegate = null
+            session.historyDelegate = null
             if (session.mediaSessionDelegate === mediaSessionDelegate) {
                 session.mediaSessionDelegate = null
             }
@@ -417,6 +446,9 @@ internal fun GeckoBrowserTab(
                     onHome = state::onHome,
                     onForward = state::onGoForward,
                     canGoForward = state.canGoForward,
+                    onBack = state::onGoBack,
+                    canGoBack = state.canGoBack,
+                    onLongPressBack = { showTabHistorySheet = true },
                     onRefresh = state::onRefresh,
                     onTranslatePage = { state.onTranslate(translationProvider) },
                     isSimpleView = state.isSimpleViewActive,
@@ -527,7 +559,77 @@ internal fun GeckoBrowserTab(
         )
     }
 
+    // タブ履歴BottomSheet
+    if (showTabHistorySheet) {
+        TabHistoryBottomSheet(
+            items = state.tabHistoryItems.take(state.tabHistoryCurrentIndex + 1),
+            onNavigateTo = { index ->
+                showTabHistorySheet = false
+                state.jumpToHistoryEntry(index)
+            },
+            onDismiss = { showTabHistorySheet = false },
+        )
+    }
 }
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun TabHistoryBottomSheet(
+    items: List<BrowserTabScreenState.TabHistoryItem>,
+    onNavigateTo: (index: Int) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+    ) {
+        Text(
+            text = "このタブの履歴",
+            style = MaterialTheme.typography.titleMedium,
+            modifier = androidx.compose.ui.Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+        )
+        HorizontalDivider()
+        LazyColumn {
+            itemsIndexed(items) { index, entry ->
+                Row(
+                    modifier = androidx.compose.ui.Modifier
+                        .fillMaxWidth()
+                        .clickable { onNavigateTo(index) }
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = "${index + 1}",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = androidx.compose.ui.Modifier.padding(end = 12.dp),
+                    )
+                    Column(modifier = androidx.compose.ui.Modifier.weight(1f)) {
+                        Text(
+                            text = entry.title.ifBlank { entry.uri },
+                            style = MaterialTheme.typography.bodyMedium,
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            text = entry.uri,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+                if (index < items.lastIndex) {
+                    HorizontalDivider(modifier = androidx.compose.ui.Modifier.padding(start = 44.dp))
+                }
+            }
+        }
+    }
+}
+
 sealed interface GeckoBrowserTabTestTags {
     val id: String
     val testTag get() = "${GeckoBrowserTabTestTags::class.java.name}#$id"

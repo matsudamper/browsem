@@ -109,6 +109,15 @@ internal class BrowserTabScreenState(
     private var lastPageStartUrlKey: String = normalizedBrowserPageKey(browserTab.currentUrl)
     // フルページロード開始フラグ（SPA の pushState 遷移と区別するため）
     private var isFullPageLoadPending: Boolean = false
+    // onLocationChange で履歴記録をスキップする残り回数
+    // goBack() / goForward() を複数回連続で呼ぶ場合にもカウンタで対応する
+    private var skipHistoryRecordCount: Int = 0
+
+    // --- タブ内ナビゲーション履歴（GeckoView の HistoryDelegate から同期） ---
+    var tabHistoryItems by mutableStateOf<List<TabHistoryItem>>(emptyList())
+    var tabHistoryCurrentIndex by mutableStateOf(-1)
+
+    data class TabHistoryItem(val uri: String, val title: String)
 
     // --- Translation state ---
     var translationState by mutableStateOf(TranslationState.Idle)
@@ -188,12 +197,22 @@ internal class BrowserTabScreenState(
 
     fun onGoForward() {
         clearPageLoadError()
+        skipHistoryRecordCount++
         session.goForward()
     }
 
     fun onGoBack() {
         clearPageLoadError()
+        skipHistoryRecordCount++
         session.goBack()
+    }
+
+    /** タブ履歴の指定インデックスへ goBack() を必要回数ループして移動する */
+    fun jumpToHistoryEntry(targetIndex: Int) {
+        val steps = tabHistoryCurrentIndex - targetIndex
+        if (steps <= 0) return
+        skipHistoryRecordCount += steps
+        repeat(steps) { session.goBack() }
     }
 
     fun togglePcMode() {
@@ -547,7 +566,11 @@ internal class BrowserTabScreenState(
             detectedPageLanguage = null
         }
         // 履歴を記録（about:blank や data: URL は除外）
-        if (url.isNotBlank() && !url.startsWith("about:") && !url.startsWith("data:")) {
+        // goBack / goForward 時はカウンタをデクリメントしてスキップする
+        val shouldRecord = url.isNotBlank() && !url.startsWith("about:") && !url.startsWith("data:")
+        val skip = skipHistoryRecordCount > 0
+        if (skip) skipHistoryRecordCount--
+        if (shouldRecord && !skip) {
             currentHistoryEntryId = null
             val callback = onHistoryRecord
             if (callback != null) {
