@@ -134,6 +134,31 @@ internal class BrowserViewModel(
         )
     }
 
+    // 外部タブを開く直前に選択されていたタブ ID を記憶するマップ
+    private val externalTabPreviousTabs = mutableMapOf<String, String?>()
+
+    /**
+     * 外部タブ登録時に呼ぶ。呼び出し時点の selectedTabId（= 外部タブ開封前のタブ）を記録する。
+     * [selectTab] より前に呼び出すこと。
+     */
+    fun registerExternalTab(tabId: String) {
+        externalTabPreviousTabs[tabId] = browserTabController.selectedTabId
+    }
+
+    /**
+     * 外部タブをバックで閉じる際に遷移すべきタブ ID を返す。
+     * 外部タブを開く前のタブが存在すればそれを、なければ他の任意のタブを返す。
+     * 他にタブが存在しない場合は null。
+     */
+    fun resolveBackTargetForExternalTab(tabId: String): String? {
+        val previousTabId = externalTabPreviousTabs[tabId]
+        return if (previousTabId != null && browserTabController.findTab(previousTabId) != null) {
+            previousTabId
+        } else {
+            browserTabController.tabs.firstOrNull { it.tabId != tabId }?.tabId
+        }
+    }
+
     /** タブを閉じ、即座に永続化する（外部URL タブをバックで閉じるときに使用）。 */
     suspend fun closeTabAndSaveImmediately(tabId: String) {
         val nextSelectedTabId = browserTabController.closeTab(tabId)
@@ -142,6 +167,7 @@ internal class BrowserViewModel(
             browserTabController.createAndAppendTab(initialUrl = currentHomepageUrl())
         }
         browserTabController.awaitPersistenceIdle()
+        externalTabPreviousTabs.remove(tabId)
     }
 
     private fun currentHomepageUrl(): String {

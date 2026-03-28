@@ -41,6 +41,10 @@ class BrowserTabController(
     private val persistenceMutex = Mutex()
     private val pendingCreatedTabIds = ConcurrentHashMap.newKeySet<String>()
     private val pendingClosedTabIds = ConcurrentHashMap.newKeySet<String>()
+    // セッション中に closeTab で閉じたタブの ID を記録する。
+    // NavDisplay の遷移アニメーション中に BrowserScreen が再コンポーズされても
+    // getOrCreateTab がタブを再作成しないようにするためのガード。
+    private val closedTabIds = ConcurrentHashMap.newKeySet<String>()
     private val tabRegistry = LinkedHashMap<String, BrowserTab>()
     private val _tabStoreState = MutableStateFlow(TabStoreState())
     private var repositoryObservationStarted = false
@@ -57,6 +61,9 @@ class BrowserTabController(
         }
 
     fun findTab(tabId: String): BrowserTab? = tabRegistry[tabId]
+
+    /** タブがこのセッション中に [closeTab] で閉じられたかどうかを返す */
+    fun wasTabClosed(tabId: String): Boolean = tabId in closedTabIds
 
     suspend fun restoreTabs(homepageUrl: String): String {
         if (tabRegistry.isEmpty()) {
@@ -250,6 +257,7 @@ class BrowserTabController(
             removed.session.close()
         }
         selectedTabId = nextSelectedTabId
+        closedTabIds.add(tabId)
         pendingClosedTabIds.add(tabId)
         pendingCreatedTabIds.remove(tabId)
         enqueuePersistence {
