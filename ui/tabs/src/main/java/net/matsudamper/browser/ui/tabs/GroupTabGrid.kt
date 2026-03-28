@@ -136,7 +136,10 @@ internal fun GroupTabGrid(
                 TabCard(
                     tab = tab,
                     selected = selected,
-                    onSelectTab = onSelectTab,
+                    onSelectTab = { tabId ->
+                        // 長押し(ドラッグ)モード中はタブ選択をブロックする
+                        if (!dragDropState.isDragging) onSelectTab(tabId)
+                    },
                     onCloseTab = onCloseTab,
                     modifier = Modifier
                         .fillMaxWidth()
