@@ -583,6 +583,11 @@ internal class BrowserTabScreenState(
         val skip = skipHistoryRecordCount > 0
         if (skip) skipHistoryRecordCount--
         if (shouldRecord && !skip) {
+            // onHistoryStateChange の発火は遅延するため、楽観的にタブ履歴を更新する
+            val newItem = TabHistoryItem(uri = url, title = currentPageTitle)
+            tabHistoryItems = tabHistoryItems.take(tabHistoryCurrentIndex + 1) + newItem
+            tabHistoryCurrentIndex = tabHistoryItems.lastIndex
+
             currentHistoryEntryId = null
             val callback = onHistoryRecord
             if (callback != null) {
