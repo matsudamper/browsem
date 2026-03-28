@@ -357,6 +357,19 @@ internal class BrowserTabSessionDelegateHost(
         flushPendingRequests()
     }
 
+    /** SessionState から履歴キャッシュを初期化する（セッション復元時に呼ぶ） */
+    fun initHistoryCache(sessionState: GeckoSession.SessionState) {
+        val items = sessionState.map { item ->
+            HistoryStateItem(uri = item.uri.orEmpty(), title = item.title.orEmpty())
+        }
+        val currentIndex = sessionState.currentIndex
+        synchronized(lock) {
+            cachedHistoryItems = items
+            cachedHistoryCurrentIndex = currentIndex
+        }
+        currentCallbacks()?.onHistoryStateChange(items, currentIndex)
+    }
+
     fun detachUi() {
         synchronized(lock) {
             callbacks = null
