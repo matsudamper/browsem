@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import net.matsudamper.browser.data.ResolvedBrowserSettings
 import net.matsudamper.browser.data.SettingsRepository
+import net.matsudamper.browser.data.TabGroupRepository
 import net.matsudamper.browser.data.TabRepository
 import net.matsudamper.browser.data.ThemeMode
 import net.matsudamper.browser.data.TranslationProvider
@@ -53,9 +54,10 @@ internal class BrowserViewModel(
     val readabilityWebExtension: ReadabilityWebExtension,
     private val settingsRepository: SettingsRepository,
     private val tabRepository: TabRepository,
+    private val tabGroupRepository: TabGroupRepository,
     internal val historyRepository: net.matsudamper.browser.data.history.HistoryRepository,
 ) : ViewModel() {
-    val browserTabController = BrowserTabController(tabRepository)
+    val browserTabController = BrowserTabController(tabRepository, tabGroupRepository)
     val browserSessionLifecycleController = BrowserSessionLifecycleController(runtime)
 
     // 構成変更を経ても破棄されないよう ViewModel で保持するセットアップ完了シグナル

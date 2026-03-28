@@ -26,6 +26,7 @@ import net.matsudamper.browser.core.TabStoreState
 import net.matsudamper.browser.core.TabSummary
 import net.matsudamper.browser.data.PersistedTabState
 import net.matsudamper.browser.data.PersistedTabStateContainer
+import net.matsudamper.browser.data.TabGroupRepository
 import net.matsudamper.browser.data.TabRepository
 import org.mozilla.geckoview.GeckoSession
 import java.util.UUID
@@ -34,6 +35,7 @@ import java.util.concurrent.ConcurrentHashMap
 @Stable
 class BrowserTabController(
     private val tabRepository: TabRepository,
+    private val tabGroupRepository: TabGroupRepository? = null,
 ) : TabStore {
     private val controllerScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val persistenceMutex = Mutex()
@@ -306,6 +308,16 @@ class BrowserTabController(
                 applyRepositoryState(state)
             }
         }
+        if (tabGroupRepository != null) {
+            controllerScope.launch {
+                tabGroupRepository.observeTabGroupAssignments().collectLatest { assignments ->
+                    val assignmentMap = assignments
+                        .filter { it.groupId.isNotEmpty() }
+                        .associate { it.tabId to it.groupId }
+                    _tabStoreState.update { it.copy(tabGroupAssignments = assignmentMap) }
+                }
+            }
+        }
     }
 
     private suspend fun applyRepositoryState(state: PersistedTabStateContainer) {
@@ -514,10 +526,12 @@ class BrowserTabController(
             ?.takeIf { selectedId -> summaries.any { it.id == selectedId } }
             ?: summaries.lastOrNull()?.id
         this.selectedTabId = nextSelectedTabId
-        _tabStoreState.value = TabStoreState(
-            tabs = summaries,
-            selectedTabId = nextSelectedTabId,
-        )
+        _tabStoreState.update {
+            it.copy(
+                tabs = summaries,
+                selectedTabId = nextSelectedTabId,
+            )
+        }
     }
 
     private fun refreshVisibleTabSummaries() {
