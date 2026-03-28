@@ -76,7 +76,10 @@ internal fun BrowserScreen(
 
     val selectedTab = browserTabController.findTab(key.tabId)
     LaunchedEffect(key.tabId, homepageUrl, selectedTab) {
-        if (selectedTab == null) {
+        // closeTab で閉じたタブは再作成しない。
+        // NavDisplay の遷移アニメーション中に BrowserScreen が残っている間に
+        // selectedTab=null で再コンポーズされてもホームページタブを作らないようにする。
+        if (selectedTab == null && !browserTabController.wasTabClosed(key.tabId)) {
             browserTabController.getOrCreateTab(
                 tabId = key.tabId,
                 homepageUrl = homepageUrl,

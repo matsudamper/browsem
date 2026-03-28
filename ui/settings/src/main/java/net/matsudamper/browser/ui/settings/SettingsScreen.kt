@@ -1,4 +1,4 @@
-package net.matsudamper.browser.screen.settings
+package net.matsudamper.browser.ui.settings
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -14,6 +14,8 @@ import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -27,17 +29,13 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalLayoutDirection
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import net.matsudamper.browser.R
 import net.matsudamper.browser.data.HomepageType
 import net.matsudamper.browser.data.SearchProvider
 import net.matsudamper.browser.data.ThemeMode
@@ -45,17 +43,14 @@ import net.matsudamper.browser.data.TranslationProvider
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun SettingsScreen(
-    viewModel: SettingsScreenViewModel,
+fun SettingsScreen(
+    uiState: SettingsScreenUiState,
     onOpenExtensions: () -> Unit,
     onOpenNotificationPermissions: () -> Unit,
     onOpenHistory: () -> Unit,
     onOpenDownloads: () -> Unit,
     onBack: () -> Unit,
 ) {
-    val uiState by viewModel.uiState.collectAsState()
-    val currentUiState = uiState ?: return
-
     Scaffold(
         topBar = {
             TopAppBar(
@@ -63,7 +58,7 @@ internal fun SettingsScreen(
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(
-                            painter = painterResource(R.drawable.ic_arrow_back_24dp),
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "戻る",
                         )
                     }
@@ -88,25 +83,25 @@ internal fun SettingsScreen(
                     Column(Modifier.selectableGroup()) {
                         SettingsRadioOption(
                             label = "Google",
-                            selected = currentUiState.homepageType == HomepageType.HOMEPAGE_GOOGLE,
-                            onClick = { currentUiState.callbacks.setHomepageType(HomepageType.HOMEPAGE_GOOGLE) },
+                            selected = uiState.homepageType == HomepageType.HOMEPAGE_GOOGLE,
+                            onClick = { uiState.callbacks.setHomepageType(HomepageType.HOMEPAGE_GOOGLE) },
                         )
                         SettingsRadioOption(
                             label = "DuckDuckGo",
-                            selected = currentUiState.homepageType == HomepageType.HOMEPAGE_DUCKDUCKGO,
-                            onClick = { currentUiState.callbacks.setHomepageType(HomepageType.HOMEPAGE_DUCKDUCKGO) },
+                            selected = uiState.homepageType == HomepageType.HOMEPAGE_DUCKDUCKGO,
+                            onClick = { uiState.callbacks.setHomepageType(HomepageType.HOMEPAGE_DUCKDUCKGO) },
                         )
                         SettingsRadioOption(
                             label = "カスタム",
-                            selected = currentUiState.homepageType == HomepageType.HOMEPAGE_CUSTOM,
-                            onClick = { currentUiState.callbacks.setHomepageType(HomepageType.HOMEPAGE_CUSTOM) },
+                            selected = uiState.homepageType == HomepageType.HOMEPAGE_CUSTOM,
+                            onClick = { uiState.callbacks.setHomepageType(HomepageType.HOMEPAGE_CUSTOM) },
                         )
                     }
-                    if (currentUiState.homepageType == HomepageType.HOMEPAGE_CUSTOM) {
+                    if (uiState.homepageType == HomepageType.HOMEPAGE_CUSTOM) {
                         Spacer(Modifier.height(4.dp))
                         OutlinedTextField(
-                            value = currentUiState.customHomepageUrl,
-                            onValueChange = currentUiState.callbacks::setCustomHomepageUrl,
+                            value = uiState.customHomepageUrl,
+                            onValueChange = uiState.callbacks::setCustomHomepageUrl,
                             label = { Text("ホームページ URL") },
                             placeholder = { Text("https://example.com") },
                             singleLine = true,
@@ -127,26 +122,26 @@ internal fun SettingsScreen(
                     Column(Modifier.selectableGroup()) {
                         SettingsRadioOption(
                             label = "Google",
-                            selected = currentUiState.searchProvider == SearchProvider.GOOGLE,
-                            onClick = { currentUiState.callbacks.setSearchProvider(SearchProvider.GOOGLE) },
+                            selected = uiState.searchProvider == SearchProvider.GOOGLE,
+                            onClick = { uiState.callbacks.setSearchProvider(SearchProvider.GOOGLE) },
                         )
                         SettingsRadioOption(
                             label = "DuckDuckGo",
-                            selected = currentUiState.searchProvider == SearchProvider.DUCKDUCKGO,
-                            onClick = { currentUiState.callbacks.setSearchProvider(SearchProvider.DUCKDUCKGO) },
+                            selected = uiState.searchProvider == SearchProvider.DUCKDUCKGO,
+                            onClick = { uiState.callbacks.setSearchProvider(SearchProvider.DUCKDUCKGO) },
                         )
                         SettingsRadioOption(
                             label = "カスタム",
-                            selected = currentUiState.searchProvider == SearchProvider.CUSTOM,
-                            onClick = { currentUiState.callbacks.setSearchProvider(SearchProvider.CUSTOM) },
+                            selected = uiState.searchProvider == SearchProvider.CUSTOM,
+                            onClick = { uiState.callbacks.setSearchProvider(SearchProvider.CUSTOM) },
                         )
                     }
 
-                    if (currentUiState.searchProvider == SearchProvider.CUSTOM) {
+                    if (uiState.searchProvider == SearchProvider.CUSTOM) {
                         Spacer(Modifier.height(4.dp))
                         OutlinedTextField(
-                            value = currentUiState.customSearchUrl,
-                            onValueChange = currentUiState.callbacks::setCustomSearchUrl,
+                            value = uiState.customSearchUrl,
+                            onValueChange = uiState.callbacks::setCustomSearchUrl,
                             label = { Text("検索 URL") },
                             placeholder = { Text("https://example.com/search?q=%s") },
                             supportingText = { Text("%s に検索ワードが入ります") },
@@ -169,9 +164,9 @@ internal fun SettingsScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .toggleable(
-                            value = currentUiState.enableWebSuggestions,
+                            value = uiState.enableWebSuggestions,
                             role = Role.Switch,
-                            onValueChange = currentUiState.callbacks::setEnableWebSuggestions,
+                            onValueChange = uiState.callbacks::setEnableWebSuggestions,
                         )
                         .padding(vertical = 4.dp),
                 ) {
@@ -187,7 +182,7 @@ internal fun SettingsScreen(
                         )
                     }
                     Switch(
-                        checked = currentUiState.enableWebSuggestions,
+                        checked = uiState.enableWebSuggestions,
                         onCheckedChange = null,
                     )
                 }
@@ -199,18 +194,18 @@ internal fun SettingsScreen(
                 Column(Modifier.selectableGroup()) {
                     SettingsRadioOption(
                         label = "システム設定に合わせる",
-                        selected = currentUiState.themeMode == ThemeMode.THEME_SYSTEM,
-                        onClick = { currentUiState.callbacks.setThemeMode(ThemeMode.THEME_SYSTEM) },
+                        selected = uiState.themeMode == ThemeMode.THEME_SYSTEM,
+                        onClick = { uiState.callbacks.setThemeMode(ThemeMode.THEME_SYSTEM) },
                     )
                     SettingsRadioOption(
                         label = "ライト",
-                        selected = currentUiState.themeMode == ThemeMode.THEME_LIGHT,
-                        onClick = { currentUiState.callbacks.setThemeMode(ThemeMode.THEME_LIGHT) },
+                        selected = uiState.themeMode == ThemeMode.THEME_LIGHT,
+                        onClick = { uiState.callbacks.setThemeMode(ThemeMode.THEME_LIGHT) },
                     )
                     SettingsRadioOption(
                         label = "ダーク",
-                        selected = currentUiState.themeMode == ThemeMode.THEME_DARK,
-                        onClick = { currentUiState.callbacks.setThemeMode(ThemeMode.THEME_DARK) },
+                        selected = uiState.themeMode == ThemeMode.THEME_DARK,
+                        onClick = { uiState.callbacks.setThemeMode(ThemeMode.THEME_DARK) },
                     )
                 }
             }
@@ -221,18 +216,18 @@ internal fun SettingsScreen(
                 Column(Modifier.selectableGroup()) {
                     SettingsRadioOption(
                         label = "Gecko",
-                        selected = currentUiState.translationProvider == TranslationProvider.TRANSLATION_PROVIDER_GECKO,
+                        selected = uiState.translationProvider == TranslationProvider.TRANSLATION_PROVIDER_GECKO,
                         onClick = {
-                            currentUiState.callbacks.setTranslationProvider(
+                            uiState.callbacks.setTranslationProvider(
                                 TranslationProvider.TRANSLATION_PROVIDER_GECKO,
                             )
                         },
                     )
                     SettingsRadioOption(
                         label = "ローカルAI (Android)",
-                        selected = currentUiState.translationProvider == TranslationProvider.TRANSLATION_PROVIDER_LOCAL_AI,
+                        selected = uiState.translationProvider == TranslationProvider.TRANSLATION_PROVIDER_LOCAL_AI,
                         onClick = {
-                            currentUiState.callbacks.setTranslationProvider(
+                            uiState.callbacks.setTranslationProvider(
                                 TranslationProvider.TRANSLATION_PROVIDER_LOCAL_AI,
                             )
                         },
@@ -255,8 +250,8 @@ internal fun SettingsScreen(
                         modifier = Modifier.weight(1f),
                     )
                     Switch(
-                        checked = currentUiState.enableThirdPartyCa,
-                        onCheckedChange = currentUiState.callbacks::setEnableThirdPartyCa,
+                        checked = uiState.enableThirdPartyCa,
+                        onCheckedChange = uiState.callbacks::setEnableThirdPartyCa,
                     )
                 }
             }

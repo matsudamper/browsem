@@ -26,6 +26,7 @@ import net.matsudamper.browser.core.TabStoreState
 import net.matsudamper.browser.core.TabSummary
 import net.matsudamper.browser.data.PersistedTabState
 import net.matsudamper.browser.data.PersistedTabStateContainer
+import net.matsudamper.browser.data.TabGroupRepository
 import net.matsudamper.browser.data.TabRepository
 import org.mozilla.geckoview.GeckoSession
 import java.util.UUID
@@ -34,11 +35,16 @@ import java.util.concurrent.ConcurrentHashMap
 @Stable
 class BrowserTabController(
     private val tabRepository: TabRepository,
+    private val tabGroupRepository: TabGroupRepository? = null,
 ) : TabStore {
     private val controllerScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val persistenceMutex = Mutex()
     private val pendingCreatedTabIds = ConcurrentHashMap.newKeySet<String>()
     private val pendingClosedTabIds = ConcurrentHashMap.newKeySet<String>()
+    // セッション中に closeTab で閉じたタブの ID を記録する。
+    // NavDisplay の遷移アニメーション中に BrowserScreen が再コンポーズされても
+    // getOrCreateTab がタブを再作成しないようにするためのガード。
+    private val closedTabIds = ConcurrentHashMap.newKeySet<String>()
     private val tabRegistry = LinkedHashMap<String, BrowserTab>()
     private val _tabStoreState = MutableStateFlow(TabStoreState())
     private var repositoryObservationStarted = false
@@ -55,6 +61,9 @@ class BrowserTabController(
         }
 
     fun findTab(tabId: String): BrowserTab? = tabRegistry[tabId]
+
+    /** タブがこのセッション中に [closeTab] で閉じられたかどうかを返す */
+    fun wasTabClosed(tabId: String): Boolean = tabId in closedTabIds
 
     suspend fun restoreTabs(homepageUrl: String): String {
         if (tabRegistry.isEmpty()) {
@@ -248,6 +257,7 @@ class BrowserTabController(
             removed.session.close()
         }
         selectedTabId = nextSelectedTabId
+        closedTabIds.add(tabId)
         pendingClosedTabIds.add(tabId)
         pendingCreatedTabIds.remove(tabId)
         enqueuePersistence {
@@ -304,6 +314,16 @@ class BrowserTabController(
         controllerScope.launch {
             tabRepository.observeTabs().collectLatest { state ->
                 applyRepositoryState(state)
+            }
+        }
+        if (tabGroupRepository != null) {
+            controllerScope.launch {
+                tabGroupRepository.observeTabGroupAssignments().collectLatest { assignments ->
+                    val assignmentMap = assignments
+                        .filter { it.groupId.isNotEmpty() }
+                        .associate { it.tabId to it.groupId }
+                    _tabStoreState.update { it.copy(tabGroupAssignments = assignmentMap) }
+                }
             }
         }
     }
@@ -514,10 +534,12 @@ class BrowserTabController(
             ?.takeIf { selectedId -> summaries.any { it.id == selectedId } }
             ?: summaries.lastOrNull()?.id
         this.selectedTabId = nextSelectedTabId
-        _tabStoreState.value = TabStoreState(
-            tabs = summaries,
-            selectedTabId = nextSelectedTabId,
-        )
+        _tabStoreState.update {
+            it.copy(
+                tabs = summaries,
+                selectedTabId = nextSelectedTabId,
+            )
+        }
     }
 
     private fun refreshVisibleTabSummaries() {

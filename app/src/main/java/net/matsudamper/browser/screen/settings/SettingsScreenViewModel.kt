@@ -16,6 +16,7 @@ import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.ThemeMode
 import net.matsudamper.browser.data.TranslationProvider
 import net.matsudamper.browser.data.resolvedEnableWebSuggestions
+import net.matsudamper.browser.ui.settings.SettingsScreenUiState
 
 internal class SettingsScreenViewModel(
     private val settingsRepository: SettingsRepository,

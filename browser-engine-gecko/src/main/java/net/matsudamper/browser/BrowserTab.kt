@@ -126,6 +126,11 @@ class BrowserTab(
         sessionDelegateHost.detachUi()
     }
 
+    /** SessionState から履歴キャッシュを初期化する */
+    internal fun initHistoryFromSessionState(sessionState: GeckoSession.SessionState) {
+        sessionDelegateHost.initHistoryCache(sessionState)
+    }
+
     internal fun syncPersistedState(persistedTabState: PersistedTabState) {
         suppressPersistence = true
         try {

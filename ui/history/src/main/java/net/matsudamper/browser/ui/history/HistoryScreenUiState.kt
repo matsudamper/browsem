@@ -1,8 +1,8 @@
-package net.matsudamper.browser.screen.history
+package net.matsudamper.browser.ui.history
 
 import net.matsudamper.browser.data.history.HistoryEntry
 
-internal data class HistoryScreenUiState(
+data class HistoryScreenUiState(
     val callbacks: Callbacks,
     val searchQuery: String,
     val entries: List<HistoryEntry>,

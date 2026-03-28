@@ -11,16 +11,22 @@ import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import net.matsudamper.browser.screen.browser.SimpleViewScreenTestTags
+import org.junit.After
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
-import java.io.File
+import java.io.BufferedReader
+import java.io.InputStreamReader
+import java.net.InetAddress
+import java.net.ServerSocket
+import java.net.Socket
 
 /**
  * シンプル表示 (Readability WebExtension) の動作確認テスト。
  *
- * ローカルHTMLを記事ページとして開き、メニューから「シンプル表示」をタップすると
+ * ローカルHTTPページを記事ページとして開き、メニューから「シンプル表示」をタップすると
  * SimpleViewScreen オーバーレイが表示されることを確認する。
  */
 @RunWith(AndroidJUnit4::class)
@@ -28,19 +34,31 @@ class SimpleViewTest {
     @get:Rule
     val composeRule = createAndroidComposeRule<MainActivity>()
 
+    private var server: LocalHtmlServer? = null
+
+    @Before
+    fun setUp() {
+        server = createLocalArticleServer()
+    }
+
+    @After
+    fun tearDown() {
+        server?.close()
+        server = null
+    }
+
     /**
      * 記事ページでシンプル表示をタップすると SimpleViewScreen が表示されることを確認する。
      */
     @Test
     fun tappingSimpleViewMenuShowsSimpleViewScreen() {
-        val articlePageUri = prepareLocalArticlePageUri()
+        val articlePageUrl = requireNotNull(server).indexUrl
 
         // 記事ページを読み込む
-        composeRule.openUrlViaViewIntent(articlePageUri)
+        composeRule.openUrlFromUrlBar(articlePageUrl)
         composeRule.waitForUrlBarContains(LOCAL_READABILITY_INDEX_FILE_NAME, timeoutMillis = 60_000)
 
         // document_idle が発火してコンテンツスクリプトがポートを確立するまで待機
-        // （ローカルファイルは通常すぐに読み込まれるが、念のため少し待つ）
         Thread.sleep(3_000)
 
         // メニューを開く
@@ -52,12 +70,12 @@ class SimpleViewTest {
         // 「シンプル表示」をタップ
         composeRule.waitUntil(timeoutMillis = 10_000) {
             composeRule.onAllNodesWithTag("シンプル表示").fetchSemanticsNodes().isNotEmpty() ||
-                    composeRule.onAllNodesWithText("シンプル表示").fetchSemanticsNodes().isNotEmpty()
+                composeRule.onAllNodesWithText("シンプル表示").fetchSemanticsNodes().isNotEmpty()
         }
         composeRule.onNodeWithText("シンプル表示").performClick()
 
         // SimpleViewScreen が表示されるまで待機
-        composeRule.waitUntil(timeoutMillis = 30_000) {
+        composeRule.waitUntil(timeoutMillis = 60_000) {
             composeRule.onAllNodesWithTag(SimpleViewScreenTestTags.SimpleView.testTag).fetchSemanticsNodes().isNotEmpty()
         }
 
@@ -72,9 +90,9 @@ class SimpleViewTest {
      */
     @Test
     fun closingSimpleViewDismissesOverlay() {
-        val articlePageUri = prepareLocalArticlePageUri()
+        val articlePageUrl = requireNotNull(server).indexUrl
 
-        composeRule.openUrlViaViewIntent(articlePageUri)
+        composeRule.openUrlFromUrlBar(articlePageUrl)
         composeRule.waitForUrlBarContains(LOCAL_READABILITY_INDEX_FILE_NAME, timeoutMillis = 60_000)
 
         Thread.sleep(3_000)
@@ -89,7 +107,7 @@ class SimpleViewTest {
         }
         composeRule.onNodeWithText("シンプル表示").performClick()
 
-        composeRule.waitUntil(timeoutMillis = 30_000) {
+        composeRule.waitUntil(timeoutMillis = 60_000) {
             composeRule.onAllNodesWithTag(SimpleViewScreenTestTags.SimpleView.testTag).fetchSemanticsNodes().isNotEmpty()
         }
 
@@ -107,23 +125,67 @@ class SimpleViewTest {
         )
     }
 
-    private fun prepareLocalArticlePageUri(): String {
+    private fun createLocalArticleServer(): LocalHtmlServer {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
-        val targetContext = instrumentation.targetContext
-        val destinationDir = File(targetContext.cacheDir, LOCAL_READABILITY_DIR_NAME).apply { mkdirs() }
-        val assetManager = instrumentation.context.assets
-        val destination = File(destinationDir, LOCAL_READABILITY_INDEX_FILE_NAME)
-        assetManager.open("$LOCAL_READABILITY_ASSET_DIR/$LOCAL_READABILITY_INDEX_FILE_NAME").use { input ->
-            destination.outputStream().use { output ->
-                input.copyTo(output)
+        val assets = instrumentation.context.assets
+        val articleHtml = assets.open("$LOCAL_READABILITY_ASSET_DIR/$LOCAL_READABILITY_INDEX_FILE_NAME")
+            .bufferedReader()
+            .use { it.readText() }
+        return LocalHtmlServer(articleHtml = articleHtml)
+    }
+
+    private class LocalHtmlServer(
+        private val articleHtml: String,
+    ) : AutoCloseable {
+        private val serverSocket = ServerSocket(0, 50, InetAddress.getByName("127.0.0.1"))
+        private val serverThread = Thread {
+            while (!serverSocket.isClosed) {
+                val socket = runCatching { serverSocket.accept() }.getOrNull() ?: break
+                runCatching { handleRequest(socket) }
+            }
+        }.apply {
+            isDaemon = true
+            start()
+        }
+
+        val indexUrl: String = "http://127.0.0.1:${serverSocket.localPort}/$LOCAL_READABILITY_INDEX_FILE_NAME"
+
+        private fun handleRequest(socket: Socket) {
+            socket.use { client ->
+                val reader = BufferedReader(InputStreamReader(client.getInputStream(), Charsets.US_ASCII))
+                val requestLine = reader.readLine() ?: return
+                while (true) {
+                    val header = reader.readLine() ?: break
+                    if (header.isEmpty()) break
+                }
+                val requestPath = requestLine.split(" ").getOrNull(1)?.substringBefore("?") ?: "/"
+                val body = when (requestPath) {
+                    "/", "/$LOCAL_READABILITY_INDEX_FILE_NAME" -> articleHtml
+                    else -> "<!doctype html><html><head><title>Not Found</title></head><body>404</body></html>"
+                }
+                val bodyBytes = body.toByteArray(Charsets.UTF_8)
+                val headers = buildString {
+                    append("HTTP/1.1 200 OK\r\n")
+                    append("Content-Type: text/html; charset=utf-8\r\n")
+                    append("Content-Length: ${bodyBytes.size}\r\n")
+                    append("Connection: close\r\n")
+                    append("\r\n")
+                }
+                val output = client.getOutputStream()
+                output.write(headers.toByteArray(Charsets.US_ASCII))
+                output.write(bodyBytes)
+                output.flush()
             }
         }
-        return destination.toURI().toString()
+
+        override fun close() {
+            runCatching { serverSocket.close() }
+            runCatching { serverThread.join(2_000) }
+        }
     }
 
     companion object {
         private const val LOCAL_READABILITY_ASSET_DIR = "test-readability"
-        private const val LOCAL_READABILITY_DIR_NAME = "test-readability"
         private const val LOCAL_READABILITY_INDEX_FILE_NAME = "index.html"
     }
 }

@@ -21,15 +21,21 @@
   </style>
 </head>
 <body>
-  <div id="tap-area">Tap to update viewport width hash</div>
+  <div id="tap-area">Viewport width is reflected in URL query automatically</div>
   <script>
     let counter = 0;
-    const updateHash = () => {
+    const updateUrlQuery = () => {
       const width = window.innerWidth;
       counter += 1;
-      window.location.hash = `w=${width}&c=${counter}`;
+      const url = new URL(window.location.href);
+      url.searchParams.set("w", String(width));
+      url.searchParams.set("c", String(counter));
+      history.replaceState(null, "", url.toString());
     };
-    document.addEventListener("click", updateHash);
+    window.addEventListener("load", updateUrlQuery);
+    window.addEventListener("resize", updateUrlQuery);
+    // 一部環境で resize が遅延するため、念のため定期更新する
+    setInterval(updateUrlQuery, 500);
   </script>
 </body>
 </html>

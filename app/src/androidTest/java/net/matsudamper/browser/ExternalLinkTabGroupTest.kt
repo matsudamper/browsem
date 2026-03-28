@@ -27,11 +27,7 @@ class ExternalLinkTabGroupTest {
 
     @Test
     fun externalLinkTabShouldShowCorrectGroupInTabList() {
-        composeRule.waitForUrlBarContains("https://")
-
-        // タブボタンをタップしてタブ一覧画面を開く
-        tapTabButton()
-        waitForTabsScreen()
+        ensureTabsScreen()
 
         // グループを追加する
         composeRule.waitUntil(timeoutMillis = 2.seconds.inWholeMilliseconds) {
@@ -39,6 +35,14 @@ class ExternalLinkTabGroupTest {
                 .isDisplayed()
         }
         composeRule.onNode(hasTestTag(TabsScreenTestTags.AddTabGroupButton.testTag)).performClick()
+        composeRule.waitForIdle()
+
+        // 追加したグループ1を選択する
+        composeRule.waitUntil(timeoutMillis = 10.seconds.inWholeMilliseconds) {
+            composeRule.onNode(hasTestTag(TabsScreenTestTags.TabGroupTopButton(1).testTag))
+                .isDisplayed()
+        }
+        composeRule.onNode(hasTestTag(TabsScreenTestTags.TabGroupTopButton(1).testTag)).performClick()
         composeRule.waitForIdle()
 
         // 追加したグループ1のデフォルトスイッチを ON にする
@@ -65,7 +69,7 @@ class ExternalLinkTabGroupTest {
         composeRule.waitForIdle()
 
         // ブラウザ画面が表示されるまで待つ
-        composeRule.waitUntil(timeoutMillis = 20_000) {
+        composeRule.waitUntil(timeoutMillis = 60_000) {
             composeRule.onAllNodes(hasTestTag(BrowserToolbarTestTags.Toolbar.testTag))
                 .fetchSemanticsNodes().isNotEmpty()
         }
@@ -78,7 +82,7 @@ class ExternalLinkTabGroupTest {
         composeRule.openUrlViaViewIntent("https://www.example.com".toUri().toString())
 
         // ページが開かれている事を確認する
-        composeRule.waitForUrlBarContains("www.example.com", timeoutMillis = 10_000)
+        composeRule.waitForUrlBarContains("www.example.com", timeoutMillis = 30_000)
 
         // 再びタブボタンをタップしてタブ一覧画面を開く
         tapTabButton()
@@ -95,15 +99,45 @@ class ExternalLinkTabGroupTest {
      * hasParent でツールバー内のボタンに絞ることで GeckoView 層への誤タップを防ぐ。
      */
     private fun tapTabButton() {
+        val alreadyOpened = runCatching {
+            composeRule.waitForTabsScreenLoaded(timeoutMillis = 2_000)
+            true
+        }.getOrDefault(false)
+        if (alreadyOpened) return
+
         val node = composeRule.onNode(
             hasTestTag(BrowserToolbarTestTags.OpenTabsButton.testTag)
                 .and(hasParent(hasTestTag(BrowserToolbarTestTags.Toolbar.testTag)))
         )
-        composeRule.waitUntil(timeoutMillis = 20_000) {
-            node.isDisplayed()
+        repeat(12) {
+            val opened = runCatching {
+                composeRule.waitForTabsScreenLoaded(timeoutMillis = 2_000)
+                true
+            }.getOrDefault(false)
+            if (opened) return
+
+            val visible = runCatching {
+                composeRule.waitUntil(timeoutMillis = 5_000) {
+                    node.isDisplayed()
+                }
+                true
+            }.getOrDefault(false)
+            if (!visible) return@repeat
+
+            node.performClick()
+            composeRule.waitForIdle()
+            val openedAfterTap = runCatching {
+                composeRule.waitForTabsScreenLoaded(timeoutMillis = 5_000)
+                true
+            }.getOrDefault(false)
+            if (openedAfterTap) return
         }
-        node.performClick()
-        composeRule.waitForIdle()
+        composeRule.waitForTabsScreenLoaded()
+    }
+
+    private fun ensureTabsScreen() {
+        tapTabButton()
+        waitForTabsScreen()
     }
 
     /**

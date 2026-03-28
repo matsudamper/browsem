@@ -70,7 +70,7 @@ android {
         execution = "ANDROIDX_TEST_ORCHESTRATOR"
         managedDevices {
             localDevices {
-                maybeCreate("pixel7Api34").apply {
+                maybeCreate("pixel6Api34").apply {
                     device = "Pixel 6"
                     apiLevel = 34
                     systemImageSource = "aosp-atd"
@@ -80,7 +80,7 @@ android {
             }
             groups {
                 maybeCreate("gmd").apply {
-                    targetDevices.add(localDevices["pixel7Api34"])
+                    targetDevices.add(localDevices["pixel6Api34"])
                 }
             }
         }
@@ -137,6 +137,11 @@ dependencies {
     implementation(project(":feature-browser"))
     implementation(project(":feature-tabs"))
     implementation(project(":data"))
+    implementation(project(":ui:downloads"))
+    implementation(project(":ui:extensions"))
+    implementation(project(":ui:history"))
+    implementation(project(":ui:notifications"))
+    implementation(project(":ui:settings"))
     implementation(libs.androidx.swiperefreshlayout)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.media3.session)
