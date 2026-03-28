@@ -198,12 +198,18 @@ internal class BrowserTabScreenState(
     fun onGoForward() {
         clearPageLoadError()
         skipHistoryRecordCount++
+        if (tabHistoryCurrentIndex < tabHistoryItems.lastIndex) {
+            tabHistoryCurrentIndex++
+        }
         session.goForward()
     }
 
     fun onGoBack() {
         clearPageLoadError()
         skipHistoryRecordCount++
+        if (tabHistoryCurrentIndex > 0) {
+            tabHistoryCurrentIndex--
+        }
         session.goBack()
     }
 
@@ -212,6 +218,7 @@ internal class BrowserTabScreenState(
         val steps = tabHistoryCurrentIndex - targetIndex
         if (steps <= 0) return
         skipHistoryRecordCount += steps
+        tabHistoryCurrentIndex = targetIndex
         repeat(steps) { session.goBack() }
     }
 
