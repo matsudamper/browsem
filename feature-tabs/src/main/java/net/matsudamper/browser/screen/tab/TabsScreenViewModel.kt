@@ -17,6 +17,8 @@ import net.matsudamper.browser.core.TabStoreState
 import net.matsudamper.browser.data.TabGroupData
 import net.matsudamper.browser.data.TabGroupRepository
 import net.matsudamper.browser.data.tab.TabGroupAssignment
+import net.matsudamper.browser.ui.tabs.TabsScreenTabData
+import net.matsudamper.browser.ui.tabs.TabsScreenUiState
 
 
 class TabsScreenViewModel(
@@ -111,6 +113,7 @@ class TabsScreenViewModel(
                                 groups = groups,
                                 // グループが空になる場合も含めて有効範囲にクランプする
                                 activeGroupIndex = state.activeGroupIndex.coerceIn(0, (groups.size - 1).coerceAtLeast(0)),
+                                selectedTabId = state.tabStoreState.selectedTabId,
                             )
                         },
                     )
@@ -396,9 +399,3 @@ class TabsScreenViewModel(
         val groups: List<TabGroupData> get() = localGroupOrder ?: dbGroups
     }
 }
-
-data class TabsScreenTabData(
-    val id: String,
-    val title: String,
-    val previewBitmapArray: ByteArray?,
-)

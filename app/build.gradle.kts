@@ -142,6 +142,7 @@ dependencies {
     implementation(project(":ui:history"))
     implementation(project(":ui:notifications"))
     implementation(project(":ui:settings"))
+    implementation(project(":ui:tabs"))
     implementation(libs.androidx.swiperefreshlayout)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.media3.session)

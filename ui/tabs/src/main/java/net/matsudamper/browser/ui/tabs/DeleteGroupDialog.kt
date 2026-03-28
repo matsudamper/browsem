@@ -1,4 +1,4 @@
-package net.matsudamper.browser.screen.tab
+package net.matsudamper.browser.ui.tabs
 
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme

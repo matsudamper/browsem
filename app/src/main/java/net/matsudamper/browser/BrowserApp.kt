@@ -25,6 +25,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntOffset
+import androidx.lifecycle.viewmodel.compose.viewModel as composeViewModel
 import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
 import androidx.navigation3.runtime.NavEntry
 import androidx.navigation3.runtime.NavKey
@@ -59,12 +60,13 @@ import net.matsudamper.browser.screen.history.HistoryScreenViewModel
 import net.matsudamper.browser.screen.notificationpermissions.NotificationPermissionsScreenViewModel
 import net.matsudamper.browser.screen.downloads.DownloadManagementScreenViewModel
 import net.matsudamper.browser.screen.settings.SettingsScreenViewModel
-import net.matsudamper.browser.screen.tab.TabsScreen
+import net.matsudamper.browser.screen.tab.TabsScreenViewModel
 import net.matsudamper.browser.ui.downloads.DownloadManagementScreen
 import net.matsudamper.browser.ui.extensions.ExtensionsScreen
 import net.matsudamper.browser.ui.history.HistoryScreen
 import net.matsudamper.browser.ui.notifications.NotificationPermissionsScreen
 import net.matsudamper.browser.ui.settings.SettingsScreen
+import net.matsudamper.browser.ui.tabs.TabsScreen
 import org.koin.compose.koinInject
 import org.mozilla.geckoview.GeckoResult
 
@@ -386,26 +388,37 @@ internal fun BrowserApp(
                     }
 
                     AppDestination.Tabs -> navEntry(key) {
+                        val tabsViewModel = composeViewModel(initializer = {
+                            TabsScreenViewModel(
+                                tabStore = browserTabController,
+                                tabGroupRepository = tabGroupRepository,
+                            )
+                        })
+                        val tabsUiState by tabsViewModel.uiState.collectAsState()
                         DisposableEffect(Unit) {
                             onDispose { navController.disposeTabs() }
                         }
+                        LaunchedEffect(tabsViewModel) {
+                            tabsViewModel.eventHandler.receiveAsFlow().collect {
+                                it(object : TabsScreenViewModel.Event {
+                                    override fun closeTab(tabId: String) {
+                                        val nextSelectedTabId = browserTabController.closeTab(tabId)
+                                        if (nextSelectedTabId == null) {
+                                            scope.launch {
+                                                val newTab = viewModel.createTabWithHomepage(
+                                                    tabId = UUID.randomUUID().toString(),
+                                                )
+                                                selectTab(newTab.tabId, null)
+                                            }
+                                        }
+                                    }
+                                })
+                            }
+                        }
                         TabsScreen(
-                            tabStore = browserTabController,
-                            tabGroupRepository = tabGroupRepository,
-                            selectedTabId = browserTabController.selectedTabId,
+                            uiState = tabsUiState,
                             onSelectTab = { tabId ->
                                 selectTab(tabId, null)
-                            },
-                            onCloseTab = { tabId ->
-                                val nextSelectedTabId = browserTabController.closeTab(tabId)
-                                if (nextSelectedTabId == null) {
-                                    scope.launch {
-                                        val newTab = viewModel.createTabWithHomepage(
-                                            tabId = UUID.randomUUID().toString(),
-                                        )
-                                        selectTab(newTab.tabId, null)
-                                    }
-                                }
                             },
                             onOpenNewTab = { currentGroupId: TabGroupId? ->
                                 // タブ一覧画面からの新規タブ追加。現在表示中のグループに割り当てる。
