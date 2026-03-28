@@ -11,6 +11,8 @@ import kotlinx.coroutines.launch
 import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.history.HistoryRepository
 import net.matsudamper.browser.data.websuggestion.WebSuggestionRepository
+import net.matsudamper.browser.ui.browser.BrowserScreenUiState
+import net.matsudamper.browser.ui.browser.UrlBarSuggestionsUiState
 
 class CustomTabScreenViewModel(
     historyRepository: HistoryRepository,

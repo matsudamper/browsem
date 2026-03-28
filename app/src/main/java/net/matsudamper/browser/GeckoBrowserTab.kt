@@ -57,7 +57,7 @@ import net.matsudamper.browser.data.TranslationProvider
 import net.matsudamper.browser.media.GeckoMediaSessionDelegate
 import net.matsudamper.browser.media.MediaWebExtension
 import net.matsudamper.browser.screen.browser.SimpleViewScreen
-import net.matsudamper.browser.screen.browser.UrlBarSuggestionsUiState
+import net.matsudamper.browser.ui.browser.UrlBarSuggestionsUiState
 import org.koin.compose.koinInject
 import org.mozilla.geckoview.BasicSelectionActionDelegate
 import org.mozilla.geckoview.GeckoResult

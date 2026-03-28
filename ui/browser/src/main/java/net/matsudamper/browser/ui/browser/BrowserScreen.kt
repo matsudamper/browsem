@@ -1,4 +1,4 @@
-package net.matsudamper.browser.screen.browser
+package net.matsudamper.browser.ui.browser
 
 import android.graphics.BitmapFactory
 import androidx.compose.animation.core.Animatable
@@ -6,9 +6,9 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.only
@@ -28,75 +28,60 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import androidx.navigation3.runtime.NavKey
 import kotlinx.coroutines.launch
-import net.matsudamper.browser.BrowserSessionLifecycleController
-import net.matsudamper.browser.BrowserTabController
 import net.matsudamper.browser.BrowserTab
-import net.matsudamper.browser.BrowserToolbar
-import net.matsudamper.browser.GeckoBrowserTab
-import net.matsudamper.browser.ThemeColorWebExtension
-import net.matsudamper.browser.UrlInputState
-import net.matsudamper.browser.data.TranslationProvider
-import net.matsudamper.browser.media.MediaWebExtension
-import net.matsudamper.browser.navigation.AppDestination
-import net.matsudamper.browser.navigation.NavController
-import org.mozilla.geckoview.GeckoResult
+import net.matsudamper.browser.BrowserTabController
 import kotlin.math.roundToInt
 
 @Composable
-internal fun BrowserScreen(
-    key: AppDestination.Browser,
+fun BrowserScreen(
+    tabId: String,
     homepageUrl: String,
-    searchTemplate: String,
-    backStack: MutableList<NavKey>,
+    uiState: BrowserScreenUiState,
     browserTabController: BrowserTabController,
-    browserSessionLifecycleController: BrowserSessionLifecycleController,
-    viewModel: BrowserScreenViewModel,
-    navController: NavController,
-    translationProvider: TranslationProvider,
-    themeColorExtension: ThemeColorWebExtension,
-    mediaWebExtension: MediaWebExtension,
-    onInstallExtensionRequest: (String) -> Unit,
-    handleNotificationPermission: (uri: String) -> GeckoResult<Int>,
-    onRequestDownloadNotificationPermission: () -> Unit,
-    onSelectTab: (tabId: String, beforeTab: AppDestination.Browser?) -> Unit,
-    /** target="_blank" 等でタブが新規作成された際に呼ばれる。グループ割り当てに使用する。 */
-    onNewSessionTabCreated: (newTabId: String, openerTabId: String) -> Unit,
+    onSelectTab: (String) -> Unit,
+    previewHeaderContent: @Composable (modifier: Modifier, tab: BrowserTab, tabCount: Int) -> Unit,
+    browserTabContent: @Composable (
+        modifier: Modifier,
+        selectedTab: BrowserTab,
+        tabCount: Int,
+        onToolbarHorizontalDrag: (Float) -> Unit,
+        onToolbarDragEnd: () -> Unit,
+    ) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    val uiState by viewModel.uiState.collectAsState()
     val tabStoreState by browserTabController.tabStoreState.collectAsState()
     val tabs = remember(tabStoreState, browserTabController) { browserTabController.tabs }
     val prevTab = uiState.swipePreview.previousTab
     val nextTab = uiState.swipePreview.nextTab
 
-    val selectedTab = browserTabController.findTab(key.tabId)
-    LaunchedEffect(key.tabId, homepageUrl, selectedTab) {
+    val selectedTab = browserTabController.findTab(tabId)
+    LaunchedEffect(tabId, homepageUrl, selectedTab) {
         // closeTab で閉じたタブは再作成しない。
         // NavDisplay の遷移アニメーション中に BrowserScreen が残っている間に
         // selectedTab=null で再コンポーズされてもホームページタブを作らないようにする。
-        if (selectedTab == null && !browserTabController.wasTabClosed(key.tabId)) {
+        if (selectedTab == null && !browserTabController.wasTabClosed(tabId)) {
             browserTabController.getOrCreateTab(
-                tabId = key.tabId,
+                tabId = tabId,
                 homepageUrl = homepageUrl,
             )
         }
     }
     if (selectedTab == null) {
-        Box(modifier = Modifier.fillMaxSize())
+        Box(modifier = modifier.fillMaxSize())
         return
     }
 
     val coroutineScope = rememberCoroutineScope()
     // URLバースワイプのオフセット（ピクセル単位）タブ切替時にリセット
-    val swipeOffset = remember(key.tabId) { Animatable(0f) }
+    val swipeOffset = remember(tabId) { Animatable(0f) }
 
     BoxWithConstraints(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxSize()
             .clipToBounds(),
     ) {
@@ -109,10 +94,11 @@ internal fun BrowserScreen(
         prevTab?.let { tab ->
             TabPreviewPage(
                 tab = tab,
+                tabCount = tabs.size,
+                previewHeaderContent = previewHeaderContent,
                 modifier = Modifier
                     .fillMaxSize()
                     .offset { IntOffset((swipeOffset.value - pageWidthPx).roundToInt(), 0) },
-                tabCount = tabs.size,
             )
         }
 
@@ -120,51 +106,22 @@ internal fun BrowserScreen(
         nextTab?.let { tab ->
             TabPreviewPage(
                 tab = tab,
+                tabCount = tabs.size,
+                previewHeaderContent = previewHeaderContent,
                 modifier = Modifier
                     .fillMaxSize()
                     .offset { IntOffset((swipeOffset.value + pageWidthPx).roundToInt(), 0) },
-                tabCount = tabs.size,
             )
         }
 
         // 現在のタブのブラウザ（最前面）
-        GeckoBrowserTab(
-            modifier = Modifier
+        browserTabContent(
+            Modifier
                 .fillMaxSize()
                 .offset { IntOffset(swipeOffset.value.roundToInt(), 0) },
-            browserTab = selectedTab,
-            homepageUrl = homepageUrl,
-            searchTemplate = searchTemplate,
-            translationProvider = translationProvider,
-            themeColorExtension = themeColorExtension,
-            mediaWebExtension = mediaWebExtension,
-            tabCount = tabs.size,
-            onInstallExtensionRequest = onInstallExtensionRequest,
-            onDesktopNotificationPermissionRequest = handleNotificationPermission,
-            onRequestDownloadNotificationPermission = onRequestDownloadNotificationPermission,
-            onOpenSettings = { backStack.add(AppDestination.Settings) },
-            onOpenTabs = { backStack.add(AppDestination.Tabs) },
-            browserSessionLifecycleController = browserSessionLifecycleController,
-            onOpenNewSessionRequest = { uri ->
-                val newTab = browserTabController.createTabForNewSession(
-                    initialUrl = uri,
-                    openerTabId = key.tabId,
-                )
-                onNewSessionTabCreated(newTab.tabId, key.tabId)
-                onSelectTab(newTab.tabId, key)
-                newTab.session
-            },
-            onCloseTab = {
-                val targetTabId = browserTabController.closeTab(key.tabId)
-                if (targetTabId != null) {
-                    onSelectTab(targetTabId, null)
-                }
-            },
-            onHistoryRecord = uiState.callbacks::onHistoryRecord,
-            onHistoryTitleUpdate = uiState.callbacks::onHistoryTitleUpdate,
-            urlBarSuggestions = uiState.urlBarSuggestions,
-            onUrlInputChanged = uiState.callbacks::onUrlInputChanged,
-            onToolbarHorizontalDrag = { delta ->
+            selectedTab,
+            tabs.size,
+            { delta ->
                 coroutineScope.launch {
                     val maxOffset = if (prevTab != null) pageWidthPx else 0f
                     val minOffset = if (nextTab != null) -pageWidthPx else 0f
@@ -173,19 +130,19 @@ internal fun BrowserScreen(
                     )
                 }
             },
-            onToolbarDragEnd = {
+            {
                 when {
                     swipeOffset.value > swipeThreshold && prevTab != null -> {
                         coroutineScope.launch {
                             swipeOffset.animateTo(pageWidthPx)
-                            onSelectTab(prevTab.tabId, null)
+                            onSelectTab(prevTab.tabId)
                         }
                     }
 
                     swipeOffset.value < -swipeThreshold && nextTab != null -> {
                         coroutineScope.launch {
                             swipeOffset.animateTo(-pageWidthPx)
-                            onSelectTab(nextTab.tabId, null)
+                            onSelectTab(nextTab.tabId)
                         }
                     }
 
@@ -204,28 +161,16 @@ internal fun BrowserScreen(
 private fun TabPreviewPage(
     tab: BrowserTab,
     tabCount: Int,
+    previewHeaderContent: @Composable (modifier: Modifier, tab: BrowserTab, tabCount: Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     // 上部（ステータスバー）は BrowserToolBar の背景色で塗りつぶすため除外する
-    Column(modifier = modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal))) {
-        BrowserToolbar(
-            modifier = Modifier.fillMaxWidth(),
-            toolbarColor = null,
-            isFocused = false,
-            tabCount = tabCount,
-            onOpenTabs = {},
-            toolbarMenu = {},
-            gestureState = null,
-            updateVisibleMenu = {},
-            urlInputState = UrlInputState(
-                value = tab.currentUrl,
-                onValueChange = {},
-                onSubmit = {},
-                onFocusChanged = {},
-                enableSuggest = false,
-                scrollEnabled = false,
-            ),
-        )
+    Column(
+        modifier = modifier.windowInsetsPadding(
+            WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal),
+        ),
+    ) {
+        previewHeaderContent(Modifier.fillMaxWidth(), tab, tabCount)
 
         Box(modifier = Modifier.fillMaxSize()) {
             val previewBitmap = tab.previewBitmap
