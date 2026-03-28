@@ -1,4 +1,4 @@
-package net.matsudamper.browser.screen.extensions
+package net.matsudamper.browser.ui.extensions
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -12,6 +12,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -23,36 +26,17 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.flow.receiveAsFlow
-import net.matsudamper.browser.R
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun ExtensionsScreen(
-    viewModel: ExtensionsScreenViewModel,
+fun ExtensionsScreen(
+    uiState: ExtensionsScreenUiState,
     onBack: () -> Unit,
-    onOpenExtensionSettings: (String) -> Unit,
 ) {
-    val uiState by viewModel.uiState.collectAsState()
-
-    LaunchedEffect(viewModel) {
-        viewModel.eventHandler.receiveAsFlow().collect {
-            it(object : ExtensionsScreenViewModel.Event {
-                override fun navigateToExtensionSettings(url: String) {
-                    onOpenExtensionSettings(url)
-                }
-            })
-        }
-    }
-
     Scaffold(
         topBar = {
             TopAppBar(
@@ -60,7 +44,7 @@ internal fun ExtensionsScreen(
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(
-                            painter = painterResource(R.drawable.ic_arrow_back_24dp),
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "戻る",
                         )
                     }
@@ -71,7 +55,7 @@ internal fun ExtensionsScreen(
                         enabled = uiState.uninstallingId == null,
                     ) {
                         Icon(
-                            painter = painterResource(R.drawable.ic_refresh_24dp),
+                            imageVector = Icons.Default.Refresh,
                             contentDescription = "再読み込み",
                         )
                     }

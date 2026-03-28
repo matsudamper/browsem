@@ -1,4 +1,4 @@
-package net.matsudamper.browser.screen.history
+package net.matsudamper.browser.ui.history
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
@@ -7,6 +7,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -19,16 +22,10 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.flow.receiveAsFlow
-import net.matsudamper.browser.R
 import net.matsudamper.browser.data.history.HistoryEntry
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -36,23 +33,10 @@ import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun HistoryScreen(
-    viewModel: HistoryScreenViewModel,
-    onNavigateToUrl: (String) -> Unit,
+fun HistoryScreen(
+    uiState: HistoryScreenUiState,
     onBack: () -> Unit,
 ) {
-    val uiState by viewModel.uiState.collectAsState()
-
-    LaunchedEffect(viewModel) {
-        viewModel.eventHandler.receiveAsFlow().collect {
-            it(object : HistoryScreenViewModel.Event {
-                override fun navigateToUrl(url: String) {
-                    onNavigateToUrl(url)
-                }
-            })
-        }
-    }
-
     Scaffold(
         topBar = {
             TopAppBar(
@@ -60,7 +44,7 @@ internal fun HistoryScreen(
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(
-                            painter = painterResource(R.drawable.ic_arrow_back_24dp),
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "戻る",
                         )
                     }
@@ -155,7 +139,7 @@ private fun HistoryItem(
         trailingContent = {
             IconButton(onClick = onDelete) {
                 Icon(
-                    painter = painterResource(R.drawable.close_24dp),
+                    imageVector = Icons.Default.Close,
                     contentDescription = "削除",
                 )
             }

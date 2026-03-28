@@ -109,6 +109,15 @@ internal class BrowserTabScreenState(
     private var lastPageStartUrlKey: String = normalizedBrowserPageKey(browserTab.currentUrl)
     // フルページロード開始フラグ（SPA の pushState 遷移と区別するため）
     private var isFullPageLoadPending: Boolean = false
+    // onLocationChange で履歴記録をスキップする残り回数
+    // goBack() / goForward() を複数回連続で呼ぶ場合にもカウンタで対応する
+    private var skipHistoryRecordCount: Int = 0
+
+    // --- タブ内ナビゲーション履歴（GeckoView の HistoryDelegate から同期） ---
+    var tabHistoryItems by mutableStateOf<List<TabHistoryItem>>(emptyList())
+    var tabHistoryCurrentIndex by mutableStateOf(-1)
+
+    data class TabHistoryItem(val uri: String, val title: String)
 
     // --- Translation state ---
     var translationState by mutableStateOf(TranslationState.Idle)
@@ -188,12 +197,28 @@ internal class BrowserTabScreenState(
 
     fun onGoForward() {
         clearPageLoadError()
+        skipHistoryRecordCount++
+        if (tabHistoryCurrentIndex < tabHistoryItems.lastIndex) {
+            tabHistoryCurrentIndex++
+        }
         session.goForward()
     }
 
     fun onGoBack() {
         clearPageLoadError()
+        skipHistoryRecordCount++
+        if (tabHistoryCurrentIndex > 0) {
+            tabHistoryCurrentIndex--
+        }
         session.goBack()
+    }
+
+    /** タブ履歴の指定インデックスへ直接ジャンプする */
+    fun jumpToHistoryEntry(targetIndex: Int) {
+        if (targetIndex == tabHistoryCurrentIndex) return
+        skipHistoryRecordCount++
+        tabHistoryCurrentIndex = targetIndex
+        session.gotoHistoryIndex(targetIndex)
     }
 
     fun togglePcMode() {
@@ -498,6 +523,11 @@ internal class BrowserTabScreenState(
         canGoForward = value
     }
 
+    override fun onHistoryStateChange(items: List<HistoryStateItem>, currentIndex: Int) {
+        tabHistoryItems = items.map { TabHistoryItem(uri = it.uri, title = it.title) }
+        tabHistoryCurrentIndex = currentIndex
+    }
+
     override fun onLoadError(uri: String?, error: WebRequestError) {
         val resolvedError = error.toPageLoadError(uri)
         val failedUrl = resolvedError.failingUrl
@@ -547,7 +577,16 @@ internal class BrowserTabScreenState(
             detectedPageLanguage = null
         }
         // 履歴を記録（about:blank や data: URL は除外）
-        if (url.isNotBlank() && !url.startsWith("about:") && !url.startsWith("data:")) {
+        // goBack / goForward 時はカウンタをデクリメントしてスキップする
+        val shouldRecord = url.isNotBlank() && !url.startsWith("about:") && !url.startsWith("data:")
+        val skip = skipHistoryRecordCount > 0
+        if (skip) skipHistoryRecordCount--
+        if (shouldRecord && !skip) {
+            // onHistoryStateChange の発火は遅延するため、楽観的にタブ履歴を更新する
+            val newItem = TabHistoryItem(uri = url, title = "")
+            tabHistoryItems = tabHistoryItems.take(tabHistoryCurrentIndex + 1) + newItem
+            tabHistoryCurrentIndex = tabHistoryItems.lastIndex
+
             currentHistoryEntryId = null
             val callback = onHistoryRecord
             if (callback != null) {

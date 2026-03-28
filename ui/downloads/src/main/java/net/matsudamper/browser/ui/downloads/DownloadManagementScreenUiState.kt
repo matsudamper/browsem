@@ -1,16 +1,15 @@
-package net.matsudamper.browser.screen.downloads
+package net.matsudamper.browser.ui.downloads
 
 import androidx.compose.runtime.Stable
 import java.util.UUID
 
 @Stable
-internal data class DownloadManagementScreenUiState(
+data class DownloadManagementScreenUiState(
     val downloads: List<DownloadItem>,
     val callbacks: Callbacks,
 ) {
     @Stable
     sealed interface DownloadStatus {
-        /** ダウンロード進行中 */
         data class InProgress(
             val progress: Int,
             val totalRead: Long,
@@ -18,13 +17,10 @@ internal data class DownloadManagementScreenUiState(
             val isIndeterminate: Boolean,
         ) : DownloadStatus
 
-        /** ダウンロード完了 */
         data class Completed(val fileUri: String) : DownloadStatus
 
-        /** ダウンロード失敗 */
         data object Failed : DownloadStatus
 
-        /** ダウンロードキャンセル */
         data object Cancelled : DownloadStatus
     }
 
@@ -33,7 +29,6 @@ internal data class DownloadManagementScreenUiState(
         val id: UUID,
         val fileName: String,
         val status: DownloadStatus,
-        /** ダウンロードを開始した時刻（エポックミリ秒） */
         val enqueuedAt: Long,
     )
 

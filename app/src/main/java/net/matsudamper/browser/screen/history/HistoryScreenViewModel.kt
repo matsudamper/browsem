@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import net.matsudamper.browser.data.history.HistoryEntry
 import net.matsudamper.browser.data.history.HistoryRepository
+import net.matsudamper.browser.ui.history.HistoryScreenUiState
 
 internal class HistoryScreenViewModel(
     private val historyRepository: HistoryRepository,
