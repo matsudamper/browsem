@@ -61,9 +61,9 @@ import net.matsudamper.browser.screen.notificationpermissions.NotificationPermis
 import net.matsudamper.browser.screen.notificationpermissions.NotificationPermissionsScreenViewModel
 import net.matsudamper.browser.screen.downloads.DownloadManagementScreen
 import net.matsudamper.browser.screen.downloads.DownloadManagementScreenViewModel
-import net.matsudamper.browser.screen.settings.SettingsScreen
 import net.matsudamper.browser.screen.settings.SettingsScreenViewModel
 import net.matsudamper.browser.screen.tab.TabsScreen
+import net.matsudamper.browser.ui.settings.SettingsScreen
 import org.koin.compose.koinInject
 import org.mozilla.geckoview.GeckoResult
 
@@ -280,16 +280,19 @@ internal fun BrowserApp(
                         val settingsViewModel = remember(settingsRepository) {
                             SettingsScreenViewModel(settingsRepository)
                         }
-                        SettingsScreen(
-                            viewModel = settingsViewModel,
-                            onOpenExtensions = { backStack.add(AppDestination.Extensions) },
-                            onOpenNotificationPermissions = {
-                                backStack.add(AppDestination.NotificationPermissions)
-                            },
-                            onOpenHistory = { backStack.add(AppDestination.History) },
-                            onOpenDownloads = { backStack.add(AppDestination.Downloads) },
-                            onBack = { backStack.removeLastOrNull() },
-                        )
+                        val settingsUiState by settingsViewModel.uiState.collectAsState()
+                        settingsUiState?.let { uiState ->
+                            SettingsScreen(
+                                uiState = uiState,
+                                onOpenExtensions = { backStack.add(AppDestination.Extensions) },
+                                onOpenNotificationPermissions = {
+                                    backStack.add(AppDestination.NotificationPermissions)
+                                },
+                                onOpenHistory = { backStack.add(AppDestination.History) },
+                                onOpenDownloads = { backStack.add(AppDestination.Downloads) },
+                                onBack = { backStack.removeLastOrNull() },
+                            )
+                        }
                     }
 
                     AppDestination.History -> navEntry(key) {

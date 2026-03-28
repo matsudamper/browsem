@@ -137,6 +137,7 @@ dependencies {
     implementation(project(":feature-browser"))
     implementation(project(":feature-tabs"))
     implementation(project(":data"))
+    implementation(project(":ui:settings"))
     implementation(libs.androidx.swiperefreshlayout)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.media3.session)
