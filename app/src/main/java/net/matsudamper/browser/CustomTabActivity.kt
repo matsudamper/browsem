@@ -13,18 +13,20 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.browser.customtabs.CustomTabsSessionToken
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.produceState
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
-import kotlinx.coroutines.runBlocking
 import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.TabRepository
 import net.matsudamper.browser.data.TranslationProvider
@@ -213,28 +215,43 @@ private fun CustomTabScreen(
             )
         }
     }
-    val browserTab = remember(browserTabController, initialUrl, prewarmedSession) {
-        if (prewarmedSession != null) {
+    val browserTab by produceState<BrowserTab?>(
+        initialValue = null,
+        key1 = browserTabController,
+        key2 = initialUrl,
+        key3 = prewarmedSession,
+    ) {
+        value = if (prewarmedSession != null) {
             browserTabController.createAndAppendTabWithSession(
                 session = prewarmedSession,
                 initialUrl = initialUrl,
             )
         } else {
-            // TODO runBlocking使わない
-            runBlocking {
-                browserTabController.createAndAppendTab(initialUrl = initialUrl)
+            browserTabController.createAndAppendTab(initialUrl = initialUrl)
+        }
+    }
+    DisposableEffect(browserTabController, browserTab?.tabId) {
+        val tabId = browserTab?.tabId
+        onDispose {
+            if (tabId != null) {
+                browserTabController.closeTab(tabId)
             }
         }
     }
-    DisposableEffect(browserTabController, browserTab.tabId) {
-        onDispose {
-            browserTabController.closeTab(browserTab.tabId)
+    val activeTab = browserTab
+    if (activeTab == null) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center,
+        ) {
+            CircularProgressIndicator()
         }
+        return
     }
 
     GeckoBrowserTab(
         modifier = Modifier.fillMaxSize(),
-        browserTab = browserTab,
+        browserTab = activeTab,
         homepageUrl = homepageUrl,
         searchTemplate = searchTemplate,
         translationProvider = translationProvider,
@@ -256,8 +273,8 @@ private fun CustomTabScreen(
         onCloseCustomTab = onClose,
         onOpenInBrowser = onOpenInBrowser,
         onOpenNewSessionRequest = { uri ->
-            browserTab.session.loadUri(uri)
-            browserTab.session
+            activeTab.session.loadUri(uri)
+            activeTab.session
         },
         onCloseTab = onClose,
         onHistoryRecord = uiState.callbacks::onHistoryRecord,
