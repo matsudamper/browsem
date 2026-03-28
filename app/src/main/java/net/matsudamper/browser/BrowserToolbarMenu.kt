@@ -15,7 +15,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LocalMinimumInteractiveComponentSize
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -96,11 +96,9 @@ internal fun ToolbarMenu(
                             painter = painterResource(R.drawable.ic_arrow_back_24dp),
                             contentDescription = null,
                             tint = if (canGoBack) {
-                                androidx.compose.ui.graphics.Color.Unspecified
+                                LocalContentColor.current
                             } else {
-                                LocalMinimumInteractiveComponentSize.let {
-                                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-                                }
+                                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
                             },
                         )
                     }
