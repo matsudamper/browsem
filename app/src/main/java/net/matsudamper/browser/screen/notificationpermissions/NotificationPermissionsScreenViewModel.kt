@@ -2,7 +2,6 @@ package net.matsudamper.browser.screen.notificationpermissions
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -10,12 +9,11 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import net.matsudamper.browser.data.SettingsRepository
+import net.matsudamper.browser.ui.notifications.NotificationPermissionsScreenUiState
 
 internal class NotificationPermissionsScreenViewModel(
     private val settingsRepository: SettingsRepository,
 ) : ViewModel() {
-
-    val eventHandler = Channel<(Event) -> Unit>(Channel.UNLIMITED)
 
     private val callbacks = object : NotificationPermissionsScreenUiState.Callbacks {
         override fun removeNotificationAllowedOrigin(origin: String) {
@@ -40,6 +38,4 @@ internal class NotificationPermissionsScreenViewModel(
             }
         }
     }.asStateFlow()
-
-    interface Event
 }

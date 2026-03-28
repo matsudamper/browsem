@@ -1,6 +1,6 @@
-package net.matsudamper.browser.screen.notificationpermissions
+package net.matsudamper.browser.ui.notifications
 
-internal data class NotificationPermissionsScreenUiState(
+data class NotificationPermissionsScreenUiState(
     val callbacks: Callbacks,
     val allowedOrigins: List<String>,
 ) {
