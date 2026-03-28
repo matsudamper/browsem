@@ -12,7 +12,6 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
@@ -546,10 +545,10 @@ internal fun GeckoBrowserTab(
     // タブ履歴BottomSheet
     if (showTabHistorySheet) {
         TabHistoryBottomSheet(
-            items = state.tabHistoryItems.take(state.tabHistoryCurrentIndex + 1),
-            onNavigateTo = { index ->
+            items = state.tabHistoryItems.take(state.tabHistoryCurrentIndex + 1).asReversed(),
+            onNavigateTo = { reversedIndex ->
                 showTabHistorySheet = false
-                state.jumpToHistoryEntry(index)
+                state.jumpToHistoryEntry(state.tabHistoryCurrentIndex - reversedIndex)
             },
             onDismiss = { showTabHistorySheet = false },
         )
@@ -577,37 +576,28 @@ private fun TabHistoryBottomSheet(
         HorizontalDivider()
         LazyColumn {
             itemsIndexed(items) { index, entry ->
-                Row(
-                    modifier = androidx.compose.ui.Modifier
+                Column(
+                    modifier = Modifier
                         .fillMaxWidth()
                         .clickable { onNavigateTo(index) }
                         .padding(horizontal = 16.dp, vertical = 12.dp),
-                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
                 ) {
                     Text(
-                        text = "${index + 1}",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = androidx.compose.ui.Modifier.padding(end = 12.dp),
+                        text = entry.title.ifBlank { entry.uri },
+                        style = MaterialTheme.typography.bodyMedium,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                     )
-                    Column(modifier = androidx.compose.ui.Modifier.weight(1f)) {
-                        Text(
-                            text = entry.title.ifBlank { entry.uri },
-                            style = MaterialTheme.typography.bodyMedium,
-                            maxLines = 1,
-                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                        )
-                        Text(
-                            text = entry.uri,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                        )
-                    }
+                    Text(
+                        text = entry.uri,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    )
                 }
                 if (index < items.lastIndex) {
-                    HorizontalDivider(modifier = androidx.compose.ui.Modifier.padding(start = 44.dp))
+                    HorizontalDivider()
                 }
             }
         }
