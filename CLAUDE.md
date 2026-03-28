@@ -47,7 +47,10 @@ Kotlin / Jetpack Compose / Material 3 / Navigation 3 / Koin DI。
 ./gradlew :app:lintDebug
 
 # Android Instrumentation テスト (Managed Device)
-./gradlew :app:pixel6Api34DebugAndroidTest
+./gradlew :app:pixel7Api34DebugAndroidTest
+
+# 特定クラスのみ実行 (PowerShell は -P 引数全体をダブルクオート)
+./gradlew :app:pixel7Api34DebugAndroidTest "-Pandroid.testInstrumentationRunnerArguments.class=net.matsudamper.browser.MainActivityCustomTabLaunchTest"
 ```
 
 ## ツールチェーン
@@ -142,8 +145,9 @@ Proto → DataStore/Room → Repository → ViewModel (StateFlow) → Compose
 
 - **単体テスト**: JUnit 4。`./gradlew test` で実行 (Paparazzi テストは自動除外)
 - **スクリーンショットテスト**: Paparazzi。`@Preview` 付き Composable を自動スキャンしてスナップショット
-- **Instrumentation テスト**: Managed Device (Pixel 6, API 34)。`app/src/androidTest/`
-  - **接続デバイス (実機・通常エミュレータ) の使用は禁止**。必ず Gradle Managed Device (`./gradlew :app:pixel6Api34DebugAndroidTest`) を使用すること
+- **Instrumentation テスト**: Managed Device (Pixel 7, API 34)。`app/src/androidTest/`
+  - **接続デバイス (実機・通常エミュレータ) の使用は禁止**。必ず Gradle Managed Device (`./gradlew :app:pixel7Api34DebugAndroidTest`) を使用すること
+  - 長時間化を避けるため、通常は全件実行せず `-Pandroid.testInstrumentationRunnerArguments.class=...` で対象を絞ること
 - **Lint**: `./gradlew :app:lintDebug`
 
 ### Instrumentation テストの操作ルール
