@@ -197,13 +197,20 @@ internal class BrowserTabSessionDelegateHost(
     private val pendingPermissionRequests = ArrayDeque<PendingPermissionRequest>()
     private val pendingNewSessionRequests = ArrayDeque<PendingNewSessionRequest>()
 
+    // タブ切り替え時にUI側コールバックが再生成されるため、最新のナビゲーション状態をキャッシュして
+    // attachUi 時にリプレイする
+    private var cachedCanGoBack: Boolean = false
+    private var cachedCanGoForward: Boolean = false
+
     private val delegateBundle = createGeckoSessionDelegateBundle(
         callbacks = object : BrowserSessionStateCallbacks {
             override fun onCanGoBackChanged(value: Boolean) {
+                synchronized(lock) { cachedCanGoBack = value }
                 currentCallbacks()?.onCanGoBackChanged(value)
             }
 
             override fun onCanGoForwardChanged(value: Boolean) {
+                synchronized(lock) { cachedCanGoForward = value }
                 currentCallbacks()?.onCanGoForwardChanged(value)
             }
 
@@ -296,12 +303,20 @@ internal class BrowserTabSessionDelegateHost(
         onOpenNewSessionRequest: (String) -> GeckoResult<GeckoSession>,
         onCloseRequest: (() -> Unit)? = null,
     ) {
+        val canGoBack: Boolean
+        val canGoForward: Boolean
         synchronized(lock) {
             this.callbacks = callbacks
             this.onDesktopNotificationPermissionRequest = onDesktopNotificationPermissionRequest
             this.onOpenNewSessionRequest = onOpenNewSessionRequest
             this.onCloseRequest = onCloseRequest
+            canGoBack = cachedCanGoBack
+            canGoForward = cachedCanGoForward
         }
+        // GeckoSession はナビゲーション状態が変わらない限り onCanGoBack/onCanGoForward を再発火しないため、
+        // キャッシュ済みの値をリプレイして UI 側の状態を同期する
+        callbacks.onCanGoBackChanged(canGoBack)
+        callbacks.onCanGoForwardChanged(canGoForward)
         flushPendingRequests()
     }
 
