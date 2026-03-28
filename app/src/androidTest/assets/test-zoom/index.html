@@ -3,8 +3,33 @@
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Zoom Test</title>
+  <style>
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+    }
+    #tap-area {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: sans-serif;
+      user-select: none;
+    }
+  </style>
 </head>
 <body>
-  <p>Zoom test page</p>
+  <div id="tap-area">Tap to update viewport width hash</div>
+  <script>
+    let counter = 0;
+    const updateHash = () => {
+      const width = window.innerWidth;
+      counter += 1;
+      window.location.hash = `w=${width}&c=${counter}`;
+    };
+    document.addEventListener("click", updateHash);
+  </script>
 </body>
 </html>

@@ -8,11 +8,8 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.isDisplayed
 import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
-import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.performClick
 import androidx.core.net.toUri
-import androidx.lifecycle.ViewModelProvider
-import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import net.matsudamper.browser.screen.tab.TabsScreenTestTags
 import org.junit.Rule
@@ -30,8 +27,7 @@ class ExternalLinkTabGroupTest {
 
     @Test
     fun externalLinkTabShouldShowCorrectGroupInTabList() {
-        val browserSessionController = waitForBrowserSessionController()
-        waitForActiveTab(browserSessionController)
+        composeRule.waitForUrlBarContains("https://")
 
         // タブボタンをタップしてタブ一覧画面を開く
         tapTabButton()
@@ -79,18 +75,10 @@ class ExternalLinkTabGroupTest {
         waitForTabsScreen()
 
         // 外部からリンクを表示する
-        ActivityScenario.launch<MainActivity>(
-            Intent(Intent.ACTION_VIEW).also { intent ->
-                intent.data = "https://www.example.com".toUri()
-                intent.addCategory(Intent.CATEGORY_BROWSABLE)
-                intent.setClass(composeRule.activity, MainActivity::class.java)
-            }
-        )
+        composeRule.openUrlViaViewIntent("https://www.example.com".toUri().toString())
 
         // ページが開かれている事を確認する
-        composeRule.waitUntil(timeoutMillis = 10_000) {
-            composeRule.onNode(hasTestTag(BrowserToolbarTestTags.Url("https://www.example.com").testTag)).isDisplayed()
-        }
+        composeRule.waitForUrlBarContains("www.example.com", timeoutMillis = 10_000)
 
         // 再びタブボタンをタップしてタブ一覧画面を開く
         tapTabButton()
@@ -122,48 +110,7 @@ class ExternalLinkTabGroupTest {
      * タブ一覧画面が表示されるまで待機する。
      */
     private fun waitForTabsScreen() {
-        composeRule.waitUntil(timeoutMillis = 20_000) {
-            composeRule.onAllNodesWithText("名前変更")
-                .fetchSemanticsNodes().isNotEmpty()
-        }
+        composeRule.waitForTabsScreenLoaded()
     }
 
-    /**
-     * BrowserSessionController が利用可能になるまで待機して取得する。
-     */
-    private fun waitForBrowserSessionController(): BrowserSessionController {
-        var controller: BrowserSessionController? = null
-        composeRule.waitUntil(timeoutMillis = 20_000) {
-            var resolved = false
-            composeRule.runOnIdle {
-                resolved = runCatching {
-                    controller = getBrowserViewModel().browserSessionController
-                }.isSuccess
-            }
-            resolved
-        }
-        return requireNotNull(controller)
-    }
-
-    /**
-     * 現在操作対象の BrowserTab が確定するまで待機して取得する。
-     */
-    private fun waitForActiveTab(browserSessionController: BrowserSessionController) {
-        composeRule.waitUntil(timeoutMillis = 20_000) {
-            var found = false
-            composeRule.runOnIdle {
-                val activeTab = browserSessionController.tabs.firstOrNull { it.session.isOpen }
-                    ?: browserSessionController.tabs.lastOrNull()
-                found = activeTab != null
-            }
-            found
-        }
-    }
-
-    /**
-     * Activity から BrowserViewModel を取得する。
-     */
-    private fun getBrowserViewModel(): BrowserViewModel {
-        return ViewModelProvider(composeRule.activity)[BrowserViewModel::class.java]
-    }
 }

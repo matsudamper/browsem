@@ -5,9 +5,7 @@ import androidx.compose.ui.test.hasParent
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.isDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
-import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.performClick
-import androidx.lifecycle.ViewModelProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import kotlinx.coroutines.test.runTest
 import net.matsudamper.browser.screen.tab.TabsScreenTestTags
@@ -27,8 +25,7 @@ class TabGroupNavigationTest {
      */
     @Test
     fun activeGroupShouldRestoreToSelectedTabGroupAfterNavigation() = runTest {
-        val browserSessionController = waitForBrowserSessionController()
-        waitForActiveTab(browserSessionController)
+        waitForBrowserScreen()
 
         // タブ一覧画面を開いて group1 を初期化する
         openTabsScreen()
@@ -100,9 +97,7 @@ class TabGroupNavigationTest {
      * タブ一覧画面が表示されるまで待機する。
      */
     private fun waitForTabsScreen() {
-        composeRule.waitUntil(timeoutMillis = 20_000) {
-            composeRule.onAllNodesWithText("名前変更").fetchSemanticsNodes().isNotEmpty()
-        }
+        composeRule.waitForTabsScreenLoaded()
     }
 
     /**
@@ -125,42 +120,4 @@ class TabGroupNavigationTest {
         }
     }
 
-    /**
-     * BrowserSessionController が利用可能になるまで待機して取得する。
-     */
-    private fun waitForBrowserSessionController(): BrowserSessionController {
-        var controller: BrowserSessionController? = null
-        composeRule.waitUntil(timeoutMillis = 20_000) {
-            var resolved = false
-            composeRule.runOnIdle {
-                resolved = runCatching {
-                    controller = getBrowserViewModel().browserSessionController
-                }.isSuccess
-            }
-            resolved
-        }
-        return requireNotNull(controller)
-    }
-
-    /**
-     * 現在操作対象の BrowserTab が確定するまで待機する。
-     */
-    private fun waitForActiveTab(browserSessionController: BrowserSessionController) {
-        composeRule.waitUntil(timeoutMillis = 20_000) {
-            var found = false
-            composeRule.runOnIdle {
-                val activeTab = browserSessionController.tabs.firstOrNull { it.session.isOpen }
-                    ?: browserSessionController.tabs.lastOrNull()
-                found = activeTab != null
-            }
-            found
-        }
-    }
-
-    /**
-     * Activity から BrowserViewModel を取得する。
-     */
-    private fun getBrowserViewModel(): BrowserViewModel {
-        return ViewModelProvider(composeRule.activity)[BrowserViewModel::class.java]
-    }
 }

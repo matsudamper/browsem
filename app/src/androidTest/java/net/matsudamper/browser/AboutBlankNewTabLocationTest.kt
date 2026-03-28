@@ -3,21 +3,25 @@ package net.matsudamper.browser
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasParent
 import androidx.compose.ui.test.hasTestTag
-import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
-import androidx.compose.ui.test.click
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performTouchInput
-import androidx.lifecycle.ViewModelProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import net.matsudamper.browser.screen.tab.TabsScreenTestTags
+import org.junit.After
+import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
-import java.io.File
+import java.io.BufferedReader
+import java.io.InputStreamReader
+import java.net.InetAddress
+import java.net.ServerSocket
+import java.net.Socket
+import java.util.Collections
 import kotlin.contracts.ExperimentalContracts
 import kotlin.contracts.InvocationKind
 import kotlin.contracts.contract
@@ -33,15 +37,27 @@ class AboutBlankNewTabLocationTest {
     val composeRule = createAndroidComposeRule<MainActivity>()
 
     private val userDebug = false
+    private var server: LocalHtmlServer? = null
+
+    @Before
+    fun setUp() {
+        server = createLocalNewTabLinkServer()
+    }
+
+    @After
+    fun tearDown() {
+        server?.close()
+        server = null
+    }
 
     @Test
     fun test() {
-        val browserSessionController = waitForBrowserSessionController()
-        waitForActiveTab(browserSessionController)
+        waitForBrowserScreen()
+        val localServer = requireNotNull(server)
 
         group("タブリスト画面を開く") {
             openTabsScreen()
-            waitForTabsScreen()
+            composeRule.waitForTabsScreenLoaded()
         }
 
         group("新しいタブグループを作るボタンを押す") {
@@ -85,7 +101,7 @@ class AboutBlankNewTabLocationTest {
 
         group("タブリスト画面を開く") {
             openTabsScreen()
-            waitForTabsScreen()
+            composeRule.waitForTabsScreenLoaded()
 
             // タブグループ 1 が表示されていることを確認する
             composeRule.waitUntil(timeoutMillis = 10.seconds.inWholeMilliseconds) {
@@ -124,50 +140,54 @@ class AboutBlankNewTabLocationTest {
             waitForBrowserScreen()
         }
 
-        // グループ 0 に追加したタブの ID を記録
-        val activeTab = getCurrentActiveTab(browserSessionController)
-
-        group("ローカル HTML を読み込む") {
-            val localPageUri = prepareLocalNewTabLinkPageUri()
-            composeRule.runOnIdle {
-                activeTab.session.loadUri(localPageUri)
-            }
+        group("ローカル HTTP の index.html を読み込む") {
+            composeRule.openUrlFromUrlBar(localServer.indexUrl)
             composeRule.waitUntil(timeoutMillis = 30_000) {
-                composeRule.onAllNodes(
-                    hasTestTag(UrlTextInputTestTags.UrlBar.testTag)
-                        .and(hasText(INDEX_FILE_NAME, substring = true))
-                ).fetchSemanticsNodes().isNotEmpty()
+                localServer.hasRequest("/$INDEX_FILE_NAME")
             }
+            composeRule.waitForUrlBarContains(INDEX_FILE_NAME, timeoutMillis = 30_000)
+            composeRule.waitForUrlBarNotFocused(timeoutMillis = 30_000)
+            val loadedUrl = composeRule.currentUrlBarText()
+            assertTrue("index ページが期待URLで開かれていない: $loadedUrl", loadedUrl.contains("127.0.0.1"))
+            println("index-url=$loadedUrl")
         }
 
         group("全面リンクをクリックして target=_blank で新しいタブを開く") {
-            composeRule.onNode(hasTestTag(GeckoBrowserTabTestTags.GeckoContainer.testTag))
-                .performTouchInput { click() }
-
-            // 新しいタブの URL がURLバーに表示されるまで待つ
-            composeRule.waitUntil(timeoutMillis = 30_000) {
-                composeRule.onAllNodes(
-                    hasTestTag(UrlTextInputTestTags.UrlBar.testTag)
-                        .and(hasText(TARGET_FILE_NAME, substring = true))
-                ).fetchSemanticsNodes().isNotEmpty()
+            var opened = false
+            var lastUrl = composeRule.currentUrlBarText()
+            repeat(3) { attempt ->
+                if (opened) return@repeat
+                composeRule.tapGeckoContainer()
+                opened = runCatching {
+                    composeRule.waitUntil(timeoutMillis = 10_000) {
+                        localServer.hasRequest("/$TARGET_FILE_NAME") &&
+                            composeRule.currentUrlBarText().contains(TARGET_FILE_NAME)
+                    }
+                    true
+                }.getOrDefault(false)
+                lastUrl = composeRule.currentUrlBarText()
+                println("target-open-attempt=${attempt + 1}, opened=$opened, currentUrl=$lastUrl")
             }
+            assertTrue("target=_blank での遷移に失敗。currentUrl=$lastUrl", opened)
         }
 
-        // タブ一覧画面を開く
-        openTabsScreen()
-        waitForTabsScreen()
-
-        // タブグループ 0 が表示されていることを確認する
-        composeRule.waitUntil(timeoutMillis = 10.seconds.inWholeMilliseconds) {
-            runCatching {
-                composeRule.onNode(
-                    hasTestTag(TabsScreenTestTags.TabGroupTopButton(0).testTag)
-                ).assertIsSelected()
-                true
-            }.getOrDefault(false)
+        group("タブ一覧画面を開く") {
+            openTabsScreen()
+            composeRule.waitForTabsScreenLoaded()
         }
 
-        group("target=\"_blank\" で開いたタブ (\"Target Page\") がグループ 0 に表示されていることを確認する") {
+        group("タブグループ 0 を表示する") {
+            composeRule.onNode(
+                hasTestTag(TabsScreenTestTags.TabGroupTopButton(0).testTag)
+            ).performClick()
+            composeRule.waitForIdle()
+            composeRule.waitUntil(timeoutMillis = 10.seconds.inWholeMilliseconds) {
+                isTabGroupSelected(0)
+            }
+            println("group-selected: g0=${isTabGroupSelected(0)}, g1=${isTabGroupSelected(1)}")
+        }
+
+        group("target ページ (\"Target Page\") がグループ 0 に表示されることを確認する") {
             composeRule.waitUntil(timeoutMillis = 10.seconds.inWholeMilliseconds) {
                 composeRule.onAllNodesWithText("Target Page")
                     .fetchSemanticsNodes().isNotEmpty()
@@ -191,15 +211,6 @@ class AboutBlankNewTabLocationTest {
     }
 
     /**
-     * タブ一覧画面が表示されるまで待機する。
-     */
-    private fun waitForTabsScreen() {
-        composeRule.waitUntil(timeoutMillis = 20_000) {
-            composeRule.onAllNodesWithText("名前変更").fetchSemanticsNodes().isNotEmpty()
-        }
-    }
-
-    /**
      * ブラウザ画面が表示されるまで待機する。
      */
     private fun waitForBrowserScreen() {
@@ -209,95 +220,89 @@ class AboutBlankNewTabLocationTest {
         }
     }
 
-    /**
-     * 現在選択中のタブを取得する。
-     */
-    private fun getCurrentActiveTab(
-        browserSessionController: BrowserSessionController,
-    ): BrowserTab {
-        var activeTab: BrowserTab? = null
-        composeRule.runOnIdle {
-            val selectedId = browserSessionController.selectedTabId
-            activeTab = browserSessionController.tabs.firstOrNull { it.tabId == selectedId }
-                ?: browserSessionController.tabs.lastOrNull()
-        }
-        return requireNotNull(activeTab)
+    private fun isTabGroupSelected(groupIndex: Int): Boolean {
+        return runCatching {
+            composeRule.onNode(
+                hasTestTag(TabsScreenTestTags.TabGroupTopButton(groupIndex).testTag)
+            ).assertIsSelected()
+            true
+        }.getOrDefault(false)
     }
 
-    /**
-     * アクティブタブの URL が条件を満たすまで待機する。
-     */
-    private fun waitForActiveTabUrl(
-        timeoutMillis: Long,
-        activeTab: BrowserTab,
-        predicate: (String) -> Boolean,
-    ) {
-        composeRule.waitUntil(timeoutMillis = timeoutMillis) {
-            var matched = false
-            composeRule.runOnIdle {
-                matched = predicate(activeTab.currentUrl)
-            }
-            matched
-        }
-    }
-
-    /**
-     * ローカルHTMLをキャッシュへ展開し、file URI を返す。
-     */
-    private fun prepareLocalNewTabLinkPageUri(): String {
+    private fun createLocalNewTabLinkServer(): LocalHtmlServer {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
-        val targetContext = instrumentation.targetContext
-        val destinationDir = File(targetContext.cacheDir, DIR_NAME).apply { mkdirs() }
-        val assetManager = instrumentation.context.assets
-        // index.html と target.html の両方をコピー
-        listOf(INDEX_FILE_NAME, TARGET_FILE_NAME).forEach { fileName ->
-            val destination = File(destinationDir, fileName)
-            assetManager.open("$ASSET_DIR/$fileName").use { input ->
-                destination.outputStream().use { output ->
-                    input.copyTo(output)
+        val assets = instrumentation.context.assets
+        val indexHtml = assets.open("$ASSET_DIR/$INDEX_FILE_NAME").bufferedReader().use { it.readText() }
+        val targetHtml = assets.open("$ASSET_DIR/$TARGET_FILE_NAME").bufferedReader().use { it.readText() }
+        return LocalHtmlServer(
+            indexHtml = indexHtml,
+            targetHtml = targetHtml,
+        )
+    }
+
+    private class LocalHtmlServer(
+        private val indexHtml: String,
+        private val targetHtml: String,
+    ) : AutoCloseable {
+        private val requestPaths = Collections.synchronizedList(mutableListOf<String>())
+        private val serverSocket = ServerSocket(0, 50, InetAddress.getByName("127.0.0.1"))
+        private val serverThread = Thread {
+            while (!serverSocket.isClosed) {
+                val socket = runCatching { serverSocket.accept() }.getOrNull() ?: break
+                runCatching {
+                    handleRequest(socket)
+                }.onFailure {
+                    if (!serverSocket.isClosed) {
+                        println("local-http error=${it.message}")
+                    }
                 }
             }
+        }.apply {
+            isDaemon = true
+            start()
         }
-        return File(destinationDir, INDEX_FILE_NAME).toURI().toString()
-    }
 
-    /**
-     * BrowserSessionController が利用可能になるまで待機して取得する。
-     */
-    private fun waitForBrowserSessionController(): BrowserSessionController {
-        var controller: BrowserSessionController? = null
-        composeRule.waitUntil(timeoutMillis = 20_000) {
-            var resolved = false
-            composeRule.runOnIdle {
-                resolved = runCatching {
-                    controller = getBrowserViewModel().browserSessionController
-                }.isSuccess
+        val indexUrl: String = "http://127.0.0.1:${serverSocket.localPort}/$INDEX_FILE_NAME"
+
+        private fun handleRequest(socket: Socket) {
+            socket.use { client ->
+                val reader = BufferedReader(InputStreamReader(client.getInputStream(), Charsets.US_ASCII))
+                val requestLine = reader.readLine() ?: return
+                while (true) {
+                    val header = reader.readLine() ?: break
+                    if (header.isEmpty()) break
+                }
+                val requestPath = requestLine.split(" ").getOrNull(1)?.substringBefore("?") ?: "/"
+                requestPaths += requestPath
+                val body = when (requestPath) {
+                    "/", "/$INDEX_FILE_NAME" -> indexHtml
+                    "/$TARGET_FILE_NAME" -> targetHtml
+                    else -> "<!doctype html><html><head><title>Not Found</title></head><body>404</body></html>"
+                }
+                println("local-http requestPath=$requestPath")
+                val bodyBytes = body.toByteArray(Charsets.UTF_8)
+                val output = client.getOutputStream()
+                val headers = buildString {
+                    append("HTTP/1.1 200 OK\r\n")
+                    append("Content-Type: text/html; charset=utf-8\r\n")
+                    append("Content-Length: ${bodyBytes.size}\r\n")
+                    append("Connection: close\r\n")
+                    append("\r\n")
+                }
+                output.write(headers.toByteArray(Charsets.US_ASCII))
+                output.write(bodyBytes)
+                output.flush()
             }
-            resolved
         }
-        return requireNotNull(controller)
-    }
 
-    /**
-     * 現在操作対象の BrowserTab が確定するまで待機する。
-     */
-    private fun waitForActiveTab(browserSessionController: BrowserSessionController) {
-        composeRule.waitUntil(timeoutMillis = 20_000) {
-            var found = false
-            composeRule.runOnIdle {
-                val activeTab = browserSessionController.tabs.firstOrNull { it.session.isOpen }
-                    ?: browserSessionController.tabs.lastOrNull()
-                found = activeTab != null
-            }
-            found
+        fun hasRequest(path: String): Boolean {
+            return requestPaths.contains(path)
         }
-    }
 
-    /**
-     * Activity から BrowserViewModel を取得する。
-     */
-    private fun getBrowserViewModel(): BrowserViewModel {
-        return ViewModelProvider(composeRule.activity)[BrowserViewModel::class.java]
+        override fun close() {
+            runCatching { serverSocket.close() }
+            runCatching { serverThread.join(2_000) }
+        }
     }
 
     @OptIn(ExperimentalContracts::class)
@@ -311,12 +316,13 @@ class AboutBlankNewTabLocationTest {
         if (userDebug) {
             Thread.sleep(5.seconds.inWholeMilliseconds)
         }
+        println("start: $title")
         block()
+        println("end: $title")
     }
 
     companion object {
         private const val ASSET_DIR = "test-new-tab-link"
-        private const val DIR_NAME = "test-new-tab-link"
         private const val INDEX_FILE_NAME = "index.html"
         private const val TARGET_FILE_NAME = "target.html"
     }

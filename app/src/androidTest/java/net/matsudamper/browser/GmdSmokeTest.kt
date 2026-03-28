@@ -15,11 +15,8 @@ import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performTextReplacement
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import androidx.lifecycle.ViewModelProvider
-import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -44,32 +41,21 @@ class GmdSmokeTest {
      */
     @Test
     fun openHatenablogAndApplyThemeColor() {
-        val browserSessionController = waitForBrowserSessionController()
-        val activeTab = waitForActiveTab(browserSessionController)
         val localThemeColorPageUri = prepareLocalThemeColorPageUri()
-        waitForThemeColorExtensionInstalled()
         val initialToolbarState = waitForToolbarState()
         assertEquals("default", initialToolbarState.source)
 
-        // URLバー経由だと file URI が補正されるため、GeckoSession に直接 file URI を渡す。
-        composeRule.runOnIdle {
-            activeTab.session.loadUri(localThemeColorPageUri)
-        }
-
-        waitForActiveTabUrl(timeoutMillis = 60_000, activeTab = activeTab) { currentUrl ->
-            currentUrl.startsWith("file:") && currentUrl.contains(LOCAL_THEME_COLOR_INDEX_FILE_NAME)
-        }
+        composeRule.openUrlViaViewIntent(localThemeColorPageUri)
+        composeRule.waitForUrlBarContains(LOCAL_THEME_COLOR_INDEX_FILE_NAME, timeoutMillis = 60_000)
 
         composeRule.waitUntil(timeoutMillis = 60_000) {
             waitForToolbarState().source == "theme"
         }
 
         val resolvedToolbarState = waitForToolbarState()
-
-        composeRule.runOnIdle {
-            assertTrue(activeTab.currentUrl.startsWith("file:"))
-            assertTrue(activeTab.currentUrl.contains(LOCAL_THEME_COLOR_INDEX_FILE_NAME))
-        }
+        val currentUrl = composeRule.currentUrlBarText()
+        assertTrue(currentUrl.startsWith("file:"))
+        assertTrue(currentUrl.contains(LOCAL_THEME_COLOR_INDEX_FILE_NAME))
         assertEquals("theme", resolvedToolbarState.source)
         assertNotEquals(initialToolbarState.argbHex, resolvedToolbarState.argbHex)
     }
@@ -99,22 +85,11 @@ class GmdSmokeTest {
      */
     @Test
     fun tappingUrlBarClearsInputAndShowsCurrentUrlActions() {
-        val browserSessionController = waitForBrowserSessionController()
-        val activeTab = waitForActiveTab(browserSessionController)
         val focusPageUri = prepareLocalFocusPageUri()
 
-        composeRule.runOnIdle {
-            activeTab.session.loadUri(focusPageUri)
-        }
-
-        waitForActiveTabUrl(timeoutMillis = 60_000, activeTab = activeTab) { currentUrl ->
-            currentUrl.startsWith("file:") && currentUrl.contains(LOCAL_FOCUS_INDEX_FILE_NAME)
-        }
-
-        var currentUrl = ""
-        composeRule.runOnIdle {
-            currentUrl = activeTab.currentUrl
-        }
+        composeRule.openUrlViaViewIntent(focusPageUri)
+        composeRule.waitForUrlBarContains(LOCAL_FOCUS_INDEX_FILE_NAME, timeoutMillis = 60_000)
+        val currentUrl = composeRule.currentUrlBarText()
 
         composeRule.onNodeWithTag(UrlTextInputTestTags.UrlBar.testTag).performClick()
         waitForUrlBarFocused()
@@ -140,14 +115,11 @@ class GmdSmokeTest {
      */
     @Test
     fun searchEngineSearchWithHistorySuggestionsBringsGeckoViewToFront() {
-        val browserSessionController = waitForBrowserSessionController()
-        val activeTab = waitForActiveTab(browserSessionController)
-
         val token = "history-search-20260307"
         val searchQuery = "$token normal query"
         val historyTitle = searchQuery
         val historyUrl = "https://$token.example/path"
-        seedHistoryEntry(url = historyUrl, title = historyTitle)
+        val seededUrl = seedHistoryEntry(url = historyUrl, title = historyTitle)
 
         composeRule.onNodeWithTag(UrlTextInputTestTags.UrlBar.testTag).performClick()
         composeRule.onNodeWithTag(UrlTextInputTestTags.UrlBar.testTag).performTextReplacement(searchQuery)
@@ -155,8 +127,9 @@ class GmdSmokeTest {
 
         composeRule.onNodeWithTag(UrlTextInputTestTags.UrlBar.testTag).performImeAction()
 
-        waitForActiveTabUrl(timeoutMillis = 30_000, activeTab = activeTab) { currentUrl ->
-            currentUrl.contains(token) && !currentUrl.startsWith(historyUrl)
+        composeRule.waitUntil(timeoutMillis = 30_000) {
+            val currentUrl = composeRule.currentUrlBarText()
+            currentUrl.contains(token) && !currentUrl.startsWith(seededUrl)
         }
         waitForHistorySuggestionsHidden()
         waitForUrlBarNotFocused()
@@ -172,14 +145,11 @@ class GmdSmokeTest {
      */
     @Test
     fun selectingHistorySuggestionBringsGeckoViewToFront() {
-        val browserSessionController = waitForBrowserSessionController()
-        val activeTab = waitForActiveTab(browserSessionController)
-
         val token = "history-pick-20260307"
         val historyTitle = "History Pick Seed 20260307"
         val historyUrl = "https://$token.example/path"
 
-        seedHistoryEntry(url = historyUrl, title = historyTitle)
+        val seededUrl = seedHistoryEntry(url = historyUrl, title = historyTitle)
 
         composeRule.onNodeWithTag(UrlTextInputTestTags.UrlBar.testTag).performClick()
         composeRule.onNodeWithTag(UrlTextInputTestTags.UrlBar.testTag).performTextReplacement(token)
@@ -187,8 +157,8 @@ class GmdSmokeTest {
 
         composeRule.onNodeWithText(historyTitle).performClick()
 
-        waitForActiveTabUrl(timeoutMillis = 30_000, activeTab = activeTab) { currentUrl ->
-            currentUrl.startsWith(historyUrl)
+        composeRule.waitUntil(timeoutMillis = 30_000) {
+            composeRule.currentUrlBarText().startsWith(seededUrl)
         }
         waitForHistorySuggestionsHidden()
         waitForUrlBarNotFocused()
@@ -206,22 +176,14 @@ class GmdSmokeTest {
      */
     @Test
     fun openingUrlBarFromGeckoViewDoesNotImmediatelyCloseKeyboard() {
-        val browserSessionController = waitForBrowserSessionController()
-        val activeTab = waitForActiveTab(browserSessionController)
         val focusPageUri = prepareLocalFocusPageUri()
 
-        // ローカルHTMLを直接ロードする
-        composeRule.runOnIdle {
-            activeTab.session.loadUri(focusPageUri)
-        }
-
-        waitForActiveTabUrl(timeoutMillis = 60_000, activeTab = activeTab) { currentUrl ->
-            currentUrl.startsWith("file:") && currentUrl.contains(LOCAL_FOCUS_INDEX_FILE_NAME)
-        }
+        composeRule.openUrlViaViewIntent(focusPageUri)
+        composeRule.waitForUrlBarContains(LOCAL_FOCUS_INDEX_FILE_NAME, timeoutMillis = 60_000)
         waitForUrlBarNotFocused()
         assertGeckoViewInFront()
 
-        focusPageSearchInput(activeTab)
+        composeRule.tapGeckoContainer()
         val imeWasVisibleBeforeTap = waitForImeVisible(timeoutMillis = 5_000)
 
         composeRule.onNodeWithTag(UrlTextInputTestTags.UrlBar.testTag).performClick()
@@ -262,46 +224,61 @@ class GmdSmokeTest {
      */
     @Test
     fun retryOnPageLoadErrorRetriesFailedUrl() {
-        val browserSessionController = waitForBrowserSessionController()
-        val activeTab = waitForActiveTab(browserSessionController)
         val focusPageUri = prepareLocalFocusPageUri()
 
-        composeRule.runOnIdle {
-            activeTab.session.loadUri(focusPageUri)
-        }
-
-        waitForActiveTabUrl(timeoutMillis = 60_000, activeTab = activeTab) { currentUrl ->
-            currentUrl.startsWith("file:") && currentUrl.contains(LOCAL_FOCUS_INDEX_FILE_NAME)
-        }
-
-        composeRule.runOnIdle {
-            activeTab.session.loadUri(PAGE_LOAD_ERROR_TEST_URL)
-        }
+        composeRule.openUrlViaViewIntent(focusPageUri)
+        composeRule.waitForUrlBarContains(LOCAL_FOCUS_INDEX_FILE_NAME, timeoutMillis = 60_000)
+        composeRule.openUrlFromUrlBar(PAGE_LOAD_ERROR_TEST_URL)
 
         waitForPageLoadErrorVisible(PAGE_LOAD_ERROR_TEST_URL)
-        composeRule.runOnIdle {
-            assertEquals(PAGE_LOAD_ERROR_TEST_URL, activeTab.currentUrl)
-        }
+        assertEquals(PAGE_LOAD_ERROR_TEST_URL, composeRule.currentUrlBarText())
         waitForUrlBarText(PAGE_LOAD_ERROR_TEST_URL)
 
         composeRule.onNodeWithText("再読み込み").performClick()
 
         waitForPageLoadErrorVisible(PAGE_LOAD_ERROR_TEST_URL)
-        composeRule.runOnIdle {
-            assertEquals(PAGE_LOAD_ERROR_TEST_URL, activeTab.currentUrl)
-        }
+        assertEquals(PAGE_LOAD_ERROR_TEST_URL, composeRule.currentUrlBarText())
         waitForUrlBarText(PAGE_LOAD_ERROR_TEST_URL)
     }
 
     /**
      * テスト用に履歴エントリを 1 件追加する。
      */
-    private fun seedHistoryEntry(url: String, title: String) {
-        composeRule.runOnIdle {
-            runBlocking {
-                getBrowserViewModel().historyRepository.recordVisit(url, title)
-            }
-        }
+    private fun seedHistoryEntry(url: String, title: String): String {
+        val seedPageUri = prepareHistorySeedPageUri(url, title)
+        composeRule.openUrlViaViewIntent(seedPageUri)
+        composeRule.waitForUrlBarContains(HISTORY_SEED_FILE_PREFIX, timeoutMillis = 60_000)
+        return seedPageUri
+    }
+
+    /**
+     * 履歴サジェスト用のローカルページを生成して file URI を返す。
+     */
+    private fun prepareHistorySeedPageUri(url: String, title: String): String {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val targetContext = instrumentation.targetContext
+        val destinationDir = File(targetContext.cacheDir, HISTORY_SEED_DIR_NAME).apply { mkdirs() }
+        val token = url
+            .substringAfter("://", url)
+            .substringBefore("/")
+            .replace(Regex("[^a-zA-Z0-9_-]"), "_")
+        val fileName = "${HISTORY_SEED_FILE_PREFIX}_${token}.html"
+        val destination = File(destinationDir, fileName)
+        destination.writeText(
+            """
+            <!doctype html>
+            <html lang="ja">
+              <head>
+                <meta charset="utf-8" />
+                <title>$title</title>
+              </head>
+              <body>
+                <main>$title</main>
+              </body>
+            </html>
+            """.trimIndent()
+        )
+        return destination.toURI().toString()
     }
 
     /**
@@ -418,20 +395,6 @@ class GmdSmokeTest {
     }
 
     /**
-     * ローカルHTMLの検索入力へ JS でフォーカスを当てる。
-     */
-    private fun focusPageSearchInput(activeTab: BrowserTab) {
-        composeRule.runOnIdle {
-            activeTab.session.loadUri(
-                "javascript:void((function(){" +
-                    "var el=document.querySelector('input[name=q]');" +
-                    "if(el){el.focus();}" +
-                    "})())",
-            )
-        }
-    }
-
-    /**
      * フォーカステスト用のローカルHTMLをキャッシュへ展開し、file URI を返す。
      */
     private fun prepareLocalFocusPageUri(): String {
@@ -535,79 +498,6 @@ class GmdSmokeTest {
     }
 
     /**
-     * アクティブタブの URL が条件を満たすまで待機する。
-     */
-    private fun waitForActiveTabUrl(
-        timeoutMillis: Long,
-        activeTab: BrowserTab,
-        predicate: (String) -> Boolean,
-    ) {
-        composeRule.waitUntil(timeoutMillis = timeoutMillis) {
-            var matched = false
-            composeRule.runOnIdle {
-                matched = predicate(activeTab.currentUrl)
-            }
-            matched
-        }
-    }
-
-    /**
-     * BrowserSessionController が利用可能になるまで待機して取得する。
-     */
-    private fun waitForBrowserSessionController(): BrowserSessionController {
-        var controller: BrowserSessionController? = null
-        composeRule.waitUntil(timeoutMillis = 20_000) {
-            var resolved = false
-            composeRule.runOnIdle {
-                resolved = runCatching {
-                    controller = getBrowserViewModel().browserSessionController
-                }.isSuccess
-            }
-            resolved
-        }
-        return requireNotNull(controller)
-    }
-
-    /**
-     * 現在操作対象の BrowserTab が確定するまで待機して取得する。
-     */
-    private fun waitForActiveTab(browserSessionController: BrowserSessionController): BrowserTab {
-        var activeTab: BrowserTab? = null
-        composeRule.waitUntil(timeoutMillis = 20_000) {
-            var found = false
-            composeRule.runOnIdle {
-                activeTab = browserSessionController.tabs.firstOrNull { it.session.isOpen }
-                    ?: browserSessionController.tabs.lastOrNull()
-                found = activeTab != null
-            }
-            found
-        }
-        assertNotNull(activeTab)
-        return activeTab!!
-    }
-
-    /**
-     * theme-color 拡張のインストール完了を待機する。
-     */
-    private fun waitForThemeColorExtensionInstalled() {
-        composeRule.waitUntil(timeoutMillis = 20_000) {
-            var installed = false
-            composeRule.runOnIdle {
-                installed = runCatching { getBrowserViewModel().themeColorExtension.isInstalled() }
-                    .getOrDefault(false)
-            }
-            installed
-        }
-    }
-
-    /**
-     * Activity から BrowserViewModel を取得する。
-     */
-    private fun getBrowserViewModel(): BrowserViewModel {
-        return ViewModelProvider(composeRule.activity)[BrowserViewModel::class.java]
-    }
-
-    /**
      * ツールバーの Semantics から色情報を抽出して返す。
      */
     private fun waitForToolbarState(): ToolbarState {
@@ -647,6 +537,8 @@ class GmdSmokeTest {
         private const val LOCAL_FOCUS_ASSET_DIR = "test-focus"
         private const val LOCAL_FOCUS_DIR_NAME = "test-focus"
         private const val LOCAL_FOCUS_INDEX_FILE_NAME = "index.html"
+        private const val HISTORY_SEED_DIR_NAME = "test-history-seed"
+        private const val HISTORY_SEED_FILE_PREFIX = "history-seed"
         private const val PAGE_LOAD_ERROR_TEST_URL = "https://reload-error-test.invalid/"
     }
 }

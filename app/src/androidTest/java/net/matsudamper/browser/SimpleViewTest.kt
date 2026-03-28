@@ -8,7 +8,6 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
-import androidx.lifecycle.ViewModelProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import net.matsudamper.browser.screen.browser.SimpleViewScreenTestTags
@@ -34,22 +33,11 @@ class SimpleViewTest {
      */
     @Test
     fun tappingSimpleViewMenuShowsSimpleViewScreen() {
-        val browserSessionController = waitForBrowserSessionController()
-        val activeTab = waitForActiveTab(browserSessionController)
         val articlePageUri = prepareLocalArticlePageUri()
 
-        // Readability 拡張がインストール完了するまで待機
-        waitForReadabilityExtensionInstalled()
-
         // 記事ページを読み込む
-        composeRule.runOnIdle {
-            activeTab.session.loadUri(articlePageUri)
-        }
-
-        // ページ読み込み完了を待機
-        waitForActiveTabUrl(timeoutMillis = 60_000, activeTab = activeTab) { currentUrl ->
-            currentUrl.startsWith("file:") && currentUrl.contains(LOCAL_READABILITY_INDEX_FILE_NAME)
-        }
+        composeRule.openUrlViaViewIntent(articlePageUri)
+        composeRule.waitForUrlBarContains(LOCAL_READABILITY_INDEX_FILE_NAME, timeoutMillis = 60_000)
 
         // document_idle が発火してコンテンツスクリプトがポートを確立するまで待機
         // （ローカルファイルは通常すぐに読み込まれるが、念のため少し待つ）
@@ -84,19 +72,10 @@ class SimpleViewTest {
      */
     @Test
     fun closingSimpleViewDismissesOverlay() {
-        val browserSessionController = waitForBrowserSessionController()
-        val activeTab = waitForActiveTab(browserSessionController)
         val articlePageUri = prepareLocalArticlePageUri()
 
-        waitForReadabilityExtensionInstalled()
-
-        composeRule.runOnIdle {
-            activeTab.session.loadUri(articlePageUri)
-        }
-
-        waitForActiveTabUrl(timeoutMillis = 60_000, activeTab = activeTab) { currentUrl ->
-            currentUrl.startsWith("file:") && currentUrl.contains(LOCAL_READABILITY_INDEX_FILE_NAME)
-        }
+        composeRule.openUrlViaViewIntent(articlePageUri)
+        composeRule.waitForUrlBarContains(LOCAL_READABILITY_INDEX_FILE_NAME, timeoutMillis = 60_000)
 
         Thread.sleep(3_000)
 
@@ -105,6 +84,9 @@ class SimpleViewTest {
             hasTestTag(BrowserToolbarTestTags.MenuButton.testTag)
                 .and(hasParent(hasTestTag(BrowserToolbarTestTags.Toolbar.testTag)))
         ).performClick()
+        composeRule.waitUntil(timeoutMillis = 10_000) {
+            composeRule.onAllNodesWithText("シンプル表示").fetchSemanticsNodes().isNotEmpty()
+        }
         composeRule.onNodeWithText("シンプル表示").performClick()
 
         composeRule.waitUntil(timeoutMillis = 30_000) {
@@ -137,64 +119,6 @@ class SimpleViewTest {
             }
         }
         return destination.toURI().toString()
-    }
-
-    private fun waitForReadabilityExtensionInstalled() {
-        composeRule.waitUntil(timeoutMillis = 20_000) {
-            var installed = false
-            composeRule.runOnIdle {
-                installed = runCatching {
-                    getBrowserViewModel().readabilityWebExtension.isInstalled()
-                }.getOrDefault(false)
-            }
-            installed
-        }
-    }
-
-    private fun waitForBrowserSessionController(): BrowserSessionController {
-        var controller: BrowserSessionController? = null
-        composeRule.waitUntil(timeoutMillis = 20_000) {
-            var resolved = false
-            composeRule.runOnIdle {
-                resolved = runCatching {
-                    controller = getBrowserViewModel().browserSessionController
-                }.isSuccess
-            }
-            resolved
-        }
-        return requireNotNull(controller)
-    }
-
-    private fun waitForActiveTab(browserSessionController: BrowserSessionController): BrowserTab {
-        var activeTab: BrowserTab? = null
-        composeRule.waitUntil(timeoutMillis = 20_000) {
-            var found = false
-            composeRule.runOnIdle {
-                activeTab = browserSessionController.tabs.firstOrNull { it.session.isOpen }
-                    ?: browserSessionController.tabs.lastOrNull()
-                found = activeTab != null
-            }
-            found
-        }
-        return requireNotNull(activeTab)
-    }
-
-    private fun waitForActiveTabUrl(
-        timeoutMillis: Long,
-        activeTab: BrowserTab,
-        predicate: (String) -> Boolean,
-    ) {
-        composeRule.waitUntil(timeoutMillis = timeoutMillis) {
-            var matched = false
-            composeRule.runOnIdle {
-                matched = predicate(activeTab.currentUrl)
-            }
-            matched
-        }
-    }
-
-    private fun getBrowserViewModel(): BrowserViewModel {
-        return ViewModelProvider(composeRule.activity)[BrowserViewModel::class.java]
     }
 
     companion object {
