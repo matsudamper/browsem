@@ -12,6 +12,9 @@
       "Bash(javap:*)",
       "Read(./**)",
       "mcp__ide__getDiagnostics"
+    ],
+    "additionalDirectories": [
+      "~/.gradle"
     ]
   },
   "hooks": {
