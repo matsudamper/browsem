@@ -60,6 +60,9 @@ class BrowserSessionLifecycleController(
             tab.pendingSessionState = null
             val parsed = GeckoSession.SessionState.fromString(state)
             if (parsed != null) {
+                // SessionState から履歴を抽出してキャッシュに反映する
+                // （restoreState は onHistoryStateChange を発火しないため）
+                tab.initHistoryFromSessionState(parsed)
                 tab.session.restoreState(parsed)
                 return
             }
