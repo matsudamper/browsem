@@ -517,6 +517,11 @@ internal class BrowserTabScreenState(
         canGoForward = value
     }
 
+    override fun onHistoryStateChange(items: List<HistoryStateItem>, currentIndex: Int) {
+        tabHistoryItems = items.map { TabHistoryItem(uri = it.uri, title = it.title) }
+        tabHistoryCurrentIndex = currentIndex
+    }
+
     override fun onLoadError(uri: String?, error: WebRequestError) {
         val resolvedError = error.toPageLoadError(uri)
         val failedUrl = resolvedError.failingUrl

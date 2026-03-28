@@ -236,28 +236,12 @@ internal fun GeckoBrowserTab(
         session.promptDelegate = promptDelegate
         // MediaSession の初回イベントを取りこぼさないよう、ページ読み込み前に delegate を設定する。
         session.mediaSessionDelegate = mediaSessionDelegate
-        // タブ内ナビゲーション履歴を GeckoView から同期する
-        session.historyDelegate = object : GeckoSession.HistoryDelegate {
-            override fun onHistoryStateChange(
-                session: GeckoSession,
-                historyList: GeckoSession.HistoryDelegate.HistoryList,
-            ) {
-                state.tabHistoryItems = historyList.map { item ->
-                    BrowserTabScreenState.TabHistoryItem(
-                        uri = item.uri.orEmpty(),
-                        title = item.title.orEmpty(),
-                    )
-                }
-                state.tabHistoryCurrentIndex = historyList.currentIndex
-            }
-        }
 
         browserSessionLifecycleController.restoreSession(browserTab)
 
         onDispose {
             browserTab.detachSessionCallbacks()
             session.promptDelegate = null
-            session.historyDelegate = null
             if (session.mediaSessionDelegate === mediaSessionDelegate) {
                 session.mediaSessionDelegate = null
             }

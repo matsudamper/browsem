@@ -27,7 +27,11 @@ interface BrowserSessionStateCallbacks {
     fun onLoadRequest(
         request: GeckoSession.NavigationDelegate.LoadRequest,
     ): GeckoResult<AllowOrDeny>?
+    fun onHistoryStateChange(items: List<HistoryStateItem>, currentIndex: Int)
 }
+
+/** タブ内ナビゲーション履歴の項目 */
+data class HistoryStateItem(val uri: String, val title: String)
 
 data class GeckoSessionDelegateBundle(
     val permissionDelegate: GeckoSession.PermissionDelegate,
@@ -201,6 +205,8 @@ internal class BrowserTabSessionDelegateHost(
     // attachUi 時にリプレイする
     private var cachedCanGoBack: Boolean = false
     private var cachedCanGoForward: Boolean = false
+    private var cachedHistoryItems: List<HistoryStateItem> = emptyList()
+    private var cachedHistoryCurrentIndex: Int = -1
 
     private val delegateBundle = createGeckoSessionDelegateBundle(
         callbacks = object : BrowserSessionStateCallbacks {
@@ -273,6 +279,10 @@ internal class BrowserTabSessionDelegateHost(
             ): GeckoResult<AllowOrDeny>? {
                 return currentCallbacks()?.onLoadRequest(request)
             }
+
+            override fun onHistoryStateChange(items: List<HistoryStateItem>, currentIndex: Int) {
+                // bindToSession で設定する historyDelegate 経由で呼ばれるため、ここでは何もしない
+            }
         },
         browserTab = browserTab,
         onDesktopNotificationPermissionRequest = { uri ->
@@ -295,6 +305,25 @@ internal class BrowserTabSessionDelegateHost(
         session.progressDelegate = delegateBundle.progressDelegate
         session.translationsSessionDelegate = delegateBundle.translationsDelegate
         session.scrollDelegate = delegateBundle.scrollDelegate
+        session.historyDelegate = object : GeckoSession.HistoryDelegate {
+            override fun onHistoryStateChange(
+                session: GeckoSession,
+                historyList: GeckoSession.HistoryDelegate.HistoryList,
+            ) {
+                val items = historyList.map { item ->
+                    HistoryStateItem(
+                        uri = item.uri.orEmpty(),
+                        title = item.title.orEmpty(),
+                    )
+                }
+                val currentIndex = historyList.currentIndex
+                synchronized(lock) {
+                    cachedHistoryItems = items
+                    cachedHistoryCurrentIndex = currentIndex
+                }
+                currentCallbacks()?.onHistoryStateChange(items, currentIndex)
+            }
+        }
     }
 
     fun attachUi(
@@ -305,6 +334,8 @@ internal class BrowserTabSessionDelegateHost(
     ) {
         val canGoBack: Boolean
         val canGoForward: Boolean
+        val historyItems: List<HistoryStateItem>
+        val historyCurrentIndex: Int
         synchronized(lock) {
             this.callbacks = callbacks
             this.onDesktopNotificationPermissionRequest = onDesktopNotificationPermissionRequest
@@ -312,11 +343,17 @@ internal class BrowserTabSessionDelegateHost(
             this.onCloseRequest = onCloseRequest
             canGoBack = cachedCanGoBack
             canGoForward = cachedCanGoForward
+            historyItems = cachedHistoryItems
+            historyCurrentIndex = cachedHistoryCurrentIndex
         }
         // GeckoSession はナビゲーション状態が変わらない限り onCanGoBack/onCanGoForward を再発火しないため、
         // キャッシュ済みの値をリプレイして UI 側の状態を同期する
         callbacks.onCanGoBackChanged(canGoBack)
         callbacks.onCanGoForwardChanged(canGoForward)
+        // タブ内ナビゲーション履歴も同様にリプレイする
+        if (historyItems.isNotEmpty()) {
+            callbacks.onHistoryStateChange(historyItems, historyCurrentIndex)
+        }
         flushPendingRequests()
     }
 
