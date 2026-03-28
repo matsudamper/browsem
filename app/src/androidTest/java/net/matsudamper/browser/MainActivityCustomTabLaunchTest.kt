@@ -7,13 +7,11 @@ import android.os.Binder
 import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
+import android.os.SystemClock
 import androidx.browser.customtabs.CustomTabsSessionToken
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import androidx.test.uiautomator.By
-import androidx.test.uiautomator.UiDevice
-import androidx.test.uiautomator.Until
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -110,16 +108,14 @@ class MainActivityCustomTabLaunchTest {
 
                 try {
                     // CustomTabScreen の remember 内で consumePreparedSession が呼ばれるまで待機する。
-                    // ツールバーの testTag が描画されれば remember ブロックが実行済みであることを確認できる。
-                    val uiDevice = UiDevice.getInstance(instrumentation)
                     assertTrue(
-                        "CustomTabActivity のツールバーが描画されていません",
-                        uiDevice.wait(
-                            // Compose の testTagsAsResourceId は viewIdResourceName にタグ値をそのまま設定するため
-                            // By.res(packageName, tag) ではなく By.res(tag) で検索する。
-                            Until.hasObject(By.res(CustomTabToolbarTestTags.Toolbar.testTag)),
-                            10_000,
-                        ),
+                        "準備済みセッションが所定時間内に消費されていません",
+                        waitUntil(timeoutMillis = 10_000) {
+                            !CustomTabsWarmupStore.hasPreparedSessionForTesting(
+                                sessionToken,
+                                preloadUri.toString(),
+                            )
+                        },
                     )
                     // consumePreparedSession が null を返すことで、セッションが引き継ぎ済みであることを確認する。
                     // 起動前に hasPreparedSessionForTesting で存在確認済みのため、
@@ -142,6 +138,15 @@ class MainActivityCustomTabLaunchTest {
         val method = CustomTabsSessionToken::class.java.getDeclaredMethod("getCallbackBinder")
         method.isAccessible = true
         return method.invoke(sessionToken) as IBinder
+    }
+
+    private fun waitUntil(timeoutMillis: Long, condition: () -> Boolean): Boolean {
+        val deadline = SystemClock.uptimeMillis() + timeoutMillis
+        while (SystemClock.uptimeMillis() < deadline) {
+            if (condition()) return true
+            Thread.sleep(100)
+        }
+        return condition()
     }
 
     companion object {

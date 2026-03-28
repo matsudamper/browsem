@@ -19,8 +19,15 @@ class NavController(
         }
 
     fun selectTab(tabId: String, beforeTab: AppDestination.Browser? = null) {
-        backStack.clear()
-        backStack.add(AppDestination.Browser(tabId, beforeTab))
+        val destination = AppDestination.Browser(tabId, beforeTab)
+        if (backStack.isEmpty()) {
+            backStack.add(destination)
+            return
+        }
+        backStack[0] = destination
+        while (backStack.size > 1) {
+            backStack.removeLastOrNull()
+        }
     }
 
     /**

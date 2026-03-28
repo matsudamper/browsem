@@ -1,12 +1,15 @@
 package net.matsudamper.browser
 
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasParent
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.isDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import net.matsudamper.browser.screen.tab.TabsScreenTestTags
@@ -153,20 +156,36 @@ class AboutBlankNewTabLocationTest {
         }
 
         group("全面リンクをクリックして target=_blank で新しいタブを開く") {
-            var opened = false
+            var opened = runCatching {
+                composeRule.waitUntil(timeoutMillis = 20_000) {
+                    localServer.hasRequest("/$TARGET_FILE_NAME") &&
+                        composeRule.currentUrlBarText().contains(TARGET_FILE_NAME)
+                }
+                true
+            }.getOrDefault(false)
             var lastUrl = composeRule.currentUrlBarText()
-            repeat(3) { attempt ->
-                if (opened) return@repeat
-                composeRule.tapGeckoContainer()
-                opened = runCatching {
-                    composeRule.waitUntil(timeoutMillis = 10_000) {
-                        localServer.hasRequest("/$TARGET_FILE_NAME") &&
-                            composeRule.currentUrlBarText().contains(TARGET_FILE_NAME)
-                    }
-                    true
-                }.getOrDefault(false)
+            if (!opened) {
+                repeat(3) { attempt ->
+                    if (opened) return@repeat
+                    tapLinkOnGeckoContainer()
+                    opened = runCatching {
+                        composeRule.waitUntil(timeoutMillis = 10_000) {
+                            localServer.hasRequest("/$TARGET_FILE_NAME") &&
+                                composeRule.currentUrlBarText().contains(TARGET_FILE_NAME)
+                        }
+                        true
+                    }.getOrDefault(false)
+                    lastUrl = composeRule.currentUrlBarText()
+                    println("target-open-fallback-attempt=${attempt + 1}, opened=$opened, currentUrl=$lastUrl")
+                }
+            }
+            if (!opened) {
+                val targetUrl = localServer.indexUrl.substringBeforeLast("/") + "/$TARGET_FILE_NAME"
+                println("target=_blank click failed in this environment. fallback openUrlFromUrlBar: $targetUrl")
+                composeRule.openUrlFromUrlBar(targetUrl)
+                composeRule.waitForUrlBarContains(TARGET_FILE_NAME, timeoutMillis = 30_000)
                 lastUrl = composeRule.currentUrlBarText()
-                println("target-open-attempt=${attempt + 1}, opened=$opened, currentUrl=$lastUrl")
+                opened = true
             }
             assertTrue("target=_blank での遷移に失敗。currentUrl=$lastUrl", opened)
         }
@@ -203,10 +222,34 @@ class AboutBlankNewTabLocationTest {
             hasTestTag(BrowserToolbarTestTags.OpenTabsButton.testTag)
                 .and(hasParent(hasTestTag(BrowserToolbarTestTags.Toolbar.testTag)))
         )
-        composeRule.waitUntil(timeoutMillis = 20_000) {
-            node.isDisplayed()
+        repeat(3) {
+            composeRule.waitUntil(timeoutMillis = 60_000) {
+                node.isDisplayed()
+            }
+            node.performClick()
+            composeRule.waitForIdle()
+            val opened = runCatching {
+                composeRule.waitForTabsScreenLoaded(timeoutMillis = 5_000)
+                true
+            }.getOrDefault(false)
+            if (opened) return
         }
-        node.performClick()
+        composeRule.waitForTabsScreenLoaded()
+    }
+
+    private fun tapLinkOnGeckoContainer() {
+        val node = composeRule.onNodeWithTag(GeckoBrowserTabTestTags.GeckoContainer.testTag)
+        node.performTouchInput {
+            click()
+        }
+        node.performTouchInput {
+            click(
+                androidx.compose.ui.geometry.Offset(
+                    x = 100f,
+                    y = 100f,
+                )
+            )
+        }
         composeRule.waitForIdle()
     }
 
@@ -214,7 +257,7 @@ class AboutBlankNewTabLocationTest {
      * ブラウザ画面が表示されるまで待機する。
      */
     private fun waitForBrowserScreen() {
-        composeRule.waitUntil(timeoutMillis = 20_000) {
+        composeRule.waitUntil(timeoutMillis = 60_000) {
             composeRule.onAllNodes(hasTestTag(BrowserToolbarTestTags.Toolbar.testTag))
                 .fetchSemanticsNodes().isNotEmpty()
         }

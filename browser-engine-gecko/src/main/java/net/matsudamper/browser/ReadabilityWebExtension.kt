@@ -30,6 +30,10 @@ class ReadabilityWebExtension {
     private val attachedSessions: MutableSet<GeckoSession> =
         Collections.newSetFromMap(ConcurrentHashMap())
 
+    // ポート未接続時に抽出要求を保留し、接続後に自動送信する
+    private val pendingExtractionSessions: MutableSet<GeckoSession> =
+        Collections.newSetFromMap(ConcurrentHashMap())
+
     fun install(runtime: GeckoRuntime) {
         Log.d(TAG, "install() 開始: uri=$EXTENSION_URI")
         runtime.webExtensionController
@@ -65,6 +69,7 @@ class ReadabilityWebExtension {
         sessionCallbacks.remove(session)
         sessionPorts.remove(session)
         attachedSessions.remove(session)
+        pendingExtractionSessions.remove(session)
         // メッセージデリゲートを解除して、セッション再利用時に onConnect が空振りしないようにする
         extension?.let { ext ->
             session.webExtensionController.setMessageDelegate(ext, null, NATIVE_APP_ID)
@@ -78,11 +83,12 @@ class ReadabilityWebExtension {
     fun requestExtraction(session: GeckoSession) {
         val port = sessionPorts[session]
         if (port == null) {
-            Log.w(TAG, "requestExtraction: ポートが未接続 (ページ読み込み中の可能性)")
+            pendingExtractionSessions.add(session)
+            Log.w(TAG, "requestExtraction: ポート未接続のため保留 (接続後に再送)")
             return
         }
-        Log.d(TAG, "requestExtraction: {action: extract} を送信")
-        port.postMessage(JSONObject().apply { put("action", "extract") })
+        pendingExtractionSessions.remove(session)
+        postExtractMessage(port)
     }
 
     private fun attachSessionDelegate(session: GeckoSession, ext: WebExtension) {
@@ -126,10 +132,19 @@ class ReadabilityWebExtension {
                             sessionPorts.remove(session)
                         }
                     })
+                    if (pendingExtractionSessions.remove(session)) {
+                        Log.d(TAG, "onConnect: 保留中の抽出要求を送信")
+                        postExtractMessage(port)
+                    }
                 }
             },
             NATIVE_APP_ID,
         )
+    }
+
+    private fun postExtractMessage(port: WebExtension.Port) {
+        Log.d(TAG, "requestExtraction: {action: extract} を送信")
+        port.postMessage(JSONObject().apply { put("action", "extract") })
     }
 
     companion object {

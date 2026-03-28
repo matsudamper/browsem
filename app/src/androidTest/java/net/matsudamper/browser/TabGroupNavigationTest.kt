@@ -7,7 +7,6 @@ import androidx.compose.ui.test.isDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import kotlinx.coroutines.test.runTest
 import net.matsudamper.browser.screen.tab.TabsScreenTestTags
 import org.junit.Rule
 import org.junit.Test
@@ -24,7 +23,7 @@ class TabGroupNavigationTest {
      * タブ画面を閉じた後に再度タブ画面を開くと前に開いたタブグループと同じタブグループが表示されないかを確認する
      */
     @Test
-    fun activeGroupShouldRestoreToSelectedTabGroupAfterNavigation() = runTest {
+    fun activeGroupShouldRestoreToSelectedTabGroupAfterNavigation() {
         waitForBrowserScreen()
 
         // タブ一覧画面を開いて group1 を初期化する
@@ -40,9 +39,14 @@ class TabGroupNavigationTest {
         composeRule.waitForIdle()
 
         // タブグループ1が表示されている
-        composeRule.onNode(
-            hasTestTag(TabsScreenTestTags.TabGroupTopButton(1).testTag)
-        ).assertIsSelected()
+        composeRule.waitUntil(timeoutMillis = 10.seconds.inWholeMilliseconds) {
+            runCatching {
+                composeRule.onNode(
+                    hasTestTag(TabsScreenTestTags.TabGroupTopButton(1).testTag)
+                ).assertIsSelected()
+                true
+            }.getOrDefault(false)
+        }
 
         // タブを追加する: グループ1で追加したから、グループ1に追加されるはず
         composeRule.onNode(hasTestTag(TabsScreenTestTags.AddTabButton.testTag)).performClick()
@@ -53,9 +57,14 @@ class TabGroupNavigationTest {
         waitForTabsScreen()
 
         // タブグループ1が表示されている: タブグループ1のタブが表示されていたのだから当然
-        composeRule.onNode(
-            hasTestTag(TabsScreenTestTags.TabGroupTopButton(1).testTag)
-        ).assertIsSelected()
+        composeRule.waitUntil(timeoutMillis = 10.seconds.inWholeMilliseconds) {
+            runCatching {
+                composeRule.onNode(
+                    hasTestTag(TabsScreenTestTags.TabGroupTopButton(1).testTag)
+                ).assertIsSelected()
+                true
+            }.getOrDefault(false)
+        }
 
         // タブグループ0を表示する
         composeRule.onNode(
@@ -71,9 +80,14 @@ class TabGroupNavigationTest {
         waitForTabsScreen()
 
         // タブグループ1が表示されている: タブグループ1のタブが表示されていたのだから当然
-        composeRule.onNode(
-            hasTestTag(TabsScreenTestTags.TabGroupTopButton(1).testTag)
-        ).assertIsSelected()
+        composeRule.waitUntil(timeoutMillis = 10.seconds.inWholeMilliseconds) {
+            runCatching {
+                composeRule.onNode(
+                    hasTestTag(TabsScreenTestTags.TabGroupTopButton(1).testTag)
+                ).assertIsSelected()
+                true
+            }.getOrDefault(false)
+        }
     }
 
     /**
@@ -86,11 +100,19 @@ class TabGroupNavigationTest {
             hasTestTag(BrowserToolbarTestTags.OpenTabsButton.testTag)
                 .and(hasParent(hasTestTag(BrowserToolbarTestTags.Toolbar.testTag)))
         )
-        composeRule.waitUntil(timeoutMillis = 20_000) {
-            node.isDisplayed()
+        repeat(3) {
+            composeRule.waitUntil(timeoutMillis = 60_000) {
+                node.isDisplayed()
+            }
+            node.performClick()
+            composeRule.waitForIdle()
+            val opened = runCatching {
+                composeRule.waitForTabsScreenLoaded(timeoutMillis = 5_000)
+                true
+            }.getOrDefault(false)
+            if (opened) return
         }
-        node.performClick()
-        composeRule.waitForIdle()
+        composeRule.waitForTabsScreenLoaded()
     }
 
     /**

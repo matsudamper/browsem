@@ -46,6 +46,7 @@ class MainActivity : ComponentActivity() {
     private var webExtensionWarmUpCompleted = false
     private var webExtensionWarmUpInProgress = false
     private var webExtensionWarmUpRetryCount = 0
+    private var lastProcessedDeepLinkUrl: String? = null
     private val createNewTabChannel = Channel<String>(Channel.UNLIMITED)
     private val openDownloadsChannel = Channel<Unit>(Channel.CONFLATED)
 
@@ -140,6 +141,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        lastProcessedDeepLinkUrl = savedInstanceState?.getString(KEY_PROCESSED_DEEPLINK_URL)
         if (intent.isCustomTabLaunchIntent()) {
             launchCustomTabActivity(intent)
             finish()
@@ -161,14 +163,14 @@ class MainActivity : ComponentActivity() {
             openDownloadsChannel.trySend(Unit)
         } else {
             val url = intent.dataString
-            // 設定変更（画面回転等）後の再起動では savedInstanceState に処理済み URL が保存されており、
+            // 設定変更（画面回転等）後の再起動では直前に処理した URL を復元し、
             // 同じ URL であれば重複タブを作らないようスキップする。
-            // プロセスキル後に新たな deeplink が届いた場合は URL が変わるため、正常に処理される。
-            val processedUrl = savedInstanceState?.getString(KEY_PROCESSED_DEEPLINK_URL)
-            if (url != null && url != processedUrl) {
+            if (url != null && url != lastProcessedDeepLinkUrl) {
                 val result = createNewTabChannel.trySend(url)
                 if (result.isFailure) {
                     Log.e("MainActivity", "URL の送信に失敗: $url, reason=${result.exceptionOrNull()}")
+                } else {
+                    lastProcessedDeepLinkUrl = url
                 }
             }
         }
@@ -216,7 +218,6 @@ class MainActivity : ComponentActivity() {
             launchCustomTabActivity(intent, finishCurrentTask = true)
             return
         }
-        setIntent(intent)
         if (intent.action == DownloadWorker.ACTION_OPEN_DOWNLOADS) {
             openDownloadsChannel.trySend(Unit)
             return
@@ -226,6 +227,8 @@ class MainActivity : ComponentActivity() {
             val result = createNewTabChannel.trySend(url)
             if (result.isFailure) {
                 Log.e("MainActivity", "URL の送信に失敗: $url, reason=${result.exceptionOrNull()}")
+            } else {
+                lastProcessedDeepLinkUrl = url
             }
         }
     }
@@ -272,7 +275,7 @@ class MainActivity : ComponentActivity() {
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
         // 処理済み deeplink URL を保存して設定変更後の重複タブ作成を防ぐ
-        intent.dataString?.let { outState.putString(KEY_PROCESSED_DEEPLINK_URL, it) }
+        lastProcessedDeepLinkUrl?.let { outState.putString(KEY_PROCESSED_DEEPLINK_URL, it) }
     }
 
     override fun onResume() {

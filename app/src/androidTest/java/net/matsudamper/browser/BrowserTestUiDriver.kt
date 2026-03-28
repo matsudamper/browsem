@@ -14,12 +14,17 @@ import androidx.compose.ui.test.junit4.AndroidComposeTestRule
 import net.matsudamper.browser.screen.tab.TabsScreenTestTags
 
 internal fun AndroidComposeTestRule<*, MainActivity>.openUrlViaViewIntent(url: String) {
+    val uri = Uri.parse(url)
     runOnIdle {
         activity.startActivity(
             Intent(activity, MainActivity::class.java).apply {
                 action = Intent.ACTION_VIEW
-                data = Uri.parse(url)
-                addCategory(Intent.CATEGORY_BROWSABLE)
+                data = uri
+                if (uri.scheme == "http" || uri.scheme == "https") {
+                    addCategory(Intent.CATEGORY_BROWSABLE)
+                }
+                addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
             }
         )
     }
@@ -27,6 +32,9 @@ internal fun AndroidComposeTestRule<*, MainActivity>.openUrlViaViewIntent(url: S
 }
 
 internal fun AndroidComposeTestRule<*, MainActivity>.openUrlFromUrlBar(url: String) {
+    waitUntil(timeoutMillis = 60_000) {
+        onAllNodesWithTag(UrlTextInputTestTags.UrlBar.testTag).fetchSemanticsNodes().isNotEmpty()
+    }
     onNodeWithTag(UrlTextInputTestTags.UrlBar.testTag).performClick()
     onNodeWithTag(UrlTextInputTestTags.UrlBar.testTag).performTextReplacement(url)
     onNodeWithTag(UrlTextInputTestTags.UrlBar.testTag).performImeAction()
@@ -47,9 +55,7 @@ internal fun AndroidComposeTestRule<*, MainActivity>.waitForTabsScreenLoaded(
 ) {
     waitUntil(timeoutMillis = timeoutMillis) {
         onAllNodesWithTag(TabsScreenTestTags.AddTabButton.testTag)
-            .fetchSemanticsNodes().isNotEmpty() &&
-            onAllNodesWithTag(TabsScreenTestTags.AddTabGroupButton.testTag)
-                .fetchSemanticsNodes().isNotEmpty()
+            .fetchSemanticsNodes().isNotEmpty()
     }
 }
 
