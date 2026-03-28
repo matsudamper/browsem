@@ -74,7 +74,7 @@ internal fun BrowserToolBar(
     canGoForward: Boolean,
     onBack: () -> Unit,
     canGoBack: Boolean,
-    onLongPressBack: () -> Unit,
+    onLongPressHistory: () -> Unit,
     onFindInPage: () -> Unit,
     isPcMode: Boolean,
     onPcModeToggle: () -> Unit,
@@ -129,7 +129,7 @@ internal fun BrowserToolBar(
                 canGoForward = canGoForward,
                 onBack = onBack,
                 canGoBack = canGoBack,
-                onLongPressBack = onLongPressBack,
+                onLongPressHistory = onLongPressHistory,
                 isPcMode = isPcMode,
                 onPcModeToggle = onPcModeToggle,
                 showInstallExtensionItem = showInstallExtensionItem,
@@ -380,7 +380,7 @@ private fun Preview() {
                     canGoForward = false,
                     onBack = {},
                     canGoBack = false,
-                    onLongPressBack = {},
+                    onLongPressHistory = {},
                     onTranslatePage = {},
                 )
                 Spacer(modifier = Modifier.height(8.dp))

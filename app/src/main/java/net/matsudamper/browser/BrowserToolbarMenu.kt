@@ -40,7 +40,7 @@ internal fun ToolbarMenu(
     canGoForward: Boolean,
     onBack: () -> Unit,
     canGoBack: Boolean,
-    onLongPressBack: () -> Unit,
+    onLongPressHistory: () -> Unit,
     isPcMode: Boolean,
     onPcModeToggle: () -> Unit,
     showInstallExtensionItem: Boolean,
@@ -78,7 +78,7 @@ internal fun ToolbarMenu(
                             role = Role.Button,
                             onLongClick = {
                                 onDismissRequest()
-                                onLongPressBack()
+                                onLongPressHistory()
                             },
                             onClick = {
                                 onDismissRequest()
@@ -109,17 +109,40 @@ internal fun ToolbarMenu(
                 )
             }
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                IconButton(
-                    onClick = {
-                        onDismissRequest()
-                        onForward()
-                    },
-                    enabled = canGoForward,
+                // 短押しで進む、長押しでタブ履歴BottomSheetを表示
+                androidx.compose.foundation.layout.Box(
+                    modifier = Modifier
+                        .combinedClickable(
+                            enabled = canGoForward,
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = ripple(bounded = false),
+                            role = Role.Button,
+                            onLongClick = {
+                                onDismissRequest()
+                                onLongPressHistory()
+                            },
+                            onClick = {
+                                onDismissRequest()
+                                onForward()
+                            },
+                        ),
+                    contentAlignment = Alignment.Center,
                 ) {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_arrow_forward_24dp),
-                        contentDescription = null,
-                    )
+                    androidx.compose.foundation.layout.Box(
+                        modifier = Modifier
+                            .padding(12.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_arrow_forward_24dp),
+                            contentDescription = null,
+                            tint = if (canGoForward) {
+                                LocalContentColor.current
+                            } else {
+                                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                            },
+                        )
+                    }
                 }
                 Text(
                     text = "進む",

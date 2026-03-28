@@ -21,7 +21,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import java.net.URL
-import kotlin.math.abs
 import net.matsudamper.browser.data.TranslationProvider
 import net.matsudamper.browser.ReadabilityArticle
 import net.matsudamper.browser.ReadabilityWebExtension
@@ -214,18 +213,12 @@ internal class BrowserTabScreenState(
         session.goBack()
     }
 
-    /** タブ履歴の指定インデックスへ goBack()/goForward() を必要回数ループして移動する */
+    /** タブ履歴の指定インデックスへ直接ジャンプする */
     fun jumpToHistoryEntry(targetIndex: Int) {
-        val steps = tabHistoryCurrentIndex - targetIndex
-        if (steps == 0) return
-        val absSteps = abs(steps)
-        skipHistoryRecordCount += absSteps
+        if (targetIndex == tabHistoryCurrentIndex) return
+        skipHistoryRecordCount++
         tabHistoryCurrentIndex = targetIndex
-        if (steps > 0) {
-            repeat(absSteps) { session.goBack() }
-        } else {
-            repeat(absSteps) { session.goForward() }
-        }
+        session.gotoHistoryIndex(targetIndex)
     }
 
     fun togglePcMode() {
