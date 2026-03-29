@@ -119,6 +119,9 @@ class TabRepository(context: Context) {
     /** サムネイル画像をキャッシュファイルに保存する */
     fun saveTabThumbnail(tabId: String, imageBytes: ByteArray) {
         if (imageBytes.isEmpty()) return
+        if (!thumbnailDir.exists()) {
+            thumbnailDir.mkdirs()
+        }
         File(thumbnailDir, "$tabId.webp").writeBytes(imageBytes)
     }
 

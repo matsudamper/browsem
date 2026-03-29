@@ -98,7 +98,11 @@ internal class BrowserTabPersistenceCoordinator(
     fun persistPreviewBitmap(tabId: String, previewBitmap: ByteArray?) {
         controllerScope.launch(Dispatchers.IO) {
             if (previewBitmap != null && previewBitmap.isNotEmpty()) {
-                tabRepository.saveTabThumbnail(tabId, previewBitmap)
+                runCatching {
+                    tabRepository.saveTabThumbnail(tabId, previewBitmap)
+                }.onFailure { error ->
+                    Log.e(TAG, "タブプレビュー保存に失敗しました", error)
+                }
             }
         }
     }
