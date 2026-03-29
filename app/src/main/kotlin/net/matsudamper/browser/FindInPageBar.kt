@@ -39,6 +39,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import net.matsudamper.browser.resources.R as ResourcesR
 
 @Composable
 internal fun FindInPageBar(
@@ -84,7 +85,7 @@ internal fun FindInPageBar(
                         Icon(
                             modifier = Modifier
                                 .size(24.dp),
-                            painter = painterResource(R.drawable.ic_regurar_expression),
+                            painter = painterResource(ResourcesR.drawable.ic_regurar_expression),
                             contentDescription = "正規表現",
                         )
                     }
@@ -128,7 +129,7 @@ internal fun FindInPageBar(
                     enabled = query.isNotEmpty() && queryError == null,
                 ) {
                     Icon(
-                        painter = painterResource(R.drawable.ic_keyboard_arrow_up_24dp),
+                        painter = painterResource(ResourcesR.drawable.ic_keyboard_arrow_up_24dp),
                         contentDescription = "前へ",
                     )
                 }
@@ -137,13 +138,13 @@ internal fun FindInPageBar(
                     enabled = query.isNotEmpty() && queryError == null,
                 ) {
                     Icon(
-                        painter = painterResource(R.drawable.ic_keyboard_arrow_down_24dp),
+                        painter = painterResource(ResourcesR.drawable.ic_keyboard_arrow_down_24dp),
                         contentDescription = "次へ",
                     )
                 }
                 IconButton(onClick = onClose) {
                     Icon(
-                        painter = painterResource(R.drawable.close_24dp),
+                        painter = painterResource(ResourcesR.drawable.close_24dp),
                         contentDescription = "閉じる",
                     )
                 }

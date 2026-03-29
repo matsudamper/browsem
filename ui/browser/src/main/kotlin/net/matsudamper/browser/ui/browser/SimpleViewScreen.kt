@@ -17,6 +17,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import net.matsudamper.browser.ReadabilityArticle
+import net.matsudamper.browser.resources.R as ResourcesR
 
 sealed interface SimpleViewScreenTestTags {
     val id: String
@@ -60,7 +61,7 @@ fun SimpleViewScreen(
                 .padding(4.dp),
         ) {
             Icon(
-                painter = painterResource(R.drawable.close_24dp),
+                painter = painterResource(ResourcesR.drawable.close_24dp),
                 contentDescription = "シンプル表示を閉じる",
                 tint = MaterialTheme.colorScheme.onBackground,
             )
