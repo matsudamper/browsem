@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Notification Permission Test</title>
+  </head>
+  <body>
+    <h1>通知許可テスト</h1>
+    <p id="status">要求中...</p>
+    <script>
+      // Notification.requestPermission() を呼び出し、結果を URL ハッシュに反映する。
+      // テスト側から URL バーを監視することで、Promise が解決されたかどうかを検出できる。
+      Notification.requestPermission().then(function(permission) {
+        document.getElementById('status').textContent = 'permission: ' + permission;
+        location.hash = 'permission-' + permission;
+      });
+    </script>
+  </body>
+</html>
