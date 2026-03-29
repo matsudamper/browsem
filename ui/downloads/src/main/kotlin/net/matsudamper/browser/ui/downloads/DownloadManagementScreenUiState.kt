@@ -19,7 +19,11 @@ data class DownloadManagementScreenUiState(
 
         data class Completed(val fileUri: String) : DownloadStatus
 
-        data object Failed : DownloadStatus
+        /**
+         * ダウンロード失敗。
+         * [canResume] が true の場合は再開ボタンを表示する。
+         */
+        data class Failed(val canResume: Boolean) : DownloadStatus
 
         data object Cancelled : DownloadStatus
     }
@@ -37,5 +41,7 @@ data class DownloadManagementScreenUiState(
         val onCancel: (UUID) -> Unit,
         val onOpenFile: (fileUri: String) -> Unit,
         val onOpenDownloadsFolder: () -> Unit,
+        /** 失敗したダウンロードを再開する */
+        val onResume: (UUID) -> Unit,
     )
 }

@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import net.matsudamper.browser.GeckoDownloadManager
 import net.matsudamper.browser.data.download.DownloadRecord
 import net.matsudamper.browser.data.download.DownloadRecordStatus
 import net.matsudamper.browser.data.download.DownloadRepository
@@ -25,19 +26,23 @@ internal class DownloadManagementScreenViewModel(
     application: Application,
 ) : AndroidViewModel(application) {
 
-    // キャンセル操作のみWorkManagerを使用する
     private val workManager = WorkManager.getInstance(application)
     private val downloadRepository = DownloadRepository(application)
+    private val geckoDownloadManager = GeckoDownloadManager(application, downloadRepository)
     private val callbacks = buildCallbacks()
+
+    /** resumeDownload から最新のレコードを参照するためのキャッシュ */
+    private var currentRecords: List<DownloadRecord> = emptyList()
 
     val uiState: StateFlow<DownloadManagementScreenUiState> = MutableStateFlow(
         DownloadManagementScreenUiState(
             downloads = emptyList(),
             callbacks = callbacks,
-        )
+        ),
     ).also { uiStateFlow ->
         viewModelScope.launch {
             downloadRepository.observeDownloads().collectLatest { records ->
+                currentRecords = records
                 val items = records.map { record -> record.toDownloadItem() }
                 uiStateFlow.update {
                     DownloadManagementScreenUiState(
@@ -53,6 +58,7 @@ internal class DownloadManagementScreenViewModel(
         onCancel = { id -> cancelDownload(id) },
         onOpenFile = { fileUri -> openFile(fileUri) },
         onOpenDownloadsFolder = { openDownloadsFolder() },
+        onResume = { id -> resumeDownload(id) },
     )
 
     private fun DownloadRecord.toDownloadItem(): DownloadManagementScreenUiState.DownloadItem {
@@ -62,10 +68,14 @@ internal class DownloadManagementScreenViewModel(
                 if (uri != null) {
                     DownloadManagementScreenUiState.DownloadStatus.Completed(uri)
                 } else {
-                    DownloadManagementScreenUiState.DownloadStatus.Failed
+                    DownloadManagementScreenUiState.DownloadStatus.Failed(canResume = false)
                 }
             }
-            DownloadRecordStatus.FAILED -> DownloadManagementScreenUiState.DownloadStatus.Failed
+            DownloadRecordStatus.FAILED -> {
+                DownloadManagementScreenUiState.DownloadStatus.Failed(
+                    canResume = partialFileUri != null,
+                )
+            }
             DownloadRecordStatus.ENQUEUED -> {
                 DownloadManagementScreenUiState.DownloadStatus.InProgress(
                     progress = 0,
@@ -104,9 +114,41 @@ internal class DownloadManagementScreenViewModel(
             // ENQUEUED（未起動）またはWorkerがWorkManagerに存在しない（prune済み等）場合は
             // doWork()が呼ばれないためDBを直接CANCELLED状態に更新する
             if (workInfo == null || workInfo.state != WorkInfo.State.RUNNING) {
-                downloadRepository.updateCancelled(id)
+                downloadRepository.updateCancelled(id.toString())
             }
         }
+    }
+
+    /**
+     * 失敗したダウンロードを再開する。
+     * 部分ファイルが残っている場合はRangeリクエストで再開し、
+     * そうでない場合は同じURLを再度エンキューする。
+     */
+    private fun resumeDownload(id: UUID) {
+        val record = currentRecords.find { it.workerId == id } ?: return
+        if (record.status != DownloadRecordStatus.FAILED) return
+
+        val partialFileUri = record.partialFileUri
+        if (partialFileUri != null) {
+            geckoDownloadManager.resumeDownload(
+                oldWorkerId = record.workerId.toString(),
+                url = record.url,
+                referrerUrl = record.referrerUrl,
+                partialFileUri = partialFileUri,
+                totalRead = record.totalRead,
+                coroutineScope = viewModelScope,
+            )
+            return
+        }
+
+        viewModelScope.launch {
+            downloadRepository.deleteById(record.workerId.toString())
+        }
+        geckoDownloadManager.enqueueDownload(
+            url = record.url,
+            referrerUrl = record.referrerUrl,
+            coroutineScope = viewModelScope,
+        )
     }
 
     private fun openFile(fileUri: String) {

@@ -6,6 +6,7 @@ import android.app.PendingIntent
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.os.Environment
 import android.provider.MediaStore
 import android.webkit.URLUtil
@@ -24,6 +25,7 @@ import java.io.IOException
  * WorkManagerを使った進捗通知付きダウンロードWorker。
  * GeckoWebExecutorを使用してダウンロードすることで、GeckoViewのCookie/セッション情報が共有される。
  * 進捗・結果はRoomに書き込み、WorkManagerのprogress/outputDataは使用しない。
+ * partialFileUri が指定された場合はHTTP Rangeリクエストを使って中断箇所から再開する。
  */
 internal class DownloadWorker(
     private val context: Context,
@@ -32,11 +34,19 @@ internal class DownloadWorker(
 ) : CoroutineWorker(context, params) {
     private val repository get() = DownloadRepository(context)
 
+    /** 失敗時に保存した部分ファイルURI（doWork終了後にcatchブロックで参照） */
+    private var partialResultUri: Uri? = null
+    private var partialResultFileName: String = ""
+    private var partialResultTotalRead: Long = 0L
+    private var partialResultContentLength: Long = -1L
+
     override suspend fun doWork(): Result {
         val url = inputData.getString(KEY_URL) ?: return Result.failure()
         val referrerUrl = inputData.getString(KEY_REFERRER_URL).orEmpty()
         // inputDataから通知IDを読み出す（GeckoDownloadManagerと共有）
         val notificationId = inputData.getInt(KEY_NOTIFICATION_ID, NOTIFICATION_ID)
+        // 再開モード: 部分ファイルURI
+        val partialFileUriString = inputData.getString(KEY_PARTIAL_FILE_URI)
 
 
         val enqueuedAt = System.currentTimeMillis()
@@ -47,25 +57,50 @@ internal class DownloadWorker(
         ensureNotificationChannel(context)
         setForeground(createForegroundInfo(notificationId, 0, true, context.getString(R.string.download_notification_starting), 0L, -1L))
 
-        repository.insertDownload(workerId = id, url = url, fileName = guessedFileName, enqueuedAt = enqueuedAt)
+        repository.insertDownload(workerId = id.toString(), url = url, referrerUrl = referrerUrl, enqueuedAt = enqueuedAt)
 
         return try {
-            val downloadFile = downloadFile(url, referrerUrl, notificationId, repository)
-            repository.updateCompleted(id, downloadFile.fileName, downloadFile.fileUri.toString())
-            postCompletionNotification(downloadFile.fileName, downloadFile.totalRead)
+            val (fileUri, fileName) = if (partialFileUriString != null) {
+                downloadFileResume(
+                    urlString = url,
+                    referrerUrl = referrerUrl,
+                    notificationId = notificationId,
+                    repository = repository,
+                    partialUri = Uri.parse(partialFileUriString),
+                )
+            } else {
+                downloadFile(url, referrerUrl, notificationId, repository)
+            }
+            repository.updateCompleted(id.toString(), fileName, fileUri.toString())
+            postCompletionNotification(fileName)
             Result.success()
         } catch (e: CancellationException) {
-            repository.updateCancelled(id)
+            repository.updateCancelled(id.toString())
+            // キャンセル時は部分ファイルを削除する
+            partialResultUri?.let { context.contentResolver.delete(it, null, null) }
             throw e
         } catch (e: Exception) {
             e.printStackTrace()
-            repository.updateFailed(id)
-            postFailureNotification()
+            val savedUri = partialResultUri
+            if (savedUri != null && partialResultTotalRead > 0) {
+                // 部分ファイルが存在する場合は再開可能として保存する
+                repository.updatePartialFailed(
+                    workerId = id.toString(),
+                    partialFileUri = savedUri.toString(),
+                    fileName = partialResultFileName,
+                    totalRead = partialResultTotalRead,
+                    contentLength = partialResultContentLength,
+                )
+            } else {
+                // partialResultUri が非null かつ 0バイトの場合は孤立したMediaStoreエントリを削除する
+                savedUri?.let { context.contentResolver.delete(it, null, null) }
+                repository.updateFailed(id.toString())
+            }
             Result.failure()
         }
     }
 
-    private fun postCompletionNotification(fileName: String, totalRead: Long) {
+    private fun postCompletionNotification(fileName: String) {
         // 負のhashCodeによる通知ID衝突を防ぐため、非負の値に変換する
         val positiveHash = id.hashCode() and 0x7fffffff
         val openDownloadsIntent = Intent(context, MainActivity::class.java).apply {
@@ -81,7 +116,7 @@ internal class DownloadWorker(
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_sys_download_done)
             .setContentTitle(fileName)
-            .setContentText(buildSizeText(totalRead, totalRead))
+            .setContentText(context.getString(R.string.download_notification_complete))
             .setProgress(100, 100, false)
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
@@ -123,26 +158,13 @@ internal class DownloadWorker(
         referrerUrl: String,
         notificationId: Int,
         repository: DownloadRepository,
-    ): DownloadResult {
-        // GeckoRuntime.getDefault() はUIスレッドでのみ呼び出し可能
-
+    ): Pair<Uri, String> {
         val executor = GeckoWebExecutor(geckoRuntime)
         val request = WebRequest.Builder(urlString)
-            .apply {
-                if (referrerUrl.isNotBlank()) {
-                    addHeader("Referer", referrerUrl)
-                }
-            }
+            .apply { if (referrerUrl.isNotBlank()) addHeader("Referer", referrerUrl) }
             .build()
 
-        val response = try {
-            executor.fetch(request).poll(60_000)
-                ?: throw IOException("レスポンスがnullです。")
-        } catch (e: IOException) {
-            throw e
-        } catch (e: Throwable) {
-            throw IOException("Geckoリクエスト失敗", e)
-        }
+        val response = fetchResponse(executor, request)
 
         val statusCode = response.statusCode
         if (statusCode !in 200 until 300) {
@@ -151,18 +173,13 @@ internal class DownloadWorker(
         }
 
         val body = response.body ?: throw IOException("レスポンスボディが空です。")
-
         val contentLength = response.headers["Content-Length"]?.toLongOrNull() ?: -1L
-        val mimeType = response.headers["Content-Type"]
-            ?.substringBefore(';')?.trim()
-            ?.takeIf { it.isNotEmpty() }
-            ?: "application/octet-stream"
-        val contentDisposition = response.headers["Content-Disposition"]
-        val fileName = URLUtil.guessFileName(urlString, contentDisposition, mimeType)
+        val mimeType = parseMimeType(response.headers["Content-Type"])
+        val fileName = URLUtil.guessFileName(urlString, response.headers["Content-Disposition"], mimeType)
             .ifBlank { "download-${System.currentTimeMillis()}" }
 
         setForeground(createForegroundInfo(notificationId, 0, contentLength <= 0, fileName, 0L, contentLength))
-        repository.updateProgress(id, fileName, 0, 0L, contentLength)
+        repository.updateProgress(id.toString(), fileName, 0, 0L, contentLength)
 
         val resolver = context.contentResolver
         val values = ContentValues().apply {
@@ -174,36 +191,37 @@ internal class DownloadWorker(
         val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
             ?: throw IOException("ダウンロードエントリの作成に失敗しました。")
 
-        var totalRead = 0L
-        try {
-            resolver.openOutputStream(uri)?.use { outputStream ->
-                body.use { inputStream ->
-                    val buffer = ByteArray(8192)
-                    var bytesRead: Int
-                    // 通知・Room更新のレート制限を避けるため、最後に更新した時刻を記録する
-                    var lastUpdateTime = 0L
-                    while (inputStream.read(buffer).also { bytesRead = it } != -1) {
-                        outputStream.write(buffer, 0, bytesRead)
-                        totalRead += bytesRead
-                        val now = System.currentTimeMillis()
-                        if (now - lastUpdateTime >= 1000L) {
-                            val progress = if (contentLength > 0) (totalRead * 100 / contentLength).toInt() else 0
-                            repository.updateProgress(id, fileName, progress, totalRead, contentLength)
-                            setForeground(createForegroundInfo(notificationId, progress, contentLength <= 0, fileName, totalRead, contentLength))
-                            lastUpdateTime = now
-                        }
+        // 失敗時に部分ファイルURIを参照できるよう保存する
+        partialResultUri = uri
+        partialResultFileName = fileName
+        partialResultContentLength = contentLength
+
+        resolver.openOutputStream(uri)?.use { outputStream ->
+            body.use { inputStream ->
+                val buffer = ByteArray(8192)
+                var bytesRead: Int
+                var totalRead = 0L
+                // 通知・Room更新のレート制限を避けるため、最後に更新した時刻を記録する
+                var lastUpdateTime = 0L
+                while (inputStream.read(buffer).also { bytesRead = it } != -1) {
+                    outputStream.write(buffer, 0, bytesRead)
+                    totalRead += bytesRead
+                    partialResultTotalRead = totalRead
+                    val now = System.currentTimeMillis()
+                    if (now - lastUpdateTime >= 1000L) {
+                        val progress = if (contentLength > 0) (totalRead * 100 / contentLength).toInt() else 0
+                        repository.updateProgress(id.toString(), fileName, progress, totalRead, contentLength)
+                        setForeground(createForegroundInfo(notificationId, progress, contentLength <= 0, fileName, totalRead, contentLength))
+                        lastUpdateTime = now
                     }
                 }
-            } ?: throw IOException("出力ストリームを開けませんでした。")
-
-            val completeValues = ContentValues().apply {
-                put(MediaStore.Downloads.IS_PENDING, 0)
             }
-            resolver.update(uri, completeValues, null, null)
-        } catch (e: Throwable) {
-            resolver.delete(uri, null, null)
-            throw e
-        }
+        } ?: throw IOException("出力ストリームを開けませんでした。")
+
+        val completeValues = ContentValues().apply { put(MediaStore.Downloads.IS_PENDING, 0) }
+        resolver.update(uri, completeValues, null, null)
+        // 完了したので部分ファイル情報をクリアする
+        partialResultUri = null
         // IS_PENDING=0 更新後にMediaStoreが重複を避けてリネームした場合に備え、実際のファイル名を取得する
         val actualFileName = resolver.query(
             uri,
@@ -214,11 +232,119 @@ internal class DownloadWorker(
         )?.use { cursor ->
             if (cursor.moveToFirst()) cursor.getString(0) else null
         }
-        return DownloadResult(
-            fileUri = uri,
-            fileName = actualFileName ?: fileName,
-            totalRead = totalRead,
-        )
+        return Pair(uri, actualFileName ?: fileName)
+    }
+
+    /**
+     * HTTP Rangeリクエストを使って中断箇所からダウンロードを再開する。
+     * サーバーが206 Partial Contentを返した場合のみ再開し、200 OKの場合は最初からやり直す。
+     */
+    private suspend fun downloadFileResume(
+        urlString: String,
+        referrerUrl: String,
+        notificationId: Int,
+        repository: DownloadRepository,
+        partialUri: Uri,
+    ): Pair<Uri, String> {
+        val resolver = context.contentResolver
+
+        // 部分ファイルの実際のサイズを取得する（DBの値と一致しない場合に備える）
+        val actualFileSize = resolver.openFileDescriptor(partialUri, "r")?.use { it.statSize } ?: 0L
+        val rangeStart = actualFileSize
+
+        val executor = GeckoWebExecutor(geckoRuntime)
+
+        val request = WebRequest.Builder(urlString)
+            .apply {
+                if (referrerUrl.isNotBlank()) addHeader("Referer", referrerUrl)
+                if (rangeStart > 0) addHeader("Range", "bytes=$rangeStart-")
+            }
+            .build()
+
+        val response = fetchResponse(executor, request)
+        val statusCode = response.statusCode
+
+        // サーバーがRangeリクエストをサポートしていない場合（200 OK）は最初からやり直す
+        if (statusCode == 200) {
+            response.body?.close()
+            // 部分ファイルを削除して新規ダウンロードを開始する
+            resolver.delete(partialUri, null, null)
+            partialResultUri = null
+            return downloadFile(urlString, referrerUrl, notificationId, repository)
+        }
+
+        if (statusCode != 206) {
+            response.body?.close()
+            throw IOException("HTTP エラー: $statusCode")
+        }
+
+        // 206 Partial Content: 既存ファイルへ追記する
+        val body = response.body ?: throw IOException("レスポンスボディが空です。")
+        val contentRangeHeader = response.headers["Content-Range"]
+        // Content-Range: bytes START-END/TOTAL 形式からトータルサイズを取得する
+        val totalFileSize = contentRangeHeader
+            ?.substringAfter('/')?.toLongOrNull()
+            ?: (rangeStart + (response.headers["Content-Length"]?.toLongOrNull() ?: -1L))
+        val contentLength = totalFileSize
+        val mimeType = parseMimeType(response.headers["Content-Type"])
+        val fileName = URLUtil.guessFileName(urlString, response.headers["Content-Disposition"], mimeType)
+            .ifBlank { "download-${System.currentTimeMillis()}" }
+
+        setForeground(createForegroundInfo(notificationId, if (contentLength > 0) (rangeStart * 100 / contentLength).toInt() else 0, contentLength <= 0, fileName, rangeStart, contentLength))
+
+        // 部分ファイルへの追記用に IS_PENDING を確認・維持する
+        val pendingValues = ContentValues().apply { put(MediaStore.Downloads.IS_PENDING, 1) }
+        resolver.update(partialUri, pendingValues, null, null)
+
+        partialResultUri = partialUri
+        partialResultFileName = fileName
+        partialResultContentLength = contentLength
+        partialResultTotalRead = rangeStart
+
+        // "wa" モードで追記オープンする
+        resolver.openOutputStream(partialUri, "wa")?.use { outputStream ->
+            body.use { inputStream ->
+                val buffer = ByteArray(8192)
+                var bytesRead: Int
+                var totalRead = rangeStart
+                var lastUpdateTime = 0L
+                while (inputStream.read(buffer).also { bytesRead = it } != -1) {
+                    outputStream.write(buffer, 0, bytesRead)
+                    totalRead += bytesRead
+                    partialResultTotalRead = totalRead
+                    val now = System.currentTimeMillis()
+                    if (now - lastUpdateTime >= 1000L) {
+                        val progress = if (contentLength > 0) (totalRead * 100 / contentLength).toInt() else 0
+                        repository.updateProgress(id.toString(), fileName, progress, totalRead, contentLength)
+                        setForeground(createForegroundInfo(notificationId, progress, contentLength <= 0, fileName, totalRead, contentLength))
+                        lastUpdateTime = now
+                    }
+                }
+            }
+        } ?: throw IOException("出力ストリームを開けませんでした。")
+
+        val completeValues = ContentValues().apply { put(MediaStore.Downloads.IS_PENDING, 0) }
+        resolver.update(partialUri, completeValues, null, null)
+        partialResultUri = null
+        return Pair(partialUri, fileName)
+    }
+
+    /** GeckoWebExecutorでリクエストを送信してレスポンスを取得する */
+    private fun fetchResponse(executor: GeckoWebExecutor, request: WebRequest): org.mozilla.geckoview.WebResponse {
+        return try {
+            executor.fetch(request).poll(60_000)
+                ?: throw IOException("レスポンスがnullです。")
+        } catch (e: IOException) {
+            throw e
+        } catch (e: Throwable) {
+            throw IOException("Geckoリクエスト失敗", e)
+        }
+    }
+
+    /** Content-Typeヘッダーからメディアタイプ文字列を取り出す */
+    private fun parseMimeType(contentType: String?): String {
+        return contentType?.substringBefore(';')?.trim()?.takeIf { it.isNotEmpty() }
+            ?: "application/octet-stream"
     }
 
     private fun createForegroundInfo(
@@ -261,6 +387,10 @@ internal class DownloadWorker(
         const val KEY_URL = "url"
         const val KEY_REFERRER_URL = "referrer_url"
         const val KEY_NOTIFICATION_ID = "notification_id"
+        /** 再開モード: 部分ファイルのMediaStore URI */
+        const val KEY_PARTIAL_FILE_URI = "partial_file_uri"
+        /** 再開モード: 再開を開始するバイト位置 */
+        const val KEY_RESUME_FROM_BYTES = "resume_from_bytes"
         const val CHANNEL_ID = "download_progress_channel"
         const val NOTIFICATION_ID = 9001
 
@@ -305,9 +435,3 @@ internal class DownloadWorker(
         }
     }
 }
-
-private data class DownloadResult(
-    val fileUri: android.net.Uri,
-    val fileName: String,
-    val totalRead: Long,
-)

@@ -26,10 +26,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.UUID
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -84,6 +86,7 @@ fun DownloadManagementScreen(
                         item = item,
                         onCancel = { uiState.callbacks.onCancel(item.id) },
                         onOpenFile = { fileUri -> uiState.callbacks.onOpenFile(fileUri) },
+                        onResume = { uiState.callbacks.onResume(item.id) },
                     )
                 }
             }
@@ -96,6 +99,7 @@ private fun DownloadItemRow(
     item: DownloadManagementScreenUiState.DownloadItem,
     onCancel: () -> Unit,
     onOpenFile: (String) -> Unit,
+    onResume: () -> Unit,
 ) {
     val dateFormat = remember { SimpleDateFormat("yyyy/MM/dd HH:mm", Locale.getDefault()) }
     Column(
@@ -131,11 +135,17 @@ private fun DownloadItemRow(
                 }
 
                 is DownloadManagementScreenUiState.DownloadStatus.Failed -> {
-                    Text(
-                        text = "失敗",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.error,
-                    )
+                    if (status.canResume) {
+                        TextButton(onClick = onResume) {
+                            Text("再開")
+                        }
+                    } else {
+                        Text(
+                            text = "失敗",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
                 }
 
                 is DownloadManagementScreenUiState.DownloadStatus.Cancelled -> {
@@ -179,7 +189,16 @@ private fun DownloadItemRow(
                 )
             }
 
-            is DownloadManagementScreenUiState.DownloadStatus.Failed -> Unit
+            is DownloadManagementScreenUiState.DownloadStatus.Failed -> {
+                if (!status.canResume) {
+                    Text(
+                        text = "再試行するには再度ダウンロードしてください。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            }
+
             is DownloadManagementScreenUiState.DownloadStatus.Cancelled -> Unit
         }
         Text(
@@ -202,4 +221,40 @@ private fun formatBytes(bytes: Long): String = when {
     bytes >= 1024L * 1024 -> "%.1f MB".format(bytes / (1024.0 * 1024.0))
     bytes >= 1024 -> "%.1f KB".format(bytes / 1024.0)
     else -> "$bytes B"
+}
+
+@Preview(name = "失敗・再開可能")
+@Composable
+private fun PreviewFailedCanResume() {
+    MaterialTheme {
+        DownloadItemRow(
+            item = DownloadManagementScreenUiState.DownloadItem(
+                id = UUID.randomUUID(),
+                fileName = "example.zip",
+                status = DownloadManagementScreenUiState.DownloadStatus.Failed(canResume = true),
+                enqueuedAt = 0L,
+            ),
+            onCancel = {},
+            onOpenFile = {},
+            onResume = {},
+        )
+    }
+}
+
+@Preview(name = "失敗・再開不可")
+@Composable
+private fun PreviewFailedCannotResume() {
+    MaterialTheme {
+        DownloadItemRow(
+            item = DownloadManagementScreenUiState.DownloadItem(
+                id = UUID.randomUUID(),
+                fileName = "example.zip",
+                status = DownloadManagementScreenUiState.DownloadStatus.Failed(canResume = false),
+                enqueuedAt = 0L,
+            ),
+            onCancel = {},
+            onOpenFile = {},
+            onResume = {},
+        )
+    }
 }

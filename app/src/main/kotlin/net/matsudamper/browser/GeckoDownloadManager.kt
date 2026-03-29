@@ -40,26 +40,25 @@ internal class GeckoDownloadManager(
             .addTag(DownloadWorker.TAG_DOWNLOAD)
             .build()
         // WorkerがENQUEUED状態の間もUI上に表示するため、事前にレコードを挿入する
-        val fileName = URLUtil.guessFileName(url, null, null)
         coroutineScope.launch {
             downloadRepository.insertEnqueued(
-                workerId = workRequest.id,
+                workerId = workRequest.id.toString(),
                 url = url,
-                fileName = fileName,
+                referrerUrl = referrerUrl,
                 enqueuedAt = System.currentTimeMillis(),
             )
+            WorkManager.getInstance(context).enqueue(workRequest)
+            // Workerが起動する前から即座に通知を表示する
+            val notification = NotificationCompat.Builder(context, DownloadWorker.CHANNEL_ID)
+                .setSmallIcon(android.R.drawable.stat_sys_download)
+                .setContentTitle(context.getString(R.string.download_notification_starting))
+                .setProgress(100, 0, true)
+                .setOngoing(true)
+                .setOnlyAlertOnce(true)
+                .build()
+            context.getSystemService(NotificationManager::class.java)
+                .notify(notificationId, notification)
         }
-        WorkManager.getInstance(context).enqueue(workRequest)
-        // Workerが起動する前から即座に通知を表示する
-        val notification = NotificationCompat.Builder(context, DownloadWorker.CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.stat_sys_download)
-            .setContentTitle(context.getString(R.string.download_notification_starting))
-            .setProgress(100, 0, true)
-            .setOngoing(true)
-            .setOnlyAlertOnce(true)
-            .build()
-        context.getSystemService(NotificationManager::class.java)
-            .notify(notificationId, notification)
     }
 
     /**
@@ -70,5 +69,57 @@ internal class GeckoDownloadManager(
     fun enqueueDownloadFromResponse(response: WebResponse, referrerUrl: String, coroutineScope: CoroutineScope) {
         response.body?.close()
         enqueueDownload(url = response.uri, referrerUrl = referrerUrl, coroutineScope = coroutineScope)
+    }
+
+    /**
+     * 失敗したダウンロードを部分ファイルから再開する。
+     * 古いレコードを削除して新しいワーカーをエンキューする。
+     * HTTPサーバーがRangeリクエストをサポートしている場合のみ実際の再開が行われ、
+     * サポートしていない場合は最初からダウンロードし直す。
+     */
+    fun resumeDownload(
+        oldWorkerId: String,
+        url: String,
+        referrerUrl: String,
+        partialFileUri: String,
+        totalRead: Long,
+        coroutineScope: CoroutineScope,
+    ) {
+        DownloadWorker.ensureNotificationChannel(context)
+        val workId = UUID.randomUUID()
+        val notificationId = workId.hashCode() and 0x7fffffff
+        val workRequest = OneTimeWorkRequestBuilder<DownloadWorker>()
+            .setId(workId)
+            .setInputData(
+                workDataOf(
+                    DownloadWorker.KEY_URL to url,
+                    DownloadWorker.KEY_REFERRER_URL to referrerUrl,
+                    DownloadWorker.KEY_NOTIFICATION_ID to notificationId,
+                    DownloadWorker.KEY_PARTIAL_FILE_URI to partialFileUri,
+                    DownloadWorker.KEY_RESUME_FROM_BYTES to totalRead,
+                )
+            )
+            .addTag(DownloadWorker.TAG_DOWNLOAD)
+            .build()
+        coroutineScope.launch {
+            // 古いFAILEDレコードを削除してから新しいENQUEUEDレコードを挿入する
+            downloadRepository.deleteById(oldWorkerId)
+            downloadRepository.insertEnqueued(
+                workerId = workRequest.id.toString(),
+                url = url,
+                referrerUrl = referrerUrl,
+                enqueuedAt = System.currentTimeMillis(),
+            )
+            WorkManager.getInstance(context).enqueue(workRequest)
+            val notification = NotificationCompat.Builder(context, DownloadWorker.CHANNEL_ID)
+                .setSmallIcon(android.R.drawable.stat_sys_download)
+                .setContentTitle(context.getString(R.string.download_notification_resuming))
+                .setProgress(100, 0, true)
+                .setOngoing(true)
+                .setOnlyAlertOnce(true)
+                .build()
+            context.getSystemService(NotificationManager::class.java)
+                .notify(notificationId, notification)
+        }
     }
 }
