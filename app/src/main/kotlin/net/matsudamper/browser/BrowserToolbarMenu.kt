@@ -334,20 +334,19 @@ internal fun ToolbarMenu(
                     contentDescription = null,
                 )
             },
-            // pointerInput で tap / 長押しを区別して処理し、onClick は使わない
+            // 長押しのみ pointerInput で拡張し、通常クリックは onClick に残す（キーボード・アクセシビリティ対応）
             modifier = Modifier.pointerInput(Unit) {
                 detectTapGestures(
-                    onTap = {
-                        onDismissRequest()
-                        onFindInPage()
-                    },
                     onLongPress = {
                         onDismissRequest()
                         onFindInPageRegex()
                     },
                 )
             },
-            onClick = {},
+            onClick = {
+                onDismissRequest()
+                onFindInPage()
+            },
         )
         DropdownMenuItem(
             text = {

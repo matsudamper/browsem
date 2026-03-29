@@ -217,6 +217,8 @@ internal fun GeckoBrowserTab(
     // FindInPageWebExtension のセッション登録
     DisposableEffect(session, state, findInPageWebExtension) {
         findInPageWebExtension.registerSession(session) { current, total, error ->
+            // 正規表現モードでないときに届いた遅延結果は無視する
+            if (!state.findIsRegex) return@registerSession
             state.findMatchCurrent = current
             state.findMatchTotal = total
             state.findQueryError = if (error == "invalid_regex") "無効な正規表現です" else null

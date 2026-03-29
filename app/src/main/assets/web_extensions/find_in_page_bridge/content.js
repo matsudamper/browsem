@@ -14,7 +14,7 @@
   // 既存のハイライトを全て除去してDOMを元に戻す
   function clearHighlights() {
     document.querySelectorAll('.' + HIGHLIGHT_CLASS).forEach(function (el) {
-      var parent = el.parentNode;
+      const parent = el.parentNode;
       if (!parent) return;
       parent.replaceChild(document.createTextNode(el.textContent || ''), el);
       parent.normalize();
@@ -35,7 +35,7 @@
       el.className = HIGHLIGHT_CLASS;
       el.setAttribute('style', HIGHLIGHT_STYLE);
     });
-    var current = highlights[index];
+    const current = highlights[index];
     if (!current) return;
     current.className = HIGHLIGHT_CLASS + ' ' + CURRENT_CLASS;
     current.setAttribute('style', CURRENT_STYLE);
@@ -45,12 +45,12 @@
   // DOM を走査してマッチ箇所に <mark> 要素を挿入する。
   // ハイライト挿入後に DOM が変化するため逆順に処理する。
   function applyHighlights(regex) {
-    var walker = document.createTreeWalker(
+    const walker = document.createTreeWalker(
       document.body,
       NodeFilter.SHOW_TEXT,
       {
         acceptNode: function (node) {
-          var tag = node.parentElement && node.parentElement.tagName
+          const tag = node.parentElement && node.parentElement.tagName
             ? node.parentElement.tagName.toLowerCase()
             : '';
           // スクリプト・スタイル・非表示要素はスキップ
@@ -63,11 +63,11 @@
     );
 
     // 先に全マッチ範囲を収集する（DOM 変更前）
-    var ranges = [];
-    var node;
+    const ranges = [];
+    let node;
     while ((node = walker.nextNode())) {
-      var text = node.nodeValue || '';
-      var match;
+      const text = node.nodeValue || '';
+      let match;
       // lastIndex をリセットしてから使用
       regex.lastIndex = 0;
       while ((match = regex.exec(text)) !== null) {
@@ -76,7 +76,7 @@
           regex.lastIndex++;
           continue;
         }
-        var range = document.createRange();
+        const range = document.createRange();
         range.setStart(node, match.index);
         range.setEnd(node, match.index + match[0].length);
         ranges.push(range);
@@ -84,9 +84,9 @@
     }
 
     // 逆順に <mark> 要素を挿入することで前方の範囲のオフセットがズレないようにする
-    for (var i = ranges.length - 1; i >= 0; i--) {
+    for (let i = ranges.length - 1; i >= 0; i--) {
       try {
-        var mark = document.createElement('mark');
+        const mark = document.createElement('mark');
         mark.className = HIGHLIGHT_CLASS;
         mark.setAttribute('style', HIGHLIGHT_STYLE);
         ranges[i].surroundContents(mark);
@@ -101,25 +101,25 @@
   }
 
   // ネイティブアプリとの双方向ポートを確立
-  var port = browser.runtime.connectNative('findInPageBridge');
+  const port = browser.runtime.connectNative('findInPageBridge');
 
   port.onMessage.addListener(function (msg) {
-    var action = msg.action;
+    const action = msg.action;
 
     if (action === 'search') {
       clearHighlights();
-      var query = msg.query || '';
+      const query = msg.query || '';
       if (!query) {
         port.postMessage({ current: 0, total: 0 });
         return;
       }
 
-      var regex;
+      let regex;
       try {
         // isRegex=true のときはユーザー入力をそのまま正規表現として扱う
         // 平文検索は大文字小文字を区別しない（Firefox デフォルトに合わせる）
-        var flags = msg.isRegex ? 'g' : 'gi';
-        var pattern = msg.isRegex ? query : escapeRegex(query);
+        const flags = msg.isRegex ? 'g' : 'gi';
+        const pattern = msg.isRegex ? query : escapeRegex(query);
         regex = new RegExp(pattern, flags);
       } catch (e) {
         // 無効な正規表現
@@ -127,7 +127,7 @@
         return;
       }
 
-      var total = applyHighlights(regex);
+      const total = applyHighlights(regex);
       if (total > 0) {
         currentIndex = 0;
         focusMatch(0);
