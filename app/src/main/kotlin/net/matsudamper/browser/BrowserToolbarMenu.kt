@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.Checkbox
@@ -278,6 +279,21 @@ internal fun ToolbarMenu(
         }
         DropdownMenuItem(
             text = {
+                Text(text = "ページ内検索")
+            },
+            leadingIcon = {
+                Icon(
+                    painter = painterResource(id = R.drawable.ic_search_24dp),
+                    contentDescription = null,
+                )
+            },
+            onClick = {
+                onDismissRequest()
+                onFindInPage()
+            },
+        )
+        DropdownMenuItem(
+            text = {
                 Text(text = "翻訳")
             },
             leadingIcon = {
@@ -319,21 +335,6 @@ internal fun ToolbarMenu(
             onClick = {
                 onDismissRequest()
                 onAddToHomeScreen()
-            },
-        )
-        DropdownMenuItem(
-            text = {
-                Text(text = "ページ内検索")
-            },
-            leadingIcon = {
-                Icon(
-                    painter = painterResource(id = R.drawable.ic_search_24dp),
-                    contentDescription = null,
-                )
-            },
-            onClick = {
-                onDismissRequest()
-                onFindInPage()
             },
         )
         DropdownMenuItem(
