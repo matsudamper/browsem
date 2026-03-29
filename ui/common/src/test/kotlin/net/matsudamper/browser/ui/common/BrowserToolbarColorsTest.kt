@@ -1,4 +1,4 @@
-package net.matsudamper.browser
+package net.matsudamper.browser.ui.common
 
 import androidx.compose.ui.graphics.Color
 import org.junit.Assert.assertEquals

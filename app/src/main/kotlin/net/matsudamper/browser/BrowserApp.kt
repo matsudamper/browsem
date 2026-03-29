@@ -60,6 +60,7 @@ import net.matsudamper.browser.screen.notificationpermissions.NotificationPermis
 import net.matsudamper.browser.screen.downloads.DownloadManagementScreenViewModel
 import net.matsudamper.browser.screen.settings.SettingsScreenViewModel
 import net.matsudamper.browser.screen.tab.TabsScreenViewModel
+import net.matsudamper.browser.ui.common.BrowserTheme
 import net.matsudamper.browser.ui.browser.BrowserScreen
 import net.matsudamper.browser.ui.downloads.DownloadManagementScreen
 import net.matsudamper.browser.ui.extensions.ExtensionsScreen

@@ -1,10 +1,10 @@
-package net.matsudamper.browser
+package net.matsudamper.browser.ui.common
 
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
 
-internal data class BrowserToolbarColors(
+data class BrowserToolbarColors(
     val resolvedToolbarColor: Color,
     val urlBarBackgroundColor: Color,
     val toolbarContentColor: Color,
@@ -13,7 +13,7 @@ internal data class BrowserToolbarColors(
     val isBrightBackground: Boolean,
 )
 
-internal fun resolveBrowserToolbarColors(
+fun resolveBrowserToolbarColors(
     toolbarColor: Color?,
     defaultToolbarColor: Color,
     isSystemDarkTheme: Boolean,
@@ -40,7 +40,7 @@ internal fun resolveBrowserToolbarColors(
     )
 }
 
-internal fun Color.toArgbHex(): String {
+fun Color.toArgbHex(): String {
     val raw = toArgb().toUInt().toString(16).padStart(8, '0')
     return "#${raw.uppercase()}"
 }

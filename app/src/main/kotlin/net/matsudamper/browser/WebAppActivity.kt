@@ -20,6 +20,7 @@ import net.matsudamper.browser.data.resolvedSearchTemplate
 import net.matsudamper.browser.data.websuggestion.WebSuggestionRepository
 import net.matsudamper.browser.media.MediaWebExtension
 import net.matsudamper.browser.screen.webapp.WebAppScreen
+import net.matsudamper.browser.ui.common.BrowserTheme
 import org.koin.android.ext.android.inject
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoRuntime

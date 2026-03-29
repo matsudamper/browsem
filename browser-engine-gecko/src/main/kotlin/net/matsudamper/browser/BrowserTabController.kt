@@ -1,6 +1,5 @@
 package net.matsudamper.browser
 
-import android.util.Log
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -16,21 +15,17 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import net.matsudamper.browser.core.TabInsertionPolicy
 import net.matsudamper.browser.core.TabSelectionPolicy
 import net.matsudamper.browser.core.TabStore
 import net.matsudamper.browser.core.TabStoreState
-import net.matsudamper.browser.core.TabSummary
 import net.matsudamper.browser.data.PersistedTabState
 import net.matsudamper.browser.data.PersistedTabStateContainer
 import net.matsudamper.browser.data.TabGroupRepository
 import net.matsudamper.browser.data.TabRepository
 import org.mozilla.geckoview.GeckoSession
 import java.util.UUID
-import java.util.concurrent.ConcurrentHashMap
 
 @Stable
 class BrowserTabController(
@@ -38,14 +33,19 @@ class BrowserTabController(
     private val tabGroupRepository: TabGroupRepository? = null,
 ) : TabStore {
     private val controllerScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-    private val persistenceMutex = Mutex()
-    private val pendingCreatedTabIds = ConcurrentHashMap.newKeySet<String>()
-    private val pendingClosedTabIds = ConcurrentHashMap.newKeySet<String>()
+    private val persistenceCoordinator = BrowserTabPersistenceCoordinator(
+        tabRepository = tabRepository,
+        controllerScope = controllerScope,
+    )
     // セッション中に closeTab で閉じたタブの ID を記録する。
     // NavDisplay の遷移アニメーション中に BrowserScreen が再コンポーズされても
     // getOrCreateTab がタブを再作成しないようにするためのガード。
-    private val closedTabIds = ConcurrentHashMap.newKeySet<String>()
-    private val tabRegistry = LinkedHashMap<String, BrowserTab>()
+    private val closedTabIds = mutableSetOf<String>()
+    private val tabRegistry = BrowserTabRegistry()
+    private val tabFactory = BrowserTabFactory(
+        persistenceCoordinator = persistenceCoordinator,
+        onTabStateChanged = ::onTabStateChanged,
+    )
     private val _tabStoreState = MutableStateFlow(TabStoreState())
     private var repositoryObservationStarted = false
 
@@ -55,12 +55,9 @@ class BrowserTabController(
         private set
 
     val tabs: List<BrowserTab>
-        get() {
-            val orderedIds = _tabStoreState.value.tabs.map { it.id }
-            return orderedIds.mapNotNull { tabId -> tabRegistry[tabId] }
-        }
+        get() = tabRegistry.orderedTabs(_tabStoreState.value.tabs)
 
-    fun findTab(tabId: String): BrowserTab? = tabRegistry[tabId]
+    fun findTab(tabId: String): BrowserTab? = tabRegistry.find(tabId)
 
     /** タブがこのセッション中に [closeTab] で閉じられたかどうかを返す */
     fun wasTabClosed(tabId: String): Boolean = tabId in closedTabIds
@@ -83,8 +80,8 @@ class BrowserTabController(
                 if (snapshot.tabs.isEmpty()) {
                     createAndAppendInitialTab(homepageUrl, persist = false)
                 } else {
-                    snapshot.tabs.forEach { restored ->
-                        val tab = appendTab(
+                    snapshot.tabs.forEachIndexed { index, restored ->
+                        val tab = createRegisteredTab(
                             tabId = restored.persistedTabState.tabId,
                             session = GeckoSession(),
                             initialUrl = restored.persistedTabState.url.ifBlank { homepageUrl },
@@ -93,6 +90,7 @@ class BrowserTabController(
                             previewBitmapArray = restored.previewImageWebp,
                             themeColor = restored.persistedTabState.themeColor,
                             openerTabId = restored.persistedTabState.openerTabId.ifBlank { null },
+                            insertIndex = index,
                         )
                         tab.pendingSessionState =
                             restored.persistedTabState.sessionState.takeIf { it.isNotBlank() }
@@ -104,9 +102,9 @@ class BrowserTabController(
                 }
             }
             if (snapshot.tabs.isEmpty()) {
-                val initialTab = tabRegistry.values.firstOrNull()
+                val initialTab = tabRegistry.firstOrNull()
                 if (initialTab != null) {
-                    persistCreatedTabNow(
+                    persistenceCoordinator.persistCreatedTabNow(
                         tab = initialTab,
                         insertIndex = 0,
                         selected = true,
@@ -121,13 +119,11 @@ class BrowserTabController(
     }
 
     suspend fun awaitPersistenceIdle() {
-        withContext(Dispatchers.IO) {
-            persistenceMutex.withLock {}
-        }
+        persistenceCoordinator.awaitIdle()
     }
 
     suspend fun getOrCreateTab(tabId: String, homepageUrl: String): BrowserTab {
-        val alreadyCreatedTab = tabRegistry[tabId]
+        val alreadyCreatedTab = tabRegistry.find(tabId)
         if (alreadyCreatedTab != null) return alreadyCreatedTab
 
         return createAndAppendTab(tabId = tabId, initialUrl = homepageUrl)
@@ -138,9 +134,7 @@ class BrowserTabController(
             return
         }
         selectedTabId = tabId
-        enqueuePersistence {
-            it.selectTab(tabId)
-        }
+        persistenceCoordinator.persistSelection(tabId)
     }
 
     suspend fun createAndAppendTab(
@@ -155,7 +149,7 @@ class BrowserTabController(
         return withContext(Dispatchers.Main) {
             val normalizedInitialUrl = initialUrl.ifBlank { "about:blank" }
             val insertIndex = tabs.size
-            val tab = appendTab(
+            val tab = createRegisteredTab(
                 tabId = tabId,
                 session = GeckoSession(),
                 initialUrl = normalizedInitialUrl,
@@ -171,7 +165,7 @@ class BrowserTabController(
             if (shouldSelect) {
                 selectedTabId = tab.tabId
             }
-            persistCreatedTab(
+            persistenceCoordinator.persistCreatedTab(
                 tab = tab,
                 insertIndex = insertIndex,
                 selected = shouldSelect,
@@ -186,7 +180,7 @@ class BrowserTabController(
             tabIds = tabs.map { it.tabId },
             openerTabId = openerTabId,
         )
-        val tab = appendTab(
+        val tab = createRegisteredTab(
             tabId = UUID.randomUUID().toString(),
             session = GeckoSession(),
             initialUrl = normalizedInitialUrl,
@@ -197,7 +191,7 @@ class BrowserTabController(
             insertIndex = insertIndex,
         )
         tab.pendingInitialUrl = normalizedInitialUrl
-        persistCreatedTab(
+        persistenceCoordinator.persistCreatedTab(
             tab = tab,
             insertIndex = insertIndex,
             selected = false,
@@ -216,7 +210,7 @@ class BrowserTabController(
             tabIds = tabs.map { it.tabId },
             openerTabId = openerTabId,
         )
-        val tab = appendTab(
+        val tab = createRegisteredTab(
             tabId = tabId,
             session = session,
             initialUrl = normalizedInitialUrl,
@@ -226,7 +220,7 @@ class BrowserTabController(
             openerTabId = openerTabId,
             insertIndex = insertIndex,
         )
-        persistCreatedTab(
+        persistenceCoordinator.persistCreatedTab(
             tab = tab,
             insertIndex = insertIndex,
             selected = false,
@@ -238,9 +232,7 @@ class BrowserTabController(
         if (fromIndex == toIndex) return
         val currentTabs = _tabStoreState.value.tabs
         if (fromIndex !in currentTabs.indices || toIndex !in currentTabs.indices) return
-        enqueuePersistence {
-            it.moveTab(fromIndex, toIndex)
-        }
+        persistenceCoordinator.persistMoveTab(fromIndex, toIndex)
     }
 
     fun closeTab(tabId: String): String? {
@@ -252,30 +244,16 @@ class BrowserTabController(
         if (removed == null) {
             return selectedTabId
         }
-        removed.disposeSessionDelegates(CancellationException("タブが閉じられました: $tabId"))
-        if (removed.session.isOpen) {
-            removed.session.close()
-        }
+        disposeTab(removed, "タブが閉じられました: $tabId")
         selectedTabId = nextSelectedTabId
         closedTabIds.add(tabId)
-        pendingClosedTabIds.add(tabId)
-        pendingCreatedTabIds.remove(tabId)
-        enqueuePersistence {
-            try {
-                it.closeTab(tabId, nextSelectedTabId)
-            } finally {
-                pendingClosedTabIds.remove(tabId)
-            }
-        }
+        persistenceCoordinator.persistClosedTab(tabId, nextSelectedTabId)
         return selectedTabId
     }
 
     fun close() {
-        tabRegistry.values.forEach { tab ->
-            tab.disposeSessionDelegates(CancellationException("BrowserTabController が終了しました"))
-            if (tab.session.isOpen) {
-                tab.session.close()
-            }
+        tabRegistry.values().forEach { tab ->
+            disposeTab(tab, "BrowserTabController が終了しました")
         }
         tabRegistry.clear()
         selectedTabId = null
@@ -287,7 +265,7 @@ class BrowserTabController(
         homepageUrl: String,
         persist: Boolean = true,
     ): BrowserTab {
-        val tab = appendTab(
+        val tab = createRegisteredTab(
             tabId = UUID.randomUUID().toString(),
             session = GeckoSession(),
             initialUrl = homepageUrl,
@@ -297,7 +275,7 @@ class BrowserTabController(
         )
         selectedTabId = tab.tabId
         if (persist) {
-            persistCreatedTab(
+            persistenceCoordinator.persistCreatedTab(
                 tab = tab,
                 insertIndex = 0,
                 selected = true,
@@ -329,143 +307,39 @@ class BrowserTabController(
     }
 
     private suspend fun applyRepositoryState(state: PersistedTabStateContainer) {
-        val persistedTabs = state.tabs.filterNot { it.tabId in pendingClosedTabIds }
+        val persistedTabs = state.tabs.filterNot { persistedTab ->
+            persistenceCoordinator.isPendingClose(persistedTab.tabId)
+        }
         val persistedTabIds = persistedTabs.mapTo(mutableSetOf()) { it.tabId }
 
         persistedTabs.forEach { persistedTab ->
-            val existing = tabRegistry[persistedTab.tabId]
+            val existing = tabRegistry.find(persistedTab.tabId)
             if (existing != null) {
                 existing.syncPersistedState(persistedTab)
             } else {
                 val previewBitmap = withContext(Dispatchers.IO) {
                     tabRepository.loadTabThumbnail(persistedTab.tabId)
                 }
-                tabRegistry[persistedTab.tabId] = appendDetachedTab(
+                tabRegistry.put(
+                    tabFactory.createDetachedTab(
                     persistedTabState = persistedTab,
                     previewBitmapArray = previewBitmap,
+                    ),
                 )
             }
         }
 
-        val removedTabIds = tabRegistry.keys.filter { tabId ->
-            tabId !in persistedTabIds && tabId !in pendingCreatedTabIds
-        }
-        removedTabIds.forEach { tabId ->
-            tabRegistry.remove(tabId)?.let { removed ->
-                removed.disposeSessionDelegates(CancellationException("リポジトリからタブが削除されました: $tabId"))
-                if (removed.session.isOpen) {
-                    removed.session.close()
-                }
-            }
+        tabRegistry.removeMissing(
+            retainedTabIds = persistedTabIds,
+            shouldKeep = persistenceCoordinator::isPendingCreate,
+        ).forEach { removed ->
+            disposeTab(removed, "リポジトリからタブが削除されました: ${removed.tabId}")
         }
 
         publishRepositoryState(persistedTabs, state.selectedTabId)
     }
 
-    private fun persistCreatedTab(
-        tab: BrowserTab,
-        insertIndex: Int,
-        selected: Boolean,
-    ) {
-        pendingCreatedTabIds.add(tab.tabId)
-        pendingClosedTabIds.remove(tab.tabId)
-        val persistedTab = tab.toPersistedTabState()
-        enqueuePersistence {
-            try {
-                it.createOrUpdateTab(
-                    tab = persistedTab,
-                    insertIndex = insertIndex,
-                    selected = selected,
-                )
-            } finally {
-                pendingCreatedTabIds.remove(tab.tabId)
-            }
-        }
-    }
-
-    private suspend fun persistCreatedTabNow(
-        tab: BrowserTab,
-        insertIndex: Int,
-        selected: Boolean,
-    ) {
-        val persistedTab = tab.toPersistedTabState()
-        pendingCreatedTabIds.add(tab.tabId)
-        pendingClosedTabIds.remove(tab.tabId)
-        withContext(Dispatchers.IO) {
-            persistenceMutex.withLock {
-                try {
-                    tabRepository.createOrUpdateTab(
-                        tab = persistedTab,
-                        insertIndex = insertIndex,
-                        selected = selected,
-                    )
-                } finally {
-                    pendingCreatedTabIds.remove(tab.tabId)
-                }
-            }
-        }
-    }
-
-    private fun enqueuePersistence(action: suspend (TabRepository) -> Unit) {
-        controllerScope.launch(Dispatchers.IO) {
-            persistenceMutex.withLock {
-                runCatching {
-                    action(tabRepository)
-                }.onFailure { error ->
-                    Log.e(TAG, "タブ状態の永続化に失敗しました", error)
-                }
-            }
-        }
-    }
-
-    private fun appendDetachedTab(
-        persistedTabState: PersistedTabState,
-        previewBitmapArray: ByteArray?,
-    ): BrowserTab {
-        val tab = BrowserTab(
-            tabId = persistedTabState.tabId,
-            session = GeckoSession(),
-            openerTabId = persistedTabState.openerTabId.ifBlank { null },
-            currentUrl = persistedTabState.url,
-            sessionState = persistedTabState.sessionState,
-            title = persistedTabState.title.ifBlank { persistedTabState.url },
-            previewBitmap = previewBitmapArray ?: byteArrayOf(),
-            themeColor = persistedTabState.themeColor,
-            onStateChanged = ::onTabStateChanged,
-            onUrlChanged = { tabId, value ->
-                enqueuePersistence { repository ->
-                    repository.updateUrl(tabId, value)
-                }
-            },
-            onSessionStateChanged = { tabId, value ->
-                enqueuePersistence { repository ->
-                    repository.updateSessionState(tabId, value)
-                }
-            },
-            onTitleChanged = { tabId, value ->
-                enqueuePersistence { repository ->
-                    repository.updateTitle(tabId, value)
-                }
-            },
-            onPreviewBitmapChanged = { tabId, previewBitmap ->
-                controllerScope.launch(Dispatchers.IO) {
-                    if (previewBitmap != null && previewBitmap.isNotEmpty()) {
-                        tabRepository.saveTabThumbnail(tabId, previewBitmap)
-                    }
-                }
-            },
-            onThemeColorChanged = { tabId, value ->
-                enqueuePersistence { repository ->
-                    repository.updateThemeColor(tabId, value)
-                }
-            },
-        )
-        tab.bindSessionDelegates()
-        tab.pendingSessionState = persistedTabState.sessionState.takeIf { it.isNotBlank() }
-        return tab
-    }
-
-    private fun appendTab(
+    private fun createRegisteredTab(
         tabId: String,
         session: GeckoSession,
         initialUrl: String,
@@ -476,46 +350,17 @@ class BrowserTabController(
         openerTabId: String? = null,
         insertIndex: Int = tabs.size,
     ): BrowserTab {
-        val tab = BrowserTab(
+        val tab = tabFactory.createTab(
             tabId = tabId,
             session = session,
-            openerTabId = openerTabId,
-            currentUrl = initialUrl,
+            initialUrl = initialUrl,
             sessionState = sessionState,
             title = title.ifBlank { initialUrl },
-            previewBitmap = previewBitmapArray ?: byteArrayOf(),
+            previewBitmapArray = previewBitmapArray,
             themeColor = themeColor,
-            onStateChanged = ::onTabStateChanged,
-            onUrlChanged = { changedTabId, value ->
-                enqueuePersistence { repository ->
-                    repository.updateUrl(changedTabId, value)
-                }
-            },
-            onSessionStateChanged = { changedTabId, value ->
-                enqueuePersistence { repository ->
-                    repository.updateSessionState(changedTabId, value)
-                }
-            },
-            onTitleChanged = { changedTabId, value ->
-                enqueuePersistence { repository ->
-                    repository.updateTitle(changedTabId, value)
-                }
-            },
-            onPreviewBitmapChanged = { changedTabId, previewBitmap ->
-                controllerScope.launch(Dispatchers.IO) {
-                    if (previewBitmap != null && previewBitmap.isNotEmpty()) {
-                        tabRepository.saveTabThumbnail(changedTabId, previewBitmap)
-                    }
-                }
-            },
-            onThemeColorChanged = { changedTabId, value ->
-                enqueuePersistence { repository ->
-                    repository.updateThemeColor(changedTabId, value)
-                }
-            },
+            openerTabId = openerTabId,
         )
-        tab.bindSessionDelegates()
-        insertTabIntoRegistry(tab = tab, insertIndex = insertIndex)
+        tabRegistry.insert(tab = tab, insertIndex = insertIndex)
         return tab
     }
 
@@ -527,9 +372,7 @@ class BrowserTabController(
         persistedTabs: List<PersistedTabState>,
         selectedTabId: String?,
     ) {
-        val summaries = persistedTabs.mapNotNull { persistedTab ->
-            tabRegistry[persistedTab.tabId]?.toSummary()
-        }
+        val summaries = tabRegistry.summariesInPersistedOrder(persistedTabs)
         val nextSelectedTabId = selectedTabId
             ?.takeIf { selectedId -> summaries.any { it.id == selectedId } }
             ?: summaries.lastOrNull()?.id
@@ -545,26 +388,15 @@ class BrowserTabController(
     private fun refreshVisibleTabSummaries() {
         _tabStoreState.update { state ->
             state.copy(
-                tabs = state.tabs.mapNotNull { summary ->
-                    tabRegistry[summary.id]?.toSummary()
-                }
+                tabs = tabRegistry.refreshSummaries(state.tabs),
             )
         }
     }
 
-    private fun insertTabIntoRegistry(tab: BrowserTab, insertIndex: Int) {
-        val orderedTabs = tabRegistry.values.toMutableList().apply {
-            removeAll { existing -> existing.tabId == tab.tabId }
-        }
-        val targetIndex = insertIndex.coerceIn(0, orderedTabs.size)
-        orderedTabs.add(targetIndex, tab)
-        rebuildTabRegistry(orderedTabs)
-    }
-
-    private fun rebuildTabRegistry(orderedTabs: List<BrowserTab>) {
-        tabRegistry.clear()
-        orderedTabs.forEach { tab ->
-            tabRegistry[tab.tabId] = tab
+    private fun disposeTab(tab: BrowserTab, reason: String) {
+        tab.disposeSessionDelegates(CancellationException(reason))
+        if (tab.session.isOpen) {
+            tab.session.close()
         }
     }
 
@@ -578,25 +410,4 @@ class BrowserTabController(
         val previewImageWebp: ByteArray,
     )
 
-    companion object {
-        private const val TAG = "BrowserTabController"
-    }
 }
-
-private fun BrowserTab.toPersistedTabState(): PersistedTabState = PersistedTabState(
-    url = currentUrl,
-    sessionState = sessionState,
-    title = title,
-    tabId = tabId,
-    openerTabId = openerTabId.orEmpty(),
-    themeColor = themeColor,
-)
-
-private fun BrowserTab.toSummary(): TabSummary = TabSummary(
-    id = tabId,
-    title = title,
-    url = currentUrl,
-    openerTabId = openerTabId,
-    previewBitmapArray = previewBitmap,
-    themeColor = themeColor,
-)

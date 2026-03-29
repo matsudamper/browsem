@@ -137,6 +137,7 @@ dependencies {
     implementation(project(":feature-browser"))
     implementation(project(":feature-tabs"))
     implementation(project(":data"))
+    implementation(project(":ui:common"))
     implementation(project(":ui:browser"))
     implementation(project(":ui:downloads"))
     implementation(project(":ui:extensions"))

@@ -1,4 +1,4 @@
-package net.matsudamper.browser
+package net.matsudamper.browser.ui.common
 
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
@@ -8,7 +8,7 @@ import androidx.compose.runtime.Composable
 import net.matsudamper.browser.data.ThemeMode
 
 @Composable
-internal fun BrowserTheme(
+fun BrowserTheme(
     themeMode: ThemeMode,
     content: @Composable () -> Unit,
 ) {

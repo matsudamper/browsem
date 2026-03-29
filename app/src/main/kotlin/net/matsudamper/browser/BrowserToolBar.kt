@@ -52,6 +52,9 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import kotlin.jvm.java
+import net.matsudamper.browser.ui.common.BrowserTheme
+import net.matsudamper.browser.ui.common.resolveBrowserToolbarColors
+import net.matsudamper.browser.ui.common.toArgbHex
 
 @Composable
 internal fun BrowserToolBar(

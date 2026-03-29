@@ -15,6 +15,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.core.content.pm.ShortcutInfoCompat
 import androidx.core.content.pm.ShortcutManagerCompat
 import androidx.core.graphics.drawable.IconCompat
+import net.matsudamper.browser.ui.common.BrowserTheme
 
 /**
  * ホームへの追加方法を選択するダイアログ。
