@@ -279,6 +279,21 @@ internal fun ToolbarMenu(
         }
         DropdownMenuItem(
             text = {
+                Text(text = "ページ内検索")
+            },
+            leadingIcon = {
+                Icon(
+                    painter = painterResource(id = R.drawable.ic_search_24dp),
+                    contentDescription = null,
+                )
+            },
+            onClick = {
+                onDismissRequest()
+                onFindInPage()
+            },
+        )
+        DropdownMenuItem(
+            text = {
                 Text(text = "翻訳")
             },
             leadingIcon = {
@@ -320,21 +335,6 @@ internal fun ToolbarMenu(
             onClick = {
                 onDismissRequest()
                 onAddToHomeScreen()
-            },
-        )
-        DropdownMenuItem(
-            text = {
-                Text(text = "ページ内検索")
-            },
-            leadingIcon = {
-                Icon(
-                    painter = painterResource(id = R.drawable.ic_search_24dp),
-                    contentDescription = null,
-                )
-            },
-            onClick = {
-                onDismissRequest()
-                onFindInPage()
             },
         )
         DropdownMenuItem(
