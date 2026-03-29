@@ -56,8 +56,8 @@ import kotlinx.coroutines.flow.collectLatest
 import net.matsudamper.browser.data.TranslationProvider
 import net.matsudamper.browser.media.GeckoMediaSessionDelegate
 import net.matsudamper.browser.media.MediaWebExtension
-import net.matsudamper.browser.screen.browser.SimpleViewScreen
 import net.matsudamper.browser.ui.common.resolveBrowserToolbarColors
+import net.matsudamper.browser.ui.browser.SimpleViewScreen
 import net.matsudamper.browser.ui.browser.UrlBarSuggestionsUiState
 import org.koin.compose.koinInject
 import org.mozilla.geckoview.BasicSelectionActionDelegate

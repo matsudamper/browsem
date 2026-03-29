@@ -1,4 +1,4 @@
-package net.matsudamper.browser.screen.browser
+package net.matsudamper.browser.ui.browser
 
 import android.webkit.WebSettings
 import android.webkit.WebView
@@ -16,10 +16,9 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
-import net.matsudamper.browser.R
 import net.matsudamper.browser.ReadabilityArticle
 
-internal sealed interface SimpleViewScreenTestTags {
+sealed interface SimpleViewScreenTestTags {
     val id: String
     val testTag get() = "${SimpleViewScreenTestTags::class.java.name}#$id"
 
@@ -27,7 +26,7 @@ internal sealed interface SimpleViewScreenTestTags {
 }
 
 @Composable
-internal fun SimpleViewScreen(
+fun SimpleViewScreen(
     article: ReadabilityArticle,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,

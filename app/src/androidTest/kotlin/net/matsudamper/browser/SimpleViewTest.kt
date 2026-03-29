@@ -10,7 +10,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import net.matsudamper.browser.screen.browser.SimpleViewScreenTestTags
+import net.matsudamper.browser.ui.browser.SimpleViewScreenTestTags
 import org.junit.After
 import org.junit.Assert.assertTrue
 import org.junit.Before

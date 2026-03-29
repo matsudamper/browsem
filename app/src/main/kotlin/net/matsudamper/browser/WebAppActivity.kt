@@ -12,6 +12,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.viewmodel.compose.viewModel
 import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.TabRepository
 import net.matsudamper.browser.data.history.HistoryRepository
@@ -19,8 +20,9 @@ import net.matsudamper.browser.data.resolvedHomepageUrl
 import net.matsudamper.browser.data.resolvedSearchTemplate
 import net.matsudamper.browser.data.websuggestion.WebSuggestionRepository
 import net.matsudamper.browser.media.MediaWebExtension
-import net.matsudamper.browser.screen.webapp.WebAppScreen
+import net.matsudamper.browser.screen.browser.WebAppScreenViewModel
 import net.matsudamper.browser.ui.common.BrowserTheme
+import net.matsudamper.browser.ui.browser.WebAppScreen
 import org.koin.android.ext.android.inject
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoRuntime
@@ -73,6 +75,14 @@ class WebAppActivity : ComponentActivity() {
         setContent {
             val settings by settingsRepository.settings.collectAsState(initial = null)
             val browserSettings = settings ?: return@setContent
+            val webAppScreenViewModel = viewModel(initializer = {
+                WebAppScreenViewModel(
+                    historyRepository = historyRepository,
+                    settingsRepository = settingsRepository,
+                    webSuggestionRepository = webSuggestionRepository,
+                )
+            })
+            val uiState by webAppScreenViewModel.uiState.collectAsState()
 
             LaunchedEffect(browserSettings.enableThirdPartyCa) {
                 runtime.settings.setEnterpriseRootsEnabled(browserSettings.enableThirdPartyCa)
@@ -81,19 +91,44 @@ class WebAppActivity : ComponentActivity() {
             BrowserTheme(themeMode = browserSettings.themeMode) {
                 WebAppScreen(
                     initialUrl = initialUrl ?: browserSettings.resolvedHomepageUrl(),
-                    homepageUrl = browserSettings.resolvedHomepageUrl(),
-                    searchTemplate = browserSettings.resolvedSearchTemplate(),
-                    translationProvider = browserSettings.translationProvider,
                     browserTabController = browserTabController,
-                    browserSessionLifecycleController = browserSessionLifecycleController,
-                    settingsRepository = settingsRepository,
-                    historyRepository = historyRepository,
-                    webSuggestionRepository = webSuggestionRepository,
-                    themeColorExtension = themeColorExtension,
-                    mediaWebExtension = mediaWebExtension,
-                    onDesktopNotificationPermissionRequest = { requestNotificationPermissionIfNeeded() },
-                    onRequestDownloadNotificationPermission = { requestDownloadNotificationPermission() },
-                )
+                    uiState = uiState,
+                ) { modifier, browserTab, webAppUiState ->
+                    GeckoBrowserTab(
+                        modifier = modifier,
+                        browserTab = browserTab,
+                        homepageUrl = browserSettings.resolvedHomepageUrl(),
+                        searchTemplate = browserSettings.resolvedSearchTemplate(),
+                        translationProvider = browserSettings.translationProvider,
+                        themeColorExtension = themeColorExtension,
+                        mediaWebExtension = mediaWebExtension,
+                        browserSessionLifecycleController = browserSessionLifecycleController,
+                        tabCount = 1,
+                        onInstallExtensionRequest = {},
+                        onDesktopNotificationPermissionRequest = { _ ->
+                            requestNotificationPermissionIfNeeded()
+                        },
+                        onRequestDownloadNotificationPermission = { requestDownloadNotificationPermission() },
+                        onOpenSettings = {},
+                        onOpenTabs = {},
+                        enableTabUi = false,
+                        showInstallExtensionItem = false,
+                        // バックナビゲーションを有効にしてブラウザ履歴を遡れるようにする
+                        enableBackNavigation = true,
+                        // ウェブアプリモード: 閉じるボタンなし、カスタムタブ風のツールバー
+                        webAppMode = true,
+                        onOpenNewSessionRequest = { uri ->
+                            // ウェブアプリモードでは新規タブを作成せず、同じセッションでURLを読み込む
+                            // 新規タブを作成するとユーザーから見えないタブになるため
+                            browserTab.session.loadUri(uri)
+                            browserTab.session
+                        },
+                        onHistoryRecord = webAppUiState.callbacks::onHistoryRecord,
+                        onHistoryTitleUpdate = webAppUiState.callbacks::onHistoryTitleUpdate,
+                        urlBarSuggestions = webAppUiState.urlBarSuggestions,
+                        onUrlInputChanged = webAppUiState.callbacks::onUrlInputChanged,
+                    )
+                }
             }
         }
     }
