@@ -31,6 +31,7 @@ dependencies {
     implementation(project(":browser-core"))
     implementation(project(":browser-engine-gecko"))
     implementation(project(":data"))
+    implementation(project(":ui:tabs"))
 
     testImplementation(libs.junit4)
     testImplementation(libs.kotlinx.coroutines.test)

@@ -3,8 +3,39 @@
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Zoom Test</title>
+  <style>
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+    }
+    #tap-area {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: sans-serif;
+      user-select: none;
+    }
+  </style>
 </head>
 <body>
-  <p>Zoom test page</p>
+  <div id="tap-area">Viewport width is reflected in URL query automatically</div>
+  <script>
+    let counter = 0;
+    const updateUrlQuery = () => {
+      const width = window.innerWidth;
+      counter += 1;
+      const url = new URL(window.location.href);
+      url.searchParams.set("w", String(width));
+      url.searchParams.set("c", String(counter));
+      history.replaceState(null, "", url.toString());
+    };
+    window.addEventListener("load", updateUrlQuery);
+    window.addEventListener("resize", updateUrlQuery);
+    // 一部環境で resize が遅延するため、念のため定期更新する
+    setInterval(updateUrlQuery, 500);
+  </script>
 </body>
 </html>
