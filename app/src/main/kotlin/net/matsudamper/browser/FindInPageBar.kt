@@ -4,9 +4,15 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -15,6 +21,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -24,6 +31,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Color.Companion
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
@@ -59,32 +67,25 @@ internal fun FindInPageBar(
                     .statusBarsPadding()
                     .padding(horizontal = 8.dp, vertical = 4.dp),
             ) {
-                // 正規表現トグルボタン（.*）
-                val regexIconColor = if (isRegex) {
-                    MaterialTheme.colorScheme.primary
-                } else {
-                    LocalContentColor.current.copy(alpha = 0.6f)
-                }
-                val regexBorderColor = if (isRegex) {
-                    MaterialTheme.colorScheme.primary
-                } else {
-                    Color.Transparent
-                }
                 Box(
                     contentAlignment = Alignment.Center,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(4.dp))
-                        .border(1.dp, regexBorderColor, RoundedCornerShape(4.dp))
-                        .padding(horizontal = 4.dp, vertical = 2.dp),
                 ) {
                     IconButton(
+                        modifier = Modifier,
                         onClick = onToggleRegex,
+                        colors = IconButtonDefaults.iconButtonColors(
+                            containerColor = if (isRegex) {
+                                MaterialTheme.colorScheme.inversePrimary
+                            } else {
+                                Color.Unspecified
+                            },
+                        ),
                     ) {
-                        Text(
-                            text = ".*",
-                            color = regexIconColor,
-                            fontFamily = FontFamily.Monospace,
-                            fontSize = 14.sp,
+                        Icon(
+                            modifier = Modifier
+                                .size(24.dp),
+                            painter = painterResource(R.drawable.ic_regurar_expression),
+                            contentDescription = "正規表現",
                         )
                     }
                 }
