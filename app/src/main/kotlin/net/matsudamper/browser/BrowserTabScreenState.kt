@@ -39,6 +39,12 @@ import java.io.ByteArrayOutputStream
 
 private val PAGE_ZOOM_STEPS = listOf(20, 25, 33, 50, 67, 75, 80, 90, 100, 110, 125, 150, 175, 200)
 
+private enum class FindInPageState {
+    Closed,
+    Normal,
+    Regex,
+}
+
 @Composable
 internal fun rememberBrowserTabScreenState(
     browserTab: BrowserTab,
@@ -52,6 +58,7 @@ internal fun rememberBrowserTabScreenState(
     val coroutineScope = rememberCoroutineScope()
     val geckoDownloadManager: GeckoDownloadManager = koinInject()
     val readabilityWebExtension: ReadabilityWebExtension = koinInject()
+    val findInPageWebExtension: FindInPageWebExtension = koinInject()
     val state = remember(browserTab) {
         BrowserTabScreenState(
             browserTab = browserTab,
@@ -60,6 +67,7 @@ internal fun rememberBrowserTabScreenState(
             coroutineScope = coroutineScope,
             geckoDownloadManager = geckoDownloadManager,
             readabilityWebExtension = readabilityWebExtension,
+            findInPageWebExtension = findInPageWebExtension,
             context = context,
             onHistoryRecord = onHistoryRecord,
             onHistoryTitleUpdate = onHistoryTitleUpdate,
@@ -81,6 +89,7 @@ internal class BrowserTabScreenState(
     private val coroutineScope: CoroutineScope,
     private val geckoDownloadManager: GeckoDownloadManager,
     private val readabilityWebExtension: ReadabilityWebExtension,
+    internal val findInPageWebExtension: FindInPageWebExtension,
     private val context: Context,
     private val onRequestDownloadNotificationPermission: () -> Unit = {},
     var onHistoryRecord: (suspend (url: String, title: String) -> Long)? = null,
@@ -137,10 +146,15 @@ internal class BrowserTabScreenState(
     val isSimpleViewActive: Boolean get() = simpleViewArticle != null
 
     // --- Find-in-page state ---
-    var showFindInPage by mutableStateOf(false)
+    private var findInPageState by mutableStateOf(FindInPageState.Closed)
+    val showFindInPage: Boolean get() = findInPageState != FindInPageState.Closed
     var findQuery by mutableStateOf("")
     var findMatchCurrent by mutableIntStateOf(0)
     var findMatchTotal by mutableIntStateOf(0)
+    /** 正規表現モードが有効かどうか */
+    val findIsRegex: Boolean get() = findInPageState == FindInPageState.Regex
+    /** 無効な正規表現が入力された場合のエラーメッセージ */
+    var findQueryError by mutableStateOf<String?>(null)
 
     // --- Context menu state ---
     var imageContextMenuUrl by mutableStateOf<String?>(null)
@@ -277,50 +291,98 @@ internal class BrowserTabScreenState(
     }
 
     fun openFindInPage() {
-        showFindInPage = true
+        findInPageState = FindInPageState.Normal
     }
 
     fun closeFindInPage() {
-        showFindInPage = false
-        session.finder.clear()
+        val previousFindInPageState = findInPageState
+        findInPageState = FindInPageState.Closed
+        if (previousFindInPageState == FindInPageState.Regex) {
+            findInPageWebExtension.clear(session)
+        } else {
+            session.finder.clear()
+        }
         findQuery = ""
         findMatchCurrent = 0
         findMatchTotal = 0
+        findQueryError = null
     }
 
     fun onFindQueryChange(newQuery: String) {
         findQuery = newQuery
+        findQueryError = null
         if (newQuery.isEmpty()) {
-            session.finder.clear()
+            if (findIsRegex) {
+                findInPageWebExtension.clear(session)
+            } else {
+                session.finder.clear()
+            }
             findMatchCurrent = 0
             findMatchTotal = 0
         } else {
-            session.finder.find(newQuery, 0).then<Void?> { result ->
-                findMatchCurrent = result?.current ?: 0
-                findMatchTotal = result?.total ?: 0
-                null
+            if (findIsRegex) {
+                findInPageWebExtension.search(session, newQuery, isRegex = true)
+            } else {
+                session.finder.find(newQuery, 0).then<Void?> { result ->
+                    findMatchCurrent = result?.current ?: 0
+                    findMatchTotal = result?.total ?: 0
+                    null
+                }
             }
         }
     }
 
     fun findNext() {
         if (findQuery.isNotEmpty()) {
-            session.finder.find(findQuery, 0).then<Void?> { result ->
-                findMatchCurrent = result?.current ?: 0
-                findMatchTotal = result?.total ?: 0
-                null
+            if (findIsRegex) {
+                findInPageWebExtension.findNext(session)
+            } else {
+                session.finder.find(findQuery, 0).then<Void?> { result ->
+                    findMatchCurrent = result?.current ?: 0
+                    findMatchTotal = result?.total ?: 0
+                    null
+                }
             }
         }
     }
 
     fun findPrevious() {
         if (findQuery.isNotEmpty()) {
-            session.finder.find(findQuery, GeckoSession.FINDER_FIND_BACKWARDS)
-                .then<Void?> { result ->
+            if (findIsRegex) {
+                findInPageWebExtension.findPrevious(session)
+            } else {
+                session.finder.find(findQuery, GeckoSession.FINDER_FIND_BACKWARDS)
+                    .then<Void?> { result ->
+                        findMatchCurrent = result?.current ?: 0
+                        findMatchTotal = result?.total ?: 0
+                        null
+                    }
+            }
+        }
+    }
+
+    fun toggleFindRegex() {
+        val newFindInPageState = if (findInPageState == FindInPageState.Regex) {
+            FindInPageState.Normal
+        } else {
+            FindInPageState.Regex
+        }
+        findInPageState = newFindInPageState
+        findQueryError = null
+        if (findQuery.isNotEmpty()) {
+            if (newFindInPageState == FindInPageState.Regex) {
+                // 通常 → 正規表現: finder をクリアして拡張機能で再検索
+                session.finder.clear()
+                findInPageWebExtension.search(session, findQuery, isRegex = true)
+            } else {
+                // 正規表現 → 通常: 拡張機能をクリアして finder で再検索
+                findInPageWebExtension.clear(session)
+                session.finder.find(findQuery, 0).then<Void?> { result ->
                     findMatchCurrent = result?.current ?: 0
                     findMatchTotal = result?.total ?: 0
                     null
                 }
+            }
         }
     }
 
