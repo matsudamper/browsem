@@ -21,7 +21,6 @@ import net.matsudamper.browser.core.TabSelectionPolicy
 import net.matsudamper.browser.core.TabStore
 import net.matsudamper.browser.core.TabStoreState
 import net.matsudamper.browser.data.PersistedTabState
-import net.matsudamper.browser.data.PersistedTabStateContainer
 import net.matsudamper.browser.data.TabGroupRepository
 import net.matsudamper.browser.data.TabRepository
 import org.mozilla.geckoview.GeckoSession
@@ -55,7 +54,7 @@ class BrowserTabController(
         private set
 
     val tabs: List<BrowserTab>
-        get() = tabRegistry.orderedTabs(_tabStoreState.value.tabs)
+        get() = tabRegistry.orderedTabs()
 
     fun findTab(tabId: String): BrowserTab? = tabRegistry.find(tabId)
 
@@ -95,10 +94,7 @@ class BrowserTabController(
                         tab.pendingSessionState =
                             restored.persistedTabState.sessionState.takeIf { it.isNotBlank() }
                     }
-                    publishRepositoryState(
-                        persistedTabs = snapshot.tabs.map { restored -> restored.persistedTabState },
-                        selectedTabId = snapshot.selectedTabId,
-                    )
+                    publishRuntimeState(snapshot.selectedTabId)
                 }
             }
             if (snapshot.tabs.isEmpty()) {
@@ -130,11 +126,12 @@ class BrowserTabController(
     }
 
     fun selectTab(tabId: String?) {
-        if (selectedTabId == tabId) {
+        val requestedTabId = tabId?.takeIf(tabRegistry::contains)
+        if (selectedTabId == requestedTabId) {
             return
         }
-        selectedTabId = tabId
-        persistenceCoordinator.persistSelection(tabId)
+        publishRuntimeState(requestedTabId)
+        persistenceCoordinator.persistSelection(selectedTabId)
     }
 
     suspend fun createAndAppendTab(
@@ -162,9 +159,8 @@ class BrowserTabController(
             )
             tab.pendingSessionState = restoredSessionState?.takeIf { it.isNotBlank() }
             val shouldSelect = selectedTabId == null
-            if (shouldSelect) {
-                selectedTabId = tab.tabId
-            }
+            val nextSelectedTabId = if (shouldSelect) tab.tabId else selectedTabId
+            publishRuntimeState(nextSelectedTabId)
             persistenceCoordinator.persistCreatedTab(
                 tab = tab,
                 insertIndex = insertIndex,
@@ -191,6 +187,7 @@ class BrowserTabController(
             insertIndex = insertIndex,
         )
         tab.pendingInitialUrl = normalizedInitialUrl
+        publishRuntimeState()
         persistenceCoordinator.persistCreatedTab(
             tab = tab,
             insertIndex = insertIndex,
@@ -220,6 +217,7 @@ class BrowserTabController(
             openerTabId = openerTabId,
             insertIndex = insertIndex,
         )
+        publishRuntimeState()
         persistenceCoordinator.persistCreatedTab(
             tab = tab,
             insertIndex = insertIndex,
@@ -230,8 +228,10 @@ class BrowserTabController(
 
     override fun moveTab(fromIndex: Int, toIndex: Int) {
         if (fromIndex == toIndex) return
-        val currentTabs = _tabStoreState.value.tabs
+        val currentTabs = tabs
         if (fromIndex !in currentTabs.indices || toIndex !in currentTabs.indices) return
+        tabRegistry.move(fromIndex, toIndex)
+        publishRuntimeState()
         persistenceCoordinator.persistMoveTab(fromIndex, toIndex)
     }
 
@@ -245,8 +245,8 @@ class BrowserTabController(
             return selectedTabId
         }
         disposeTab(removed, "タブが閉じられました: $tabId")
-        selectedTabId = nextSelectedTabId
         closedTabIds.add(tabId)
+        publishRuntimeState(nextSelectedTabId)
         persistenceCoordinator.persistClosedTab(tabId, nextSelectedTabId)
         return selectedTabId
     }
@@ -273,7 +273,7 @@ class BrowserTabController(
             title = homepageUrl,
             previewBitmapArray = null,
         )
-        selectedTabId = tab.tabId
+        publishRuntimeState(tab.tabId)
         if (persist) {
             persistenceCoordinator.persistCreatedTab(
                 tab = tab,
@@ -289,11 +289,6 @@ class BrowserTabController(
             return
         }
         repositoryObservationStarted = true
-        controllerScope.launch {
-            tabRepository.observeTabs().collectLatest { state ->
-                applyRepositoryState(state)
-            }
-        }
         if (tabGroupRepository != null) {
             controllerScope.launch {
                 tabGroupRepository.observeTabGroupAssignments().collectLatest { assignments ->
@@ -304,39 +299,6 @@ class BrowserTabController(
                 }
             }
         }
-    }
-
-    private suspend fun applyRepositoryState(state: PersistedTabStateContainer) {
-        val persistedTabs = state.tabs.filterNot { persistedTab ->
-            persistenceCoordinator.isPendingClose(persistedTab.tabId)
-        }
-        val persistedTabIds = persistedTabs.mapTo(mutableSetOf()) { it.tabId }
-
-        persistedTabs.forEach { persistedTab ->
-            val existing = tabRegistry.find(persistedTab.tabId)
-            if (existing != null) {
-                existing.syncPersistedState(persistedTab)
-            } else {
-                val previewBitmap = withContext(Dispatchers.IO) {
-                    tabRepository.loadTabThumbnail(persistedTab.tabId)
-                }
-                tabRegistry.put(
-                    tabFactory.createDetachedTab(
-                    persistedTabState = persistedTab,
-                    previewBitmapArray = previewBitmap,
-                    ),
-                )
-            }
-        }
-
-        tabRegistry.removeMissing(
-            retainedTabIds = persistedTabIds,
-            shouldKeep = persistenceCoordinator::isPendingCreate,
-        ).forEach { removed ->
-            disposeTab(removed, "リポジトリからタブが削除されました: ${removed.tabId}")
-        }
-
-        publishRepositoryState(persistedTabs, state.selectedTabId)
     }
 
     private fun createRegisteredTab(
@@ -365,14 +327,13 @@ class BrowserTabController(
     }
 
     private fun onTabStateChanged() {
-        refreshVisibleTabSummaries()
+        publishRuntimeState()
     }
 
-    private fun publishRepositoryState(
-        persistedTabs: List<PersistedTabState>,
-        selectedTabId: String?,
+    private fun publishRuntimeState(
+        selectedTabId: String? = this.selectedTabId,
     ) {
-        val summaries = tabRegistry.summariesInPersistedOrder(persistedTabs)
+        val summaries = tabRegistry.summaries()
         val nextSelectedTabId = selectedTabId
             ?.takeIf { selectedId -> summaries.any { it.id == selectedId } }
             ?: summaries.lastOrNull()?.id
@@ -381,14 +342,6 @@ class BrowserTabController(
             it.copy(
                 tabs = summaries,
                 selectedTabId = nextSelectedTabId,
-            )
-        }
-    }
-
-    private fun refreshVisibleTabSummaries() {
-        _tabStoreState.update { state ->
-            state.copy(
-                tabs = tabRegistry.refreshSummaries(state.tabs),
             )
         }
     }

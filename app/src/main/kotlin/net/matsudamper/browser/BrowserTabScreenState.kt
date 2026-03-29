@@ -88,6 +88,10 @@ internal class BrowserTabScreenState(
 ) : BrowserSessionStateCallbacks {
     // 現在のページの履歴エントリID（タイトル更新に使用）
     private var currentHistoryEntryId: Long? = null
+    // 履歴レコード作成前に届いたタイトルを一時保持する
+    private var pendingHistoryTitle: String? = null
+    // 遅延して返る履歴レコードIDが古い遷移に紐づくものかを判定する
+    private var historyRecordSequence: Long = 0
     var homepageUrl by mutableStateOf(homepageUrl)
     var searchTemplate by mutableStateOf(searchTemplate)
     val session: GeckoSession get() = browserTab.session
@@ -587,11 +591,19 @@ internal class BrowserTabScreenState(
             tabHistoryItems = tabHistoryItems.take(tabHistoryCurrentIndex + 1) + newItem
             tabHistoryCurrentIndex = tabHistoryItems.lastIndex
 
+            historyRecordSequence++
+            val sequence = historyRecordSequence
             currentHistoryEntryId = null
+            pendingHistoryTitle = null
             val callback = onHistoryRecord
             if (callback != null) {
                 coroutineScope.launch {
-                    currentHistoryEntryId = callback(url, currentPageTitle)
+                    val historyEntryId = callback(url, "")
+                    if (historyRecordSequence != sequence) {
+                        return@launch
+                    }
+                    currentHistoryEntryId = historyEntryId
+                    applyPendingHistoryTitle(historyEntryId)
                 }
             }
         }
@@ -601,10 +613,17 @@ internal class BrowserTabScreenState(
         currentPageTitle = title
         val entryId = currentHistoryEntryId
         val callback = onHistoryTitleUpdate
+        if (tabHistoryCurrentIndex in tabHistoryItems.indices) {
+            tabHistoryItems = tabHistoryItems.toMutableList().apply {
+                this[tabHistoryCurrentIndex] = this[tabHistoryCurrentIndex].copy(title = title)
+            }
+        }
         if (entryId != null && title.isNotBlank() && callback != null) {
             coroutineScope.launch {
                 callback(entryId, title)
             }
+        } else if (title.isNotBlank()) {
+            pendingHistoryTitle = title
         }
     }
 
@@ -636,7 +655,6 @@ internal class BrowserTabScreenState(
     }
 
     override fun onSessionStateChange(sessionState: GeckoSession.SessionState) {
-        browserTab.sessionState = sessionState.toString().orEmpty()
     }
 
     override fun onPageStart(url: String) {
@@ -749,6 +767,18 @@ internal class BrowserTabScreenState(
 
     private fun clearPageLoadError() {
         pageLoadError = null
+    }
+
+    private fun applyPendingHistoryTitle(entryId: Long) {
+        val title = pendingHistoryTitle
+        val callback = onHistoryTitleUpdate
+        if (title.isNullOrBlank() || callback == null) {
+            return
+        }
+        pendingHistoryTitle = null
+        coroutineScope.launch {
+            callback(entryId, title)
+        }
     }
 
     private fun maybeResetToolbarColorOnPageStart(url: String) {

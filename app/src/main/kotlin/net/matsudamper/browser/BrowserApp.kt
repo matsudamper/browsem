@@ -371,7 +371,7 @@ internal fun BrowserApp(
                                                     tabId = tabId,
                                                     initialUrl = url,
                                                 )
-                                                navController.selectTab(tabId)
+                                                selectTab(tabId, null)
                                             }
                                         }
                                     }

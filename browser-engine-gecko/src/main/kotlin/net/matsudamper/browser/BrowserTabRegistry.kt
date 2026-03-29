@@ -1,18 +1,21 @@
 package net.matsudamper.browser
 
 import net.matsudamper.browser.core.TabSummary
-import net.matsudamper.browser.data.PersistedTabState
 
 internal class BrowserTabRegistry {
     private val tabsById = LinkedHashMap<String, BrowserTab>()
 
     fun isEmpty(): Boolean = tabsById.isEmpty()
 
+    fun contains(tabId: String): Boolean = tabId in tabsById
+
     fun find(tabId: String): BrowserTab? = tabsById[tabId]
 
     fun firstOrNull(): BrowserTab? = tabsById.values.firstOrNull()
 
     fun values(): Collection<BrowserTab> = tabsById.values
+
+    fun orderedTabs(): List<BrowserTab> = tabsById.values.toList()
 
     fun insert(tab: BrowserTab, insertIndex: Int) {
         val orderedTabs = tabsById.values.toMutableList().apply {
@@ -26,37 +29,21 @@ internal class BrowserTabRegistry {
         }
     }
 
-    fun put(tab: BrowserTab) {
-        tabsById[tab.tabId] = tab
-    }
-
     fun remove(tabId: String): BrowserTab? = tabsById.remove(tabId)
 
-    fun removeMissing(
-        retainedTabIds: Set<String>,
-        shouldKeep: (String) -> Boolean,
-    ): List<BrowserTab> {
-        val removedTabIds = tabsById.keys.filter { tabId ->
-            tabId !in retainedTabIds && !shouldKeep(tabId)
+    fun move(fromIndex: Int, toIndex: Int) {
+        val orderedTabs = tabsById.values.toMutableList()
+        if (fromIndex !in orderedTabs.indices || toIndex !in orderedTabs.indices) {
+            return
         }
-        return removedTabIds.mapNotNull(::remove)
-    }
-
-    fun orderedTabs(summaries: List<TabSummary>): List<BrowserTab> {
-        return summaries.mapNotNull { summary -> tabsById[summary.id] }
-    }
-
-    fun summariesInPersistedOrder(persistedTabs: List<PersistedTabState>): List<TabSummary> {
-        return persistedTabs.mapNotNull { persistedTab ->
-            tabsById[persistedTab.tabId]?.toSummary()
+        orderedTabs.add(toIndex, orderedTabs.removeAt(fromIndex))
+        tabsById.clear()
+        orderedTabs.forEach { orderedTab ->
+            tabsById[orderedTab.tabId] = orderedTab
         }
     }
 
-    fun refreshSummaries(currentSummaries: List<TabSummary>): List<TabSummary> {
-        return currentSummaries.mapNotNull { summary ->
-            tabsById[summary.id]?.toSummary()
-        }
-    }
+    fun summaries(): List<TabSummary> = tabsById.values.map(BrowserTab::toSummary)
 
     fun clear() {
         tabsById.clear()

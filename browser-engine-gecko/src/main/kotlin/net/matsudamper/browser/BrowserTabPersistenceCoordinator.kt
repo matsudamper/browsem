@@ -8,25 +8,18 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import net.matsudamper.browser.data.TabRepository
-import java.util.concurrent.ConcurrentHashMap
 
 internal class BrowserTabPersistenceCoordinator(
     private val tabRepository: TabRepository,
     private val controllerScope: CoroutineScope,
 ) {
     private val persistenceMutex = Mutex()
-    private val pendingCreatedTabIds = ConcurrentHashMap.newKeySet<String>()
-    private val pendingClosedTabIds = ConcurrentHashMap.newKeySet<String>()
 
     suspend fun awaitIdle() {
         withContext(Dispatchers.IO) {
             persistenceMutex.withLock {}
         }
     }
-
-    fun isPendingCreate(tabId: String): Boolean = tabId in pendingCreatedTabIds
-
-    fun isPendingClose(tabId: String): Boolean = tabId in pendingClosedTabIds
 
     fun persistSelection(tabId: String?) {
         enqueue {
@@ -45,19 +38,13 @@ internal class BrowserTabPersistenceCoordinator(
         insertIndex: Int,
         selected: Boolean,
     ) {
-        pendingCreatedTabIds.add(tab.tabId)
-        pendingClosedTabIds.remove(tab.tabId)
         val persistedTab = tab.toPersistedTabState()
         enqueue {
-            try {
-                it.createOrUpdateTab(
-                    tab = persistedTab,
-                    insertIndex = insertIndex,
-                    selected = selected,
-                )
-            } finally {
-                pendingCreatedTabIds.remove(tab.tabId)
-            }
+            it.createOrUpdateTab(
+                tab = persistedTab,
+                insertIndex = insertIndex,
+                selected = selected,
+            )
         }
     }
 
@@ -67,32 +54,20 @@ internal class BrowserTabPersistenceCoordinator(
         selected: Boolean,
     ) {
         val persistedTab = tab.toPersistedTabState()
-        pendingCreatedTabIds.add(tab.tabId)
-        pendingClosedTabIds.remove(tab.tabId)
         withContext(Dispatchers.IO) {
             persistenceMutex.withLock {
-                try {
-                    tabRepository.createOrUpdateTab(
-                        tab = persistedTab,
-                        insertIndex = insertIndex,
-                        selected = selected,
-                    )
-                } finally {
-                    pendingCreatedTabIds.remove(tab.tabId)
-                }
+                tabRepository.createOrUpdateTab(
+                    tab = persistedTab,
+                    insertIndex = insertIndex,
+                    selected = selected,
+                )
             }
         }
     }
 
     fun persistClosedTab(tabId: String, nextSelectedTabId: String?) {
-        pendingClosedTabIds.add(tabId)
-        pendingCreatedTabIds.remove(tabId)
         enqueue {
-            try {
-                it.closeTab(tabId, nextSelectedTabId)
-            } finally {
-                pendingClosedTabIds.remove(tabId)
-            }
+            it.closeTab(tabId, nextSelectedTabId)
         }
     }
 

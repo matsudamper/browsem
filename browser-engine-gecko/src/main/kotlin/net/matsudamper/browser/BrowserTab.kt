@@ -5,7 +5,6 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import net.matsudamper.browser.data.PersistedTabState
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
 
@@ -26,7 +25,6 @@ class BrowserTab(
     private val onPreviewBitmapChanged: (String, ByteArray?) -> Unit = { _, _ -> },
     private val onThemeColorChanged: (String, Int?) -> Unit = { _, _ -> },
 ) {
-    private var suppressPersistence = false
     private var currentUrlState by mutableStateOf(currentUrl)
     private var sessionStateState by mutableStateOf(sessionState)
     private var titleState by mutableStateOf(title)
@@ -39,9 +37,7 @@ class BrowserTab(
             if (currentUrlState == value) return
             currentUrlState = value
             onStateChanged()
-            if (!suppressPersistence) {
-                onUrlChanged(tabId, value)
-            }
+            onUrlChanged(tabId, value)
         }
 
     var sessionState: String
@@ -50,9 +46,7 @@ class BrowserTab(
             if (sessionStateState == value) return
             sessionStateState = value
             onStateChanged()
-            if (!suppressPersistence) {
-                onSessionStateChanged(tabId, value)
-            }
+            onSessionStateChanged(tabId, value)
         }
 
     var title: String
@@ -61,9 +55,7 @@ class BrowserTab(
             if (titleState == value) return
             titleState = value
             onStateChanged()
-            if (!suppressPersistence) {
-                onTitleChanged(tabId, value)
-            }
+            onTitleChanged(tabId, value)
         }
 
     var previewBitmap: ByteArray?
@@ -81,9 +73,7 @@ class BrowserTab(
             if (themeColorState == value) return
             themeColorState = value
             onStateChanged()
-            if (!suppressPersistence) {
-                onThemeColorChanged(tabId, value)
-            }
+            onThemeColorChanged(tabId, value)
         }
 
     // ページのfavicon（ホーム追加時のアイコンに使用、永続化は不要）
@@ -129,18 +119,6 @@ class BrowserTab(
     /** SessionState から履歴キャッシュを初期化する */
     internal fun initHistoryFromSessionState(sessionState: GeckoSession.SessionState) {
         sessionDelegateHost.initHistoryCache(sessionState)
-    }
-
-    internal fun syncPersistedState(persistedTabState: PersistedTabState) {
-        suppressPersistence = true
-        try {
-            currentUrl = persistedTabState.url
-            sessionState = persistedTabState.sessionState
-            title = persistedTabState.title.ifBlank { persistedTabState.url }
-            themeColor = persistedTabState.themeColor
-        } finally {
-            suppressPersistence = false
-        }
     }
 }
 
