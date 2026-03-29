@@ -39,6 +39,12 @@ import java.io.ByteArrayOutputStream
 
 private val PAGE_ZOOM_STEPS = listOf(20, 25, 33, 50, 67, 75, 80, 90, 100, 110, 125, 150, 175, 200)
 
+private enum class FindInPageState {
+    Closed,
+    Normal,
+    Regex,
+}
+
 @Composable
 internal fun rememberBrowserTabScreenState(
     browserTab: BrowserTab,
@@ -140,12 +146,13 @@ internal class BrowserTabScreenState(
     val isSimpleViewActive: Boolean get() = simpleViewArticle != null
 
     // --- Find-in-page state ---
-    var showFindInPage by mutableStateOf(false)
+    private var findInPageState by mutableStateOf(FindInPageState.Closed)
+    val showFindInPage: Boolean get() = findInPageState != FindInPageState.Closed
     var findQuery by mutableStateOf("")
     var findMatchCurrent by mutableIntStateOf(0)
     var findMatchTotal by mutableIntStateOf(0)
     /** 正規表現モードが有効かどうか */
-    var findIsRegex by mutableStateOf(false)
+    val findIsRegex: Boolean get() = findInPageState == FindInPageState.Regex
     /** 無効な正規表現が入力された場合のエラーメッセージ */
     var findQueryError by mutableStateOf<String?>(null)
 
@@ -284,18 +291,13 @@ internal class BrowserTabScreenState(
     }
 
     fun openFindInPage() {
-        findIsRegex = false
-        showFindInPage = true
-    }
-
-    fun openFindInPageRegex() {
-        findIsRegex = true
-        showFindInPage = true
+        findInPageState = FindInPageState.Normal
     }
 
     fun closeFindInPage() {
-        showFindInPage = false
-        if (findIsRegex) {
+        val previousFindInPageState = findInPageState
+        findInPageState = FindInPageState.Closed
+        if (previousFindInPageState == FindInPageState.Regex) {
             findInPageWebExtension.clear(session)
         } else {
             session.finder.clear()
@@ -360,11 +362,15 @@ internal class BrowserTabScreenState(
     }
 
     fun toggleFindRegex() {
-        val newIsRegex = !findIsRegex
-        findIsRegex = newIsRegex
+        val newFindInPageState = if (findInPageState == FindInPageState.Regex) {
+            FindInPageState.Normal
+        } else {
+            FindInPageState.Regex
+        }
+        findInPageState = newFindInPageState
         findQueryError = null
         if (findQuery.isNotEmpty()) {
-            if (newIsRegex) {
+            if (newFindInPageState == FindInPageState.Regex) {
                 // 通常 → 正規表現: finder をクリアして拡張機能で再検索
                 session.finder.clear()
                 findInPageWebExtension.search(session, findQuery, isRegex = true)

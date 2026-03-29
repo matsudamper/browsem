@@ -49,7 +49,6 @@ internal fun ToolbarMenu(
     onTranslatePage: () -> Unit,
     onShare: () -> Unit,
     onFindInPage: () -> Unit,
-    onFindInPageRegex: () -> Unit,
     onOpenSettings: () -> Unit,
     onAddToHomeScreen: () -> Unit,
     isSimpleView: Boolean,
@@ -323,37 +322,21 @@ internal fun ToolbarMenu(
                 onAddToHomeScreen()
             },
         )
-        // DropdownMenuItemはonLongClickを持たないため、combinedClickableを使うカスタム項目で長押しを実装する
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .combinedClickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = ripple(),
-                    onLongClick = {
-                        onDismissRequest()
-                        onFindInPageRegex()
-                    },
-                    onClick = {
-                        onDismissRequest()
-                        onFindInPage()
-                    },
+        DropdownMenuItem(
+            text = {
+                Text(text = "ページ内検索")
+            },
+            leadingIcon = {
+                Icon(
+                    painter = painterResource(id = R.drawable.ic_search_24dp),
+                    contentDescription = null,
                 )
-                .heightIn(min = 48.dp)
-                .padding(horizontal = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(
-                painter = painterResource(id = R.drawable.ic_search_24dp),
-                contentDescription = null,
-                tint = LocalContentColor.current,
-            )
-            Text(
-                text = "ページ内検索",
-                style = MaterialTheme.typography.labelLarge,
-                modifier = Modifier.padding(start = 12.dp),
-            )
-        }
+            },
+            onClick = {
+                onDismissRequest()
+                onFindInPage()
+            },
+        )
         DropdownMenuItem(
             text = {
                 Text(text = "設定")
