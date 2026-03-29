@@ -1,4 +1,4 @@
-package net.matsudamper.browser.screen.browser
+package net.matsudamper.browser.ui.browser
 
 import net.matsudamper.browser.BrowserTab
 

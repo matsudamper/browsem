@@ -53,7 +53,6 @@ import net.matsudamper.browser.data.history.HistoryRepository
 import net.matsudamper.browser.data.websuggestion.WebSuggestionRepository
 import net.matsudamper.browser.navigation.AppDestination
 import net.matsudamper.browser.navigation.NavController
-import net.matsudamper.browser.screen.browser.BrowserScreen
 import net.matsudamper.browser.screen.browser.BrowserScreenViewModel
 import net.matsudamper.browser.screen.extensions.ExtensionsScreenViewModel
 import net.matsudamper.browser.screen.history.HistoryScreenViewModel
@@ -61,6 +60,7 @@ import net.matsudamper.browser.screen.notificationpermissions.NotificationPermis
 import net.matsudamper.browser.screen.downloads.DownloadManagementScreenViewModel
 import net.matsudamper.browser.screen.settings.SettingsScreenViewModel
 import net.matsudamper.browser.screen.tab.TabsScreenViewModel
+import net.matsudamper.browser.ui.browser.BrowserScreen
 import net.matsudamper.browser.ui.downloads.DownloadManagementScreen
 import net.matsudamper.browser.ui.extensions.ExtensionsScreen
 import net.matsudamper.browser.ui.history.HistoryScreen
@@ -252,38 +252,85 @@ internal fun BrowserApp(
                         DisposableEffect(key.tabId) {
                             onDispose { browserScreenViewModel.close() }
                         }
+                        val browserScreenUiState by browserScreenViewModel.uiState.collectAsState()
                         BrowserScreen(
-                            key = key,
+                            tabId = key.tabId,
                             homepageUrl = uiState.homepageUrl,
-                            searchTemplate = uiState.searchTemplate,
-                            backStack = backStack,
+                            uiState = browserScreenUiState,
                             browserTabController = browserTabController,
-                            browserSessionLifecycleController = browserSessionLifecycleController,
-                            viewModel = browserScreenViewModel,
-                            navController = navController,
-                            translationProvider = uiState.translationProvider,
-                            themeColorExtension = themeColorExtension,
-                            mediaWebExtension = mediaWebExtension,
-                            onInstallExtensionRequest = onInstallExtensionRequest,
-                            handleNotificationPermission = handleNotificationPermission,
-                            onRequestDownloadNotificationPermission = onRequestDownloadNotificationPermission,
-                            onSelectTab = { tabId, beforeTab ->
-                                selectTab(tabId, beforeTab)
+                            onSelectTab = { tabId ->
+                                selectTab(tabId, null)
                             },
-                            onNewSessionTabCreated = { newTabId, openerTabId ->
-                                // target="_blank" で開いたタブはオープナーと同じグループに割り当てる。
-                                // デフォルトグループは外部 Intent 経由の場合にのみ適用するため、ここでは使用しない。
-                                scope.launch {
-                                    val openerGroupId = tabGroupRepository.observeTabGroupAssignments()
-                                        .first()
-                                        .find { it.tabId == openerTabId }
-                                        ?.groupId
-                                        ?.takeIf { it.isNotEmpty() }
-                                        ?.let { TabGroupId(it) }
-                                    if (openerGroupId != null) {
-                                        tabGroupRepository.assignTabToGroup(newTabId, openerGroupId)
-                                    }
-                                }
+                            previewHeaderContent = { modifier, tab, tabCount ->
+                                BrowserToolbar(
+                                    modifier = modifier,
+                                    toolbarColor = null,
+                                    isFocused = false,
+                                    tabCount = tabCount,
+                                    onOpenTabs = {},
+                                    toolbarMenu = {},
+                                    gestureState = null,
+                                    updateVisibleMenu = {},
+                                    urlInputState = UrlInputState(
+                                        value = tab.currentUrl,
+                                        onValueChange = {},
+                                        onSubmit = {},
+                                        onFocusChanged = {},
+                                        enableSuggest = false,
+                                        scrollEnabled = false,
+                                    ),
+                                )
+                            },
+                            browserTabContent = { modifier, selectedTab, tabCount, onToolbarHorizontalDrag, onToolbarDragEnd ->
+                                GeckoBrowserTab(
+                                    modifier = modifier,
+                                    browserTab = selectedTab,
+                                    homepageUrl = uiState.homepageUrl,
+                                    searchTemplate = uiState.searchTemplate,
+                                    translationProvider = uiState.translationProvider,
+                                    themeColorExtension = themeColorExtension,
+                                    mediaWebExtension = mediaWebExtension,
+                                    tabCount = tabCount,
+                                    onInstallExtensionRequest = onInstallExtensionRequest,
+                                    onDesktopNotificationPermissionRequest = handleNotificationPermission,
+                                    onRequestDownloadNotificationPermission = onRequestDownloadNotificationPermission,
+                                    onOpenSettings = { backStack.add(AppDestination.Settings) },
+                                    onOpenTabs = { backStack.add(AppDestination.Tabs) },
+                                    browserSessionLifecycleController = browserSessionLifecycleController,
+                                    onOpenNewSessionRequest = { uri ->
+                                        val newTab = browserTabController.createTabForNewSession(
+                                            initialUrl = uri,
+                                            openerTabId = key.tabId,
+                                        )
+                                        // target="_blank" で開いたタブはオープナーと同じグループに割り当てる。
+                                        // デフォルトグループは外部 Intent 経由の場合にのみ適用するため、ここでは使用しない。
+                                        scope.launch {
+                                            val openerGroupId = tabGroupRepository.observeTabGroupAssignments()
+                                                .first()
+                                                .find { it.tabId == key.tabId }
+                                                ?.groupId
+                                                ?.takeIf { it.isNotEmpty() }
+                                                ?.let { TabGroupId(it) }
+                                            if (openerGroupId != null) {
+                                                tabGroupRepository.assignTabToGroup(newTab.tabId, openerGroupId)
+                                            }
+                                        }
+                                        selectTab(newTab.tabId, key)
+                                        newTab.session
+                                    },
+                                    onCloseTab = {
+                                        val targetTabId = browserTabController.closeTab(key.tabId)
+                                        if (targetTabId != null) {
+                                            selectTab(targetTabId, null)
+                                        }
+                                    },
+                                    onHistoryRecord = browserScreenUiState.callbacks::onHistoryRecord,
+                                    onHistoryTitleUpdate = browserScreenUiState.callbacks::onHistoryTitleUpdate,
+                                    urlBarSuggestions = browserScreenUiState.urlBarSuggestions,
+                                    onUrlInputChanged = browserScreenUiState.callbacks::onUrlInputChanged,
+                                    onToolbarHorizontalDrag = onToolbarHorizontalDrag,
+                                    onToolbarDragEnd = onToolbarDragEnd,
+                                )
                             },
                         )
                     }

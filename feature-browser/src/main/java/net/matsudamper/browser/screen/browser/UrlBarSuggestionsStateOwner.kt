@@ -18,6 +18,8 @@ import net.matsudamper.browser.data.history.HistoryEntry
 import net.matsudamper.browser.data.history.HistoryRepository
 import net.matsudamper.browser.data.resolvedEnableWebSuggestions
 import net.matsudamper.browser.data.websuggestion.WebSuggestionRepository
+import net.matsudamper.browser.ui.browser.BrowserScreenUiState
+import net.matsudamper.browser.ui.browser.UrlBarSuggestionsUiState
 
 @OptIn(ExperimentalCoroutinesApi::class)
 internal class UrlBarSuggestionsStateOwner(
