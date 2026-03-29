@@ -52,6 +52,7 @@ internal fun rememberBrowserTabScreenState(
     val coroutineScope = rememberCoroutineScope()
     val geckoDownloadManager: GeckoDownloadManager = koinInject()
     val readabilityWebExtension: ReadabilityWebExtension = koinInject()
+    val findInPageWebExtension: FindInPageWebExtension = koinInject()
     val state = remember(browserTab) {
         BrowserTabScreenState(
             browserTab = browserTab,
@@ -60,6 +61,7 @@ internal fun rememberBrowserTabScreenState(
             coroutineScope = coroutineScope,
             geckoDownloadManager = geckoDownloadManager,
             readabilityWebExtension = readabilityWebExtension,
+            findInPageWebExtension = findInPageWebExtension,
             context = context,
             onHistoryRecord = onHistoryRecord,
             onHistoryTitleUpdate = onHistoryTitleUpdate,
@@ -81,6 +83,7 @@ internal class BrowserTabScreenState(
     private val coroutineScope: CoroutineScope,
     private val geckoDownloadManager: GeckoDownloadManager,
     private val readabilityWebExtension: ReadabilityWebExtension,
+    internal val findInPageWebExtension: FindInPageWebExtension,
     private val context: Context,
     private val onRequestDownloadNotificationPermission: () -> Unit = {},
     var onHistoryRecord: (suspend (url: String, title: String) -> Long)? = null,
@@ -128,6 +131,10 @@ internal class BrowserTabScreenState(
     var findQuery by mutableStateOf("")
     var findMatchCurrent by mutableIntStateOf(0)
     var findMatchTotal by mutableIntStateOf(0)
+    /** 正規表現モードが有効かどうか */
+    var findIsRegex by mutableStateOf(false)
+    /** 無効な正規表現が入力された場合のエラーメッセージ */
+    var findQueryError by mutableStateOf<String?>(null)
 
     // --- Context menu state ---
     var imageContextMenuUrl by mutableStateOf<String?>(null)
@@ -253,45 +260,43 @@ internal class BrowserTabScreenState(
 
     fun closeFindInPage() {
         showFindInPage = false
-        session.finder.clear()
+        findInPageWebExtension.clear(session)
         findQuery = ""
         findMatchCurrent = 0
         findMatchTotal = 0
+        findQueryError = null
     }
 
     fun onFindQueryChange(newQuery: String) {
         findQuery = newQuery
+        findQueryError = null
         if (newQuery.isEmpty()) {
-            session.finder.clear()
+            findInPageWebExtension.clear(session)
             findMatchCurrent = 0
             findMatchTotal = 0
         } else {
-            session.finder.find(newQuery, 0).then<Void?> { result ->
-                findMatchCurrent = result?.current ?: 0
-                findMatchTotal = result?.total ?: 0
-                null
-            }
+            findInPageWebExtension.search(session, newQuery, findIsRegex)
         }
     }
 
     fun findNext() {
         if (findQuery.isNotEmpty()) {
-            session.finder.find(findQuery, 0).then<Void?> { result ->
-                findMatchCurrent = result?.current ?: 0
-                findMatchTotal = result?.total ?: 0
-                null
-            }
+            findInPageWebExtension.findNext(session)
         }
     }
 
     fun findPrevious() {
         if (findQuery.isNotEmpty()) {
-            session.finder.find(findQuery, GeckoSession.FINDER_FIND_BACKWARDS)
-                .then<Void?> { result ->
-                    findMatchCurrent = result?.current ?: 0
-                    findMatchTotal = result?.total ?: 0
-                    null
-                }
+            findInPageWebExtension.findPrevious(session)
+        }
+    }
+
+    fun toggleFindRegex() {
+        findIsRegex = !findIsRegex
+        findQueryError = null
+        if (findQuery.isNotEmpty()) {
+            // 正規表現モード切り替え後に再検索する
+            findInPageWebExtension.search(session, findQuery, findIsRegex)
         }
     }
 
