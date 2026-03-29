@@ -450,6 +450,7 @@ internal fun BrowserApp(
                             tabsViewModel.eventHandler.receiveAsFlow().collect {
                                 it(object : TabsScreenViewModel.Event {
                                     override fun closeTab(tabId: String) {
+                                        val wasCurrentBrowserTab = navController.getSelectedTab() == tabId
                                         val nextSelectedTabId = browserTabController.closeTab(tabId)
                                         if (nextSelectedTabId == null) {
                                             scope.launch {
@@ -458,6 +459,9 @@ internal fun BrowserApp(
                                                 )
                                                 selectTab(newTab.tabId, null)
                                             }
+                                        } else if (wasCurrentBrowserTab) {
+                                            // タブ一覧は開いたまま、戻り先の Browser だけ最新の選択タブへ同期する
+                                            navController.replaceCurrentBrowserTab(nextSelectedTabId)
                                         }
                                     }
                                 })
