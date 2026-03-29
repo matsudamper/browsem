@@ -5,9 +5,11 @@ import android.app.DownloadManager
 import android.content.Intent
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -92,7 +94,17 @@ internal class DownloadManagementScreenViewModel(
     }
 
     private fun cancelDownload(id: UUID) {
-        workManager.cancelWorkById(id)
+        viewModelScope.launch {
+            // キャンセル前にWorkerの状態を確認する
+            val workInfo = workManager.getWorkInfoByIdFlow(id).first()
+            workManager.cancelWorkById(id)
+            // WorkerがRUNNING状態の場合はdoWork()のCancellationExceptionハンドラがDBを更新するため直接更新しない
+            // ENQUEUED（未起動）またはWorkerがWorkManagerに存在しない（prune済み等）場合は
+            // doWork()が呼ばれないためDBを直接CANCELLED状態に更新する
+            if (workInfo == null || workInfo.state != WorkInfo.State.RUNNING) {
+                downloadRepository.updateCancelled(id)
+            }
+        }
     }
 
     private fun openFile(fileUri: String) {
