@@ -255,6 +255,7 @@ internal class BrowserTabScreenState(
     }
 
     fun openFindInPage() {
+        findIsRegex = false
         showFindInPage = true
     }
 
@@ -265,7 +266,11 @@ internal class BrowserTabScreenState(
 
     fun closeFindInPage() {
         showFindInPage = false
-        findInPageWebExtension.clear(session)
+        if (findIsRegex) {
+            findInPageWebExtension.clear(session)
+        } else {
+            session.finder.clear()
+        }
         findQuery = ""
         findMatchCurrent = 0
         findMatchTotal = 0
@@ -276,32 +281,73 @@ internal class BrowserTabScreenState(
         findQuery = newQuery
         findQueryError = null
         if (newQuery.isEmpty()) {
-            findInPageWebExtension.clear(session)
+            if (findIsRegex) {
+                findInPageWebExtension.clear(session)
+            } else {
+                session.finder.clear()
+            }
             findMatchCurrent = 0
             findMatchTotal = 0
         } else {
-            findInPageWebExtension.search(session, newQuery, findIsRegex)
+            if (findIsRegex) {
+                findInPageWebExtension.search(session, newQuery, isRegex = true)
+            } else {
+                session.finder.find(newQuery, 0).then<Void?> { result ->
+                    findMatchCurrent = result?.current ?: 0
+                    findMatchTotal = result?.total ?: 0
+                    null
+                }
+            }
         }
     }
 
     fun findNext() {
         if (findQuery.isNotEmpty()) {
-            findInPageWebExtension.findNext(session)
+            if (findIsRegex) {
+                findInPageWebExtension.findNext(session)
+            } else {
+                session.finder.find(findQuery, 0).then<Void?> { result ->
+                    findMatchCurrent = result?.current ?: 0
+                    findMatchTotal = result?.total ?: 0
+                    null
+                }
+            }
         }
     }
 
     fun findPrevious() {
         if (findQuery.isNotEmpty()) {
-            findInPageWebExtension.findPrevious(session)
+            if (findIsRegex) {
+                findInPageWebExtension.findPrevious(session)
+            } else {
+                session.finder.find(findQuery, GeckoSession.FINDER_FIND_BACKWARDS)
+                    .then<Void?> { result ->
+                        findMatchCurrent = result?.current ?: 0
+                        findMatchTotal = result?.total ?: 0
+                        null
+                    }
+            }
         }
     }
 
     fun toggleFindRegex() {
-        findIsRegex = !findIsRegex
+        val newIsRegex = !findIsRegex
+        findIsRegex = newIsRegex
         findQueryError = null
         if (findQuery.isNotEmpty()) {
-            // 正規表現モード切り替え後に再検索する
-            findInPageWebExtension.search(session, findQuery, findIsRegex)
+            if (newIsRegex) {
+                // 通常 → 正規表現: finder をクリアして拡張機能で再検索
+                session.finder.clear()
+                findInPageWebExtension.search(session, findQuery, isRegex = true)
+            } else {
+                // 正規表現 → 通常: 拡張機能をクリアして finder で再検索
+                findInPageWebExtension.clear(session)
+                session.finder.find(findQuery, 0).then<Void?> { result ->
+                    findMatchCurrent = result?.current ?: 0
+                    findMatchTotal = result?.total ?: 0
+                    null
+                }
+            }
         }
     }
 
