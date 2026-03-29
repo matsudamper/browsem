@@ -1,6 +1,5 @@
 package net.matsudamper.browser.navigation
 
-import android.util.Log
 import androidx.compose.runtime.Stable
 import androidx.navigation3.runtime.NavBackStack
 import androidx.navigation3.runtime.NavKey
@@ -28,6 +27,16 @@ class NavController(
         while (backStack.size > 1) {
             backStack.removeLastOrNull()
         }
+    }
+
+    fun replaceCurrentBrowserTab(tabId: String, beforeTab: AppDestination.Browser? = null) {
+        val destination = AppDestination.Browser(tabId, beforeTab)
+        val browserIndex = backStack.indexOfLast { it is AppDestination.Browser }
+        if (browserIndex < 0) {
+            selectTab(tabId, beforeTab)
+            return
+        }
+        backStack[browserIndex] = destination
     }
 
     /**
