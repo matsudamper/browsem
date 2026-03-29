@@ -26,6 +26,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import net.matsudamper.browser.resources.R as ResourcesR
 
 internal sealed interface CustomTabToolbarTestTags {
     val id: String
@@ -72,7 +73,7 @@ internal fun CustomTabToolbar(
             if (showCloseButton) {
                 IconButton(onClick = onClose) {
                     Icon(
-                        painter = painterResource(R.drawable.close_24dp),
+                        painter = painterResource(ResourcesR.drawable.close_24dp),
                         contentDescription = "閉じる",
                     )
                 }
@@ -99,7 +100,7 @@ internal fun CustomTabToolbar(
             Box {
                 IconButton(onClick = { menuExpanded = true }) {
                     Icon(
-                        painter = painterResource(R.drawable.ic_more_vert_24dp),
+                        painter = painterResource(ResourcesR.drawable.ic_more_vert_24dp),
                         contentDescription = "メニュー",
                     )
                 }

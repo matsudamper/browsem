@@ -52,6 +52,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import kotlin.jvm.java
+import net.matsudamper.browser.resources.R as ResourcesR
 import net.matsudamper.browser.ui.common.BrowserTheme
 import net.matsudamper.browser.ui.common.resolveBrowserToolbarColors
 import net.matsudamper.browser.ui.common.toArgbHex
@@ -284,7 +285,7 @@ internal fun BrowserToolbar(
                                         interactionSource = remember { MutableInteractionSource() },
                                         onClick = { urlInputState.onValueChange("") }
                                     ),
-                                painter = painterResource(R.drawable.close_24dp),
+                                painter = painterResource(ResourcesR.drawable.close_24dp),
                                 contentDescription = "クリア",
                             )
                         }
@@ -318,7 +319,7 @@ internal fun BrowserToolbar(
                     onClick = { updateVisibleMenu(true) },
                 ) {
                     Icon(
-                        painter = painterResource(R.drawable.ic_more_vert_24dp),
+                        painter = painterResource(ResourcesR.drawable.ic_more_vert_24dp),
                         contentDescription = "Menu",
                     )
                     toolbarMenu()

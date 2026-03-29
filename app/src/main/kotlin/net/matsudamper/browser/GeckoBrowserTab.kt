@@ -56,6 +56,7 @@ import kotlinx.coroutines.flow.collectLatest
 import net.matsudamper.browser.data.TranslationProvider
 import net.matsudamper.browser.media.GeckoMediaSessionDelegate
 import net.matsudamper.browser.media.MediaWebExtension
+import net.matsudamper.browser.FindInPageWebExtension
 import net.matsudamper.browser.ui.common.resolveBrowserToolbarColors
 import net.matsudamper.browser.ui.browser.SimpleViewScreen
 import net.matsudamper.browser.ui.browser.UrlBarSuggestionsUiState
@@ -101,6 +102,7 @@ internal fun GeckoBrowserTab(
 ) {
     val context = LocalContext.current
     val readabilityWebExtension: ReadabilityWebExtension = koinInject()
+    val findInPageWebExtension: FindInPageWebExtension = koinInject()
     // URLバーフォーカス時にクリップボードから読み取ったURL
     var clipboardUrl by remember { mutableStateOf<String?>(null) }
     // タブ履歴BottomSheetの表示状態
@@ -209,6 +211,20 @@ internal fun GeckoBrowserTab(
         }
         onDispose {
             readabilityWebExtension.unregisterSession(session)
+        }
+    }
+
+    // FindInPageWebExtension のセッション登録
+    DisposableEffect(session, state, findInPageWebExtension) {
+        findInPageWebExtension.registerSession(session) { current, total, error ->
+            // 正規表現モードでないときに届いた遅延結果は無視する
+            if (!state.findIsRegex) return@registerSession
+            state.findMatchCurrent = current
+            state.findMatchTotal = total
+            state.findQueryError = if (error == "invalid_regex") "無効な正規表現です" else null
+        }
+        onDispose {
+            findInPageWebExtension.unregisterSession(session)
         }
     }
 
@@ -351,10 +367,13 @@ internal fun GeckoBrowserTab(
                 query = state.findQuery,
                 matchCurrent = state.findMatchCurrent,
                 matchTotal = state.findMatchTotal,
+                isRegex = state.findIsRegex,
+                queryError = state.findQueryError,
                 onQueryChange = state::onFindQueryChange,
                 onNext = state::findNext,
                 onPrevious = state::findPrevious,
                 onClose = state::closeFindInPage,
+                onToggleRegex = state::toggleFindRegex,
             )
         } else {
             if (customTabMode || webAppMode) {

@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.Checkbox
@@ -28,6 +29,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import net.matsudamper.browser.resources.R as ResourcesR
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -93,7 +95,7 @@ internal fun ToolbarMenu(
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(
-                            painter = painterResource(R.drawable.ic_arrow_back_24dp),
+                            painter = painterResource(ResourcesR.drawable.ic_arrow_back_24dp),
                             contentDescription = null,
                             tint = if (canGoBack) {
                                 LocalContentColor.current
@@ -134,7 +136,7 @@ internal fun ToolbarMenu(
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(
-                            painter = painterResource(R.drawable.ic_arrow_forward_24dp),
+                            painter = painterResource(ResourcesR.drawable.ic_arrow_forward_24dp),
                             contentDescription = null,
                             tint = if (canGoForward) {
                                 LocalContentColor.current
@@ -157,7 +159,7 @@ internal fun ToolbarMenu(
                     }
                 ) {
                     Icon(
-                        painter = painterResource(R.drawable.ic_home_24dp),
+                        painter = painterResource(ResourcesR.drawable.ic_home_24dp),
                         contentDescription = null,
                     )
                 }
@@ -174,7 +176,7 @@ internal fun ToolbarMenu(
                     }
                 ) {
                     Icon(
-                        painter = painterResource(R.drawable.ic_refresh_24dp),
+                        painter = painterResource(ResourcesR.drawable.ic_refresh_24dp),
                         contentDescription = null,
                     )
                 }
@@ -201,7 +203,7 @@ internal fun ToolbarMenu(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = onPageZoomOut) {
                     Icon(
-                        painter = painterResource(R.drawable.ic_remove_24dp),
+                        painter = painterResource(ResourcesR.drawable.ic_remove_24dp),
                         contentDescription = "縮小",
                     )
                 }
@@ -217,7 +219,7 @@ internal fun ToolbarMenu(
                 }
                 IconButton(onClick = onPageZoomIn) {
                     Icon(
-                        painter = painterResource(R.drawable.ic_add_24dp),
+                        painter = painterResource(ResourcesR.drawable.ic_add_24dp),
                         contentDescription = "拡大",
                     )
                 }
@@ -228,7 +230,7 @@ internal fun ToolbarMenu(
             text = { Text(text = "PCページ") },
             leadingIcon = {
                 Icon(
-                    painter = painterResource(id = R.drawable.ic_computer_24dp),
+                    painter = painterResource(id = ResourcesR.drawable.ic_computer_24dp),
                     contentDescription = null,
                 )
             },
@@ -244,7 +246,7 @@ internal fun ToolbarMenu(
             text = { Text(text = "シンプル表示") },
             leadingIcon = {
                 Icon(
-                    painter = painterResource(id = R.drawable.ic_article_24dp),
+                    painter = painterResource(id = ResourcesR.drawable.ic_article_24dp),
                     contentDescription = null,
                 )
             },
@@ -266,7 +268,7 @@ internal fun ToolbarMenu(
                 },
                 leadingIcon = {
                     Icon(
-                        painter = painterResource(id = R.drawable.ic_extension_24dp),
+                        painter = painterResource(id = ResourcesR.drawable.ic_extension_24dp),
                         contentDescription = null,
                     )
                 },
@@ -278,11 +280,26 @@ internal fun ToolbarMenu(
         }
         DropdownMenuItem(
             text = {
+                Text(text = "ページ内検索")
+            },
+            leadingIcon = {
+                Icon(
+                    painter = painterResource(id = ResourcesR.drawable.ic_search_24dp),
+                    contentDescription = null,
+                )
+            },
+            onClick = {
+                onDismissRequest()
+                onFindInPage()
+            },
+        )
+        DropdownMenuItem(
+            text = {
                 Text(text = "翻訳")
             },
             leadingIcon = {
                 Icon(
-                    painter = painterResource(id = R.drawable.ic_translate_24dp),
+                    painter = painterResource(id = ResourcesR.drawable.ic_translate_24dp),
                     contentDescription = null,
                 )
             },
@@ -297,7 +314,7 @@ internal fun ToolbarMenu(
             },
             leadingIcon = {
                 Icon(
-                    painter = painterResource(id = R.drawable.ic_share_24dp),
+                    painter = painterResource(id = ResourcesR.drawable.ic_share_24dp),
                     contentDescription = null,
                 )
             },
@@ -312,7 +329,7 @@ internal fun ToolbarMenu(
             },
             leadingIcon = {
                 Icon(
-                    painter = painterResource(id = R.drawable.ic_add_to_home_screen_24dp),
+                    painter = painterResource(id = ResourcesR.drawable.ic_add_to_home_screen_24dp),
                     contentDescription = null,
                 )
             },
@@ -323,26 +340,11 @@ internal fun ToolbarMenu(
         )
         DropdownMenuItem(
             text = {
-                Text(text = "ページ内検索")
-            },
-            leadingIcon = {
-                Icon(
-                    painter = painterResource(id = R.drawable.ic_search_24dp),
-                    contentDescription = null,
-                )
-            },
-            onClick = {
-                onDismissRequest()
-                onFindInPage()
-            },
-        )
-        DropdownMenuItem(
-            text = {
                 Text(text = "設定")
             },
             leadingIcon = {
                 Icon(
-                    painter = painterResource(id = R.drawable.ic_settings_24dp),
+                    painter = painterResource(id = ResourcesR.drawable.ic_settings_24dp),
                     contentDescription = null,
                 )
             },

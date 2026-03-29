@@ -15,6 +15,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.core.content.pm.ShortcutInfoCompat
 import androidx.core.content.pm.ShortcutManagerCompat
 import androidx.core.graphics.drawable.IconCompat
+import net.matsudamper.browser.resources.R as ResourcesR
 import net.matsudamper.browser.ui.common.BrowserTheme
 
 /**
@@ -75,7 +76,7 @@ private fun addShortcutToHome(context: Context, url: String, title: String, favi
     val icon = if (favicon != null) {
         IconCompat.createWithBitmap(favicon)
     } else {
-        IconCompat.createWithResource(context, R.drawable.ic_firefox_like)
+        IconCompat.createWithResource(context, ResourcesR.drawable.ic_firefox_like)
     }
     val info = ShortcutInfoCompat.Builder(context, "shortcut_${url.hashCode()}")
         .setShortLabel(title.ifBlank { url }.take(25))
@@ -104,7 +105,7 @@ private fun addWebAppToHome(context: Context, url: String, title: String, favico
     val icon = if (favicon != null) {
         IconCompat.createWithBitmap(favicon)
     } else {
-        IconCompat.createWithResource(context, R.drawable.ic_firefox_like)
+        IconCompat.createWithResource(context, ResourcesR.drawable.ic_firefox_like)
     }
     val info = ShortcutInfoCompat.Builder(context, "webapp_${url.hashCode()}")
         .setShortLabel(title.ifBlank { url }.take(25))
