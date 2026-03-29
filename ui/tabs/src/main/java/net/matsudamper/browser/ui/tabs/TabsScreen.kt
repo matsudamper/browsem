@@ -1,4 +1,4 @@
-package net.matsudamper.browser.screen.tab
+package net.matsudamper.browser.ui.tabs
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.animateScrollBy
@@ -18,6 +18,8 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FloatingActionButton
@@ -28,7 +30,6 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -41,17 +42,11 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
-import kotlinx.coroutines.flow.receiveAsFlow
-import net.matsudamper.browser.R
-import net.matsudamper.browser.core.TabStore
 import net.matsudamper.browser.data.TabGroupData
 import net.matsudamper.browser.data.TabGroupId
-import net.matsudamper.browser.data.TabGroupRepository
 
 internal object TabsLayoutDefaults {
     val minCellWidth: Dp = 220.dp
@@ -103,33 +98,12 @@ internal fun calculatePagerIndicatorBounds(
 }
 
 @Composable
-internal fun TabsScreen(
-    tabStore: TabStore,
-    tabGroupRepository: TabGroupRepository,
-    selectedTabId: String?,
+fun TabsScreen(
+    uiState: TabsScreenUiState,
     onSelectTab: (String) -> Unit,
-    onCloseTab: (String) -> Unit,
     onOpenNewTab: (currentGroupId: TabGroupId?) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val viewModel = viewModel(initializer = {
-        TabsScreenViewModel(
-            tabStore = tabStore,
-            tabGroupRepository = tabGroupRepository,
-        )
-    })
-    val uiState by viewModel.uiState.collectAsState()
-
-    LaunchedEffect(viewModel) {
-        viewModel.eventHandler.receiveAsFlow().collect {
-            it(object : TabsScreenViewModel.Event {
-                override fun closeTab(tabId: String) {
-                    onCloseTab(tabId)
-                }
-            })
-        }
-    }
-
     when (val loadingState = uiState.loadingState) {
         is TabsScreenUiState.LoadingState.Loading -> {
             Box(
@@ -145,7 +119,7 @@ internal fun TabsScreen(
                 groupedTabs = loadingState.groupedTabs,
                 groups = loadingState.groups,
                 activeGroupIndex = loadingState.activeGroupIndex,
-                selectedTabId = selectedTabId,
+                selectedTabId = loadingState.selectedTabId,
                 onSelectTab = onSelectTab,
                 onCloseTab = uiState.callbacks::onCloseTab,
                 onOpenNewTab = onOpenNewTab,
@@ -280,10 +254,7 @@ private fun TabsScreenLoadedContent(
                     .testTag(TabsScreenTestTags.AddTabButton.testTag)
                     .padding(16.dp),
             ) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_add_24dp),
-                    contentDescription = "新規タブ",
-                )
+                Icon(imageVector = Icons.Default.Add, contentDescription = "新規タブ")
             }
         }
     ) { paddingValues ->

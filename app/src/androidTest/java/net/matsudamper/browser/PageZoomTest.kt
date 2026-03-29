@@ -11,7 +11,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import net.matsudamper.browser.screen.tab.TabsScreenTestTags
+import net.matsudamper.browser.ui.tabs.TabsScreenTestTags
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test

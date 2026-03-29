@@ -12,7 +12,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import net.matsudamper.browser.screen.tab.TabsScreenTestTags
+import net.matsudamper.browser.ui.tabs.TabsScreenTestTags
 import org.junit.After
 import org.junit.Assert.assertTrue
 import org.junit.Before
