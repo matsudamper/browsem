@@ -1,4 +1,4 @@
-package net.matsudamper.browser.screen.tab
+package net.matsudamper.browser.ui.tabs
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -29,13 +31,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import net.matsudamper.browser.R
 
 @Composable
 internal fun TabCard(
@@ -88,8 +88,8 @@ internal fun TabCard(
                     modifier = Modifier.offset { IntOffset(4, -4) },
                 ) {
                     Icon(
-                        painter = painterResource(R.drawable.close_24dp),
-                        contentDescription = "close"
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "close",
                     )
                 }
             }

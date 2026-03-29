@@ -1,4 +1,4 @@
-package net.matsudamper.browser.screen.tab
+package net.matsudamper.browser.ui.tabs
 
 import net.matsudamper.browser.data.TabGroupData
 
@@ -25,6 +25,13 @@ data class TabsScreenUiState(
             val groupedTabs: List<List<TabsScreenTabData>>,
             val groups: List<TabGroupData>,
             val activeGroupIndex: Int,
+            val selectedTabId: String?,
         ) : LoadingState
     }
 }
+
+data class TabsScreenTabData(
+    val id: String,
+    val title: String,
+    val previewBitmapArray: ByteArray?,
+)

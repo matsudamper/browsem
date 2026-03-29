@@ -11,7 +11,7 @@ import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.junit4.AndroidComposeTestRule
-import net.matsudamper.browser.screen.tab.TabsScreenTestTags
+import net.matsudamper.browser.ui.tabs.TabsScreenTestTags
 
 internal fun AndroidComposeTestRule<*, MainActivity>.openUrlViaViewIntent(url: String) {
     val uri = Uri.parse(url)

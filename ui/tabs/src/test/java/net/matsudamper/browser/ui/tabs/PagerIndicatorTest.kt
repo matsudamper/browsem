@@ -1,4 +1,4 @@
-package net.matsudamper.browser.screen.tab
+package net.matsudamper.browser.ui.tabs
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull

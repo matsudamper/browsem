@@ -1,4 +1,4 @@
-package net.matsudamper.browser.screen.tab
+package net.matsudamper.browser.ui.tabs
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
