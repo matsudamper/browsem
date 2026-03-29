@@ -47,18 +47,18 @@ internal class GeckoDownloadManager(
                 referrerUrl = referrerUrl,
                 enqueuedAt = System.currentTimeMillis(),
             )
+            WorkManager.getInstance(context).enqueue(workRequest)
+            // Workerが起動する前から即座に通知を表示する
+            val notification = NotificationCompat.Builder(context, DownloadWorker.CHANNEL_ID)
+                .setSmallIcon(android.R.drawable.stat_sys_download)
+                .setContentTitle(context.getString(R.string.download_notification_starting))
+                .setProgress(100, 0, true)
+                .setOngoing(true)
+                .setOnlyAlertOnce(true)
+                .build()
+            context.getSystemService(NotificationManager::class.java)
+                .notify(notificationId, notification)
         }
-        WorkManager.getInstance(context).enqueue(workRequest)
-        // Workerが起動する前から即座に通知を表示する
-        val notification = NotificationCompat.Builder(context, DownloadWorker.CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.stat_sys_download)
-            .setContentTitle(context.getString(R.string.download_notification_starting))
-            .setProgress(100, 0, true)
-            .setOngoing(true)
-            .setOnlyAlertOnce(true)
-            .build()
-        context.getSystemService(NotificationManager::class.java)
-            .notify(notificationId, notification)
     }
 
     /**
@@ -110,16 +110,16 @@ internal class GeckoDownloadManager(
                 referrerUrl = referrerUrl,
                 enqueuedAt = System.currentTimeMillis(),
             )
+            WorkManager.getInstance(context).enqueue(workRequest)
+            val notification = NotificationCompat.Builder(context, DownloadWorker.CHANNEL_ID)
+                .setSmallIcon(android.R.drawable.stat_sys_download)
+                .setContentTitle(context.getString(R.string.download_notification_resuming))
+                .setProgress(100, 0, true)
+                .setOngoing(true)
+                .setOnlyAlertOnce(true)
+                .build()
+            context.getSystemService(NotificationManager::class.java)
+                .notify(notificationId, notification)
         }
-        WorkManager.getInstance(context).enqueue(workRequest)
-        val notification = NotificationCompat.Builder(context, DownloadWorker.CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.stat_sys_download)
-            .setContentTitle(context.getString(R.string.download_notification_resuming))
-            .setProgress(100, 0, true)
-            .setOngoing(true)
-            .setOnlyAlertOnce(true)
-            .build()
-        context.getSystemService(NotificationManager::class.java)
-            .notify(notificationId, notification)
     }
 }
