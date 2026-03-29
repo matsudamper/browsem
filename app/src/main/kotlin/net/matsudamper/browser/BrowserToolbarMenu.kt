@@ -2,12 +2,12 @@ package net.matsudamper.browser
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.Checkbox
@@ -25,7 +25,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
@@ -324,30 +323,37 @@ internal fun ToolbarMenu(
                 onAddToHomeScreen()
             },
         )
-        DropdownMenuItem(
-            text = {
-                Text(text = "ページ内検索")
-            },
-            leadingIcon = {
-                Icon(
-                    painter = painterResource(id = R.drawable.ic_search_24dp),
-                    contentDescription = null,
-                )
-            },
-            // 長押しのみ pointerInput で拡張し、通常クリックは onClick に残す（キーボード・アクセシビリティ対応）
-            modifier = Modifier.pointerInput(Unit) {
-                detectTapGestures(
-                    onLongPress = {
+        // DropdownMenuItemはonLongClickを持たないため、combinedClickableを使うカスタム項目で長押しを実装する
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .combinedClickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = ripple(),
+                    onLongClick = {
                         onDismissRequest()
                         onFindInPageRegex()
                     },
+                    onClick = {
+                        onDismissRequest()
+                        onFindInPage()
+                    },
                 )
-            },
-            onClick = {
-                onDismissRequest()
-                onFindInPage()
-            },
-        )
+                .heightIn(min = 48.dp)
+                .padding(horizontal = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                painter = painterResource(id = R.drawable.ic_search_24dp),
+                contentDescription = null,
+                tint = LocalContentColor.current,
+            )
+            Text(
+                text = "ページ内検索",
+                style = MaterialTheme.typography.labelLarge,
+                modifier = Modifier.padding(start = 12.dp),
+            )
+        }
         DropdownMenuItem(
             text = {
                 Text(text = "設定")
