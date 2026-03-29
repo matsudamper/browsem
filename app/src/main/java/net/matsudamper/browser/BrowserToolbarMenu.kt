@@ -1,5 +1,6 @@
 package net.matsudamper.browser
 
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -18,6 +19,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -37,6 +39,7 @@ internal fun ToolbarMenu(
     onTranslatePage: () -> Unit,
     onShare: () -> Unit,
     onFindInPage: () -> Unit,
+    onFindInPageRegex: () -> Unit,
     onOpenSettings: () -> Unit,
     onAddToHomeScreen: () -> Unit,
     isSimpleView: Boolean,
@@ -256,10 +259,20 @@ internal fun ToolbarMenu(
                     contentDescription = null,
                 )
             },
-            onClick = {
-                onDismissRequest()
-                onFindInPage()
+            // pointerInput で tap / 長押しを区別して処理し、onClick は使わない
+            modifier = Modifier.pointerInput(Unit) {
+                detectTapGestures(
+                    onTap = {
+                        onDismissRequest()
+                        onFindInPage()
+                    },
+                    onLongPress = {
+                        onDismissRequest()
+                        onFindInPageRegex()
+                    },
+                )
             },
+            onClick = {},
         )
         DropdownMenuItem(
             text = {

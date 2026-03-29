@@ -443,6 +443,7 @@ internal fun GeckoBrowserTab(
                     isPcMode = state.isPcMode,
                     onPcModeToggle = state::togglePcMode,
                     onFindInPage = state::openFindInPage,
+                    onFindInPageRegex = state::openFindInPageRegex,
                     toolbarColor = state.toolbarColor,
                     onHome = state::onHome,
                     onForward = state::onGoForward,

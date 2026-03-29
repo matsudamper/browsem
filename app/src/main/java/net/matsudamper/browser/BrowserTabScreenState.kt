@@ -258,6 +258,11 @@ internal class BrowserTabScreenState(
         showFindInPage = true
     }
 
+    fun openFindInPageRegex() {
+        findIsRegex = true
+        showFindInPage = true
+    }
+
     fun closeFindInPage() {
         showFindInPage = false
         findInPageWebExtension.clear(session)
