@@ -21,6 +21,21 @@ object TabSelectionPolicy {
                 return openerTab.id
             }
         }
+        // 同グループ内のタブを優先する
+        val closingTabGroupId = state.tabGroupAssignments[closingTabId]
+        if (closingTabGroupId != null) {
+            val closingTabIndex = state.tabs.indexOfFirst { it.id == closingTabId }
+            val sameGroupTabs = remainingTabs.filter { state.tabGroupAssignments[it.id] == closingTabGroupId }
+            if (sameGroupTabs.isNotEmpty()) {
+                // 閉じるタブの前にある同グループのタブを選択
+                val previousInGroup = sameGroupTabs.lastOrNull { tab ->
+                    state.tabs.indexOfFirst { it.id == tab.id } < closingTabIndex
+                }
+                if (previousInGroup != null) return previousInGroup.id
+                // 前がない場合は同グループの次のタブ
+                return sameGroupTabs.first().id
+            }
+        }
         return remainingTabs.last().id
     }
 }
