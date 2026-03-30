@@ -10,10 +10,12 @@ import kotlinx.coroutines.withContext
 import net.matsudamper.browser.data.TabRepository
 
 internal class BrowserTabPersistenceCoordinator(
-    private val tabRepository: TabRepository,
+    tabRepository: TabRepository,
     private val controllerScope: CoroutineScope,
-    private val enabled: Boolean = true,
+    private val isSinglePage: Boolean,
 ) {
+    // CustomTabs等のTabに依存しない場合はTabの保存を利用しない
+    private val tabRepository = tabRepository.takeIf { isSinglePage }
     private val persistenceMutex = Mutex()
 
     suspend fun awaitIdle() {
@@ -54,7 +56,7 @@ internal class BrowserTabPersistenceCoordinator(
         insertIndex: Int,
         selected: Boolean,
     ) {
-        if (!enabled) return
+        tabRepository ?: return
         val persistedTab = tab.toPersistedTabState()
         withContext(Dispatchers.IO) {
             persistenceMutex.withLock {
@@ -98,7 +100,7 @@ internal class BrowserTabPersistenceCoordinator(
     }
 
     fun persistPreviewBitmap(tabId: String, previewBitmap: ByteArray?) {
-        if (!enabled) return
+        tabRepository ?: return
         controllerScope.launch(Dispatchers.IO) {
             if (previewBitmap != null && previewBitmap.isNotEmpty()) {
                 runCatching {
@@ -111,7 +113,7 @@ internal class BrowserTabPersistenceCoordinator(
     }
 
     private fun enqueue(action: suspend (TabRepository) -> Unit) {
-        if (!enabled) return
+        tabRepository ?: return
         controllerScope.launch(Dispatchers.IO) {
             persistenceMutex.withLock {
                 runCatching {

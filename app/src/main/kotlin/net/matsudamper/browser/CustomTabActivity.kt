@@ -78,7 +78,11 @@ class CustomTabActivity : ComponentActivity() {
 
         // 拡張機能は Koin の single で管理されるため、ここではセッション管理のみ担当する
         // カスタムタブは一時的なセッションのため、タブ状態をDBに永続化しない
-        browserTabController = BrowserTabController(tabRepository, persistTabs = false)
+        browserTabController = BrowserTabController(
+            tabRepository = tabRepository,
+            tabGroupRepository = null,
+            isSinglePage = true,
+        )
         browserSessionLifecycleController = BrowserSessionLifecycleController(runtime)
 
         val initialUrl = intent.dataString.orEmpty()
@@ -97,24 +101,24 @@ class CustomTabActivity : ComponentActivity() {
                         testTagsAsResourceId = true
                     },
                 ) {
-                CustomTabScreen(
-                    initialUrl = initialUrl.takeIf { it.isNotBlank() } ?: browserSettings.resolvedHomepageUrl(),
-                    customTabsSessionToken = customTabsSessionToken,
-                    homepageUrl = browserSettings.resolvedHomepageUrl(),
-                    searchTemplate = browserSettings.resolvedSearchTemplate(),
-                    translationProvider = browserSettings.translationProvider,
-                    browserTabController = browserTabController,
-                    browserSessionLifecycleController = browserSessionLifecycleController,
-                    settingsRepository = settingsRepository,
-                    historyRepository = historyRepository,
-                    webSuggestionRepository = webSuggestionRepository,
-                    themeColorExtension = themeColorExtension,
-                    mediaWebExtension = mediaWebExtensionInstance,
-                    onClose = ::finish,
-                    onOpenInBrowser = ::openInMainBrowser,
-                    onDesktopNotificationPermissionRequest = { requestNotificationPermissionIfNeeded() },
-                    onRequestDownloadNotificationPermission = { requestDownloadNotificationPermission() },
-                )
+                    CustomTabScreen(
+                        initialUrl = initialUrl.takeIf { it.isNotBlank() } ?: browserSettings.resolvedHomepageUrl(),
+                        customTabsSessionToken = customTabsSessionToken,
+                        homepageUrl = browserSettings.resolvedHomepageUrl(),
+                        searchTemplate = browserSettings.resolvedSearchTemplate(),
+                        translationProvider = browserSettings.translationProvider,
+                        browserTabController = browserTabController,
+                        browserSessionLifecycleController = browserSessionLifecycleController,
+                        settingsRepository = settingsRepository,
+                        historyRepository = historyRepository,
+                        webSuggestionRepository = webSuggestionRepository,
+                        themeColorExtension = themeColorExtension,
+                        mediaWebExtension = mediaWebExtensionInstance,
+                        onClose = ::finish,
+                        onOpenInBrowser = ::openInMainBrowser,
+                        onDesktopNotificationPermissionRequest = { requestNotificationPermissionIfNeeded() },
+                        onRequestDownloadNotificationPermission = { requestDownloadNotificationPermission() },
+                    )
                 }
             }
         }
