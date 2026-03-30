@@ -26,15 +26,20 @@ import net.matsudamper.browser.data.TabRepository
 import org.mozilla.geckoview.GeckoSession
 import java.util.UUID
 
+/**
+ * @param isSinglePage Tabに依存しない。Tabの保存機能が無効化される
+ */
 @Stable
 class BrowserTabController(
     private val tabRepository: TabRepository,
-    private val tabGroupRepository: TabGroupRepository? = null,
+    private val tabGroupRepository: TabGroupRepository?,
+    isSinglePage: Boolean,
 ) : TabStore {
     private val controllerScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val persistenceCoordinator = BrowserTabPersistenceCoordinator(
         tabRepository = tabRepository,
         controllerScope = controllerScope,
+        isSinglePage = isSinglePage,
     )
     // セッション中に closeTab で閉じたタブの ID を記録する。
     // NavDisplay の遷移アニメーション中に BrowserScreen が再コンポーズされても

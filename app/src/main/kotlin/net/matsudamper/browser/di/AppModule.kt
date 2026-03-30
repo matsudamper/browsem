@@ -46,6 +46,6 @@ val appModule = module {
     single { ReadabilityWebExtension().also { it.install(get()) } }
     single { FindInPageWebExtension().also { it.install(get()) } }
     factory { GeckoDownloadManager(androidContext(), get()) }
-    viewModel { BrowserViewModel(get(), get(), get(), get(), get(), get(), get(), get()) }
+    viewModel { BrowserViewModel(get(), get(), get(), get(), get(), get()) }
     worker { DownloadWorker(get(), get(), get()) }
 }
