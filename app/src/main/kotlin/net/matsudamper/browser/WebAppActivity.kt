@@ -67,7 +67,11 @@ class WebAppActivity : ComponentActivity() {
         runtime.settings.setExtensionsWebAPIEnabled(true)
 
         // 拡張機能は Koin の single で管理されるため、ここではセッション管理のみ担当する
-        browserTabController = BrowserTabController(tabRepository)
+        browserTabController = BrowserTabController(
+            tabRepository = tabRepository,
+            tabGroupRepository = null,
+            isSinglePage = true,
+        )
         browserSessionLifecycleController = BrowserSessionLifecycleController(runtime)
 
         // 外部アプリから任意のURLが渡されないよう、http/https スキームのみ許可する

@@ -7,7 +7,6 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
@@ -51,13 +50,15 @@ internal class BrowserViewModel(
     val runtime: GeckoRuntime,
     val themeColorExtension: ThemeColorWebExtension,
     val mediaWebExtension: net.matsudamper.browser.media.MediaWebExtension,
-    val readabilityWebExtension: ReadabilityWebExtension,
     private val settingsRepository: SettingsRepository,
     private val tabRepository: TabRepository,
     private val tabGroupRepository: TabGroupRepository,
-    internal val historyRepository: net.matsudamper.browser.data.history.HistoryRepository,
 ) : ViewModel() {
-    val browserTabController = BrowserTabController(tabRepository, tabGroupRepository)
+    val browserTabController = BrowserTabController(
+        tabRepository = tabRepository,
+        tabGroupRepository = tabGroupRepository,
+        isSinglePage = false,
+    )
     val browserSessionLifecycleController = BrowserSessionLifecycleController(runtime)
 
     // 構成変更を経ても破棄されないよう ViewModel で保持するセットアップ完了シグナル
