@@ -44,6 +44,9 @@ class NotificationPermissionDialogTest {
 
     private var server: NotificationPermissionTestServer? = null
 
+    @Volatile
+    private var serverError: Throwable? = null
+
     @Before
     fun setUp() {
         // POST_NOTIFICATIONS を事前に付与することで Android システムダイアログをスキップし、
@@ -59,6 +62,13 @@ class NotificationPermissionDialogTest {
 
     @After
     fun tearDown() {
+        // setUp() で付与した通知権限を後続テストへ漏らさないよう revoke する
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val instrumentation = InstrumentationRegistry.getInstrumentation()
+            instrumentation.uiAutomation.executeShellCommand(
+                "pm revoke ${instrumentation.targetContext.packageName} android.permission.POST_NOTIFICATIONS"
+            ).close()
+        }
         server?.close()
         server = null
     }
@@ -81,6 +91,7 @@ class NotificationPermissionDialogTest {
         // Notification.requestPermission() の結果が URL ハッシュに反映されるまで待機する。
         // バグがある場合はここでタイムアウトする（Promise が永遠に pending のまま）。
         composeRule.waitUntil(timeoutMillis = 15_000) {
+            serverError?.let { throw AssertionError("NotificationPermissionTestServer でエラーが発生しました", it) }
             val url = composeRule.currentUrlBarText()
             url.contains("#permission-granted") || url.contains("#permission-denied")
         }
@@ -123,6 +134,10 @@ class NotificationPermissionDialogTest {
             while (!serverSocket.isClosed) {
                 val socket = runCatching { serverSocket.accept() }.getOrNull() ?: break
                 runCatching { handleRequest(socket) }
+                    .onFailure { error ->
+                        serverError = error
+                        runCatching { serverSocket.close() }
+                    }
             }
         }.apply {
             isDaemon = true
