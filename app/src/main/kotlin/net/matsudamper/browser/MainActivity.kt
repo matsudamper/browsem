@@ -35,6 +35,7 @@ import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.WebNotification
 import org.mozilla.geckoview.WebNotificationDelegate
+import org.mozilla.geckoview.WebPushDelegate
 import java.net.URI
 import java.util.concurrent.CancellationException
 
@@ -106,6 +107,23 @@ class MainActivity : ComponentActivity() {
         result
     }
 
+    // FCM 未実装のため onSubscribe は即座に reject する。
+    // delegate を設定しない場合 PushManager.subscribe() が解決されず JS Promise がハングするため、
+    // 必ず登録すること。
+    private val webPushDelegate = object : WebPushDelegate {
+        override fun onSubscribe(scope: String, appServerKey: ByteArray?): GeckoResult<org.mozilla.geckoview.WebPushSubscription>? {
+            return GeckoResult.fromException(RuntimeException("Web Push is not supported: FCM integration is not configured."))
+        }
+
+        override fun onGetSubscription(scope: String): GeckoResult<org.mozilla.geckoview.WebPushSubscription>? {
+            return GeckoResult.fromValue(null)
+        }
+
+        override fun onUnsubscribe(scope: String): GeckoResult<Void>? {
+            return GeckoResult.fromValue(null)
+        }
+    }
+
     private val webNotificationDelegate = object : WebNotificationDelegate {
         override fun onShowNotification(notification: WebNotification) {
             val source = notification.source ?: return
@@ -154,6 +172,7 @@ class MainActivity : ComponentActivity() {
         runtime.webExtensionController.setPromptDelegate(extensionInstaller.promptDelegate)
         runtime.webExtensionController.setAddonManagerDelegate(extensionInstaller.addonManagerDelegate)
         runtime.webNotificationDelegate = webNotificationDelegate
+        runtime.webPushController.setDelegate(webPushDelegate)
         warmUpWebExtensionController()
 
         // ACTION_OPEN_DOWNLOADS は savedInstanceState の有無にかかわらず処理する。
@@ -306,6 +325,7 @@ class MainActivity : ComponentActivity() {
             runtime.webExtensionController.setPromptDelegate(null)
         }
         runtime.webExtensionController.setAddonManagerDelegate(null)
+        runtime.webPushController.setDelegate(null)
         super.onDestroy()
     }
 

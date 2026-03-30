@@ -117,12 +117,19 @@ internal class BrowserViewModel(
             return GeckoResult.fromValue(GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW)
         }
         val androidResult = onDesktopNotificationPermissionRequest()
-        return androidResult.then { value ->
-            if (value == GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW) {
-                viewModelScope.launch { settingsRepository.addNotificationAllowedOrigin(uri) }
-            }
-            GeckoResult.fromValue(value)
-        }
+        // 例外が発生した場合（別のリクエストが進行中など）は DENY を返す。
+        // exception listener を指定しないと例外が伝播し GeckoView が JS Promise を解決しない恐れがある。
+        return androidResult.then(
+            { value ->
+                if (value == GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW) {
+                    viewModelScope.launch { settingsRepository.addNotificationAllowedOrigin(uri) }
+                }
+                GeckoResult.fromValue(value)
+            },
+            { _ ->
+                GeckoResult.fromValue(GeckoSession.PermissionDelegate.ContentPermission.VALUE_DENY)
+            },
+        )
     }
 
     suspend fun createTabWithHomepage(
