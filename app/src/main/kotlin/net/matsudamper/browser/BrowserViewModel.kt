@@ -50,11 +50,9 @@ internal class BrowserViewModel(
     val runtime: GeckoRuntime,
     val themeColorExtension: ThemeColorWebExtension,
     val mediaWebExtension: net.matsudamper.browser.media.MediaWebExtension,
-    val readabilityWebExtension: ReadabilityWebExtension,
     private val settingsRepository: SettingsRepository,
     private val tabRepository: TabRepository,
     private val tabGroupRepository: TabGroupRepository,
-    internal val historyRepository: net.matsudamper.browser.data.history.HistoryRepository,
 ) : ViewModel() {
     val browserTabController = BrowserTabController(
         tabRepository = tabRepository,
