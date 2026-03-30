@@ -77,7 +77,8 @@ class CustomTabActivity : ComponentActivity() {
         runtime.settings.setExtensionsWebAPIEnabled(true)
 
         // 拡張機能は Koin の single で管理されるため、ここではセッション管理のみ担当する
-        browserTabController = BrowserTabController(tabRepository)
+        // カスタムタブは一時的なセッションのため、タブ状態をDBに永続化しない
+        browserTabController = BrowserTabController(tabRepository, persistTabs = false)
         browserSessionLifecycleController = BrowserSessionLifecycleController(runtime)
 
         val initialUrl = intent.dataString.orEmpty()

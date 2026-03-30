@@ -12,6 +12,7 @@ import net.matsudamper.browser.data.TabRepository
 internal class BrowserTabPersistenceCoordinator(
     private val tabRepository: TabRepository,
     private val controllerScope: CoroutineScope,
+    private val enabled: Boolean = true,
 ) {
     private val persistenceMutex = Mutex()
 
@@ -53,6 +54,7 @@ internal class BrowserTabPersistenceCoordinator(
         insertIndex: Int,
         selected: Boolean,
     ) {
+        if (!enabled) return
         val persistedTab = tab.toPersistedTabState()
         withContext(Dispatchers.IO) {
             persistenceMutex.withLock {
@@ -96,6 +98,7 @@ internal class BrowserTabPersistenceCoordinator(
     }
 
     fun persistPreviewBitmap(tabId: String, previewBitmap: ByteArray?) {
+        if (!enabled) return
         controllerScope.launch(Dispatchers.IO) {
             if (previewBitmap != null && previewBitmap.isNotEmpty()) {
                 runCatching {
@@ -108,6 +111,7 @@ internal class BrowserTabPersistenceCoordinator(
     }
 
     private fun enqueue(action: suspend (TabRepository) -> Unit) {
+        if (!enabled) return
         controllerScope.launch(Dispatchers.IO) {
             persistenceMutex.withLock {
                 runCatching {

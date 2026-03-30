@@ -30,11 +30,13 @@ import java.util.UUID
 class BrowserTabController(
     private val tabRepository: TabRepository,
     private val tabGroupRepository: TabGroupRepository? = null,
+    persistTabs: Boolean = true,
 ) : TabStore {
     private val controllerScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val persistenceCoordinator = BrowserTabPersistenceCoordinator(
         tabRepository = tabRepository,
         controllerScope = controllerScope,
+        enabled = persistTabs,
     )
     // セッション中に closeTab で閉じたタブの ID を記録する。
     // NavDisplay の遷移アニメーション中に BrowserScreen が再コンポーズされても
