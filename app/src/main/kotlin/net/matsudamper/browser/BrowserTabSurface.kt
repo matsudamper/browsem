@@ -134,10 +134,11 @@ internal fun BrowserContentHost(
             }
         }
         if (!state.renderReady) {
-            if (previewBitmap != null) {
+            val bitmap = previewBitmap
+            if (bitmap != null) {
                 Image(
                     modifier = Modifier.fillMaxSize(),
-                    bitmap = previewBitmap.asImageBitmap(),
+                    bitmap = bitmap.asImageBitmap(),
                     contentDescription = null,
                     contentScale = ContentScale.FillWidth,
                     alignment = Alignment.TopStart,
