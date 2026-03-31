@@ -21,9 +21,7 @@ import net.matsudamper.browser.data.TabRepository
 import net.matsudamper.browser.data.ThemeMode
 import net.matsudamper.browser.data.TranslationProvider
 import net.matsudamper.browser.data.resolvedBrowserSettings
-import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoRuntime
-import org.mozilla.geckoview.GeckoSession
 
 internal data class BrowserAppUiState(
     val themeMode: ThemeMode,
@@ -109,28 +107,14 @@ internal class BrowserViewModel(
         }
     }
 
-    fun handleNotificationPermission(
-        uri: String,
-        onDesktopNotificationPermissionRequest: () -> GeckoResult<Int>,
-    ): GeckoResult<Int> {
-        val allowedOrigins = viewModelStateFlow.value.logicSettings?.notificationAllowedOrigins ?: emptySet()
-        if (allowedOrigins.contains(uri)) {
-            return GeckoResult.fromValue(GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW)
-        }
-        val androidResult = onDesktopNotificationPermissionRequest()
-        // 例外が発生した場合（別のリクエストが進行中など）は DENY を返す。
-        // exception listener を指定しないと例外が伝播し GeckoView が JS Promise を解決しない恐れがある。
-        return androidResult.then(
-            { value ->
-                if (value == GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW) {
-                    viewModelScope.launch { settingsRepository.addNotificationAllowedOrigin(uri) }
-                }
-                GeckoResult.fromValue(value)
-            },
-            { _ ->
-                GeckoResult.fromValue(GeckoSession.PermissionDelegate.ContentPermission.VALUE_DENY)
-            },
-        )
+    /** 指定 URI がユーザーに通知を許可済みかどうかを返す */
+    fun isNotificationOriginAllowed(uri: String): Boolean {
+        return viewModelStateFlow.value.logicSettings?.notificationAllowedOrigins?.contains(uri) == true
+    }
+
+    /** 指定 URI を通知許可済みオリジンとして保存する */
+    fun addNotificationAllowedOrigin(uri: String) {
+        viewModelScope.launch { settingsRepository.addNotificationAllowedOrigin(uri) }
     }
 
     suspend fun createTabWithHomepage(

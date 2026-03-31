@@ -70,6 +70,12 @@ import net.matsudamper.browser.ui.settings.SettingsScreen
 import net.matsudamper.browser.ui.tabs.TabsScreen
 import org.koin.compose.koinInject
 import org.mozilla.geckoview.GeckoResult
+import org.mozilla.geckoview.GeckoSession
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 
 @Composable
 internal fun BrowserApp(
@@ -145,11 +151,21 @@ internal fun BrowserApp(
         }
     }
 
+    // ユーザーへの通知許可ダイアログ表示に使う保留リクエスト
+    var pendingNotificationPermissionRequest by remember { mutableStateOf<NotificationPermissionRequest?>(null) }
+
     val handleNotificationPermission: (uri: String) -> GeckoResult<Int> = { uri ->
-        viewModel.handleNotificationPermission(
-            uri = uri,
-            onDesktopNotificationPermissionRequest = onDesktopNotificationPermissionRequest,
-        )
+        if (viewModel.isNotificationOriginAllowed(uri)) {
+            // 既に許可済みのオリジンは即座に ALLOW
+            GeckoResult.fromValue(GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW)
+        } else if (pendingNotificationPermissionRequest != null) {
+            // 別の許可ダイアログを表示中は DENY で即答する
+            GeckoResult.fromValue(GeckoSession.PermissionDelegate.ContentPermission.VALUE_DENY)
+        } else {
+            val result = GeckoResult<Int>()
+            pendingNotificationPermissionRequest = NotificationPermissionRequest(uri, result)
+            result
+        }
     }
 
     BackHandler(enabled = navController.isLastBackHandled) {
@@ -495,6 +511,39 @@ internal fun BrowserApp(
                 }
             },
         )
+        // サイトから Notification.requestPermission() が呼ばれたときの許可確認ダイアログ
+        pendingNotificationPermissionRequest?.let { request ->
+            NotificationPermissionDialog(
+                uri = request.uri,
+                onAllow = {
+                    pendingNotificationPermissionRequest = null
+                    // Android の POST_NOTIFICATIONS 権限を要求し結果を GeckoResult へ伝搬する。
+                    // exception listener を指定しないと例外が伝播し JS Promise がハングする恐れがある。
+                    val androidResult = onDesktopNotificationPermissionRequest()
+                    androidResult.then<Void>(
+                        { value ->
+                            if (value == GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW) {
+                                viewModel.addNotificationAllowedOrigin(request.uri)
+                            }
+                            request.result.complete(value)
+                            null
+                        },
+                        { _ ->
+                            request.result.complete(
+                                GeckoSession.PermissionDelegate.ContentPermission.VALUE_DENY,
+                            )
+                            null
+                        },
+                    )
+                },
+                onDeny = {
+                    pendingNotificationPermissionRequest = null
+                    request.result.complete(
+                        GeckoSession.PermissionDelegate.ContentPermission.VALUE_DENY,
+                    )
+                },
+            )
+        }
     }
 }
 
@@ -533,4 +582,37 @@ private fun <T : NavKey> AnimatedContentTransitionScope<Scene<T>>.popTransition(
     }
 
     return default
+}
+
+/** サイトの通知許可リクエストを保留するデータクラス */
+private data class NotificationPermissionRequest(
+    val uri: String,
+    val result: GeckoResult<Int>,
+)
+
+/** サイト名を表示して通知を許可するかユーザーに確認するダイアログ */
+@Composable
+private fun NotificationPermissionDialog(
+    uri: String,
+    onAllow: () -> Unit,
+    onDeny: () -> Unit,
+) {
+    val host = remember(uri) {
+        try {
+            java.net.URI(uri).host?.takeIf { it.isNotBlank() } ?: uri
+        } catch (_: Exception) {
+            uri
+        }
+    }
+    AlertDialog(
+        onDismissRequest = onDeny,
+        title = { Text(host) },
+        text = { Text("このサイトからの通知を受け取りますか？") },
+        confirmButton = {
+            TextButton(onClick = onAllow) { Text("許可") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDeny) { Text("ブロック") }
+        },
+    )
 }
