@@ -172,7 +172,7 @@ internal class BrowserTabScreenState(
     var renderReady by mutableStateOf(false)
     var pageLoadError by mutableStateOf<PageLoadError?>(null)
 
-    // --- ページズーム状態（viewport width 操作によりテキスト・画像含め全体をズーム）---
+    // --- ズーム状態（viewport width 操作によりテキスト・画像含め全体をズーム）---
     var pageZoomPercent by mutableIntStateOf(100)
         private set
 
