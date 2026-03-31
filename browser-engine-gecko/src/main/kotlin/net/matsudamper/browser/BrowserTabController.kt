@@ -79,60 +79,78 @@ class BrowserTabController(
     fun wasTabClosed(tabId: String): Boolean = tabId in closedTabIds
 
     suspend fun restoreTabs(homepageUrl: String): String {
-        if (restoreState != RestoreState.NOT_STARTED) {
-            // 2回目以降の呼び出し（構成変更後など）はスキップして現在の選択タブIDを返す
-            Log.d(TAG, "restoreTabs() は既に呼び出されています (状態: $restoreState)")
-            return selectedTabId ?: withContext(Dispatchers.Main.immediate) {
-                createAndAppendInitialTab(homepageUrl).tabId
+        when (restoreState) {
+            RestoreState.COMPLETED -> {
+                // 構成変更後の再呼び出し。既に復元済みなので現在の選択タブIDを返す
+                Log.d(TAG, "restoreTabs(): 復元済みのためスキップ")
+                return selectedTabId ?: withContext(Dispatchers.Main.immediate) {
+                    createAndAppendInitialTab(homepageUrl).tabId
+                }
             }
+            RestoreState.IN_PROGRESS -> {
+                // 別のコルーチンで復元中。完了を待機してから返す
+                Log.d(TAG, "restoreTabs(): 進行中の復元を待機")
+                _restoreComplete.await()
+                return selectedTabId ?: withContext(Dispatchers.Main.immediate) {
+                    createAndAppendInitialTab(homepageUrl).tabId
+                }
+            }
+            RestoreState.NOT_STARTED -> { /* 以下で復元処理を実行 */ }
         }
         restoreState = RestoreState.IN_PROGRESS
-        val snapshot = withContext(Dispatchers.IO) {
-            val persisted = tabRepository.loadTabs()
-            RestoredTabs(
-                tabs = persisted.tabs.map { tab ->
-                    RestoredTab(
-                        persistedTabState = tab,
-                        previewImageWebp = tabRepository.loadTabThumbnail(tab.tabId) ?: byteArrayOf(),
-                    )
-                },
-                selectedTabId = persisted.selectedTabId,
-            )
-        }
-        withContext(Dispatchers.Main.immediate) {
-            if (snapshot.tabs.isEmpty()) {
-                createAndAppendInitialTab(homepageUrl, persist = false)
-            } else {
-                snapshot.tabs.forEachIndexed { index, restored ->
-                    val tab = createRegisteredTab(
-                        tabId = restored.persistedTabState.tabId,
-                        session = GeckoSession(),
-                        initialUrl = restored.persistedTabState.url.ifBlank { homepageUrl },
-                        sessionState = restored.persistedTabState.sessionState,
-                        title = restored.persistedTabState.title,
-                        previewBitmapArray = restored.previewImageWebp,
-                        themeColor = restored.persistedTabState.themeColor,
-                        openerTabId = restored.persistedTabState.openerTabId.ifBlank { null },
-                        insertIndex = index,
-                    )
-                    tab.pendingSessionState =
-                        restored.persistedTabState.sessionState.takeIf { it.isNotBlank() }
-                }
-                publishRuntimeState(snapshot.selectedTabId)
-            }
-        }
-        if (snapshot.tabs.isEmpty()) {
-            val initialTab = tabRegistry.firstOrNull()
-            if (initialTab != null) {
-                persistenceCoordinator.persistCreatedTabNow(
-                    tab = initialTab,
-                    insertIndex = 0,
-                    selected = true,
+        try {
+            val snapshot = withContext(Dispatchers.IO) {
+                val persisted = tabRepository.loadTabs()
+                RestoredTabs(
+                    tabs = persisted.tabs.map { tab ->
+                        RestoredTab(
+                            persistedTabState = tab,
+                            previewImageWebp = tabRepository.loadTabThumbnail(tab.tabId) ?: byteArrayOf(),
+                        )
+                    },
+                    selectedTabId = persisted.selectedTabId,
                 )
             }
+            withContext(Dispatchers.Main.immediate) {
+                if (snapshot.tabs.isEmpty()) {
+                    createAndAppendInitialTab(homepageUrl, persist = false)
+                } else {
+                    snapshot.tabs.forEachIndexed { index, restored ->
+                        val tab = createRegisteredTab(
+                            tabId = restored.persistedTabState.tabId,
+                            session = GeckoSession(),
+                            initialUrl = restored.persistedTabState.url.ifBlank { homepageUrl },
+                            sessionState = restored.persistedTabState.sessionState,
+                            title = restored.persistedTabState.title,
+                            previewBitmapArray = restored.previewImageWebp,
+                            themeColor = restored.persistedTabState.themeColor,
+                            openerTabId = restored.persistedTabState.openerTabId.ifBlank { null },
+                            insertIndex = index,
+                        )
+                        tab.pendingSessionState =
+                            restored.persistedTabState.sessionState.takeIf { it.isNotBlank() }
+                    }
+                    publishRuntimeState(snapshot.selectedTabId)
+                }
+            }
+            if (snapshot.tabs.isEmpty()) {
+                val initialTab = tabRegistry.firstOrNull()
+                if (initialTab != null) {
+                    persistenceCoordinator.persistCreatedTabNow(
+                        tab = initialTab,
+                        insertIndex = 0,
+                        selected = true,
+                    )
+                }
+            }
+            restoreState = RestoreState.COMPLETED
+            _restoreComplete.complete(Unit)
+        } catch (e: Exception) {
+            // 異常時は状態をリセットし、await している呼び出し元がハングしないようにする
+            restoreState = RestoreState.NOT_STARTED
+            _restoreComplete.completeExceptionally(e)
+            throw e
         }
-        restoreState = RestoreState.COMPLETED
-        _restoreComplete.complete(Unit)
         startRepositoryObservation()
         return selectedTabId ?: withContext(Dispatchers.Main.immediate) {
             createAndAppendInitialTab(homepageUrl).tabId
