@@ -196,7 +196,7 @@ internal fun ToolbarMenu(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                text = "ページズーム",
+                text = "ズーム",
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.padding(start = 8.dp),
             )

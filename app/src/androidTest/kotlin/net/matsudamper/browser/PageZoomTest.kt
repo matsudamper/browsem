@@ -36,7 +36,7 @@ class PageZoomTest {
     fun initialPageZoomIsHundredPercent() {
         openMenuFromToolbar()
         composeRule.waitUntil(timeoutMillis = 10_000) {
-            composeRule.onAllNodesWithText("ページズーム").fetchSemanticsNodes().isNotEmpty()
+            composeRule.onAllNodesWithText("ズーム").fetchSemanticsNodes().isNotEmpty()
         }
         assertTrue(
             "初期ページズームが100%でない",
@@ -51,7 +51,7 @@ class PageZoomTest {
     fun pageZoomInIncreasesDisplayedPercent() {
         openMenuFromToolbar()
         composeRule.waitUntil(timeoutMillis = 10_000) {
-            composeRule.onAllNodesWithText("ページズーム").fetchSemanticsNodes().isNotEmpty()
+            composeRule.onAllNodesWithText("ズーム").fetchSemanticsNodes().isNotEmpty()
         }
 
         composeRule.onNodeWithContentDescription("拡大").performClick()
@@ -72,7 +72,7 @@ class PageZoomTest {
     fun pageZoomOutDecreasesDisplayedPercent() {
         openMenuFromToolbar()
         composeRule.waitUntil(timeoutMillis = 10_000) {
-            composeRule.onAllNodesWithText("ページズーム").fetchSemanticsNodes().isNotEmpty()
+            composeRule.onAllNodesWithText("ズーム").fetchSemanticsNodes().isNotEmpty()
         }
         // まず拡大して110%にする
         composeRule.onNodeWithContentDescription("拡大").performClick()
@@ -98,7 +98,7 @@ class PageZoomTest {
     fun tappingPercentButtonResetsZoomToHundred() {
         openMenuFromToolbar()
         composeRule.waitUntil(timeoutMillis = 10_000) {
-            composeRule.onAllNodesWithText("ページズーム").fetchSemanticsNodes().isNotEmpty()
+            composeRule.onAllNodesWithText("ズーム").fetchSemanticsNodes().isNotEmpty()
         }
         composeRule.onNodeWithContentDescription("拡大").performClick()
         composeRule.waitUntil(timeoutMillis = 10_000) {
@@ -166,7 +166,7 @@ class PageZoomTest {
     private fun openPageZoomMenuAndSet200Percent() {
         openMenuFromToolbar()
         composeRule.waitUntil(timeoutMillis = 10_000) {
-            composeRule.onAllNodesWithText("ページズーム").fetchSemanticsNodes().isNotEmpty()
+            composeRule.onAllNodesWithText("ズーム").fetchSemanticsNodes().isNotEmpty()
         }
         repeat(5) {
             composeRule.onNodeWithContentDescription("拡大").performClick()
