@@ -14,8 +14,8 @@ internal class BrowserTabPersistenceCoordinator(
     private val controllerScope: CoroutineScope,
     private val isSinglePage: Boolean,
 ) {
-    // CustomTabs等のTabに依存しない場合はTabの保存を利用しない
-    private val tabRepository = tabRepository.takeIf { isSinglePage }
+    // isSinglePage=true（CustomTabs・WebApp等の一時セッション）はDB保存不要なため無効化する
+    private val tabRepository = tabRepository.takeIf { !isSinglePage }
     private val persistenceMutex = Mutex()
 
     suspend fun awaitIdle() {
