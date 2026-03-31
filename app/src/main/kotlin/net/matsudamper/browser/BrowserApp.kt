@@ -84,7 +84,8 @@ internal fun BrowserApp(
     onRequestDownloadNotificationPermission: () -> Unit,
 ) {
     val currentUiState by viewModel.uiState.collectAsState()
-    if (currentUiState == null) {
+    val uiState = currentUiState
+    if (uiState == null) {
         Box(
             modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.Center,
@@ -93,7 +94,7 @@ internal fun BrowserApp(
         }
     } else {
         BrowserAppContent(
-            uiState = currentUiState,
+            uiState = uiState,
             viewModel = viewModel,
             newTabUrlFlow = newTabUrlFlow,
             openDownloadsFlow = openDownloadsFlow,
