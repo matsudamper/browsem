@@ -117,6 +117,7 @@ Proto → DataStore/Room → Repository → ViewModel (StateFlow) → Compose
 - Kotlin コードスタイル: `official` (`gradle.properties` で指定)
 - 最大行長: 200 文字 (`.editorconfig`)
 - import はワイルドカード不使用。個別 import
+- FQCN ではなく import して短縮名を使う（名前衝突時を除く）
 
 ### ファイル命名
 
