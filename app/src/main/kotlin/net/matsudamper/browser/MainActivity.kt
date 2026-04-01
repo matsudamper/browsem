@@ -26,6 +26,7 @@ import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.receiveAsFlow
 import org.koin.android.ext.android.inject
@@ -56,19 +57,29 @@ class MainActivity : ComponentActivity() {
     private val openDownloadsFlow = openDownloadsChannel.receiveAsFlow()
 
     private var pendingNotificationPermissionResult: GeckoResult<Int>? = null
+    private var pendingDownloadNotificationPermissionDeferred: CompletableDeferred<Unit>? = null
 
     private val requestNotificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { isGranted ->
-        val pendingResult = pendingNotificationPermissionResult ?: return@registerForActivityResult
-        pendingNotificationPermissionResult = null
-        pendingResult.complete(
-            if (isGranted) {
-                GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW
-            } else {
-                GeckoSession.PermissionDelegate.ContentPermission.VALUE_DENY
-            }
-        )
+        // GeckoView のデスクトップ通知パーミッション要求の完了
+        val pendingResult = pendingNotificationPermissionResult
+        if (pendingResult != null) {
+            pendingNotificationPermissionResult = null
+            pendingResult.complete(
+                if (isGranted) {
+                    GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW
+                } else {
+                    GeckoSession.PermissionDelegate.ContentPermission.VALUE_DENY
+                }
+            )
+        }
+        // ダウンロード通知パーミッション要求の完了
+        val downloadDeferred = pendingDownloadNotificationPermissionDeferred
+        if (downloadDeferred != null) {
+            pendingDownloadNotificationPermissionDeferred = null
+            downloadDeferred.complete(Unit)
+        }
     }
 
     private val geckoActivityLauncher = registerForActivityResult(
@@ -234,19 +245,24 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * ダウンロード通知を表示するために POST_NOTIFICATIONS パーミッションを要求する。
+     * ダウンロード通知を表示するために POST_NOTIFICATIONS パーミッションを要求し、
+     * ユーザーが GRANT または DENY を選択するまで待機する。
      * GeckoView の通知パーミッション要求が保留中の場合はスキップする。
      */
-    private fun requestDownloadNotificationPermission() {
+    private suspend fun requestDownloadNotificationPermission() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
         if (ContextCompat.checkSelfPermission(
                 this,
                 Manifest.permission.POST_NOTIFICATIONS,
             ) == PackageManager.PERMISSION_GRANTED
         ) return
-        // GeckoView の通知パーミッション要求が保留中の場合は競合を避けるためスキップ
+        // GeckoView の通知パーミッション要求または別のダウンロード通知パーミッション要求が保留中の場合はスキップ
         if (pendingNotificationPermissionResult != null) return
+        if (pendingDownloadNotificationPermissionDeferred != null) return
+        val deferred = CompletableDeferred<Unit>()
+        pendingDownloadNotificationPermissionDeferred = deferred
         requestNotificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        deferred.await()
     }
 
     private fun requestNotificationPermissionIfNeeded(): GeckoResult<Int> {
@@ -297,6 +313,10 @@ class MainActivity : ComponentActivity() {
             CancellationException("Activity was destroyed before notification permission completed.")
         )
         pendingNotificationPermissionResult = null
+        pendingDownloadNotificationPermissionDeferred?.cancel(
+            CancellationException("Activity was destroyed before download notification permission completed.")
+        )
+        pendingDownloadNotificationPermissionDeferred = null
         if (::extensionInstaller.isInitialized && runtime.getActivityDelegate() === activityDelegate) {
             runtime.setActivityDelegate(null)
         }

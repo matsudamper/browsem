@@ -81,7 +81,7 @@ internal fun GeckoBrowserTab(
     tabCount: Int,
     onInstallExtensionRequest: (String) -> Unit,
     onDesktopNotificationPermissionRequest: (String) -> GeckoResult<Int>,
-    onRequestDownloadNotificationPermission: () -> Unit = {},
+    onRequestDownloadNotificationPermission: suspend () -> Unit = {},
     onOpenSettings: () -> Unit,
     onOpenTabs: () -> Unit,
     enableTabUi: Boolean = true,
