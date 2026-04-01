@@ -5,8 +5,6 @@
 GeckoView ベースの Android ブラウザアプリ。
 Kotlin / Jetpack Compose / Material 3 / Navigation 3 / Koin DI。
 
-## モジュール構成
-
 ## 開発コマンド
 
 ```bash
@@ -34,6 +32,7 @@ Kotlin / Jetpack Compose / Material 3 / Navigation 3 / Koin DI。
 
 
 ## アーキテクチャ方針
+ViewModelとUIのやり取りにはクリックイベントも表示もUiStateを経由して行う。これがUIとの唯一の接点。ActivityやOneShotのイベントを行うにはChannelを使ったeventを使用する。
 
 ### データフロー
 
