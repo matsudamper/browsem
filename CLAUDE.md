@@ -57,8 +57,6 @@ Proto → DataStore/Room → Repository → ViewModel(ViewModelStateFlow) → Ui
 
 - 画面 Composable は `internal` visibility
 - State Holder クラスには `@Stable` アノテーション
-- `collectAsState()` で Flow → State 変換
-- `@Preview` は Paparazzi でスクリーンショットテストされる
 
 ### 永続化
 
@@ -85,6 +83,8 @@ Proto → DataStore/Room → Repository → ViewModel(ViewModelStateFlow) → Ui
 - TestTagは直接stringを使用せず、他のtestTagのパターンに合わせる
 
 ## 作業フロー
+
+UIに関連した実装はPaparazziで差分を取って作業するのが良い
 
 ### 変更後
 
