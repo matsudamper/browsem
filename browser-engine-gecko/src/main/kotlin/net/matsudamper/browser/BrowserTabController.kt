@@ -4,8 +4,11 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import android.util.Log
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
@@ -33,8 +36,11 @@ import java.util.UUID
 class BrowserTabController(
     private val tabRepository: TabRepository,
     private val tabGroupRepository: TabGroupRepository?,
-    isSinglePage: Boolean,
+    private val isSinglePage: Boolean,
 ) : TabStore {
+    // タブ復元の状態を追跡する列挙型
+    private enum class RestoreState { NOT_STARTED, IN_PROGRESS, COMPLETED }
+
     private val controllerScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val persistenceCoordinator = BrowserTabPersistenceCoordinator(
         tabRepository = tabRepository,
@@ -52,6 +58,14 @@ class BrowserTabController(
     )
     private val _tabStoreState = MutableStateFlow(TabStoreState())
     private var repositoryObservationStarted = false
+    private var restoreState = RestoreState.NOT_STARTED
+    // タブ復元完了を他のコルーチンから待機するためのシグナル（isSinglePage=true の場合は即完了）
+    // 復元失敗後の再試行に備え、試行ごとに再生成する
+    private var _restoreComplete = CompletableDeferred<Unit>().also {
+        if (isSinglePage) it.complete(Unit)
+    }
+    val restoreComplete: Deferred<Unit>
+        get() = _restoreComplete
 
     override val tabStoreState: StateFlow<TabStoreState> = _tabStoreState.asStateFlow()
 
@@ -67,7 +81,30 @@ class BrowserTabController(
     fun wasTabClosed(tabId: String): Boolean = tabId in closedTabIds
 
     suspend fun restoreTabs(homepageUrl: String): String {
-        if (tabRegistry.isEmpty()) {
+        when (restoreState) {
+            RestoreState.COMPLETED -> {
+                // 構成変更後の再呼び出し。既に復元済みなので現在の選択タブIDを返す
+                Log.d(TAG, "restoreTabs(): 復元済みのためスキップ")
+                return selectedTabId ?: withContext(Dispatchers.Main.immediate) {
+                    createAndAppendInitialTab(homepageUrl).tabId
+                }
+            }
+            RestoreState.IN_PROGRESS -> {
+                // 別のコルーチンで復元中。完了を待機してから返す
+                Log.d(TAG, "restoreTabs(): 進行中の復元を待機")
+                _restoreComplete.await()
+                return selectedTabId ?: withContext(Dispatchers.Main.immediate) {
+                    createAndAppendInitialTab(homepageUrl).tabId
+                }
+            }
+            RestoreState.NOT_STARTED -> { /* 以下で復元処理を実行 */ }
+        }
+        // 前回失敗で例外完了した deferred を再生成して、新しい試行の待機先を提供する
+        if (_restoreComplete.isCompleted) {
+            _restoreComplete = CompletableDeferred()
+        }
+        restoreState = RestoreState.IN_PROGRESS
+        try {
             val snapshot = withContext(Dispatchers.IO) {
                 val persisted = tabRepository.loadTabs()
                 RestoredTabs(
@@ -112,6 +149,13 @@ class BrowserTabController(
                     )
                 }
             }
+            restoreState = RestoreState.COMPLETED
+            _restoreComplete.complete(Unit)
+        } catch (e: Exception) {
+            // 異常時は状態をリセットし、await している呼び出し元がハングしないようにする
+            restoreState = RestoreState.NOT_STARTED
+            _restoreComplete.completeExceptionally(e)
+            throw e
         }
         startRepositoryObservation()
         return selectedTabId ?: withContext(Dispatchers.Main.immediate) {
@@ -148,6 +192,9 @@ class BrowserTabController(
         restoredThemeColor: Int? = null,
         openerTabId: String? = null,
     ): BrowserTab {
+        if (!isSinglePage && restoreState != RestoreState.COMPLETED) {
+            Log.w(TAG, "タブ復元完了前に createAndAppendTab が呼ばれました (状態: $restoreState)")
+        }
         return withContext(Dispatchers.Main) {
             val normalizedInitialUrl = initialUrl.ifBlank { "about:blank" }
             val insertIndex = tabs.size
@@ -176,6 +223,9 @@ class BrowserTabController(
     }
 
     fun createTabForNewSession(initialUrl: String, openerTabId: String? = null): BrowserTab {
+        if (!isSinglePage && restoreState != RestoreState.COMPLETED) {
+            Log.w(TAG, "タブ復元完了前に createTabForNewSession が呼ばれました (状態: $restoreState)")
+        }
         val normalizedInitialUrl = initialUrl.ifBlank { "about:blank" }
         val insertIndex = TabInsertionPolicy.resolveInsertionIndex(
             tabIds = tabs.map { it.tabId },
@@ -207,6 +257,9 @@ class BrowserTabController(
         initialUrl: String,
         openerTabId: String? = null,
     ): BrowserTab {
+        if (!isSinglePage && restoreState != RestoreState.COMPLETED) {
+            Log.w(TAG, "タブ復元完了前に createAndAppendTabWithSession が呼ばれました (状態: $restoreState)")
+        }
         val normalizedInitialUrl = initialUrl.ifBlank { "about:blank" }
         val insertIndex = TabInsertionPolicy.resolveInsertionIndex(
             tabIds = tabs.map { it.tabId },
@@ -368,4 +421,7 @@ class BrowserTabController(
         val previewImageWebp: ByteArray,
     )
 
+    private companion object {
+        private const val TAG = "BrowserTabController"
+    }
 }

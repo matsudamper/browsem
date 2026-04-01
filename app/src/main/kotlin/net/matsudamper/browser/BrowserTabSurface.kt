@@ -375,10 +375,16 @@ private fun CurrentPageUrlListItem(
                     modifier = Modifier.testTag(BrowserTabSurfaceTestTags.CurrentUrlText.testTag),
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TextButton(onClick = onCopyCurrentUrl) {
+                    TextButton(
+                        onClick = onCopyCurrentUrl,
+                        modifier = Modifier.testTag(BrowserTabSurfaceTestTags.CopyButton.testTag),
+                    ) {
                         Text("コピー")
                     }
-                    TextButton(onClick = onRestoreCurrentUrl) {
+                    TextButton(
+                        onClick = onRestoreCurrentUrl,
+                        modifier = Modifier.testTag(BrowserTabSurfaceTestTags.RestoreUrlButton.testTag),
+                    ) {
                         Text("URLバーに戻す")
                     }
                 }
@@ -442,7 +448,10 @@ internal fun PageLoadErrorOverlay(
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TextButton(onClick = onRetry) {
+                TextButton(
+                    onClick = onRetry,
+                    modifier = Modifier.testTag(BrowserTabSurfaceTestTags.RetryButton.testTag),
+                ) {
                     Text("再読み込み")
                 }
             }
@@ -459,4 +468,7 @@ sealed interface BrowserTabSurfaceTestTags {
     object CurrentUrlActions : BrowserTabSurfaceTestTags { override val id = "current_url_actions" }
     object CurrentUrlText : BrowserTabSurfaceTestTags { override val id = "current_url_text" }
     object PageLoadError : BrowserTabSurfaceTestTags { override val id = "page_load_error" }
+    object CopyButton : BrowserTabSurfaceTestTags { override val id = "copy_button" }
+    object RestoreUrlButton : BrowserTabSurfaceTestTags { override val id = "restore_url_button" }
+    object RetryButton : BrowserTabSurfaceTestTags { override val id = "retry_button" }
 }

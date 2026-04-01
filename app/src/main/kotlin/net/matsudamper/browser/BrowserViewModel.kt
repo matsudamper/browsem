@@ -3,7 +3,7 @@ package net.matsudamper.browser
 import androidx.compose.runtime.Stable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -61,8 +61,8 @@ internal class BrowserViewModel(
     )
     val browserSessionLifecycleController = BrowserSessionLifecycleController(runtime)
 
-    // 構成変更を経ても破棄されないよう ViewModel で保持するセットアップ完了シグナル
-    val setupComplete = CompletableDeferred<Unit>()
+    // タブ復元完了シグナル。BrowserTabController が内部で管理し、構成変更後も有効。
+    val setupComplete: Deferred<Unit> get() = browserTabController.restoreComplete
 
     private val viewModelStateFlow = MutableStateFlow(ViewModelState())
     val uiState: StateFlow<BrowserAppUiState?> = MutableStateFlow<BrowserAppUiState?>(null)
@@ -105,7 +105,7 @@ internal class BrowserViewModel(
             if (browserTabController.selectedTabId != tabId) {
                 browserTabController.selectTab(tabId)
             }
-            setupComplete.complete(Unit)
+            // setupComplete は browserTabController.restoreTabs() 内で complete 済み
         }
     }
 
