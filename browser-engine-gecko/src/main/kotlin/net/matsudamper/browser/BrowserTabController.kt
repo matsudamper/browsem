@@ -60,10 +60,12 @@ class BrowserTabController(
     private var repositoryObservationStarted = false
     private var restoreState = RestoreState.NOT_STARTED
     // タブ復元完了を他のコルーチンから待機するためのシグナル（isSinglePage=true の場合は即完了）
-    private val _restoreComplete = CompletableDeferred<Unit>().also {
+    // 復元失敗後の再試行に備え、試行ごとに再生成する
+    private var _restoreComplete = CompletableDeferred<Unit>().also {
         if (isSinglePage) it.complete(Unit)
     }
-    val restoreComplete: Deferred<Unit> = _restoreComplete
+    val restoreComplete: Deferred<Unit>
+        get() = _restoreComplete
 
     override val tabStoreState: StateFlow<TabStoreState> = _tabStoreState.asStateFlow()
 
@@ -96,6 +98,10 @@ class BrowserTabController(
                 }
             }
             RestoreState.NOT_STARTED -> { /* 以下で復元処理を実行 */ }
+        }
+        // 前回失敗で例外完了した deferred を再生成して、新しい試行の待機先を提供する
+        if (_restoreComplete.isCompleted) {
+            _restoreComplete = CompletableDeferred()
         }
         restoreState = RestoreState.IN_PROGRESS
         try {
