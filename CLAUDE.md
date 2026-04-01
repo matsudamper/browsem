@@ -7,27 +7,6 @@ Kotlin / Jetpack Compose / Material 3 / Navigation 3 / Koin DI。
 
 ## モジュール構成
 
-| モジュール | 役割 |
-|-----------|------|
-| `:app` | メインアプリ。Activity・Compose UI・GeckoView ホスト・翻訳・拡張機能 |
-| `:browser-core` | 純 JVM ライブラリ。タブ選択ポリシー等のドメインロジック |
-| `:browser-engine-gecko` | Android ライブラリ。GeckoView 統合・メディア再生 |
-| `:feature-browser` | Android ライブラリ。ブラウザ画面の ViewModel |
-| `:feature-tabs` | Android ライブラリ。タブ一覧画面の ViewModel |
-| `:data` | Android ライブラリ。DataStore + Room による永続化 |
-| `:proto` | 純 Java ライブラリ。Protocol Buffers スキーマ (protobuf-lite) |
-
-依存グラフ:
-
-```
-:app → :browser-engine-gecko → :browser-core
-                              → :data → :proto
-     → :feature-browser → :data
-     → :feature-tabs → :browser-core
-                     → :browser-engine-gecko
-     → :data
-```
-
 ## 開発コマンド
 
 ```bash
@@ -53,80 +32,27 @@ Kotlin / Jetpack Compose / Material 3 / Navigation 3 / Koin DI。
 ./gradlew :app:pixel6Api34DebugAndroidTest "-Pandroid.testInstrumentationRunnerArguments.class=net.matsudamper.browser.MainActivityCustomTabLaunchTest"
 ```
 
-## ツールチェーン
-
-- バージョンは `@gradle/libs.versions.toml` を参照
-- Gradle バージョンは `@gradle/wrapper/gradle-wrapper.properties` を参照
-- compileSdk / minSdk / targetSdk は `@app/build.gradle.kts` を参照
-- JVM Target / Java 互換性も `@app/build.gradle.kts` を参照
 
 ## アーキテクチャ方針
 
 ### データフロー
 
 ```
-Proto → DataStore/Room → Repository → ViewModel (StateFlow) → Compose
+Proto → DataStore/Room → Repository → ViewModel(ViewModelStateFlow) → UiState -> Compose
 ```
-
-### DI (Koin)
-
-- 設定は `app/.../di/AppModule.kt` に集約
-- `GeckoRuntime` は `single` スコープ (プロセス内シングルトン)
-- Repository は `single`、ViewModel は `viewModel { }` で登録
 
 ### GeckoRuntime
 
 - **プロセスに1つ**。`GeckoRuntime.getDefault(context)` で取得
 - ViewModel・Controller 経由で各タブに配布
 
-### タブ管理
-
-- `BrowserSessionController` がタブのライフサイクルを管理
-- タブ切替は `AppDestination.Browser(tabId, beforeTab)` で表現
-- タブ状態は Room + ファイルキャッシュ (サムネイル) で永続化
-
-### ナビゲーション
-
-- Navigation 3 (`androidx.navigation3`) + Kotlin Serialization
-- `AppDestination` sealed interface で型安全なルート定義
-- カスタム `NavController` でバックスタックを操作
-
-## コード構成 (app モジュール)
-
-パッケージルート: `app/src/main/java/net/matsudamper/browser/`
-
-- `MainActivity.kt` — Activity エントリポイント
-- `BrowserViewModel.kt` — メイン ViewModel
-- `BrowserSessionController.kt` — タブ管理
-- `navigation/` — `AppDestination`, `NavController`
-- `screen/browser/` — ブラウザ画面 (BrowserScreen, BrowserToolBar, GeckoBrowserTab, BrowserTabScreenState)
-- `screen/tab/` — タブ一覧
-- `screen/settings/` — 設定
-- `screen/extensions/` — 拡張機能管理
-- `screen/history/` — 履歴
-- `screen/notificationpermissions/` — 通知許可管理
-- `translate/` — 翻訳 (GeckoView 内蔵 / ML Kit の 2 プロバイダ)
-- `di/` — Koin モジュール定義
-- `media/` — メディア再生サービス
-
 ## コーディング規約
 
 ### 言語・スタイル
 
-- **コメントは日本語で書く**
-- Kotlin コードスタイル: `official` (`gradle.properties` で指定)
-- 最大行長: 200 文字 (`.editorconfig`)
+- コメントは日本語で書く
 - import はワイルドカード不使用。個別 import
 - FQCN ではなく import して短縮名を使う（名前衝突時を除く）
-
-### ファイル命名
-
-| 種別 | 命名パターン | 例 |
-|------|------------|-----|
-| 画面 Composable | `*Screen.kt` | `SettingsScreen.kt` |
-| ViewModel | `*ViewModel.kt` | `BrowserViewModel.kt` |
-| State Holder | `*ScreenState.kt` | `BrowserTabScreenState.kt` |
-| ツールバー等の UI 部品 | 機能名で命名 | `BrowserToolBar.kt` |
 
 ### Compose パターン
 
@@ -173,32 +99,7 @@ Proto → DataStore/Room → Repository → ViewModel (StateFlow) → Compose
 2. `./gradlew test` でユニットテスト通過を確認
 3. UI 変更を含む場合は `@Preview` を追加/更新し、Paparazzi スナップショットを撮影
 
-### PR 前チェック
-
-```bash
-./gradlew :app:assembleDebug && ./gradlew test && ./gradlew :app:lintDebug
-```
-
 ## Claude への運用ルール
 
-- **既存パターン優先**: 新しいパターンを導入する前に、同種の既存実装を確認して合わせる
-- **最小限の変更**: 依頼された範囲だけを変更する。無関係なリファクタ・コメント追加・import 整理をしない
-- **影響範囲が大きい変更** (モジュール構成の変更、DI 設定の変更、Navigation ルート追加など) は実装前にユーザーに確認する
-- **コメントは日本語**で書く
-- **1 コミット = 1 論理的変更** を目安にする
-
-## 参考ファイル
-
-- `@settings.gradle.kts` — モジュール一覧
-- `@gradle/libs.versions.toml` — バージョンカタログ
-- `@app/build.gradle.kts` — アプリモジュール設定・依存関係
-- `@app/src/main/java/net/matsudamper/browser/di/AppModule.kt` — DI 設定
-- `@app/src/main/java/net/matsudamper/browser/navigation/AppDestination.kt` — ナビゲーション定義
-- `@proto/src/main/proto/browser_settings.proto` — 設定スキーマ
-- `@.github/workflows/` — CI ワークフロー
-
-## 要確認事項
-
-- ktlint / detekt 等の静的解析ツールは未導入 (導入予定があるか要確認)
-- `app/lint.xml` は空。プロジェクト固有の lint ルールがあるか要確認
-- E2E テスト方針が定まっているか要確認
+- 1 コミット = 1 論理的変更を目安にする
+- ビルド時にネットワークエラーになった場合は原因を調べなくて良い。作業を完了し、通らなかったエラーを知らせるだけで良い
