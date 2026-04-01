@@ -52,7 +52,7 @@ internal fun rememberBrowserTabScreenState(
     searchTemplate: String,
     onHistoryRecord: (suspend (url: String, title: String) -> Long)? = null,
     onHistoryTitleUpdate: (suspend (id: Long, title: String) -> Unit)? = null,
-    onRequestDownloadNotificationPermission: () -> Unit = {},
+    onRequestDownloadNotificationPermission: suspend () -> Unit = {},
 ): BrowserTabScreenState {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -91,7 +91,7 @@ internal class BrowserTabScreenState(
     private val readabilityWebExtension: ReadabilityWebExtension,
     internal val findInPageWebExtension: FindInPageWebExtension,
     private val context: Context,
-    private val onRequestDownloadNotificationPermission: () -> Unit = {},
+    private val onRequestDownloadNotificationPermission: suspend () -> Unit = {},
     var onHistoryRecord: (suspend (url: String, title: String) -> Long)? = null,
     var onHistoryTitleUpdate: (suspend (id: Long, title: String) -> Unit)? = null,
 ) : BrowserSessionStateCallbacks {
@@ -456,14 +456,18 @@ internal class BrowserTabScreenState(
 
     fun downloadImage(imageUrl: String) {
         imageContextMenuUrl = null
-        // ダウンロード進捗を通知で表示するためにパーミッションを要求する
-        onRequestDownloadNotificationPermission()
-        // WorkManagerにエンキューして通知で進捗表示
-        geckoDownloadManager.enqueueDownload(
-            url = imageUrl,
-            referrerUrl = currentPageUrl,
-            coroutineScope = coroutineScope,
-        )
+        // suspend 前に referrerUrl を確定させる（許可ダイアログ中にページ遷移しても影響を受けないため）
+        val referrerUrl = currentPageUrl
+        coroutineScope.launch {
+            // ダウンロード進捗を通知で表示するためにパーミッションを要求し、ユーザーの応答を待つ
+            onRequestDownloadNotificationPermission()
+            // WorkManagerにエンキューして通知で進捗表示
+            geckoDownloadManager.enqueueDownload(
+                url = imageUrl,
+                referrerUrl = referrerUrl,
+                coroutineScope = coroutineScope,
+            )
+        }
     }
 
     // GeckoViewがレンダリングできないレスポンス（ダウンロードリンク等）を受け取った際に呼ばれる
@@ -475,13 +479,20 @@ internal class BrowserTabScreenState(
     fun confirmPendingDownload() {
         val response = pendingDownloadResponse ?: return
         pendingDownloadResponse = null
-        // ダウンロード進捗を通知で表示するためにパーミッションを要求する
-        onRequestDownloadNotificationPermission()
-        geckoDownloadManager.enqueueDownloadFromResponse(
-            response = response,
-            referrerUrl = currentPageUrl,
-            coroutineScope = coroutineScope,
-        )
+        // suspend 前に必要な情報を取り出し、body は即座にクローズする
+        // （許可ダイアログ中にキャンセルされても body がリークしないようにするため）
+        val downloadUrl = response.uri
+        response.body?.close()
+        val referrerUrl = currentPageUrl
+        coroutineScope.launch {
+            // ダウンロード進捗を通知で表示するためにパーミッションを要求し、ユーザーの応答を待つ
+            onRequestDownloadNotificationPermission()
+            geckoDownloadManager.enqueueDownload(
+                url = downloadUrl,
+                referrerUrl = referrerUrl,
+                coroutineScope = coroutineScope,
+            )
+        }
     }
 
     fun dismissPendingDownload() {

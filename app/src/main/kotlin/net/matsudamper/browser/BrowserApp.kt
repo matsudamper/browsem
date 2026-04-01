@@ -81,7 +81,7 @@ internal fun BrowserApp(
     openDownloadsFlow: Flow<Unit>,
     onInstallExtensionRequest: (String) -> Unit,
     onDesktopNotificationPermissionRequest: () -> GeckoResult<Int>,
-    onRequestDownloadNotificationPermission: () -> Unit,
+    onRequestDownloadNotificationPermission: suspend () -> Unit,
 ) {
     val currentUiState by viewModel.uiState.collectAsState()
     val uiState = currentUiState
@@ -113,7 +113,7 @@ private fun BrowserAppContent(
     openDownloadsFlow: Flow<Unit>,
     onInstallExtensionRequest: (String) -> Unit,
     onDesktopNotificationPermissionRequest: () -> GeckoResult<Int>,
-    onRequestDownloadNotificationPermission: () -> Unit,
+    onRequestDownloadNotificationPermission: suspend () -> Unit,
 ) {
     val browserTabController = viewModel.browserTabController
     val browserSessionLifecycleController = viewModel.browserSessionLifecycleController
