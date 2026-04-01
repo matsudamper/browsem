@@ -4,6 +4,7 @@ import androidx.compose.ui.test.hasParent
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.isDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
@@ -36,7 +37,7 @@ class PageZoomTest {
     fun initialPageZoomIsHundredPercent() {
         openMenuFromToolbar()
         composeRule.waitUntil(timeoutMillis = 10_000) {
-            composeRule.onAllNodesWithText("ズーム").fetchSemanticsNodes().isNotEmpty()
+            composeRule.onAllNodesWithTag(BrowserToolbarMenuTestTags.ZoomLabel.testTag).fetchSemanticsNodes().isNotEmpty()
         }
         assertTrue(
             "初期ページズームが100%でない",
@@ -51,7 +52,7 @@ class PageZoomTest {
     fun pageZoomInIncreasesDisplayedPercent() {
         openMenuFromToolbar()
         composeRule.waitUntil(timeoutMillis = 10_000) {
-            composeRule.onAllNodesWithText("ズーム").fetchSemanticsNodes().isNotEmpty()
+            composeRule.onAllNodesWithTag(BrowserToolbarMenuTestTags.ZoomLabel.testTag).fetchSemanticsNodes().isNotEmpty()
         }
 
         composeRule.onNodeWithContentDescription("拡大").performClick()
@@ -72,7 +73,7 @@ class PageZoomTest {
     fun pageZoomOutDecreasesDisplayedPercent() {
         openMenuFromToolbar()
         composeRule.waitUntil(timeoutMillis = 10_000) {
-            composeRule.onAllNodesWithText("ズーム").fetchSemanticsNodes().isNotEmpty()
+            composeRule.onAllNodesWithTag(BrowserToolbarMenuTestTags.ZoomLabel.testTag).fetchSemanticsNodes().isNotEmpty()
         }
         // まず拡大して110%にする
         composeRule.onNodeWithContentDescription("拡大").performClick()
@@ -98,7 +99,7 @@ class PageZoomTest {
     fun tappingPercentButtonResetsZoomToHundred() {
         openMenuFromToolbar()
         composeRule.waitUntil(timeoutMillis = 10_000) {
-            composeRule.onAllNodesWithText("ズーム").fetchSemanticsNodes().isNotEmpty()
+            composeRule.onAllNodesWithTag(BrowserToolbarMenuTestTags.ZoomLabel.testTag).fetchSemanticsNodes().isNotEmpty()
         }
         composeRule.onNodeWithContentDescription("拡大").performClick()
         composeRule.waitUntil(timeoutMillis = 10_000) {
@@ -146,9 +147,9 @@ class PageZoomTest {
 
         openPageZoomMenuAndSet200Percent()
         composeRule.waitUntil(timeoutMillis = 10_000) {
-            composeRule.onAllNodesWithText("更新").fetchSemanticsNodes().isNotEmpty()
+            composeRule.onAllNodesWithTag(BrowserToolbarMenuTestTags.RefreshButton.testTag).fetchSemanticsNodes().isNotEmpty()
         }
-        composeRule.onNodeWithText("更新").performClick()
+        composeRule.onNodeWithTag(BrowserToolbarMenuTestTags.RefreshButton.testTag).performClick()
         composeRule.waitForUrlBarContains(ZOOM_INDEX_FILE_NAME, timeoutMillis = 60_000)
 
         openMenuFromToolbar()
@@ -166,7 +167,7 @@ class PageZoomTest {
     private fun openPageZoomMenuAndSet200Percent() {
         openMenuFromToolbar()
         composeRule.waitUntil(timeoutMillis = 10_000) {
-            composeRule.onAllNodesWithText("ズーム").fetchSemanticsNodes().isNotEmpty()
+            composeRule.onAllNodesWithTag(BrowserToolbarMenuTestTags.ZoomLabel.testTag).fetchSemanticsNodes().isNotEmpty()
         }
         repeat(5) {
             composeRule.onNodeWithContentDescription("拡大").performClick()
