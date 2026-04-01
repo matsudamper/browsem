@@ -105,12 +105,12 @@ class GmdSmokeTest {
             composeRule.onAllNodesWithTag(BrowserTabSurfaceTestTags.CurrentUrlActions.testTag).fetchSemanticsNodes().isNotEmpty() &&
                 // ListItem の mergeDescendants により子ノードは merged tree で不可視のため unmerged tree を使用
                 composeRule.onAllNodesWithTag(BrowserTabSurfaceTestTags.CurrentUrlText.testTag, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() &&
-                composeRule.onAllNodesWithText("コピー").fetchSemanticsNodes().isNotEmpty() &&
-                composeRule.onAllNodesWithText("URLバーに戻す").fetchSemanticsNodes().isNotEmpty() &&
+                composeRule.onAllNodesWithTag(BrowserTabSurfaceTestTags.CopyButton.testTag).fetchSemanticsNodes().isNotEmpty() &&
+                composeRule.onAllNodesWithTag(BrowserTabSurfaceTestTags.RestoreUrlButton.testTag).fetchSemanticsNodes().isNotEmpty() &&
                 composeRule.onAllNodesWithText(currentUrl).fetchSemanticsNodes().isNotEmpty()
         }
 
-        composeRule.onNodeWithText("URLバーに戻す").performClick()
+        composeRule.onNodeWithTag(BrowserTabSurfaceTestTags.RestoreUrlButton.testTag).performClick()
         waitForUrlBarText(currentUrl)
     }
 
@@ -254,7 +254,7 @@ class GmdSmokeTest {
         assertEquals(PAGE_LOAD_ERROR_TEST_URL, composeRule.currentUrlBarText())
         waitForUrlBarText(PAGE_LOAD_ERROR_TEST_URL)
 
-        composeRule.onNodeWithText("再読み込み").performClick()
+        composeRule.onNodeWithTag(BrowserTabSurfaceTestTags.RetryButton.testTag).performClick()
 
         waitForPageLoadErrorVisible(PAGE_LOAD_ERROR_TEST_URL)
         assertEquals(PAGE_LOAD_ERROR_TEST_URL, composeRule.currentUrlBarText())

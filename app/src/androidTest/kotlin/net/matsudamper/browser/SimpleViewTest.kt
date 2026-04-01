@@ -4,9 +4,8 @@ import androidx.compose.ui.test.hasParent
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
-import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
-import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -69,10 +68,9 @@ class SimpleViewTest {
 
         // 「シンプル表示」をタップ
         composeRule.waitUntil(timeoutMillis = 10_000) {
-            composeRule.onAllNodesWithTag("シンプル表示").fetchSemanticsNodes().isNotEmpty() ||
-                composeRule.onAllNodesWithText("シンプル表示").fetchSemanticsNodes().isNotEmpty()
+            composeRule.onAllNodesWithTag(BrowserToolbarMenuTestTags.SimpleViewMenuItem.testTag).fetchSemanticsNodes().isNotEmpty()
         }
-        composeRule.onNodeWithText("シンプル表示").performClick()
+        composeRule.onNodeWithTag(BrowserToolbarMenuTestTags.SimpleViewMenuItem.testTag).performClick()
 
         // SimpleViewScreen が表示されるまで待機
         composeRule.waitUntil(timeoutMillis = 60_000) {
@@ -103,9 +101,9 @@ class SimpleViewTest {
                 .and(hasParent(hasTestTag(BrowserToolbarTestTags.Toolbar.testTag)))
         ).performClick()
         composeRule.waitUntil(timeoutMillis = 10_000) {
-            composeRule.onAllNodesWithText("シンプル表示").fetchSemanticsNodes().isNotEmpty()
+            composeRule.onAllNodesWithTag(BrowserToolbarMenuTestTags.SimpleViewMenuItem.testTag).fetchSemanticsNodes().isNotEmpty()
         }
-        composeRule.onNodeWithText("シンプル表示").performClick()
+        composeRule.onNodeWithTag(BrowserToolbarMenuTestTags.SimpleViewMenuItem.testTag).performClick()
 
         composeRule.waitUntil(timeoutMillis = 60_000) {
             composeRule.onAllNodesWithTag(SimpleViewScreenTestTags.SimpleView.testTag).fetchSemanticsNodes().isNotEmpty()
