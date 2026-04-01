@@ -456,13 +456,15 @@ internal class BrowserTabScreenState(
 
     fun downloadImage(imageUrl: String) {
         imageContextMenuUrl = null
+        // suspend 前に referrerUrl を確定させる（許可ダイアログ中にページ遷移しても影響を受けないため）
+        val referrerUrl = currentPageUrl
         coroutineScope.launch {
             // ダウンロード進捗を通知で表示するためにパーミッションを要求し、ユーザーの応答を待つ
             onRequestDownloadNotificationPermission()
             // WorkManagerにエンキューして通知で進捗表示
             geckoDownloadManager.enqueueDownload(
                 url = imageUrl,
-                referrerUrl = currentPageUrl,
+                referrerUrl = referrerUrl,
                 coroutineScope = coroutineScope,
             )
         }
@@ -477,12 +479,16 @@ internal class BrowserTabScreenState(
     fun confirmPendingDownload() {
         val response = pendingDownloadResponse ?: return
         pendingDownloadResponse = null
+        // suspend 前に必要な情報を取り出し、body は即座にクローズする
+        // （許可ダイアログ中にキャンセルされても body がリークしないようにするため）
+        val downloadUrl = response.uri
+        response.body?.close()
         val referrerUrl = currentPageUrl
         coroutineScope.launch {
             // ダウンロード進捗を通知で表示するためにパーミッションを要求し、ユーザーの応答を待つ
             onRequestDownloadNotificationPermission()
-            geckoDownloadManager.enqueueDownloadFromResponse(
-                response = response,
+            geckoDownloadManager.enqueueDownload(
+                url = downloadUrl,
                 referrerUrl = referrerUrl,
                 coroutineScope = coroutineScope,
             )

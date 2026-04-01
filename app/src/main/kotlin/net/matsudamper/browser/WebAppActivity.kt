@@ -180,7 +180,7 @@ class WebAppActivity : ComponentActivity() {
     /**
      * ダウンロード通知を表示するために POST_NOTIFICATIONS パーミッションを要求し、
      * ユーザーが GRANT または DENY を選択するまで待機する。
-     * GeckoView の通知パーミッション要求が保留中の場合はスキップする。
+     * 別の権限ダイアログが表示中の場合はそのダイアログの完了に合流して待機する。
      */
     private suspend fun requestDownloadNotificationPermission() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
@@ -189,9 +189,19 @@ class WebAppActivity : ComponentActivity() {
                 Manifest.permission.POST_NOTIFICATIONS,
             ) == PackageManager.PERMISSION_GRANTED
         ) return
-        // GeckoView の通知パーミッション要求または別のダウンロード通知パーミッション要求が保留中の場合はスキップ
-        if (pendingNotificationPermissionResult != null) return
-        if (pendingDownloadNotificationPermissionDeferred != null) return
+        // 別のダウンロード通知パーミッション要求が保留中の場合は合流して待機
+        val existingDownloadDeferred = pendingDownloadNotificationPermissionDeferred
+        if (existingDownloadDeferred != null) {
+            existingDownloadDeferred.await()
+            return
+        }
+        // GeckoView の通知ダイアログが表示中の場合: コールバックで完了させてもらう deferred を登録して待機
+        if (pendingNotificationPermissionResult != null) {
+            val deferred = CompletableDeferred<Unit>()
+            pendingDownloadNotificationPermissionDeferred = deferred
+            deferred.await()
+            return
+        }
         val deferred = CompletableDeferred<Unit>()
         pendingDownloadNotificationPermissionDeferred = deferred
         requestNotificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
