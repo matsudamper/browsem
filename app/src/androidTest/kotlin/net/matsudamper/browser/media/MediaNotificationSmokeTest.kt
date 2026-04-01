@@ -9,6 +9,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.Until
+import java.util.regex.Pattern
 import net.matsudamper.browser.MainActivity
 import org.junit.After
 import org.junit.Assert.assertTrue
@@ -82,10 +83,13 @@ class MediaNotificationSmokeTest {
                 "通知タイトルが表示されない",
                 uiDevice.wait(Until.hasObject(By.text(EXPECTED_TITLE)), NOTIFICATION_CONTROL_TIMEOUT_MS),
             )
+            // Play/Pause どちらか一方を単一の wait で待つ（逐次タイムアウトを避けるため regex を使用）。
             assertTrue(
                 "メディア通知にコントロール（Play/Pause）が表示されない",
-                uiDevice.wait(Until.hasObject(By.descContains("Play")), NOTIFICATION_CONTROL_TIMEOUT_MS) ||
-                    uiDevice.wait(Until.hasObject(By.descContains("Pause")), NOTIFICATION_CONTROL_TIMEOUT_MS),
+                uiDevice.wait(
+                    Until.hasObject(By.desc(Pattern.compile(".*(Play|Pause).*"))),
+                    NOTIFICATION_CONTROL_TIMEOUT_MS,
+                ),
             )
         } finally {
             uiDevice.pressBack()
