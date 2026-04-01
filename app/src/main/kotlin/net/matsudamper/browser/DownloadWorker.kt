@@ -117,7 +117,7 @@ internal class DownloadWorker(
             .setSmallIcon(android.R.drawable.stat_sys_download_done)
             .setContentTitle(fileName)
             .setContentText(context.getString(R.string.download_notification_complete))
-            .setProgress(100, 100, false)
+            .setProgress(0, 0, false)
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
             .build()
