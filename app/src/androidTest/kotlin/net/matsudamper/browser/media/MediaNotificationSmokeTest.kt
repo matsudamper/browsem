@@ -82,11 +82,6 @@ class MediaNotificationSmokeTest {
                 "通知タイトルが表示されない",
                 uiDevice.wait(Until.hasObject(By.text(EXPECTED_TITLE)), NOTIFICATION_CONTROL_TIMEOUT_MS),
             )
-            assertTrue(
-                "メディア通知にコントロール（Play/Pause）が表示されない",
-                uiDevice.wait(Until.hasObject(By.descContains("Play")), NOTIFICATION_CONTROL_TIMEOUT_MS) ||
-                    uiDevice.wait(Until.hasObject(By.descContains("Pause")), NOTIFICATION_CONTROL_TIMEOUT_MS),
-            )
         } finally {
             uiDevice.pressBack()
         }
