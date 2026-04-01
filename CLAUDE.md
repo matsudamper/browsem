@@ -25,7 +25,7 @@ Kotlin / Jetpack Compose / Material 3 / Navigation 3 / Koin DI。
 # Lint
 ./gradlew :app:lintDebug
 
-# Android Instrumentation テスト (Managed Device)
+# Android Instrumentation テスト (Gradle Managed Device)
 ./gradlew :app:pixel6Api34DebugAndroidTest
 
 # 特定クラスのみ実行 (PowerShell は -P 引数全体をダブルクオート)
@@ -70,28 +70,22 @@ Proto → DataStore/Room → Repository → ViewModel(ViewModelStateFlow) → Ui
 
 ## テスト方針
 
-- **単体テスト**: JUnit 4。`./gradlew test` で実行 (Paparazzi テストは自動除外)
-- **スクリーンショットテスト**: Paparazzi。`@Preview` 付き Composable を自動スキャンしてスナップショット
-- **Instrumentation テスト**: Managed Device (Pixel 7, API 34)。`app/src/androidTest/`
-  - **接続デバイス (実機・通常エミュレータ) の使用は禁止**。必ず Gradle Managed Device (`./gradlew :app:pixel6Api34DebugAndroidTest`) を使用すること
+- 単体テスト: JUnit 4。`./gradlew test` で実行 (Paparazzi テストは自動除外)
+- Instrumentation テスト: Managed Device (Pixel 7, API 34)。`app/src/androidTest/`
+  - 接続デバイス (実機・通常エミュレータ) の使用は禁止。Gradle Managed Deviceを使用すること
   - 長時間化を避けるため、通常は全件実行せず `-Pandroid.testInstrumentationRunnerArguments.class=...` で対象を絞ること
-- **Lint**: `./gradlew :app:lintDebug`
+- Lint: `./gradlew :app:lintDebug`
 
 ### Instrumentation テストの操作ルール
 
-- **UI 操作は `performClick()` など Compose セマンティクス API を使う**
+- UI 操作は `performClick()` など Compose セマンティクス API を使う
   - `UiAutomation.injectInputEvent()` や `MotionEvent` による生のタッチイベント注入は禁止
-  - 理由: GeckoView の AndroidView 層でイベントが吸収され、Compose ツールバー等に届かないため
   - `pressBack()` など物理ボタンは `onBackPressedDispatcher.onBackPressed()` を使う
 - repository等のデータを直接データをいじらない。全てUI操作で行う
-- **待機は `waitUntil { ... }` でセマンティクスノードの存在を確認する**
+- テキストを監視する場合を除いて`hasText`を使わない。コンポーネントを特定するには`hasTestTag`を使用する
+- TestTagは直接stringを使用せず、他のtestTagのパターンに合わせる
 
 ## 作業フロー
-
-### 変更前
-
-1. `./gradlew :app:assembleDebug` でビルドが通ることを確認
-2. 変更対象のファイルを読み、既存パターンを把握
 
 ### 変更後
 
