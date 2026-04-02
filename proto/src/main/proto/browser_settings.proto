@@ -38,4 +38,5 @@ message BrowserSettings {
   TranslationProvider translation_provider = 9;
   bool enable_third_party_ca = 10;
   optional bool enable_web_suggestions = 11;
+  repeated string background_playback_allowed_domains = 12;
 }

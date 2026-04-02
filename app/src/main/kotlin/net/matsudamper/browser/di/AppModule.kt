@@ -1,5 +1,6 @@
 package net.matsudamper.browser.di
 
+import net.matsudamper.browser.BackgroundPlaybackWebExtension
 import net.matsudamper.browser.BrowserViewModel
 import net.matsudamper.browser.DownloadWorker
 import net.matsudamper.browser.FindInPageWebExtension
@@ -45,7 +46,8 @@ val appModule = module {
     single { MediaWebExtension(androidContext()).also { it.install(get()) } }
     single { ReadabilityWebExtension().also { it.install(get()) } }
     single { FindInPageWebExtension().also { it.install(get()) } }
+    single { BackgroundPlaybackWebExtension().also { it.install(get()) } }
     factory { GeckoDownloadManager(androidContext(), get()) }
-    viewModel { BrowserViewModel(get(), get(), get(), get(), get(), get()) }
+    viewModel { BrowserViewModel(get(), get(), get(), get(), get(), get(), get()) }
     worker { DownloadWorker(get(), get(), get()) }
 }

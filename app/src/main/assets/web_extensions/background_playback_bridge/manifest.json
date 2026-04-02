@@ -1,0 +1,23 @@
+{
+  "manifest_version": 2,
+  "name": "Background Playback Bridge",
+  "version": "1.0",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "background-playback-bridge@browsem"
+    }
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "exclude_matches": ["about:*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "permissions": [
+    "geckoViewAddons",
+    "nativeMessaging",
+    "nativeMessagingFromContent"
+  ]
+}

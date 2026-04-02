@@ -20,6 +20,7 @@ import net.matsudamper.browser.data.TabGroupRepository
 import net.matsudamper.browser.data.TabRepository
 import net.matsudamper.browser.data.ThemeMode
 import net.matsudamper.browser.data.TranslationProvider
+import net.matsudamper.browser.data.resolvedBackgroundPlaybackDomains
 import net.matsudamper.browser.data.resolvedBrowserSettings
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoRuntime
@@ -53,6 +54,7 @@ internal class BrowserViewModel(
     private val settingsRepository: SettingsRepository,
     private val tabRepository: TabRepository,
     private val tabGroupRepository: TabGroupRepository,
+    private val backgroundPlaybackWebExtension: BackgroundPlaybackWebExtension,
 ) : ViewModel() {
     val browserTabController = BrowserTabController(
         tabRepository = tabRepository,
@@ -90,6 +92,13 @@ internal class BrowserViewModel(
                 .collect { enableThirdPartyCa ->
                     runtime.settings.setEnterpriseRootsEnabled(enableThirdPartyCa)
                 }
+        }
+        viewModelScope.launch {
+            settingsRepository.settings.collectLatest { settings ->
+                backgroundPlaybackWebExtension.updateAllowedDomains(
+                    settings.resolvedBackgroundPlaybackDomains()
+                )
+            }
         }
     }
 

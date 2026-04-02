@@ -56,6 +56,7 @@ import kotlinx.coroutines.flow.collectLatest
 import net.matsudamper.browser.data.TranslationProvider
 import net.matsudamper.browser.media.GeckoMediaSessionDelegate
 import net.matsudamper.browser.media.MediaWebExtension
+import net.matsudamper.browser.BackgroundPlaybackWebExtension
 import net.matsudamper.browser.FindInPageWebExtension
 import net.matsudamper.browser.ui.common.resolveBrowserToolbarColors
 import net.matsudamper.browser.ui.browser.SimpleViewScreen
@@ -103,6 +104,7 @@ internal fun GeckoBrowserTab(
     val context = LocalContext.current
     val readabilityWebExtension: ReadabilityWebExtension = koinInject()
     val findInPageWebExtension: FindInPageWebExtension = koinInject()
+    val backgroundPlaybackWebExtension: BackgroundPlaybackWebExtension = koinInject()
     // URLバーフォーカス時にクリップボードから読み取ったURL
     var clipboardUrl by remember { mutableStateOf<String?>(null) }
     // タブ履歴BottomSheetの表示状態
@@ -211,6 +213,14 @@ internal fun GeckoBrowserTab(
         }
         onDispose {
             readabilityWebExtension.unregisterSession(session)
+        }
+    }
+
+    // BackgroundPlaybackWebExtension のセッション登録
+    DisposableEffect(session, backgroundPlaybackWebExtension) {
+        backgroundPlaybackWebExtension.registerSession(session)
+        onDispose {
+            backgroundPlaybackWebExtension.unregisterSession(session)
         }
     }
 

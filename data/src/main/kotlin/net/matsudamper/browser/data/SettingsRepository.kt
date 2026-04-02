@@ -112,6 +112,40 @@ class SettingsRepository(context: Context) {
         }
     }
 
+    suspend fun addBackgroundPlaybackDomain(domain: String) {
+        dataStore.updateData { current ->
+            val currentList = current.backgroundPlaybackAllowedDomainsList.ifEmpty {
+                DEFAULT_BACKGROUND_PLAYBACK_DOMAINS
+            }
+            if (currentList.contains(domain)) return@updateData current
+            current.toBuilder()
+                .clearBackgroundPlaybackAllowedDomains()
+                .addAllBackgroundPlaybackAllowedDomains(currentList + domain)
+                .build()
+        }
+    }
+
+    suspend fun removeBackgroundPlaybackDomain(domain: String) {
+        dataStore.updateData { current ->
+            val currentList = current.backgroundPlaybackAllowedDomainsList.ifEmpty {
+                DEFAULT_BACKGROUND_PLAYBACK_DOMAINS
+            }
+            val newList = currentList.filter { it != domain }
+            current.toBuilder()
+                .clearBackgroundPlaybackAllowedDomains()
+                .addAllBackgroundPlaybackAllowedDomains(newList)
+                .build()
+        }
+    }
+
+    suspend fun resetBackgroundPlaybackDomains() {
+        dataStore.updateData { current ->
+            current.toBuilder()
+                .clearBackgroundPlaybackAllowedDomains()
+                .build()
+        }
+    }
+
     suspend fun removeNotificationAllowedOrigin(origin: String) {
         dataStore.updateData { current ->
             if (!current.notificationAllowedOriginsList.contains(origin)) {
@@ -164,3 +198,15 @@ fun BrowserSettings.resolvedEnableWebSuggestions(): Boolean {
         false
     }
 }
+
+/** 空の場合はデフォルトの YouTube 関連ドメインを返す */
+fun BrowserSettings.resolvedBackgroundPlaybackDomains(): List<String> {
+    return backgroundPlaybackAllowedDomainsList.ifEmpty {
+        DEFAULT_BACKGROUND_PLAYBACK_DOMAINS
+    }
+}
+
+val DEFAULT_BACKGROUND_PLAYBACK_DOMAINS = listOf(
+    "youtube.com",
+    "youtu.be",
+)

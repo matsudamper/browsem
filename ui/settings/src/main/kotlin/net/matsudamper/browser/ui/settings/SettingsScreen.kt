@@ -47,6 +47,7 @@ fun SettingsScreen(
     uiState: SettingsScreenUiState,
     onOpenExtensions: () -> Unit,
     onOpenNotificationPermissions: () -> Unit,
+    onOpenBackgroundPlaybackSettings: () -> Unit,
     onOpenHistory: () -> Unit,
     onOpenDownloads: () -> Unit,
     onBack: () -> Unit,
@@ -296,6 +297,17 @@ fun SettingsScreen(
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text("通知を許可したサイト")
+                }
+            }
+
+            Spacer(Modifier.height(betweenPadding))
+
+            SettingSection(title = "バックグラウンド再生") {
+                TextButton(
+                    onClick = onOpenBackgroundPlaybackSettings,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("バックグラウンド再生を許可するドメイン")
                 }
             }
 

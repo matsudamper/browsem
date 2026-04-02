@@ -28,4 +28,7 @@ sealed interface AppDestination : NavKey, java.io.Serializable {
 
     @Serializable
     data object Downloads : AppDestination, java.io.Serializable
+
+    @Serializable
+    data object BackgroundPlaybackSettings : AppDestination, java.io.Serializable
 }

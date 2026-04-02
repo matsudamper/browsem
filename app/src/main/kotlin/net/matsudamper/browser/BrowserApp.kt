@@ -59,6 +59,7 @@ import net.matsudamper.browser.navigation.NavController
 import net.matsudamper.browser.screen.browser.BrowserScreenViewModel
 import net.matsudamper.browser.screen.extensions.ExtensionsScreenViewModel
 import net.matsudamper.browser.screen.history.HistoryScreenViewModel
+import net.matsudamper.browser.screen.backgroundplayback.BackgroundPlaybackSettingsScreenViewModel
 import net.matsudamper.browser.screen.notificationpermissions.NotificationPermissionsScreenViewModel
 import net.matsudamper.browser.screen.downloads.DownloadManagementScreenViewModel
 import net.matsudamper.browser.screen.settings.SettingsScreenViewModel
@@ -69,6 +70,7 @@ import net.matsudamper.browser.ui.downloads.DownloadManagementScreen
 import net.matsudamper.browser.ui.extensions.ExtensionsScreen
 import net.matsudamper.browser.ui.history.HistoryScreen
 import net.matsudamper.browser.ui.notifications.NotificationPermissionsScreen
+import net.matsudamper.browser.ui.settings.BackgroundPlaybackSettingsScreen
 import net.matsudamper.browser.ui.settings.SettingsScreen
 import net.matsudamper.browser.ui.tabs.TabsScreen
 import org.koin.compose.koinInject
@@ -380,11 +382,25 @@ private fun BrowserAppContent(
                                 onOpenNotificationPermissions = {
                                     backStack.add(AppDestination.NotificationPermissions)
                                 },
+                                onOpenBackgroundPlaybackSettings = {
+                                    backStack.add(AppDestination.BackgroundPlaybackSettings)
+                                },
                                 onOpenHistory = { backStack.add(AppDestination.History) },
                                 onOpenDownloads = { backStack.add(AppDestination.Downloads) },
                                 onBack = { backStack.removeLastOrNull() },
                             )
                         }
+                    }
+
+                    AppDestination.BackgroundPlaybackSettings -> navEntry(key) {
+                        val backgroundPlaybackViewModel = remember(settingsRepository) {
+                            BackgroundPlaybackSettingsScreenViewModel(settingsRepository)
+                        }
+                        val backgroundPlaybackUiState by backgroundPlaybackViewModel.uiState.collectAsState()
+                        BackgroundPlaybackSettingsScreen(
+                            uiState = backgroundPlaybackUiState,
+                            onBack = { backStack.removeLastOrNull() },
+                        )
                     }
 
                     AppDestination.History -> navEntry(key) {
