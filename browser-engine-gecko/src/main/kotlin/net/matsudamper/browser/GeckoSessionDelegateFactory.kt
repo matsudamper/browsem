@@ -45,7 +45,6 @@ data class GeckoSessionDelegateBundle(
 fun createGeckoSessionDelegateBundle(
     callbacks: BrowserSessionStateCallbacks,
     browserTab: BrowserTab,
-    onDesktopNotificationPermissionRequest: (String) -> GeckoResult<Int>,
     onOpenNewSessionRequest: (String) -> GeckoResult<GeckoSession>,
     onCloseRequest: (() -> Unit)? = null,
 ): GeckoSessionDelegateBundle {
@@ -68,14 +67,16 @@ fun createGeckoSessionDelegateBundle(
                         GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW
                     )
                 }
-                if (perm.permission != GeckoSession.PermissionDelegate.PERMISSION_DESKTOP_NOTIFICATION) {
-                    Log.d("BrowserTabPermission", "non-notification permission prompted")
+                if (perm.permission == GeckoSession.PermissionDelegate.PERMISSION_DESKTOP_NOTIFICATION) {
+                    Log.d("BrowserTabPermission", "desktop notification denied")
                     return GeckoResult.fromValue(
-                        GeckoSession.PermissionDelegate.ContentPermission.VALUE_PROMPT
+                        GeckoSession.PermissionDelegate.ContentPermission.VALUE_DENY
                     )
                 }
-                Log.d("BrowserTabPermission", "desktop notification delegated")
-                return onDesktopNotificationPermissionRequest(perm.uri)
+                Log.d("BrowserTabPermission", "non-notification permission prompted")
+                return GeckoResult.fromValue(
+                    GeckoSession.PermissionDelegate.ContentPermission.VALUE_PROMPT
+                )
             }
         },
         navigationDelegate = object : GeckoSession.NavigationDelegate {
@@ -195,10 +196,8 @@ internal class BrowserTabSessionDelegateHost(
 ) {
     private val lock = Any()
     private var callbacks: BrowserSessionStateCallbacks? = null
-    private var onDesktopNotificationPermissionRequest: ((String) -> GeckoResult<Int>)? = null
     private var onOpenNewSessionRequest: ((String) -> GeckoResult<GeckoSession>)? = null
     private var onCloseRequest: (() -> Unit)? = null
-    private val pendingPermissionRequests = ArrayDeque<PendingPermissionRequest>()
     private val pendingNewSessionRequests = ArrayDeque<PendingNewSessionRequest>()
 
     // タブ切り替え時にUI側コールバックが再生成されるため、最新のナビゲーション状態をキャッシュして
@@ -285,9 +284,6 @@ internal class BrowserTabSessionDelegateHost(
             }
         },
         browserTab = browserTab,
-        onDesktopNotificationPermissionRequest = { uri ->
-            resolveDesktopNotificationPermission(uri)
-        },
         onOpenNewSessionRequest = { uri ->
             resolveNewSession(uri)
         },
@@ -328,7 +324,6 @@ internal class BrowserTabSessionDelegateHost(
 
     fun attachUi(
         callbacks: BrowserSessionStateCallbacks,
-        onDesktopNotificationPermissionRequest: (String) -> GeckoResult<Int>,
         onOpenNewSessionRequest: (String) -> GeckoResult<GeckoSession>,
         onCloseRequest: (() -> Unit)? = null,
     ) {
@@ -338,7 +333,6 @@ internal class BrowserTabSessionDelegateHost(
         val historyCurrentIndex: Int
         synchronized(lock) {
             this.callbacks = callbacks
-            this.onDesktopNotificationPermissionRequest = onDesktopNotificationPermissionRequest
             this.onOpenNewSessionRequest = onOpenNewSessionRequest
             this.onCloseRequest = onCloseRequest
             canGoBack = cachedCanGoBack
@@ -373,44 +367,19 @@ internal class BrowserTabSessionDelegateHost(
     fun detachUi() {
         synchronized(lock) {
             callbacks = null
-            onDesktopNotificationPermissionRequest = null
             onOpenNewSessionRequest = null
             onCloseRequest = null
         }
     }
 
     fun failPendingRequests(cause: Throwable) {
-        val permissions: List<PendingPermissionRequest>
         val newSessions: List<PendingNewSessionRequest>
         synchronized(lock) {
-            permissions = pendingPermissionRequests.toList()
             newSessions = pendingNewSessionRequests.toList()
-            pendingPermissionRequests.clear()
             pendingNewSessionRequests.clear()
-        }
-        permissions.forEach { pending ->
-            pending.result.completeExceptionally(cause)
         }
         newSessions.forEach { pending ->
             pending.result.completeExceptionally(cause)
-        }
-    }
-
-    private fun resolveDesktopNotificationPermission(uri: String): GeckoResult<Int> {
-        val handler = synchronized(lock) {
-            onDesktopNotificationPermissionRequest
-        }
-        if (handler != null) {
-            return runCatching {
-                handler(uri)
-            }.getOrElse { error ->
-                GeckoResult.fromException(error)
-            }
-        }
-        return GeckoResult<Int>().also { result ->
-            synchronized(lock) {
-                pendingPermissionRequests.addLast(PendingPermissionRequest(uri, result))
-            }
         }
     }
 
@@ -433,26 +402,7 @@ internal class BrowserTabSessionDelegateHost(
     }
 
     private fun flushPendingRequests() {
-        flushPendingPermissionRequests()
         flushPendingNewSessionRequests()
-    }
-
-    private fun flushPendingPermissionRequests() {
-        while (true) {
-            val current = synchronized(lock) {
-                val handler = onDesktopNotificationPermissionRequest
-                val pending = pendingPermissionRequests.removeFirstOrNull()
-                if (handler == null || pending == null) null else handler to pending
-            } ?: break
-            val (handler, pending) = current
-            val upstream = runCatching {
-                handler(pending.uri)
-            }.getOrElse { error ->
-                pending.result.completeExceptionally(error)
-                continue
-            }
-            bridgeResult(upstream, pending.result)
-        }
     }
 
     private fun flushPendingNewSessionRequests() {
@@ -494,11 +444,6 @@ internal class BrowserTabSessionDelegateHost(
             },
         )
     }
-
-    private data class PendingPermissionRequest(
-        val uri: String,
-        val result: GeckoResult<Int>,
-    )
 
     private data class PendingNewSessionRequest(
         val uri: String,

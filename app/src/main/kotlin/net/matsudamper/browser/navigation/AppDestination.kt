@@ -18,9 +18,6 @@ sealed interface AppDestination : NavKey, java.io.Serializable {
     data object Extensions : AppDestination, java.io.Serializable
 
     @Serializable
-    data object NotificationPermissions : AppDestination, java.io.Serializable
-
-    @Serializable
     data object Tabs : AppDestination, java.io.Serializable
 
     @Serializable

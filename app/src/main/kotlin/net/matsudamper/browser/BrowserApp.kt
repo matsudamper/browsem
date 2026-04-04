@@ -57,7 +57,6 @@ import net.matsudamper.browser.navigation.NavController
 import net.matsudamper.browser.screen.browser.BrowserScreenViewModel
 import net.matsudamper.browser.screen.extensions.ExtensionsScreenViewModel
 import net.matsudamper.browser.screen.history.HistoryScreenViewModel
-import net.matsudamper.browser.screen.notificationpermissions.NotificationPermissionsScreenViewModel
 import net.matsudamper.browser.screen.downloads.DownloadManagementScreenViewModel
 import net.matsudamper.browser.screen.settings.SettingsScreenViewModel
 import net.matsudamper.browser.screen.tab.TabsScreenViewModel
@@ -66,11 +65,9 @@ import net.matsudamper.browser.ui.browser.BrowserScreen
 import net.matsudamper.browser.ui.downloads.DownloadManagementScreen
 import net.matsudamper.browser.ui.extensions.ExtensionsScreen
 import net.matsudamper.browser.ui.history.HistoryScreen
-import net.matsudamper.browser.ui.notifications.NotificationPermissionsScreen
 import net.matsudamper.browser.ui.settings.SettingsScreen
 import net.matsudamper.browser.ui.tabs.TabsScreen
 import org.koin.compose.koinInject
-import org.mozilla.geckoview.GeckoResult
 
 @Composable
 internal fun BrowserApp(
@@ -78,7 +75,6 @@ internal fun BrowserApp(
     newTabUrlFlow: Flow<String>,
     openDownloadsFlow: Flow<Unit>,
     onInstallExtensionRequest: (String) -> Unit,
-    onDesktopNotificationPermissionRequest: () -> GeckoResult<Int>,
     onRequestDownloadNotificationPermission: suspend () -> Unit,
 ) {
     val currentUiState by viewModel.uiState.collectAsState()
@@ -97,7 +93,6 @@ internal fun BrowserApp(
             newTabUrlFlow = newTabUrlFlow,
             openDownloadsFlow = openDownloadsFlow,
             onInstallExtensionRequest = onInstallExtensionRequest,
-            onDesktopNotificationPermissionRequest = onDesktopNotificationPermissionRequest,
             onRequestDownloadNotificationPermission = onRequestDownloadNotificationPermission,
         )
     }
@@ -110,7 +105,6 @@ private fun BrowserAppContent(
     newTabUrlFlow: Flow<String>,
     openDownloadsFlow: Flow<Unit>,
     onInstallExtensionRequest: (String) -> Unit,
-    onDesktopNotificationPermissionRequest: () -> GeckoResult<Int>,
     onRequestDownloadNotificationPermission: suspend () -> Unit,
 ) {
     val browserTabController = viewModel.browserTabController
@@ -169,13 +163,6 @@ private fun BrowserAppContent(
             viewModel.registerExternalTab(newTab.tabId)
             selectTab(newTab.tabId, null)
         }
-    }
-
-    val handleNotificationPermission: (uri: String) -> GeckoResult<Int> = { uri ->
-        viewModel.handleNotificationPermission(
-            uri = uri,
-            onDesktopNotificationPermissionRequest = onDesktopNotificationPermissionRequest,
-        )
     }
 
     BackHandler(enabled = navController.isLastBackHandled) {
@@ -292,7 +279,6 @@ private fun BrowserAppContent(
                                     mediaWebExtension = mediaWebExtension,
                                     tabCount = tabCount,
                                     onInstallExtensionRequest = onInstallExtensionRequest,
-                                    onDesktopNotificationPermissionRequest = handleNotificationPermission,
                                     onRequestDownloadNotificationPermission = onRequestDownloadNotificationPermission,
                                     onOpenSettings = { backStack.add(AppDestination.Settings) },
                                     onOpenTabs = { backStack.add(AppDestination.Tabs) },
@@ -344,9 +330,6 @@ private fun BrowserAppContent(
                             SettingsScreen(
                                 uiState = uiState,
                                 onOpenExtensions = { backStack.add(AppDestination.Extensions) },
-                                onOpenNotificationPermissions = {
-                                    backStack.add(AppDestination.NotificationPermissions)
-                                },
                                 onOpenHistory = { backStack.add(AppDestination.History) },
                                 onOpenDownloads = { backStack.add(AppDestination.Downloads) },
                                 onBack = { backStack.removeLastOrNull() },
@@ -408,17 +391,6 @@ private fun BrowserAppContent(
                         }
                         ExtensionsScreen(
                             uiState = extensionsUiState,
-                            onBack = { backStack.removeLastOrNull() },
-                        )
-                    }
-
-                    AppDestination.NotificationPermissions -> navEntry(key) {
-                        val notificationPermissionsViewModel = remember(settingsRepository) {
-                            NotificationPermissionsScreenViewModel(settingsRepository)
-                        }
-                        val notificationPermissionsUiState by notificationPermissionsViewModel.uiState.collectAsState()
-                        NotificationPermissionsScreen(
-                            uiState = notificationPermissionsUiState,
                             onBack = { backStack.removeLastOrNull() },
                         )
                     }
