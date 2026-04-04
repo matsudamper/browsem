@@ -1,6 +1,5 @@
 package net.matsudamper.browser
 
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.ContentTransform
@@ -21,7 +20,6 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateSetOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
@@ -140,8 +138,6 @@ private fun BrowserAppContent(
         }
     }
 
-    // 外部 Intent から開いたタブの ID を追跡する
-    val externalTabIds = remember { mutableStateSetOf<String>() }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
 
@@ -169,8 +165,6 @@ private fun BrowserAppContent(
                 tabGroupRepository.assignTabToGroup(tabId, defaultGroupId)
             }
             val newTab = browserTabController.createAndAppendTab(tabId = tabId, initialUrl = url)
-            // 外部から開いたタブとして記録する
-            externalTabIds.add(newTab.tabId)
             // selectTab より前に呼ぶことで、外部タブ開封前の selectedTabId を記録できる
             viewModel.registerExternalTab(newTab.tabId)
             selectTab(newTab.tabId, null)
@@ -186,28 +180,6 @@ private fun BrowserAppContent(
 
     BackHandler(enabled = navController.isLastBackHandled) {
         navController.back()
-    }
-
-    // 外部 URL で開いたタブをバックで閉じる処理。
-    // タブ移動・ホーム遷移等の操作なしにバックされた場合（isLastBackHandled == false）にのみ発火し、
-    // タブを閉じて即座に保存してからアプリを終了する。
-    val currentExternalTabId = run {
-        val currentTabId = backStack.filterIsInstance<AppDestination.Browser>().lastOrNull()?.tabId
-        currentTabId?.takeIf { it in externalTabIds }
-    }
-    BackHandler(enabled = !navController.isLastBackHandled && currentExternalTabId != null) {
-        val tabId = currentExternalTabId ?: return@BackHandler
-        scope.launch {
-            // 外部タブを閉じる前にバック先へ遷移して BrowserScreen(外部タブ) を破棄する。
-            // そうしないと closeTab 後に BrowserScreen が selectedTab=null を検知し、
-            // getOrCreateTab でホームページタブを再作成してしまうため。
-            val backTargetId = viewModel.resolveBackTargetForExternalTab(tabId)
-            if (backTargetId != null) {
-                selectTab(backTargetId, null)
-            }
-            viewModel.closeTabAndSaveImmediately(tabId)
-            (context as ComponentActivity).finish()
-        }
     }
 
     BrowserTheme(themeMode = uiState.themeMode) {

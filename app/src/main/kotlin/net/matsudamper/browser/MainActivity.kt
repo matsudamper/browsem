@@ -9,11 +9,14 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
+import android.window.OnBackInvokedCallback
+import android.window.OnBackInvokedDispatcher
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.RequiresApi
 import androidx.browser.customtabs.CustomTabsSessionToken
 import androidx.compose.foundation.layout.Box
 import androidx.compose.material3.AlertDialog
@@ -26,11 +29,14 @@ import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import org.koin.android.ext.android.inject
-import org.koin.androidx.compose.koinViewModel
+import org.koin.androidx.viewmodel.ext.android.viewModel
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoSession
@@ -42,6 +48,7 @@ import java.util.concurrent.CancellationException
 class MainActivity : ComponentActivity() {
 
     private val runtime: GeckoRuntime by inject()
+    private val browserViewModel: BrowserViewModel by viewModel()
     private lateinit var extensionInstaller: WebExtensionInstaller
     private var pendingActivityResult: GeckoResult<Intent>? = null
     private var webExtensionWarmUpCompleted = false
@@ -58,6 +65,8 @@ class MainActivity : ComponentActivity() {
 
     private var pendingNotificationPermissionResult: GeckoResult<Int>? = null
     private var pendingDownloadNotificationPermissionDeferred: CompletableDeferred<Unit>? = null
+    private var hostsBrowserContent = false
+    private var systemNavigationObserverCallback: Any? = null
 
     private val requestNotificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -158,6 +167,8 @@ class MainActivity : ComponentActivity() {
             finish()
             return
         }
+        hostsBrowserContent = true
+        registerSystemNavigationObserverIfAvailable()
         extensionInstaller = WebExtensionInstaller(runtime)
 
         runtime.setActivityDelegate(activityDelegate)
@@ -187,7 +198,6 @@ class MainActivity : ComponentActivity() {
         }
 
         setContent {
-            val browserViewModel: BrowserViewModel = koinViewModel()
             Box(
                 modifier = Modifier.semantics {
                     testTagsAsResourceId = true
@@ -312,6 +322,16 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        unregisterSystemNavigationObserverIfNeeded()
+        if (hostsBrowserContent && isFinishing) {
+            runCatching {
+                runBlocking {
+                    browserViewModel.cleanupSelectedExternalTabOnActivityFinishIfNeeded()
+                }
+            }.onFailure { error ->
+                Log.e("MainActivity", "外部タブの終了クリーンアップに失敗", error)
+            }
+        }
         if (::extensionInstaller.isInitialized) {
             extensionInstaller.cleanup()
         }
@@ -416,6 +436,58 @@ class MainActivity : ComponentActivity() {
         if (finishCurrentTask) {
             finishAndRemoveTask()
         }
+    }
+
+    private fun registerSystemNavigationObserverIfAvailable() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.BAKLAVA) {
+            return
+        }
+        registerSystemNavigationObserverApi36()
+    }
+
+    private fun unregisterSystemNavigationObserverIfNeeded() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.BAKLAVA) {
+            return
+        }
+        unregisterSystemNavigationObserverApi36()
+    }
+
+    @RequiresApi(Build.VERSION_CODES.BAKLAVA)
+    private fun registerSystemNavigationObserverApi36() {
+        if (systemNavigationObserverCallback != null) {
+            return
+        }
+        val callback = OnBackInvokedCallback {
+            lifecycleScope.launch {
+                runCatching {
+                    browserViewModel.cleanupSelectedExternalTabOnActivityFinishIfNeeded()
+                }.onFailure { error ->
+                    Log.e("MainActivity", "外部タブのバッククリーンアップに失敗", error)
+                }
+            }
+        }
+        runCatching {
+            onBackInvokedDispatcher.registerOnBackInvokedCallback(
+                OnBackInvokedDispatcher.PRIORITY_SYSTEM_NAVIGATION_OBSERVER,
+                callback,
+            )
+            systemNavigationObserverCallback = callback
+        }.onFailure { error ->
+            Log.w(
+                "MainActivity",
+                "システムナビゲーション observer の登録に失敗。終了時クリーンアップへフォールバック",
+                error,
+            )
+        }
+    }
+
+    @RequiresApi(Build.VERSION_CODES.BAKLAVA)
+    private fun unregisterSystemNavigationObserverApi36() {
+        val callback = systemNavigationObserverCallback as? OnBackInvokedCallback ?: return
+        runCatching {
+            onBackInvokedDispatcher.unregisterOnBackInvokedCallback(callback)
+        }
+        systemNavigationObserverCallback = null
     }
 }
 
