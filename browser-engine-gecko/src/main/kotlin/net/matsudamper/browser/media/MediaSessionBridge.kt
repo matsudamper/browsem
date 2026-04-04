@@ -23,12 +23,14 @@ object MediaSessionBridge {
     val playbackState: StateFlow<MediaPlaybackState> = _playbackState.asStateFlow()
 
     fun activate() {
-        Log.d(TAG, "activate")
+        Log.d(TAG, "activate: hasMediaSession=${activeGeckoMediaSession != null}")
+        MediaTraceLog.d("BRIDGE activate hasMediaSession=${activeGeckoMediaSession != null}")
         _playbackState.value = _playbackState.value.copy(isActive = true)
     }
 
     fun deactivate() {
         Log.d(TAG, "deactivate")
+        MediaTraceLog.d("BRIDGE deactivate")
         _playbackState.value = MediaPlaybackState()
         activeGeckoMediaSession = null
     }
@@ -39,7 +41,10 @@ object MediaSessionBridge {
         album: String,
         artworkBitmap: Bitmap?,
     ) {
-        Log.d(TAG, "updateMetadata: title=$title, artist=$artist, hasArtwork=${artworkBitmap != null}")
+        Log.d(TAG, "updateMetadata: title=$title, artist=$artist, album=$album, hasArtwork=${artworkBitmap != null}")
+        MediaTraceLog.d(
+            "BRIDGE metadata title=${title.take(60)} artist=${artist.take(40)} album=${album.take(40)} artwork=${artworkBitmap != null}",
+        )
         _playbackState.value = _playbackState.value.copy(
             title = title,
             artist = artist,
@@ -50,10 +55,13 @@ object MediaSessionBridge {
 
     fun updatePlaying(isPlaying: Boolean) {
         Log.d(TAG, "updatePlaying: isPlaying=$isPlaying")
+        MediaTraceLog.d("BRIDGE playing isPlaying=$isPlaying")
         _playbackState.value = _playbackState.value.copy(isPlaying = isPlaying)
     }
 
     fun updatePosition(positionMs: Long, durationMs: Long) {
+        Log.d(TAG, "updatePosition: positionMs=$positionMs durationMs=$durationMs")
+        MediaTraceLog.d("BRIDGE position positionMs=$positionMs durationMs=$durationMs")
         _playbackState.value = _playbackState.value.copy(
             positionMs = positionMs,
             durationMs = durationMs,
@@ -67,27 +75,30 @@ object MediaSessionBridge {
 
     // サービスからGeckoViewへの制御メソッド
     fun play() {
-        Log.d(TAG, "play")
+        Log.d(TAG, "play: hasMediaSession=${activeGeckoMediaSession != null}")
+        MediaTraceLog.d("BRIDGE command play hasMediaSession=${activeGeckoMediaSession != null}")
         activeGeckoMediaSession?.play()
     }
     fun pause() {
-        Log.d(TAG, "pause")
+        Log.d(TAG, "pause: hasMediaSession=${activeGeckoMediaSession != null}")
+        MediaTraceLog.d("BRIDGE command pause hasMediaSession=${activeGeckoMediaSession != null}")
         activeGeckoMediaSession?.pause()
     }
     fun stop() {
-        Log.d(TAG, "stop")
+        Log.d(TAG, "stop: hasMediaSession=${activeGeckoMediaSession != null}")
         activeGeckoMediaSession?.stop()
     }
     fun nextTrack() {
-        Log.d(TAG, "nextTrack")
+        Log.d(TAG, "nextTrack: hasMediaSession=${activeGeckoMediaSession != null}")
         activeGeckoMediaSession?.nextTrack()
     }
     fun previousTrack() {
-        Log.d(TAG, "previousTrack")
+        Log.d(TAG, "previousTrack: hasMediaSession=${activeGeckoMediaSession != null}")
         activeGeckoMediaSession?.previousTrack()
     }
     fun seekTo(positionSeconds: Double) {
-        Log.d(TAG, "seekTo: positionSeconds=$positionSeconds")
+        Log.d(TAG, "seekTo: positionSeconds=$positionSeconds hasMediaSession=${activeGeckoMediaSession != null}")
+        MediaTraceLog.d("BRIDGE command seekTo positionSeconds=$positionSeconds hasMediaSession=${activeGeckoMediaSession != null}")
         activeGeckoMediaSession?.seekTo(positionSeconds, true)
     }
 

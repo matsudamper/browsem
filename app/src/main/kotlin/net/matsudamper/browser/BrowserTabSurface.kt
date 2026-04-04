@@ -26,6 +26,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -35,6 +36,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.draw.clipToBounds
@@ -132,14 +134,22 @@ internal fun BrowserContentHost(
             }
         }
         if (!state.renderReady) {
-            previewBitmap?.also { bitmap ->
+            val bitmap = previewBitmap
+            if (bitmap != null) {
                 Image(
                     modifier = Modifier.fillMaxSize(),
                     bitmap = bitmap.asImageBitmap(),
                     contentDescription = null,
                     contentScale = ContentScale.FillWidth,
-                    alignment = androidx.compose.ui.Alignment.TopStart,
+                    alignment = Alignment.TopStart,
                 )
+            } else {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    CircularProgressIndicator()
+                }
             }
         }
     }
@@ -365,10 +375,16 @@ private fun CurrentPageUrlListItem(
                     modifier = Modifier.testTag(BrowserTabSurfaceTestTags.CurrentUrlText.testTag),
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TextButton(onClick = onCopyCurrentUrl) {
+                    TextButton(
+                        onClick = onCopyCurrentUrl,
+                        modifier = Modifier.testTag(BrowserTabSurfaceTestTags.CopyButton.testTag),
+                    ) {
                         Text("コピー")
                     }
-                    TextButton(onClick = onRestoreCurrentUrl) {
+                    TextButton(
+                        onClick = onRestoreCurrentUrl,
+                        modifier = Modifier.testTag(BrowserTabSurfaceTestTags.RestoreUrlButton.testTag),
+                    ) {
                         Text("URLバーに戻す")
                     }
                 }
@@ -432,7 +448,10 @@ internal fun PageLoadErrorOverlay(
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TextButton(onClick = onRetry) {
+                TextButton(
+                    onClick = onRetry,
+                    modifier = Modifier.testTag(BrowserTabSurfaceTestTags.RetryButton.testTag),
+                ) {
                     Text("再読み込み")
                 }
             }
@@ -449,4 +468,7 @@ sealed interface BrowserTabSurfaceTestTags {
     object CurrentUrlActions : BrowserTabSurfaceTestTags { override val id = "current_url_actions" }
     object CurrentUrlText : BrowserTabSurfaceTestTags { override val id = "current_url_text" }
     object PageLoadError : BrowserTabSurfaceTestTags { override val id = "page_load_error" }
+    object CopyButton : BrowserTabSurfaceTestTags { override val id = "copy_button" }
+    object RestoreUrlButton : BrowserTabSurfaceTestTags { override val id = "restore_url_button" }
+    object RetryButton : BrowserTabSurfaceTestTags { override val id = "retry_button" }
 }

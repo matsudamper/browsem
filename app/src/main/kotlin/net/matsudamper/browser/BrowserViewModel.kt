@@ -3,7 +3,8 @@ package net.matsudamper.browser
 import androidx.compose.runtime.Stable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -14,6 +15,9 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import net.matsudamper.browser.data.ResolvedBrowserSettings
 import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.TabGroupRepository
@@ -43,6 +47,11 @@ private data class ViewModelState(
     val logicSettings: BrowserLogicSettings? = null,
 )
 
+internal data class ExternalTabFinishCleanup(
+    val tabId: String,
+    val nextSelectedTabId: String?,
+)
+
 @Stable
 internal class BrowserViewModel(
     val runtime: GeckoRuntime,
@@ -59,8 +68,8 @@ internal class BrowserViewModel(
     )
     val browserSessionLifecycleController = BrowserSessionLifecycleController(runtime)
 
-    // 構成変更を経ても破棄されないよう ViewModel で保持するセットアップ完了シグナル
-    val setupComplete = CompletableDeferred<Unit>()
+    // タブ復元完了シグナル。BrowserTabController が内部で管理し、構成変更後も有効。
+    val setupComplete: Deferred<Unit> get() = browserTabController.restoreComplete
 
     private val viewModelStateFlow = MutableStateFlow(ViewModelState())
     val uiState: StateFlow<BrowserAppUiState?> = MutableStateFlow<BrowserAppUiState?>(null)
@@ -103,7 +112,7 @@ internal class BrowserViewModel(
             if (browserTabController.selectedTabId != tabId) {
                 browserTabController.selectTab(tabId)
             }
-            setupComplete.complete(Unit)
+            // setupComplete は browserTabController.restoreTabs() 内で complete 済み
         }
     }
 
@@ -128,6 +137,7 @@ internal class BrowserViewModel(
 
     // 外部タブを開く直前に選択されていたタブ ID を記憶するマップ
     private val externalTabPreviousTabs = mutableMapOf<String, String?>()
+    private val externalTabCleanupMutex = Mutex()
 
     /**
      * 外部タブ登録時に呼ぶ。呼び出し時点の selectedTabId（= 外部タブ開封前のタブ）を記録する。
@@ -151,15 +161,34 @@ internal class BrowserViewModel(
         }
     }
 
-    /** タブを閉じ、即座に永続化する（外部URL タブをバックで閉じるときに使用）。 */
-    suspend fun closeTabAndSaveImmediately(tabId: String) {
-        val nextSelectedTabId = browserTabController.closeTab(tabId)
-        // タブが空になった場合はホームタブを作成して空状態での保存を避ける
-        if (nextSelectedTabId == null) {
-            browserTabController.createAndAppendTab(initialUrl = currentHomepageUrl())
+    /**
+     * Activity 終了時に永続化から外すべき外部タブ情報を返す。
+     * システム既定の戻る処理を使うため、UI 側で BackHandler は消費しない。
+     */
+    fun snapshotSelectedExternalTabFinishCleanup(): ExternalTabFinishCleanup? {
+        val selectedTabId = browserTabController.selectedTabId ?: return null
+        if (!externalTabPreviousTabs.containsKey(selectedTabId)) {
+            return null
         }
-        browserTabController.awaitPersistenceIdle()
-        externalTabPreviousTabs.remove(tabId)
+        return ExternalTabFinishCleanup(
+            tabId = selectedTabId,
+            nextSelectedTabId = resolveBackTargetForExternalTab(selectedTabId),
+        )
+    }
+
+    /**
+     * Activity が閉じる直前に外部タブだけを永続化から外す。
+     * 先に保留中の保存を流し切ってから DB から削除し、次回起動時に復元されないようにする。
+     */
+    suspend fun cleanupSelectedExternalTabOnActivityFinishIfNeeded() {
+        externalTabCleanupMutex.withLock {
+            val cleanup = snapshotSelectedExternalTabFinishCleanup() ?: return
+            externalTabPreviousTabs.remove(cleanup.tabId)
+            browserTabController.awaitPersistenceIdle()
+            withContext(Dispatchers.IO) {
+                tabRepository.closeTab(cleanup.tabId, cleanup.nextSelectedTabId)
+            }
+        }
     }
 
     private fun currentHomepageUrl(): String {

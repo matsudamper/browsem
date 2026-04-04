@@ -28,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import net.matsudamper.browser.resources.R as ResourcesR
 
@@ -170,6 +171,7 @@ internal fun ToolbarMenu(
             }
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 IconButton(
+                    modifier = Modifier.testTag(BrowserToolbarMenuTestTags.RefreshButton.testTag),
                     onClick = {
                         onDismissRequest()
                         onRefresh()
@@ -196,9 +198,11 @@ internal fun ToolbarMenu(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                text = "ページズーム",
+                text = "ズーム",
                 style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.padding(start = 8.dp),
+                modifier = Modifier
+                    .padding(start = 8.dp)
+                    .testTag(BrowserToolbarMenuTestTags.ZoomLabel.testTag),
             )
             Row(verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = onPageZoomOut) {
@@ -209,7 +213,9 @@ internal fun ToolbarMenu(
                 }
                 TextButton(
                     onClick = onResetPageZoom,
-                    modifier = Modifier.widthIn(min = 64.dp),
+                    modifier = Modifier
+                        .widthIn(min = 64.dp)
+                        .testTag(BrowserToolbarMenuTestTags.ZoomPercentButton.testTag),
                 ) {
                     Text(
                         text = "${pageZoomPercent}%",
@@ -243,6 +249,7 @@ internal fun ToolbarMenu(
             onClick = { onPcModeToggle() },
         )
         DropdownMenuItem(
+            modifier = Modifier.testTag(BrowserToolbarMenuTestTags.SimpleViewMenuItem.testTag),
             text = { Text(text = "シンプル表示") },
             leadingIcon = {
                 Icon(
@@ -354,4 +361,14 @@ internal fun ToolbarMenu(
             },
         )
     }
+}
+
+sealed interface BrowserToolbarMenuTestTags {
+    val id: String
+    val testTag get() = "${BrowserToolbarMenuTestTags::class.java.name}#$id"
+
+    object ZoomLabel : BrowserToolbarMenuTestTags { override val id = "zoom_label" }
+    object ZoomPercentButton : BrowserToolbarMenuTestTags { override val id = "zoom_percent_button" }
+    object RefreshButton : BrowserToolbarMenuTestTags { override val id = "refresh_button" }
+    object SimpleViewMenuItem : BrowserToolbarMenuTestTags { override val id = "simple_view_menu_item" }
 }

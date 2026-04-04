@@ -1,6 +1,5 @@
 package net.matsudamper.browser
 
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.ContentTransform
@@ -12,16 +11,18 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideIn
 import androidx.compose.animation.slideOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateSetOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntOffset
@@ -84,11 +85,40 @@ internal fun BrowserApp(
     openDownloadsFlow: Flow<Unit>,
     onInstallExtensionRequest: (String) -> Unit,
     onDesktopNotificationPermissionRequest: () -> GeckoResult<Int>,
-    onRequestDownloadNotificationPermission: () -> Unit,
+    onRequestDownloadNotificationPermission: suspend () -> Unit,
 ) {
     val currentUiState by viewModel.uiState.collectAsState()
-    val uiState = currentUiState ?: return
+    val uiState = currentUiState
+    if (uiState == null) {
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center,
+        ) {
+            CircularProgressIndicator()
+        }
+    } else {
+        BrowserAppContent(
+            uiState = uiState,
+            viewModel = viewModel,
+            newTabUrlFlow = newTabUrlFlow,
+            openDownloadsFlow = openDownloadsFlow,
+            onInstallExtensionRequest = onInstallExtensionRequest,
+            onDesktopNotificationPermissionRequest = onDesktopNotificationPermissionRequest,
+            onRequestDownloadNotificationPermission = onRequestDownloadNotificationPermission,
+        )
+    }
+}
 
+@Composable
+private fun BrowserAppContent(
+    uiState: BrowserAppUiState,
+    viewModel: BrowserViewModel,
+    newTabUrlFlow: Flow<String>,
+    openDownloadsFlow: Flow<Unit>,
+    onInstallExtensionRequest: (String) -> Unit,
+    onDesktopNotificationPermissionRequest: () -> GeckoResult<Int>,
+    onRequestDownloadNotificationPermission: suspend () -> Unit,
+) {
     val browserTabController = viewModel.browserTabController
     val browserSessionLifecycleController = viewModel.browserSessionLifecycleController
     val themeColorExtension = viewModel.themeColorExtension
@@ -114,8 +144,6 @@ internal fun BrowserApp(
         }
     }
 
-    // 外部 Intent から開いたタブの ID を追跡する
-    val externalTabIds = remember { mutableStateSetOf<String>() }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
 
@@ -143,8 +171,6 @@ internal fun BrowserApp(
                 tabGroupRepository.assignTabToGroup(tabId, defaultGroupId)
             }
             val newTab = browserTabController.createAndAppendTab(tabId = tabId, initialUrl = url)
-            // 外部から開いたタブとして記録する
-            externalTabIds.add(newTab.tabId)
             // selectTab より前に呼ぶことで、外部タブ開封前の selectedTabId を記録できる
             viewModel.registerExternalTab(newTab.tabId)
             selectTab(newTab.tabId, null)
@@ -170,28 +196,6 @@ internal fun BrowserApp(
 
     BackHandler(enabled = navController.isLastBackHandled) {
         navController.back()
-    }
-
-    // 外部 URL で開いたタブをバックで閉じる処理。
-    // タブ移動・ホーム遷移等の操作なしにバックされた場合（isLastBackHandled == false）にのみ発火し、
-    // タブを閉じて即座に保存してからアプリを終了する。
-    val currentExternalTabId = run {
-        val currentTabId = backStack.filterIsInstance<AppDestination.Browser>().lastOrNull()?.tabId
-        currentTabId?.takeIf { it in externalTabIds }
-    }
-    BackHandler(enabled = !navController.isLastBackHandled && currentExternalTabId != null) {
-        val tabId = currentExternalTabId ?: return@BackHandler
-        scope.launch {
-            // 外部タブを閉じる前にバック先へ遷移して BrowserScreen(外部タブ) を破棄する。
-            // そうしないと closeTab 後に BrowserScreen が selectedTab=null を検知し、
-            // getOrCreateTab でホームページタブを再作成してしまうため。
-            val backTargetId = viewModel.resolveBackTargetForExternalTab(tabId)
-            if (backTargetId != null) {
-                selectTab(backTargetId, null)
-            }
-            viewModel.closeTabAndSaveImmediately(tabId)
-            (context as ComponentActivity).finish()
-        }
     }
 
     BrowserTheme(themeMode = uiState.themeMode) {
@@ -250,19 +254,14 @@ internal fun BrowserApp(
                                 .map { browserTabController.tabs.toList() }
                                 .distinctUntilChanged()
                         }
-                        val selectedTabIdFlow = remember(browserTabController) {
-                            browserTabController.tabStoreState
-                                .map { state -> state.selectedTabId }
-                                .distinctUntilChanged()
-                        }
-                        val browserScreenViewModel = remember(tabGroupRepository, browserTabsFlow, selectedTabIdFlow) {
+                        val browserScreenViewModel = remember(key.tabId, tabGroupRepository, browserTabsFlow) {
                             BrowserScreenViewModel(
                                 historyRepository = historyRepository,
                                 settingsRepository = settingsRepository,
                                 webSuggestionRepository = webSuggestionRepository,
                                 tabGroupRepository = tabGroupRepository,
                                 browserTabsFlow = browserTabsFlow,
-                                selectedTabIdFlow = selectedTabIdFlow,
+                                screenTabId = key.tabId,
                             )
                         }
                         // タブが閉じられた際にコルーチンスコープをキャンセルしてリークを防ぐ

@@ -8,6 +8,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import kotlinx.coroutines.CompletableDeferred
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -47,19 +48,29 @@ class WebAppActivity : ComponentActivity() {
     private lateinit var browserSessionLifecycleController: BrowserSessionLifecycleController
 
     private var pendingNotificationPermissionResult: GeckoResult<Int>? = null
+    private var pendingDownloadNotificationPermissionDeferred: CompletableDeferred<Unit>? = null
 
     private val requestNotificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { isGranted ->
-        val pendingResult = pendingNotificationPermissionResult ?: return@registerForActivityResult
-        pendingNotificationPermissionResult = null
-        pendingResult.complete(
-            if (isGranted) {
-                GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW
-            } else {
-                GeckoSession.PermissionDelegate.ContentPermission.VALUE_DENY
-            }
-        )
+        // GeckoView のデスクトップ通知パーミッション要求の完了
+        val pendingResult = pendingNotificationPermissionResult
+        if (pendingResult != null) {
+            pendingNotificationPermissionResult = null
+            pendingResult.complete(
+                if (isGranted) {
+                    GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW
+                } else {
+                    GeckoSession.PermissionDelegate.ContentPermission.VALUE_DENY
+                }
+            )
+        }
+        // ダウンロード通知パーミッション要求の完了
+        val downloadDeferred = pendingDownloadNotificationPermissionDeferred
+        if (downloadDeferred != null) {
+            pendingDownloadNotificationPermissionDeferred = null
+            downloadDeferred.complete(Unit)
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -142,6 +153,10 @@ class WebAppActivity : ComponentActivity() {
             CancellationException("Activity was destroyed before notification permission completed.")
         )
         pendingNotificationPermissionResult = null
+        pendingDownloadNotificationPermissionDeferred?.cancel(
+            CancellationException("Activity was destroyed before download notification permission completed.")
+        )
+        pendingDownloadNotificationPermissionDeferred = null
         // セッションのみ閉じる。拡張機能はプロセススコープで管理されるため解放しない。
         if (::browserTabController.isInitialized) {
             browserTabController.close()
@@ -163,19 +178,34 @@ class WebAppActivity : ComponentActivity() {
     }
 
     /**
-     * ダウンロード通知を表示するために POST_NOTIFICATIONS パーミッションを要求する。
-     * GeckoView の通知パーミッション要求が保留中の場合はスキップする。
+     * ダウンロード通知を表示するために POST_NOTIFICATIONS パーミッションを要求し、
+     * ユーザーが GRANT または DENY を選択するまで待機する。
+     * 別の権限ダイアログが表示中の場合はそのダイアログの完了に合流して待機する。
      */
-    private fun requestDownloadNotificationPermission() {
+    private suspend fun requestDownloadNotificationPermission() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
         if (ContextCompat.checkSelfPermission(
                 this,
                 Manifest.permission.POST_NOTIFICATIONS,
             ) == PackageManager.PERMISSION_GRANTED
         ) return
-        // GeckoView の通知パーミッション要求が保留中の場合は競合を避けるためスキップ
-        if (pendingNotificationPermissionResult != null) return
+        // 別のダウンロード通知パーミッション要求が保留中の場合は合流して待機
+        val existingDownloadDeferred = pendingDownloadNotificationPermissionDeferred
+        if (existingDownloadDeferred != null) {
+            existingDownloadDeferred.await()
+            return
+        }
+        // GeckoView の通知ダイアログが表示中の場合: コールバックで完了させてもらう deferred を登録して待機
+        if (pendingNotificationPermissionResult != null) {
+            val deferred = CompletableDeferred<Unit>()
+            pendingDownloadNotificationPermissionDeferred = deferred
+            deferred.await()
+            return
+        }
+        val deferred = CompletableDeferred<Unit>()
+        pendingDownloadNotificationPermissionDeferred = deferred
         requestNotificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        deferred.await()
     }
 
     private fun requestNotificationPermissionIfNeeded(): GeckoResult<Int> {

@@ -9,11 +9,14 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
+import android.window.OnBackInvokedCallback
+import android.window.OnBackInvokedDispatcher
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.RequiresApi
 import androidx.browser.customtabs.CustomTabsSessionToken
 import androidx.compose.foundation.layout.Box
 import androidx.compose.material3.AlertDialog
@@ -26,10 +29,14 @@ import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import org.koin.android.ext.android.inject
-import org.koin.androidx.compose.koinViewModel
+import org.koin.androidx.viewmodel.ext.android.viewModel
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoSession
@@ -42,6 +49,7 @@ import java.util.concurrent.CancellationException
 class MainActivity : ComponentActivity() {
 
     private val runtime: GeckoRuntime by inject()
+    private val browserViewModel: BrowserViewModel by viewModel()
     private lateinit var extensionInstaller: WebExtensionInstaller
     private var pendingActivityResult: GeckoResult<Intent>? = null
     private var webExtensionWarmUpCompleted = false
@@ -57,19 +65,31 @@ class MainActivity : ComponentActivity() {
     private val openDownloadsFlow = openDownloadsChannel.receiveAsFlow()
 
     private var pendingNotificationPermissionResult: GeckoResult<Int>? = null
+    private var pendingDownloadNotificationPermissionDeferred: CompletableDeferred<Unit>? = null
+    private var hostsBrowserContent = false
+    private var systemNavigationObserverCallback: Any? = null
 
     private val requestNotificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { isGranted ->
-        val pendingResult = pendingNotificationPermissionResult ?: return@registerForActivityResult
-        pendingNotificationPermissionResult = null
-        pendingResult.complete(
-            if (isGranted) {
-                GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW
-            } else {
-                GeckoSession.PermissionDelegate.ContentPermission.VALUE_DENY
-            }
-        )
+        // GeckoView のデスクトップ通知パーミッション要求の完了
+        val pendingResult = pendingNotificationPermissionResult
+        if (pendingResult != null) {
+            pendingNotificationPermissionResult = null
+            pendingResult.complete(
+                if (isGranted) {
+                    GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW
+                } else {
+                    GeckoSession.PermissionDelegate.ContentPermission.VALUE_DENY
+                }
+            )
+        }
+        // ダウンロード通知パーミッション要求の完了
+        val downloadDeferred = pendingDownloadNotificationPermissionDeferred
+        if (downloadDeferred != null) {
+            pendingDownloadNotificationPermissionDeferred = null
+            downloadDeferred.complete(Unit)
+        }
     }
 
     private val geckoActivityLauncher = registerForActivityResult(
@@ -165,6 +185,8 @@ class MainActivity : ComponentActivity() {
             finish()
             return
         }
+        hostsBrowserContent = true
+        registerSystemNavigationObserverIfAvailable()
         extensionInstaller = WebExtensionInstaller(runtime)
 
         runtime.setActivityDelegate(activityDelegate)
@@ -195,7 +217,6 @@ class MainActivity : ComponentActivity() {
         }
 
         setContent {
-            val browserViewModel: BrowserViewModel = koinViewModel()
             Box(
                 modifier = Modifier.semantics {
                     testTagsAsResourceId = true
@@ -253,19 +274,34 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * ダウンロード通知を表示するために POST_NOTIFICATIONS パーミッションを要求する。
-     * GeckoView の通知パーミッション要求が保留中の場合はスキップする。
+     * ダウンロード通知を表示するために POST_NOTIFICATIONS パーミッションを要求し、
+     * ユーザーが GRANT または DENY を選択するまで待機する。
+     * 別の権限ダイアログが表示中の場合はそのダイアログの完了に合流して待機する。
      */
-    private fun requestDownloadNotificationPermission() {
+    private suspend fun requestDownloadNotificationPermission() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
         if (ContextCompat.checkSelfPermission(
                 this,
                 Manifest.permission.POST_NOTIFICATIONS,
             ) == PackageManager.PERMISSION_GRANTED
         ) return
-        // GeckoView の通知パーミッション要求が保留中の場合は競合を避けるためスキップ
-        if (pendingNotificationPermissionResult != null) return
+        // 別のダウンロード通知パーミッション要求が保留中の場合は合流して待機
+        val existingDownloadDeferred = pendingDownloadNotificationPermissionDeferred
+        if (existingDownloadDeferred != null) {
+            existingDownloadDeferred.await()
+            return
+        }
+        // GeckoView の通知ダイアログが表示中の場合: コールバックで完了させてもらう deferred を登録して待機
+        if (pendingNotificationPermissionResult != null) {
+            val deferred = CompletableDeferred<Unit>()
+            pendingDownloadNotificationPermissionDeferred = deferred
+            deferred.await()
+            return
+        }
+        val deferred = CompletableDeferred<Unit>()
+        pendingDownloadNotificationPermissionDeferred = deferred
         requestNotificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        deferred.await()
     }
 
     private fun requestNotificationPermissionIfNeeded(): GeckoResult<Int> {
@@ -305,6 +341,16 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        unregisterSystemNavigationObserverIfNeeded()
+        if (hostsBrowserContent && isFinishing) {
+            runCatching {
+                runBlocking {
+                    browserViewModel.cleanupSelectedExternalTabOnActivityFinishIfNeeded()
+                }
+            }.onFailure { error ->
+                Log.e("MainActivity", "外部タブの終了クリーンアップに失敗", error)
+            }
+        }
         if (::extensionInstaller.isInitialized) {
             extensionInstaller.cleanup()
         }
@@ -316,6 +362,10 @@ class MainActivity : ComponentActivity() {
             CancellationException("Activity was destroyed before notification permission completed.")
         )
         pendingNotificationPermissionResult = null
+        pendingDownloadNotificationPermissionDeferred?.cancel(
+            CancellationException("Activity was destroyed before download notification permission completed.")
+        )
+        pendingDownloadNotificationPermissionDeferred = null
         if (::extensionInstaller.isInitialized && runtime.getActivityDelegate() === activityDelegate) {
             runtime.setActivityDelegate(null)
         }
@@ -406,6 +456,58 @@ class MainActivity : ComponentActivity() {
         if (finishCurrentTask) {
             finishAndRemoveTask()
         }
+    }
+
+    private fun registerSystemNavigationObserverIfAvailable() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.BAKLAVA) {
+            return
+        }
+        registerSystemNavigationObserverApi36()
+    }
+
+    private fun unregisterSystemNavigationObserverIfNeeded() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.BAKLAVA) {
+            return
+        }
+        unregisterSystemNavigationObserverApi36()
+    }
+
+    @RequiresApi(Build.VERSION_CODES.BAKLAVA)
+    private fun registerSystemNavigationObserverApi36() {
+        if (systemNavigationObserverCallback != null) {
+            return
+        }
+        val callback = OnBackInvokedCallback {
+            lifecycleScope.launch {
+                runCatching {
+                    browserViewModel.cleanupSelectedExternalTabOnActivityFinishIfNeeded()
+                }.onFailure { error ->
+                    Log.e("MainActivity", "外部タブのバッククリーンアップに失敗", error)
+                }
+            }
+        }
+        runCatching {
+            onBackInvokedDispatcher.registerOnBackInvokedCallback(
+                OnBackInvokedDispatcher.PRIORITY_SYSTEM_NAVIGATION_OBSERVER,
+                callback,
+            )
+            systemNavigationObserverCallback = callback
+        }.onFailure { error ->
+            Log.w(
+                "MainActivity",
+                "システムナビゲーション observer の登録に失敗。終了時クリーンアップへフォールバック",
+                error,
+            )
+        }
+    }
+
+    @RequiresApi(Build.VERSION_CODES.BAKLAVA)
+    private fun unregisterSystemNavigationObserverApi36() {
+        val callback = systemNavigationObserverCallback as? OnBackInvokedCallback ?: return
+        runCatching {
+            onBackInvokedDispatcher.unregisterOnBackInvokedCallback(callback)
+        }
+        systemNavigationObserverCallback = null
     }
 }
 

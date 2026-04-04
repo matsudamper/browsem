@@ -26,6 +26,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import java.io.ByteArrayOutputStream
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * メディア再生通知を管理するフォアグラウンドサービス。
@@ -36,6 +37,7 @@ class MediaPlaybackService : MediaSessionService() {
 
     private var mediaSession: MediaSession? = null
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private val hasStartedForeground = AtomicBoolean(false)
 
     @OptIn(UnstableApi::class)
     override fun onCreate() {
@@ -57,6 +59,14 @@ class MediaPlaybackService : MediaSessionService() {
                     actionFactory: MediaNotification.ActionFactory,
                     onNotificationChangedCallback: MediaNotification.Provider.Callback,
                 ): MediaNotification {
+                    Log.d(
+                        TAG,
+                        "createNotification: title=${mediaSession.player.mediaMetadata.title} playbackState=${mediaSession.player.playbackState} playWhenReady=${mediaSession.player.playWhenReady} position=${mediaSession.player.currentPosition}",
+                    )
+                    MediaTraceLog.d(
+                        "SVC createNotification title=${mediaSession.player.mediaMetadata.title?.toString()?.take(60)} " +
+                            "playbackState=${mediaSession.player.playbackState} playWhenReady=${mediaSession.player.playWhenReady} position=${mediaSession.player.currentPosition}",
+                    )
                     return defaultNotificationProvider.createNotification(
                         mediaSession,
                         customLayout,
@@ -97,7 +107,14 @@ class MediaPlaybackService : MediaSessionService() {
     }
 
     override fun onStartCommand(intent: android.content.Intent?, flags: Int, startId: Int): Int {
-        Log.d(TAG, "onStartCommand: flags=$flags, startId=$startId")
+        Log.d(TAG, "onStartCommand: flags=$flags, startId=$startId bridgeState=${MediaSessionBridge.playbackState.value}")
+        MediaTraceLog.d("SVC onStartCommand startId=$startId flags=$flags startedFg=${hasStartedForeground.get()}")
+
+        if (!hasStartedForeground.compareAndSet(false, true)) {
+            Log.d(TAG, "onStartCommand: skip bootstrap notification because foreground already started")
+            MediaTraceLog.d("SVC skipBootstrap startId=$startId")
+            return super.onStartCommand(intent, flags, startId)
+        }
 
         // startForegroundService() 経由で起動された場合（フラグの有無に関わらず）、
         // タイムアウト回避のため先にプレースホルダ通知で foreground 化する。
@@ -114,6 +131,7 @@ class MediaPlaybackService : MediaSessionService() {
             )
         } catch (e: Exception) {
             Log.w(TAG, "startForeground failed (may not be a foreground service)", e)
+            MediaTraceLog.d("SVC startForeground failed error=${e.javaClass.simpleName}")
         }
 
         return super.onStartCommand(intent, flags, startId)
@@ -121,6 +139,8 @@ class MediaPlaybackService : MediaSessionService() {
 
     override fun onDestroy() {
         Log.d(TAG, "onDestroy")
+        MediaTraceLog.d("SVC onDestroy")
+        hasStartedForeground.set(false)
         MediaPlaybackServiceController.onServiceDestroyed()
         mediaSession?.run {
             removeSession(this)
@@ -161,6 +181,10 @@ private class GeckoMediaPlayer : SimpleBasePlayer(Looper.getMainLooper()) {
     private var currentState = MediaSessionBridge.playbackState.value
 
     fun updateFromBridge(state: MediaPlaybackState) {
+        Log.d(PLAYER_TAG, "updateFromBridge: state=$state")
+        MediaTraceLog.d(
+            "PLY updateFromBridge isActive=${state.isActive} isPlaying=${state.isPlaying} titleBlank=${state.title.isBlank()} pos=${state.positionMs} dur=${state.durationMs}",
+        )
         currentState = state
         invalidateState()
     }
@@ -268,5 +292,9 @@ private class GeckoMediaPlayer : SimpleBasePlayer(Looper.getMainLooper()) {
         val stream = ByteArrayOutputStream()
         bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream)
         return stream.toByteArray()
+    }
+
+    companion object {
+        private const val PLAYER_TAG = "GeckoMediaPlayer"
     }
 }
