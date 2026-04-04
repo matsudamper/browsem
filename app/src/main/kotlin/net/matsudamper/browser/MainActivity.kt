@@ -1,8 +1,6 @@
 package net.matsudamper.browser
 
 import android.Manifest
-import android.app.NotificationChannel
-import android.app.NotificationManager
 import android.content.Intent
 import android.content.IntentSender
 import android.content.pm.PackageManager
@@ -26,8 +24,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTagsAsResourceId
-import androidx.core.app.NotificationCompat
-import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.CompletableDeferred
@@ -39,10 +35,6 @@ import org.koin.android.ext.android.inject
 import org.koin.androidx.viewmodel.ext.android.viewModel
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoRuntime
-import org.mozilla.geckoview.GeckoSession
-import org.mozilla.geckoview.WebNotification
-import org.mozilla.geckoview.WebNotificationDelegate
-import java.net.URI
 import java.util.concurrent.CancellationException
 
 class MainActivity : ComponentActivity() {
@@ -63,32 +55,15 @@ class MainActivity : ComponentActivity() {
     private val newTabUrlFlow = createNewTabChannel.receiveAsFlow()
     private val openDownloadsFlow = openDownloadsChannel.receiveAsFlow()
 
-    private var pendingNotificationPermissionResult: GeckoResult<Int>? = null
     private var pendingDownloadNotificationPermissionDeferred: CompletableDeferred<Unit>? = null
     private var hostsBrowserContent = false
     private var systemNavigationObserverCallback: Any? = null
 
-    private val requestNotificationPermissionLauncher = registerForActivityResult(
+    private val requestDownloadNotificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
-        // GeckoView のデスクトップ通知パーミッション要求の完了
-        val pendingResult = pendingNotificationPermissionResult
-        if (pendingResult != null) {
-            pendingNotificationPermissionResult = null
-            pendingResult.complete(
-                if (isGranted) {
-                    GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW
-                } else {
-                    GeckoSession.PermissionDelegate.ContentPermission.VALUE_DENY
-                }
-            )
-        }
-        // ダウンロード通知パーミッション要求の完了
-        val downloadDeferred = pendingDownloadNotificationPermissionDeferred
-        if (downloadDeferred != null) {
-            pendingDownloadNotificationPermissionDeferred = null
-            downloadDeferred.complete(Unit)
-        }
+    ) { _ ->
+        pendingDownloadNotificationPermissionDeferred?.complete(Unit)
+        pendingDownloadNotificationPermissionDeferred = null
     }
 
     private val geckoActivityLauncher = registerForActivityResult(
@@ -126,38 +101,6 @@ class MainActivity : ComponentActivity() {
         result
     }
 
-    private val webNotificationDelegate = object : WebNotificationDelegate {
-        override fun onShowNotification(notification: WebNotification) {
-            val source = notification.source ?: return
-            val domain = extractDomain(source)
-            val channelId = ensureNotificationChannel(domain)
-
-            val notificationId =
-                (notification.tag.takeIf { it.isNotBlank() } ?: source).hashCode()
-            val builder = NotificationCompat.Builder(this@MainActivity, channelId)
-                .setSmallIcon(android.R.drawable.ic_dialog_info)
-                .setContentTitle(notification.title)
-                .setContentText(notification.text)
-                .setAutoCancel(true)
-
-            if (ContextCompat.checkSelfPermission(
-                    this@MainActivity,
-                    Manifest.permission.POST_NOTIFICATIONS,
-                ) == PackageManager.PERMISSION_GRANTED
-            ) {
-                NotificationManagerCompat.from(this@MainActivity)
-                    .notify(notificationId, builder.build())
-            }
-        }
-
-        override fun onCloseNotification(notification: WebNotification) {
-            val source = notification.source ?: return
-            val notificationId =
-                (notification.tag.takeIf { it.isNotBlank() } ?: source).hashCode()
-            NotificationManagerCompat.from(this@MainActivity).cancel(notificationId)
-        }
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -175,7 +118,6 @@ class MainActivity : ComponentActivity() {
         runtime.settings.setExtensionsWebAPIEnabled(true)
         runtime.webExtensionController.setPromptDelegate(extensionInstaller.promptDelegate)
         runtime.webExtensionController.setAddonManagerDelegate(extensionInstaller.addonManagerDelegate)
-        runtime.webNotificationDelegate = webNotificationDelegate
         warmUpWebExtensionController()
 
         // ACTION_OPEN_DOWNLOADS は savedInstanceState の有無にかかわらず処理する。
@@ -209,9 +151,6 @@ class MainActivity : ComponentActivity() {
                     openDownloadsFlow = openDownloadsFlow,
                     onInstallExtensionRequest = { pageUrl ->
                         extensionInstaller.installFromCurrentPage(pageUrl)
-                    },
-                    onDesktopNotificationPermissionRequest = {
-                        requestNotificationPermissionIfNeeded()
                     },
                     onRequestDownloadNotificationPermission = {
                         requestDownloadNotificationPermission()
@@ -257,7 +196,6 @@ class MainActivity : ComponentActivity() {
     /**
      * ダウンロード通知を表示するために POST_NOTIFICATIONS パーミッションを要求し、
      * ユーザーが GRANT または DENY を選択するまで待機する。
-     * 別の権限ダイアログが表示中の場合はそのダイアログの完了に合流して待機する。
      */
     private suspend fun requestDownloadNotificationPermission() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
@@ -266,46 +204,14 @@ class MainActivity : ComponentActivity() {
                 Manifest.permission.POST_NOTIFICATIONS,
             ) == PackageManager.PERMISSION_GRANTED
         ) return
-        // 別のダウンロード通知パーミッション要求が保留中の場合は合流して待機
-        val existingDownloadDeferred = pendingDownloadNotificationPermissionDeferred
-        if (existingDownloadDeferred != null) {
-            existingDownloadDeferred.await()
-            return
-        }
-        // GeckoView の通知ダイアログが表示中の場合: コールバックで完了させてもらう deferred を登録して待機
-        if (pendingNotificationPermissionResult != null) {
-            val deferred = CompletableDeferred<Unit>()
-            pendingDownloadNotificationPermissionDeferred = deferred
-            deferred.await()
+        pendingDownloadNotificationPermissionDeferred?.let {
+            it.await()
             return
         }
         val deferred = CompletableDeferred<Unit>()
         pendingDownloadNotificationPermissionDeferred = deferred
-        requestNotificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        requestDownloadNotificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         deferred.await()
-    }
-
-    private fun requestNotificationPermissionIfNeeded(): GeckoResult<Int> {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
-            return GeckoResult.fromValue(GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW)
-        }
-        if (ContextCompat.checkSelfPermission(
-                this,
-                Manifest.permission.POST_NOTIFICATIONS
-            ) == PackageManager.PERMISSION_GRANTED
-        ) {
-            return GeckoResult.fromValue(GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW)
-        }
-        pendingNotificationPermissionResult?.let {
-            return GeckoResult.fromException(
-                IllegalStateException("Another notification permission request is already pending.")
-            )
-        }
-
-        return GeckoResult<Int>().also { result ->
-            pendingNotificationPermissionResult = result
-            requestNotificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-        }
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -339,10 +245,6 @@ class MainActivity : ComponentActivity() {
             CancellationException("Activity was destroyed before Gecko activity completed.")
         )
         pendingActivityResult = null
-        pendingNotificationPermissionResult?.completeExceptionally(
-            CancellationException("Activity was destroyed before notification permission completed.")
-        )
-        pendingNotificationPermissionResult = null
         pendingDownloadNotificationPermissionDeferred?.cancel(
             CancellationException("Activity was destroyed before download notification permission completed.")
         )
@@ -357,28 +259,6 @@ class MainActivity : ComponentActivity() {
         }
         runtime.webExtensionController.setAddonManagerDelegate(null)
         super.onDestroy()
-    }
-
-    private fun extractDomain(url: String): String {
-        return try {
-            URI(url).host?.takeIf { it.isNotBlank() } ?: url
-        } catch (_: Exception) {
-            url
-        }
-    }
-
-    private fun ensureNotificationChannel(domain: String): String {
-        val channelId = "notification_$domain"
-        val notificationManager = getSystemService(NotificationManager::class.java)
-        if (notificationManager.getNotificationChannel(channelId) == null) {
-            val channel = NotificationChannel(
-                channelId,
-                domain,
-                NotificationManager.IMPORTANCE_DEFAULT,
-            )
-            notificationManager.createNotificationChannel(channel)
-        }
-        return channelId
     }
 
     private fun warmUpWebExtensionController() {

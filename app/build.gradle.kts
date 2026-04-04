@@ -140,7 +140,6 @@ dependencies {
     implementation(project(":ui:downloads"))
     implementation(project(":ui:extensions"))
     implementation(project(":ui:history"))
-    implementation(project(":ui:notifications"))
     implementation(project(":ui:settings"))
     implementation(project(":ui:tabs"))
     implementation(libs.androidx.swiperefreshlayout)

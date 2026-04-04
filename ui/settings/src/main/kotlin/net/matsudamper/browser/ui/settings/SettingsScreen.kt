@@ -46,7 +46,6 @@ import net.matsudamper.browser.data.TranslationProvider
 fun SettingsScreen(
     uiState: SettingsScreenUiState,
     onOpenExtensions: () -> Unit,
-    onOpenNotificationPermissions: () -> Unit,
     onOpenHistory: () -> Unit,
     onOpenDownloads: () -> Unit,
     onBack: () -> Unit,
@@ -290,15 +289,6 @@ fun SettingsScreen(
             }
 
             Spacer(Modifier.height(betweenPadding))
-            SettingSection(title = "通知") {
-                TextButton(
-                    onClick = onOpenNotificationPermissions,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text("通知を許可したサイト")
-                }
-            }
-
             Spacer(Modifier.height(8.dp))
             Spacer(Modifier.padding(bottom = paddingValues.calculateBottomPadding()))
         }

@@ -101,30 +101,6 @@ class SettingsRepository(context: Context) {
                 .build()
         }
     }
-
-    suspend fun addNotificationAllowedOrigin(origin: String) {
-        dataStore.updateData { current ->
-            if (current.notificationAllowedOriginsList.contains(origin)) {
-                current
-            } else {
-                current.toBuilder().addNotificationAllowedOrigins(origin).build()
-            }
-        }
-    }
-
-    suspend fun removeNotificationAllowedOrigin(origin: String) {
-        dataStore.updateData { current ->
-            if (!current.notificationAllowedOriginsList.contains(origin)) {
-                current
-            } else {
-                val newList = current.notificationAllowedOriginsList.filter { it != origin }
-                current.toBuilder()
-                    .clearNotificationAllowedOrigins()
-                    .addAllNotificationAllowedOrigins(newList)
-                    .build()
-            }
-        }
-    }
 }
 
 data class ResolvedBrowserSettings(
@@ -133,7 +109,6 @@ data class ResolvedBrowserSettings(
     val translationProvider: TranslationProvider,
     val enableThirdPartyCa: Boolean,
     val themeMode: ThemeMode,
-    val notificationAllowedOrigins: List<String>,
 )
 
 fun BrowserSettings.resolvedBrowserSettings(): ResolvedBrowserSettings = ResolvedBrowserSettings(
@@ -142,7 +117,6 @@ fun BrowserSettings.resolvedBrowserSettings(): ResolvedBrowserSettings = Resolve
     translationProvider = translationProvider,
     enableThirdPartyCa = enableThirdPartyCa,
     themeMode = themeMode,
-    notificationAllowedOrigins = notificationAllowedOriginsList,
 )
 
 fun BrowserSettings.resolvedHomepageUrl(): String = when (homepageType) {

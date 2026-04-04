@@ -100,13 +100,11 @@ class BrowserTab(
 
     fun attachSessionCallbacks(
         callbacks: BrowserSessionStateCallbacks,
-        onDesktopNotificationPermissionRequest: (String) -> GeckoResult<Int>,
         onOpenNewSessionRequest: (String) -> GeckoResult<GeckoSession>,
         onCloseRequest: (() -> Unit)? = null,
     ) {
         sessionDelegateHost.attachUi(
             callbacks = callbacks,
-            onDesktopNotificationPermissionRequest = onDesktopNotificationPermissionRequest,
             onOpenNewSessionRequest = onOpenNewSessionRequest,
             onCloseRequest = onCloseRequest,
         )

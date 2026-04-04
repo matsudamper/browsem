@@ -80,7 +80,6 @@ internal fun GeckoBrowserTab(
     modifier: Modifier = Modifier,
     tabCount: Int,
     onInstallExtensionRequest: (String) -> Unit,
-    onDesktopNotificationPermissionRequest: (String) -> GeckoResult<Int>,
     onRequestDownloadNotificationPermission: suspend () -> Unit = {},
     onOpenSettings: () -> Unit,
     onOpenTabs: () -> Unit,
@@ -147,7 +146,6 @@ internal fun GeckoBrowserTab(
 
     // 不安定なラムダキーによる DisposableEffect の再実行を防ぐ
     val currentOnCloseTab by rememberUpdatedState(onCloseTab)
-    val currentOnDesktopNotificationPermissionRequest by rememberUpdatedState(onDesktopNotificationPermissionRequest)
     val currentOnOpenNewSessionRequest by rememberUpdatedState(onOpenNewSessionRequest)
     val closeUrlInput: (Boolean) -> Unit = { restoreCurrentUrl ->
         state.isUrlInputFocused = false
@@ -231,13 +229,6 @@ internal fun GeckoBrowserTab(
     DisposableEffect(session, state, browserTab, mediaWebExtension) {
         browserTab.attachSessionCallbacks(
             callbacks = state,
-            onDesktopNotificationPermissionRequest = { uri ->
-                runCatching {
-                    currentOnDesktopNotificationPermissionRequest(uri)
-                }.getOrElse { error ->
-                    GeckoResult.fromException(error)
-                }
-            },
             onOpenNewSessionRequest = { uri ->
                 runCatching {
                     GeckoResult.fromValue(currentOnOpenNewSessionRequest(uri))

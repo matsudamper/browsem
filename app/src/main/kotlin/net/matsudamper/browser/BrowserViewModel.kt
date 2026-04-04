@@ -25,9 +25,7 @@ import net.matsudamper.browser.data.TabRepository
 import net.matsudamper.browser.data.ThemeMode
 import net.matsudamper.browser.data.TranslationProvider
 import net.matsudamper.browser.data.resolvedBrowserSettings
-import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoRuntime
-import org.mozilla.geckoview.GeckoSession
 
 internal data class BrowserAppUiState(
     val themeMode: ThemeMode,
@@ -42,7 +40,6 @@ private data class BrowserLogicSettings(
     val searchTemplate: String,
     val translationProvider: TranslationProvider,
     val enableThirdPartyCa: Boolean,
-    val notificationAllowedOrigins: Set<String>,
 )
 
 private data class ViewModelState(
@@ -115,23 +112,6 @@ internal class BrowserViewModel(
                 browserTabController.selectTab(tabId)
             }
             // setupComplete は browserTabController.restoreTabs() 内で complete 済み
-        }
-    }
-
-    fun handleNotificationPermission(
-        uri: String,
-        onDesktopNotificationPermissionRequest: () -> GeckoResult<Int>,
-    ): GeckoResult<Int> {
-        val allowedOrigins = viewModelStateFlow.value.logicSettings?.notificationAllowedOrigins ?: emptySet()
-        if (allowedOrigins.contains(uri)) {
-            return GeckoResult.fromValue(GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW)
-        }
-        val androidResult = onDesktopNotificationPermissionRequest()
-        return androidResult.then { value ->
-            if (value == GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW) {
-                viewModelScope.launch { settingsRepository.addNotificationAllowedOrigin(uri) }
-            }
-            GeckoResult.fromValue(value)
         }
     }
 
@@ -223,5 +203,4 @@ private fun ResolvedBrowserSettings.toLogicSettings(): BrowserLogicSettings = Br
     searchTemplate = searchTemplate,
     translationProvider = translationProvider,
     enableThirdPartyCa = enableThirdPartyCa,
-    notificationAllowedOrigins = notificationAllowedOrigins.toSet(),
 )
