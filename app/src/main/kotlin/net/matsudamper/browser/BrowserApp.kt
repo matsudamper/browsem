@@ -238,19 +238,14 @@ private fun BrowserAppContent(
                                 .map { browserTabController.tabs.toList() }
                                 .distinctUntilChanged()
                         }
-                        val selectedTabIdFlow = remember(browserTabController) {
-                            browserTabController.tabStoreState
-                                .map { state -> state.selectedTabId }
-                                .distinctUntilChanged()
-                        }
-                        val browserScreenViewModel = remember(tabGroupRepository, browserTabsFlow, selectedTabIdFlow) {
+                        val browserScreenViewModel = remember(key.tabId, tabGroupRepository, browserTabsFlow) {
                             BrowserScreenViewModel(
                                 historyRepository = historyRepository,
                                 settingsRepository = settingsRepository,
                                 webSuggestionRepository = webSuggestionRepository,
                                 tabGroupRepository = tabGroupRepository,
                                 browserTabsFlow = browserTabsFlow,
-                                selectedTabIdFlow = selectedTabIdFlow,
+                                screenTabId = key.tabId,
                             )
                         }
                         // タブが閉じられた際にコルーチンスコープをキャンセルしてリークを防ぐ

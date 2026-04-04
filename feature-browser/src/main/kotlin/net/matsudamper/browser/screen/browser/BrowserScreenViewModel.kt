@@ -31,7 +31,7 @@ class BrowserScreenViewModel(
     webSuggestionRepository: WebSuggestionRepository,
     tabGroupRepository: TabGroupRepository,
     browserTabsFlow: Flow<List<BrowserTab>>,
-    selectedTabIdFlow: Flow<String?>,
+    screenTabId: String,
 ) : ViewModel(), Closeable {
     // ViewModel継承時はonCleared()でキャンセル、remember()使用時はclose()でキャンセル
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -43,7 +43,9 @@ class BrowserScreenViewModel(
     )
     private val callbacks = urlBarSuggestionsStateOwner.callbacks
 
-    private val viewModelStateFlow = MutableStateFlow(ViewModelState())
+    private val viewModelStateFlow = MutableStateFlow(
+        ViewModelState(screenTabId = screenTabId),
+    )
 
     override fun onCleared() {
         super.onCleared()
@@ -86,13 +88,6 @@ class BrowserScreenViewModel(
             }
         }
         scope.launch {
-            selectedTabIdFlow
-                .distinctUntilChanged()
-                .collectLatest { selectedTabId ->
-                    viewModelStateFlow.update { it.copy(currentTabId = selectedTabId) }
-                }
-        }
-        scope.launch {
             browserTabsFlow
                 .distinctUntilChanged()
                 .collectLatest { browserTabs ->
@@ -126,7 +121,7 @@ private data class ViewModelState(
     val tabGroupAssignments: List<TabGroupAssignment> = emptyList(),
     val browserTabs: List<BrowserTab> = emptyList(),
     val orderedBrowserTabs: List<BrowserTab> = emptyList(),
-    val currentTabId: String? = null,
+    val screenTabId: String? = null,
 ) {
     fun withResolvedOrderedBrowserTabs(): ViewModelState {
         val orderedBrowserTabs = resolveOrderedBrowserTabs()
@@ -136,13 +131,18 @@ private data class ViewModelState(
     }
 
     fun resolveAdjacentTabs(): AdjacentTabs {
-        val tabId = currentTabId ?: return AdjacentTabs()
-        val currentIndex = orderedBrowserTabs.indexOfFirst { it.tabId == tabId }
-        if (currentIndex < 0) return AdjacentTabs()
-        return AdjacentTabs(
-            previousTab = if (currentIndex > 0) orderedBrowserTabs[currentIndex - 1] else null,
-            nextTab = if (currentIndex < orderedBrowserTabs.lastIndex) orderedBrowserTabs[currentIndex + 1] else null,
+        val adjacentTabIds = resolveAdjacentTabIds(
+            orderedTabIds = orderedBrowserTabs.map(BrowserTab::tabId),
+            anchorTabId = screenTabId,
         )
+        return AdjacentTabs(
+            previousTab = adjacentTabIds.previousTabId?.let(::findTab),
+            nextTab = adjacentTabIds.nextTabId?.let(::findTab),
+        )
+    }
+
+    private fun findTab(tabId: String): BrowserTab? {
+        return orderedBrowserTabs.firstOrNull { it.tabId == tabId }
     }
 
     private fun resolveOrderedBrowserTabs(): List<BrowserTab> {
@@ -159,4 +159,22 @@ private data class ViewModelState(
 private data class AdjacentTabs(
     val previousTab: BrowserTab? = null,
     val nextTab: BrowserTab? = null,
+)
+
+internal fun resolveAdjacentTabIds(
+    orderedTabIds: List<String>,
+    anchorTabId: String?,
+): AdjacentTabIds {
+    val tabId = anchorTabId ?: return AdjacentTabIds()
+    val currentIndex = orderedTabIds.indexOf(tabId)
+    if (currentIndex < 0) return AdjacentTabIds()
+    return AdjacentTabIds(
+        previousTabId = orderedTabIds.getOrNull(currentIndex - 1),
+        nextTabId = orderedTabIds.getOrNull(currentIndex + 1),
+    )
+}
+
+internal data class AdjacentTabIds(
+    val previousTabId: String? = null,
+    val nextTabId: String? = null,
 )
