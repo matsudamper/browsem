@@ -68,12 +68,14 @@ class MediaWebExtension(
         if (!registeredSessions.add(session)) {
             return
         }
+        Log.d(TAG, "registerSession: session=${session.logKey()}")
         extension?.also { ext ->
             attachSessionMessageDelegate(session, ext)
         }
     }
 
     fun unregisterSession(session: GeckoSession) {
+        Log.d(TAG, "unregisterSession: session=${session.logKey()} isOpen=${session.isOpen}")
         // メッセージデリゲートはセッション継続中のバックグラウンド再生にも必要なため維持する。
         if (activeSession === session && !session.isOpen) {
             deactivateSession(session)
@@ -81,16 +83,21 @@ class MediaWebExtension(
     }
 
     fun onActivated(session: GeckoSession, mediaSession: MediaSession) {
+        Log.d(TAG, "onActivated: session=${session.logKey()} mediaSession=${mediaSession.logKey()}")
+        MediaTraceLog.d("WX activated session=${session.logKey()} mediaSession=${mediaSession.logKey()}")
         activeSession = session
         MediaSessionBridge.activeGeckoMediaSession = mediaSession
         applySessionState(session)
     }
 
     fun onDeactivated(session: GeckoSession) {
+        Log.d(TAG, "onDeactivated: session=${session.logKey()}")
+        MediaTraceLog.d("WX deactivated session=${session.logKey()}")
         deactivateSession(session)
     }
 
     fun onFeatures(session: GeckoSession, features: Long) {
+        Log.d(TAG, "onFeatures: session=${session.logKey()} features=$features")
         val current = sessionStates[session] ?: SessionPlaybackSnapshot()
         val next = current.copy(features = features)
         sessionStates[session] = next
@@ -103,7 +110,7 @@ class MediaWebExtension(
     fun onMetadata(session: GeckoSession, meta: MediaSession.Metadata) {
         Log.d(
             TAG,
-            "onMetadata: title=${meta.title}, artist=${meta.artist}, hasArtwork=${meta.artwork != null}",
+            "onMetadata: session=${session.logKey()} title=${meta.title}, artist=${meta.artist}, album=${meta.album}, hasArtwork=${meta.artwork != null}",
         )
         updateSessionSnapshot(session) { current ->
             current.copy(
@@ -154,7 +161,7 @@ class MediaWebExtension(
     }
 
     fun onPlay(session: GeckoSession, mediaSession: MediaSession) {
-        Log.d(TAG, "onPlay fallback")
+        Log.d(TAG, "onPlay fallback: session=${session.logKey()}")
         bindMediaSessionIfNeeded(session, mediaSession)
         updateSessionSnapshot(session) { current ->
             current.copy(isActive = true, isPlaying = true)
@@ -162,7 +169,8 @@ class MediaWebExtension(
     }
 
     fun onPause(session: GeckoSession, mediaSession: MediaSession) {
-        Log.d(TAG, "onPause fallback")
+        Log.d(TAG, "onPause fallback: session=${session.logKey()}")
+        MediaTraceLog.d("WX pauseFallback session=${session.logKey()}")
         bindMediaSessionIfNeeded(session, mediaSession)
         updateSessionSnapshot(session) { current ->
             current.copy(isActive = true, isPlaying = false)
@@ -176,7 +184,10 @@ class MediaWebExtension(
     ) {
         Log.d(
             TAG,
-            "onPositionState fallback: position=${state.position}, duration=${state.duration}",
+            "onPositionState fallback: session=${session.logKey()} position=${state.position}, duration=${state.duration}",
+        )
+        MediaTraceLog.d(
+            "WX positionFallback session=${session.logKey()} position=${state.position} duration=${state.duration}",
         )
         bindMediaSessionIfNeeded(session, mediaSession)
         updateSessionSnapshot(session) { current ->
@@ -211,18 +222,39 @@ class MediaWebExtension(
                         return null
                     }
                     val json = message as? JSONObject ?: return null
+                    val previousSnapshot = sessionStates[session]
+                    val isActive = json.optBoolean("isActive", false)
+                    val isPlaying = json.optBoolean("isPlaying", false)
+                    val incomingDurationMs = json.optLong("durationMs", 0L).coerceAtLeast(0L)
+                    val incomingPositionMs = json.optLong("positionMs", 0L).coerceAtLeast(0L)
+                    val shouldKeepPreviousTiming =
+                        isActive &&
+                            incomingDurationMs == 0L &&
+                            incomingPositionMs == 0L &&
+                            previousSnapshot != null &&
+                            previousSnapshot.durationMs > 0L
                     val snapshot = SessionPlaybackSnapshot(
-                        isActive = json.optBoolean("isActive", false),
-                        isPlaying = json.optBoolean("isPlaying", false),
+                        isActive = isActive,
+                        isPlaying = isPlaying,
                         title = json.optString("title", ""),
                         artist = json.optString("artist", ""),
                         album = json.optString("album", ""),
-                        durationMs = json.optLong("durationMs", 0L).coerceAtLeast(0L),
-                        positionMs = json.optLong("positionMs", 0L).coerceAtLeast(0L),
-                        features = sessionStates[session]?.features ?: 0L,
+                        durationMs = if (shouldKeepPreviousTiming) previousSnapshot.durationMs else incomingDurationMs,
+                        positionMs = if (shouldKeepPreviousTiming) previousSnapshot.positionMs else incomingPositionMs,
+                        features = previousSnapshot?.features ?: 0L,
                     )
                     mainHandler.post {
-                        val previousSnapshot = sessionStates[session]
+                        Log.d(TAG, "raw snapshot: session=${session.logKey()} payload=$json")
+                        val debugReason = json.optString("debugReason", "")
+                        if (debugReason != "interval" && debugReason != "event:timeupdate") {
+                            MediaTraceLog.d(
+                                "WX raw session=${session.logKey()} reason=$debugReason isActive=${snapshot.isActive} isPlaying=${snapshot.isPlaying} " +
+                                    "vis=${json.optString("debugVisibility", "")} playbackState=${json.optString("debugPlaybackState", "")} " +
+                                    "mediaCount=${json.optInt("debugMediaCount", -1)} knownMedia=${json.optInt("debugKnownMediaCount", -1)} " +
+                                    "paused=${json.optBoolean("debugMediaPaused", false)} ended=${json.optBoolean("debugMediaEnded", false)} " +
+                                    "ready=${json.optInt("debugMediaReadyState", -1)} pos=${snapshot.positionMs} dur=${snapshot.durationMs} src=${json.optString("debugCurrentSrc", "").takeLast(80)}",
+                            )
+                        }
                         if (
                             previousSnapshot != null &&
                             (
@@ -235,8 +267,8 @@ class MediaWebExtension(
                         }
                         Log.d(
                             TAG,
-                            "snapshot: isActive=${snapshot.isActive}, isPlaying=${snapshot.isPlaying}, " +
-                                "title=${snapshot.title}, durationMs=${snapshot.durationMs}, positionMs=${snapshot.positionMs}",
+                            "snapshot: session=${session.logKey()} isActive=${snapshot.isActive}, isPlaying=${snapshot.isPlaying}, " +
+                                "title=${snapshot.title}, durationMs=${snapshot.durationMs}, positionMs=${snapshot.positionMs}, activeSession=${activeSession?.logKey()}",
                         )
                         sessionStates[session] = snapshot
                         promoteSessionFromSnapshotIfNeeded(session, snapshot)
@@ -253,6 +285,10 @@ class MediaWebExtension(
 
     private fun applySessionState(session: GeckoSession) {
         val snapshot = sessionStates[session]
+        Log.d(
+            TAG,
+            "applySessionState: session=${session.logKey()} hasSnapshot=${snapshot != null} activeSession=${activeSession?.logKey()}",
+        )
         if (snapshot != null) {
             applySnapshot(session, snapshot)
             return
@@ -274,6 +310,10 @@ class MediaWebExtension(
         transform: (SessionPlaybackSnapshot) -> SessionPlaybackSnapshot,
     ): SessionPlaybackSnapshot {
         val next = transform(sessionStates[session] ?: SessionPlaybackSnapshot())
+        Log.d(
+            TAG,
+            "updateSessionSnapshot: session=${session.logKey()} next=$next activeSession=${activeSession?.logKey()}",
+        )
         sessionStates[session] = next
         promoteSessionFromSnapshotIfNeeded(session, next)
         if (activeSession === session) {
@@ -283,9 +323,16 @@ class MediaWebExtension(
     }
 
     private fun applySnapshot(session: GeckoSession, snapshot: SessionPlaybackSnapshot) {
+        Log.d(
+            TAG,
+            "applySnapshot: session=${session.logKey()} snapshot=$snapshot activeSession=${activeSession?.logKey()} artwork=${sessionArtworkBitmaps.containsKey(session)}",
+        )
+        MediaTraceLog.d(
+            "WX apply session=${session.logKey()} isActive=${snapshot.isActive} isPlaying=${snapshot.isPlaying} " +
+                "titleBlank=${snapshot.title.isBlank()} pos=${snapshot.positionMs} dur=${snapshot.durationMs} artwork=${sessionArtworkBitmaps.containsKey(session)} active=${activeSession?.logKey()}",
+        )
         if (!snapshot.isActive) {
-            MediaSessionBridge.deactivate()
-            MediaPlaybackServiceController.stop(context)
+            deactivateSession(session)
             return
         }
 
@@ -302,12 +349,16 @@ class MediaWebExtension(
         )
         MediaSessionBridge.updateFeatures(snapshot.features)
         MediaSessionBridge.updatePlaying(snapshot.isPlaying)
-        if (snapshot.isPlaying) {
+        if (snapshot.isActive) {
             MediaPlaybackServiceController.start(context)
         }
     }
 
     private fun bindMediaSessionIfNeeded(session: GeckoSession, mediaSession: MediaSession) {
+        Log.d(
+            TAG,
+            "bindMediaSessionIfNeeded: session=${session.logKey()} mediaSession=${mediaSession.logKey()} currentActive=${activeSession?.logKey()}",
+        )
         if (activeSession == null || activeSession === session) {
             activeSession = session
             MediaSessionBridge.activeGeckoMediaSession = mediaSession
@@ -315,6 +366,11 @@ class MediaWebExtension(
     }
 
     private fun deactivateSession(session: GeckoSession) {
+        Log.d(
+            TAG,
+            "deactivateSession: session=${session.logKey()} currentActive=${activeSession?.logKey()}",
+        )
+        MediaTraceLog.d("WX deactivate session=${session.logKey()} currentActive=${activeSession?.logKey()}")
         if (activeSession !== session) {
             return
         }
@@ -338,7 +394,7 @@ class MediaWebExtension(
             return
         }
         if (activeSession == null) {
-            Log.d(TAG, "activeSession を WebExtension snapshot から補完")
+            Log.d(TAG, "activeSession を WebExtension snapshot から補完: session=${session.logKey()}")
             activeSession = session
         }
     }
@@ -362,6 +418,8 @@ private fun Double.toSnapshotMillis(fallback: Long): Long {
     }
     return (coerceAtLeast(0.0) * 1000.0).roundToLong()
 }
+
+private fun Any.logKey(): String = Integer.toHexString(System.identityHashCode(this))
 
 internal data class SessionPlaybackSnapshot(
     val isActive: Boolean = false,
