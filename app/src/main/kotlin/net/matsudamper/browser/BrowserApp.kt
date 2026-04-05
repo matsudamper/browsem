@@ -144,6 +144,19 @@ private fun BrowserAppContent(
         }.launchIn(this)
     }
 
+    // savedInstanceState からバックスタックが復元された場合、AppDestination.Setup が
+    // バックスタックに存在しないため restoreTabs() が呼ばれない。
+    // その場合はここでフォールバックとして復元を行い setupComplete を完了させる。
+    LaunchedEffect(Unit) {
+        if (backStack.none { it is AppDestination.Setup }) {
+            val restoredTabId = viewModel.restoreTabs()
+            val currentBrowserTab = backStack.filterIsInstance<AppDestination.Browser>().lastOrNull()
+            if (currentBrowserTab == null || browserTabController.findTab(currentBrowserTab.tabId) == null) {
+                selectTab(restoredTabId, null)
+            }
+        }
+    }
+
     LaunchedEffect(newTabUrlFlow) {
         // タブ復元完了を待ってから外部URLを処理する（レースコンディション防止）
         setupComplete.await()
