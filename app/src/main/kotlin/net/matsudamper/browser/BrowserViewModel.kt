@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -70,6 +71,12 @@ internal class BrowserViewModel(
     // タブ復元完了シグナル。BrowserTabController が内部で管理し、構成変更後も有効。
     val setupComplete: Deferred<Unit> get() = browserTabController.restoreComplete
 
+    val eventHandler = Channel<(Event) -> Unit>(Channel.UNLIMITED)
+
+    interface Event {
+        fun onTabsRestored(tabId: String)
+    }
+
     private val viewModelStateFlow = MutableStateFlow(ViewModelState())
     val uiState: StateFlow<BrowserAppUiState?> = MutableStateFlow<BrowserAppUiState?>(null)
         .also { uiStateFlow ->
@@ -96,6 +103,12 @@ internal class BrowserViewModel(
                 .collect { enableThirdPartyCa ->
                     runtime.settings.setEnterpriseRootsEnabled(enableThirdPartyCa)
                 }
+        }
+        // ViewModel 生成時にタブ復元を開始する。
+        // バックスタックの状態に依存せず、復元は必ず実行される。
+        viewModelScope.launch {
+            val tabId = restoreTabs()
+            eventHandler.trySend { it.onTabsRestored(tabId) }
         }
     }
 

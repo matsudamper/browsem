@@ -144,16 +144,27 @@ private fun BrowserAppContent(
         }.launchIn(this)
     }
 
-    // savedInstanceState からバックスタックが復元された場合、AppDestination.Setup が
-    // バックスタックに存在しないため restoreTabs() が呼ばれない。
-    // その場合はここでフォールバックとして復元を行い setupComplete を完了させる。
-    LaunchedEffect(Unit) {
-        if (backStack.none { it is AppDestination.Setup }) {
-            val restoredTabId = viewModel.restoreTabs()
-            val currentBrowserTab = backStack.filterIsInstance<AppDestination.Browser>().lastOrNull()
-            if (currentBrowserTab == null || browserTabController.findTab(currentBrowserTab.tabId) == null) {
-                selectTab(restoredTabId, null)
-            }
+    // ViewModel.init でタブ復元が開始される。復元完了後に遷移先タブを確定する。
+    LaunchedEffect(viewModel) {
+        viewModel.eventHandler.receiveAsFlow().collect { event ->
+            event(object : BrowserViewModel.Event {
+                override fun onTabsRestored(tabId: String) {
+                    when {
+                        backStack.firstOrNull() is AppDestination.Setup -> {
+                            // 通常起動: Setup プレースホルダーから復元済みタブへ遷移する
+                            selectTab(tabId, null)
+                        }
+                        else -> {
+                            // savedInstanceState 復元時: backstack がすでに Browser を指している。
+                            // そのタブが DB に存在しない場合（外部タブがクリーンアップ済み等）のみ遷移する。
+                            val currentBrowserTab = backStack.filterIsInstance<AppDestination.Browser>().lastOrNull()
+                            if (currentBrowserTab == null || browserTabController.findTab(currentBrowserTab.tabId) == null) {
+                                selectTab(tabId, null)
+                            }
+                        }
+                    }
+                }
+            })
         }
     }
 
@@ -225,11 +236,8 @@ private fun BrowserAppContent(
             entryProvider = { key: NavKey ->
                 when (key) {
                     is AppDestination.Setup -> navEntry(key) {
-                        LaunchedEffect(Unit) {
-                            val tabId = viewModel.restoreTabs()
-                            selectTab(tabId, null)
-                            // setupComplete は restoreTabs() 内で complete 済み
-                        }
+                        // タブ復元は BrowserViewModel.init で開始し、ナビゲーションは
+                        // BrowserAppContent の eventHandler LaunchedEffect が行う
                     }
 
                     is AppDestination.Browser -> navEntry(key) {
