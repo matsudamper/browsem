@@ -168,14 +168,27 @@ internal fun GeckoBrowserTab(
             }
     }
 
-    // Lifecycle observer for tab preview capture
+    // 他アプリから復帰した際に画面全体が真っ黒になる問題への対処。
+    // GeckoView 内部の SurfaceView がバックグラウンド中に Surface を破棄し、
+    // 復帰時に HWUI の合成ツリーが不整合になる。ON_STOP で releaseSession を呼んで
+    // Surface を明示的に破棄し、ON_START で setSession を呼んで再確保することで
+    // パイプラインを正常に復帰させる。
     DisposableEffect(lifecycleOwner, session) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_STOP) {
-                session.flushSessionState()
-                geckoView?.also {
-                    state.captureTabPreview(it)
+            when (event) {
+                Lifecycle.Event.ON_STOP -> {
+                    session.flushSessionState()
+                    geckoView?.also {
+                        state.captureTabPreview(it)
+                        it.releaseSession()
+                    }
                 }
+                Lifecycle.Event.ON_START -> {
+                    geckoView?.also { gecko ->
+                        gecko.setSession(session)
+                    }
+                }
+                else -> Unit
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
