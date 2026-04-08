@@ -169,13 +169,42 @@ internal fun GeckoBrowserTab(
     }
 
     // Lifecycle observer for tab preview capture
+    // 他アプリから復帰した際に画面全体が真っ黒になる問題（GeckoView 内部の SurfaceView が
+    // 非表示中に Surface を破棄し、復帰時に HWUI の合成ツリーが不整合になって ComposeView
+    // 側まで描画が止まるパターン）の対処として、ON_START 時に再描画を強制する。
+    //
+    // ここで行う「Step 1: 再描画強制」で直らない場合、次の打ち手として下記を検討すること:
+    //   Step 2: ON_STOP で geckoView.releaseSession(), ON_START で geckoView.setSession(session)
+    //           を呼び、Surface のライフサイクルを明示的にリセットする。既存の flushSessionState /
+    //           captureTabPreview の後に releaseSession を呼ぶ順序。バックグラウンド動画再生
+    //           （cef7f20）との干渉に注意。
+    //   Step 3: Step 2 でも直らない場合は GeckoRuntime レベルでの Surface 制御や、SurfaceView の
+    //           Z オーダー（setZOrderMediaOverlay）など、より低レイヤの対処が必要。
+    // 検討の詳細は plan ファイルを参照。
     DisposableEffect(lifecycleOwner, session) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_STOP) {
-                session.flushSessionState()
-                geckoView?.also {
-                    state.captureTabPreview(it)
+            when (event) {
+                Lifecycle.Event.ON_STOP -> {
+                    session.flushSessionState()
+                    geckoView?.also {
+                        state.captureTabPreview(it)
+                    }
                 }
+                Lifecycle.Event.ON_START -> {
+                    // Step 1: SurfaceView の surfaceCreated/surfaceChanged を再発火させる
+                    // 定番トリック。visibility を一度 INVISIBLE にして戻すことで Surface を
+                    // 再確保させ、あわせてレイアウト・描画パスを走らせる。
+                    geckoView?.also { gecko ->
+                        gecko.visibility = View.INVISIBLE
+                        gecko.visibility = View.VISIBLE
+                        gecko.requestLayout()
+                        gecko.invalidate()
+                    }
+                    // ComposeView 側のルートにも再描画要求を出し、HWUI の合成パイプラインを
+                    // 叩き起こす。GeckoView だけでなく Compose 全体が黒くなる症状への対処。
+                    view.rootView.invalidate()
+                }
+                else -> Unit
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
