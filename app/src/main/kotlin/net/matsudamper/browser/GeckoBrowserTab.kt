@@ -168,19 +168,11 @@ internal fun GeckoBrowserTab(
             }
     }
 
-    // Lifecycle observer for tab preview capture
-    // 他アプリから復帰した際に画面全体が真っ黒になる問題（GeckoView 内部の SurfaceView が
-    // 非表示中に Surface を破棄し、復帰時に HWUI の合成ツリーが不整合になって ComposeView
-    // 側まで描画が止まるパターン）の対処として、ON_START 時に再描画を強制する。
-    //
-    // ここで行う「Step 1: 再描画強制」で直らない場合、次の打ち手として下記を検討すること:
-    //   Step 2: ON_STOP で geckoView.releaseSession(), ON_START で geckoView.setSession(session)
-    //           を呼び、Surface のライフサイクルを明示的にリセットする。既存の flushSessionState /
-    //           captureTabPreview の後に releaseSession を呼ぶ順序。バックグラウンド動画再生
-    //           （cef7f20）との干渉に注意。
-    //   Step 3: Step 2 でも直らない場合は GeckoRuntime レベルでの Surface 制御や、SurfaceView の
-    //           Z オーダー（setZOrderMediaOverlay）など、より低レイヤの対処が必要。
-    // 検討の詳細は plan ファイルを参照。
+    // 他アプリから復帰した際に画面全体が真っ黒になる問題への対処。
+    // GeckoView 内部の SurfaceView がバックグラウンド中に Surface を破棄し、
+    // 復帰時に HWUI の合成ツリーが不整合になる。ON_STOP で releaseSession を呼んで
+    // Surface を明示的に破棄し、ON_START で setSession を呼んで再確保することで
+    // パイプラインを正常に復帰させる。
     DisposableEffect(lifecycleOwner, session) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
@@ -188,16 +180,11 @@ internal fun GeckoBrowserTab(
                     session.flushSessionState()
                     geckoView?.also {
                         state.captureTabPreview(it)
-                        // Step 2: Surface のライフサイクルを明示的にリセットする。
-                        // releaseSession で SurfaceView の Surface を破棄し、復帰時の
-                        // HWUI 合成ツリー不整合を防ぐ。
                         it.releaseSession()
                     }
                 }
                 Lifecycle.Event.ON_START -> {
                     geckoView?.also { gecko ->
-                        // Step 2: ON_START で setSession を呼び、Surface を再確保する。
-                        // これにより HWUI の合成パイプラインが正常に復帰する。
                         gecko.setSession(session)
                     }
                 }
