@@ -188,13 +188,20 @@ internal fun GeckoBrowserTab(
                     session.flushSessionState()
                     geckoView?.also {
                         state.captureTabPreview(it)
+                        // Step 2: Surface のライフサイクルを明示的にリセットする。
+                        // releaseSession で SurfaceView の Surface を破棄し、復帰時の
+                        // HWUI 合成ツリー不整合を防ぐ。
+                        it.releaseSession()
                     }
                 }
                 Lifecycle.Event.ON_START -> {
-                    // Step 1: SurfaceView の surfaceCreated/surfaceChanged を再発火させる
-                    // 定番トリック。visibility を一度 INVISIBLE にして戻すことで Surface を
-                    // 再確保させ、あわせてレイアウト・描画パスを走らせる。
                     geckoView?.also { gecko ->
+                        // Step 2: ON_START で setSession を呼び、Surface を再確保する。
+                        // これにより HWUI の合成パイプラインが正常に復帰する。
+                        gecko.setSession(session)
+                        // Step 1: SurfaceView の surfaceCreated/surfaceChanged を再発火させる
+                        // 定番トリック。visibility を一度 INVISIBLE にして戻すことで Surface を
+                        // 再確保させ、あわせてレイアウト・描画パスを走らせる。
                         gecko.visibility = View.INVISIBLE
                         gecko.visibility = View.VISIBLE
                         gecko.requestLayout()
