@@ -244,26 +244,17 @@ class MediaWebExtension(
                     }
                     val json = message as? JSONObject ?: return null
                     val previousSnapshot = sessionStates[session]
-                    val isActive = json.optBoolean("isActive", false)
-                    val isPlaying = json.optBoolean("isPlaying", false)
-                    val incomingDurationMs = json.optLong("durationMs", 0L).coerceAtLeast(0L)
-                    val incomingPositionMs = json.optLong("positionMs", 0L).coerceAtLeast(0L)
-                    val shouldKeepPreviousTiming =
-                        isActive &&
-                            incomingDurationMs == 0L &&
-                            incomingPositionMs == 0L &&
-                            previousSnapshot != null &&
-                            previousSnapshot.durationMs > 0L
-                    val snapshot = SessionPlaybackSnapshot(
-                        isActive = isActive,
-                        isPlaying = isPlaying,
-                        title = json.optString("title", ""),
-                        artist = json.optString("artist", ""),
-                        album = json.optString("album", ""),
-                        durationMs = if (shouldKeepPreviousTiming) previousSnapshot.durationMs else incomingDurationMs,
-                        positionMs = if (shouldKeepPreviousTiming) previousSnapshot.positionMs else incomingPositionMs,
-                        features = previousSnapshot?.features ?: 0L,
-                    )
+                    val payload =
+                        WebExtensionPlaybackPayload(
+                            isActive = json.optBoolean("isActive", false),
+                            isPlaying = json.optBoolean("isPlaying", false),
+                            title = json.optString("title", ""),
+                            artist = json.optString("artist", ""),
+                            album = json.optString("album", ""),
+                            durationMs = json.optLong("durationMs", 0L).coerceAtLeast(0L),
+                            positionMs = json.optLong("positionMs", 0L).coerceAtLeast(0L),
+                        )
+                    val snapshot = buildSessionPlaybackSnapshot(previousSnapshot, payload)
                     mainHandler.post {
                         Log.d(TAG, "raw snapshot: session=${session.logKey()} payload=$json")
                         val debugReason = json.optString("debugReason", "")
@@ -493,3 +484,29 @@ internal data class SessionPlaybackSnapshot(
     val positionMs: Long = 0L,
     val features: Long = 0L,
 )
+
+internal data class WebExtensionPlaybackPayload(
+    val isActive: Boolean,
+    val isPlaying: Boolean,
+    val title: String,
+    val artist: String,
+    val album: String,
+    val durationMs: Long,
+    val positionMs: Long,
+)
+
+internal fun buildSessionPlaybackSnapshot(
+    previousSnapshot: SessionPlaybackSnapshot?,
+    payload: WebExtensionPlaybackPayload,
+): SessionPlaybackSnapshot {
+    return SessionPlaybackSnapshot(
+        isActive = payload.isActive,
+        isPlaying = payload.isPlaying,
+        title = payload.title,
+        artist = payload.artist,
+        album = payload.album,
+        durationMs = payload.durationMs,
+        positionMs = payload.positionMs,
+        features = previousSnapshot?.features ?: 0L,
+    )
+}

@@ -6,7 +6,6 @@
   const ATTACHED_MEDIA = new WeakSet();
   const STARTED_MEDIA = new WeakSet();
   const KNOWN_MEDIA = new Set();
-  const LAST_KNOWN_TIMING_BY_KEY = new Map();
   let lastPrimaryMedia = null;
   let lastSerializedPayload = "";
   let publishTimer = null;
@@ -42,6 +41,11 @@
   function listKnownMediaElements() {
     const mediaElements = listMediaElements();
     mediaElements.forEach((media) => KNOWN_MEDIA.add(media));
+    KNOWN_MEDIA.forEach((media) => {
+      if (!media.isConnected && media !== lastPrimaryMedia) {
+        KNOWN_MEDIA.delete(media);
+      }
+    });
     if (lastPrimaryMedia) {
       KNOWN_MEDIA.add(lastPrimaryMedia);
     }
@@ -61,9 +65,17 @@
 
   function pickPrimaryMedia() {
     const mediaElements = listKnownMediaElements();
+    const activelyPlayingMedia = mediaElements.find((media) => !media.paused && !media.ended);
+    const retainableLastPrimary =
+      lastPrimaryMedia &&
+      mediaElements.includes(lastPrimaryMedia) &&
+      isUsableMedia(lastPrimaryMedia) &&
+      !lastPrimaryMedia.ended
+        ? lastPrimaryMedia
+        : null;
     const picked =
-      (isUsableMedia(lastPrimaryMedia) && lastPrimaryMedia) ||
-      mediaElements.find((media) => !media.paused && !media.ended) ||
+      activelyPlayingMedia ||
+      retainableLastPrimary ||
       mediaElements.find((media) => STARTED_MEDIA.has(media) && !media.ended) ||
       mediaElements.find((media) => media.currentTime > 0) ||
       mediaElements.find((media) => Number.isFinite(media.duration) && media.duration > 0) ||
@@ -92,21 +104,12 @@
     };
   }
 
-  function buildTimingKey(metadata) {
-    return [
-      location.href,
-      metadata.title,
-      metadata.artist,
-      metadata.album,
-    ].join("\u0001");
-  }
-
   function readPayload() {
     const media = pickPrimaryMedia();
     const metadata = readMetadata(media);
     const playbackState = readMediaSessionPlaybackState();
     const mediaElements = listMediaElements();
-    const timingKey = buildTimingKey(metadata);
+    const currentSrc = cleanText(media && (media.currentSrc || media.src));
     let durationMs =
       media && Number.isFinite(media.duration) && media.duration > 0
         ? Math.round(media.duration * 1000)
@@ -124,28 +127,13 @@
       playbackState === "playing" ||
       playbackState === "paused" ||
       (!!media && (mediaElementPlaying || hasStarted));
-    const shouldReuseLastKnownTiming =
-      isActive &&
-      durationMs === 0 &&
-      positionMs === 0 &&
-      LAST_KNOWN_TIMING_BY_KEY.has(timingKey);
-
-    if (shouldReuseLastKnownTiming) {
-      const lastKnownTiming = LAST_KNOWN_TIMING_BY_KEY.get(timingKey);
-      durationMs = lastKnownTiming.durationMs;
-      positionMs = lastKnownTiming.positionMs;
-    } else if (durationMs > 0) {
-      LAST_KNOWN_TIMING_BY_KEY.set(timingKey, {
-        durationMs: durationMs,
-        positionMs: positionMs,
-      });
-    }
 
     return {
       url: location.href,
       title: metadata.title,
       artist: metadata.artist,
       album: metadata.album,
+      currentSrc: currentSrc,
       durationMs: durationMs,
       positionMs: positionMs,
       isPlaying: isPlaying,
@@ -159,8 +147,7 @@
       debugMediaPaused: !!media && media.paused,
       debugMediaEnded: !!media && media.ended,
       debugMediaReadyState: media ? media.readyState : -1,
-      debugCurrentSrc: media ? media.currentSrc || media.src || "" : "",
-      debugTimingCacheHit: shouldReuseLastKnownTiming,
+      debugCurrentSrc: currentSrc,
     };
   }
 
