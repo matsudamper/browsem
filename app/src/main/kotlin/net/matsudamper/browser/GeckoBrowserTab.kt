@@ -138,6 +138,7 @@ internal fun GeckoBrowserTab(
     var imeWasVisibleDuringUrlFocus by remember { mutableStateOf(false) }
     var urlBarFocusStartedAtMs by remember { mutableStateOf(0L) }
     var geckoView: GeckoView? by remember { mutableStateOf(null) }
+    var sessionReleasedOnStop by remember(session) { mutableStateOf(false) }
     // ホームに追加ダイアログの表示状態
     var showAddToHomeScreenDialog by remember { mutableStateOf(false) }
     var addToHomeUrl by remember { mutableStateOf("") }
@@ -180,12 +181,20 @@ internal fun GeckoBrowserTab(
                     session.flushSessionState()
                     geckoView?.also {
                         state.captureTabPreview(it)
-                        it.releaseSession()
+                        if (mediaWebExtension.shouldKeepSessionAttached(session)) {
+                            sessionReleasedOnStop = false
+                        } else {
+                            it.releaseSession()
+                            sessionReleasedOnStop = true
+                        }
                     }
                 }
                 Lifecycle.Event.ON_START -> {
                     geckoView?.also { gecko ->
-                        gecko.setSession(session)
+                        if (sessionReleasedOnStop) {
+                            gecko.setSession(session)
+                            sessionReleasedOnStop = false
+                        }
                         // 黒くなる対応。効くかは不明
                         gecko.visibility = View.INVISIBLE
                         gecko.visibility = View.VISIBLE

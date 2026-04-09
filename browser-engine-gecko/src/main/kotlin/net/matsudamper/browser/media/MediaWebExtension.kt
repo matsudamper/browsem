@@ -44,6 +44,8 @@ class MediaWebExtension(
 
     @Volatile
     private var activeSession: GeckoSession? = null
+    private var pendingDeactivateSession: GeckoSession? = null
+    private var pendingDeactivateRunnable: Runnable? = null
 
     fun install(runtime: GeckoRuntime) {
         Log.d(TAG, "install() 開始: uri=$EXTENSION_URI")
@@ -85,6 +87,7 @@ class MediaWebExtension(
     fun onActivated(session: GeckoSession, mediaSession: MediaSession) {
         Log.d(TAG, "onActivated: session=${session.logKey()} mediaSession=${mediaSession.logKey()}")
         MediaTraceLog.d("WX activated session=${session.logKey()} mediaSession=${mediaSession.logKey()}")
+        cancelPendingDeactivation(session)
         activeSession = session
         MediaSessionBridge.activeGeckoMediaSession = mediaSession
         applySessionState(session)
@@ -98,6 +101,7 @@ class MediaWebExtension(
 
     fun onFeatures(session: GeckoSession, features: Long) {
         Log.d(TAG, "onFeatures: session=${session.logKey()} features=$features")
+        cancelPendingDeactivation(session)
         val current = sessionStates[session] ?: SessionPlaybackSnapshot()
         val next = current.copy(features = features)
         sessionStates[session] = next
@@ -112,6 +116,7 @@ class MediaWebExtension(
             TAG,
             "onMetadata: session=${session.logKey()} title=${meta.title}, artist=${meta.artist}, album=${meta.album}, hasArtwork=${meta.artwork != null}",
         )
+        cancelPendingDeactivation(session)
         updateSessionSnapshot(session) { current ->
             current.copy(
                 isActive = true,
@@ -162,6 +167,7 @@ class MediaWebExtension(
 
     fun onPlay(session: GeckoSession, mediaSession: MediaSession) {
         Log.d(TAG, "onPlay fallback: session=${session.logKey()}")
+        cancelPendingDeactivation(session)
         bindMediaSessionIfNeeded(session, mediaSession)
         updateSessionSnapshot(session) { current ->
             current.copy(isActive = true, isPlaying = true)
@@ -171,6 +177,7 @@ class MediaWebExtension(
     fun onPause(session: GeckoSession, mediaSession: MediaSession) {
         Log.d(TAG, "onPause fallback: session=${session.logKey()}")
         MediaTraceLog.d("WX pauseFallback session=${session.logKey()}")
+        cancelPendingDeactivation(session)
         bindMediaSessionIfNeeded(session, mediaSession)
         updateSessionSnapshot(session) { current ->
             current.copy(isActive = true, isPlaying = false)
@@ -189,6 +196,7 @@ class MediaWebExtension(
         MediaTraceLog.d(
             "WX positionFallback session=${session.logKey()} position=${state.position} duration=${state.duration}",
         )
+        cancelPendingDeactivation(session)
         bindMediaSessionIfNeeded(session, mediaSession)
         updateSessionSnapshot(session) { current ->
             current.copy(
@@ -201,7 +209,20 @@ class MediaWebExtension(
 
     fun isInstalled(): Boolean = extension != null
 
+    fun shouldKeepSessionAttached(session: GeckoSession): Boolean {
+        val snapshot = sessionStates[session]
+        val keepAttached =
+            activeSession === session &&
+                (snapshot?.isActive ?: MediaSessionBridge.playbackState.value.isActive)
+        Log.d(
+            TAG,
+            "shouldKeepSessionAttached: session=${session.logKey()} keepAttached=$keepAttached activeSession=${activeSession?.logKey()} snapshotActive=${snapshot?.isActive}",
+        )
+        return keepAttached
+    }
+
     fun cleanup() {
+        cancelPendingDeactivation()
         activeSession = null
         sessionStates.clear()
         sessionArtworkBitmaps.clear()
@@ -270,6 +291,9 @@ class MediaWebExtension(
                             "snapshot: session=${session.logKey()} isActive=${snapshot.isActive}, isPlaying=${snapshot.isPlaying}, " +
                                 "title=${snapshot.title}, durationMs=${snapshot.durationMs}, positionMs=${snapshot.positionMs}, activeSession=${activeSession?.logKey()}",
                         )
+                        if (snapshot.isActive) {
+                            cancelPendingDeactivation(session)
+                        }
                         sessionStates[session] = snapshot
                         promoteSessionFromSnapshotIfNeeded(session, snapshot)
                         if (activeSession === session) {
@@ -374,9 +398,7 @@ class MediaWebExtension(
         if (activeSession !== session) {
             return
         }
-        activeSession = null
-        MediaSessionBridge.deactivate()
-        MediaPlaybackServiceController.stop(context)
+        scheduleDeactivation(session)
     }
 
     private fun invalidateArtwork(session: GeckoSession): Long {
@@ -393,6 +415,7 @@ class MediaWebExtension(
         if (!snapshot.isActive) {
             return
         }
+        cancelPendingDeactivation(session)
         if (activeSession == null) {
             Log.d(TAG, "activeSession を WebExtension snapshot から補完: session=${session.logKey()}")
             activeSession = session
@@ -403,12 +426,51 @@ class MediaWebExtension(
         return sessionArtworkRequestIds[session] == requestId
     }
 
+    private fun scheduleDeactivation(session: GeckoSession) {
+        if (pendingDeactivateSession === session && pendingDeactivateRunnable != null) {
+            return
+        }
+        cancelPendingDeactivation()
+        pendingDeactivateSession = session
+        pendingDeactivateRunnable = Runnable {
+            if (activeSession !== session) {
+                return@Runnable
+            }
+            val snapshot = sessionStates[session]
+            if (snapshot?.isActive == true) {
+                return@Runnable
+            }
+            Log.d(
+                TAG,
+                "deactivateSession grace period elapsed: session=${session.logKey()}",
+            )
+            activeSession = null
+            pendingDeactivateSession = null
+            pendingDeactivateRunnable = null
+            MediaSessionBridge.deactivate()
+            MediaPlaybackServiceController.stop(context)
+        }.also { runnable ->
+            mainHandler.postDelayed(runnable, DEACTIVATION_GRACE_PERIOD_MS)
+        }
+    }
+
+    private fun cancelPendingDeactivation(session: GeckoSession? = null) {
+        val runnable = pendingDeactivateRunnable ?: return
+        if (session != null && pendingDeactivateSession !== session) {
+            return
+        }
+        mainHandler.removeCallbacks(runnable)
+        pendingDeactivateRunnable = null
+        pendingDeactivateSession = null
+    }
+
     companion object {
         private const val TAG = "MediaWebExtension"
         private const val NATIVE_APP_ID = "mediaBridge"
         private const val EXTENSION_URI =
             "resource://android/assets/web_extensions/media_bridge/"
         private const val DEFAULT_ARTWORK_SIZE_PX = 256
+        private const val DEACTIVATION_GRACE_PERIOD_MS = 5_000L
     }
 }
 
