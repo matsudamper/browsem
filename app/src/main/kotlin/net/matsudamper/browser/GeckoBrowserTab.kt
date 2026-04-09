@@ -186,7 +186,17 @@ internal fun GeckoBrowserTab(
                 Lifecycle.Event.ON_START -> {
                     geckoView?.also { gecko ->
                         gecko.setSession(session)
+                        // Step 1: SurfaceView の surfaceCreated/surfaceChanged を再発火させる
+                        // 定番トリック。visibility を一度 INVISIBLE にして戻すことで Surface を
+                        // 再確保させ、あわせてレイアウト・描画パスを走らせる。
+                        gecko.visibility = View.INVISIBLE
+                        gecko.visibility = View.VISIBLE
+                        gecko.requestLayout()
+                        gecko.invalidate()
                     }
+                    // ComposeView 側のルートにも再描画要求を出し、HWUI の合成パイプラインを
+                    // 叩き起こす。GeckoView だけでなく Compose 全体が黒くなる症状への対処。
+                    view.rootView.invalidate()
                 }
                 else -> Unit
             }
