@@ -55,6 +55,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import kotlinx.coroutines.flow.collectLatest
 import net.matsudamper.browser.cast.CastManager
+import net.matsudamper.browser.CastWebExtension
 import net.matsudamper.browser.data.TranslationProvider
 import net.matsudamper.browser.media.GeckoMediaSessionDelegate
 import net.matsudamper.browser.media.MediaWebExtension
@@ -104,6 +105,7 @@ internal fun GeckoBrowserTab(
     val context = LocalContext.current
     val readabilityWebExtension: ReadabilityWebExtension = koinInject()
     val findInPageWebExtension: FindInPageWebExtension = koinInject()
+    val castWebExtension: CastWebExtension = koinInject()
     val castManager: CastManager = koinInject()
     val castState by castManager.castState.collectAsState()
     // URLバーフォーカス時にクリップボードから読み取ったURL
@@ -242,6 +244,19 @@ internal fun GeckoBrowserTab(
         }
         onDispose {
             readabilityWebExtension.unregisterSession(session)
+        }
+    }
+
+    // CastWebExtension のセッション登録
+    DisposableEffect(session, castWebExtension, castManager) {
+        val handler = castManager.createBridgeHandler(context)
+        castWebExtension.registerSession(session, handler)
+        // セッション終了をウェブページに通知する
+        val sessionEndedListener = { castWebExtension.notifySessionEnded(session) }
+        castManager.addSessionEndedListener(sessionEndedListener)
+        onDispose {
+            castManager.removeSessionEndedListener(sessionEndedListener)
+            castWebExtension.unregisterSession(session)
         }
     }
 

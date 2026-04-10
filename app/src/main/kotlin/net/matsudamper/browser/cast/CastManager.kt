@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import androidx.mediarouter.app.MediaRouteChooserDialog
 import androidx.mediarouter.media.MediaRouteSelector
+import com.google.android.gms.cast.Cast
 import com.google.android.gms.cast.CastMediaControlIntent
 import com.google.android.gms.cast.MediaInfo
 import com.google.android.gms.cast.MediaLoadRequestData
@@ -23,6 +24,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
+import net.matsudamper.browser.CastWebExtension
 import net.matsudamper.browser.media.MediaSessionBridge
 import java.util.concurrent.Executors
 
@@ -44,6 +46,11 @@ class CastManager(
     private var sessionManager: SessionManager? = null
     private var castExecutor: java.util.concurrent.ExecutorService? = null
 
+    // ウェブページからのセッションリクエスト用コールバック
+    private var webSessionCallback: ((Boolean, String, String) -> Unit)? = null
+    // ウェブページ経由でセッションが開始されたかどうか
+    private var isWebInitiatedSession = false
+
     private val sessionManagerListener = object : SessionManagerListener<CastSession> {
         override fun onSessionStarting(session: CastSession) {
             Log.d(TAG, "onSessionStarting")
@@ -53,7 +60,19 @@ class CastManager(
             Log.d(TAG, "onSessionStarted: sessionId=$sessionId device=${session.castDevice?.friendlyName}")
             val deviceName = session.castDevice?.friendlyName ?: ""
             _castState.value = _castState.value.copy(isConnected = true, deviceName = deviceName)
-            // ローカル再生を一時停止してキャストに切り替え
+
+            // ウェブページからのリクエストの場合はコールバックで通知
+            val webCallback = webSessionCallback
+            if (webCallback != null) {
+                webSessionCallback = null
+                isWebInitiatedSession = true
+                MediaSessionBridge.pause()
+                MediaSessionBridge.updateCasting(true)
+                webCallback(true, sessionId, deviceName)
+                return
+            }
+
+            // ツールバーからのキャスト: ローカル再生を一時停止してキャストに切り替え
             val state = MediaSessionBridge.playbackState.value
             MediaSessionBridge.pause()
             MediaSessionBridge.updateCasting(true)
@@ -70,6 +89,9 @@ class CastManager(
             Log.e(TAG, "onSessionStartFailed: error=$error")
             _castState.value = _castState.value.copy(isConnected = false, deviceName = "")
             MediaSessionBridge.updateCasting(false)
+            // ウェブページからのリクエスト失敗を通知
+            webSessionCallback?.invoke(false, "", "")
+            webSessionCallback = null
         }
 
         override fun onSessionEnding(session: CastSession) {
@@ -79,7 +101,19 @@ class CastManager(
         override fun onSessionEnded(session: CastSession, error: Int) {
             Log.d(TAG, "onSessionEnded: error=$error")
             _castState.value = _castState.value.copy(isConnected = false, deviceName = "")
-            // キャスト終了時、リモート側が再生中だった場合のみローカル再生を再開
+            val wasWebInitiated = isWebInitiatedSession
+            isWebInitiatedSession = false
+
+            // セッション終了リスナーに通知
+            sessionEndedListeners.toList().forEach { it() }
+
+            if (wasWebInitiated) {
+                // ウェブ経由のセッションはページ側で再生制御するため、ここではキャスト状態のみ解除
+                MediaSessionBridge.updateCasting(false)
+                return
+            }
+
+            // ツールバーからのキャスト終了時、リモート側が再生中だった場合のみローカル再生を再開
             val remoteClient = session.remoteMediaClient
             val wasPlaying = remoteClient?.isPlaying ?: false
             val positionMs = remoteClient?.approximateStreamPosition ?: 0L
@@ -191,6 +225,89 @@ class CastManager(
         currentRemoteMediaClient()?.pause()
     }
 
+    // セッション終了リスナー
+    private val sessionEndedListeners = mutableListOf<() -> Unit>()
+
+    /**
+     * セッション終了時のリスナーを追加する。
+     */
+    fun addSessionEndedListener(listener: () -> Unit) {
+        sessionEndedListeners.add(listener)
+    }
+
+    fun removeSessionEndedListener(listener: () -> Unit) {
+        sessionEndedListeners.remove(listener)
+    }
+
+    /**
+     * ウェブページからのセッションリクエストを処理する。
+     * デバイス選択ダイアログを表示し、結果をコールバックで返す。
+     */
+    fun requestSessionFromWeb(
+        context: Context,
+        callback: (success: Boolean, sessionId: String, deviceName: String) -> Unit,
+    ) {
+        Log.d(TAG, "requestSessionFromWeb")
+        webSessionCallback = callback
+        showChooserDialog(context)
+    }
+
+    /**
+     * Cast デバイスにメッセージを送信する。
+     */
+    fun sendMessageOnCast(namespace: String, message: String) {
+        val session = sessionManager?.currentCastSession ?: run {
+            Log.w(TAG, "sendMessageOnCast: セッションなし")
+            return
+        }
+        try {
+            session.sendMessage(namespace, message)
+        } catch (e: Exception) {
+            Log.e(TAG, "sendMessageOnCast失敗: namespace=$namespace", e)
+        }
+    }
+
+    /**
+     * Cast デバイスからのメッセージリスナーを登録する。
+     */
+    fun addMessageListenerOnCast(namespace: String, callback: (namespace: String, message: String) -> Unit) {
+        val session = sessionManager?.currentCastSession ?: run {
+            Log.w(TAG, "addMessageListenerOnCast: セッションなし")
+            return
+        }
+        try {
+            session.setMessageReceivedCallbacks(namespace, Cast.MessageReceivedCallback { _, ns, msg ->
+                Log.d(TAG, "messageReceived: namespace=$ns")
+                callback(ns, msg)
+            })
+        } catch (e: Exception) {
+            Log.e(TAG, "addMessageListenerOnCast失敗: namespace=$namespace", e)
+        }
+    }
+
+    /**
+     * CastWebExtension 用のブリッジハンドラを作成する。
+     */
+    fun createBridgeHandler(activityContext: Context): CastWebExtension.CastBridgeHandler {
+        return object : CastWebExtension.CastBridgeHandler {
+            override fun requestSession(callback: (Boolean, String, String) -> Unit) {
+                requestSessionFromWeb(activityContext, callback)
+            }
+
+            override fun sendMessage(namespace: String, message: String) {
+                sendMessageOnCast(namespace, message)
+            }
+
+            override fun addMessageListener(namespace: String, callback: (String, String) -> Unit) {
+                addMessageListenerOnCast(namespace, callback)
+            }
+
+            override fun stopSession() {
+                stopCasting()
+            }
+        }
+    }
+
     /**
      * リソースを解放する。ActivityのonDestroy等で呼ぶ。
      */
@@ -198,6 +315,7 @@ class CastManager(
         sessionManager?.removeSessionManagerListener(sessionManagerListener, CastSession::class.java)
         castExecutor?.shutdown()
         castExecutor = null
+        sessionEndedListeners.clear()
         scope.cancel()
     }
 
