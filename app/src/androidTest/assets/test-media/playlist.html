@@ -22,6 +22,9 @@
   </video>
 
   <script>
+    const TRACK1_START_POSITION_SECONDS = 30;
+    const TRACK2_SWITCH_POSITION_SECONDS = 33;
+    const TRACK1_PLAYBACK_RATE = 1;
     const status = document.getElementById('status');
     const track1 = document.getElementById('track1');
     const track2 = document.getElementById('track2');
@@ -81,7 +84,7 @@
       });
       video.addEventListener('timeupdate', () => {
         updatePositionState(video);
-        if (video === track1 && !switched && video.currentTime >= 6) {
+        if (video === track1 && !switched && video.currentTime >= TRACK2_SWITCH_POSITION_SECONDS) {
           switchToTrack2();
         }
       });
@@ -89,8 +92,8 @@
 
     function startPlaylist() {
       if (activeTrack) return;
-      track1.playbackRate = 4;
-      track1.currentTime = 4;
+      track1.playbackRate = TRACK1_PLAYBACK_RATE;
+      track1.currentTime = TRACK1_START_POSITION_SECONDS;
       activeTrack = track1;
       updateMetadata('Track 1');
       updatePlaybackState();
