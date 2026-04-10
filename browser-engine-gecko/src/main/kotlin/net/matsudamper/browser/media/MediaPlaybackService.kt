@@ -238,7 +238,8 @@ private class GeckoMediaPlayer : SimpleBasePlayer(Looper.getMainLooper()) {
                 PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST,
             )
             .setPlaybackState(
-                if (currentState.isActive) STATE_READY else STATE_IDLE,
+                // キャスト中はローカル通知を抑制するためSTATE_IDLEを返す
+                if (currentState.isActive && !currentState.isCasting) STATE_READY else STATE_IDLE,
             )
             .setContentPositionMs(currentState.positionMs)
             .setPlaylist(

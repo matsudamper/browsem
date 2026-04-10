@@ -59,6 +59,9 @@ internal fun ToolbarMenu(
     onPageZoomIn: () -> Unit,
     onPageZoomOut: () -> Unit,
     onResetPageZoom: () -> Unit,
+    isCastAvailable: Boolean = false,
+    isCastConnected: Boolean = false,
+    onCastClick: () -> Unit = {},
 ) {
     DropdownMenu(
         expanded = visibleMenu,
@@ -315,6 +318,29 @@ internal fun ToolbarMenu(
                 onTranslatePage()
             },
         )
+        if (isCastAvailable) {
+            DropdownMenuItem(
+                text = {
+                    Text(text = if (isCastConnected) "キャストを停止" else "キャスト")
+                },
+                leadingIcon = {
+                    Icon(
+                        painter = painterResource(
+                            id = if (isCastConnected) {
+                                ResourcesR.drawable.ic_cast_connected_24dp
+                            } else {
+                                ResourcesR.drawable.ic_cast_24dp
+                            },
+                        ),
+                        contentDescription = null,
+                    )
+                },
+                onClick = {
+                    onDismissRequest()
+                    onCastClick()
+                },
+            )
+        }
         DropdownMenuItem(
             text = {
                 Text(text = "共有")

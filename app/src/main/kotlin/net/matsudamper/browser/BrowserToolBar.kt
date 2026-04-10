@@ -93,6 +93,9 @@ internal fun BrowserToolBar(
     toolbarColor: Color?,
     onHorizontalDrag: (Float) -> Unit = {},
     onHorizontalDragEnd: () -> Unit = {},
+    isCastAvailable: Boolean = false,
+    isCastConnected: Boolean = false,
+    onCastClick: () -> Unit = {},
 ) {
     var visibleMenu by remember { mutableStateOf(false) }
     BrowserToolbar(
@@ -112,6 +115,9 @@ internal fun BrowserToolBar(
         onOpenTabs = onOpenTabs,
         tabCount = tabCount,
         showTabButton = showTabActions,
+        isCastAvailable = isCastAvailable,
+        isCastConnected = isCastConnected,
+        onCastClick = onCastClick,
         urlInputState = UrlInputState(
             value = value,
             onValueChange = onValueChange,
@@ -149,6 +155,9 @@ internal fun BrowserToolBar(
                 onPageZoomIn = onPageZoomIn,
                 onPageZoomOut = onPageZoomOut,
                 onResetPageZoom = onResetPageZoom,
+                isCastAvailable = isCastAvailable,
+                isCastConnected = isCastConnected,
+                onCastClick = onCastClick,
             )
         }
     )
@@ -207,6 +216,9 @@ internal fun BrowserToolbar(
     showTabButton: Boolean = true,
     toolbarMenu: @Composable () -> Unit,
     modifier: Modifier = Modifier,
+    isCastAvailable: Boolean = false,
+    isCastConnected: Boolean = false,
+    onCastClick: () -> Unit = {},
 ) {
     var heightCache by remember { mutableIntStateOf(0) }
 
@@ -294,6 +306,21 @@ internal fun BrowserToolbar(
             }
 
             if (!isFocused) {
+                if (isCastAvailable) {
+                    // キャストデバイスが利用可能な場合にCastボタンを表示
+                    IconButton(onClick = onCastClick) {
+                        Icon(
+                            painter = painterResource(
+                                if (isCastConnected) {
+                                    ResourcesR.drawable.ic_cast_connected_24dp
+                                } else {
+                                    ResourcesR.drawable.ic_cast_24dp
+                                },
+                            ),
+                            contentDescription = if (isCastConnected) "キャストを停止" else "キャスト",
+                        )
+                    }
+                }
                 if (showTabButton) {
                     IconButton(
                         onClick = onOpenTabs,

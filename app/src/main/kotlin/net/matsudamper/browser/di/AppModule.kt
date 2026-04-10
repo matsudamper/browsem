@@ -14,6 +14,7 @@ import net.matsudamper.browser.data.download.DownloadRepository
 import net.matsudamper.browser.data.history.HistoryRepository
 import net.matsudamper.browser.data.websuggestion.HttpWebSuggestionRepository
 import net.matsudamper.browser.data.websuggestion.WebSuggestionRepository
+import net.matsudamper.browser.cast.CastManager
 import net.matsudamper.browser.media.MediaWebExtension
 import org.koin.android.ext.koin.androidContext
 import org.koin.androidx.workmanager.dsl.worker
@@ -45,6 +46,7 @@ val appModule = module {
     single { MediaWebExtension(androidContext()).also { it.install(get()) } }
     single { ReadabilityWebExtension().also { it.install(get()) } }
     single { FindInPageWebExtension().also { it.install(get()) } }
+    single { CastManager(androidContext()) }
     factory { GeckoDownloadManager(androidContext(), get()) }
     viewModel { BrowserViewModel(get(), get(), get(), get(), get(), get()) }
     worker { DownloadWorker(get(), get(), get()) }

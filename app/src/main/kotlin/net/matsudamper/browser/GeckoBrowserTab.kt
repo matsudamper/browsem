@@ -35,6 +35,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -53,6 +54,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import kotlinx.coroutines.flow.collectLatest
+import net.matsudamper.browser.cast.CastManager
 import net.matsudamper.browser.data.TranslationProvider
 import net.matsudamper.browser.media.GeckoMediaSessionDelegate
 import net.matsudamper.browser.media.MediaWebExtension
@@ -102,6 +104,8 @@ internal fun GeckoBrowserTab(
     val context = LocalContext.current
     val readabilityWebExtension: ReadabilityWebExtension = koinInject()
     val findInPageWebExtension: FindInPageWebExtension = koinInject()
+    val castManager: CastManager = koinInject()
+    val castState by castManager.castState.collectAsState()
     // URLバーフォーカス時にクリップボードから読み取ったURL
     var clipboardUrl by remember { mutableStateOf<String?>(null) }
     // タブ履歴BottomSheetの表示状態
@@ -488,6 +492,15 @@ internal fun GeckoBrowserTab(
                         addToHomeTitle = state.currentPageTitle
                         addToHomeFavicon = browserTab.faviconBitmap
                         showAddToHomeScreenDialog = true
+                    },
+                    isCastAvailable = castState.isAvailable,
+                    isCastConnected = castState.isConnected,
+                    onCastClick = {
+                        if (castState.isConnected) {
+                            castManager.stopCasting()
+                        } else {
+                            castManager.showChooserDialog(context)
+                        }
                     },
                 )
             }

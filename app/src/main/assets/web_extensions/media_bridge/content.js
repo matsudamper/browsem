@@ -159,6 +159,7 @@
       debugMediaPaused: !!media && media.paused,
       debugMediaEnded: !!media && media.ended,
       debugMediaReadyState: media ? media.readyState : -1,
+      currentSrc: media ? media.currentSrc || media.src || "" : "",
       debugCurrentSrc: media ? media.currentSrc || media.src || "" : "",
       debugTimingCacheHit: shouldReuseLastKnownTiming,
     };

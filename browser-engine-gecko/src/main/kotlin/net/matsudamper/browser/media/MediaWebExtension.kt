@@ -263,6 +263,7 @@ class MediaWebExtension(
                         durationMs = if (shouldKeepPreviousTiming) previousSnapshot.durationMs else incomingDurationMs,
                         positionMs = if (shouldKeepPreviousTiming) previousSnapshot.positionMs else incomingPositionMs,
                         features = previousSnapshot?.features ?: 0L,
+                        mediaSourceUrl = json.optString("currentSrc", json.optString("debugCurrentSrc", "")),
                     )
                     mainHandler.post {
                         Log.d(TAG, "raw snapshot: session=${session.logKey()} payload=$json")
@@ -373,6 +374,7 @@ class MediaWebExtension(
         )
         MediaSessionBridge.updateFeatures(snapshot.features)
         MediaSessionBridge.updatePlaying(snapshot.isPlaying)
+        MediaSessionBridge.updateMediaSourceUrl(snapshot.mediaSourceUrl)
         if (snapshot.isActive) {
             MediaPlaybackServiceController.start(context)
         }
@@ -492,4 +494,5 @@ internal data class SessionPlaybackSnapshot(
     val durationMs: Long = 0L,
     val positionMs: Long = 0L,
     val features: Long = 0L,
+    val mediaSourceUrl: String = "",
 )

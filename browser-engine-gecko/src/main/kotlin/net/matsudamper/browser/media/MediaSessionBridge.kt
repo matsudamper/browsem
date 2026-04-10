@@ -73,6 +73,16 @@ object MediaSessionBridge {
         _playbackState.value = _playbackState.value.copy(features = features)
     }
 
+    fun updateMediaSourceUrl(url: String) {
+        Log.d(TAG, "updateMediaSourceUrl: url=${url.take(100)}")
+        _playbackState.value = _playbackState.value.copy(mediaSourceUrl = url)
+    }
+
+    fun updateCasting(isCasting: Boolean) {
+        Log.d(TAG, "updateCasting: isCasting=$isCasting")
+        _playbackState.value = _playbackState.value.copy(isCasting = isCasting)
+    }
+
     // サービスからGeckoViewへの制御メソッド
     fun play() {
         Log.d(TAG, "play: hasMediaSession=${activeGeckoMediaSession != null}")
@@ -116,4 +126,6 @@ data class MediaPlaybackState(
     val durationMs: Long = 0L,
     val positionMs: Long = 0L,
     val features: Long = 0L,
+    val mediaSourceUrl: String = "",
+    val isCasting: Boolean = false,
 )
