@@ -42,6 +42,7 @@ class CastManager(
 
     private var castContext: CastContext? = null
     private var sessionManager: SessionManager? = null
+    private var castExecutor: java.util.concurrent.ExecutorService? = null
 
     private val sessionManagerListener = object : SessionManagerListener<CastSession> {
         override fun onSessionStarting(session: CastSession) {
@@ -78,14 +79,17 @@ class CastManager(
         override fun onSessionEnded(session: CastSession, error: Int) {
             Log.d(TAG, "onSessionEnded: error=$error")
             _castState.value = _castState.value.copy(isConnected = false, deviceName = "")
-            // キャスト終了時にローカル再生を再開
+            // キャスト終了時、リモート側が再生中だった場合のみローカル再生を再開
             val remoteClient = session.remoteMediaClient
+            val wasPlaying = remoteClient?.isPlaying ?: false
             val positionMs = remoteClient?.approximateStreamPosition ?: 0L
             MediaSessionBridge.updateCasting(false)
             if (positionMs > 0) {
                 MediaSessionBridge.seekTo(positionMs / 1000.0)
             }
-            MediaSessionBridge.play()
+            if (wasPlaying) {
+                MediaSessionBridge.play()
+            }
         }
 
         override fun onSessionResuming(session: CastSession, sessionId: String) {
@@ -132,6 +136,7 @@ class CastManager(
         }
         try {
             val executor = Executors.newSingleThreadExecutor()
+            castExecutor = executor
             CastContext.getSharedInstance(context, executor).addOnSuccessListener { ctx ->
                 castContext = ctx
                 sessionManager = ctx.sessionManager
@@ -191,6 +196,8 @@ class CastManager(
      */
     fun cleanup() {
         sessionManager?.removeSessionManagerListener(sessionManagerListener, CastSession::class.java)
+        castExecutor?.shutdown()
+        castExecutor = null
         scope.cancel()
     }
 
