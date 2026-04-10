@@ -4,6 +4,7 @@ import android.content.Intent
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
@@ -60,8 +61,7 @@ class MediaPrimarySelectionTest {
         val mediaPageUri = prepareLocalMediaPageUri(LOCAL_MEDIA_PLAYLIST_FILE_NAME)
 
         openMediaPage(mediaPageUri)
-        Thread.sleep(PAGE_READY_DELAY_MS)
-        tapMediaPage()
+        ensureMediaPlaybackStarted()
 
         val firstTrackState =
             waitUntil(timeoutMs = FIRST_TRACK_TIMEOUT_MS) { state ->
@@ -136,10 +136,30 @@ class MediaPrimarySelectionTest {
         }
     }
 
-    private fun tapMediaPage() {
+    private fun ensureMediaPlaybackStarted() {
+        waitUntil(timeoutMs = AUTOSTART_GRACE_PERIOD_MS, ::hasPlaybackStarted)?.let {
+            return
+        }
         val geckoNode = composeRule.onNodeWithTag(GeckoBrowserTabTestTags.GeckoContainer.testTag)
-        geckoNode.performTouchInput { click() }
-        composeRule.waitForIdle()
+        listOf<Offset?>(null, Offset(100f, 100f), Offset(200f, 200f)).forEach { offset ->
+            if (offset == null) {
+                geckoNode.performTouchInput { click() }
+            } else {
+                geckoNode.performTouchInput { click(offset) }
+            }
+            composeRule.waitForIdle()
+            waitUntil(timeoutMs = PLAYBACK_START_CONFIRM_TIMEOUT_MS, ::hasPlaybackStarted)?.let {
+                return
+            }
+        }
+    }
+
+    private fun hasPlaybackStarted(state: MediaPlaybackState): Boolean {
+        return state.isActive ||
+            state.isPlaying ||
+            state.positionMs > 0L ||
+            state.title == EXPECTED_FIRST_TITLE ||
+            state.title == EXPECTED_SECOND_TITLE
     }
 
     private fun waitUntil(
@@ -161,7 +181,8 @@ class MediaPrimarySelectionTest {
 
     companion object {
         private const val TEST_TIMEOUT_MS = 180_000L
-        private const val PAGE_READY_DELAY_MS = 3_000L
+        private const val AUTOSTART_GRACE_PERIOD_MS = 2_000L
+        private const val PLAYBACK_START_CONFIRM_TIMEOUT_MS = 2_500L
         private const val FIRST_TRACK_TIMEOUT_MS = 20_000L
         private const val TRACK_SWITCH_TIMEOUT_MS = 20_000L
         private const val POLL_INTERVAL_MS = 100L
