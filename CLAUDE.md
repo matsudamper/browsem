@@ -81,6 +81,7 @@ Proto → DataStore/Room → Repository → ViewModel(ViewModelStateFlow) → Ui
 - repository等のデータを直接データをいじらない。全てUI操作で行う
 - テキストを監視する場合を除いて`hasText`を使わない。コンポーネントを特定するには`hasTestTag`を使用する
 - TestTagは直接stringを使用せず、他のtestTagのパターンに合わせる
+- GMDデバイスを使用する。起動に失敗した場合、名前、IDを一時的に変えて再実行する
 
 ## 作業フロー
 

@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Media Playlist Test</title>
+  <style>
+    body { font-family: sans-serif; max-width: 720px; margin: 24px auto; padding: 0 16px; background: #111; color: #eee; }
+    h1 { font-size: 1.25rem; }
+    video { width: 100%; margin-top: 16px; background: #000; border-radius: 8px; }
+    #status { margin-top: 12px; color: #bfbfbf; }
+  </style>
+</head>
+<body>
+  <h1>Media Playlist Test</h1>
+  <div id="status">idle (tap anywhere to start)</div>
+  <video id="track1" preload="metadata" playsinline controls muted data-title="Track 1">
+    <source src="./test.webm" type="video/webm" />
+  </video>
+  <video id="track2" preload="metadata" playsinline controls muted data-title="Track 2">
+    <source src="./test.webm" type="video/webm" />
+  </video>
+
+  <script>
+    const TRACK1_START_POSITION_SECONDS = 30;
+    const TRACK2_SWITCH_POSITION_SECONDS = 33;
+    const TRACK1_PLAYBACK_RATE = 1;
+    const status = document.getElementById('status');
+    const track1 = document.getElementById('track1');
+    const track2 = document.getElementById('track2');
+    const tracks = [track1, track2];
+    let activeTrack = null;
+    let switched = false;
+
+    function updateMetadata(title) {
+      if (!('mediaSession' in navigator)) return;
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title,
+        artist: 'Browsem',
+        album: 'Playlist Test',
+      });
+    }
+
+    function updatePlaybackState() {
+      if (!('mediaSession' in navigator)) return;
+      navigator.mediaSession.playbackState =
+        activeTrack && !activeTrack.paused && !activeTrack.ended ? 'playing' : 'paused';
+    }
+
+    function updatePositionState(video) {
+      if (!('mediaSession' in navigator)) return;
+      if (activeTrack !== video) return;
+      if (!Number.isFinite(video.duration) || video.duration <= 0) return;
+      navigator.mediaSession.setPositionState({
+        duration: video.duration,
+        playbackRate: video.playbackRate,
+        position: video.currentTime,
+      });
+    }
+
+    function switchToTrack2() {
+      if (switched) return;
+      switched = true;
+      status.textContent = 'switching to track 2';
+      track1.pause();
+      activeTrack = track2;
+      updateMetadata('Track 2');
+      updatePlaybackState();
+      track2.currentTime = 0;
+      track2.play().catch(() => {});
+    }
+
+    tracks.forEach((video) => {
+      video.addEventListener('play', () => {
+        activeTrack = video;
+        updateMetadata(video.dataset.title || document.title);
+        updatePlaybackState();
+        status.textContent = `playing ${video.dataset.title}`;
+      });
+      video.addEventListener('pause', () => {
+        if (activeTrack === video) {
+          updatePlaybackState();
+        }
+      });
+      video.addEventListener('timeupdate', () => {
+        updatePositionState(video);
+        if (video === track1 && !switched && video.currentTime >= TRACK2_SWITCH_POSITION_SECONDS) {
+          switchToTrack2();
+        }
+      });
+    });
+
+    track1.addEventListener('loadedmetadata', () => {
+      window.setTimeout(startPlaylist, 0);
+    }, { once: true });
+
+    function startPlaylist() {
+      if (activeTrack) return;
+      track1.playbackRate = TRACK1_PLAYBACK_RATE;
+      track1.currentTime = TRACK1_START_POSITION_SECONDS;
+      activeTrack = track1;
+      updateMetadata('Track 1');
+      updatePlaybackState();
+      track1.play().catch((error) => {
+        status.textContent = `play blocked: ${error?.name ?? 'unknown'}`;
+      });
+    }
+
+    document.addEventListener('pointerdown', startPlaylist, { once: true });
+    document.addEventListener('click', startPlaylist, { once: true });
+  </script>
+</body>
+</html>
