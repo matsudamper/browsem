@@ -53,7 +53,7 @@ class MediaPrimarySelectionTest {
             runCatching { composeRule.activity.stopService(Intent(composeRule.activity, MediaPlaybackService::class.java)) }
             latch.countDown()
         }
-        latch.await(5, TimeUnit.SECONDS)
+        assertTrue("tearDown がタイムアウトしました", latch.await(5, TimeUnit.SECONDS))
     }
 
     @Test
