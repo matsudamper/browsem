@@ -50,6 +50,8 @@ class CastManager(
     private var webSessionCallback: ((Boolean, String, String) -> Unit)? = null
     // ウェブページ経由でセッションが開始されたかどうか
     private var isWebInitiatedSession = false
+    // ウェブ経由セッション終了時に呼ぶコールバック（キャスト開始元のセッションのみに通知）
+    private var webSessionEndedCallback: (() -> Unit)? = null
 
     private val sessionManagerListener = object : SessionManagerListener<CastSession> {
         override fun onSessionStarting(session: CastSession) {
@@ -104,8 +106,9 @@ class CastManager(
             val wasWebInitiated = isWebInitiatedSession
             isWebInitiatedSession = false
 
-            // セッション終了リスナーに通知
-            sessionEndedListeners.toList().forEach { it() }
+            // キャスト開始元セッションのみに終了を通知
+            webSessionEndedCallback?.invoke()
+            webSessionEndedCallback = null
 
             if (wasWebInitiated) {
                 // ウェブ経由のセッションはページ側で再生制御するため、ここではキャスト状態のみ解除
@@ -225,30 +228,64 @@ class CastManager(
         currentRemoteMediaClient()?.pause()
     }
 
-    // セッション終了リスナー
-    private val sessionEndedListeners = mutableListOf<() -> Unit>()
-
-    /**
-     * セッション終了時のリスナーを追加する。
-     */
-    fun addSessionEndedListener(listener: () -> Unit) {
-        sessionEndedListeners.add(listener)
+    @Suppress("DEPRECATION")
+    fun seekOnCast(positionMs: Long) {
+        currentRemoteMediaClient()?.seek(positionMs)
     }
 
-    fun removeSessionEndedListener(listener: () -> Unit) {
-        sessionEndedListeners.remove(listener)
+    fun stopMediaOnCast() {
+        currentRemoteMediaClient()?.stop()
+    }
+
+    /**
+     * Cast デバイスにメディアをロードする（ウェブページからのリクエスト用）。
+     */
+    fun loadMediaOnCastFromWeb(contentId: String, contentType: String, autoplay: Boolean, currentTimeMs: Long) {
+        val session = sessionManager?.currentCastSession ?: run {
+            Log.w(TAG, "loadMediaOnCastFromWeb: セッションなし")
+            return
+        }
+        val metadata = MediaMetadata(MediaMetadata.MEDIA_TYPE_GENERIC).apply {
+            putString(MediaMetadata.KEY_TITLE, "Media")
+        }
+        val mediaInfo = MediaInfo.Builder(contentId)
+            .setStreamType(MediaInfo.STREAM_TYPE_BUFFERED)
+            .setContentType(contentType)
+            .setMetadata(metadata)
+            .build()
+        val loadRequest = MediaLoadRequestData.Builder()
+            .setMediaInfo(mediaInfo)
+            .setCurrentTime(currentTimeMs)
+            .setAutoplay(autoplay)
+            .build()
+        session.remoteMediaClient?.load(loadRequest)?.setResultCallback { result ->
+            if (!result.status.isSuccess) {
+                Log.e(TAG, "ウェブ経由メディアロード失敗: ${result.status.statusMessage}")
+            } else {
+                Log.d(TAG, "ウェブ経由メディアロード成功")
+            }
+        }
     }
 
     /**
      * ウェブページからのセッションリクエストを処理する。
      * デバイス選択ダイアログを表示し、結果をコールバックで返す。
+     * 既にリクエスト中の場合は新しいリクエストを拒否する。
      */
     fun requestSessionFromWeb(
         context: Context,
+        onSessionEnded: () -> Unit,
         callback: (success: Boolean, sessionId: String, deviceName: String) -> Unit,
     ) {
+        // 重複リクエストを拒否する
+        if (webSessionCallback != null) {
+            Log.w(TAG, "requestSessionFromWeb: 既にリクエスト処理中のため拒否")
+            callback(false, "", "")
+            return
+        }
         Log.d(TAG, "requestSessionFromWeb")
         webSessionCallback = callback
+        webSessionEndedCallback = onSessionEnded
         showChooserDialog(context)
     }
 
@@ -288,10 +325,10 @@ class CastManager(
     /**
      * CastWebExtension 用のブリッジハンドラを作成する。
      */
-    fun createBridgeHandler(activityContext: Context): CastWebExtension.CastBridgeHandler {
+    fun createBridgeHandler(activityContext: Context, onSessionEnded: () -> Unit): CastWebExtension.CastBridgeHandler {
         return object : CastWebExtension.CastBridgeHandler {
             override fun requestSession(callback: (Boolean, String, String) -> Unit) {
-                requestSessionFromWeb(activityContext, callback)
+                requestSessionFromWeb(activityContext, onSessionEnded, callback)
             }
 
             override fun sendMessage(namespace: String, message: String) {
@@ -305,6 +342,30 @@ class CastManager(
             override fun stopSession() {
                 stopCasting()
             }
+
+            override fun loadMedia(contentId: String, contentType: String, autoplay: Boolean, currentTimeMs: Long) {
+                loadMediaOnCastFromWeb(contentId, contentType, autoplay, currentTimeMs)
+            }
+
+            override fun playMedia() {
+                playOnCast()
+            }
+
+            override fun pauseMedia() {
+                pauseOnCast()
+            }
+
+            override fun seekMedia(positionMs: Long) {
+                seekOnCast(positionMs)
+            }
+
+            override fun stopMedia() {
+                stopMediaOnCast()
+            }
+
+            override fun getAvailability(): Boolean {
+                return _castState.value.isAvailable
+            }
         }
     }
 
@@ -315,7 +376,7 @@ class CastManager(
         sessionManager?.removeSessionManagerListener(sessionManagerListener, CastSession::class.java)
         castExecutor?.shutdown()
         castExecutor = null
-        sessionEndedListeners.clear()
+        webSessionEndedCallback = null
         scope.cancel()
     }
 

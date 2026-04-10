@@ -53,7 +53,11 @@ import androidx.core.view.WindowCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.launch
 import net.matsudamper.browser.cast.CastManager
 import net.matsudamper.browser.CastWebExtension
 import net.matsudamper.browser.data.TranslationProvider
@@ -248,14 +252,21 @@ internal fun GeckoBrowserTab(
     }
 
     // CastWebExtension のセッション登録
-    DisposableEffect(session, castWebExtension, castManager) {
-        val handler = castManager.createBridgeHandler(context)
+    DisposableEffect(session, castWebExtension, castManager, context) {
+        val handler = castManager.createBridgeHandler(context) {
+            // キャスト開始元のこのセッションのみにセッション終了を通知する
+            castWebExtension.notifySessionEnded(session)
+        }
         castWebExtension.registerSession(session, handler)
-        // セッション終了をウェブページに通知する
-        val sessionEndedListener = { castWebExtension.notifySessionEnded(session) }
-        castManager.addSessionEndedListener(sessionEndedListener)
+        // Cast可用性の変更をこのセッションに通知する
+        val castScope = CoroutineScope(Dispatchers.Main)
+        castScope.launch {
+            castManager.castState.collectLatest { state ->
+                castWebExtension.notifyAvailability(session, state.isAvailable)
+            }
+        }
         onDispose {
-            castManager.removeSessionEndedListener(sessionEndedListener)
+            castScope.cancel()
             castWebExtension.unregisterSession(session)
         }
     }

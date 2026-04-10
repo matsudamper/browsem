@@ -30,6 +30,18 @@ class CastWebExtension {
         fun addMessageListener(namespace: String, callback: (namespace: String, message: String) -> Unit)
         /** キャストセッションを停止する */
         fun stopSession()
+        /** Cast デバイスにメディアをロードする */
+        fun loadMedia(contentId: String, contentType: String, autoplay: Boolean, currentTimeMs: Long)
+        /** キャスト中のメディアを再生する */
+        fun playMedia()
+        /** キャスト中のメディアを一時停止する */
+        fun pauseMedia()
+        /** キャスト中のメディアをシークする */
+        fun seekMedia(positionMs: Long)
+        /** キャスト中のメディアを停止する */
+        fun stopMedia()
+        /** 現在の Cast デバイス検出状態を取得する */
+        fun getAvailability(): Boolean
     }
 
     private var extension: WebExtension? = null
@@ -94,6 +106,19 @@ class CastWebExtension {
     }
 
     /**
+     * Cast デバイスの可用性変更をコンテンツスクリプトに通知する。
+     */
+    fun notifyAvailability(session: GeckoSession, isAvailable: Boolean) {
+        val port = sessionPorts[session] ?: return
+        mainHandler.post {
+            port.postMessage(JSONObject().apply {
+                put("action", "availability")
+                put("isAvailable", isAvailable)
+            })
+        }
+    }
+
+    /**
      * Cast デバイスから受信したメッセージをコンテンツスクリプトに転送する。
      */
     fun notifyMessageReceived(session: GeckoSession, namespace: String, message: String) {
@@ -140,6 +165,17 @@ class CastWebExtension {
                             sessionPorts.remove(session)
                         }
                     })
+                    // ポート接続時にネイティブの可用性を即時通知する
+                    val handler = sessionHandlers[session]
+                    if (handler != null) {
+                        mainHandler.post {
+                            val isAvailable = handler.getAvailability()
+                            port.postMessage(JSONObject().apply {
+                                put("action", "availability")
+                                put("isAvailable", isAvailable)
+                            })
+                        }
+                    }
                 }
             },
             NATIVE_APP_ID,
@@ -184,9 +220,24 @@ class CastWebExtension {
                 handler.stopSession()
             }
             "loadMedia" -> {
-                // メディアロードはsendMessageのurn:x-cast:com.google.cast.media経由で
-                // 処理されるため、ここでは追加処理不要
-                Log.d(TAG, "loadMedia: contentId=${json.optString("contentId")}")
+                val contentId = json.optString("contentId", "")
+                val contentType = json.optString("contentType", "video/mp4")
+                val autoplay = json.optBoolean("autoplay", true)
+                val currentTimeMs = json.optLong("currentTime", 0L)
+                handler.loadMedia(contentId, contentType, autoplay, currentTimeMs)
+            }
+            "mediaPlay" -> {
+                handler.playMedia()
+            }
+            "mediaPause" -> {
+                handler.pauseMedia()
+            }
+            "mediaSeek" -> {
+                val currentTime = json.optDouble("currentTime", 0.0)
+                handler.seekMedia((currentTime * 1000).toLong())
+            }
+            "mediaStop" -> {
+                handler.stopMedia()
             }
             else -> {
                 Log.d(TAG, "未知のアクション: $action")

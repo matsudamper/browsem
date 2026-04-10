@@ -255,15 +255,18 @@
     var apiConfig = null;
     var currentSession = null;
     var requestSessionPending = false;
+    // ネイティブから通知されるデバイス検出状態（デフォルト: 未検出）
+    var nativeAvailability = false;
 
     // メインAPI
     chrome.cast.initialize = function (config, onSuccess, onError) {
       apiConfig = config;
-      chrome.cast.isAvailable = true;
       if (onSuccess) setTimeout(onSuccess, 0);
-      // receiverListener に AVAILABLE を通知してキャストボタンを表示させる
-      if (config && config.receiverListener) {
+      // ネイティブの可用性がすでに判明していれば即時通知、
+      // そうでなければネイティブからの通知を待つ
+      if (nativeAvailability && config && config.receiverListener) {
         setTimeout(function () {
+          chrome.cast.isAvailable = true;
           config.receiverListener(chrome.cast.ReceiverAvailability.AVAILABLE);
         }, 100);
       }
@@ -314,14 +317,26 @@
 
     chrome.cast.setCustomReceivers = function () {};
     chrome.cast.unescape = function (str) { return str; };
-    chrome.cast.isAvailable = true;
+    // ネイティブから可用性が通知されるまでは false
+    chrome.cast.isAvailable = false;
     chrome.cast.VERSION = [1, 2, 0, 0];
 
-    // ネイティブからのメッセージ受信（セッション状態変更等）
+    // ネイティブからのメッセージ受信（セッション状態変更、可用性変更等）
     window.addEventListener("message", function (event) {
       var data = event.data;
       if (!data || !data.__castBridge) return;
-      if (data.action === "messageReceived" && currentSession) {
+      if (data.action === "availability") {
+        // ネイティブからのデバイス検出状態通知
+        nativeAvailability = !!data.isAvailable;
+        chrome.cast.isAvailable = nativeAvailability;
+        if (apiConfig && apiConfig.receiverListener) {
+          apiConfig.receiverListener(
+            nativeAvailability
+              ? chrome.cast.ReceiverAvailability.AVAILABLE
+              : chrome.cast.ReceiverAvailability.UNAVAILABLE
+          );
+        }
+      } else if (data.action === "messageReceived" && currentSession) {
         var listeners = currentSession._messageListeners[data.namespace];
         if (listeners) {
           listeners.forEach(function (listener) {
@@ -342,7 +357,7 @@
 
     // __onGCastApiAvailable のインターセプト
     // cast_sender.js がロードされた場合に false で呼ばれる可能性があるため、
-    // 常に true で呼ぶようにインターセプトする
+    // ネイティブの可用性に基づいて呼ぶようにインターセプトする
     var existingCallback = window.__onGCastApiAvailable;
     var storedCallbacks = [];
     if (typeof existingCallback === "function") {
@@ -351,18 +366,20 @@
 
     Object.defineProperty(window, "__onGCastApiAvailable", {
       get: function () {
-        // cast_sender.js がこの関数を呼ぶ時、常に true を渡すラッパーを返す
         return function () {
+          // ネイティブの可用性に基づいて通知する
           storedCallbacks.forEach(function (cb) {
-            try { cb(true); } catch (e) {}
+            try { cb(nativeAvailability); } catch (e) {}
           });
         };
       },
       set: function (fn) {
         if (typeof fn === "function") {
           storedCallbacks.push(fn);
-          // 設定直後に true で呼び出す
-          setTimeout(function () { fn(true); }, 0);
+          // ネイティブの可用性が既に判明している場合は即時通知
+          if (nativeAvailability) {
+            setTimeout(function () { fn(true); }, 0);
+          }
         }
       },
       configurable: true,
