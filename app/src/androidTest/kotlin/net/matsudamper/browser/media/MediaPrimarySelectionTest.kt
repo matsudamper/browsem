@@ -140,9 +140,6 @@ class MediaPrimarySelectionTest {
     private fun tapMediaPage() {
         val geckoNode = composeRule.onNodeWithTag(GeckoBrowserTabTestTags.GeckoContainer.testTag)
         geckoNode.performTouchInput { click() }
-        geckoNode.performTouchInput {
-            click(Offset(x = 100f, y = 100f))
-        }
         composeRule.waitForIdle()
     }
 
