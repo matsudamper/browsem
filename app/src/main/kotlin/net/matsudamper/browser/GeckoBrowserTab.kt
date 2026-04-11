@@ -44,6 +44,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalView
@@ -139,6 +140,8 @@ internal fun GeckoBrowserTab(
     var urlBarFocusStartedAtMs by remember { mutableStateOf(0L) }
     var geckoView: GeckoView? by remember { mutableStateOf(null) }
     var sessionReleasedOnStop by remember(session) { mutableStateOf(false) }
+    var waitingForSurfaceRestore by remember(session) { mutableStateOf(false) }
+    val resumeCoverColor = MaterialTheme.colorScheme.surface.toArgb()
     // ホームに追加ダイアログの表示状態
     var showAddToHomeScreenDialog by remember { mutableStateOf(false) }
     var addToHomeUrl by remember { mutableStateOf("") }
@@ -169,15 +172,26 @@ internal fun GeckoBrowserTab(
             }
     }
 
-    // 他アプリから復帰した際に画面全体が真っ黒になる問題への対処。
-    // GeckoView 内部の SurfaceView がバックグラウンド中に Surface を破棄し、
-    // 復帰時に HWUI の合成ツリーが不整合になる。ON_STOP で releaseSession を呼んで
-    // Surface を明示的に破棄し、ON_START で setSession を呼んで再確保することで
-    // パイプラインを正常に復帰させる。
-    DisposableEffect(lifecycleOwner, session) {
+    DisposableEffect(lifecycleOwner, session, resumeCoverColor) {
+        fun restoreGeckoSurface(gecko: GeckoView) {
+            if (!waitingForSurfaceRestore && !sessionReleasedOnStop) {
+                return
+            }
+            if (sessionReleasedOnStop) {
+                gecko.setSession(session)
+                sessionReleasedOnStop = false
+            }
+            // GeckoView 内部の SurfaceView を明示的に再作成する。
+            gecko.coverUntilFirstPaint(resumeCoverColor)
+            gecko.requestNewSurface()
+            gecko.requestLayout()
+            gecko.invalidate()
+            waitingForSurfaceRestore = false
+        }
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
                 Lifecycle.Event.ON_STOP -> {
+                    waitingForSurfaceRestore = true
                     session.flushSessionState()
                     geckoView?.also {
                         state.captureTabPreview(it)
@@ -190,18 +204,12 @@ internal fun GeckoBrowserTab(
                     }
                 }
                 Lifecycle.Event.ON_START -> {
-                    geckoView?.also { gecko ->
-                        if (sessionReleasedOnStop) {
-                            gecko.setSession(session)
-                            sessionReleasedOnStop = false
-                        }
-                        // 黒くなる対応。効くかは不明
-                        gecko.visibility = View.INVISIBLE
-                        gecko.visibility = View.VISIBLE
-                        gecko.requestLayout()
-                        gecko.invalidate()
-                    }
-                    // ComposeView 側のルートにも再描画要求を出し、HWUI の合成パイプラインを叩き起こす。GeckoView だけでなく Compose 全体が黒くなる症状への対処。
+                    geckoView?.also(::restoreGeckoSurface)
+                    // ComposeView 側のルートにも再描画要求を出す。
+                    view.rootView.invalidate()
+                }
+                Lifecycle.Event.ON_RESUME -> {
+                    geckoView?.also(::restoreGeckoSurface)
                     view.rootView.invalidate()
                 }
                 else -> Unit
