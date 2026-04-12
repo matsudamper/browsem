@@ -23,7 +23,7 @@ media3 = "1.9.2"
 workManager = "2.11.2"
 room = "2.8.4"
 ksp = "2.3.6"
-koin = "4.2.0"
+koin = "4.2.1"
 androidxBrowser = "1.10.0"
 uiautomator = "2.3.0"
 
