@@ -61,6 +61,7 @@ class BrowserScreenViewModel(
     val uiState: StateFlow<BrowserScreenUiState> = MutableStateFlow(
         BrowserScreenUiState(
             urlBarSuggestions = UrlBarSuggestionsUiState(),
+            groupTabCount = null,
             callbacks = callbacks,
         ),
     ).also { uiStateFlow ->
@@ -74,6 +75,7 @@ class BrowserScreenViewModel(
                             previousTab = adjacentTabs.previousTab,
                             nextTab = adjacentTabs.nextTab,
                         ),
+                        groupTabCount = state.resolveGroupTabCount(),
                         callbacks = callbacks,
                     )
                 }
@@ -143,6 +145,21 @@ private data class ViewModelState(
 
     private fun findTab(tabId: String): BrowserTab? {
         return orderedBrowserTabs.firstOrNull { it.tabId == tabId }
+    }
+
+    fun resolveGroupTabCount(): Int? {
+        // タブ・グループ情報がまだロードされていない場合は null を返す
+        if (browserTabs.isEmpty()) return null
+        val assignmentMap = tabGroupAssignments.associate { it.tabId to it.groupId }
+        val knownGroupIds = tabGroups.map { it.id.value }.toSet()
+        val currentGroupId = assignmentMap[screenTabId]?.takeIf { it in knownGroupIds }
+        return if (currentGroupId != null) {
+            // 現在のタブが属するグループ内のタブ数
+            browserTabs.count { tab -> assignmentMap[tab.tabId] == currentGroupId }
+        } else {
+            // 未グループのタブ数
+            browserTabs.count { tab -> assignmentMap[tab.tabId]?.let { it in knownGroupIds } != true }
+        }
     }
 
     private fun resolveOrderedBrowserTabs(): List<BrowserTab> {

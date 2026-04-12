@@ -79,7 +79,7 @@ internal fun GeckoBrowserTab(
     mediaWebExtension: MediaWebExtension,
     browserSessionLifecycleController: BrowserSessionLifecycleController,
     modifier: Modifier = Modifier,
-    tabCount: Int,
+    tabCount: Int?,
     onInstallExtensionRequest: (String) -> Unit,
     onRequestDownloadNotificationPermission: suspend () -> Unit = {},
     onOpenSettings: () -> Unit,
