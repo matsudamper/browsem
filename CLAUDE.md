@@ -58,12 +58,8 @@ Proto → DataStore/Room → Repository → ViewModel(ViewModelStateFlow) → Ui
 - 画面 Composable は `internal` visibility
 - State Holder クラスには `@Stable` アノテーション
 
-### 永続化
-
-- 設定: Proto → DataStore (`SettingsRepository`)
-- タブ状態: Room (`TabRepository`)
-- 履歴: Room (`HistoryRepository`)
-- Proto 定義: `proto/src/main/proto/browser_settings.proto`
+### その他
+Compose Material Icons ExtendedはDeprecatedなので使用禁止。
 
 ## テスト方針
 
