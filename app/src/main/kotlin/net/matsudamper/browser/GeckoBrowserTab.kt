@@ -289,7 +289,9 @@ internal fun GeckoBrowserTab(
         onDispose {
             browserTab.detachSessionCallbacks()
             session.promptDelegate = null
-            if (session.mediaSessionDelegate === mediaSessionDelegate) {
+            if (session.mediaSessionDelegate === mediaSessionDelegate
+                && !mediaWebExtension.shouldKeepSessionAttached(session)
+            ) {
                 session.mediaSessionDelegate = null
             }
         }
