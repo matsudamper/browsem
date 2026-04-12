@@ -490,10 +490,13 @@ private fun parseDateToMillis(value: String?): Long? {
         val parts = value.split("-")
         if (parts.size < 3) return null
         val year = parts[0].toInt()
-        val month = parts[1].toInt() - 1  // Calendar の月は 0 始まり
+        val month = parts[1].toInt()
         val day = parts[2].toInt()
+        // 月・日の範囲チェック（Calendar は自動補正するため明示的に検証する）
+        if (month !in 1..12) return null
+        if (day !in 1..31) return null
         val calendar = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
-        calendar.set(year, month, day, 0, 0, 0)
+        calendar.set(year, month - 1, day, 0, 0, 0)  // Calendar の月は 0 始まり
         calendar.set(Calendar.MILLISECOND, 0)
         calendar.timeInMillis
     }.getOrNull()
