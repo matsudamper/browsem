@@ -135,6 +135,18 @@ private fun BrowserAppContent(
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
 
+    suspend fun assignTabToOpenerGroup(tabId: String, openerTabId: String) {
+        val openerGroupId = tabGroupRepository.observeTabGroupAssignments()
+            .first()
+            .find { it.tabId == openerTabId }
+            ?.groupId
+            ?.takeIf { it.isNotEmpty() }
+            ?.let { TabGroupId(it) }
+        if (openerGroupId != null) {
+            tabGroupRepository.assignTabToGroup(tabId, openerGroupId)
+        }
+    }
+
     // 通知タップ時にダウンロード管理画面を開く
     LaunchedEffect(openDownloadsFlow) {
         openDownloadsFlow.onEach {
@@ -312,18 +324,22 @@ private fun BrowserAppContent(
                                         // target="_blank" で開いたタブはオープナーと同じグループに割り当てる。
                                         // デフォルトグループは外部 Intent 経由の場合にのみ適用するため、ここでは使用しない。
                                         scope.launch {
-                                            val openerGroupId = tabGroupRepository.observeTabGroupAssignments()
-                                                .first()
-                                                .find { it.tabId == key.tabId }
-                                                ?.groupId
-                                                ?.takeIf { it.isNotEmpty() }
-                                                ?.let { TabGroupId(it) }
-                                            if (openerGroupId != null) {
-                                                tabGroupRepository.assignTabToGroup(newTab.tabId, openerGroupId)
-                                            }
+                                            assignTabToOpenerGroup(newTab.tabId, key.tabId)
                                         }
                                         selectTab(newTab.tabId, key)
                                         newTab.session
+                                    },
+                                    onOpenNewTabRequest = { uri ->
+                                        scope.launch {
+                                            val tabId = UUID.randomUUID().toString()
+                                            assignTabToOpenerGroup(tabId, key.tabId)
+                                            val newTab = browserTabController.createAndAppendTab(
+                                                tabId = tabId,
+                                                initialUrl = uri,
+                                                openerTabId = key.tabId,
+                                            )
+                                            selectTab(newTab.tabId, key)
+                                        }
                                     },
                                     onCloseTab = {
                                         val targetTabId = browserTabController.closeTab(key.tabId)

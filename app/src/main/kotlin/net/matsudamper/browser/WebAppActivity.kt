@@ -116,6 +116,9 @@ class WebAppActivity : ComponentActivity() {
                             browserTab.session.loadUri(uri)
                             browserTab.session
                         },
+                        onOpenNewTabRequest = { uri ->
+                            browserTab.session.loadUri(uri)
+                        },
                         onHistoryRecord = webAppUiState.callbacks::onHistoryRecord,
                         onHistoryTitleUpdate = webAppUiState.callbacks::onHistoryTitleUpdate,
                         urlBarSuggestions = webAppUiState.urlBarSuggestions,

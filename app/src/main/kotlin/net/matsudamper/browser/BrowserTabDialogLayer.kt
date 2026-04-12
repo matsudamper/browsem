@@ -34,7 +34,7 @@ internal fun BrowserTabDialogLayer(
     state: BrowserTabScreenState,
     dialogState: PromptDialogState,
     enableTabUi: Boolean,
-    onOpenNewSessionRequest: (String) -> GeckoSession,
+    onOpenNewTabRequest: (String) -> Unit,
 ) {
     state.imageContextMenuUrl?.let { imageUrl ->
         AlertDialog(
@@ -75,7 +75,7 @@ internal fun BrowserTabDialogLayer(
                     if (enableTabUi) {
                         TextButton(
                             onClick = {
-                                onOpenNewSessionRequest(linkUrl)
+                                onOpenNewTabRequest(linkUrl)
                                 state.linkContextMenuUrl = null
                             },
                         ) {

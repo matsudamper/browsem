@@ -92,6 +92,7 @@ internal fun GeckoBrowserTab(
     onCloseCustomTab: (() -> Unit)? = null,
     onOpenInBrowser: ((String) -> Unit)? = null,
     onOpenNewSessionRequest: (String) -> GeckoSession,
+    onOpenNewTabRequest: (String) -> Unit,
     onCloseTab: (() -> Unit)? = null,
     onToolbarHorizontalDrag: (Float) -> Unit = {},
     onToolbarDragEnd: () -> Unit = {},
@@ -151,6 +152,7 @@ internal fun GeckoBrowserTab(
     // 不安定なラムダキーによる DisposableEffect の再実行を防ぐ
     val currentOnCloseTab by rememberUpdatedState(onCloseTab)
     val currentOnOpenNewSessionRequest by rememberUpdatedState(onOpenNewSessionRequest)
+    val currentOnOpenNewTabRequest by rememberUpdatedState(onOpenNewTabRequest)
     val closeUrlInput: (Boolean) -> Unit = { restoreCurrentUrl ->
         state.isUrlInputFocused = false
         if (restoreCurrentUrl) {
@@ -326,9 +328,9 @@ internal fun GeckoBrowserTab(
                             URLEncoder.encode(text, "UTF-8"),
                         )
                         if (enableTabUi) {
-                            currentOnOpenNewSessionRequest(url)
+                            currentOnOpenNewTabRequest(url)
                         } else {
-                            session.loadUri(url)
+                            state.onUrlSubmit(url)
                         }
                         mode.finish()
                         return true
@@ -340,9 +342,9 @@ internal fun GeckoBrowserTab(
                             "https://$text"
                         }
                         if (enableTabUi) {
-                            currentOnOpenNewSessionRequest(url)
+                            currentOnOpenNewTabRequest(url)
                         } else {
-                            session.loadUri(url)
+                            state.onUrlSubmit(url)
                         }
                         mode.finish()
                         return true
@@ -577,7 +579,7 @@ internal fun GeckoBrowserTab(
             state = state,
             dialogState = dialogState,
             enableTabUi = enableTabUi,
-            onOpenNewSessionRequest = currentOnOpenNewSessionRequest,
+            onOpenNewTabRequest = currentOnOpenNewTabRequest,
         )
     }
 
