@@ -253,6 +253,9 @@ private fun CustomTabScreen(
             activeTab.session.loadUri(uri)
             activeTab.session
         },
+        onOpenNewTabRequest = { uri ->
+            activeTab.session.loadUri(uri)
+        },
         onCloseTab = onClose,
         onHistoryRecord = uiState.callbacks::onHistoryRecord,
         onHistoryTitleUpdate = uiState.callbacks::onHistoryTitleUpdate,
