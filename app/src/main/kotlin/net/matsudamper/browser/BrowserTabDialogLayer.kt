@@ -11,12 +11,18 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TimePicker
+import androidx.compose.material3.rememberDatePickerState
+import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -25,8 +31,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.toColorInt
+import java.util.Calendar
+import java.util.Locale
+import java.util.TimeZone
+import net.matsudamper.browser.ui.common.BrowserTheme
 import org.mozilla.geckoview.GeckoSession
 
 @Composable
@@ -265,48 +276,267 @@ internal fun BrowserTabDialogLayer(
     }
 
     dialogState.pendingDateTimePrompt?.let { prompt ->
-        var dateTimeText by remember(prompt) { mutableStateOf(prompt.defaultValue ?: "") }
-        val (title, hint) = when (prompt.type) {
-            GeckoSession.PromptDelegate.DateTimePrompt.Type.DATE ->
-                "日付を選択" to "YYYY-MM-DD"
-
-            GeckoSession.PromptDelegate.DateTimePrompt.Type.TIME ->
-                "時刻を選択" to "HH:MM"
-
-            GeckoSession.PromptDelegate.DateTimePrompt.Type.MONTH ->
-                "年月を選択" to "YYYY-MM"
-
-            GeckoSession.PromptDelegate.DateTimePrompt.Type.WEEK ->
-                "週を選択" to "YYYY-Www"
-
-            GeckoSession.PromptDelegate.DateTimePrompt.Type.DATETIME_LOCAL ->
-                "日時を選択" to "YYYY-MM-DDTHH:MM"
-
-            else -> "値を入力" to ""
-        }
-        AlertDialog(
-            onDismissRequest = dialogState::dismissDateTimePrompt,
-            title = { Text(title) },
-            text = {
-                OutlinedTextField(
-                    value = dateTimeText,
-                    onValueChange = { dateTimeText = it },
-                    label = { Text(hint) },
-                    singleLine = true,
+        when (prompt.type) {
+            GeckoSession.PromptDelegate.DateTimePrompt.Type.DATE -> {
+                DateInputDialog(
+                    defaultValue = prompt.defaultValue,
+                    onConfirm = dialogState::confirmDateTimePrompt,
+                    onDismiss = dialogState::dismissDateTimePrompt,
                 )
-            },
-            confirmButton = {
-                TextButton(onClick = { dialogState.confirmDateTimePrompt(dateTimeText) }) {
-                    Text("OK")
+            }
+            GeckoSession.PromptDelegate.DateTimePrompt.Type.TIME -> {
+                TimeInputDialog(
+                    defaultValue = prompt.defaultValue,
+                    onConfirm = dialogState::confirmDateTimePrompt,
+                    onDismiss = dialogState::dismissDateTimePrompt,
+                )
+            }
+            GeckoSession.PromptDelegate.DateTimePrompt.Type.DATETIME_LOCAL -> {
+                DateTimeLocalInputDialog(
+                    defaultValue = prompt.defaultValue,
+                    onConfirm = dialogState::confirmDateTimePrompt,
+                    onDismiss = dialogState::dismissDateTimePrompt,
+                )
+            }
+            else -> {
+                // MONTH, WEEK: テキスト入力で対応
+                var dateTimeText by remember(prompt) { mutableStateOf(prompt.defaultValue ?: "") }
+                val (title, hint) = when (prompt.type) {
+                    GeckoSession.PromptDelegate.DateTimePrompt.Type.MONTH -> "年月を選択" to "YYYY-MM"
+                    GeckoSession.PromptDelegate.DateTimePrompt.Type.WEEK -> "週を選択" to "YYYY-Www"
+                    else -> "値を入力" to ""
                 }
-            },
-            dismissButton = {
-                TextButton(onClick = dialogState::dismissDateTimePrompt) {
-                    Text("キャンセル")
-                }
-            },
-        )
+                AlertDialog(
+                    onDismissRequest = dialogState::dismissDateTimePrompt,
+                    title = { Text(title) },
+                    text = {
+                        OutlinedTextField(
+                            value = dateTimeText,
+                            onValueChange = { dateTimeText = it },
+                            label = { Text(hint) },
+                            singleLine = true,
+                        )
+                    },
+                    confirmButton = {
+                        TextButton(onClick = { dialogState.confirmDateTimePrompt(dateTimeText) }) {
+                            Text("OK")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = dialogState::dismissDateTimePrompt) {
+                            Text("キャンセル")
+                        }
+                    },
+                )
+            }
+        }
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DateInputDialog(
+    defaultValue: String?,
+    onConfirm: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val initialDateMillis = remember(defaultValue) { parseDateToMillis(defaultValue) }
+    val datePickerState = rememberDatePickerState(
+        initialSelectedDateMillis = initialDateMillis,
+    )
+    DatePickerDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    val millis = datePickerState.selectedDateMillis ?: return@TextButton
+                    onConfirm(formatDateMillis(millis))
+                },
+                enabled = datePickerState.selectedDateMillis != null,
+            ) {
+                Text("OK")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("キャンセル")
+            }
+        },
+    ) {
+        DatePicker(state = datePickerState)
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun TimeInputDialog(
+    defaultValue: String?,
+    onConfirm: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val (initialHour, initialMinute) = remember(defaultValue) { parseTimeToHourMinute(defaultValue) }
+    val timePickerState = rememberTimePickerState(
+        initialHour = initialHour,
+        initialMinute = initialMinute,
+    )
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("時刻を選択") },
+        text = {
+            TimePicker(state = timePickerState)
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    onConfirm(formatHourMinute(timePickerState.hour, timePickerState.minute))
+                },
+            ) {
+                Text("OK")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("キャンセル")
+            }
+        },
+    )
+}
+
+private enum class DateTimeLocalStep { DATE, TIME }
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DateTimeLocalInputDialog(
+    defaultValue: String?,
+    onConfirm: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val (initialDateMillis, initialHour, initialMinute) = remember(defaultValue) {
+        parseDateTimeLocal(defaultValue)
+    }
+    val datePickerState = rememberDatePickerState(
+        initialSelectedDateMillis = initialDateMillis,
+    )
+    val timePickerState = rememberTimePickerState(
+        initialHour = initialHour,
+        initialMinute = initialMinute,
+    )
+    var step by remember { mutableStateOf(DateTimeLocalStep.DATE) }
+
+    when (step) {
+        DateTimeLocalStep.DATE -> {
+            DatePickerDialog(
+                onDismissRequest = onDismiss,
+                confirmButton = {
+                    TextButton(
+                        onClick = { step = DateTimeLocalStep.TIME },
+                        enabled = datePickerState.selectedDateMillis != null,
+                    ) {
+                        Text("次へ")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = onDismiss) {
+                        Text("キャンセル")
+                    }
+                },
+            ) {
+                DatePicker(state = datePickerState)
+            }
+        }
+        DateTimeLocalStep.TIME -> {
+            AlertDialog(
+                onDismissRequest = onDismiss,
+                title = { Text("時刻を選択") },
+                text = {
+                    TimePicker(state = timePickerState)
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            val dateMillis = datePickerState.selectedDateMillis ?: return@TextButton
+                            val dateStr = formatDateMillis(dateMillis)
+                            val timeStr = formatHourMinute(timePickerState.hour, timePickerState.minute)
+                            onConfirm("${dateStr}T${timeStr}")
+                        },
+                    ) {
+                        Text("OK")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { step = DateTimeLocalStep.DATE }) {
+                        Text("戻る")
+                    }
+                },
+            )
+        }
+    }
+}
+
+private data class DateTimeLocalParsed(
+    val dateMillis: Long?,
+    val hour: Int,
+    val minute: Int,
+)
+
+private operator fun DateTimeLocalParsed.component1() = dateMillis
+private operator fun DateTimeLocalParsed.component2() = hour
+private operator fun DateTimeLocalParsed.component3() = minute
+
+/** "YYYY-MM-DD" 形式の文字列を UTC ミリ秒に変換する */
+private fun parseDateToMillis(value: String?): Long? {
+    if (value.isNullOrBlank()) return null
+    return runCatching {
+        val parts = value.split("-")
+        if (parts.size < 3) return null
+        val year = parts[0].toInt()
+        val month = parts[1].toInt() - 1  // Calendar の月は 0 始まり
+        val day = parts[2].toInt()
+        val calendar = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
+        calendar.set(year, month, day, 0, 0, 0)
+        calendar.set(Calendar.MILLISECOND, 0)
+        calendar.timeInMillis
+    }.getOrNull()
+}
+
+/** UTC ミリ秒を "YYYY-MM-DD" 形式に変換する */
+private fun formatDateMillis(millis: Long): String {
+    val calendar = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
+    calendar.timeInMillis = millis
+    return String.format(
+        Locale.ROOT,
+        "%04d-%02d-%02d",
+        calendar.get(Calendar.YEAR),
+        calendar.get(Calendar.MONTH) + 1,
+        calendar.get(Calendar.DAY_OF_MONTH),
+    )
+}
+
+/** "HH:MM" または "HH:MM:SS" 形式の文字列を (hour, minute) に変換する */
+private fun parseTimeToHourMinute(value: String?): Pair<Int, Int> {
+    if (value.isNullOrBlank()) return 0 to 0
+    return runCatching {
+        val parts = value.split(":")
+        val hour = parts[0].toInt().coerceIn(0, 23)
+        val minute = if (parts.size > 1) parts[1].toInt().coerceIn(0, 59) else 0
+        hour to minute
+    }.getOrElse { 0 to 0 }
+}
+
+/** hour と minute を "HH:MM" 形式に変換する */
+private fun formatHourMinute(hour: Int, minute: Int): String {
+    return String.format(Locale.ROOT, "%02d:%02d", hour, minute)
+}
+
+/** "YYYY-MM-DDTHH:MM" 形式の文字列を解析する */
+private fun parseDateTimeLocal(value: String?): DateTimeLocalParsed {
+    if (value.isNullOrBlank()) return DateTimeLocalParsed(null, 0, 0)
+    return runCatching {
+        val parts = value.split("T")
+        val dateMillis = if (parts.isNotEmpty()) parseDateToMillis(parts[0]) else null
+        val (hour, minute) = if (parts.size > 1) parseTimeToHourMinute(parts[1]) else 0 to 0
+        DateTimeLocalParsed(dateMillis, hour, minute)
+    }.getOrElse { DateTimeLocalParsed(null, 0, 0) }
 }
 
 @Composable
@@ -386,5 +616,29 @@ private fun flattenChoices(
         } else {
             listOf(choice)
         }
+    }
+}
+
+@Preview(name = "DateInputDialog")
+@Composable
+private fun PreviewDateInputDialog() {
+    BrowserTheme(themeMode = net.matsudamper.browser.data.ThemeMode.THEME_SYSTEM) {
+        DateInputDialog(
+            defaultValue = "2024-06-15",
+            onConfirm = {},
+            onDismiss = {},
+        )
+    }
+}
+
+@Preview(name = "TimeInputDialog")
+@Composable
+private fun PreviewTimeInputDialog() {
+    BrowserTheme(themeMode = net.matsudamper.browser.data.ThemeMode.THEME_SYSTEM) {
+        TimeInputDialog(
+            defaultValue = "14:30",
+            onConfirm = {},
+            onDismiss = {},
+        )
     }
 }
