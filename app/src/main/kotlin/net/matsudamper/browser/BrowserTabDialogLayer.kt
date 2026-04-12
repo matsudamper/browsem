@@ -9,12 +9,17 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
@@ -30,6 +35,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -331,6 +338,138 @@ internal fun BrowserTabDialogLayer(
             }
         }
     }
+
+    dialogState.pendingAuthPrompt?.let { prompt ->
+        AuthPromptDialog(
+            prompt = prompt,
+            onConfirm = { username, password ->
+                if (username != null) {
+                    dialogState.confirmAuthPrompt(username, password)
+                } else {
+                    dialogState.confirmAuthPromptPasswordOnly(password)
+                }
+            },
+            onDismiss = dialogState::dismissAuthPrompt,
+        )
+    }
+
+    dialogState.pendingBeforeUnloadPrompt?.let {
+        AlertDialog(
+            onDismissRequest = dialogState::dismissBeforeUnloadPrompt,
+            title = { Text("ページを離れますか？") },
+            text = { Text("入力した内容が保存されない可能性があります。") },
+            confirmButton = {
+                TextButton(onClick = { dialogState.confirmBeforeUnloadPrompt(true) }) {
+                    Text("離れる")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { dialogState.confirmBeforeUnloadPrompt(false) }) {
+                    Text("このページに留まる")
+                }
+            },
+        )
+    }
+
+    dialogState.pendingRepostConfirmPrompt?.let {
+        AlertDialog(
+            onDismissRequest = dialogState::dismissRepostConfirmPrompt,
+            title = { Text("フォームデータを再送信しますか？") },
+            text = { Text("このページを表示するにはフォームデータを再送信する必要があります。") },
+            confirmButton = {
+                TextButton(onClick = { dialogState.confirmRepostConfirmPrompt(true) }) {
+                    Text("再送信")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { dialogState.confirmRepostConfirmPrompt(false) }) {
+                    Text("キャンセル")
+                }
+            },
+        )
+    }
+}
+
+@Composable
+private fun AuthPromptDialog(
+    prompt: GeckoSession.PromptDelegate.AuthPrompt,
+    onConfirm: (username: String?, password: String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val isPasswordOnly = (prompt.authOptions.flags and
+        GeckoSession.PromptDelegate.AuthPrompt.AuthOptions.Flags.ONLY_PASSWORD) != 0
+    var username by remember(prompt) {
+        mutableStateOf(prompt.authOptions.username.orEmpty())
+    }
+    var password by remember(prompt) {
+        mutableStateOf(prompt.authOptions.password.orEmpty())
+    }
+    var passwordVisible by remember { mutableStateOf(false) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(prompt.title?.takeIf { it.isNotEmpty() } ?: "認証が必要です")
+        },
+        text = {
+            Column {
+                prompt.message?.takeIf { it.isNotEmpty() }?.let {
+                    Text(it)
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+                if (!isPasswordOnly) {
+                    OutlinedTextField(
+                        value = username,
+                        onValueChange = { username = it },
+                        label = { Text("ユーザー名") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+                OutlinedTextField(
+                    value = password,
+                    onValueChange = { password = it },
+                    label = { Text("パスワード") },
+                    singleLine = true,
+                    visualTransformation = if (passwordVisible) {
+                        VisualTransformation.None
+                    } else {
+                        PasswordVisualTransformation()
+                    },
+                    trailingIcon = {
+                        IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                            Icon(
+                                imageVector = if (passwordVisible) {
+                                    Icons.Filled.VisibilityOff
+                                } else {
+                                    Icons.Filled.Visibility
+                                },
+                                contentDescription = if (passwordVisible) "パスワードを隠す" else "パスワードを表示",
+                            )
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    onConfirm(
+                        if (isPasswordOnly) null else username,
+                        password,
+                    )
+                },
+            ) {
+                Text("OK")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("キャンセル")
+            }
+        },
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

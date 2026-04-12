@@ -1,9 +1,12 @@
 package net.matsudamper.browser
 
+import android.content.Context
+import android.net.Uri
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import org.mozilla.geckoview.AllowOrDeny
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
 
@@ -37,6 +40,22 @@ internal class PromptDialogState {
     // --- DateTime (<input type="date/time/...">) ---
     var pendingDateTimePrompt by mutableStateOf<GeckoSession.PromptDelegate.DateTimePrompt?>(null)
     var pendingDateTimeResult by mutableStateOf<GeckoResult<GeckoSession.PromptDelegate.PromptResponse>?>(null)
+
+    // --- Auth (HTTP 認証) ---
+    var pendingAuthPrompt by mutableStateOf<GeckoSession.PromptDelegate.AuthPrompt?>(null)
+    var pendingAuthResult by mutableStateOf<GeckoResult<GeckoSession.PromptDelegate.PromptResponse>?>(null)
+
+    // --- File (<input type="file">) ---
+    var pendingFilePrompt by mutableStateOf<GeckoSession.PromptDelegate.FilePrompt?>(null)
+    var pendingFileResult by mutableStateOf<GeckoResult<GeckoSession.PromptDelegate.PromptResponse>?>(null)
+
+    // --- BeforeUnload (window.onbeforeunload) ---
+    var pendingBeforeUnloadPrompt by mutableStateOf<GeckoSession.PromptDelegate.BeforeUnloadPrompt?>(null)
+    var pendingBeforeUnloadResult by mutableStateOf<GeckoResult<GeckoSession.PromptDelegate.PromptResponse>?>(null)
+
+    // --- RepostConfirm (フォーム再送信確認) ---
+    var pendingRepostConfirmPrompt by mutableStateOf<GeckoSession.PromptDelegate.RepostConfirmPrompt?>(null)
+    var pendingRepostConfirmResult by mutableStateOf<GeckoResult<GeckoSession.PromptDelegate.PromptResponse>?>(null)
 
     // ================================================================
     // Actions
@@ -128,6 +147,73 @@ internal class PromptDialogState {
         pendingDateTimeResult = null
     }
 
+    fun confirmAuthPrompt(username: String, password: String) {
+        val prompt = pendingAuthPrompt ?: return
+        pendingAuthResult?.complete(prompt.confirm(username, password))
+        pendingAuthPrompt = null
+        pendingAuthResult = null
+    }
+
+    fun confirmAuthPromptPasswordOnly(password: String) {
+        val prompt = pendingAuthPrompt ?: return
+        pendingAuthResult?.complete(prompt.confirm(password))
+        pendingAuthPrompt = null
+        pendingAuthResult = null
+    }
+
+    fun dismissAuthPrompt() {
+        val prompt = pendingAuthPrompt ?: return
+        pendingAuthResult?.complete(prompt.dismiss())
+        pendingAuthPrompt = null
+        pendingAuthResult = null
+    }
+
+    fun confirmFilePrompt(context: Context, uris: Array<Uri>) {
+        val prompt = pendingFilePrompt ?: return
+        pendingFileResult?.complete(prompt.confirm(context, uris))
+        pendingFilePrompt = null
+        pendingFileResult = null
+    }
+
+    fun dismissFilePrompt() {
+        val prompt = pendingFilePrompt ?: return
+        pendingFileResult?.complete(prompt.dismiss())
+        pendingFilePrompt = null
+        pendingFileResult = null
+    }
+
+    fun confirmBeforeUnloadPrompt(allow: Boolean) {
+        val prompt = pendingBeforeUnloadPrompt ?: return
+        pendingBeforeUnloadResult?.complete(
+            prompt.confirm(if (allow) AllowOrDeny.ALLOW else AllowOrDeny.DENY),
+        )
+        pendingBeforeUnloadPrompt = null
+        pendingBeforeUnloadResult = null
+    }
+
+    fun dismissBeforeUnloadPrompt() {
+        val prompt = pendingBeforeUnloadPrompt ?: return
+        pendingBeforeUnloadResult?.complete(prompt.dismiss())
+        pendingBeforeUnloadPrompt = null
+        pendingBeforeUnloadResult = null
+    }
+
+    fun confirmRepostConfirmPrompt(allow: Boolean) {
+        val prompt = pendingRepostConfirmPrompt ?: return
+        pendingRepostConfirmResult?.complete(
+            prompt.confirm(if (allow) AllowOrDeny.ALLOW else AllowOrDeny.DENY),
+        )
+        pendingRepostConfirmPrompt = null
+        pendingRepostConfirmResult = null
+    }
+
+    fun dismissRepostConfirmPrompt() {
+        val prompt = pendingRepostConfirmPrompt ?: return
+        pendingRepostConfirmResult?.complete(prompt.dismiss())
+        pendingRepostConfirmPrompt = null
+        pendingRepostConfirmResult = null
+    }
+
     // ================================================================
     // Delegate 生成
     // ================================================================
@@ -192,6 +278,54 @@ internal class PromptDialogState {
                 pendingDateTimePrompt = prompt
                 pendingDateTimeResult = result
                 return result
+            }
+
+            override fun onAuthPrompt(
+                session: GeckoSession,
+                prompt: GeckoSession.PromptDelegate.AuthPrompt,
+            ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse> {
+                val result = GeckoResult<GeckoSession.PromptDelegate.PromptResponse>()
+                pendingAuthPrompt = prompt
+                pendingAuthResult = result
+                return result
+            }
+
+            override fun onFilePrompt(
+                session: GeckoSession,
+                prompt: GeckoSession.PromptDelegate.FilePrompt,
+            ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse> {
+                val result = GeckoResult<GeckoSession.PromptDelegate.PromptResponse>()
+                pendingFilePrompt = prompt
+                pendingFileResult = result
+                return result
+            }
+
+            override fun onBeforeUnloadPrompt(
+                session: GeckoSession,
+                prompt: GeckoSession.PromptDelegate.BeforeUnloadPrompt,
+            ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse> {
+                val result = GeckoResult<GeckoSession.PromptDelegate.PromptResponse>()
+                pendingBeforeUnloadPrompt = prompt
+                pendingBeforeUnloadResult = result
+                return result
+            }
+
+            override fun onRepostConfirmPrompt(
+                session: GeckoSession,
+                prompt: GeckoSession.PromptDelegate.RepostConfirmPrompt,
+            ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse> {
+                val result = GeckoResult<GeckoSession.PromptDelegate.PromptResponse>()
+                pendingRepostConfirmPrompt = prompt
+                pendingRepostConfirmResult = result
+                return result
+            }
+
+            override fun onPopupPrompt(
+                session: GeckoSession,
+                prompt: GeckoSession.PromptDelegate.PopupPrompt,
+            ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse> {
+                // ポップアップを許可する
+                return GeckoResult.fromValue(prompt.confirm(AllowOrDeny.ALLOW))
             }
         }
 }

@@ -29,6 +29,8 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -148,6 +150,41 @@ internal fun GeckoBrowserTab(
     var addToHomeUrl by remember { mutableStateOf("") }
     var addToHomeTitle by remember { mutableStateOf("") }
     var addToHomeFavicon by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
+
+    // ファイルピッカー（単一ファイル選択）
+    val singleFileLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri != null) {
+            dialogState.confirmFilePrompt(context, arrayOf(uri))
+        } else {
+            dialogState.dismissFilePrompt()
+        }
+    }
+
+    // ファイルピッカー（複数ファイル選択）
+    val multipleFilesLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenMultipleDocuments(),
+    ) { uris ->
+        if (uris.isNotEmpty()) {
+            dialogState.confirmFilePrompt(context, uris.toTypedArray())
+        } else {
+            dialogState.dismissFilePrompt()
+        }
+    }
+
+    // ファイルプロンプトが来たらピッカーを起動
+    val pendingFilePrompt = dialogState.pendingFilePrompt
+    LaunchedEffect(pendingFilePrompt) {
+        val prompt = pendingFilePrompt ?: return@LaunchedEffect
+        val mimeTypes = prompt.mimeTypes?.takeIf { it.isNotEmpty() } ?: arrayOf("*/*")
+        when (prompt.type) {
+            GeckoSession.PromptDelegate.FilePrompt.Type.MULTIPLE ->
+                multipleFilesLauncher.launch(mimeTypes)
+            else ->
+                singleFileLauncher.launch(mimeTypes)
+        }
+    }
 
     // 不安定なラムダキーによる DisposableEffect の再実行を防ぐ
     val currentOnCloseTab by rememberUpdatedState(onCloseTab)
