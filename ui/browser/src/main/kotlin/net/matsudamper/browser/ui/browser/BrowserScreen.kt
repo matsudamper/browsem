@@ -20,7 +20,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -45,18 +44,16 @@ fun BrowserScreen(
     uiState: BrowserScreenUiState,
     browserTabController: BrowserTabController,
     onSelectTab: (String) -> Unit,
-    previewHeaderContent: @Composable (modifier: Modifier, tab: BrowserTab, tabCount: Int) -> Unit,
+    previewHeaderContent: @Composable (modifier: Modifier, tab: BrowserTab, tabCount: Int?) -> Unit,
     browserTabContent: @Composable (
         modifier: Modifier,
         selectedTab: BrowserTab,
-        tabCount: Int,
+        tabCount: Int?,
         onToolbarHorizontalDrag: (Float) -> Unit,
         onToolbarDragEnd: () -> Unit,
     ) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val tabStoreState by browserTabController.tabStoreState.collectAsState()
-    val tabs = remember(tabStoreState, browserTabController) { browserTabController.tabs }
     val prevTab = uiState.swipePreview.previousTab
     val nextTab = uiState.swipePreview.nextTab
 
@@ -100,7 +97,7 @@ fun BrowserScreen(
         prevTab?.let { tab ->
             TabPreviewPage(
                 tab = tab,
-                tabCount = tabs.size,
+                tabCount = uiState.groupTabCount,
                 previewHeaderContent = previewHeaderContent,
                 modifier = Modifier
                     .fillMaxSize()
@@ -112,7 +109,7 @@ fun BrowserScreen(
         nextTab?.let { tab ->
             TabPreviewPage(
                 tab = tab,
-                tabCount = tabs.size,
+                tabCount = uiState.groupTabCount,
                 previewHeaderContent = previewHeaderContent,
                 modifier = Modifier
                     .fillMaxSize()
@@ -126,7 +123,7 @@ fun BrowserScreen(
                 .fillMaxSize()
                 .offset { IntOffset(swipeOffset.value.roundToInt(), 0) },
             selectedTab,
-            tabs.size,
+            uiState.groupTabCount,
             { delta ->
                 coroutineScope.launch {
                     val maxOffset = if (prevTab != null) pageWidthPx else 0f
@@ -166,8 +163,8 @@ fun BrowserScreen(
 @Composable
 private fun TabPreviewPage(
     tab: BrowserTab,
-    tabCount: Int,
-    previewHeaderContent: @Composable (modifier: Modifier, tab: BrowserTab, tabCount: Int) -> Unit,
+    tabCount: Int?,
+    previewHeaderContent: @Composable (modifier: Modifier, tab: BrowserTab, tabCount: Int?) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     // 上部（ステータスバー）は BrowserToolBar の背景色で塗りつぶすため除外する

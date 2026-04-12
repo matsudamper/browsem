@@ -5,6 +5,7 @@ import net.matsudamper.browser.BrowserTab
 data class BrowserScreenUiState(
     val urlBarSuggestions: UrlBarSuggestionsUiState,
     val swipePreview: SwipePreviewUiState = SwipePreviewUiState(),
+    val groupTabCount: Int?,
     val callbacks: Callbacks,
 ) {
     data class SwipePreviewUiState(

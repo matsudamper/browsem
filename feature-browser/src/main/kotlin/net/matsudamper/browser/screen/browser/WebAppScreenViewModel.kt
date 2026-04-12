@@ -30,6 +30,7 @@ class WebAppScreenViewModel(
     val uiState: StateFlow<BrowserScreenUiState> = MutableStateFlow(
         BrowserScreenUiState(
             urlBarSuggestions = UrlBarSuggestionsUiState(),
+            groupTabCount = null,
             callbacks = callbacks,
         ),
     ).also { uiStateFlow ->
@@ -38,6 +39,7 @@ class WebAppScreenViewModel(
                 uiStateFlow.update {
                     BrowserScreenUiState(
                         urlBarSuggestions = suggestions,
+                        groupTabCount = null,
                         callbacks = callbacks,
                     )
                 }

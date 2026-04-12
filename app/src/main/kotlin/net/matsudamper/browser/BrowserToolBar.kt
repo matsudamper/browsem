@@ -69,7 +69,7 @@ internal fun BrowserToolBar(
     onInstallExtension: () -> Unit,
     onOpenSettings: () -> Unit,
     onShare: () -> Unit,
-    tabCount: Int,
+    tabCount: Int?,
     onOpenTabs: () -> Unit,
     showTabActions: Boolean = true,
     onRefresh: () -> Unit,
@@ -203,7 +203,7 @@ internal fun BrowserToolbar(
     toolbarColor: Color?,
     updateVisibleMenu: (Boolean) -> Unit,
     onOpenTabs: () -> Unit,
-    tabCount: Int,
+    tabCount: Int?,
     showTabButton: Boolean = true,
     toolbarMenu: @Composable () -> Unit,
     modifier: Modifier = Modifier,
@@ -294,7 +294,7 @@ internal fun BrowserToolbar(
             }
 
             if (!isFocused) {
-                if (showTabButton) {
+                if (showTabButton && tabCount != null) {
                     IconButton(
                         onClick = onOpenTabs,
                         modifier = Modifier.testTag(BrowserToolbarTestTags.OpenTabsButton.testTag),
