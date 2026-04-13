@@ -1,0 +1,28 @@
+# detekt設定: compose rulesのみ有効化
+# デフォルトのdetektルールは全て無効化する
+
+complexity:
+  active: false
+
+coroutines:
+  active: false
+
+empty-blocks:
+  active: false
+
+exceptions:
+  active: false
+
+naming:
+  active: false
+
+performance:
+  active: false
+
+potential-bugs:
+  active: false
+
+style:
+  active: false
+
+# compose rules (io.nlopez.compose.rules) はデフォルトで全て有効
