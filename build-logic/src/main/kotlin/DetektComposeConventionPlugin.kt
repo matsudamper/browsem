@@ -18,7 +18,10 @@ class DetektComposeConventionPlugin : Plugin<Project> {
             }
 
             dependencies {
-                "detektPlugins"(libs.findLibrary("compose-rules-detekt").get())
+                val composeRulesDetekt = libs.findLibrary("compose-rules-detekt").orElseThrow {
+                    NoSuchElementException("version catalogに 'compose-rules-detekt' ライブラリが見つかりません")
+                }
+                "detektPlugins"(composeRulesDetekt)
             }
 
             tasks.withType<Detekt>().configureEach {
