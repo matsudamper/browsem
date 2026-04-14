@@ -103,10 +103,11 @@ internal fun TabCard(
                 contentAlignment = Alignment.Center,
             ) {
                 var bitmap: Bitmap? by remember { mutableStateOf(null) }
-                LaunchedEffect(tab.previewBitmapArray) {
-                    val array = tab.previewBitmapArray ?: return@LaunchedEffect
+                LaunchedEffect(tab.previewImage) {
+                    val array = tab.previewImage?.bytes ?: return@LaunchedEffect
                     bitmap = withContext(Dispatchers.Default) {
-                        BitmapFactory.decodeByteArray(array, 0, array.size)
+                        val options = BitmapFactory.Options().apply { inSampleSize = 2 }
+                        BitmapFactory.decodeByteArray(array, 0, array.size, options)
                     }
                 }
 

@@ -17,6 +17,7 @@ import net.matsudamper.browser.core.TabStoreState
 import net.matsudamper.browser.data.TabGroupData
 import net.matsudamper.browser.data.TabGroupRepository
 import net.matsudamper.browser.data.tab.TabGroupAssignment
+import net.matsudamper.browser.ui.tabs.TabPreviewImage
 import net.matsudamper.browser.ui.tabs.TabsScreenTabData
 import net.matsudamper.browser.ui.tabs.TabsScreenUiState
 
@@ -98,7 +99,7 @@ class TabsScreenViewModel(
                             TabsScreenTabData(
                                 id = tab.id,
                                 title = tab.title,
-                                previewBitmapArray = tab.previewBitmapArray,
+                                previewImage = tab.previewBitmapArray?.let { TabPreviewImage(it) },
                             )
                         }
                 }
@@ -311,7 +312,7 @@ class TabsScreenViewModel(
                     TabsScreenTabData(
                         id = tab.id,
                         title = tab.title,
-                        previewBitmapArray = tab.previewBitmapArray,
+                        previewImage = tab.previewBitmapArray?.let { TabPreviewImage(it) },
                     )
                 }
         }

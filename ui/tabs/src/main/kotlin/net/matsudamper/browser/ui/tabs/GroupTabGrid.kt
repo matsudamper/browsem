@@ -94,6 +94,7 @@ internal fun GroupTabGrid(
         LazyVerticalGrid(
             columns = GridCells.Fixed(columns),
             state = gridState,
+            beyondBoundsItemCount = 4,
             modifier = Modifier
                 .fillMaxSize()
                 .onGloballyPositioned { coordinates ->
