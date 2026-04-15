@@ -33,5 +33,18 @@ data class TabsScreenUiState(
 data class TabsScreenTabData(
     val id: String,
     val title: String,
-    val previewBitmapArray: ByteArray?,
+    val previewImage: TabPreviewImage?,
 )
+
+// ByteArray を contentEquals で比較するラッパー。
+// data class の自動生成 equals は配列の参照等値になるため、
+// ラッパー側で正しいコンテンツ等値を実装する。
+class TabPreviewImage(val bytes: ByteArray) {
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is TabPreviewImage) return false
+        return bytes.contentEquals(other.bytes)
+    }
+
+    override fun hashCode(): Int = bytes.contentHashCode()
+}
