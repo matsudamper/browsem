@@ -531,7 +531,13 @@ internal fun GeckoBrowserTab(
                     onPageZoomOut = state::pageZoomOut,
                     onResetPageZoom = state::resetPageZoom,
                     onHorizontalDrag = onToolbarHorizontalDrag,
-                    onHorizontalDragEnd = onToolbarDragEnd,
+                    onHorizontalDragEnd = {
+                        // タブ切替スワイプになる可能性があるため、現在のタブのプレビューを事前にキャプチャする
+                        geckoView?.also { gv ->
+                            runCatching { state.flushAndCaptureForTabSwitch(gv) }
+                        }
+                        onToolbarDragEnd()
+                    },
                     onAddToHomeScreen = {
                         addToHomeUrl = state.currentPageUrl
                         addToHomeTitle = state.currentPageTitle
