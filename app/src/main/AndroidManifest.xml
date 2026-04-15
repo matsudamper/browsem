@@ -48,12 +48,12 @@
                 <category android:name="android.intent.category.APP_BROWSER" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-        </activity>
-        <activity
-            android:name=".DeepLinkActivity"
-            android:exported="true"
-            android:noHistory="true"
-            android:windowSoftInputMode="adjustResize">
+            <!--
+                URL 選択ダイアログ（YouTube 等の外部アプリからのリンク開封）で
+                このアプリをブラウザとして表示するための intent-filter。
+                Chrome・Firefox と同様にメインの Activity に VIEW filter を置くことで、
+                Android がブラウザとして認識できるようにする。
+            -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
 
@@ -64,6 +64,15 @@
                 <data android:scheme="https" />
             </intent-filter>
         </activity>
+        <!--
+            ホームスクリーンショートカットおよび Custom Tab の振り分けに使用するトランポリン Activity。
+            intent-filter は持たず、明示的 Intent からのみ起動される。
+        -->
+        <activity
+            android:name=".DeepLinkActivity"
+            android:exported="true"
+            android:noHistory="true"
+            android:windowSoftInputMode="adjustResize" />
         <activity
             android:name=".CustomTabActivity"
             android:exported="false"
