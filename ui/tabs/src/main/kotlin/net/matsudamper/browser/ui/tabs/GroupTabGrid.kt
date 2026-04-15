@@ -1,5 +1,7 @@
 package net.matsudamper.browser.ui.tabs
 
+import android.graphics.Bitmap
+import android.util.LruCache
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -77,6 +79,15 @@ internal fun GroupTabGrid(
             gridState = gridState,
             onMove = onReorderTabs,
         )
+        // デコード済み Bitmap を保持してスクロール往復時の再デコードを避ける。
+        // 画面を離れる（GroupTabGrid がコンポジションから抜ける）と破棄される。
+        // キーは TabPreviewImage（contentEquals/contentHashCode 実装済み）なので
+        // プレビュー内容が変わった際は自然にキャッシュミスする。
+        val bitmapCache = remember {
+            object : LruCache<TabPreviewImage, Bitmap>(TAB_BITMAP_CACHE_BYTES) {
+                override fun sizeOf(key: TabPreviewImage, value: Bitmap): Int = value.byteCount
+            }
+        }
 
         // ドラッグ状態を上位コンポーザブルに通知する
         LaunchedEffect(dragDropState.isDragging, dragDropState.dragCenterInRoot) {
@@ -141,6 +152,7 @@ internal fun GroupTabGrid(
                         if (!dragDropState.isDragging) onSelectTab(tabId)
                     },
                     onCloseTab = onCloseTab,
+                    bitmapCache = bitmapCache,
                     modifier = Modifier
                         .fillMaxWidth()
                         .aspectRatio(TabsLayoutDefaults.cardAspectRatio)
@@ -168,6 +180,7 @@ internal fun GroupTabGrid(
                         selected = overlayTab.id == selectedTabId,
                         onSelectTab = {},
                         onCloseTab = {},
+                        bitmapCache = bitmapCache,
                         modifier = Modifier.fillMaxSize(),
                     )
                 }
@@ -175,6 +188,11 @@ internal fun GroupTabGrid(
         }
     }
 }
+
+// タブサムネイルキャッシュの上限（バイト）。16MiB。
+// タブカードは inSampleSize=2 でデコードするため、1枚あたり数百KB程度。
+// 典型的なタブ数（〜50）をカバーできる容量。
+private const val TAB_BITMAP_CACHE_BYTES: Int = 16 * 1024 * 1024
 
 
 @Composable

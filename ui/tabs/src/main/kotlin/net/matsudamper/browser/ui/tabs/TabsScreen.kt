@@ -464,11 +464,11 @@ private fun Preview() {
     val groupedTabs = remember {
         listOf(
             listOf(
-                TabsScreenTabData(id = "1", title = "Example Domain", previewBitmapArray = null),
-                TabsScreenTabData(id = "2", title = "Google", previewBitmapArray = null),
+                TabsScreenTabData(id = "1", title = "Example Domain", previewImage = null),
+                TabsScreenTabData(id = "2", title = "Google", previewImage = null),
             ),
             listOf(
-                TabsScreenTabData(id = "3", title = "GitHub", previewBitmapArray = null),
+                TabsScreenTabData(id = "3", title = "GitHub", previewImage = null),
             ),
         )
     }

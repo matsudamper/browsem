@@ -54,16 +54,24 @@ class GeckoSurfaceResumeTest {
     private fun waitForNonBlackGeckoPixels(timeoutMillis: Long = 30_000): Bitmap {
         val deadline = System.currentTimeMillis() + timeoutMillis
         var latestBitmap: Bitmap? = null
+        var lastError: Throwable? = null
         while (System.currentTimeMillis() < deadline) {
-            latestBitmap = captureGeckoPixels()
-            if (!latestBitmap.isMostlyBlack()) {
-                return latestBitmap
+            try {
+                latestBitmap = captureGeckoPixels()
+                if (!latestBitmap.isMostlyBlack()) {
+                    return latestBitmap
+                }
+            } catch (e: AssertionError) {
+                // Activity リジューム直後は GeckoView の Compositor がまだ準備できておらず
+                // capturePixels() が失敗することがある。一時的なエラーとしてリトライする。
+                lastError = e
             }
             Thread.sleep(250L)
         }
         error(
-            "GeckoView pixels stayed mostly black. " +
-                "lastBitmap=${latestBitmap?.width}x${latestBitmap?.height}",
+            "GeckoView pixels stayed mostly black or capture failed. " +
+                "lastBitmap=${latestBitmap?.width}x${latestBitmap?.height}, " +
+                "lastError=$lastError",
         )
     }
 
