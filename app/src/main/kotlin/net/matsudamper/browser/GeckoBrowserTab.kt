@@ -232,13 +232,19 @@ internal fun GeckoBrowserTab(
                 Lifecycle.Event.ON_STOP -> {
                     waitingForSurfaceRestore = true
                     session.flushSessionState()
-                    geckoView?.also {
-                        state.captureTabPreview(it)
+                    geckoView?.also { gv ->
                         if (mediaWebExtension.shouldKeepSessionAttached(session)) {
+                            state.captureTabPreview(gv)
                             sessionReleasedOnStop = false
                         } else {
-                            it.releaseSession()
-                            sessionReleasedOnStop = true
+                            // capturePixels()はセッションに依存するため、キャプチャ完了後にreleaseSession()を呼ぶ
+                            state.captureTabPreview(gv) {
+                                // ON_STARTが先に来てwaitingForSurfaceRestoreがリセットされた場合はスキップ
+                                if (waitingForSurfaceRestore) {
+                                    gv.releaseSession()
+                                    sessionReleasedOnStop = true
+                                }
+                            }
                         }
                     }
                 }
