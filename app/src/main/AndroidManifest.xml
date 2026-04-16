@@ -49,10 +49,42 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
             <!--
+                音声検索・アシスタントからブラウザとして選択されるための filter。
+                Chrome・Firefox と同様に WEB_SEARCH を MainActivity に置く。
+            -->
+            <intent-filter>
+                <action android:name="android.intent.action.WEB_SEARCH" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+        <!--
+            ホームスクリーンショートカットおよび Custom Tab の振り分けに使用するトランポリン Activity。
+            URL 選択ダイアログでブラウザとして表示するためのメイン intent-filter を持つ。
+        -->
+        <activity
+            android:name=".DeepLinkActivity"
+            android:exported="true"
+            android:noHistory="true"
+            android:windowSoftInputMode="adjustResize">
+            <!--
                 URL 選択ダイアログ（YouTube 等の外部アプリからのリンク開封）で
                 このアプリをブラウザとして表示するための intent-filter。
-                Chrome・Firefox と同様にメインの Activity に VIEW filter を置くことで、
-                Android がブラウザとして認識できるようにする。
+                autoVerify=true を付けることで Android がブラウザ候補として認識する。
+            -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <category android:name="android.intent.category.APP_BROWSER" />
+
+                <data android:scheme="http" />
+                <data android:scheme="https" />
+            </intent-filter>
+            <!--
+                about:, javascript:, data:, blob: などのブラウザ固有スキーム。
+                Chrome・Firefox と同様に登録することでブラウザとして認識させる。
             -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
@@ -60,19 +92,41 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
 
-                <data android:scheme="http" />
-                <data android:scheme="https" />
+                <data android:scheme="about" />
+                <data android:scheme="javascript" />
+            </intent-filter>
+            <!--
+                ローカルファイルおよび HTML コンテンツを開くための filter。
+                Chrome・Firefox と同様に text/html 等を処理できることを宣言する。
+            -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data android:scheme="file" />
+                <data android:mimeType="text/html" />
+                <data android:mimeType="text/plain" />
+                <data android:mimeType="application/xhtml+xml" />
+                <data android:mimeType="application/xml" />
+            </intent-filter>
+            <!--
+                content:// URI 経由で HTML ファイルを受け取る場合の filter。
+            -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data android:scheme="content" />
+                <data android:mimeType="text/html" />
+                <data android:mimeType="text/plain" />
+                <data android:mimeType="application/xhtml+xml" />
+                <data android:mimeType="application/xml" />
             </intent-filter>
         </activity>
-        <!--
-            ホームスクリーンショートカットおよび Custom Tab の振り分けに使用するトランポリン Activity。
-            intent-filter は持たず、明示的 Intent からのみ起動される。
-        -->
-        <activity
-            android:name=".DeepLinkActivity"
-            android:exported="true"
-            android:noHistory="true"
-            android:windowSoftInputMode="adjustResize" />
         <activity
             android:name=".CustomTabActivity"
             android:exported="false"
