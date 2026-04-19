@@ -45,6 +45,9 @@ Proto → DataStore/Room → Repository → ViewModel(ViewModelStateFlow) → Ui
 - **プロセスに1つ**。`GeckoRuntime.getDefault(context)` で取得
 - ViewModel・Controller 経由で各タブに配布
 
+## Coding Agent
+すべての応答、説明、およびコミットメッセージは日本語で行ってください。
+
 ## コーディング規約
 
 ### 言語・スタイル
