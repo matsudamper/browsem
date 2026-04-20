@@ -57,6 +57,7 @@ Compose:
   LambdaParameterInRestartableEffect:
     active: true
   Material2:
+    # Material 3を使用しているため無効化（オプトインルール）
     active: false
   ModifierClickableOrder:
     active: true
@@ -85,6 +86,7 @@ Compose:
   PreviewAnnotationNaming:
     active: true
   PreviewNaming:
+    # オプトインルール。必要に応じて有効化
     active: false
   PreviewPublic:
     active: true
@@ -95,6 +97,7 @@ Compose:
   StateParam:
     active: true
   UnstableCollections:
+    # オプトインルール。Strong Skippingが有効な場合は不要
     active: false
   ViewModelForwarding:
     active: true
