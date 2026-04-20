@@ -87,14 +87,6 @@ class CustomTabActivity : ComponentActivity() {
                 runtime.settings.setEnterpriseRootsEnabled(browserSettings.enableThirdPartyCa)
             }
 
-            val customTabViewModel = viewModel(initializer = {
-                CustomTabScreenViewModel(
-                    historyRepository = historyRepository,
-                    settingsRepository = settingsRepository,
-                    webSuggestionRepository = webSuggestionRepository,
-                )
-            })
-
             BrowserTheme(themeMode = browserSettings.themeMode) {
                 Box(
                     modifier = Modifier.semantics {
@@ -109,7 +101,9 @@ class CustomTabActivity : ComponentActivity() {
                         translationProvider = browserSettings.translationProvider,
                         browserTabController = browserTabController,
                         browserSessionLifecycleController = browserSessionLifecycleController,
-                        customTabViewModel = customTabViewModel,
+                        settingsRepository = settingsRepository,
+                        historyRepository = historyRepository,
+                        webSuggestionRepository = webSuggestionRepository,
                         themeColorExtension = themeColorExtension,
                         mediaWebExtension = mediaWebExtensionInstance,
                         onClose = ::finish,
@@ -176,14 +170,23 @@ private fun CustomTabScreen(
     translationProvider: TranslationProvider,
     browserTabController: BrowserTabController,
     browserSessionLifecycleController: BrowserSessionLifecycleController,
-    customTabViewModel: CustomTabScreenViewModel,
+    settingsRepository: SettingsRepository,
+    historyRepository: HistoryRepository,
+    webSuggestionRepository: WebSuggestionRepository,
     themeColorExtension: ThemeColorWebExtension,
     mediaWebExtension: MediaWebExtension,
     onClose: () -> Unit,
     onOpenInBrowser: (String) -> Unit,
     onRequestDownloadNotificationPermission: suspend () -> Unit,
 ) {
-    val uiState by customTabViewModel.uiState.collectAsState()
+    val viewModel = viewModel(initializer = {
+        CustomTabScreenViewModel(
+            historyRepository = historyRepository,
+            settingsRepository = settingsRepository,
+            webSuggestionRepository = webSuggestionRepository,
+        )
+    })
+    val uiState by viewModel.uiState.collectAsState()
     val prewarmedSession = remember(customTabsSessionToken, initialUrl) {
         customTabsSessionToken?.let { token ->
             CustomTabsWarmupStore.consumePreparedSession(
@@ -257,6 +260,6 @@ private fun CustomTabScreen(
         onHistoryRecord = uiState.callbacks::onHistoryRecord,
         onHistoryTitleUpdate = uiState.callbacks::onHistoryTitleUpdate,
         urlBarSuggestions = uiState.urlBarSuggestions,
-        onUrlInputChange = uiState.callbacks::onUrlInputChanged,
+        onUrlInputChanged = uiState.callbacks::onUrlInputChanged,
     )
 }

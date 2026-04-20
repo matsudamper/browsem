@@ -102,7 +102,7 @@ internal fun GeckoBrowserTab(
     onHistoryRecord: (suspend (url: String, title: String) -> Long)? = null,
     onHistoryTitleUpdate: (suspend (id: Long, title: String) -> Unit)? = null,
     urlBarSuggestions: UrlBarSuggestionsUiState = UrlBarSuggestionsUiState(),
-    onUrlInputChange: ((String) -> Unit)? = null,
+    onUrlInputChanged: ((String) -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val readabilityWebExtension: ReadabilityWebExtension = koinInject()
@@ -203,11 +203,11 @@ internal fun GeckoBrowserTab(
     }
 
     // URLバー入力変更時にサジェスト検索を発火
-    LaunchedEffect(state, onUrlInputChange) {
+    LaunchedEffect(state, onUrlInputChanged) {
         snapshotFlow { state.urlInput to state.isUrlInputFocused }
             .collectLatest { (input, focused) ->
                 if (focused) {
-                    onUrlInputChange?.invoke(input)
+                    onUrlInputChanged?.invoke(input)
                 }
             }
     }
@@ -572,10 +572,10 @@ internal fun GeckoBrowserTab(
                 toLanguage = state.translationToLanguage,
                 fromLanguageOptions = languageOptions,
                 toLanguageOptions = languageOptions,
-                onSelectFromLanguage = { lang ->
+                onFromLanguageSelected = { lang ->
                     state.onRetranslate(translationProvider, fromLanguage = lang, toLanguage = state.translationToLanguage ?: "ja")
                 },
-                onSelectToLanguage = { lang ->
+                onToLanguageSelected = { lang ->
                     state.onRetranslate(translationProvider, fromLanguage = state.translationFromLanguage, toLanguage = lang)
                 },
             )

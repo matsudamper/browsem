@@ -38,8 +38,8 @@ internal fun TranslationStatusBar(
     fromLanguageOptions: List<String>? = null,
     /** 翻訳先の選択肢（言語タグ一覧）。nullなら言語変更UIを表示しない。 */
     toLanguageOptions: List<String>? = null,
-    onSelectFromLanguage: (String) -> Unit = {},
-    onSelectToLanguage: (String) -> Unit = {},
+    onFromLanguageSelected: (String) -> Unit = {},
+    onToLanguageSelected: (String) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     if (state == TranslationState.Idle) return
@@ -77,7 +77,7 @@ internal fun TranslationStatusBar(
                             languageTag = fromLanguage,
                             options = fromLanguageOptions,
                             color = MaterialTheme.colorScheme.onSecondaryContainer,
-                            onSelect = onSelectFromLanguage,
+                            onSelected = onFromLanguageSelected,
                         )
                         Text(
                             text = " → ",
@@ -89,7 +89,7 @@ internal fun TranslationStatusBar(
                             languageTag = toLanguage,
                             options = toLanguageOptions,
                             color = MaterialTheme.colorScheme.onSecondaryContainer,
-                            onSelect = onSelectToLanguage,
+                            onSelected = onToLanguageSelected,
                         )
                     }
 
@@ -144,7 +144,7 @@ private fun LanguageDropdownButton(
     languageTag: String?,
     options: List<String>?,
     color: androidx.compose.ui.graphics.Color,
-    onSelect: (String) -> Unit,
+    onSelected: (String) -> Unit,
 ) {
     val displayName = languageDisplayName(languageTag)
     if (options.isNullOrEmpty()) {
@@ -175,7 +175,7 @@ private fun LanguageDropdownButton(
                     text = { Text(languageDisplayName(lang)) },
                     onClick = {
                         expanded = false
-                        onSelect(lang)
+                        onSelected(lang)
                     },
                 )
             }
