@@ -28,6 +28,7 @@ androidxBrowser = "1.10.0"
 uiautomator = "2.3.0"
 detekt = "2.0.0-alpha.2"
 composeRules = "0.5.7"
+mockk = "1.14.9"
 
 [libraries]
 androidx-compose-bom = { module = "androidx.compose:compose-bom", version.ref = "composeBom" }
@@ -73,6 +74,7 @@ androidx-test-uiautomator = { module = "androidx.test.uiautomator:uiautomator", 
 detekt-gradle-plugin = { module = "dev.detekt:detekt-gradle-plugin", version.ref = "detekt" }
 detekt-compose-rules = { module = "io.nlopez.compose.rules:detekt", version.ref = "composeRules" }
 kotlin-gradle-plugin = { module = "org.jetbrains.kotlin:kotlin-gradle-plugin", version.ref = "kotlin" }
+mockk = { module = "io.mockk:mockk", version.ref = "mockk" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
