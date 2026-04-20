@@ -204,9 +204,9 @@ internal fun BrowserToolbar(
     updateVisibleMenu: (Boolean) -> Unit,
     onOpenTabs: () -> Unit,
     tabCount: Int?,
+    modifier: Modifier = Modifier,
     showTabButton: Boolean = true,
     toolbarMenu: @Composable () -> Unit,
-    modifier: Modifier = Modifier,
 ) {
     var heightCache by remember { mutableIntStateOf(0) }
 
