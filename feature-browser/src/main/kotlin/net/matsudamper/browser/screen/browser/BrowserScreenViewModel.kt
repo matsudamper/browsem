@@ -151,9 +151,6 @@ private data class ViewModelState(
         if (browserTabs.isEmpty()) return null
         val assignmentMap = tabGroupAssignments.associate { it.tabId to it.groupId }
         val knownGroupIds = tabGroups.map { it.id.value }.toSet()
-        // 全タブは設計上必ずいずれかのグループに属する。未ロードやデータ不整合で
-        // 所属グループが解決できない場合は null を返し、UI 側で数字ボタンを非表示にする
-        // （誤った全体タブ数が一瞬表示されるフラッシュを防ぐ）。
         val currentGroupId = assignmentMap[screenTabId]?.takeIf { it in knownGroupIds } ?: return null
         return browserTabs.count { tab -> assignmentMap[tab.tabId] == currentGroupId }
     }
