@@ -72,6 +72,7 @@ androidx-browser = { module = "androidx.browser:browser", version.ref = "android
 androidx-test-uiautomator = { module = "androidx.test.uiautomator:uiautomator", version.ref = "uiautomator" }
 detekt-gradle-plugin = { module = "dev.detekt:detekt-gradle-plugin", version.ref = "detekt" }
 detekt-compose-rules = { module = "io.nlopez.compose.rules:detekt", version.ref = "composeRules" }
+kotlin-gradle-plugin = { module = "org.jetbrains.kotlin:kotlin-gradle-plugin", version.ref = "kotlin" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
