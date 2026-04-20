@@ -339,9 +339,10 @@ internal fun BrowserToolbar(
     }
 }
 
-// Row(IntrinsicSize.Min) から降りてくる maxHeight を一辺に採用する正方形レイアウト。
-// 幅方向の intrinsic を height に固定し、子 BasicText のテキスト幅が Row 高さへ
-// 伝播して URL バー高さが伸びる問題を遮断する。
+/**
+ * Row(IntrinsicSize.Min) から降りてくる maxHeight を一辺に採用する正方形レイアウト。
+ * 幅方向の intrinsic を height に固定し、子 BasicText のテキスト幅が Row 高さへ伝播して URL バー高さが伸びる問題を遮断する。
+ */
 private val TabCountSquareMeasurePolicy = object : MeasurePolicy {
     override fun MeasureScope.measure(
         measurables: List<Measurable>,
