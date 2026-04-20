@@ -14,9 +14,6 @@ empty-blocks:
 exceptions:
   active: false
 
-libraries:
-  active: false
-
 naming:
   active: false
 
@@ -24,9 +21,6 @@ performance:
   active: false
 
 potential-bugs:
-  active: false
-
-ruleauthors:
   active: false
 
 style:
