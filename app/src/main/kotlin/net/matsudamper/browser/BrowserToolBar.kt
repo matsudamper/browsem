@@ -294,13 +294,13 @@ internal fun BrowserToolbar(
             }
 
             if (!isFocused) {
-                if (showTabButton && tabCount != null) {
+                if (showTabButton) {
                     IconButton(
                         onClick = onOpenTabs,
                         modifier = Modifier.testTag(BrowserToolbarTestTags.OpenTabsButton.testTag),
                     ) {
                         Text(
-                            text = "$tabCount",
+                            text = tabCount?.toString().orEmpty(),
                             style = MaterialTheme.typography.titleMedium,
                             textAlign = TextAlign.Center,
                             modifier = Modifier
