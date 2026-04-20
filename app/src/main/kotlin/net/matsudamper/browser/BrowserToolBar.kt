@@ -6,56 +6,69 @@ import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.IntrinsicMeasurable
+import androidx.compose.ui.layout.IntrinsicMeasureScope
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.layout.Measurable
+import androidx.compose.ui.layout.MeasurePolicy
+import androidx.compose.ui.layout.MeasureResult
+import androidx.compose.ui.layout.MeasureScope
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
-import kotlin.jvm.java
-import net.matsudamper.browser.resources.R as ResourcesR
+import androidx.compose.ui.unit.sp
 import net.matsudamper.browser.ui.common.BrowserTheme
 import net.matsudamper.browser.ui.common.resolveBrowserToolbarColors
 import net.matsudamper.browser.ui.common.toArgbHex
+import net.matsudamper.browser.resources.R as ResourcesR
 
 @Composable
 internal fun BrowserToolBar(
@@ -204,9 +217,9 @@ internal fun BrowserToolbar(
     updateVisibleMenu: (Boolean) -> Unit,
     onOpenTabs: () -> Unit,
     tabCount: Int?,
+    modifier: Modifier = Modifier,
     showTabButton: Boolean = true,
     toolbarMenu: @Composable () -> Unit,
-    modifier: Modifier = Modifier,
 ) {
     var heightCache by remember { mutableIntStateOf(0) }
 
@@ -235,7 +248,10 @@ internal fun BrowserToolbar(
             // ステータスバー領域の高さ分だけコンテンツを下に押し出す。
             // Surface の背景色はステータスバー領域まで延びて塗りつぶされる。
             // 親が safeDrawingPadding を適用済みの場合はインセットが消費されているため 0 になる。
-            modifier = Modifier.statusBarsPadding(),
+            // IntrinsicSize.Min で Row 高さを子の最小 intrinsic 高さに合わせる（URL バーの自然高さ）。
+            modifier = Modifier
+                .statusBarsPadding()
+                .height(IntrinsicSize.Min),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Surface(
@@ -294,25 +310,19 @@ internal fun BrowserToolbar(
             }
 
             if (!isFocused) {
-                if (showTabButton && tabCount != null) {
-                    IconButton(
-                        onClick = onOpenTabs,
-                        modifier = Modifier.testTag(BrowserToolbarTestTags.OpenTabsButton.testTag),
-                    ) {
-                        Text(
-                            text = "$tabCount",
-                            style = MaterialTheme.typography.titleMedium,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(8.dp))
-                                .border(
-                                    width = 1.dp,
-                                    color = MaterialTheme.colorScheme.outline,
-                                    shape = RoundedCornerShape(8.dp),
-                                )
-                                .padding(horizontal = 8.dp, vertical = 2.dp),
-                        )
-                    }
+                if (showTabButton) {
+                    TabCountButton(
+                        modifier = Modifier
+                            .semantics(mergeDescendants = true) {
+                                contentDescription = "タブ件数、${tabCount?.toString()?.plus("件").orEmpty()}"
+                                role = Role.Button
+                            }
+                            .fillMaxHeight()
+                            .padding(4.dp)
+                            .padding(vertical = 4.dp),
+                        tabCount = tabCount,
+                        onOpenTabs = onOpenTabs,
+                    )
                 }
                 IconButton(
                     modifier = Modifier.testTag(BrowserToolbarTestTags.MenuButton.testTag),
@@ -329,6 +339,103 @@ internal fun BrowserToolbar(
     }
 }
 
+/**
+ * Row(IntrinsicSize.Min) から降りてくる maxHeight を一辺に採用する正方形レイアウト。
+ * 幅方向の intrinsic を height に固定し、子 BasicText のテキスト幅が Row 高さへ伝播して URL バー高さが伸びる問題を遮断する。
+ */
+private val TabCountSquareMeasurePolicy = object : MeasurePolicy {
+    override fun MeasureScope.measure(
+        measurables: List<Measurable>,
+        constraints: Constraints,
+    ): MeasureResult {
+        val side = when {
+            constraints.hasBoundedHeight -> constraints.maxHeight
+            else -> constraints.minHeight
+        }
+        val placeables = measurables.map { it.measure(Constraints.fixed(side, side)) }
+        return layout(side, side) {
+            placeables.forEach { it.place(0, 0) }
+        }
+    }
+
+    override fun IntrinsicMeasureScope.minIntrinsicWidth(
+        measurables: List<IntrinsicMeasurable>,
+        height: Int,
+    ): Int = if (height == Constraints.Infinity) {
+        measurables.firstOrNull()?.minIntrinsicHeight(Constraints.Infinity) ?: 0
+    } else {
+        height
+    }
+
+    override fun IntrinsicMeasureScope.maxIntrinsicWidth(
+        measurables: List<IntrinsicMeasurable>,
+        height: Int,
+    ): Int = if (height == Constraints.Infinity) {
+        measurables.firstOrNull()?.maxIntrinsicHeight(Constraints.Infinity) ?: 0
+    } else {
+        height
+    }
+
+    override fun IntrinsicMeasureScope.minIntrinsicHeight(
+        measurables: List<IntrinsicMeasurable>,
+        width: Int,
+    ): Int = measurables.firstOrNull()?.minIntrinsicHeight(width) ?: 0
+
+    override fun IntrinsicMeasureScope.maxIntrinsicHeight(
+        measurables: List<IntrinsicMeasurable>,
+        width: Int,
+    ): Int = measurables.firstOrNull()?.maxIntrinsicHeight(width) ?: 0
+}
+
+@Composable
+private fun TabCountButton(
+    tabCount: Int?,
+    modifier: Modifier = Modifier,
+    onOpenTabs: () -> Unit,
+) {
+    Layout(
+        modifier = modifier
+            .clip(RoundedCornerShape(8.dp))
+            .border(
+                width = 1.dp,
+                color = MaterialTheme.colorScheme.outline,
+                shape = RoundedCornerShape(8.dp),
+            )
+            .clickable(
+                indication = ripple(),
+                interactionSource = remember { MutableInteractionSource() },
+                onClick = onOpenTabs,
+            )
+            .testTag(BrowserToolbarTestTags.OpenTabsButton.testTag),
+        measurePolicy = TabCountSquareMeasurePolicy,
+        content = {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center,
+            ) {
+                if (tabCount != null) {
+                    BasicText(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 4.dp),
+                        text = "$tabCount",
+                        maxLines = 1,
+                        autoSize = TextAutoSize.StepBased(
+                            minFontSize = 6.sp,
+                            maxFontSize = 16.sp,
+                            stepSize = 1.sp,
+                        ),
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            color = LocalContentColor.current,
+                            textAlign = TextAlign.Center,
+                        ),
+                    )
+                }
+            }
+        },
+    )
+}
+
 sealed class BrowserToolbarTestTags(val id: String) {
     val testTag: String = "${BrowserToolbarTestTags::class.java.name}#$id"
 
@@ -339,6 +446,7 @@ sealed class BrowserToolbarTestTags(val id: String) {
     object Toolbar : BrowserToolbarTestTags(
         id = "toolbar",
     )
+
     object OpenTabsButton : BrowserToolbarTestTags(
         id = "open_tabs_button",
     )
@@ -366,6 +474,50 @@ private fun Preview() {
                     onOpenSettings = {},
                     onShare = {},
                     tabCount = 2,
+                    onOpenTabs = {},
+                    isPcMode = false,
+                    onPcModeToggle = {},
+                    onFindInPage = {},
+                    onAddToHomeScreen = {},
+                    isSimpleView = false,
+                    onSimpleView = {},
+                    pageZoomPercent = 100,
+                    onPageZoomIn = {},
+                    onPageZoomOut = {},
+                    onResetPageZoom = {},
+                    toolbarColor = null,
+                    onRefresh = {},
+                    onHome = {},
+                    onForward = {},
+                    canGoForward = false,
+                    onBack = {},
+                    canGoBack = false,
+                    onLongPressHistory = {},
+                    onTranslatePage = {},
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+            }
+        }
+    }
+}
+
+@Preview(name = "TabCountVariants")
+@Composable
+private fun PreviewTabCountVariants() {
+    BrowserTheme(themeMode = net.matsudamper.browser.data.ThemeMode.THEME_SYSTEM) {
+        Column {
+            for (tabCount in listOf(null, 2, 99, 999, 9999, 10000)) {
+                BrowserToolBar(
+                    value = "https://google.com",
+                    onValueChange = {},
+                    onSubmit = {},
+                    isFocused = false,
+                    onFocusChanged = {},
+                    showInstallExtensionItem = true,
+                    onInstallExtension = {},
+                    onOpenSettings = {},
+                    onShare = {},
+                    tabCount = tabCount,
                     onOpenTabs = {},
                     isPcMode = false,
                     onPcModeToggle = {},

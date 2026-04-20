@@ -573,17 +573,22 @@ internal class BrowserTabScreenState(
         linkContextMenuUrl = null
     }
 
-    fun captureTabPreview(geckoView: GeckoView) {
+    fun captureTabPreview(geckoView: GeckoView, onCaptured: (() -> Unit)? = null) {
         geckoView.capturePixels().accept(
             { bitmap ->
-                val previewBitmap = bitmap ?: return@accept
+                val previewBitmap = bitmap ?: run {
+                    onCaptured?.invoke()
+                    return@accept
+                }
+                // ビットマップ取得済みのため、セッションリリースはこの後でも問題ない
+                onCaptured?.invoke()
                 coroutineScope.launch(Dispatchers.IO) {
                     val stream = ByteArrayOutputStream()
                     previewBitmap.compress(Bitmap.CompressFormat.WEBP_LOSSY, 0, stream)
                     browserTab.previewBitmap = stream.toByteArray()
                 }
             },
-            {},
+            { onCaptured?.invoke() },
         )
     }
 

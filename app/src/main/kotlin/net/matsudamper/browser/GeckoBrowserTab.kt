@@ -232,13 +232,19 @@ internal fun GeckoBrowserTab(
                 Lifecycle.Event.ON_STOP -> {
                     waitingForSurfaceRestore = true
                     session.flushSessionState()
-                    geckoView?.also {
-                        state.captureTabPreview(it)
+                    geckoView?.also { gv ->
                         if (mediaWebExtension.shouldKeepSessionAttached(session)) {
+                            state.captureTabPreview(gv)
                             sessionReleasedOnStop = false
                         } else {
-                            it.releaseSession()
-                            sessionReleasedOnStop = true
+                            // capturePixels()はセッションに依存するため、キャプチャ完了後にreleaseSession()を呼ぶ
+                            state.captureTabPreview(gv) {
+                                // ON_STARTが先に来てwaitingForSurfaceRestoreがリセットされた場合はスキップ
+                                if (waitingForSurfaceRestore) {
+                                    gv.releaseSession()
+                                    sessionReleasedOnStop = true
+                                }
+                            }
                         }
                     }
                 }
@@ -531,7 +537,13 @@ internal fun GeckoBrowserTab(
                     onPageZoomOut = state::pageZoomOut,
                     onResetPageZoom = state::resetPageZoom,
                     onHorizontalDrag = onToolbarHorizontalDrag,
-                    onHorizontalDragEnd = onToolbarDragEnd,
+                    onHorizontalDragEnd = {
+                        // タブ切替スワイプになる可能性があるため、現在のタブのプレビューを事前にキャプチャする
+                        geckoView?.also { gv ->
+                            runCatching { state.flushAndCaptureForTabSwitch(gv) }
+                        }
+                        onToolbarDragEnd()
+                    },
                     onAddToHomeScreen = {
                         addToHomeUrl = state.currentPageUrl
                         addToHomeTitle = state.currentPageTitle
