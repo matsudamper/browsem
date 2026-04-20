@@ -122,7 +122,7 @@ class WebAppActivity : ComponentActivity() {
                         onHistoryRecord = webAppUiState.callbacks::onHistoryRecord,
                         onHistoryTitleUpdate = webAppUiState.callbacks::onHistoryTitleUpdate,
                         urlBarSuggestions = webAppUiState.urlBarSuggestions,
-                        onUrlInputChanged = webAppUiState.callbacks::onUrlInputChanged,
+                        onUrlInputChange = webAppUiState.callbacks::onUrlInputChanged,
                     )
                 }
             }

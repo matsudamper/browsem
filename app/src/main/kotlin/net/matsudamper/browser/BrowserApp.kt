@@ -68,6 +68,7 @@ import net.matsudamper.browser.ui.history.HistoryScreen
 import net.matsudamper.browser.ui.settings.SettingsScreen
 import net.matsudamper.browser.ui.tabs.TabsScreen
 import org.koin.compose.koinInject
+import org.mozilla.geckoview.GeckoRuntime
 
 @Composable
 internal fun BrowserApp(
@@ -89,7 +90,15 @@ internal fun BrowserApp(
     } else {
         BrowserAppContent(
             uiState = uiState,
-            viewModel = viewModel,
+            browserTabController = viewModel.browserTabController,
+            browserSessionLifecycleController = viewModel.browserSessionLifecycleController,
+            themeColorExtension = viewModel.themeColorExtension,
+            mediaWebExtension = viewModel.mediaWebExtension,
+            runtime = viewModel.runtime,
+            setupComplete = viewModel.setupComplete,
+            eventHandler = viewModel.eventHandler,
+            registerExternalTab = viewModel::registerExternalTab,
+            createTabWithHomepage = viewModel::createTabWithHomepage,
             newTabUrlFlow = newTabUrlFlow,
             openDownloadsFlow = openDownloadsFlow,
             onInstallExtensionRequest = onInstallExtensionRequest,
@@ -101,17 +110,20 @@ internal fun BrowserApp(
 @Composable
 private fun BrowserAppContent(
     uiState: BrowserAppUiState,
-    viewModel: BrowserViewModel,
+    browserTabController: BrowserTabController,
+    browserSessionLifecycleController: BrowserSessionLifecycleController,
+    themeColorExtension: ThemeColorWebExtension,
+    mediaWebExtension: net.matsudamper.browser.media.MediaWebExtension,
+    runtime: GeckoRuntime,
+    setupComplete: kotlinx.coroutines.Deferred<Unit>,
+    eventHandler: kotlinx.coroutines.channels.Channel<(BrowserViewModel.Event) -> Unit>,
+    registerExternalTab: (String) -> Unit,
+    createTabWithHomepage: suspend (String) -> BrowserTab,
     newTabUrlFlow: Flow<String>,
     openDownloadsFlow: Flow<Unit>,
     onInstallExtensionRequest: (String) -> Unit,
     onRequestDownloadNotificationPermission: suspend () -> Unit,
 ) {
-    val browserTabController = viewModel.browserTabController
-    val browserSessionLifecycleController = viewModel.browserSessionLifecycleController
-    val themeColorExtension = viewModel.themeColorExtension
-    val mediaWebExtension = viewModel.mediaWebExtension
-    val runtime = viewModel.runtime
 
     // Koin からリポジトリを取得（画面 ViewModel に直接渡す）
     val settingsRepository: SettingsRepository = koinInject()
@@ -121,8 +133,7 @@ private fun BrowserAppContent(
 
     val backStack = rememberNavBackStack(AppDestination.Setup)
     val navController = remember(backStack) { NavController(backStack = backStack) }
-    // タブ復元完了シグナルは ViewModel で保持（構成変更後も有効）
-    val setupComplete = viewModel.setupComplete
+    // タブ復元完了シグナルはパラメータで受け取り済み
 
     // ナビゲーションとViewModelの両方にタブ選択を通知するヘルパー
     val selectTab: (String, AppDestination.Browser?) -> Unit = remember(navController, browserTabController) {
@@ -156,9 +167,9 @@ private fun BrowserAppContent(
         }.launchIn(this)
     }
 
-    // ViewModel.init でタブ復元が開始される。復元完了後に遷移先タブを確定する。
-    LaunchedEffect(viewModel) {
-        viewModel.eventHandler.receiveAsFlow().collect { event ->
+    // タブ復元が開始される。復元完了後に遷移先タブを確定する。
+    LaunchedEffect(eventHandler) {
+        eventHandler.receiveAsFlow().collect { event ->
             event(object : BrowserViewModel.Event {
                 override fun onTabsRestored(tabId: String) {
                     when {
@@ -196,7 +207,7 @@ private fun BrowserAppContent(
             }
             val newTab = browserTabController.createAndAppendTab(tabId = tabId, initialUrl = url)
             // selectTab より前に呼ぶことで、外部タブ開封前の selectedTabId を記録できる
-            viewModel.registerExternalTab(newTab.tabId)
+            registerExternalTab(newTab.tabId)
             selectTab(newTab.tabId, null)
         }
     }
@@ -350,7 +361,7 @@ private fun BrowserAppContent(
                                     onHistoryRecord = browserScreenUiState.callbacks::onHistoryRecord,
                                     onHistoryTitleUpdate = browserScreenUiState.callbacks::onHistoryTitleUpdate,
                                     urlBarSuggestions = browserScreenUiState.urlBarSuggestions,
-                                    onUrlInputChanged = browserScreenUiState.callbacks::onUrlInputChanged,
+                                    onUrlInputChange = browserScreenUiState.callbacks::onUrlInputChanged,
                                     onToolbarHorizontalDrag = onToolbarHorizontalDrag,
                                     onToolbarDragEnd = onToolbarDragEnd,
                                 )
@@ -462,8 +473,8 @@ private fun BrowserAppContent(
                                         val nextSelectedTabId = browserTabController.closeTab(tabId)
                                         if (nextSelectedTabId == null) {
                                             scope.launch {
-                                                val newTab = viewModel.createTabWithHomepage(
-                                                    tabId = UUID.randomUUID().toString(),
+                                                val newTab = createTabWithHomepage(
+                                                    UUID.randomUUID().toString(),
                                                 )
                                                 selectTab(newTab.tabId, null)
                                             }
@@ -489,7 +500,7 @@ private fun BrowserAppContent(
                                     if (currentGroupId != null) {
                                         tabGroupRepository.assignTabToGroup(tabId, currentGroupId)
                                     }
-                                    val newTab = viewModel.createTabWithHomepage(tabId = tabId)
+                                    val newTab = createTabWithHomepage(tabId)
                                     selectTab(newTab.tabId, null)
                                 }
                             },
