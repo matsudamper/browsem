@@ -30,7 +30,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -153,8 +152,9 @@ internal fun GeckoBrowserTab(
     var addToHomeFavicon by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
 
     // ファイルピッカー（単一ファイル選択）
+    // ACTION_GET_CONTENTを使用してGeckoViewがアクセスできるURIを取得する
     val singleFileLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenDocument(),
+        GetFileContent(),
     ) { uri ->
         if (uri != null) {
             dialogState.confirmFilePrompt(context, arrayOf(uri))
@@ -164,8 +164,9 @@ internal fun GeckoBrowserTab(
     }
 
     // ファイルピッカー（複数ファイル選択）
+    // ACTION_GET_CONTENTを使用してGeckoViewがアクセスできるURIを取得する
     val multipleFilesLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenMultipleDocuments(),
+        GetMultipleFileContent(),
     ) { uris ->
         if (uris.isNotEmpty()) {
             dialogState.confirmFilePrompt(context, uris.toTypedArray())
