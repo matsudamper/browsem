@@ -742,12 +742,7 @@ private class GetContentWithMimeTypes : ActivityResultContract<Array<String>, Ur
     override fun createIntent(context: Context, input: Array<String>): Intent {
         return Intent(Intent.ACTION_GET_CONTENT).apply {
             addCategory(Intent.CATEGORY_OPENABLE)
-            if (input.size == 1) {
-                type = input[0]
-            } else {
-                type = "*/*"
-                putExtra(Intent.EXTRA_MIME_TYPES, input)
-            }
+            applyMimeTypes(this, input)
         }
     }
 
@@ -765,12 +760,7 @@ private class GetMultipleContentsWithMimeTypes : ActivityResultContract<Array<St
         return Intent(Intent.ACTION_GET_CONTENT).apply {
             addCategory(Intent.CATEGORY_OPENABLE)
             putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
-            if (input.size == 1) {
-                type = input[0]
-            } else {
-                type = "*/*"
-                putExtra(Intent.EXTRA_MIME_TYPES, input)
-            }
+            applyMimeTypes(this, input)
         }
     }
 
@@ -781,6 +771,18 @@ private class GetMultipleContentsWithMimeTypes : ActivityResultContract<Array<St
             (0 until clipData.itemCount).map { clipData.getItemAt(it).uri }
         } else {
             listOfNotNull(intent.data)
+        }
+    }
+}
+
+/** MIME タイプを Intent に適用する共通関数 */
+private fun applyMimeTypes(intent: Intent, mimeTypes: Array<String>) {
+    when {
+        mimeTypes.isEmpty() -> intent.type = "*/*"
+        mimeTypes.size == 1 -> intent.type = mimeTypes[0]
+        else -> {
+            intent.type = "*/*"
+            intent.putExtra(Intent.EXTRA_MIME_TYPES, mimeTypes)
         }
     }
 }
