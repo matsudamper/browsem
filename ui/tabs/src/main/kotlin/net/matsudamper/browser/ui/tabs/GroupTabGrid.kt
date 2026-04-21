@@ -133,7 +133,13 @@ internal fun GroupTabGrid(
                         onDragCancel = { dragDropState.onDragEnd() },
                     )
                 },
-            contentPadding = PaddingValues(TabsLayoutDefaults.gridPadding),
+            contentPadding = PaddingValues(
+                start = TabsLayoutDefaults.gridPadding,
+                top = TabsLayoutDefaults.gridPadding,
+                end = TabsLayoutDefaults.gridPadding,
+                // FABに隠れないよう、FABの高さ分の余白を追加する
+                bottom = TabsLayoutDefaults.gridPadding + TabsLayoutDefaults.fabBottomPadding,
+            ),
             verticalArrangement = Arrangement.spacedBy(TabsLayoutDefaults.gridSpacing),
             horizontalArrangement = Arrangement.spacedBy(TabsLayoutDefaults.gridSpacing),
         ) {

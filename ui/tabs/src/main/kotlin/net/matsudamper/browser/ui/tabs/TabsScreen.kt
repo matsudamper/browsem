@@ -54,6 +54,8 @@ internal object TabsLayoutDefaults {
     val gridPadding: Dp = 12.dp
     val gridSpacing: Dp = 12.dp
     const val cardAspectRatio: Float = 1f
+    /** FABに隠れないようにリスト下部に追加する余白（FABの高さ＋マージン相当） */
+    val fabBottomPadding: Dp = 80.dp
 
     fun calculateColumns(availableWidth: Dp): Int {
         return (availableWidth / minCellWidth).toInt().coerceAtLeast(2)
