@@ -1,6 +1,9 @@
 package net.matsudamper.browser
 
 import android.app.Activity
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import android.os.SystemClock
 import android.view.ActionMode
 import android.view.Menu
@@ -30,7 +33,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.result.contract.ActivityResultContract
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -152,9 +155,9 @@ internal fun GeckoBrowserTab(
     var addToHomeTitle by remember { mutableStateOf("") }
     var addToHomeFavicon by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
 
-    // ファイルピッカー（単一ファイル選択）
+    // ファイルピッカー（単一ファイル選択）Google Photos を含むピッカーを表示するため ACTION_GET_CONTENT を使用
     val singleFileLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenDocument(),
+        GetContentWithMimeTypes(),
     ) { uri ->
         if (uri != null) {
             dialogState.confirmFilePrompt(context, arrayOf(uri))
@@ -163,9 +166,9 @@ internal fun GeckoBrowserTab(
         }
     }
 
-    // ファイルピッカー（複数ファイル選択）
+    // ファイルピッカー（複数ファイル選択）Google Photos を含むピッカーを表示するため ACTION_GET_CONTENT を使用
     val multipleFilesLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenMultipleDocuments(),
+        GetMultipleContentsWithMimeTypes(),
     ) { uris ->
         if (uris.isNotEmpty()) {
             dialogState.confirmFilePrompt(context, uris.toTypedArray())
@@ -730,3 +733,54 @@ private const val URL_BAR_IME_HIDE_GRACE_MS = 700L
 // テキスト選択メニューのカスタム項目 ID
 private const val MENU_ID_SEARCH = 0x10001
 private const val MENU_ID_OPEN = 0x10002
+
+/**
+ * ACTION_GET_CONTENT を使った単一ファイル選択コントラクト。
+ * OpenDocument と異なり Google Photos などのフォトアプリもピッカーに表示される。
+ */
+private class GetContentWithMimeTypes : ActivityResultContract<Array<String>, Uri?>() {
+    override fun createIntent(context: Context, input: Array<String>): Intent {
+        return Intent(Intent.ACTION_GET_CONTENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            if (input.size == 1) {
+                type = input[0]
+            } else {
+                type = "*/*"
+                putExtra(Intent.EXTRA_MIME_TYPES, input)
+            }
+        }
+    }
+
+    override fun parseResult(resultCode: Int, intent: Intent?): Uri? {
+        return if (resultCode == Activity.RESULT_OK) intent?.data else null
+    }
+}
+
+/**
+ * ACTION_GET_CONTENT を使った複数ファイル選択コントラクト。
+ * OpenMultipleDocuments と異なり Google Photos などのフォトアプリもピッカーに表示される。
+ */
+private class GetMultipleContentsWithMimeTypes : ActivityResultContract<Array<String>, List<Uri>>() {
+    override fun createIntent(context: Context, input: Array<String>): Intent {
+        return Intent(Intent.ACTION_GET_CONTENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+            if (input.size == 1) {
+                type = input[0]
+            } else {
+                type = "*/*"
+                putExtra(Intent.EXTRA_MIME_TYPES, input)
+            }
+        }
+    }
+
+    override fun parseResult(resultCode: Int, intent: Intent?): List<Uri> {
+        if (resultCode != Activity.RESULT_OK || intent == null) return emptyList()
+        val clipData = intent.clipData
+        return if (clipData != null) {
+            (0 until clipData.itemCount).map { clipData.getItemAt(it).uri }
+        } else {
+            listOfNotNull(intent.data)
+        }
+    }
+}
