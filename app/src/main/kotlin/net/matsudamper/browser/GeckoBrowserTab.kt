@@ -768,7 +768,13 @@ private class GetMultipleContentsWithMimeTypes : ActivityResultContract<Array<St
         if (resultCode != Activity.RESULT_OK || intent == null) return emptyList()
         val clipData = intent.clipData
         return if (clipData != null) {
-            (0 until clipData.itemCount).map { clipData.getItemAt(it).uri }
+            // 一部のピッカーは clipData に加え intent.data にも先頭URIを入れるため、両方をマージして重複を除去する
+            val uris = mutableListOf<Uri>()
+            intent.data?.let { uris.add(it) }
+            for (i in 0 until clipData.itemCount) {
+                uris.add(clipData.getItemAt(i).uri)
+            }
+            uris.distinct()
         } else {
             listOfNotNull(intent.data)
         }
