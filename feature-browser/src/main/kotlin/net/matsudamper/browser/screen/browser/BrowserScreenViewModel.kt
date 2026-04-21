@@ -133,14 +133,33 @@ private data class ViewModelState(
     }
 
     fun resolveAdjacentTabs(): AdjacentTabs {
+        // 同じタブグループ内のタブのみを対象にして前後タブを解決する。
+        // グループ間の移動を防ぐため、現在のタブが属するグループのタブだけに絞り込む。
+        val sameGroupTabIds = resolveGroupTabIds()
         val adjacentTabIds = resolveAdjacentTabIds(
-            orderedTabIds = orderedBrowserTabs.map(BrowserTab::tabId),
+            orderedTabIds = sameGroupTabIds,
             anchorTabId = screenTabId,
         )
         return AdjacentTabs(
             previousTab = adjacentTabIds.previousTabId?.let(::findTab),
             nextTab = adjacentTabIds.nextTabId?.let(::findTab),
         )
+    }
+
+    /**
+     * 現在のタブと同じグループに属するタブIDのリストを返す。
+     * グループ未割り当ての場合は未割り当てタブのみを返す。
+     */
+    private fun resolveGroupTabIds(): List<String> {
+        val assignmentMap = tabGroupAssignments.associate { it.tabId to it.groupId }
+        val knownGroupIds = tabGroups.map { it.id.value }.toSet()
+        val currentGroupId = assignmentMap[screenTabId]?.takeIf { it in knownGroupIds }
+        return orderedBrowserTabs
+            .filter { tab ->
+                val tabGroupId = assignmentMap[tab.tabId]?.takeIf { it in knownGroupIds }
+                tabGroupId == currentGroupId
+            }
+            .map { it.tabId }
     }
 
     private fun findTab(tabId: String): BrowserTab? {
