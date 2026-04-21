@@ -36,7 +36,7 @@ jobs:
       - name: Build debug APK
         env:
           DEBUG_KEYSTORE_PATH: ${{ runner.temp }}/debug.keystore
-        run: ./gradlew :app:assembleDebug
+        run: ./gradlew :app:assembleDebug -Pandroid.injected.build.abi=arm64-v8a
 
       - name: Rename APK with branch and short hash
         env:
@@ -48,8 +48,12 @@ jobs:
           SAFE_REPO="${REPOSITORY##*/}"
           SAFE_BRANCH="${BRANCH_NAME//\//-}"
           APK_NAME="app-${SAFE_REPO}-${SAFE_BRANCH}-${SHORT_SHA}.apk"
-          mv app/build/outputs/apk/debug/app-debug.apk \
-             "app/build/outputs/apk/debug/${APK_NAME}"
+          APK_SOURCE_PATH="$(find app/build/outputs/apk/debug -maxdepth 1 -name '*arm64-v8a*debug.apk' | head -n 1)"
+          if [ -z "${APK_SOURCE_PATH}" ]; then
+            echo "arm64-v8a向けAPKが見つかりませんでした。"
+            exit 1
+          fi
+          mv "${APK_SOURCE_PATH}" "app/build/outputs/apk/debug/${APK_NAME}"
           echo "APK_NAME=${APK_NAME}" >> "$GITHUB_ENV"
           echo "APK_PATH=app/build/outputs/apk/debug/${APK_NAME}" >> "$GITHUB_ENV"
 
