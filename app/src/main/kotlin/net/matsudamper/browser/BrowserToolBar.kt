@@ -75,7 +75,6 @@ internal fun BrowserToolBar(
     value: String,
     onValueChange: (String) -> Unit,
     onSubmit: (String) -> Unit,
-    modifier: Modifier = Modifier,
     isFocused: Boolean,
     onFocusChanged: (Boolean) -> Unit,
     showInstallExtensionItem: Boolean,
@@ -84,7 +83,6 @@ internal fun BrowserToolBar(
     onShare: () -> Unit,
     tabCount: Int?,
     onOpenTabs: () -> Unit,
-    showTabActions: Boolean = true,
     onRefresh: () -> Unit,
     onHome: () -> Unit,
     onForward: () -> Unit,
@@ -104,6 +102,8 @@ internal fun BrowserToolBar(
     onPageZoomOut: () -> Unit,
     onResetPageZoom: () -> Unit,
     toolbarColor: Color?,
+    modifier: Modifier = Modifier,
+    showTabActions: Boolean = true,
     onHorizontalDrag: (Float) -> Unit = {},
     onHorizontalDragEnd: () -> Unit = {},
 ) {
@@ -390,8 +390,8 @@ private val TabCountSquareMeasurePolicy = object : MeasurePolicy {
 @Composable
 private fun TabCountButton(
     tabCount: Int?,
-    modifier: Modifier = Modifier,
     onOpenTabs: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     Layout(
         modifier = modifier

@@ -38,8 +38,10 @@ import java.util.UUID
 fun DownloadManagementScreen(
     uiState: DownloadManagementScreenUiState,
     onBack: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     Scaffold(
+        modifier = modifier,
         topBar = {
             TopAppBar(
                 title = { Text("ダウンロード管理") },

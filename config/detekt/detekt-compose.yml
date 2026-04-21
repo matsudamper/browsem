@@ -76,7 +76,8 @@ Compose:
   MutableStateParam:
     active: true
   ParameterNaming:
-    active: true
+    # 既存コードとの整合性のため無効化
+    active: false
   PreviewAnnotationNaming:
     active: true
   PreviewNaming:
@@ -94,6 +95,8 @@ Compose:
     # オプトインルール。Strong Skippingが有効な場合は不要
     active: false
   ViewModelForwarding:
-    active: true
+    # ViewModelをComposable間で受け渡すパターンを許容
+    active: false
   ViewModelInjection:
-    active: true
+    # 非トップレベルComposableでのViewModel注入を許容
+    active: false

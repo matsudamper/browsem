@@ -36,8 +36,10 @@ import java.util.Locale
 fun HistoryScreen(
     uiState: HistoryScreenUiState,
     onBack: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     Scaffold(
+        modifier = modifier,
         topBar = {
             TopAppBar(
                 title = { Text("閲覧履歴") },
