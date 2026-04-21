@@ -90,7 +90,7 @@ internal fun GroupTabGrid(
         }
 
         // ドラッグ状態を上位コンポーザブルに通知する
-        LaunchedEffect(dragDropState.isDragging, dragDropState.dragCenterInRoot) {
+        LaunchedEffect(dragDropState.isDragging, dragDropState.dragCenterInRoot, onTabDragStateChanged) {
             onTabDragStateChanged(dragDropState.isDragging, dragDropState.dragCenterInRoot)
         }
 

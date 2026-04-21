@@ -38,6 +38,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -80,12 +81,14 @@ internal fun GeckoBrowserTab(
     themeColorExtension: ThemeColorWebExtension,
     mediaWebExtension: MediaWebExtension,
     browserSessionLifecycleController: BrowserSessionLifecycleController,
-    modifier: Modifier = Modifier,
     tabCount: Int?,
     onInstallExtensionRequest: (String) -> Unit,
-    onRequestDownloadNotificationPermission: suspend () -> Unit = {},
     onOpenSettings: () -> Unit,
     onOpenTabs: () -> Unit,
+    onOpenNewSessionRequest: (String) -> GeckoSession,
+    onOpenNewTabRequest: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    onRequestDownloadNotificationPermission: suspend () -> Unit = {},
     enableTabUi: Boolean = true,
     showInstallExtensionItem: Boolean = true,
     enableBackNavigation: Boolean = true,
@@ -93,8 +96,6 @@ internal fun GeckoBrowserTab(
     webAppMode: Boolean = false,
     onCloseCustomTab: (() -> Unit)? = null,
     onOpenInBrowser: ((String) -> Unit)? = null,
-    onOpenNewSessionRequest: (String) -> GeckoSession,
-    onOpenNewTabRequest: (String) -> Unit,
     onCloseTab: (() -> Unit)? = null,
     onToolbarHorizontalDrag: (Float) -> Unit = {},
     onToolbarDragEnd: () -> Unit = {},
@@ -140,7 +141,7 @@ internal fun GeckoBrowserTab(
     val lifecycleOwner = LocalLifecycleOwner.current
     val isImeVisible = WindowInsets.isImeVisible
     var imeWasVisibleDuringUrlFocus by remember { mutableStateOf(false) }
-    var urlBarFocusStartedAtMs by remember { mutableStateOf(0L) }
+    var urlBarFocusStartedAtMs by remember { mutableLongStateOf(0L) }
     var geckoView: GeckoView? by remember { mutableStateOf(null) }
     var sessionReleasedOnStop by remember(session) { mutableStateOf(false) }
     var waitingForSurfaceRestore by remember(session) { mutableStateOf(false) }
