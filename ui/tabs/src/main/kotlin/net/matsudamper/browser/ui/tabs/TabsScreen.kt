@@ -31,6 +31,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -41,6 +42,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.tooling.preview.Preview
@@ -54,8 +56,6 @@ internal object TabsLayoutDefaults {
     val gridPadding: Dp = 12.dp
     val gridSpacing: Dp = 12.dp
     const val cardAspectRatio: Float = 1f
-    /** FABに隠れないようにリスト下部に追加する余白（FABの高さ＋マージン相当） */
-    val fabBottomPadding: Dp = 80.dp
 
     fun calculateColumns(availableWidth: Dp): Int {
         return (availableWidth / minCellWidth).toInt().coerceAtLeast(2)
@@ -247,6 +247,9 @@ private fun TabsScreenLoadedContent(
     // 削除確認ダイアログの対象グループインデックス
     var deleteDialogGroupIndex by remember { mutableStateOf<Int?>(null) }
 
+    // FABの高さを計測して、タブグリッドの下部余白に反映する
+    var fabHeightPx by remember { mutableIntStateOf(0) }
+
     Scaffold(
         modifier = modifier
             .fillMaxSize(),
@@ -255,6 +258,7 @@ private fun TabsScreenLoadedContent(
             FloatingActionButton(
                 onClick = { onOpenNewTab(groups.getOrNull(activeGroupIndex)?.id) },
                 modifier = Modifier
+                    .onSizeChanged { size -> fabHeightPx = size.height }
                     .testTag(TabsScreenTestTags.AddTabButton.testTag)
                     .padding(16.dp),
             ) {
@@ -366,6 +370,7 @@ private fun TabsScreenLoadedContent(
                         onTabLongPressWithoutDrag = { tabId ->
                             moveDialogTabId = tabId
                         },
+                        fabHeightPx = fabHeightPx,
                         modifier = Modifier.weight(1f),
                     )
                 }

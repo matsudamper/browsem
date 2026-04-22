@@ -58,6 +58,7 @@ internal fun GroupTabGrid(
     onTabDragStateChanged: (isDragging: Boolean, centerInRoot: Offset) -> Unit,
     onTabDropped: (tabId: String) -> Unit,
     onTabLongPressWithoutDrag: (tabId: String) -> Unit,
+    fabHeightPx: Int,
     modifier: Modifier = Modifier,
 ) {
     if (tabs.isEmpty()) {
@@ -137,8 +138,8 @@ internal fun GroupTabGrid(
                 start = TabsLayoutDefaults.gridPadding,
                 top = TabsLayoutDefaults.gridPadding,
                 end = TabsLayoutDefaults.gridPadding,
-                // FABに隠れないよう、FABの高さ分の余白を追加する
-                bottom = TabsLayoutDefaults.gridPadding + TabsLayoutDefaults.fabBottomPadding,
+                // FABに隠れないよう、計測したFABの高さ分の余白を追加する
+                bottom = TabsLayoutDefaults.gridPadding + with(LocalDensity.current) { fabHeightPx.toDp() },
             ),
             verticalArrangement = Arrangement.spacedBy(TabsLayoutDefaults.gridSpacing),
             horizontalArrangement = Arrangement.spacedBy(TabsLayoutDefaults.gridSpacing),
