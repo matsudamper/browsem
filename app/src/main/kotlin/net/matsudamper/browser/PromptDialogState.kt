@@ -2,7 +2,6 @@ package net.matsudamper.browser
 
 import android.content.Context
 import android.net.Uri
-import android.provider.OpenableColumns
 import android.util.Log
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
@@ -13,6 +12,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.util.UUID
 import org.mozilla.geckoview.AllowOrDeny
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
@@ -207,23 +207,14 @@ internal class PromptDialogState(
         pendingFileResult = null
     }
 
-    /**
-     * コンテンツ URI の内容をキャッシュディレクトリにコピーし、そのファイルの URI を返す。
-     * コピーに失敗した場合は null を返す。
-     */
     private fun copyToCache(context: Context, uri: Uri): Uri? {
         return try {
-            val rawName = queryFileName(context, uri) ?: "file_prompt"
-            // パストラバーサルや無効な文字を防ぐためファイル名をサニタイズ
-            val sanitizedName = rawName.replace(Regex("[/\\\\:*?\"<>|]"), "_")
-            // 同名ファイルの衝突を防ぐためタイムスタンプを付与
-            val fileName = "${System.currentTimeMillis()}_$sanitizedName"
             val cacheDir = File(context.cacheDir, "file_prompts")
             if (!cacheDir.exists() && !cacheDir.mkdirs()) {
                 Log.w("PromptDialogState", "キャッシュディレクトリの作成に失敗: $cacheDir")
                 return null
             }
-            val destFile = File(cacheDir, fileName)
+            val destFile = File(cacheDir, UUID.randomUUID().toString())
             context.contentResolver.openInputStream(uri)?.use { input ->
                 destFile.outputStream().use { output ->
                     input.copyTo(output)
@@ -232,24 +223,6 @@ internal class PromptDialogState(
             Uri.fromFile(destFile)
         } catch (e: Exception) {
             Log.w("PromptDialogState", "コンテンツ URI のキャッシュコピーに失敗", e)
-            null
-        }
-    }
-
-    /**
-     * コンテンツ URI からファイル名を取得する。
-     */
-    private fun queryFileName(context: Context, uri: Uri): String? {
-        return try {
-            context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
-                ?.use { cursor ->
-                    if (cursor.moveToFirst()) {
-                        cursor.getString(cursor.getColumnIndexOrThrow(OpenableColumns.DISPLAY_NAME))
-                    } else {
-                        null
-                    }
-                }
-        } catch (e: Exception) {
             null
         }
     }
