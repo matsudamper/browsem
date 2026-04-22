@@ -45,6 +45,9 @@ Proto → DataStore/Room → Repository → ViewModel(ViewModelStateFlow) → Ui
 - **プロセスに1つ**。`GeckoRuntime.getDefault(context)` で取得
 - ViewModel・Controller 経由で各タブに配布
 
+## Coding Agent
+すべての応答、説明、およびコミットメッセージは日本語で行ってください。
+
 ## コーディング規約
 
 ### 言語・スタイル
@@ -86,8 +89,9 @@ UIに関連した実装はPaparazziで差分を取って作業するのが良い
 ### 変更後
 
 1. `./gradlew :app:assembleDebug` でビルド確認
-2. `./gradlew test` でユニットテスト通過を確認
-3. UI 変更を含む場合は `@Preview` を追加/更新し、Paparazzi スナップショットを撮影
+2. `./gradlew detek` でlintを確認
+3. `./gradlew test` でユニットテスト通過を確認
+4. UI 変更を含む場合は `@Preview` を追加/更新し、Paparazzi スナップショットを撮影
 
 ## Claude への運用ルール
 

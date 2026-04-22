@@ -1,0 +1,102 @@
+# デフォルトルールをすべて無効化し、Compose ルールのみ有効にする
+comments:
+  active: false
+
+complexity:
+  active: false
+
+coroutines:
+  active: false
+
+empty-blocks:
+  active: false
+
+exceptions:
+  active: false
+
+naming:
+  active: false
+
+performance:
+  active: false
+
+potential-bugs:
+  active: false
+
+style:
+  active: false
+
+Compose:
+  active: true
+  ComposableAnnotationNaming:
+    active: true
+  ComposableNaming:
+    active: true
+  ComposableParamOrder:
+    active: true
+  CompositionLocalAllowlist:
+    active: true
+  CompositionLocalNaming:
+    active: true
+  ContentEmitterReturningValues:
+    active: true
+  ContentSlotReused:
+    active: true
+  ContentTrailingLambda:
+    active: true
+  DefaultsVisibility:
+    active: true
+  LambdaParameterEventTrailing:
+    active: true
+  LambdaParameterInRestartableEffect:
+    active: true
+  Material2:
+    # Material 3を使用しているため無効化（オプトインルール）
+    active: false
+  ModifierClickableOrder:
+    active: true
+  ModifierComposed:
+    active: true
+  ModifierMissing:
+    active: true
+  ModifierNaming:
+    active: true
+  ModifierNotUsedAtRoot:
+    active: true
+  ModifierReused:
+    active: true
+  ModifierWithoutDefault:
+    active: true
+  MultipleEmitters:
+    active: true
+  MutableParams:
+    active: true
+  MutableStateAutoboxing:
+    active: true
+  MutableStateParam:
+    active: true
+  ParameterNaming:
+    # 既存コードとの整合性のため無効化
+    active: false
+  PreviewAnnotationNaming:
+    active: true
+  PreviewNaming:
+    # オプトインルール。必要に応じて有効化
+    active: false
+  PreviewPublic:
+    active: true
+  RememberContentMissing:
+    active: true
+  RememberMissing:
+    active: true
+  StateParam:
+    active: true
+  UnstableCollections:
+    # オプトインルール。Strong Skippingが有効な場合は不要
+    active: false
+  ViewModelForwarding:
+    # ViewModelをComposable間で受け渡すパターンを許容
+    active: false
+  ViewModelInjection:
+    # 非トップレベルComposableでのViewModel注入を許容
+    active: false

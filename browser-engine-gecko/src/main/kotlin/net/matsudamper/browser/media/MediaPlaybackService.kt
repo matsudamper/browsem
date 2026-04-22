@@ -82,6 +82,10 @@ class MediaPlaybackService : MediaSessionService() {
                 ): Boolean {
                     return defaultNotificationProvider.handleCustomCommand(session, action, extras)
                 }
+
+                override fun getNotificationChannelInfo(): MediaNotification.Provider.NotificationChannelInfo {
+                    return defaultNotificationProvider.getNotificationChannelInfo()
+                }
             }
         )
 

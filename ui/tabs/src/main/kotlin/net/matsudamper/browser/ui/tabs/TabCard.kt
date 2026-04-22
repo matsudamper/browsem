@@ -2,6 +2,7 @@ package net.matsudamper.browser.ui.tabs
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.util.LruCache
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
@@ -43,6 +44,7 @@ internal fun TabCard(
     selected: Boolean,
     onSelectTab: (String) -> Unit,
     onCloseTab: (String) -> Unit,
+    bitmapCache: LruCache<TabPreviewImage, Bitmap>,
     modifier: Modifier = Modifier,
 ) {
     Card(
@@ -102,11 +104,31 @@ internal fun TabCard(
                     .clip(RoundedCornerShape(8.dp)),
                 contentAlignment = Alignment.Center,
             ) {
-                var bitmap: Bitmap? by remember { mutableStateOf(null) }
-                LaunchedEffect(tab.previewBitmapArray) {
-                    val array = tab.previewBitmapArray ?: return@LaunchedEffect
-                    bitmap = withContext(Dispatchers.Default) {
-                        BitmapFactory.decodeByteArray(array, 0, array.size)
+                val image = tab.previewImage
+                // キャッシュにヒットすれば初期値として即表示する。
+                // remember の key を指定しないのは、previewImage が更新されている間も
+                // 古い Bitmap を表示し続けてチラつきを避けるため。
+                var bitmap: Bitmap? by remember {
+                    mutableStateOf(image?.let { bitmapCache.get(it) })
+                }
+                LaunchedEffect(image) {
+                    if (image == null) {
+                        bitmap = null
+                        return@LaunchedEffect
+                    }
+                    val cached = bitmapCache.get(image)
+                    if (cached != null) {
+                        bitmap = cached
+                        return@LaunchedEffect
+                    }
+                    val array = image.bytes
+                    val decoded = withContext(Dispatchers.Default) {
+                        val options = BitmapFactory.Options().apply { inSampleSize = 2 }
+                        BitmapFactory.decodeByteArray(array, 0, array.size, options)
+                    }
+                    if (decoded != null) {
+                        bitmapCache.put(image, decoded)
+                        bitmap = decoded
                     }
                 }
 

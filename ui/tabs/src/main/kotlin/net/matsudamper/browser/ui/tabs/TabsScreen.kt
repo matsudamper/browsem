@@ -33,6 +33,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -172,6 +173,7 @@ private fun TabsScreenLoadedContent(
     // グループタブバーの LazyRow 状態（PagerIndicator と共有してスクロール同期に使う）
     val groupTabListState = rememberLazyListState()
     val density = LocalDensity.current
+    val currentOnGroupPageChanged by rememberUpdatedState(onGroupPageChanged)
 
     // ViewModelのactiveGroupIndex変化 → ページスクロールとタブバースクロールを同期
     LaunchedEffect(activeGroupIndex) {
@@ -209,7 +211,7 @@ private fun TabsScreenLoadedContent(
     // ユーザーのスワイプ → ViewModelへ通知（settledPage でアニメーション完了後のみ通知）
     LaunchedEffect(pagerState) {
         snapshotFlow { pagerState.settledPage }.collect { page ->
-            onGroupPageChanged(page)
+            currentOnGroupPageChanged(page)
         }
     }
 
@@ -464,11 +466,11 @@ private fun Preview() {
     val groupedTabs = remember {
         listOf(
             listOf(
-                TabsScreenTabData(id = "1", title = "Example Domain", previewBitmapArray = null),
-                TabsScreenTabData(id = "2", title = "Google", previewBitmapArray = null),
+                TabsScreenTabData(id = "1", title = "Example Domain", previewImage = null),
+                TabsScreenTabData(id = "2", title = "Google", previewImage = null),
             ),
             listOf(
-                TabsScreenTabData(id = "3", title = "GitHub", previewBitmapArray = null),
+                TabsScreenTabData(id = "3", title = "GitHub", previewImage = null),
             ),
         )
     }

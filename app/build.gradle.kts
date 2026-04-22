@@ -3,6 +3,7 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.paparazzi)
+    id("detekt-compose-convention")
 }
 
 val ciDebugKeystorePath = System.getenv("DEBUG_KEYSTORE_PATH")

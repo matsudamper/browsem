@@ -36,8 +36,10 @@ import androidx.compose.ui.unit.dp
 fun ExtensionsScreen(
     uiState: ExtensionsScreenUiState,
     onBack: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     Scaffold(
+        modifier = modifier,
         topBar = {
             TopAppBar(
                 title = { Text("拡張機能") },

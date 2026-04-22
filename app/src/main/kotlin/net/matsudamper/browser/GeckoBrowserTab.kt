@@ -1,6 +1,9 @@
 package net.matsudamper.browser
 
 import android.app.Activity
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import android.os.SystemClock
 import android.view.ActionMode
 import android.view.Menu
@@ -30,7 +33,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.result.contract.ActivityResultContract
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -38,6 +41,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -80,12 +84,14 @@ internal fun GeckoBrowserTab(
     themeColorExtension: ThemeColorWebExtension,
     mediaWebExtension: MediaWebExtension,
     browserSessionLifecycleController: BrowserSessionLifecycleController,
-    modifier: Modifier = Modifier,
     tabCount: Int?,
     onInstallExtensionRequest: (String) -> Unit,
-    onRequestDownloadNotificationPermission: suspend () -> Unit = {},
     onOpenSettings: () -> Unit,
     onOpenTabs: () -> Unit,
+    onOpenNewSessionRequest: (String) -> GeckoSession,
+    onOpenNewTabRequest: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    onRequestDownloadNotificationPermission: suspend () -> Unit = {},
     enableTabUi: Boolean = true,
     showInstallExtensionItem: Boolean = true,
     enableBackNavigation: Boolean = true,
@@ -93,8 +99,6 @@ internal fun GeckoBrowserTab(
     webAppMode: Boolean = false,
     onCloseCustomTab: (() -> Unit)? = null,
     onOpenInBrowser: ((String) -> Unit)? = null,
-    onOpenNewSessionRequest: (String) -> GeckoSession,
-    onOpenNewTabRequest: (String) -> Unit,
     onCloseTab: (() -> Unit)? = null,
     onToolbarHorizontalDrag: (Float) -> Unit = {},
     onToolbarDragEnd: () -> Unit = {},
@@ -140,7 +144,7 @@ internal fun GeckoBrowserTab(
     val lifecycleOwner = LocalLifecycleOwner.current
     val isImeVisible = WindowInsets.isImeVisible
     var imeWasVisibleDuringUrlFocus by remember { mutableStateOf(false) }
-    var urlBarFocusStartedAtMs by remember { mutableStateOf(0L) }
+    var urlBarFocusStartedAtMs by remember { mutableLongStateOf(0L) }
     var geckoView: GeckoView? by remember { mutableStateOf(null) }
     var sessionReleasedOnStop by remember(session) { mutableStateOf(false) }
     var waitingForSurfaceRestore by remember(session) { mutableStateOf(false) }
@@ -151,9 +155,9 @@ internal fun GeckoBrowserTab(
     var addToHomeTitle by remember { mutableStateOf("") }
     var addToHomeFavicon by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
 
-    // ファイルピッカー（単一ファイル選択）
+    // ファイルピッカー（単一ファイル選択）Google Photos を含むピッカーを表示するため ACTION_GET_CONTENT を使用
     val singleFileLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenDocument(),
+        GetContentWithMimeTypes(),
     ) { uri ->
         if (uri != null) {
             dialogState.confirmFilePrompt(context, arrayOf(uri))
@@ -162,9 +166,9 @@ internal fun GeckoBrowserTab(
         }
     }
 
-    // ファイルピッカー（複数ファイル選択）
+    // ファイルピッカー（複数ファイル選択）Google Photos を含むピッカーを表示するため ACTION_GET_CONTENT を使用
     val multipleFilesLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenMultipleDocuments(),
+        GetMultipleContentsWithMimeTypes(),
     ) { uris ->
         if (uris.isNotEmpty()) {
             dialogState.confirmFilePrompt(context, uris.toTypedArray())
@@ -232,13 +236,19 @@ internal fun GeckoBrowserTab(
                 Lifecycle.Event.ON_STOP -> {
                     waitingForSurfaceRestore = true
                     session.flushSessionState()
-                    geckoView?.also {
-                        state.captureTabPreview(it)
+                    geckoView?.also { gv ->
                         if (mediaWebExtension.shouldKeepSessionAttached(session)) {
+                            state.captureTabPreview(gv)
                             sessionReleasedOnStop = false
                         } else {
-                            it.releaseSession()
-                            sessionReleasedOnStop = true
+                            // capturePixels()はセッションに依存するため、キャプチャ完了後にreleaseSession()を呼ぶ
+                            state.captureTabPreview(gv) {
+                                // ON_STARTが先に来てwaitingForSurfaceRestoreがリセットされた場合はスキップ
+                                if (waitingForSurfaceRestore) {
+                                    gv.releaseSession()
+                                    sessionReleasedOnStop = true
+                                }
+                            }
                         }
                     }
                 }
@@ -532,7 +542,13 @@ internal fun GeckoBrowserTab(
                     onPageZoomOut = state::pageZoomOut,
                     onResetPageZoom = state::resetPageZoom,
                     onHorizontalDrag = onToolbarHorizontalDrag,
-                    onHorizontalDragEnd = onToolbarDragEnd,
+                    onHorizontalDragEnd = {
+                        // タブ切替スワイプになる可能性があるため、現在のタブのプレビューを事前にキャプチャする
+                        geckoView?.also { gv ->
+                            runCatching { state.flushAndCaptureForTabSwitch(gv) }
+                        }
+                        onToolbarDragEnd()
+                    },
                     onAddToHomeScreen = {
                         addToHomeUrl = state.currentPageUrl
                         addToHomeTitle = state.currentPageTitle
@@ -718,3 +734,62 @@ private const val URL_BAR_IME_HIDE_GRACE_MS = 700L
 // テキスト選択メニューのカスタム項目 ID
 private const val MENU_ID_SEARCH = 0x10001
 private const val MENU_ID_OPEN = 0x10002
+
+/**
+ * ACTION_GET_CONTENT を使った単一ファイル選択コントラクト。
+ * OpenDocument と異なり Google Photos などのフォトアプリもピッカーに表示される。
+ */
+private class GetContentWithMimeTypes : ActivityResultContract<Array<String>, Uri?>() {
+    override fun createIntent(context: Context, input: Array<String>): Intent {
+        return Intent(Intent.ACTION_GET_CONTENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            applyMimeTypes(this, input)
+        }
+    }
+
+    override fun parseResult(resultCode: Int, intent: Intent?): Uri? {
+        return if (resultCode == Activity.RESULT_OK) intent?.data else null
+    }
+}
+
+/**
+ * ACTION_GET_CONTENT を使った複数ファイル選択コントラクト。
+ * OpenMultipleDocuments と異なり Google Photos などのフォトアプリもピッカーに表示される。
+ */
+private class GetMultipleContentsWithMimeTypes : ActivityResultContract<Array<String>, List<Uri>>() {
+    override fun createIntent(context: Context, input: Array<String>): Intent {
+        return Intent(Intent.ACTION_GET_CONTENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+            applyMimeTypes(this, input)
+        }
+    }
+
+    override fun parseResult(resultCode: Int, intent: Intent?): List<Uri> {
+        if (resultCode != Activity.RESULT_OK || intent == null) return emptyList()
+        val clipData = intent.clipData
+        return if (clipData != null) {
+            // 一部のピッカーは clipData に加え intent.data にも先頭URIを入れるため、両方をマージして重複を除去する
+            val uris = mutableListOf<Uri>()
+            intent.data?.let { uris.add(it) }
+            for (i in 0 until clipData.itemCount) {
+                uris.add(clipData.getItemAt(i).uri)
+            }
+            uris.distinct()
+        } else {
+            listOfNotNull(intent.data)
+        }
+    }
+}
+
+/** MIME タイプを Intent に適用する共通関数 */
+private fun applyMimeTypes(intent: Intent, mimeTypes: Array<String>) {
+    when {
+        mimeTypes.isEmpty() -> intent.type = "*/*"
+        mimeTypes.size == 1 -> intent.type = mimeTypes[0]
+        else -> {
+            intent.type = "*/*"
+            intent.putExtra(Intent.EXTRA_MIME_TYPES, mimeTypes)
+        }
+    }
+}

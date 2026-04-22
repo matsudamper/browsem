@@ -49,8 +49,10 @@ fun SettingsScreen(
     onOpenHistory: () -> Unit,
     onOpenDownloads: () -> Unit,
     onBack: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     Scaffold(
+        modifier = modifier,
         topBar = {
             TopAppBar(
                 title = { Text("設定") },
