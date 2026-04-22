@@ -17,6 +17,7 @@ interface BrowserSessionStateCallbacks {
     fun onTitleChange(title: String)
     fun onContextMenu(element: GeckoSession.ContentDelegate.ContextElement)
     fun onRenderReady()
+    fun onPreviewCaptureReady()
     fun onExternalResponse(response: WebResponse)
     fun onSessionStateChange(sessionState: GeckoSession.SessionState)
     fun onPageStart(url: String)
@@ -147,6 +148,7 @@ fun createGeckoSessionDelegateBundle(
 
             override fun onFirstContentfulPaint(session: GeckoSession) {
                 callbacks.onRenderReady()
+                callbacks.onPreviewCaptureReady()
             }
 
             override fun onFirstComposite(session: GeckoSession) {
@@ -250,6 +252,10 @@ internal class BrowserTabSessionDelegateHost(
 
             override fun onRenderReady() {
                 currentCallbacks()?.onRenderReady()
+            }
+
+            override fun onPreviewCaptureReady() {
+                currentCallbacks()?.onPreviewCaptureReady()
             }
 
             override fun onExternalResponse(response: WebResponse) {

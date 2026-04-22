@@ -172,6 +172,7 @@ internal class BrowserTabScreenState(
     private var skipExternalAppCheckForNextLoad = false
 
     var renderReady by mutableStateOf(false)
+    private var previewCaptureReady = false
     var pageLoadError by mutableStateOf<PageLoadError?>(null)
 
     // --- ズーム状態（viewport width 操作によりテキスト・画像含め全体をズーム）---
@@ -195,6 +196,7 @@ internal class BrowserTabScreenState(
         maybeResetToolbarColor(currentPageUrl, resolved)
         currentPageUrl = resolved
         clearPageLoadError()
+        markRenderingPending()
         session.loadUri(resolved)
     }
 
@@ -203,6 +205,7 @@ internal class BrowserTabScreenState(
         maybeResetToolbarColor(currentPageUrl, homepageUrl)
         currentPageUrl = homepageUrl
         clearPageLoadError()
+        markRenderingPending()
         session.loadUri(homepageUrl)
     }
 
@@ -221,6 +224,7 @@ internal class BrowserTabScreenState(
         if (tabHistoryCurrentIndex < tabHistoryItems.lastIndex) {
             tabHistoryCurrentIndex++
         }
+        markRenderingPending()
         session.goForward()
     }
 
@@ -230,6 +234,7 @@ internal class BrowserTabScreenState(
         if (tabHistoryCurrentIndex > 0) {
             tabHistoryCurrentIndex--
         }
+        markRenderingPending()
         session.goBack()
     }
 
@@ -238,6 +243,7 @@ internal class BrowserTabScreenState(
         if (targetIndex == tabHistoryCurrentIndex) return
         skipHistoryRecordCount++
         tabHistoryCurrentIndex = targetIndex
+        markRenderingPending()
         session.gotoHistoryIndex(targetIndex)
     }
 
@@ -436,6 +442,7 @@ internal class BrowserTabScreenState(
         translationToLanguage = null
         if (savedUrl != null) {
             clearPageLoadError()
+            markRenderingPending()
             session.loadUri(savedUrl)
         }
     }
@@ -576,6 +583,10 @@ internal class BrowserTabScreenState(
     }
 
     fun captureTabPreview(geckoView: GeckoView, onCaptured: (() -> Unit)? = null) {
+        if (!shouldCaptureTabPreview(previewCaptureReady)) {
+            onCaptured?.invoke()
+            return
+        }
         geckoView.capturePixels().accept(
             { bitmap ->
                 val previewBitmap = bitmap ?: run {
@@ -734,6 +745,11 @@ internal class BrowserTabScreenState(
         renderReady = true
     }
 
+    override fun onPreviewCaptureReady() {
+        renderReady = true
+        previewCaptureReady = true
+    }
+
     override fun onExternalResponse(response: WebResponse) {
         downloadFileFromResponse(response)
     }
@@ -743,6 +759,7 @@ internal class BrowserTabScreenState(
 
     override fun onPageStart(url: String) {
         clearPageLoadError()
+        markRenderingPending()
         // 新しいページへの遷移時にfaviconをリセット
         browserTab.faviconBitmap = null
         webAppManifestJson = null
@@ -844,9 +861,11 @@ internal class BrowserTabScreenState(
             if (!isUrlInputFocused) {
                 urlInput = retryUrl
             }
+            markRenderingPending()
             session.loadUri(retryUrl)
             return
         }
+        markRenderingPending()
         session.reload()
     }
 
@@ -880,7 +899,13 @@ internal class BrowserTabScreenState(
             urlInput = url
         }
         clearPageLoadError()
+        markRenderingPending()
         session.loadUri(url)
+    }
+
+    private fun markRenderingPending() {
+        renderReady = false
+        previewCaptureReady = false
     }
 
     private fun copyUrlToClipboard(url: String) {
