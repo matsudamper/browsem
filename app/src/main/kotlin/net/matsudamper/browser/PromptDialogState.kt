@@ -12,11 +12,11 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
 import java.util.UUID
 import org.mozilla.geckoview.AllowOrDeny
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
-import java.io.File
 
 /**
  * JavaScript のプロンプトダイアログ状態を管理する。
@@ -209,7 +209,7 @@ internal class PromptDialogState(
 
     private fun copyToCache(context: Context, uri: Uri): Uri? {
         return try {
-            val cacheDir = File(context.cacheDir, "file_prompts")
+            val cacheDir = context.filePromptsCacheDir
             if (!cacheDir.exists() && !cacheDir.mkdirs()) {
                 Log.w("PromptDialogState", "キャッシュディレクトリの作成に失敗: $cacheDir")
                 return null

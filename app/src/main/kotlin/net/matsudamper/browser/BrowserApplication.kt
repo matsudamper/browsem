@@ -26,7 +26,7 @@ class BrowserApplication : Application() {
     }
 
     private fun cleanFilePromptsCache() {
-        val dir = File(cacheDir, "file_prompts")
+        val dir = filePromptsCacheDir
         val deleteFiles = dir.getChildrenRecursively()
         applicationScope.launch(Dispatchers.IO) {
             deleteFiles.forEach { it.delete() }
