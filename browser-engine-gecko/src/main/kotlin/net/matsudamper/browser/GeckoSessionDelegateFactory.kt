@@ -1,6 +1,7 @@
 package net.matsudamper.browser
 
 import android.util.Log
+import org.json.JSONObject
 import org.mozilla.geckoview.AllowOrDeny
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
@@ -20,6 +21,7 @@ interface BrowserSessionStateCallbacks {
     fun onSessionStateChange(sessionState: GeckoSession.SessionState)
     fun onPageStart(url: String)
     fun onPageStop(success: Boolean)
+    fun onWebAppManifest(manifest: JSONObject)
     fun onTranslationStateChange(
         translationState: TranslationsController.SessionTranslation.TranslationState?,
     )
@@ -154,6 +156,10 @@ fun createGeckoSessionDelegateBundle(
             override fun onExternalResponse(session: GeckoSession, response: WebResponse) {
                 callbacks.onExternalResponse(response)
             }
+
+            override fun onWebAppManifest(session: GeckoSession, manifest: JSONObject) {
+                callbacks.onWebAppManifest(manifest)
+            }
         },
         progressDelegate = object : GeckoSession.ProgressDelegate {
             override fun onSessionStateChange(
@@ -261,6 +267,10 @@ internal class BrowserTabSessionDelegateHost(
 
             override fun onPageStop(success: Boolean) {
                 currentCallbacks()?.onPageStop(success)
+            }
+
+            override fun onWebAppManifest(manifest: JSONObject) {
+                currentCallbacks()?.onWebAppManifest(manifest)
             }
 
             override fun onTranslationStateChange(

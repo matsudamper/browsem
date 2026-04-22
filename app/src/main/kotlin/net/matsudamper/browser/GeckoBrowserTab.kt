@@ -44,6 +44,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -60,6 +61,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.launch
 import net.matsudamper.browser.data.TranslationProvider
 import net.matsudamper.browser.media.GeckoMediaSessionDelegate
 import net.matsudamper.browser.media.MediaWebExtension
@@ -154,6 +156,9 @@ internal fun GeckoBrowserTab(
     var addToHomeUrl by remember { mutableStateOf("") }
     var addToHomeTitle by remember { mutableStateOf("") }
     var addToHomeFavicon by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
+    var isAddToHomeIconLoading by remember { mutableStateOf(false) }
+    var addToHomeIconRequestId by remember { mutableLongStateOf(0L) }
+    val addToHomeIconScope = rememberCoroutineScope()
 
     // ファイルピッカー（単一ファイル選択）Google Photos を含むピッカーを表示するため ACTION_GET_CONTENT を使用
     val singleFileLauncher = rememberLauncherForActivityResult(
@@ -549,10 +554,31 @@ internal fun GeckoBrowserTab(
                         onToolbarDragEnd()
                     },
                     onAddToHomeScreen = {
-                        addToHomeUrl = state.currentPageUrl
-                        addToHomeTitle = state.currentPageTitle
-                        addToHomeFavicon = browserTab.faviconBitmap
+                        val pageUrl = state.currentPageUrl
+                        val pageTitle = state.currentPageTitle
+                        val manifestJson = state.webAppManifestJson
+                        val fallbackFavicon = browserTab.faviconBitmap
+                        addToHomeIconRequestId += 1
+                        val requestId = addToHomeIconRequestId
+                        addToHomeUrl = pageUrl
+                        addToHomeTitle = pageTitle
+                        addToHomeFavicon = null
+                        isAddToHomeIconLoading = true
                         showAddToHomeScreenDialog = true
+                        addToHomeIconScope.launch {
+                            val fetchedIcon = HomeScreenIconFetcher.fetchIcon(
+                                pageUrl = pageUrl,
+                                webAppManifestJson = manifestJson,
+                            )
+                            if (addToHomeIconRequestId != requestId || addToHomeUrl != pageUrl) {
+                                return@launch
+                            }
+                            addToHomeFavicon = fetchedIcon ?: fallbackFavicon
+                            if (fetchedIcon != null && state.currentPageUrl == pageUrl) {
+                                browserTab.faviconBitmap = fetchedIcon
+                            }
+                            isAddToHomeIconLoading = false
+                        }
                     },
                 )
             }
@@ -644,7 +670,12 @@ internal fun GeckoBrowserTab(
             url = addToHomeUrl,
             title = addToHomeTitle,
             favicon = addToHomeFavicon,
-            onDismiss = { showAddToHomeScreenDialog = false },
+            isIconLoading = isAddToHomeIconLoading,
+            onDismiss = {
+                addToHomeIconRequestId += 1
+                isAddToHomeIconLoading = false
+                showAddToHomeScreenDialog = false
+            },
         )
     }
 

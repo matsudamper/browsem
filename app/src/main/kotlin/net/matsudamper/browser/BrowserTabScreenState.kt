@@ -24,6 +24,7 @@ import java.net.URL
 import net.matsudamper.browser.data.TranslationProvider
 import net.matsudamper.browser.ReadabilityArticle
 import net.matsudamper.browser.ReadabilityWebExtension
+import org.json.JSONObject
 import org.koin.compose.koinInject
 import org.mozilla.geckoview.AllowOrDeny
 import org.mozilla.geckoview.GeckoResult
@@ -125,6 +126,7 @@ internal class BrowserTabScreenState(
     // onLocationChange で履歴記録をスキップする残り回数
     // goBack() / goForward() を複数回連続で呼ぶ場合にもカウンタで対応する
     private var skipHistoryRecordCount: Int = 0
+    var webAppManifestJson by mutableStateOf<String?>(null)
 
     // --- タブ内ナビゲーション履歴（GeckoView の HistoryDelegate から同期） ---
     var tabHistoryItems by mutableStateOf<List<TabHistoryItem>>(emptyList())
@@ -705,6 +707,10 @@ internal class BrowserTabScreenState(
         }
     }
 
+    override fun onWebAppManifest(manifest: JSONObject) {
+        webAppManifestJson = manifest.toString()
+    }
+
     override fun onContextMenu(element: GeckoSession.ContentDelegate.ContextElement) {
         val linkUri = element.linkUri
         if (linkUri != null) {
@@ -739,6 +745,7 @@ internal class BrowserTabScreenState(
         clearPageLoadError()
         // 新しいページへの遷移時にfaviconをリセット
         browserTab.faviconBitmap = null
+        webAppManifestJson = null
         isFullPageLoadPending = true
     }
 
