@@ -58,6 +58,7 @@ internal fun GroupTabGrid(
     onTabDragStateChanged: (isDragging: Boolean, centerInRoot: Offset) -> Unit,
     onTabDropped: (tabId: String) -> Unit,
     onTabLongPressWithoutDrag: (tabId: String) -> Unit,
+    floatingActionButtonBoundsInRoot: Rect?,
     modifier: Modifier = Modifier,
 ) {
     if (tabs.isEmpty()) {
@@ -79,6 +80,21 @@ internal fun GroupTabGrid(
             gridState = gridState,
             onMove = onReorderTabs,
         )
+        var gridBoundsInRoot by remember { mutableStateOf(Rect.Zero) }
+        val density = LocalDensity.current
+        val floatingActionButtonBottomPadding = remember(
+            density,
+            floatingActionButtonBoundsInRoot,
+            gridBoundsInRoot,
+        ) {
+            if (floatingActionButtonBoundsInRoot == null || !floatingActionButtonBoundsInRoot.overlapsHorizontally(gridBoundsInRoot)) {
+                0.dp
+            } else {
+                with(density) {
+                    (gridBoundsInRoot.bottom - floatingActionButtonBoundsInRoot.top).coerceAtLeast(0f).toDp()
+                }
+            }
+        }
         // デコード済み Bitmap を保持してスクロール往復時の再デコードを避ける。
         // 画面を離れる（GroupTabGrid がコンポジションから抜ける）と破棄される。
         // キーは TabPreviewImage（contentEquals/contentHashCode 実装済み）なので
@@ -108,7 +124,9 @@ internal fun GroupTabGrid(
             modifier = Modifier
                 .fillMaxSize()
                 .onGloballyPositioned { coordinates ->
-                    dragDropState.gridBoundsInRoot = coordinates.boundsInRoot()
+                    val boundsInRoot = coordinates.boundsInRoot()
+                    dragDropState.gridBoundsInRoot = boundsInRoot
+                    gridBoundsInRoot = boundsInRoot
                 }
                 .pointerInput(dragDropState) {
                     detectDragGesturesAfterLongPress(
@@ -133,7 +151,12 @@ internal fun GroupTabGrid(
                         onDragCancel = { dragDropState.onDragEnd() },
                     )
                 },
-            contentPadding = PaddingValues(TabsLayoutDefaults.gridPadding),
+            contentPadding = PaddingValues(
+                start = TabsLayoutDefaults.gridPadding,
+                top = TabsLayoutDefaults.gridPadding,
+                end = TabsLayoutDefaults.gridPadding,
+                bottom = TabsLayoutDefaults.gridPadding + floatingActionButtonBottomPadding,
+            ),
             verticalArrangement = Arrangement.spacedBy(TabsLayoutDefaults.gridSpacing),
             horizontalArrangement = Arrangement.spacedBy(TabsLayoutDefaults.gridSpacing),
         ) {
@@ -166,7 +189,6 @@ internal fun GroupTabGrid(
         if (dragDropState.isDragging) {
             val overlayTab = tabs.firstOrNull { it.id == dragDropState.draggedItemKey }
             if (overlayTab != null) {
-                val density = LocalDensity.current
                 val widthDp = with(density) { dragDropState.draggedItemSize.width.toDp() }
                 val heightDp = with(density) { dragDropState.draggedItemSize.height.toDp() }
                 Box(
@@ -187,6 +209,10 @@ internal fun GroupTabGrid(
             }
         }
     }
+}
+
+private fun Rect.overlapsHorizontally(other: Rect): Boolean {
+    return left < other.right && right > other.left
 }
 
 // タブサムネイルキャッシュの上限（バイト）。16MiB。
