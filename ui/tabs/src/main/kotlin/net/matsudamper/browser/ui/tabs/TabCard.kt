@@ -99,8 +99,8 @@ internal fun TabCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
-                    .padding(horizontal = 8.dp)
-                    .padding(bottom = 8.dp)
+                    .padding(horizontal = 4.dp)
+                    .padding(bottom = 4.dp)
                     .clip(RoundedCornerShape(8.dp)),
                 contentAlignment = Alignment.Center,
             ) {
