@@ -468,6 +468,30 @@ internal fun GeckoBrowserTab(
                     toolbarColor = state.toolbarColor,
                     // ウェブアプリモードでは閉じるボタンを非表示にする
                     showCloseButton = customTabMode,
+                    onHome = state::onHome,
+                    onForward = state::onGoForward,
+                    canGoForward = state.canGoForward,
+                    onBack = state::onGoBack,
+                    canGoBack = state.canGoBack,
+                    onLongPressHistory = { showTabHistorySheet = true },
+                    isPcMode = state.isPcMode,
+                    onPcModeToggle = state::togglePcMode,
+                    showInstallExtensionItem = showInstallExtensionItem && state.showInstallExtensionItem,
+                    onInstallExtension = { onInstallExtensionRequest(state.currentPageUrl) },
+                    onTranslatePage = { state.onTranslate(translationProvider) },
+                    onFindInPage = state::openFindInPage,
+                    onAddToHomeScreen = {
+                        addToHomeUrl = state.currentPageUrl
+                        addToHomeTitle = state.currentPageTitle
+                        addToHomeFavicon = browserTab.faviconBitmap
+                        showAddToHomeScreenDialog = true
+                    },
+                    isSimpleView = state.isSimpleViewActive,
+                    onSimpleView = state::toggleSimpleView,
+                    pageZoomPercent = state.pageZoomPercent,
+                    onPageZoomIn = state::pageZoomIn,
+                    onPageZoomOut = state::pageZoomOut,
+                    onResetPageZoom = state::resetPageZoom,
                 )
             } else {
                 BrowserToolBar(

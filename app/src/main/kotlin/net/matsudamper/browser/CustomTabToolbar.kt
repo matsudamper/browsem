@@ -11,8 +11,6 @@ import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsIgnoringVisibility
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -51,6 +49,25 @@ internal fun CustomTabToolbar(
     onOpenInBrowser: (() -> Unit)?,
     toolbarColor: Color?,
     showCloseButton: Boolean = true,
+    onHome: () -> Unit,
+    onForward: () -> Unit,
+    canGoForward: Boolean,
+    onBack: () -> Unit,
+    canGoBack: Boolean,
+    onLongPressHistory: () -> Unit,
+    isPcMode: Boolean,
+    onPcModeToggle: () -> Unit,
+    showInstallExtensionItem: Boolean,
+    onInstallExtension: () -> Unit,
+    onTranslatePage: () -> Unit,
+    onFindInPage: () -> Unit,
+    onAddToHomeScreen: () -> Unit,
+    isSimpleView: Boolean,
+    onSimpleView: () -> Unit,
+    pageZoomPercent: Int,
+    onPageZoomIn: () -> Unit,
+    onPageZoomOut: () -> Unit,
+    onResetPageZoom: () -> Unit,
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
     val resolvedToolbarColor = toolbarColor ?: MaterialTheme.colorScheme.primaryContainer
@@ -112,35 +129,36 @@ internal fun CustomTabToolbar(
                         contentDescription = "メニュー",
                     )
                 }
-                DropdownMenu(
-                    expanded = menuExpanded,
+                ToolbarMenu(
+                    visibleMenu = menuExpanded,
                     onDismissRequest = { menuExpanded = false },
-                ) {
-                    onOpenInBrowser?.let { openInBrowser ->
-                        DropdownMenuItem(
-                            text = { Text("ブラウザで開く") },
-                            onClick = {
-                                menuExpanded = false
-                                openInBrowser()
-                            },
-                        )
-                    }
-                    DropdownMenuItem(
-                        text = { Text("共有") },
-                        onClick = {
-                            menuExpanded = false
-                            onShare()
-                        },
-                    )
-                    DropdownMenuItem(
-                        text = { Text("更新") },
-                        onClick = {
-                            menuExpanded = false
-                            onRefresh()
-                        },
-                    )
-                }
+                    onRefresh = onRefresh,
+                    onHome = onHome,
+                    onForward = onForward,
+                    canGoForward = canGoForward,
+                    onBack = onBack,
+                    canGoBack = canGoBack,
+                    onLongPressHistory = onLongPressHistory,
+                    isPcMode = isPcMode,
+                    onPcModeToggle = onPcModeToggle,
+                    showInstallExtensionItem = showInstallExtensionItem,
+                    onInstallExtension = onInstallExtension,
+                    onTranslatePage = onTranslatePage,
+                    onShare = onShare,
+                    onFindInPage = onFindInPage,
+                    onOpenSettings = {},
+                    showSettings = false,
+                    onAddToHomeScreen = onAddToHomeScreen,
+                    isSimpleView = isSimpleView,
+                    onSimpleView = onSimpleView,
+                    pageZoomPercent = pageZoomPercent,
+                    onPageZoomIn = onPageZoomIn,
+                    onPageZoomOut = onPageZoomOut,
+                    onResetPageZoom = onResetPageZoom,
+                    onOpenInBrowser = onOpenInBrowser,
+                )
             }
         }
     }
 }
+

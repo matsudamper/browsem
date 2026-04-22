@@ -52,6 +52,7 @@ internal fun ToolbarMenu(
     onShare: () -> Unit,
     onFindInPage: () -> Unit,
     onOpenSettings: () -> Unit,
+    showSettings: Boolean = true,
     onAddToHomeScreen: () -> Unit,
     isSimpleView: Boolean,
     onSimpleView: () -> Unit,
@@ -59,6 +60,7 @@ internal fun ToolbarMenu(
     onPageZoomIn: () -> Unit,
     onPageZoomOut: () -> Unit,
     onResetPageZoom: () -> Unit,
+    onOpenInBrowser: (() -> Unit)? = null,
 ) {
     DropdownMenu(
         expanded = visibleMenu,
@@ -345,21 +347,34 @@ internal fun ToolbarMenu(
                 onAddToHomeScreen()
             },
         )
-        DropdownMenuItem(
-            text = {
-                Text(text = "設定")
-            },
-            leadingIcon = {
-                Icon(
-                    painter = painterResource(id = ResourcesR.drawable.ic_settings_24dp),
-                    contentDescription = null,
-                )
-            },
-            onClick = {
-                onDismissRequest()
-                onOpenSettings()
-            },
-        )
+        if (onOpenInBrowser != null) {
+            DropdownMenuItem(
+                text = {
+                    Text(text = "ブラウザで開く")
+                },
+                onClick = {
+                    onDismissRequest()
+                    onOpenInBrowser()
+                },
+            )
+        }
+        if (showSettings) {
+            DropdownMenuItem(
+                text = {
+                    Text(text = "設定")
+                },
+                leadingIcon = {
+                    Icon(
+                        painter = painterResource(id = ResourcesR.drawable.ic_settings_24dp),
+                        contentDescription = null,
+                    )
+                },
+                onClick = {
+                    onDismissRequest()
+                    onOpenSettings()
+                },
+            )
+        }
     }
 }
 
