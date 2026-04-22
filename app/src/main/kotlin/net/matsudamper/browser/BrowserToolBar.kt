@@ -8,18 +8,23 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.statusBarsIgnoringVisibility
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
@@ -211,6 +216,7 @@ data class UrlInputState(
 )
 
 @Composable
+@OptIn(ExperimentalLayoutApi::class)
 internal fun BrowserToolbar(
     isFocused: Boolean,
     gestureState: BrowserToolBarGestureState?,
@@ -247,12 +253,13 @@ internal fun BrowserToolbar(
             ),
     ) {
         Row(
-            // ステータスバー領域の高さ分だけコンテンツを下に押し出す。
+            // ステータスバーが一時的に非表示扱いになっても通常時の領域分だけコンテンツを下に押し出す。
             // Surface の背景色はステータスバー領域まで延びて塗りつぶされる。
-            // 親が safeDrawingPadding を適用済みの場合はインセットが消費されているため 0 になる。
             // IntrinsicSize.Min で Row 高さを子の最小 intrinsic 高さに合わせる（URL バーの自然高さ）。
             modifier = Modifier
-                .statusBarsPadding()
+                .windowInsetsPadding(
+                    WindowInsets.statusBarsIgnoringVisibility.only(WindowInsetsSides.Top)
+                )
                 .height(IntrinsicSize.Min),
             verticalAlignment = Alignment.CenterVertically,
         ) {

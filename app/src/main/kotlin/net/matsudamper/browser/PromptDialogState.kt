@@ -2,10 +2,18 @@ package net.matsudamper.browser
 
 import android.content.Context
 import android.net.Uri
+import android.util.Log
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
+import java.util.UUID
 import org.mozilla.geckoview.AllowOrDeny
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
@@ -15,7 +23,9 @@ import org.mozilla.geckoview.GeckoSession
  * BrowserTabScreenState から分離し、PromptDelegate と UI ダイアログの橋渡しを行う。
  */
 @Stable
-internal class PromptDialogState {
+internal class PromptDialogState(
+    private val coroutineScope: CoroutineScope,
+) {
 
     // --- Alert (window.alert()) ---
     var pendingAlertPrompt by mutableStateOf<GeckoSession.PromptDelegate.AlertPrompt?>(null)
@@ -170,9 +180,24 @@ internal class PromptDialogState {
 
     fun confirmFilePrompt(context: Context, uris: Array<Uri>) {
         val prompt = pendingFilePrompt ?: return
-        pendingFileResult?.complete(prompt.confirm(context, uris))
+        val result = pendingFileResult
         pendingFilePrompt = null
         pendingFileResult = null
+        coroutineScope.launch {
+            try {
+                // ACTION_GET_CONTENT が返す content URI は一時的な読み取り権限しか持たない場合があり、
+                // GeckoView が非同期で読み取る際に権限が失効する可能性がある。
+                // そのため、コンテンツをキャッシュファイルにコピーしてから GeckoView に渡す。
+                val cachedUris = withContext(Dispatchers.IO) {
+                    uris.map { uri -> copyToCache(context, uri) ?: uri }.toTypedArray()
+                }
+                result?.complete(prompt.confirm(context, cachedUris))
+            } catch (e: CancellationException) {
+                // 画面破棄などでスコープがキャンセルされた場合、GeckoResult を dismiss で完了させてハングを防ぐ
+                result?.complete(prompt.dismiss())
+                throw e
+            }
+        }
     }
 
     fun dismissFilePrompt() {
@@ -180,6 +205,26 @@ internal class PromptDialogState {
         pendingFileResult?.complete(prompt.dismiss())
         pendingFilePrompt = null
         pendingFileResult = null
+    }
+
+    private fun copyToCache(context: Context, uri: Uri): Uri? {
+        return try {
+            val cacheDir = context.filePromptsCacheDir
+            if (!cacheDir.exists() && !cacheDir.mkdirs()) {
+                Log.w("PromptDialogState", "キャッシュディレクトリの作成に失敗: $cacheDir")
+                return null
+            }
+            val destFile = File(cacheDir, UUID.randomUUID().toString())
+            context.contentResolver.openInputStream(uri)?.use { input ->
+                destFile.outputStream().use { output ->
+                    input.copyTo(output)
+                }
+            } ?: return null
+            Uri.fromFile(destFile)
+        } catch (e: Exception) {
+            Log.w("PromptDialogState", "コンテンツ URI のキャッシュコピーに失敗", e)
+            null
+        }
     }
 
     fun confirmBeforeUnloadPrompt(allow: Boolean) {

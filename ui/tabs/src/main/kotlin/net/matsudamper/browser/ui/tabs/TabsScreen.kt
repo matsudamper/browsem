@@ -41,6 +41,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.tooling.preview.Preview
@@ -245,6 +247,8 @@ private fun TabsScreenLoadedContent(
     // 削除確認ダイアログの対象グループインデックス
     var deleteDialogGroupIndex by remember { mutableStateOf<Int?>(null) }
 
+    var floatingActionButtonBoundsInRoot by remember { mutableStateOf<Rect?>(null) }
+
     Scaffold(
         modifier = modifier
             .fillMaxSize(),
@@ -254,7 +258,9 @@ private fun TabsScreenLoadedContent(
                 onClick = { onOpenNewTab(groups.getOrNull(activeGroupIndex)?.id) },
                 modifier = Modifier
                     .testTag(TabsScreenTestTags.AddTabButton.testTag)
-                    .padding(16.dp),
+                    .onGloballyPositioned { coordinates ->
+                        floatingActionButtonBoundsInRoot = coordinates.boundsInRoot()
+                    },
             ) {
                 Icon(imageVector = Icons.Default.Add, contentDescription = "新規タブ")
             }
@@ -364,6 +370,7 @@ private fun TabsScreenLoadedContent(
                         onTabLongPressWithoutDrag = { tabId ->
                             moveDialogTabId = tabId
                         },
+                        floatingActionButtonBoundsInRoot = floatingActionButtonBoundsInRoot,
                         modifier = Modifier.weight(1f),
                     )
                 }

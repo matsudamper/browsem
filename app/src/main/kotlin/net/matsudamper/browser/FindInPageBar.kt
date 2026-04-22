@@ -4,16 +4,21 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.statusBarsIgnoringVisibility
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -42,6 +47,7 @@ import androidx.compose.ui.unit.sp
 import net.matsudamper.browser.resources.R as ResourcesR
 
 @Composable
+@OptIn(ExperimentalLayoutApi::class)
 internal fun FindInPageBar(
     query: String,
     matchCurrent: Int,
@@ -65,7 +71,9 @@ internal fun FindInPageBar(
                 // ステータスバー領域の高さ分だけコンテンツを下に押し出す。
                 // Surface の背景色はステータスバー領域まで延びて塗りつぶされる。
                 modifier = Modifier
-                    .statusBarsPadding()
+                    .windowInsetsPadding(
+                        WindowInsets.statusBarsIgnoringVisibility.only(WindowInsetsSides.Top)
+                    )
                     .padding(horizontal = 8.dp, vertical = 4.dp),
             ) {
                 Box(

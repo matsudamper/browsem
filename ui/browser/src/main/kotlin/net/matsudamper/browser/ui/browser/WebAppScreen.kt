@@ -1,11 +1,14 @@
 package net.matsudamper.browser.ui.browser
 
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import kotlinx.coroutines.runBlocking
 import net.matsudamper.browser.BrowserTab
 import net.matsudamper.browser.BrowserTabController
 
@@ -21,21 +24,37 @@ fun WebAppScreen(
         uiState: BrowserScreenUiState,
     ) -> Unit,
 ) {
-    val browserTab = remember(browserTabController, initialUrl) {
-        // TODO runBlocking使わない
-        runBlocking {
-            browserTabController.createAndAppendTab(initialUrl = initialUrl)
+    val browserTab by produceState<BrowserTab?>(
+        initialValue = null,
+        key1 = browserTabController,
+        key2 = initialUrl,
+    ) {
+        value = null
+        value = browserTabController.createAndAppendTab(initialUrl = initialUrl)
+    }
+    DisposableEffect(browserTabController, browserTab?.tabId) {
+        val tabId = browserTab?.tabId
+        onDispose {
+            if (tabId != null) {
+                browserTabController.closeTab(tabId)
+            }
         }
     }
-    DisposableEffect(browserTabController, browserTab.tabId) {
-        onDispose {
-            browserTabController.closeTab(browserTab.tabId)
+
+    val activeTab = browserTab
+    if (activeTab == null) {
+        Box(
+            modifier = modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center,
+        ) {
+            CircularProgressIndicator()
         }
+        return
     }
 
     browserTabContent(
         modifier.fillMaxSize(),
-        browserTab,
+        activeTab,
         uiState,
     )
 }
