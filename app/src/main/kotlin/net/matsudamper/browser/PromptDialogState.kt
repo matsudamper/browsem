@@ -8,6 +8,7 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -183,13 +184,19 @@ internal class PromptDialogState(
         pendingFilePrompt = null
         pendingFileResult = null
         coroutineScope.launch {
-            // ACTION_GET_CONTENT が返す content URI は一時的な読み取り権限しか持たない場合があり、
-            // GeckoView が非同期で読み取る際に権限が失効する可能性がある。
-            // そのため、コンテンツをキャッシュファイルにコピーしてから GeckoView に渡す。
-            val cachedUris = withContext(Dispatchers.IO) {
-                uris.map { uri -> copyToCache(context, uri) ?: uri }.toTypedArray()
+            try {
+                // ACTION_GET_CONTENT が返す content URI は一時的な読み取り権限しか持たない場合があり、
+                // GeckoView が非同期で読み取る際に権限が失効する可能性がある。
+                // そのため、コンテンツをキャッシュファイルにコピーしてから GeckoView に渡す。
+                val cachedUris = withContext(Dispatchers.IO) {
+                    uris.map { uri -> copyToCache(context, uri) ?: uri }.toTypedArray()
+                }
+                result?.complete(prompt.confirm(context, cachedUris))
+            } catch (e: CancellationException) {
+                // 画面破棄などでスコープがキャンセルされた場合、GeckoResult を dismiss で完了させてハングを防ぐ
+                result?.complete(prompt.dismiss())
+                throw e
             }
-            result?.complete(prompt.confirm(context, cachedUris))
         }
     }
 
