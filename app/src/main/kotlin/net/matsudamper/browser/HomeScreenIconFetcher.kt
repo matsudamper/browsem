@@ -21,6 +21,7 @@ internal object HomeScreenIconFetcher {
     private const val FETCH_TIMEOUT_MS = 8000
     private const val MAX_HTML_BYTES = 256 * 1024
     private const val MAX_SHORTCUT_ICON_SIZE = 192
+    private const val MAX_ICON_FETCH_ATTEMPTS = 20
     private const val USER_AGENT = "Mozilla/5.0 (Android) Browsem"
 
     private val linkTagRegex = Regex("""<link\b[^>]*>""", RegexOption.IGNORE_CASE)
@@ -45,7 +46,7 @@ internal object HomeScreenIconFetcher {
             ?: HtmlIconCandidates()
         val storedManifestIcons = parseManifestIconCandidates(
             manifestJson = webAppManifestJson,
-            baseUri = pageUri,
+            fallbackBaseUri = pageUri,
             source = IconSource.StoredManifest,
         )
         val linkedManifestIcons = pageHtmlIcons.manifestUrls
@@ -54,7 +55,7 @@ internal object HomeScreenIconFetcher {
                 val manifestUri = runCatching { URI(manifestUrl) }.getOrNull() ?: return@flatMap emptyList()
                 parseManifestIconCandidates(
                     manifestJson = fetchText(manifestUrl, MAX_HTML_BYTES),
-                    baseUri = manifestUri,
+                    fallbackBaseUri = manifestUri,
                     source = IconSource.LinkedManifest,
                 )
             }
@@ -70,9 +71,11 @@ internal object HomeScreenIconFetcher {
                 compareByDescending<IconCandidate> { it.source.priority }
                     .thenByDescending { it.size },
             )
-            .take(8)
 
+        var attemptCount = 0
         for (candidate in candidates) {
+            if (attemptCount >= MAX_ICON_FETCH_ATTEMPTS) break
+            attemptCount++
             val bitmap = fetchBitmap(candidate.url) ?: continue
             return bitmap.scaleForShortcut()
         }
@@ -120,11 +123,16 @@ internal object HomeScreenIconFetcher {
 
     private fun parseManifestIconCandidates(
         manifestJson: String?,
-        baseUri: URI,
+        fallbackBaseUri: URI,
         source: IconSource,
     ): List<IconCandidate> {
         if (manifestJson.isNullOrBlank()) return emptyList()
         val manifest = runCatching { JSONObject(manifestJson) }.getOrNull() ?: return emptyList()
+        val manifestBaseUri = manifest.optString("href")
+            .takeIf { it.isNotBlank() }
+            ?.let { runCatching { URI(it) }.getOrNull() }
+            ?.takeIf { it.isHttpUri() }
+            ?: fallbackBaseUri
         val icons = manifest.optJSONArray("icons") ?: return emptyList()
         return buildList {
             for (index in 0 until icons.length()) {
@@ -134,7 +142,7 @@ internal object HomeScreenIconFetcher {
                     continue
                 }
                 val src = icon.optString("src").takeIf { it.isNotBlank() } ?: continue
-                val url = resolveUrl(baseUri, src) ?: continue
+                val url = resolveUrl(manifestBaseUri, src) ?: continue
                 add(
                     IconCandidate(
                         url = url,
