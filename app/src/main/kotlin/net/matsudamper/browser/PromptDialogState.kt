@@ -195,11 +195,16 @@ internal class PromptDialogState {
      */
     private fun copyToCache(context: Context, uri: Uri): Uri? {
         return try {
-            val rawName = queryFileName(context, uri) ?: "file_prompt_${System.currentTimeMillis()}"
+            val rawName = queryFileName(context, uri) ?: "file_prompt"
             // パストラバーサルや無効な文字を防ぐためファイル名をサニタイズ
-            val fileName = rawName.replace(Regex("[/\\\\:*?\"<>|]"), "_")
+            val sanitizedName = rawName.replace(Regex("[/\\\\:*?\"<>|]"), "_")
+            // 同名ファイルの衝突を防ぐためタイムスタンプを付与
+            val fileName = "${System.currentTimeMillis()}_$sanitizedName"
             val cacheDir = File(context.cacheDir, "file_prompts")
-            cacheDir.mkdirs()
+            if (!cacheDir.exists() && !cacheDir.mkdirs()) {
+                Log.w("PromptDialogState", "キャッシュディレクトリの作成に失敗: $cacheDir")
+                return null
+            }
             val destFile = File(cacheDir, fileName)
             context.contentResolver.openInputStream(uri)?.use { input ->
                 destFile.outputStream().use { output ->
