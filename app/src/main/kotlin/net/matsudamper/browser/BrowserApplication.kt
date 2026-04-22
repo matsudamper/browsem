@@ -13,7 +13,7 @@ import org.koin.androidx.workmanager.koin.workManagerFactory
 import org.koin.core.context.startKoin
 
 class BrowserApplication : Application() {
-    private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val applicationScope = CoroutineScope(SupervisorJob())
 
     override fun onCreate() {
         super.onCreate()
@@ -27,6 +27,14 @@ class BrowserApplication : Application() {
 
     private fun cleanFilePromptsCache() {
         val dir = File(cacheDir, "file_prompts")
-        applicationScope.launch { dir.deleteRecursively() }
+        val deleteFiles = dir.getChildrenRecursively()
+        applicationScope.launch(Dispatchers.IO) {
+            deleteFiles.forEach { it.delete() }
+        }
+    }
+
+    private fun File.getChildrenRecursively(): List<File> {
+        val children = listFiles()?.toList() ?: emptyList()
+        return children + children.flatMap { it.getChildrenRecursively() }
     }
 }
