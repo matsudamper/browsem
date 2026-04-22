@@ -352,6 +352,12 @@ internal fun ToolbarMenu(
                 text = {
                     Text(text = "ブラウザで開く")
                 },
+                leadingIcon = {
+                    Icon(
+                        painter = painterResource(id = ResourcesR.drawable.ic_open_in_browser_24dp),
+                        contentDescription = null,
+                    )
+                },
                 onClick = {
                     onDismissRequest()
                     onOpenInBrowser()

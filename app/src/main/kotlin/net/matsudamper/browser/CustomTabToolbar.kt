@@ -146,6 +146,7 @@ internal fun CustomTabToolbar(
                     onTranslatePage = onTranslatePage,
                     onShare = onShare,
                     onFindInPage = onFindInPage,
+                    // custom tabモードでは設定は表示しないため、呼ばれることはない
                     onOpenSettings = {},
                     showSettings = false,
                     onAddToHomeScreen = onAddToHomeScreen,
