@@ -27,6 +27,14 @@ android {
         vectorDrawables {
             useSupportLibrary = true
         }
+
+        // CI_ABI_FILTER が設定されている場合は指定された ABI のみビルドする（PR CIでの容量削減）
+        val ciAbiFilter = System.getenv("CI_ABI_FILTER")
+        if (ciAbiFilter != null) {
+            ndk {
+                abiFilters += ciAbiFilter.split(",").map { it.trim() }
+            }
+        }
     }
 
     signingConfigs {
