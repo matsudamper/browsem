@@ -2,6 +2,8 @@ package net.matsudamper.browser
 
 import android.content.Context
 import android.net.Uri
+import android.provider.OpenableColumns
+import android.util.Log
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -9,6 +11,7 @@ import androidx.compose.runtime.setValue
 import org.mozilla.geckoview.AllowOrDeny
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
+import java.io.File
 
 /**
  * JavaScript のプロンプトダイアログ状態を管理する。
@@ -170,7 +173,11 @@ internal class PromptDialogState {
 
     fun confirmFilePrompt(context: Context, uris: Array<Uri>) {
         val prompt = pendingFilePrompt ?: return
-        pendingFileResult?.complete(prompt.confirm(context, uris))
+        // ACTION_GET_CONTENT が返す content URI は一時的な読み取り権限しか持たない場合があり、
+        // GeckoView が非同期で読み取る際に権限が失効する可能性がある。
+        // そのため、コンテンツをキャッシュファイルにコピーしてから GeckoView に渡す。
+        val cachedUris = uris.map { uri -> copyToCache(context, uri) ?: uri }.toTypedArray()
+        pendingFileResult?.complete(prompt.confirm(context, cachedUris))
         pendingFilePrompt = null
         pendingFileResult = null
     }
@@ -180,6 +187,48 @@ internal class PromptDialogState {
         pendingFileResult?.complete(prompt.dismiss())
         pendingFilePrompt = null
         pendingFileResult = null
+    }
+
+    /**
+     * コンテンツ URI の内容をキャッシュディレクトリにコピーし、そのファイルの URI を返す。
+     * コピーに失敗した場合は null を返す。
+     */
+    private fun copyToCache(context: Context, uri: Uri): Uri? {
+        return try {
+            val rawName = queryFileName(context, uri) ?: "file_prompt_${System.currentTimeMillis()}"
+            // パストラバーサルや無効な文字を防ぐためファイル名をサニタイズ
+            val fileName = rawName.replace(Regex("[/\\\\:*?\"<>|]"), "_")
+            val cacheDir = File(context.cacheDir, "file_prompts")
+            cacheDir.mkdirs()
+            val destFile = File(cacheDir, fileName)
+            context.contentResolver.openInputStream(uri)?.use { input ->
+                destFile.outputStream().use { output ->
+                    input.copyTo(output)
+                }
+            } ?: return null
+            Uri.fromFile(destFile)
+        } catch (e: Exception) {
+            Log.w("PromptDialogState", "コンテンツ URI のキャッシュコピーに失敗", e)
+            null
+        }
+    }
+
+    /**
+     * コンテンツ URI からファイル名を取得する。
+     */
+    private fun queryFileName(context: Context, uri: Uri): String? {
+        return try {
+            context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
+                ?.use { cursor ->
+                    if (cursor.moveToFirst()) {
+                        cursor.getString(cursor.getColumnIndexOrThrow(OpenableColumns.DISPLAY_NAME))
+                    } else {
+                        null
+                    }
+                }
+        } catch (e: Exception) {
+            null
+        }
     }
 
     fun confirmBeforeUnloadPrompt(allow: Boolean) {
