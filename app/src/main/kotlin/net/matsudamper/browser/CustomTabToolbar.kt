@@ -2,10 +2,15 @@ package net.matsudamper.browser
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.statusBarsIgnoringVisibility
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -36,6 +41,7 @@ internal sealed interface CustomTabToolbarTestTags {
 }
 
 @Composable
+@OptIn(ExperimentalLayoutApi::class)
 internal fun CustomTabToolbar(
     title: String,
     url: String,
@@ -66,7 +72,9 @@ internal fun CustomTabToolbar(
             modifier = Modifier
                 .fillMaxWidth()
                 // ステータスバー領域はSurfaceの背景色で塗りつぶし、コンテンツをその下に押し出す
-                .statusBarsPadding()
+                .windowInsetsPadding(
+                    WindowInsets.statusBarsIgnoringVisibility.only(WindowInsetsSides.Top)
+                )
                 .padding(horizontal = 4.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
