@@ -161,7 +161,7 @@ internal class BrowserTabScreenState(
     var linkContextMenuUrl by mutableStateOf<String?>(null)
 
     // --- プロンプトダイアログ状態（分離済み） ---
-    val promptDialogState = PromptDialogState()
+    val promptDialogState = PromptDialogState(coroutineScope)
 
     // --- ファイルダウンロード確認ダイアログ用state ---
     var pendingDownloadResponse by mutableStateOf<WebResponse?>(null)
