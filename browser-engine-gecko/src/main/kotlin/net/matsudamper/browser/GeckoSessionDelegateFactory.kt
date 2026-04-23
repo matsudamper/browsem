@@ -1,6 +1,7 @@
 package net.matsudamper.browser
 
 import android.util.Log
+import org.json.JSONObject
 import org.mozilla.geckoview.AllowOrDeny
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
@@ -21,6 +22,7 @@ interface BrowserSessionStateCallbacks {
     fun onSessionStateChange(sessionState: GeckoSession.SessionState)
     fun onPageStart(url: String)
     fun onPageStop(success: Boolean)
+    fun onWebAppManifest(manifest: JSONObject)
     fun onTranslationStateChange(
         translationState: TranslationsController.SessionTranslation.TranslationState?,
     )
@@ -156,6 +158,10 @@ fun createGeckoSessionDelegateBundle(
             override fun onExternalResponse(session: GeckoSession, response: WebResponse) {
                 callbacks.onExternalResponse(response)
             }
+
+            override fun onWebAppManifest(session: GeckoSession, manifest: JSONObject) {
+                callbacks.onWebAppManifest(manifest)
+            }
         },
         progressDelegate = object : GeckoSession.ProgressDelegate {
             override fun onSessionStateChange(
@@ -208,6 +214,9 @@ internal class BrowserTabSessionDelegateHost(
     private var cachedCanGoForward: Boolean = false
     private var cachedHistoryItems: List<HistoryStateItem> = emptyList()
     private var cachedHistoryCurrentIndex: Int = -1
+    // UI未接続中に届いた manifest を失わないようにキャッシュする。
+    // onPageStart でクリアし、attachUi 時にリプレイする。
+    private var cachedWebAppManifest: JSONObject? = null
 
     private val delegateBundle = createGeckoSessionDelegateBundle(
         callbacks = object : BrowserSessionStateCallbacks {
@@ -262,11 +271,18 @@ internal class BrowserTabSessionDelegateHost(
             }
 
             override fun onPageStart(url: String) {
+                // 新しいページでは前ページの manifest を持ち越さない
+                synchronized(lock) { cachedWebAppManifest = null }
                 currentCallbacks()?.onPageStart(url)
             }
 
             override fun onPageStop(success: Boolean) {
                 currentCallbacks()?.onPageStop(success)
+            }
+
+            override fun onWebAppManifest(manifest: JSONObject) {
+                synchronized(lock) { cachedWebAppManifest = manifest }
+                currentCallbacks()?.onWebAppManifest(manifest)
             }
 
             override fun onTranslationStateChange(
@@ -337,6 +353,7 @@ internal class BrowserTabSessionDelegateHost(
         val canGoForward: Boolean
         val historyItems: List<HistoryStateItem>
         val historyCurrentIndex: Int
+        val webAppManifest: JSONObject?
         synchronized(lock) {
             this.callbacks = callbacks
             this.onOpenNewSessionRequest = onOpenNewSessionRequest
@@ -345,6 +362,7 @@ internal class BrowserTabSessionDelegateHost(
             canGoForward = cachedCanGoForward
             historyItems = cachedHistoryItems
             historyCurrentIndex = cachedHistoryCurrentIndex
+            webAppManifest = cachedWebAppManifest
         }
         // GeckoSession はナビゲーション状態が変わらない限り onCanGoBack/onCanGoForward を再発火しないため、
         // キャッシュ済みの値をリプレイして UI 側の状態を同期する
@@ -353,6 +371,10 @@ internal class BrowserTabSessionDelegateHost(
         // タブ内ナビゲーション履歴も同様にリプレイする
         if (historyItems.isNotEmpty()) {
             callbacks.onHistoryStateChange(historyItems, historyCurrentIndex)
+        }
+        // UI未接続中に届いた manifest もリプレイして Add to Home で利用できるようにする
+        if (webAppManifest != null) {
+            callbacks.onWebAppManifest(webAppManifest)
         }
         flushPendingRequests()
     }
