@@ -144,8 +144,18 @@ internal object HomeScreenIconFetcher {
         return buildList {
             for (index in 0 until icons.length()) {
                 val icon = icons.optJSONObject(index) ?: continue
-                val purpose = icon.optString("purpose").takeIf { it.isNotBlank() }
-                if (purpose?.lowercase(Locale.US)?.split(Regex("""\s+"""))?.contains("monochrome") == true) {
+                val purposeTokens = icon.optString("purpose")
+                    .takeIf { it.isNotBlank() }
+                    ?.lowercase(Locale.US)
+                    ?.split(Regex("""\s+"""))
+                    ?.filter { it.isNotBlank() }
+                // purpose が monochrome だけを含む場合はショートカット用途に使えないのでスキップする。
+                // "any monochrome" のように他の用途も含むアイコンは候補として残す。
+                if (purposeTokens != null &&
+                    "monochrome" in purposeTokens &&
+                    "any" !in purposeTokens &&
+                    "maskable" !in purposeTokens
+                ) {
                     continue
                 }
                 val src = icon.optString("src").takeIf { it.isNotBlank() } ?: continue
