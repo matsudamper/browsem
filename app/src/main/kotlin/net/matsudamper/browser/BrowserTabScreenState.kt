@@ -883,7 +883,11 @@ internal class BrowserTabScreenState(
             if (!isUrlInputFocused) {
                 urlInput = retryUrl
             }
-            session.loadUri(retryUrl, GeckoSession.LOAD_FLAGS_BYPASS_CACHE)
+            session.load(
+                GeckoSession.Loader()
+                    .uri(retryUrl)
+                    .flags(GeckoSession.LOAD_FLAGS_BYPASS_CACHE),
+            )
             return
         }
         session.reload(GeckoSession.LOAD_FLAGS_BYPASS_CACHE)

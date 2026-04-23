@@ -541,6 +541,7 @@ private fun PreviewTabCountVariants() {
                     onResetPageZoom = {},
                     toolbarColor = null,
                     onRefresh = {},
+                    onSuperRefresh = {},
                     onHome = {},
                     onForward = {},
                     canGoForward = false,
