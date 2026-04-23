@@ -4,7 +4,6 @@ import net.matsudamper.browser.BrowserViewModel
 import net.matsudamper.browser.DownloadWorker
 import net.matsudamper.browser.FindInPageWebExtension
 import net.matsudamper.browser.GeckoDownloadManager
-import net.matsudamper.browser.ReadabilityWebExtension
 import net.matsudamper.browser.ThemeColorWebExtension
 import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.TabGroupRepository
@@ -43,7 +42,6 @@ val appModule = module {
     // 拡張機能はプロセスに1つの GeckoRuntime に対してインストールするため single で管理
     single { ThemeColorWebExtension().also { it.install(get()) } }
     single { MediaWebExtension(androidContext()).also { it.install(get()) } }
-    single { ReadabilityWebExtension().also { it.install(get()) } }
     single { FindInPageWebExtension().also { it.install(get()) } }
     factory { GeckoDownloadManager(androidContext(), get()) }
     viewModel { BrowserViewModel(get(), get(), get(), get(), get(), get()) }

@@ -24,8 +24,6 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import java.net.URL
 import net.matsudamper.browser.data.TranslationProvider
-import net.matsudamper.browser.ReadabilityArticle
-import net.matsudamper.browser.ReadabilityWebExtension
 import org.json.JSONObject
 import org.koin.compose.koinInject
 import org.mozilla.geckoview.AllowOrDeny
@@ -60,7 +58,6 @@ internal fun rememberBrowserTabScreenState(
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val geckoDownloadManager: GeckoDownloadManager = koinInject()
-    val readabilityWebExtension: ReadabilityWebExtension = koinInject()
     val findInPageWebExtension: FindInPageWebExtension = koinInject()
     val state = remember(browserTab) {
         BrowserTabScreenState(
@@ -69,7 +66,6 @@ internal fun rememberBrowserTabScreenState(
             searchTemplate = searchTemplate,
             coroutineScope = coroutineScope,
             geckoDownloadManager = geckoDownloadManager,
-            readabilityWebExtension = readabilityWebExtension,
             findInPageWebExtension = findInPageWebExtension,
             context = context,
             onHistoryRecord = onHistoryRecord,
@@ -91,7 +87,6 @@ internal class BrowserTabScreenState(
     searchTemplate: String,
     private val coroutineScope: CoroutineScope,
     private val geckoDownloadManager: GeckoDownloadManager,
-    private val readabilityWebExtension: ReadabilityWebExtension,
     internal val findInPageWebExtension: FindInPageWebExtension,
     private val context: Context,
     private val onRequestDownloadNotificationPermission: suspend () -> Unit = {},
@@ -144,10 +139,6 @@ internal class BrowserTabScreenState(
     var translationFromLanguage by mutableStateOf<String?>(null)
     /** 翻訳先言語タグ（例: "ja"） */
     var translationToLanguage by mutableStateOf<String?>(null)
-
-    // --- シンプル表示状態 ---
-    var simpleViewArticle by mutableStateOf<ReadabilityArticle?>(null)
-    val isSimpleViewActive: Boolean get() = simpleViewArticle != null
 
     // --- Find-in-page state ---
     private var findInPageState by mutableStateOf(FindInPageState.Closed)
@@ -588,20 +579,6 @@ internal class BrowserTabScreenState(
         refreshCurrentPage()
     }
 
-    fun toggleSimpleView() {
-        if (simpleViewArticle != null) {
-            // シンプル表示を閉じる
-            simpleViewArticle = null
-        } else {
-            // コンテンツスクリプトに記事抽出を要求する
-            readabilityWebExtension.requestExtraction(session)
-        }
-    }
-
-    fun dismissSimpleView() {
-        simpleViewArticle = null
-    }
-
     fun requestAddToHomeScreen() {
         val pageUrl = currentPageUrl
         val pageTitle = currentPageTitle
@@ -755,10 +732,6 @@ internal class BrowserTabScreenState(
         ) {
             translationState = TranslationState.Idle
             originalPageUrlForRevert = null
-        }
-        // ページ遷移時にシンプル表示をリセット
-        if (simpleViewArticle != null) {
-            simpleViewArticle = null
         }
         if (!url.startsWith("data:")) {
             detectedPageLanguage = null
