@@ -1,6 +1,6 @@
 [versions]
 agp = "9.2.0"
-kotlin = "2.3.20"
+kotlin = "2.3.21"
 composeBom = "2026.04.01"
 activityCompose = "1.13.0"
 geckoview = "150.0.20260415192539"
@@ -29,6 +29,7 @@ uiautomator = "2.3.0"
 detekt = "2.0.0-alpha.2"
 composeRules = "0.5.7"
 mockk = "1.14.9"
+robolectric = "4.15.1"
 
 [libraries]
 androidx-compose-bom = { module = "androidx.compose:compose-bom", version.ref = "composeBom" }
@@ -75,6 +76,7 @@ detekt-gradle-plugin = { module = "dev.detekt:detekt-gradle-plugin", version.ref
 detekt-compose-rules = { module = "io.nlopez.compose.rules:detekt", version.ref = "composeRules" }
 kotlin-gradle-plugin = { module = "org.jetbrains.kotlin:kotlin-gradle-plugin", version.ref = "kotlin" }
 mockk = { module = "io.mockk:mockk", version.ref = "mockk" }
+robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
