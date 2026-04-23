@@ -227,6 +227,11 @@ internal class BrowserTabScreenState(
         refreshCurrentPage()
     }
 
+    fun onSuperRefresh() {
+        // キャッシュをバイパスしてリロード（スーパーリフレッシュ）
+        superRefreshCurrentPage()
+    }
+
     fun onRefreshFromSwipe() {
         refreshCurrentPage()
         isRefreshing = false
@@ -943,6 +948,25 @@ internal class BrowserTabScreenState(
         }
         markRenderingPending()
         session.reload()
+    }
+
+    private fun superRefreshCurrentPage() {
+        // キャッシュを完全にバイパスして再読み込みする
+        val retryUrl = pageLoadError?.failingUrl?.takeIf { it.isNotBlank() }
+        clearPageLoadError()
+        if (retryUrl != null) {
+            currentPageUrl = retryUrl
+            if (!isUrlInputFocused) {
+                urlInput = retryUrl
+            }
+            session.load(
+                GeckoSession.Loader()
+                    .uri(retryUrl)
+                    .flags(GeckoSession.LOAD_FLAGS_BYPASS_CACHE),
+            )
+            return
+        }
+        session.reload(GeckoSession.LOAD_FLAGS_BYPASS_CACHE)
     }
 
     private fun clearPageLoadError() {

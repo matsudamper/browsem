@@ -38,6 +38,7 @@ internal fun ToolbarMenu(
     visibleMenu: Boolean,
     onDismissRequest: () -> Unit,
     onRefresh: () -> Unit,
+    onSuperRefresh: () -> Unit,
     onHome: () -> Unit,
     onForward: () -> Unit,
     canGoForward: Boolean,
@@ -170,17 +171,34 @@ internal fun ToolbarMenu(
                 )
             }
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                IconButton(
-                    modifier = Modifier.testTag(BrowserToolbarMenuTestTags.RefreshButton.testTag),
-                    onClick = {
-                        onDismissRequest()
-                        onRefresh()
-                    }
+                // 短押しで通常更新、長押しでキャッシュをバイパスしてスーパーリフレッシュ
+                androidx.compose.foundation.layout.Box(
+                    modifier = Modifier
+                        .testTag(BrowserToolbarMenuTestTags.RefreshButton.testTag)
+                        .combinedClickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = ripple(bounded = false),
+                            role = Role.Button,
+                            onLongClick = {
+                                onDismissRequest()
+                                onSuperRefresh()
+                            },
+                            onClick = {
+                                onDismissRequest()
+                                onRefresh()
+                            },
+                        ),
+                    contentAlignment = Alignment.Center,
                 ) {
-                    Icon(
-                        painter = painterResource(ResourcesR.drawable.ic_refresh_24dp),
-                        contentDescription = null,
-                    )
+                    androidx.compose.foundation.layout.Box(
+                        modifier = Modifier.padding(12.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            painter = painterResource(ResourcesR.drawable.ic_refresh_24dp),
+                            contentDescription = null,
+                        )
+                    }
                 }
                 Text(
                     text = "更新",

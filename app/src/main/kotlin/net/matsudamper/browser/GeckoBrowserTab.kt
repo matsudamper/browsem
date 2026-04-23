@@ -528,6 +528,7 @@ internal fun GeckoBrowserTab(
                     canGoBack = state.canGoBack,
                     onLongPressHistory = { showTabHistorySheet = true },
                     onRefresh = state::onRefresh,
+                    onSuperRefresh = state::onSuperRefresh,
                     onTranslatePage = { state.onTranslate(translationProvider) },
                     isSimpleView = state.isSimpleViewActive,
                     onSimpleView = state::toggleSimpleView,
