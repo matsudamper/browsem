@@ -149,11 +149,6 @@ internal fun GeckoBrowserTab(
     var sessionReleasedOnStop by remember(session) { mutableStateOf(false) }
     var waitingForSurfaceRestore by remember(session) { mutableStateOf(false) }
     val resumeCoverColor = MaterialTheme.colorScheme.surface.toArgb()
-    // ホームに追加ダイアログの表示状態
-    var showAddToHomeScreenDialog by remember { mutableStateOf(false) }
-    var addToHomeUrl by remember { mutableStateOf("") }
-    var addToHomeTitle by remember { mutableStateOf("") }
-    var addToHomeFavicon by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
 
     // ファイルピッカー（単一ファイル選択）Google Photos を含むピッカーを表示するため ACTION_GET_CONTENT を使用
     val singleFileLauncher = rememberLauncherForActivityResult(
@@ -548,12 +543,7 @@ internal fun GeckoBrowserTab(
                         }
                         onToolbarDragEnd()
                     },
-                    onAddToHomeScreen = {
-                        addToHomeUrl = state.currentPageUrl
-                        addToHomeTitle = state.currentPageTitle
-                        addToHomeFavicon = browserTab.faviconBitmap
-                        showAddToHomeScreenDialog = true
-                    },
+                    onAddToHomeScreen = state::requestAddToHomeScreen,
                 )
             }
             // 翻訳元・翻訳先の選択肢：検出済み言語＋英語＋日本語（重複除去）
@@ -639,12 +629,13 @@ internal fun GeckoBrowserTab(
     }
 
     // ホームに追加ダイアログ
-    if (showAddToHomeScreenDialog) {
+    state.addToHomeScreenState?.let { addToHomeScreenState ->
         AddToHomeScreenDialog(
-            url = addToHomeUrl,
-            title = addToHomeTitle,
-            favicon = addToHomeFavicon,
-            onDismiss = { showAddToHomeScreenDialog = false },
+            url = addToHomeScreenState.url,
+            title = addToHomeScreenState.title,
+            favicon = addToHomeScreenState.favicon,
+            isIconLoading = addToHomeScreenState.isIconLoading,
+            onDismiss = state::dismissAddToHomeScreen,
         )
     }
 

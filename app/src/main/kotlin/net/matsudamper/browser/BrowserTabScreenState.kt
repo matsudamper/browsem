@@ -17,13 +17,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import java.net.URL
 import net.matsudamper.browser.data.TranslationProvider
 import net.matsudamper.browser.ReadabilityArticle
 import net.matsudamper.browser.ReadabilityWebExtension
+import org.json.JSONObject
 import org.koin.compose.koinInject
 import org.mozilla.geckoview.AllowOrDeny
 import org.mozilla.geckoview.GeckoResult
@@ -125,6 +128,7 @@ internal class BrowserTabScreenState(
     // onLocationChange で履歴記録をスキップする残り回数
     // goBack() / goForward() を複数回連続で呼ぶ場合にもカウンタで対応する
     private var skipHistoryRecordCount: Int = 0
+    var webAppManifestJson by mutableStateOf<String?>(null)
 
     // --- タブ内ナビゲーション履歴（GeckoView の HistoryDelegate から同期） ---
     var tabHistoryItems by mutableStateOf<List<TabHistoryItem>>(emptyList())
@@ -159,6 +163,18 @@ internal class BrowserTabScreenState(
     // --- Context menu state ---
     var imageContextMenuUrl by mutableStateOf<String?>(null)
     var linkContextMenuUrl by mutableStateOf<String?>(null)
+
+    // --- ホームに追加ダイアログ状態 ---
+    var addToHomeScreenState by mutableStateOf<AddToHomeScreenState?>(null)
+        private set
+    private var addToHomeIconJob: Job? = null
+
+    data class AddToHomeScreenState(
+        val url: String,
+        val title: String,
+        val favicon: Bitmap?,
+        val isIconLoading: Boolean,
+    )
 
     // --- プロンプトダイアログ状態（分離済み） ---
     val promptDialogState = PromptDialogState(coroutineScope)
@@ -570,6 +586,61 @@ internal class BrowserTabScreenState(
         simpleViewArticle = null
     }
 
+    fun requestAddToHomeScreen() {
+        val pageUrl = currentPageUrl
+        val pageTitle = currentPageTitle
+        val manifestJson = webAppManifestJson
+        val fallbackFavicon = browserTab.faviconBitmap
+        addToHomeIconJob?.cancel()
+        addToHomeScreenState = AddToHomeScreenState(
+            url = pageUrl,
+            title = pageTitle,
+            favicon = null,
+            isIconLoading = true,
+        )
+        addToHomeIconJob = coroutineScope.launch {
+            // CancellationException は runCatching で握りつぶさずに呼び出し側へ伝播させる。
+            // 同一URLで requestAddToHomeScreen() を再送した際、旧ジョブの cancel() 後に
+            // このコルーチンが継続して新リクエストの isIconLoading=false を書き戻すのを防ぐ。
+            val fetchedIcon = try {
+                HomeScreenIconFetcher.fetchIcon(
+                    pageUrl = pageUrl,
+                    webAppManifestJson = manifestJson,
+                )
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                null
+            }
+            try {
+                val current = addToHomeScreenState ?: return@launch
+                if (current.url != pageUrl) return@launch
+                addToHomeScreenState = current.copy(
+                    favicon = fetchedIcon ?: fallbackFavicon,
+                    isIconLoading = false,
+                )
+                if (fetchedIcon != null && currentPageUrl == pageUrl) {
+                    browserTab.faviconBitmap = fetchedIcon
+                }
+            } finally {
+                // 予期せぬ例外でもスピナー表示が残らないようロード中状態を必ず解除する
+                val current = addToHomeScreenState
+                if (current != null && current.url == pageUrl && current.isIconLoading) {
+                    addToHomeScreenState = current.copy(
+                        favicon = current.favicon ?: fallbackFavicon,
+                        isIconLoading = false,
+                    )
+                }
+            }
+        }
+    }
+
+    fun dismissAddToHomeScreen() {
+        addToHomeIconJob?.cancel()
+        addToHomeIconJob = null
+        addToHomeScreenState = null
+    }
+
     fun copyCurrentPageUrl() {
         if (currentPageUrl.isBlank()) return
         copyUrlToClipboard(currentPageUrl)
@@ -723,6 +794,10 @@ internal class BrowserTabScreenState(
         }
     }
 
+    override fun onWebAppManifest(manifest: JSONObject) {
+        webAppManifestJson = manifest.toString()
+    }
+
     override fun onContextMenu(element: GeckoSession.ContentDelegate.ContextElement) {
         val linkUri = element.linkUri
         if (linkUri != null) {
@@ -763,6 +838,7 @@ internal class BrowserTabScreenState(
         markRenderingPending()
         // 新しいページへの遷移時にfaviconをリセット
         browserTab.faviconBitmap = null
+        webAppManifestJson = null
         isFullPageLoadPending = true
     }
 
