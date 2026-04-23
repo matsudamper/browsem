@@ -598,18 +598,31 @@ internal class BrowserTabScreenState(
             isIconLoading = true,
         )
         addToHomeIconJob = coroutineScope.launch {
-            val fetchedIcon = HomeScreenIconFetcher.fetchIcon(
-                pageUrl = pageUrl,
-                webAppManifestJson = manifestJson,
-            )
-            val current = addToHomeScreenState ?: return@launch
-            if (current.url != pageUrl) return@launch
-            addToHomeScreenState = current.copy(
-                favicon = fetchedIcon ?: fallbackFavicon,
-                isIconLoading = false,
-            )
-            if (fetchedIcon != null && currentPageUrl == pageUrl) {
-                browserTab.faviconBitmap = fetchedIcon
+            val fetchedIcon = runCatching {
+                HomeScreenIconFetcher.fetchIcon(
+                    pageUrl = pageUrl,
+                    webAppManifestJson = manifestJson,
+                )
+            }.getOrNull()
+            try {
+                val current = addToHomeScreenState ?: return@launch
+                if (current.url != pageUrl) return@launch
+                addToHomeScreenState = current.copy(
+                    favicon = fetchedIcon ?: fallbackFavicon,
+                    isIconLoading = false,
+                )
+                if (fetchedIcon != null && currentPageUrl == pageUrl) {
+                    browserTab.faviconBitmap = fetchedIcon
+                }
+            } finally {
+                // 予期せぬ例外でもスピナー表示が残らないようロード中状態を必ず解除する
+                val current = addToHomeScreenState
+                if (current != null && current.url == pageUrl && current.isIconLoading) {
+                    addToHomeScreenState = current.copy(
+                        favicon = current.favicon ?: fallbackFavicon,
+                        isIconLoading = false,
+                    )
+                }
             }
         }
     }
