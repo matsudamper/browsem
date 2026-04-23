@@ -29,7 +29,7 @@ uiautomator = "2.3.0"
 detekt = "2.0.0-alpha.2"
 composeRules = "0.5.7"
 mockk = "1.14.9"
-robolectric = "4.15.1"
+robolectric = "4.16.1"
 
 [libraries]
 androidx-compose-bom = { module = "androidx.compose:compose-bom", version.ref = "composeBom" }
