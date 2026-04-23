@@ -3,6 +3,7 @@ package net.matsudamper.browser
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONObject
@@ -32,7 +33,11 @@ internal object HomeScreenIconFetcher {
     suspend fun fetchIcon(pageUrl: String, webAppManifestJson: String?): Bitmap? {
         return withContext(Dispatchers.IO) {
             withTimeoutOrNull(FETCH_TIMEOUT_MS.toLong()) {
-                fetchIconBlocking(pageUrl, webAppManifestJson)
+                // runInterruptible でブロッキング I/O を包むと、キャンセル時にスレッドが
+                // interrupt され HttpURLConnection の読み書きが中断される。
+                runInterruptible {
+                    fetchIconBlocking(pageUrl, webAppManifestJson)
+                }
             }
         }
     }
@@ -81,6 +86,7 @@ internal object HomeScreenIconFetcher {
 
         var attemptCount = 0
         for (candidate in candidates) {
+            if (Thread.currentThread().isInterrupted) break
             if (attemptCount >= MAX_ICON_FETCH_ATTEMPTS) break
             attemptCount++
             val bitmap = fetchBitmap(candidate.url) ?: continue
