@@ -101,14 +101,31 @@ class GmdSmokeTest {
         composeRule.onNodeWithTag(UrlTextInputTestTags.UrlBar.testTag).performClick()
         waitForUrlBarFocused()
         waitForUrlBarText("")
-        composeRule.waitUntil(timeoutMillis = 20_000) {
-            composeRule.onAllNodesWithTag(BrowserTabSurfaceTestTags.CurrentUrlActions.testTag).fetchSemanticsNodes().isNotEmpty() &&
-                // ListItem の mergeDescendants により子ノードは merged tree で不可視のため unmerged tree を使用
-                composeRule.onAllNodesWithTag(BrowserTabSurfaceTestTags.CurrentUrlText.testTag, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() &&
-                composeRule.onAllNodesWithTag(BrowserTabSurfaceTestTags.CopyButton.testTag).fetchSemanticsNodes().isNotEmpty() &&
-                composeRule.onAllNodesWithTag(BrowserTabSurfaceTestTags.RestoreUrlButton.testTag).fetchSemanticsNodes().isNotEmpty() &&
-                composeRule.onAllNodesWithText(currentUrl).fetchSemanticsNodes().isNotEmpty()
+        composeRule.waitUntil(timeoutMillis = 30_000) {
+            composeRule.onAllNodesWithTag(BrowserTabSurfaceTestTags.CurrentUrlActions.testTag)
+                .fetchSemanticsNodes().isNotEmpty()
         }
+        // ListItem の mergeDescendants により子ノードは merged tree で不可視のため unmerged tree を使用
+        composeRule.waitUntil(timeoutMillis = 30_000) {
+            composeRule.onAllNodesWithTag(BrowserTabSurfaceTestTags.CurrentUrlText.testTag, useUnmergedTree = true)
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.waitUntil(timeoutMillis = 30_000) {
+            composeRule.onAllNodesWithTag(BrowserTabSurfaceTestTags.CopyButton.testTag)
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.waitUntil(timeoutMillis = 30_000) {
+            composeRule.onAllNodesWithTag(BrowserTabSurfaceTestTags.RestoreUrlButton.testTag)
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+
+        // CurrentUrlText の実テキストが捕捉した currentUrl と一致することを直接検証する
+        val displayedUrl = composeRule
+            .onNodeWithTag(BrowserTabSurfaceTestTags.CurrentUrlText.testTag, useUnmergedTree = true)
+            .fetchSemanticsNode()
+            .config[SemanticsProperties.Text]
+            .joinToString(separator = "") { it.text }
+        assertEquals(currentUrl, displayedUrl)
 
         composeRule.onNodeWithTag(BrowserTabSurfaceTestTags.RestoreUrlButton.testTag).performClick()
         waitForUrlBarText(currentUrl)

@@ -161,8 +161,19 @@ internal class BrowserTabScreenState(
     var findQueryError by mutableStateOf<String?>(null)
 
     // --- Context menu state ---
-    var imageContextMenuUrl by mutableStateOf<String?>(null)
-    var linkContextMenuUrl by mutableStateOf<String?>(null)
+    var contextMenuState by mutableStateOf<ContextMenuState?>(null)
+        private set
+
+    fun dismissContextMenu() {
+        contextMenuState = null
+    }
+
+    @Stable
+    sealed interface ContextMenuState {
+        data class Link(val url: String) : ContextMenuState
+        data class Image(val srcUrl: String) : ContextMenuState
+        data class LinkWithImage(val url: String, val imageSrcUrl: String) : ContextMenuState
+    }
 
     // --- ホームに追加ダイアログ状態 ---
     var addToHomeScreenState by mutableStateOf<AddToHomeScreenState?>(null)
@@ -225,6 +236,11 @@ internal class BrowserTabScreenState(
 
     fun onRefresh() {
         refreshCurrentPage()
+    }
+
+    fun onSuperRefresh() {
+        // キャッシュをバイパスしてリロード（スーパーリフレッシュ）
+        superRefreshCurrentPage()
     }
 
     fun onRefreshFromSwipe() {
@@ -478,7 +494,7 @@ internal class BrowserTabScreenState(
     }
 
     fun downloadImage(imageUrl: String) {
-        imageContextMenuUrl = null
+        dismissContextMenu()
         // suspend 前に referrerUrl を確定させる（許可ダイアログ中にページ遷移しても影響を受けないため）
         val referrerUrl = currentPageUrl
         coroutineScope.launch {
@@ -648,7 +664,7 @@ internal class BrowserTabScreenState(
 
     fun copyLinkUrl(url: String) {
         copyUrlToClipboard(url)
-        linkContextMenuUrl = null
+        dismissContextMenu()
     }
 
     fun captureTabPreview(geckoView: GeckoView, onCaptured: (() -> Unit)? = null) {
@@ -800,20 +816,15 @@ internal class BrowserTabScreenState(
 
     override fun onContextMenu(element: GeckoSession.ContentDelegate.ContextElement) {
         val linkUri = element.linkUri
-        if (linkUri != null) {
-            linkContextMenuUrl = linkUri
-            return
-        }
-        when (element.type) {
-            GeckoSession.ContentDelegate.ContextElement.TYPE_IMAGE -> {
-                imageContextMenuUrl = element.srcUri
-            }
-
-            GeckoSession.ContentDelegate.ContextElement.TYPE_AUDIO,
-            GeckoSession.ContentDelegate.ContextElement.TYPE_NONE,
-            GeckoSession.ContentDelegate.ContextElement.TYPE_VIDEO -> {
-                // TODO
-            }
+        val srcUri = element.srcUri
+        val isImage = element.type == GeckoSession.ContentDelegate.ContextElement.TYPE_IMAGE
+        contextMenuState = when {
+            linkUri != null && isImage && srcUri != null ->
+                ContextMenuState.LinkWithImage(url = linkUri, imageSrcUrl = srcUri)
+            linkUri != null -> ContextMenuState.Link(url = linkUri)
+            isImage && srcUri != null -> ContextMenuState.Image(srcUrl = srcUri)
+            // AUDIO / VIDEO / NONE は未対応
+            else -> null
         }
     }
 
@@ -943,6 +954,25 @@ internal class BrowserTabScreenState(
         }
         markRenderingPending()
         session.reload()
+    }
+
+    private fun superRefreshCurrentPage() {
+        // キャッシュを完全にバイパスして再読み込みする
+        val retryUrl = pageLoadError?.failingUrl?.takeIf { it.isNotBlank() }
+        clearPageLoadError()
+        if (retryUrl != null) {
+            currentPageUrl = retryUrl
+            if (!isUrlInputFocused) {
+                urlInput = retryUrl
+            }
+            session.load(
+                GeckoSession.Loader()
+                    .uri(retryUrl)
+                    .flags(GeckoSession.LOAD_FLAGS_BYPASS_CACHE),
+            )
+            return
+        }
+        session.reload(GeckoSession.LOAD_FLAGS_BYPASS_CACHE)
     }
 
     private fun clearPageLoadError() {

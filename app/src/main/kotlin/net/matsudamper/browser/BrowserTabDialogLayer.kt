@@ -53,66 +53,21 @@ internal fun BrowserTabDialogLayer(
     enableTabUi: Boolean,
     onOpenNewTabRequest: (String) -> Unit,
 ) {
-    state.imageContextMenuUrl?.let { imageUrl ->
-        AlertDialog(
-            onDismissRequest = { state.imageContextMenuUrl = null },
-            title = { Text(text = "画像") },
-            text = { Text(text = "この画像をダウンロードしますか？") },
-            confirmButton = {
-                TextButton(onClick = { state.downloadImage(imageUrl) }) {
-                    Text(text = "ダウンロード")
-                }
+    state.contextMenuState?.let { menu ->
+        ContextMenuDialog(
+            menu = menu,
+            enableTabUi = enableTabUi,
+            onOpenNewTab = { url ->
+                onOpenNewTabRequest(url)
+                state.dismissContextMenu()
             },
-            dismissButton = {
-                TextButton(onClick = { state.imageContextMenuUrl = null }) {
-                    Text(text = "キャンセル")
-                }
+            onOpenUrl = { url ->
+                state.onUrlSubmit(url)
+                state.dismissContextMenu()
             },
-        )
-    }
-
-    state.linkContextMenuUrl?.let { linkUrl ->
-        AlertDialog(
-            onDismissRequest = { state.linkContextMenuUrl = null },
-            title = { Text(text = "リンク") },
-            text = {
-                Text(
-                    text = linkUrl,
-                    maxLines = 3,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = { state.copyLinkUrl(linkUrl) }) {
-                    Text("URLをコピー")
-                }
-            },
-            dismissButton = {
-                Column {
-                    if (enableTabUi) {
-                        TextButton(
-                            onClick = {
-                                onOpenNewTabRequest(linkUrl)
-                                state.linkContextMenuUrl = null
-                            },
-                        ) {
-                            Text("新しいタブで開く")
-                        }
-                    } else {
-                        TextButton(
-                            onClick = {
-                                state.onUrlSubmit(linkUrl)
-                                state.linkContextMenuUrl = null
-                            },
-                        ) {
-                            Text("開く")
-                        }
-                    }
-                    TextButton(onClick = { state.linkContextMenuUrl = null }) {
-                        Text("キャンセル")
-                    }
-                }
-            },
+            onCopyLink = { url -> state.copyLinkUrl(url) },
+            onDownloadImage = { url -> state.downloadImage(url) },
+            onDismiss = state::dismissContextMenu,
         )
     }
 
@@ -390,6 +345,100 @@ internal fun BrowserTabDialogLayer(
 }
 
 @Composable
+private fun ContextMenuDialog(
+    menu: BrowserTabScreenState.ContextMenuState,
+    enableTabUi: Boolean,
+    onOpenNewTab: (String) -> Unit,
+    onOpenUrl: (String) -> Unit,
+    onCopyLink: (String) -> Unit,
+    onDownloadImage: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val title = when (menu) {
+        is BrowserTabScreenState.ContextMenuState.Link -> "リンク"
+        is BrowserTabScreenState.ContextMenuState.Image -> "画像"
+        is BrowserTabScreenState.ContextMenuState.LinkWithImage -> "リンクと画像"
+    }
+    val bodyText = when (menu) {
+        is BrowserTabScreenState.ContextMenuState.Link -> menu.url
+        is BrowserTabScreenState.ContextMenuState.Image -> "この画像をダウンロードしますか？"
+        is BrowserTabScreenState.ContextMenuState.LinkWithImage -> menu.url
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(text = title) },
+        text = {
+            Text(
+                text = bodyText,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis,
+            )
+        },
+        // ボタンを縦に並べたいので confirm は空にして dismissButton スロットに集約する
+        confirmButton = {},
+        dismissButton = {
+            Column {
+                when (menu) {
+                    is BrowserTabScreenState.ContextMenuState.Link -> {
+                        LinkActionButtons(
+                            url = menu.url,
+                            enableTabUi = enableTabUi,
+                            onOpenNewTab = onOpenNewTab,
+                            onOpenUrl = onOpenUrl,
+                            onCopyLink = onCopyLink,
+                        )
+                    }
+                    is BrowserTabScreenState.ContextMenuState.Image -> {
+                        TextButton(onClick = { onDownloadImage(menu.srcUrl) }) {
+                            Text(text = "ダウンロード")
+                        }
+                    }
+                    is BrowserTabScreenState.ContextMenuState.LinkWithImage -> {
+                        LinkActionButtons(
+                            url = menu.url,
+                            enableTabUi = enableTabUi,
+                            onOpenNewTab = onOpenNewTab,
+                            onOpenUrl = onOpenUrl,
+                            onCopyLink = onCopyLink,
+                        )
+                        TextButton(onClick = { onDownloadImage(menu.imageSrcUrl) }) {
+                            Text(text = "画像をダウンロード")
+                        }
+                    }
+                }
+                TextButton(onClick = onDismiss) {
+                    Text(text = "キャンセル")
+                }
+            }
+        },
+    )
+}
+
+@Composable
+private fun LinkActionButtons(
+    url: String,
+    enableTabUi: Boolean,
+    onOpenNewTab: (String) -> Unit,
+    onOpenUrl: (String) -> Unit,
+    onCopyLink: (String) -> Unit,
+) {
+    Column {
+        if (enableTabUi) {
+            TextButton(onClick = { onOpenNewTab(url) }) {
+                Text(text = "新しいタブで開く")
+            }
+        } else {
+            TextButton(onClick = { onOpenUrl(url) }) {
+                Text(text = "開く")
+            }
+        }
+        TextButton(onClick = { onCopyLink(url) }) {
+            Text(text = "URLをコピー")
+        }
+    }
+}
+
+@Composable
 private fun AuthPromptDialog(
     prompt: GeckoSession.PromptDelegate.AuthPrompt,
     onConfirm: (username: String?, password: String) -> Unit,
@@ -616,10 +665,6 @@ private data class DateTimeLocalParsed(
     val hour: Int,
     val minute: Int,
 )
-
-private operator fun DateTimeLocalParsed.component1() = dateMillis
-private operator fun DateTimeLocalParsed.component2() = hour
-private operator fun DateTimeLocalParsed.component3() = minute
 
 /** "YYYY-MM-DD" 形式の文字列を UTC ミリ秒に変換する */
 private fun parseDateToMillis(value: String?): Long? {
