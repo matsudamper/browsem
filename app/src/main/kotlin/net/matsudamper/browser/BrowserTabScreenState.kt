@@ -233,7 +233,9 @@ internal class BrowserTabScreenState(
         if (tabHistoryCurrentIndex < tabHistoryItems.lastIndex) {
             tabHistoryCurrentIndex++
         }
-        markRenderingPending()
+        // 履歴移動先が SPA 同一ドキュメント遷移かフルページロードか不明のため
+        // ここでは markRenderingPending() を呼ばず、フルロードなら onPageStart で
+        // プレースホルダーを出す。SPA では一瞬プレースホルダーが見えるのを防ぐ
         session.goForward()
     }
 
@@ -243,7 +245,6 @@ internal class BrowserTabScreenState(
         if (tabHistoryCurrentIndex > 0) {
             tabHistoryCurrentIndex--
         }
-        markRenderingPending()
         session.goBack()
     }
 
@@ -252,7 +253,6 @@ internal class BrowserTabScreenState(
         if (targetIndex == tabHistoryCurrentIndex) return
         skipHistoryRecordCount++
         tabHistoryCurrentIndex = targetIndex
-        markRenderingPending()
         session.gotoHistoryIndex(targetIndex)
     }
 
@@ -660,6 +660,13 @@ internal class BrowserTabScreenState(
         if (isFullPageLoadPending) {
             maybeResetToolbarColorOnPageStart(url)
             isFullPageLoadPending = false
+        } else {
+            // SPA 遷移（pushState / 同一ドキュメント内 history 移動）では
+            // onPageStart / onPageStop が発火しないため、onGoBack 等で
+            // markRenderingPending() により false になった renderReady が戻らず、
+            // プレースホルダーが被り続ける。GeckoView は既に新しいコンテンツを
+            // 描画しており、遷移前のページは FCP 済みなので両フラグを復帰させる
+            markRenderingDone()
         }
         currentPageUrl = url
         if (!isUrlInputFocused) {
@@ -905,6 +912,11 @@ internal class BrowserTabScreenState(
     private fun markRenderingPending() {
         renderReady = false
         previewCaptureReady = false
+    }
+
+    private fun markRenderingDone() {
+        renderReady = true
+        previewCaptureReady = true
     }
 
     private fun copyUrlToClipboard(url: String) {
