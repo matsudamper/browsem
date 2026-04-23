@@ -64,6 +64,10 @@ Proto → DataStore/Room → Repository → ViewModel(ViewModelStateFlow) → Ui
 ### その他
 Compose Material Icons ExtendedはDeprecatedなので使用禁止。
 
+## デグレ防止
+
+コードを変更・削除する前に、必ず `git log -p` で対象コードが追加されたコミットを確認し、その目的と経緯を把握してから作業すること。
+
 ## テスト方針
 
 - 単体テスト: JUnit 4。`./gradlew test` で実行 (Paparazzi テストは自動除外)
