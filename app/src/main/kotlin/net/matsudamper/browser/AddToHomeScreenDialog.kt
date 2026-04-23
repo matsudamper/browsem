@@ -5,13 +5,21 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
 import android.widget.Toast
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
 import androidx.core.content.pm.ShortcutInfoCompat
 import androidx.core.content.pm.ShortcutManagerCompat
 import androidx.core.graphics.drawable.IconCompat
@@ -27,13 +35,25 @@ internal fun AddToHomeScreenDialog(
     url: String,
     title: String,
     favicon: Bitmap?,
+    isIconLoading: Boolean,
     onDismiss: () -> Unit,
 ) {
     val context = LocalContext.current
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("ホームに追加") },
-        text = { Text(title.ifBlank { url }) },
+        text = {
+            Column {
+                Text(title.ifBlank { url })
+                if (isIconLoading) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("アイコンを取得中")
+                    }
+                }
+            }
+        },
         dismissButton = {
             TextButton(onClick = onDismiss) {
                 Text("キャンセル")
@@ -46,6 +66,7 @@ internal fun AddToHomeScreenDialog(
                         addShortcutToHome(context, url, title, favicon)
                         onDismiss()
                     },
+                    enabled = !isIconLoading,
                 ) {
                     Text("ショートカット")
                 }
@@ -54,6 +75,7 @@ internal fun AddToHomeScreenDialog(
                         addWebAppToHome(context, url, title, favicon)
                         onDismiss()
                     },
+                    enabled = !isIconLoading,
                 ) {
                     Text("アプリ")
                 }
@@ -124,6 +146,7 @@ private fun PreviewWithFavicon() {
             url = "https://example.com",
             title = "Example Site",
             favicon = null,
+            isIconLoading = false,
             onDismiss = {},
         )
     }
@@ -137,6 +160,7 @@ private fun PreviewNoTitle() {
             url = "https://example.com/very/long/path?query=value",
             title = "",
             favicon = null,
+            isIconLoading = true,
             onDismiss = {},
         )
     }
