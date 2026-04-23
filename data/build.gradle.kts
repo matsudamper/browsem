@@ -30,4 +30,5 @@ dependencies {
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)
     testImplementation(libs.junit4)
+    testImplementation(libs.robolectric)
 }
