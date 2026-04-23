@@ -217,10 +217,10 @@ internal class PromptDialogState(
                 return null
             }
             val rawExtension = resolveExtension(context, uri)
-            // パス操作を防ぐため、英数字以外の文字を除去してサニタイズする
-            val extension = rawExtension
-                ?.filter { it.isLetterOrDigit() }
-                ?.takeIf { it.isNotEmpty() }
+            // MimeTypeMap で認識される拡張子のみ使用し、不明な値は無視する
+            val extension = rawExtension?.takeIf {
+                MimeTypeMap.getSingleton().getMimeTypeFromExtension(it) != null
+            }
             val fileName = if (extension != null) {
                 "${UUID.randomUUID()}.$extension"
             } else {
