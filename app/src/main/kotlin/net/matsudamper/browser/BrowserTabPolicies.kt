@@ -1,5 +1,20 @@
 package net.matsudamper.browser
 
+/**
+ * ページ遷移時に翻訳状態をリセットすべきかを判定する。
+ *
+ * data: URL（翻訳コンテンツ）や翻訳元URLへの遷移ではリセットしない。
+ */
+internal fun shouldResetTranslationOnLocationChange(
+    translationState: TranslationState,
+    url: String,
+    originalPageUrlForRevert: String?,
+): Boolean {
+    return translationState != TranslationState.Idle &&
+        !url.startsWith("data:") &&
+        url != originalPageUrlForRevert
+}
+
 internal fun isThemeColorForCurrentPage(currentPageUrl: String, reportedUrl: String): Boolean {
     if (reportedUrl.isBlank()) return false
     return normalizedBrowserPageKey(currentPageUrl) == normalizedBrowserPageKey(reportedUrl)
