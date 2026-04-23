@@ -19,6 +19,7 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import java.net.URL
 import net.matsudamper.browser.data.TranslationProvider
@@ -161,6 +162,18 @@ internal class BrowserTabScreenState(
     // --- Context menu state ---
     var imageContextMenuUrl by mutableStateOf<String?>(null)
     var linkContextMenuUrl by mutableStateOf<String?>(null)
+
+    // --- ホームに追加ダイアログ状態 ---
+    var addToHomeScreenState by mutableStateOf<AddToHomeScreenState?>(null)
+        private set
+    private var addToHomeIconJob: Job? = null
+
+    data class AddToHomeScreenState(
+        val url: String,
+        val title: String,
+        val favicon: Bitmap?,
+        val isIconLoading: Boolean,
+    )
 
     // --- プロンプトダイアログ状態（分離済み） ---
     val promptDialogState = PromptDialogState(coroutineScope)
@@ -570,6 +583,41 @@ internal class BrowserTabScreenState(
 
     fun dismissSimpleView() {
         simpleViewArticle = null
+    }
+
+    fun requestAddToHomeScreen() {
+        val pageUrl = currentPageUrl
+        val pageTitle = currentPageTitle
+        val manifestJson = webAppManifestJson
+        val fallbackFavicon = browserTab.faviconBitmap
+        addToHomeIconJob?.cancel()
+        addToHomeScreenState = AddToHomeScreenState(
+            url = pageUrl,
+            title = pageTitle,
+            favicon = null,
+            isIconLoading = true,
+        )
+        addToHomeIconJob = coroutineScope.launch {
+            val fetchedIcon = HomeScreenIconFetcher.fetchIcon(
+                pageUrl = pageUrl,
+                webAppManifestJson = manifestJson,
+            )
+            val current = addToHomeScreenState ?: return@launch
+            if (current.url != pageUrl) return@launch
+            addToHomeScreenState = current.copy(
+                favicon = fetchedIcon ?: fallbackFavicon,
+                isIconLoading = false,
+            )
+            if (fetchedIcon != null && currentPageUrl == pageUrl) {
+                browserTab.faviconBitmap = fetchedIcon
+            }
+        }
+    }
+
+    fun dismissAddToHomeScreen() {
+        addToHomeIconJob?.cancel()
+        addToHomeIconJob = null
+        addToHomeScreenState = null
     }
 
     fun copyCurrentPageUrl() {
