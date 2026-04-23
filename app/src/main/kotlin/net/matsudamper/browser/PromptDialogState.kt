@@ -216,7 +216,11 @@ internal class PromptDialogState(
                 Log.w("PromptDialogState", "キャッシュディレクトリの作成に失敗: $cacheDir")
                 return null
             }
-            val extension = resolveExtension(context, uri)
+            val rawExtension = resolveExtension(context, uri)
+            // パス操作を防ぐため、英数字以外の文字を除去してサニタイズする
+            val extension = rawExtension
+                ?.filter { it.isLetterOrDigit() }
+                ?.takeIf { it.isNotEmpty() }
             val fileName = if (extension != null) {
                 "${UUID.randomUUID()}.$extension"
             } else {
