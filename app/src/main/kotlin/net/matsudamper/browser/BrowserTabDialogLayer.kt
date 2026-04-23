@@ -422,17 +422,19 @@ private fun LinkActionButtons(
     onOpenUrl: (String) -> Unit,
     onCopyLink: (String) -> Unit,
 ) {
-    if (enableTabUi) {
-        TextButton(onClick = { onOpenNewTab(url) }) {
-            Text(text = "新しいタブで開く")
+    Column {
+        if (enableTabUi) {
+            TextButton(onClick = { onOpenNewTab(url) }) {
+                Text(text = "新しいタブで開く")
+            }
+        } else {
+            TextButton(onClick = { onOpenUrl(url) }) {
+                Text(text = "開く")
+            }
         }
-    } else {
-        TextButton(onClick = { onOpenUrl(url) }) {
-            Text(text = "開く")
+        TextButton(onClick = { onCopyLink(url) }) {
+            Text(text = "URLをコピー")
         }
-    }
-    TextButton(onClick = { onCopyLink(url) }) {
-        Text(text = "URLをコピー")
     }
 }
 
@@ -663,10 +665,6 @@ private data class DateTimeLocalParsed(
     val hour: Int,
     val minute: Int,
 )
-
-private operator fun DateTimeLocalParsed.component1() = dateMillis
-private operator fun DateTimeLocalParsed.component2() = hour
-private operator fun DateTimeLocalParsed.component3() = minute
 
 /** "YYYY-MM-DD" 形式の文字列を UTC ミリ秒に変換する */
 private fun parseDateToMillis(value: String?): Long? {
