@@ -108,6 +108,13 @@ internal class BrowserViewModel(
         // バックスタックの状態に依存せず、復元は必ず実行される。
         viewModelScope.launch {
             val tabId = restoreTabs()
+            // 初回起動時にタブ件数表示が空になるのを防ぐため、タブ一覧画面を開く前に
+            // デフォルトグループを作成し、復元済みタブを割り当てておく。
+            // TabsScreenViewModel でも同様の初期化を行うが、最初に表示されるのは
+            // BrowserScreen であり、グループ割当が無いと groupTabCount が null になる。
+            tabGroupRepository.createDefaultGroupIfEmpty(
+                browserTabController.tabs.map { it.tabId },
+            )
             eventHandler.trySend { it.onTabsRestored(tabId) }
         }
     }
