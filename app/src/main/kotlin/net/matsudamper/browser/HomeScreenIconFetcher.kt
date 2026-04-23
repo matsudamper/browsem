@@ -49,7 +49,7 @@ internal object HomeScreenIconFetcher {
         if (!pageUri.isHttpUri() || pageUri.host.isNullOrBlank()) return null
 
         val pageHtmlIcons = fetchText(pageUri.toString(), MAX_HTML_BYTES)
-            ?.let { parseHtmlIconCandidates(it, pageUri) }
+            ?.let { parseHtmlIconCandidates(it.body, it.finalUri) }
             ?: HtmlIconCandidates()
         val storedManifestBaseUri = pageHtmlIcons.manifestUrls
             .firstNotNullOfOrNull { manifestUrl ->
@@ -66,10 +66,13 @@ internal object HomeScreenIconFetcher {
         val linkedManifestIcons = pageHtmlIcons.manifestUrls
             .take(2)
             .flatMap { manifestUrl ->
-                val manifestUri = runCatching { URI(manifestUrl) }.getOrNull() ?: return@flatMap emptyList()
+                val fetched = fetchText(manifestUrl, MAX_HTML_BYTES) ?: return@flatMap emptyList()
                 parseManifestIconCandidates(
-                    manifestJson = fetchText(manifestUrl, MAX_HTML_BYTES),
-                    fallbackBaseUri = manifestUri,
+                    manifestJson = fetched.body,
+                    // redirect 後の最終 URL を基準にしないと、/manifest.webmanifest →
+                    // /app/manifest.webmanifest のように別ディレクトリへ飛んだ場合に
+                    // 相対 src の解決先が元 URL のディレクトリになり、実在しない URL になってしまう。
+                    fallbackBaseUri = fetched.finalUri,
                     source = IconSource.LinkedManifest,
                 )
             }
@@ -200,7 +203,7 @@ internal object HomeScreenIconFetcher {
         }
     }
 
-    private fun fetchText(url: String, maxBytes: Int): String? {
+    private fun fetchText(url: String, maxBytes: Int): FetchedText? {
         val connection = openHttpConnection(url, "text/html,application/manifest+json,application/json,*/*")
             ?: return null
         return try {
@@ -208,7 +211,11 @@ internal object HomeScreenIconFetcher {
             val bytes = connection.inputStream.use { input ->
                 readBoundedBytes(input, maxBytes, rejectOnOverflow = false)
             } ?: return null
-            String(bytes, parseCharset(connection.contentType))
+            val body = String(bytes, parseCharset(connection.contentType))
+            val finalUri = runCatching { connection.url.toURI() }.getOrNull()
+                ?.takeIf { it.isHttpUri() }
+                ?: return null
+            FetchedText(body = body, finalUri = finalUri)
         } catch (_: Exception) {
             null
         } finally {
@@ -336,6 +343,11 @@ internal object HomeScreenIconFetcher {
         val scaledHeight = (height * scale).roundToInt().coerceAtLeast(1)
         return Bitmap.createScaledBitmap(this, scaledWidth, scaledHeight, true)
     }
+
+    private data class FetchedText(
+        val body: String,
+        val finalUri: URI,
+    )
 
     private data class HtmlIconCandidates(
         val icons: List<IconCandidate> = emptyList(),
