@@ -25,7 +25,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Before
 import org.junit.Test
-import org.mozilla.geckoview.GeckoSession
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @Suppress("RemoveRedundantBackticks", "NonAsciiCharacters")
@@ -77,7 +76,7 @@ class BrowserScreenViewModelTest {
     private fun createTab(tabId: String): BrowserTab {
         return BrowserTab(
             tabId = tabId,
-            session = GeckoSession(),
+            session = mockk(relaxed = true),
             openerTabId = null,
             currentUrl = "https://example.com/$tabId",
             sessionState = "",
