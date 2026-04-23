@@ -10,8 +10,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
@@ -32,11 +34,47 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+
+@Composable
+@Preview
+private fun PreviewTabCardShortTitle() {
+    TabCard(
+        tab = TabsScreenTabData(id = "1", title = "Google", previewImage = null),
+        selected = false,
+        onSelectTab = {},
+        onCloseTab = {},
+        bitmapCache = LruCache(1),
+        modifier = Modifier
+            .width(160.dp)
+            .height(220.dp),
+    )
+}
+
+@Composable
+@Preview
+private fun PreviewTabCardLongTitle() {
+    TabCard(
+        tab = TabsScreenTabData(
+            id = "2",
+            title = "GitHub - matsudamper/browsem: Android Browser App",
+            previewImage = null,
+        ),
+        selected = false,
+        onSelectTab = {},
+        onCloseTab = {},
+        bitmapCache = LruCache(1),
+        modifier = Modifier
+            .width(160.dp)
+            .height(220.dp),
+    )
+}
 
 @Composable
 internal fun TabCard(
@@ -81,8 +119,9 @@ internal fun TabCard(
                 Text(
                     text = tab.title.ifBlank { "Untitled" },
                     style = MaterialTheme.typography.titleSmall,
-                    maxLines = 1,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.Center,
                     modifier = Modifier.weight(1f),
                 )
                 IconButton(
