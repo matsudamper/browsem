@@ -7,8 +7,8 @@ import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONObject
-import java.io.BufferedInputStream
 import java.io.ByteArrayOutputStream
+import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URI
 import java.net.URL
@@ -21,6 +21,8 @@ internal object HomeScreenIconFetcher {
     private const val CONNECTION_TIMEOUT_MS = 2500
     private const val FETCH_TIMEOUT_MS = 8000
     private const val MAX_HTML_BYTES = 256 * 1024
+    private const val MAX_ICON_IMAGE_BYTES = 2 * 1024 * 1024
+    private const val MAX_DECODED_ICON_DIMENSION = 1024
     private const val MAX_SHORTCUT_ICON_SIZE = 192
     private const val MAX_ICON_FETCH_ATTEMPTS = 20
     private const val USER_AGENT = "Mozilla/5.0 (Android) Browsem"
@@ -204,17 +206,8 @@ internal object HomeScreenIconFetcher {
         return try {
             if (connection.responseCode !in 200..299) return null
             val bytes = connection.inputStream.use { input ->
-                val output = ByteArrayOutputStream()
-                val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
-                var totalBytes = 0
-                while (totalBytes < maxBytes) {
-                    val read = input.read(buffer, 0, minOf(buffer.size, maxBytes - totalBytes))
-                    if (read <= 0) break
-                    output.write(buffer, 0, read)
-                    totalBytes += read
-                }
-                output.toByteArray()
-            }
+                readBoundedBytes(input, maxBytes, rejectOnOverflow = false)
+            } ?: return null
             String(bytes, parseCharset(connection.contentType))
         } catch (_: Exception) {
             null
@@ -233,14 +226,45 @@ internal object HomeScreenIconFetcher {
                 ?.trim()
                 ?.lowercase(Locale.US)
             if (contentType == "image/svg+xml") return null
-            BufferedInputStream(connection.inputStream).use { stream ->
-                BitmapFactory.decodeStream(stream)
-            }
+            // ネットワーク越しに任意サイズの画像を渡されうるため、まずバイト列として
+            // 上限付きで読み込み、寸法だけ先に取ってからサンプリングしてデコードする。
+            val bytes = connection.inputStream.use { input ->
+                readBoundedBytes(input, MAX_ICON_IMAGE_BYTES, rejectOnOverflow = true)
+            } ?: return null
+            decodeBoundedBitmap(bytes)
         } catch (_: Exception) {
             null
         } finally {
             connection.disconnect()
         }
+    }
+
+    private fun readBoundedBytes(input: InputStream, maxBytes: Int, rejectOnOverflow: Boolean): ByteArray? {
+        val output = ByteArrayOutputStream()
+        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+        var totalBytes = 0
+        while (totalBytes < maxBytes) {
+            val read = input.read(buffer, 0, minOf(buffer.size, maxBytes - totalBytes))
+            if (read <= 0) break
+            output.write(buffer, 0, read)
+            totalBytes += read
+        }
+        if (rejectOnOverflow && totalBytes >= maxBytes && input.read() != -1) return null
+        return output.toByteArray()
+    }
+
+    private fun decodeBoundedBitmap(bytes: ByteArray): Bitmap? {
+        val boundsOptions = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, boundsOptions)
+        val width = boundsOptions.outWidth
+        val height = boundsOptions.outHeight
+        if (width <= 0 || height <= 0) return null
+        var sampleSize = 1
+        while (max(width, height) / sampleSize > MAX_DECODED_ICON_DIMENSION) {
+            sampleSize *= 2
+        }
+        val decodeOptions = BitmapFactory.Options().apply { inSampleSize = sampleSize }
+        return BitmapFactory.decodeByteArray(bytes, 0, bytes.size, decodeOptions)
     }
 
     private fun openHttpConnection(url: String, accept: String): HttpURLConnection? {
