@@ -44,9 +44,16 @@ internal object HomeScreenIconFetcher {
         val pageHtmlIcons = fetchText(pageUri.toString(), MAX_HTML_BYTES)
             ?.let { parseHtmlIconCandidates(it, pageUri) }
             ?: HtmlIconCandidates()
+        val storedManifestBaseUri = pageHtmlIcons.manifestUrls
+            .firstNotNullOfOrNull { manifestUrl ->
+                runCatching { URI(manifestUrl) }
+                    .getOrNull()
+                    ?.takeIf { it.isHttpUri() }
+            }
+            ?: pageUri
         val storedManifestIcons = parseManifestIconCandidates(
             manifestJson = webAppManifestJson,
-            fallbackBaseUri = pageUri,
+            fallbackBaseUri = storedManifestBaseUri,
             source = IconSource.StoredManifest,
         )
         val linkedManifestIcons = pageHtmlIcons.manifestUrls
@@ -130,8 +137,8 @@ internal object HomeScreenIconFetcher {
         val manifest = runCatching { JSONObject(manifestJson) }.getOrNull() ?: return emptyList()
         val manifestBaseUri = manifest.optString("href")
             .takeIf { it.isNotBlank() }
+            ?.let { resolveUrl(fallbackBaseUri, it) }
             ?.let { runCatching { URI(it) }.getOrNull() }
-            ?.takeIf { it.isHttpUri() }
             ?: fallbackBaseUri
         val icons = manifest.optJSONArray("icons") ?: return emptyList()
         return buildList {
