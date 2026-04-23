@@ -2,7 +2,9 @@ package net.matsudamper.browser
 
 import android.content.Context
 import android.net.Uri
+import android.provider.OpenableColumns
 import android.util.Log
+import android.webkit.MimeTypeMap
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -214,7 +216,13 @@ internal class PromptDialogState(
                 Log.w("PromptDialogState", "キャッシュディレクトリの作成に失敗: $cacheDir")
                 return null
             }
-            val destFile = File(cacheDir, UUID.randomUUID().toString())
+            val extension = resolveExtension(context, uri)
+            val fileName = if (extension != null) {
+                "${UUID.randomUUID()}.$extension"
+            } else {
+                UUID.randomUUID().toString()
+            }
+            val destFile = File(cacheDir, fileName)
             context.contentResolver.openInputStream(uri)?.use { input ->
                 destFile.outputStream().use { output ->
                     input.copyTo(output)
@@ -225,6 +233,41 @@ internal class PromptDialogState(
             Log.w("PromptDialogState", "コンテンツ URI のキャッシュコピーに失敗", e)
             null
         }
+    }
+
+    /**
+     * content URI からファイルの拡張子を解決する。
+     * 表示名（OpenableColumns.DISPLAY_NAME）から拡張子を取得し、
+     * 取得できない場合は MIME タイプから MimeTypeMap で補完する。
+     */
+    private fun resolveExtension(context: Context, uri: Uri): String? {
+        // 表示名から拡張子を取得
+        val displayName = runCatching {
+            context.contentResolver.query(
+                uri,
+                arrayOf(OpenableColumns.DISPLAY_NAME),
+                null,
+                null,
+                null,
+            )?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    cursor.getString(cursor.getColumnIndexOrThrow(OpenableColumns.DISPLAY_NAME))
+                } else {
+                    null
+                }
+            }
+        }.getOrNull()
+
+        if (displayName != null) {
+            val dotIndex = displayName.lastIndexOf('.')
+            if (dotIndex > 0 && dotIndex < displayName.length - 1) {
+                return displayName.substring(dotIndex + 1)
+            }
+        }
+
+        // 表示名から取得できない場合は MIME タイプから拡張子を補完
+        val mimeType = context.contentResolver.getType(uri) ?: return null
+        return MimeTypeMap.getSingleton().getExtensionFromMimeType(mimeType)
     }
 
     fun confirmBeforeUnloadPrompt(allow: Boolean) {
