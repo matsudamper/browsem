@@ -216,11 +216,8 @@ internal class PromptDialogState(
                 Log.w("PromptDialogState", "キャッシュディレクトリの作成に失敗: $cacheDir")
                 return null
             }
-            val rawExtension = resolveExtension(context, uri)
-            // MimeTypeMap で認識される拡張子のみ使用し、不明な値は無視する
-            val extension = rawExtension?.takeIf {
-                MimeTypeMap.getSingleton().getMimeTypeFromExtension(it) != null
-            }
+            val mimeType = resolveMimeType(context, uri)
+            val extension = MimeTypeMap.getSingleton().getExtensionFromMimeType(mimeType)
             val fileName = if (extension != null) {
                 "${UUID.randomUUID()}.$extension"
             } else {
@@ -240,12 +237,17 @@ internal class PromptDialogState(
     }
 
     /**
-     * content URI からファイルの拡張子を解決する。
-     * 表示名（OpenableColumns.DISPLAY_NAME）から拡張子を取得し、
-     * 取得できない場合は MIME タイプから MimeTypeMap で補完する。
+     * content URI の MIME タイプを解決する。
+     * ContentResolver.getType(uri) を第一候補とし、
+     * null の場合のみ DISPLAY_NAME の拡張子から MimeTypeMap で補完する。
+     * どちらも不明な場合は "application/octet-stream" を返す。
      */
-    private fun resolveExtension(context: Context, uri: Uri): String? {
-        // 表示名から拡張子を取得
+    private fun resolveMimeType(context: Context, uri: Uri): String {
+        // ContentResolver.getType() が最も信頼性が高い
+        val mimeFromResolver = context.contentResolver.getType(uri)
+        if (mimeFromResolver != null) return mimeFromResolver
+
+        // null の場合のみ DISPLAY_NAME の拡張子から補完
         val displayName = runCatching {
             context.contentResolver.query(
                 uri,
@@ -265,13 +267,14 @@ internal class PromptDialogState(
         if (displayName != null) {
             val dotIndex = displayName.lastIndexOf('.')
             if (dotIndex > 0 && dotIndex < displayName.length - 1) {
-                return displayName.substring(dotIndex + 1)
+                val ext = displayName.substring(dotIndex + 1)
+                val mimeFromExt = MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext)
+                if (mimeFromExt != null) return mimeFromExt
             }
         }
 
-        // 表示名から取得できない場合は MIME タイプから拡張子を補完
-        val mimeType = context.contentResolver.getType(uri) ?: return null
-        return MimeTypeMap.getSingleton().getExtensionFromMimeType(mimeType)
+        // それでも不明なら未知のバイナリとして扱う
+        return "application/octet-stream"
     }
 
     fun confirmBeforeUnloadPrompt(allow: Boolean) {
