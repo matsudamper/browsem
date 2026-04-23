@@ -17,6 +17,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -598,12 +599,19 @@ internal class BrowserTabScreenState(
             isIconLoading = true,
         )
         addToHomeIconJob = coroutineScope.launch {
-            val fetchedIcon = runCatching {
+            // CancellationException は runCatching で握りつぶさずに呼び出し側へ伝播させる。
+            // 同一URLで requestAddToHomeScreen() を再送した際、旧ジョブの cancel() 後に
+            // このコルーチンが継続して新リクエストの isIconLoading=false を書き戻すのを防ぐ。
+            val fetchedIcon = try {
                 HomeScreenIconFetcher.fetchIcon(
                     pageUrl = pageUrl,
                     webAppManifestJson = manifestJson,
                 )
-            }.getOrNull()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                null
+            }
             try {
                 val current = addToHomeScreenState ?: return@launch
                 if (current.url != pageUrl) return@launch
