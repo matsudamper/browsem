@@ -5,14 +5,15 @@ import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
@@ -20,10 +21,13 @@ import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
@@ -41,6 +45,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
@@ -304,10 +309,11 @@ private fun TabsScreenLoadedContent(
             ) { page ->
                 val tabsForPage = groupedTabs.getOrElse(page) { emptyList() }
                 Column(
-                    modifier = Modifier.fillMaxSize()
+                    modifier = Modifier
+                        .fillMaxSize()
                         .testTag(TabsScreenTestTags.Page(page).testTag),
                 ) {
-                    // ページヘッダー: 名前変更・削除ボタン・デフォルトトグル
+                    // ページヘッダー: デフォルトトグル・3点メニュー
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -315,22 +321,7 @@ private fun TabsScreenLoadedContent(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        val buttonPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
-                        FilledTonalButton(
-                            onClick = { renameDialogGroupIndex = page },
-                            modifier = Modifier.weight(1f),
-                            contentPadding = buttonPadding,
-                        ) {
-                            Text("名前変更")
-                        }
-                        FilledTonalButton(
-                            onClick = { deleteDialogGroupIndex = page },
-                            modifier = Modifier.weight(1f),
-                            enabled = groups.size > 1,
-                            contentPadding = buttonPadding,
-                        ) {
-                            Text("削除")
-                        }
+                        Spacer(modifier = Modifier.weight(1f))
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -342,10 +333,40 @@ private fun TabsScreenLoadedContent(
                             // 外部アプリ（Intent）経由でURLを開いた際に割り当てるグループを指定する。
                             // タブ一覧での新規追加・target=_blank など、アプリ内操作には適用されない。
                             Switch(
+                                modifier = Modifier.testTag(TabsScreenTestTags.DefaultGroupSwitch(page).testTag),
                                 checked = groups.getOrNull(page)?.isDefault ?: false,
                                 onCheckedChange = { onToggleDefaultGroup(page) },
-                                modifier = Modifier.testTag(TabsScreenTestTags.DefaultGroupSwitch(page).testTag),
                             )
+                        }
+                        // グループの名前変更・削除を格納する3点メニュー
+                        var groupMenuExpanded by remember { mutableStateOf(false) }
+                        Box {
+                            IconButton(onClick = { groupMenuExpanded = true }) {
+                                Icon(
+                                    imageVector = Icons.Default.MoreVert,
+                                    contentDescription = "メニュー",
+                                )
+                            }
+                            DropdownMenu(
+                                expanded = groupMenuExpanded,
+                                onDismissRequest = { groupMenuExpanded = false },
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("名前変更") },
+                                    onClick = {
+                                        groupMenuExpanded = false
+                                        renameDialogGroupIndex = page
+                                    },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("削除") },
+                                    enabled = groups.size > 1,
+                                    onClick = {
+                                        groupMenuExpanded = false
+                                        deleteDialogGroupIndex = page
+                                    },
+                                )
+                            }
                         }
                     }
                     GroupTabGrid(
@@ -506,7 +527,7 @@ sealed interface TabsScreenTestTags {
 
     val testTag get() = "${TabsScreenTestTags::class.java.name}#$id"
 
-    class Page(index: Int): TabsScreenTestTags {
+    class Page(index: Int) : TabsScreenTestTags {
         override val id: String = "page_$index"
     }
 
