@@ -106,7 +106,6 @@ class WebAppActivity : ComponentActivity() {
                         onOpenTabs = {},
                         enableTabUi = false,
                         showInstallExtensionItem = false,
-                        // バックナビゲーションを有効にしてブラウザ履歴を遡れるようにする
                         enableBackNavigation = true,
                         // ウェブアプリモード: 閉じるボタンなし、カスタムタブ風のツールバー
                         webAppMode = true,
