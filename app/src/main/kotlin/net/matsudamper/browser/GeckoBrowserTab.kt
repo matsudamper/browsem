@@ -55,6 +55,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
+import androidx.core.view.OneShotPreDrawListener
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -145,8 +146,9 @@ internal fun GeckoBrowserTab(
     var imeWasVisibleDuringUrlFocus by remember { mutableStateOf(false) }
     var urlBarFocusStartedAtMs by remember { mutableLongStateOf(0L) }
     var geckoView: GeckoView? by remember { mutableStateOf(null) }
-    var sessionReleasedOnStop by remember(session) { mutableStateOf(false) }
-    var waitingForSurfaceRestore by remember(session) { mutableStateOf(false) }
+    // Surface と Session の復元状態を一元管理する state machine。
+    // ON_START / ON_RESUME が重複発火しても state=ACTIVE なら即 no-op にする。
+    var surfaceResumeState by remember(session) { mutableStateOf(SurfaceResumeState.ACTIVE) }
     val resumeCoverColor = MaterialTheme.colorScheme.surface.toArgb()
 
     // ファイルピッカー（単一ファイル選択）Google Photos を含むピッカーを表示するため ACTION_GET_CONTENT を使用
@@ -209,51 +211,82 @@ internal fun GeckoBrowserTab(
             }
     }
 
-    DisposableEffect(lifecycleOwner, session, resumeCoverColor) {
-        fun restoreGeckoSurface(gecko: GeckoView) {
-            if (!waitingForSurfaceRestore && !sessionReleasedOnStop) {
-                return
+    // Surface 復元処理本体。ACTIVE なら即 return。
+    //
+    // Column に .imePadding() が掛かっているため IME 表示中に pause すると GeckoView の
+    // 親が縮む。resume 時は SurfaceView が一旦 stale 寸法で再作成され、layout settle 後に
+    // 正しい寸法へ resize される。ここで Gecko compositor が attach 済みだと
+    // SyncResumeResizeCompositor の IPC 経路でハング → GPU プロセス kill 発生。
+    //
+    // そこで ON_PAUSE 側で releaseSession 済の前提で、OneShotPreDrawListener で layout が
+    // 最新寸法で計測された後に setSession で fresh attach する。fresh attach は "resume"
+    // ではなく "initial" 扱いのため IPC ハング経路を通らない。
+    fun restoreSurfaceIfNeeded(gecko: GeckoView) {
+        if (surfaceResumeState == SurfaceResumeState.ACTIVE) return
+        // stale フレームが一瞬表示されるのを防ぐため pre-draw 待ちより前に cover する。
+        gecko.coverUntilFirstPaint(resumeCoverColor)
+        OneShotPreDrawListener.add(gecko) {
+            if (surfaceResumeState == SurfaceResumeState.ACTIVE) return@add
+            // ON_RESUME→ON_PAUSE の短時間遷移で遅延 callback がフォアグラウンド外で
+            // 実行されると、paused activity で session を再活性化した上に stale サイズで
+            // setActive(true) を呼んでしまい本来防ぎたいハング経路に再突入する。
+            // 次回の ON_START / ON_RESUME で改めて登録されるので、ここでは state 遷移させずに抜ける。
+            if (!lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
+                return@add
             }
-            if (sessionReleasedOnStop) {
-                gecko.setSession(session)
-                sessionReleasedOnStop = false
-            }
-            // GeckoView 内部の SurfaceView を明示的に再作成する。
-            gecko.coverUntilFirstPaint(resumeCoverColor)
-            gecko.requestNewSurface()
-            gecko.requestLayout()
-            gecko.invalidate()
-            waitingForSurfaceRestore = false
+            gecko.setSession(session)
+            session.setActive(true)
+            surfaceResumeState = SurfaceResumeState.ACTIVE
         }
+    }
+
+    DisposableEffect(lifecycleOwner, session, resumeCoverColor) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
+                Lifecycle.Event.ON_PAUSE -> {
+                    // ON_STOP まで待つと surface 破棄→再作成時に GeckoView 内部の
+                    // SurfaceHolder.Callback が Gecko compositor を自動 resume-resize させ、
+                    // IME 由来の stale サイズで frame 産出 → BLAST reject → GPU プロセス kill
+                    // というハングが発生する。ON_PAUSE 時点で releaseSession して session を
+                    // GeckoView から detach しておけば、surface 再作成時の自動レンダリングを
+                    // 抑止できる。
+                    //
+                    // capture preview は release 前に start する。capturePixels() は非同期
+                    // GeckoResult を返すため release 直後に走るキャプチャ完了率は低下するが、
+                    // ハング回避を優先する。
+                    if (surfaceResumeState == SurfaceResumeState.ACTIVE &&
+                        !mediaWebExtension.shouldKeepSessionAttached(session)
+                    ) {
+                        geckoView?.also { gv ->
+                            session.setActive(false)
+                            // best-effort capture（非同期 GeckoResult、release 後に失敗する可能性あり）。
+                            state.captureTabPreview(gv)
+                            // surface 再作成時の自動 compositor resume を防ぐため即 detach。
+                            gv.releaseSession()
+                            surfaceResumeState = SurfaceResumeState.RELEASED
+                        }
+                    }
+                }
                 Lifecycle.Event.ON_STOP -> {
-                    waitingForSurfaceRestore = true
                     session.flushSessionState()
+                    // non-media の場合は ON_PAUSE で release 済み。
+                    // media の場合は session 維持のため capture のみ実行（従来どおり）。
+                    // TODO: media 再生継続中の session は release しないため、surface 再作成時の
+                    //       SyncResumeResizeCompositor ハング経路を踏むリスクが残る。実機で
+                    //       再現を確認したら、audio を殺さない形で compositor 再構築する手段
+                    //       （releaseSession しても MediaSession 経由で音は継続する可能性が高い）
+                    //       を検討する。
                     geckoView?.also { gv ->
                         if (mediaWebExtension.shouldKeepSessionAttached(session)) {
                             state.captureTabPreview(gv)
-                            sessionReleasedOnStop = false
-                        } else {
-                            // capturePixels()はセッションに依存するため、キャプチャ完了後にreleaseSession()を呼ぶ
-                            state.captureTabPreview(gv) {
-                                // ON_STARTが先に来てwaitingForSurfaceRestoreがリセットされた場合はスキップ
-                                if (waitingForSurfaceRestore) {
-                                    gv.releaseSession()
-                                    sessionReleasedOnStop = true
-                                }
-                            }
                         }
                     }
                 }
                 Lifecycle.Event.ON_START -> {
-                    geckoView?.also(::restoreGeckoSurface)
-                    // ComposeView 側のルートにも再描画要求を出す。
-                    view.rootView.invalidate()
+                    geckoView?.also(::restoreSurfaceIfNeeded)
                 }
                 Lifecycle.Event.ON_RESUME -> {
-                    geckoView?.also(::restoreGeckoSurface)
-                    view.rootView.invalidate()
+                    geckoView?.also(::restoreSurfaceIfNeeded)
                 }
                 else -> Unit
             }
@@ -690,6 +723,17 @@ private fun TabHistoryBottomSheet(
             }
         }
     }
+}
+
+/**
+ * Surface/Session 復元の進行状態。
+ *
+ * - ACTIVE: 前面表示中。復元処理は全て no-op。
+ * - RELEASED: ON_PAUSE で releaseSession() 済。ON_START で setSession が必要。
+ */
+private enum class SurfaceResumeState {
+    ACTIVE,
+    RELEASED,
 }
 
 sealed interface GeckoBrowserTabTestTags {
