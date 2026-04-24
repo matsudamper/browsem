@@ -264,6 +264,11 @@ internal fun GeckoBrowserTab(
                     session.flushSessionState()
                     // non-media の場合は ON_PAUSE で release 済み。
                     // media の場合は session 維持のため capture のみ実行（従来どおり）。
+                    // TODO: media 再生継続中の session は release しないため、surface 再作成時の
+                    //       SyncResumeResizeCompositor ハング経路を踏むリスクが残る。実機で
+                    //       再現を確認したら、audio を殺さない形で compositor 再構築する手段
+                    //       （releaseSession しても MediaSession 経由で音は継続する可能性が高い）
+                    //       を検討する。
                     geckoView?.also { gv ->
                         if (mediaWebExtension.shouldKeepSessionAttached(session)) {
                             state.captureTabPreview(gv)
