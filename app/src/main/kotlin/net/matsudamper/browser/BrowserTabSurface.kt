@@ -77,6 +77,9 @@ internal fun BrowserContentHost(
                         geckoView.importantForAutofill =
                             View.IMPORTANT_FOR_AUTOFILL_YES_EXCLUDE_DESCENDANTS
                         geckoView.setSession(session)
+                        // Engine 側で非アクティブ扱いになると Compositor の描画更新が止まり、
+                        // 復帰時の黒画面につながるため、初期生成時に必ず active 化する。
+                        session.setActive(true)
                         @SuppressLint("ClickableViewAccessibility")
                         geckoView.setOnTouchListener { view, event ->
                             if (event.actionMasked == MotionEvent.ACTION_DOWN) {

@@ -49,6 +49,7 @@ class BrowserSessionLifecycleController(
                 tab.pendingInitialUrl = null
                 tab.session.loadUri(url)
             }
+            tab.session.setActive(true)
             return
         }
         if (tab.pendingInitialUrl != null) {
@@ -64,9 +65,30 @@ class BrowserSessionLifecycleController(
                 // （restoreState は onHistoryStateChange を発火しないため）
                 tab.initHistoryFromSessionState(parsed)
                 tab.session.restoreState(parsed)
+                tab.session.setActive(true)
                 return
             }
         }
         tab.session.loadUri(tab.currentUrl.ifBlank { "about:blank" })
+        tab.session.setActive(true)
+    }
+
+    /**
+     * バックグラウンド遷移時に呼び、セッション側の処理を一時停止させる。
+     * Surface バインドは維持するため復帰時のちらつきが少ない。
+     */
+    fun pauseSession(tab: BrowserTab) {
+        if (tab.session.isOpen) {
+            tab.session.setActive(false)
+        }
+    }
+
+    /**
+     * フォアグラウンド復帰時に呼び、セッション側の処理を再開させる。
+     */
+    fun resumeSession(tab: BrowserTab) {
+        if (tab.session.isOpen) {
+            tab.session.setActive(true)
+        }
     }
 }
