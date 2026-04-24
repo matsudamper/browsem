@@ -64,6 +64,7 @@ import net.matsudamper.browser.data.TranslationProvider
 import net.matsudamper.browser.media.GeckoMediaSessionDelegate
 import net.matsudamper.browser.media.MediaWebExtension
 import net.matsudamper.browser.FindInPageWebExtension
+import net.matsudamper.browser.translate.TranslationPriorityLanguage
 import net.matsudamper.browser.ui.common.resolveBrowserToolbarColors
 import net.matsudamper.browser.ui.browser.SimpleViewScreen
 import net.matsudamper.browser.ui.browser.UrlBarSuggestionsUiState
@@ -551,11 +552,11 @@ internal fun GeckoBrowserTab(
             val detectedLang = state.detectedPageLanguage
             val languageOptions = remember(detectedLang) {
                 buildList {
-                    if (detectedLang != null && detectedLang != "en" && detectedLang != "ja") {
+                    if (detectedLang != null && detectedLang != TranslationPriorityLanguage.FROM && detectedLang != TranslationPriorityLanguage.TO) {
                         add(detectedLang)
                     }
-                    add("en")
-                    add("ja")
+                    add(TranslationPriorityLanguage.FROM)
+                    add(TranslationPriorityLanguage.TO)
                 }
             }
             TranslationStatusBar(
@@ -567,7 +568,7 @@ internal fun GeckoBrowserTab(
                 fromLanguageOptions = languageOptions,
                 toLanguageOptions = languageOptions,
                 onFromLanguageSelected = { lang ->
-                    state.onRetranslate(translationProvider, fromLanguage = lang, toLanguage = state.translationToLanguage ?: "ja")
+                    state.onRetranslate(translationProvider, fromLanguage = lang, toLanguage = state.translationToLanguage ?: TranslationPriorityLanguage.TO)
                 },
                 onToLanguageSelected = { lang ->
                     state.onRetranslate(translationProvider, fromLanguage = state.translationFromLanguage, toLanguage = lang)
