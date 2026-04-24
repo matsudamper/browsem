@@ -10,15 +10,19 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicText
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -33,10 +37,65 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+
+@Composable
+@Preview
+private fun PreviewTabCardShortTitle() {
+    TabCard(
+        tab = TabsScreenTabData(id = "1", title = "Google", previewImage = null),
+        selected = false,
+        onSelectTab = {},
+        onCloseTab = {},
+        bitmapCache = LruCache(1),
+        modifier = Modifier
+            .width(160.dp)
+            .height(220.dp),
+    )
+}
+
+@Composable
+@Preview
+private fun PreviewTabCardLongTitle() {
+    TabCard(
+        tab = TabsScreenTabData(
+            id = "2",
+            title = "GitHub - matsudamper/browsem: Android Browser App",
+            previewImage = null,
+        ),
+        selected = false,
+        onSelectTab = {},
+        onCloseTab = {},
+        bitmapCache = LruCache(1),
+        modifier = Modifier
+            .width(160.dp)
+            .height(220.dp),
+    )
+}
+
+@Composable
+@Preview
+private fun PreviewTabCardVeryLongTitle() {
+    TabCard(
+        tab = TabsScreenTabData(
+            id = "3",
+            title = "非常に長いタイトルで最大フォントでは2行に収まらず縮小が必要になるケースのサンプルテキスト",
+            previewImage = null,
+        ),
+        selected = false,
+        onSelectTab = {},
+        onCloseTab = {},
+        bitmapCache = LruCache(1),
+        modifier = Modifier
+            .width(160.dp)
+            .height(220.dp),
+    )
+}
 
 @Composable
 internal fun TabCard(
@@ -78,11 +137,18 @@ internal fun TabCard(
                     .padding(start = 12.dp, end = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(
+                BasicText(
                     text = tab.title.ifBlank { "Untitled" },
-                    style = MaterialTheme.typography.titleSmall,
-                    maxLines = 1,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
+                    autoSize = FitLinesTextAutoSize(
+                        minFontSize = 8.sp,
+                        maxFontSize = 14.sp,
+                        overflowExtraReduction = 4.sp,
+                    ),
+                    style = MaterialTheme.typography.titleSmall.copy(
+                        color = LocalContentColor.current,
+                    ),
                     modifier = Modifier.weight(1f),
                 )
                 IconButton(

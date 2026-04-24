@@ -430,8 +430,10 @@ internal class BrowserTabScreenState(
             if (originalPageUrlForRevert == null) {
                 originalPageUrlForRevert = currentPageUrl
             }
+            // 非同期処理完了後にページ遷移済みかを検出するために翻訳開始時のURLを保持する
+            val translationStartUrl = originalPageUrlForRevert
             translationState = TranslationState.Loading
-            val pageUrl = originalPageUrlForRevert ?: currentPageUrl
+            val pageUrl = translationStartUrl ?: currentPageUrl
             val result = runCatching {
                 PageTranslator(session, pageUrl).translatePage(
                     translationProvider,
@@ -439,6 +441,9 @@ internal class BrowserTabScreenState(
                     toLanguage,
                 )
             }
+            // 翻訳中にページ遷移が発生した場合（onLocationChange が originalPageUrlForRevert をクリア済み）は
+            // 翻訳結果を破棄して翻訳バーを表示しない
+            if (originalPageUrlForRevert != translationStartUrl) return@launch
             if (result.isSuccess) {
                 val langs = result.getOrNull()
                 translationFromLanguage = langs?.fromLanguage
@@ -707,6 +712,7 @@ internal class BrowserTabScreenState(
         // SPA 遷移（pushState）では onPageStart が発火しないためリセットしない
         // ダウンロードリンクのように onPageStart だけ発火して onLocationChange が呼ばれない
         // ケースは isFullPageLoadPending が onPageStop でクリアされるため色をリセットしない
+        val wasFullPageLoad = isFullPageLoadPending
         if (isFullPageLoadPending) {
             maybeResetToolbarColorOnPageStart(url)
             isFullPageLoadPending = false
@@ -719,11 +725,7 @@ internal class BrowserTabScreenState(
         if (!isUrlInputFocused) {
             urlInput = url
         }
-        val revertUrl = originalPageUrlForRevert
-        if (translationState != TranslationState.Idle &&
-            !url.startsWith("data:") &&
-            url != revertUrl
-        ) {
+        if (shouldResetTranslationOnLocationChange(translationState, url, originalPageUrlForRevert, wasFullPageLoad)) {
             translationState = TranslationState.Idle
             originalPageUrlForRevert = null
         }
