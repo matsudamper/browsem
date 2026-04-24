@@ -85,8 +85,7 @@ class BrowserTabPoliciesTest {
     // --- shouldResetTranslationOnLocationChange ---
 
     /**
-     * 翻訳済みページから別ページへ遷移すると翻訳状態がリセットされることを確認するリグレッション防止テスト。
-     * 「翻訳した後にページ遷移すると翻訳バーが消えるが、翻訳されている状態になっている」バグ修正の確認。
+     * 翻訳済みページからフルページロードで別ページへ遷移すると翻訳状態がリセットされることを確認するリグレッション防止テスト。
      */
     @Test
     fun translationStateIsResetWhenNavigatingToDifferentPage() {
@@ -95,6 +94,19 @@ class BrowserTabPoliciesTest {
                 translationState = TranslationState.Translated,
                 url = "https://example.com/page-b",
                 originalPageUrlForRevert = "https://example.com/page-a",
+                isFullPageLoad = true,
+            )
+        )
+    }
+
+    @Test
+    fun translationStateIsNotResetOnSpaNavigation() {
+        assertFalse(
+            shouldResetTranslationOnLocationChange(
+                translationState = TranslationState.Translated,
+                url = "https://example.com/page-b",
+                originalPageUrlForRevert = "https://example.com/page-a",
+                isFullPageLoad = false,
             )
         )
     }
@@ -106,6 +118,7 @@ class BrowserTabPoliciesTest {
                 translationState = TranslationState.Translated,
                 url = "https://example.com/page-a",
                 originalPageUrlForRevert = "https://example.com/page-a",
+                isFullPageLoad = true,
             )
         )
     }
@@ -117,6 +130,7 @@ class BrowserTabPoliciesTest {
                 translationState = TranslationState.Idle,
                 url = "https://example.com/page-b",
                 originalPageUrlForRevert = "https://example.com/page-a",
+                isFullPageLoad = true,
             )
         )
     }
@@ -128,6 +142,7 @@ class BrowserTabPoliciesTest {
                 translationState = TranslationState.Translated,
                 url = "data:text/html,<html></html>",
                 originalPageUrlForRevert = "https://example.com/page-a",
+                isFullPageLoad = true,
             )
         )
     }
@@ -139,6 +154,7 @@ class BrowserTabPoliciesTest {
                 translationState = TranslationState.Loading,
                 url = "https://example.com/page-b",
                 originalPageUrlForRevert = "https://example.com/page-a",
+                isFullPageLoad = true,
             )
         )
     }
@@ -150,6 +166,7 @@ class BrowserTabPoliciesTest {
                 translationState = TranslationState.Translated,
                 url = "https://example.com/page-b",
                 originalPageUrlForRevert = null,
+                isFullPageLoad = true,
             )
         )
     }

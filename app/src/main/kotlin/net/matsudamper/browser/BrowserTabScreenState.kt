@@ -735,6 +735,7 @@ internal class BrowserTabScreenState(
         // SPA 遷移（pushState）では onPageStart が発火しないためリセットしない
         // ダウンロードリンクのように onPageStart だけ発火して onLocationChange が呼ばれない
         // ケースは isFullPageLoadPending が onPageStop でクリアされるため色をリセットしない
+        val wasFullPageLoad = isFullPageLoadPending
         if (isFullPageLoadPending) {
             maybeResetToolbarColorOnPageStart(url)
             isFullPageLoadPending = false
@@ -747,7 +748,7 @@ internal class BrowserTabScreenState(
         if (!isUrlInputFocused) {
             urlInput = url
         }
-        if (shouldResetTranslationOnLocationChange(translationState, url, originalPageUrlForRevert)) {
+        if (shouldResetTranslationOnLocationChange(translationState, url, originalPageUrlForRevert, wasFullPageLoad)) {
             translationState = TranslationState.Idle
             originalPageUrlForRevert = null
         }
