@@ -95,7 +95,6 @@ internal fun GeckoBrowserTab(
     onRequestDownloadNotificationPermission: suspend () -> Unit = {},
     enableTabUi: Boolean = true,
     showInstallExtensionItem: Boolean = true,
-    enableBackNavigation: Boolean = true,
     customTabMode: Boolean = false,
     webAppMode: Boolean = false,
     onCloseCustomTab: (() -> Unit)? = null,
@@ -427,7 +426,7 @@ internal fun GeckoBrowserTab(
 
     // Back handlers
     BackHandler(enabled = state.showFindInPage) { state.closeFindInPage() }
-    BackHandler(enabled = enableBackNavigation && state.canGoBack && !state.isUrlInputFocused) {
+    BackHandler(enabled = state.canGoBack && !state.isUrlInputFocused) {
         state.onGoBack()
     }
     BackHandler(enabled = state.isUrlInputFocused) { closeUrlInput(true) }
