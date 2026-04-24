@@ -9,6 +9,7 @@ import com.google.mlkit.nl.translate.TranslatorOptions
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
+import net.matsudamper.browser.resolveTranslationLanguagePair
 import org.mozilla.geckoview.GeckoSession
 import java.net.HttpURLConnection
 import java.net.URL
@@ -44,25 +45,29 @@ class LocalAITranslator(
             .take(4500)
         if (plainText.isBlank()) return null
 
-        // 3. 言語検出（不明な場合はHTMLのlang属性に決め打ち）
+        // 3. 言語検出（不明な場合はHTMLのlang属性にフォールバック、それでも不明なら優先翻訳元言語を使用）
         val detectedLang = detectLanguage(plainText)
         val sourceLang = if (detectedLang.isBlank() || detectedLang == "und") {
             extractHtmlLang(rawHtml)
         } else {
             detectedLang
         }
-        val sourceTranslateLang = toTranslateLanguageTag(sourceLang) ?: return null
+        val sourceTranslateLang = toTranslateLanguageTag(sourceLang)
+            ?: toTranslateLanguageTag(TranslationPriorityLanguage.FROM)
+            ?: return null
         val toTranslateLanguage = toLanguage.let { lang ->
             TranslateLanguage.fromLanguageTag(lang)
                 ?: TranslateLanguage.fromLanguageTag(lang.substringBefore('-'))
         } ?: return null
-        if (sourceTranslateLang == toTranslateLanguage) return null
+        // 翻訳元と翻訳先が同じ場合、優先言語でない方を優先言語に切り替える
+        val (effectiveSourceLang, effectiveToLang) = resolveTranslationLanguagePair(sourceTranslateLang, toTranslateLanguage)
+        if (effectiveSourceLang == effectiveToLang) return null
 
         // 4. 翻訳
         val translated = translateWithLocalAi(
             text = plainText,
-            sourceLanguage = sourceTranslateLang,
-            targetLanguage = toTranslateLanguage,
+            sourceLanguage = effectiveSourceLang,
+            targetLanguage = effectiveToLang,
         )
 
         // 5. javascript: URI でURLを変えずにDOMを置換
@@ -93,7 +98,7 @@ class LocalAITranslator(
             "d.body.appendChild(div);" +
             "})())"
         session.loadUri(script)
-        return TranslationLanguages(sourceLang, toTranslateLanguage)
+        return TranslationLanguages(effectiveSourceLang, effectiveToLang)
     }
 
     /** HTMLの&lt;html lang="..."&gt;属性から言語タグを抽出する */

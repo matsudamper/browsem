@@ -24,6 +24,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import java.net.URL
 import net.matsudamper.browser.data.TranslationProvider
+import net.matsudamper.browser.translate.TranslationPriorityLanguage
 import org.json.JSONObject
 import org.koin.compose.koinInject
 import org.mozilla.geckoview.AllowOrDeny
@@ -414,7 +415,7 @@ internal class BrowserTabScreenState(
 
     fun onTranslate(translationProvider: TranslationProvider) {
         if (translationState == TranslationState.Loading) return
-        runTranslation(translationProvider, fromLanguage = detectedPageLanguage, toLanguage = "ja")
+        runTranslation(translationProvider, fromLanguage = detectedPageLanguage, toLanguage = TranslationPriorityLanguage.TO)
     }
 
     /** ステータスバーの言語ドロップダウンから再翻訳を実行する */
