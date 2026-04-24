@@ -245,7 +245,8 @@ private fun CustomTabScreen(
         onOpenTabs = {},
         enableTabUi = false,
         showInstallExtensionItem = false,
-        enableBackNavigation = false,
+        // バックナビゲーションを有効にしてブラウザ履歴を遡れるようにする
+        enableBackNavigation = true,
         customTabMode = true,
         onCloseCustomTab = onClose,
         onOpenInBrowser = onOpenInBrowser,
