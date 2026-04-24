@@ -2,7 +2,9 @@ package net.matsudamper.browser
 
 import android.content.Context
 import android.net.Uri
+import android.provider.OpenableColumns
 import android.util.Log
+import android.webkit.MimeTypeMap
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -214,7 +216,14 @@ internal class PromptDialogState(
                 Log.w("PromptDialogState", "キャッシュディレクトリの作成に失敗: $cacheDir")
                 return null
             }
-            val destFile = File(cacheDir, UUID.randomUUID().toString())
+            val mimeType = resolveMimeType(context, uri)
+            val extension = MimeTypeMap.getSingleton().getExtensionFromMimeType(mimeType)
+            val fileName = if (extension != null) {
+                "${UUID.randomUUID()}.$extension"
+            } else {
+                UUID.randomUUID().toString()
+            }
+            val destFile = File(cacheDir, fileName)
             context.contentResolver.openInputStream(uri)?.use { input ->
                 destFile.outputStream().use { output ->
                     input.copyTo(output)
@@ -225,6 +234,47 @@ internal class PromptDialogState(
             Log.w("PromptDialogState", "コンテンツ URI のキャッシュコピーに失敗", e)
             null
         }
+    }
+
+    /**
+     * content URI の MIME タイプを解決する。
+     * ContentResolver.getType(uri) を第一候補とし、
+     * null の場合のみ DISPLAY_NAME の拡張子から MimeTypeMap で補完する。
+     * どちらも不明な場合は "application/octet-stream" を返す。
+     */
+    private fun resolveMimeType(context: Context, uri: Uri): String {
+        // ContentResolver.getType() が最も信頼性が高い
+        val mimeFromResolver = context.contentResolver.getType(uri)
+        if (mimeFromResolver != null) return mimeFromResolver
+
+        // null の場合のみ DISPLAY_NAME の拡張子から補完
+        val displayName = runCatching {
+            context.contentResolver.query(
+                uri,
+                arrayOf(OpenableColumns.DISPLAY_NAME),
+                null,
+                null,
+                null,
+            )?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    cursor.getString(cursor.getColumnIndexOrThrow(OpenableColumns.DISPLAY_NAME))
+                } else {
+                    null
+                }
+            }
+        }.getOrNull()
+
+        if (displayName != null) {
+            val dotIndex = displayName.lastIndexOf('.')
+            if (dotIndex > 0 && dotIndex < displayName.length - 1) {
+                val ext = displayName.substring(dotIndex + 1)
+                val mimeFromExt = MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext)
+                if (mimeFromExt != null) return mimeFromExt
+            }
+        }
+
+        // それでも不明なら未知のバイナリとして扱う
+        return "application/octet-stream"
     }
 
     fun confirmBeforeUnloadPrompt(allow: Boolean) {
