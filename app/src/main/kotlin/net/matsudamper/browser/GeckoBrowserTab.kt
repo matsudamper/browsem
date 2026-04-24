@@ -56,6 +56,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
+import androidx.core.view.OneShotPreDrawListener
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -212,23 +213,34 @@ internal fun GeckoBrowserTab(
     }
 
     // Surface 復元処理本体。ACTIVE なら即 return。
-    // Window 再アタッチと同フレームに Surface 操作すると空振りするため、gecko.post {} で 1 フレーム遅延させる。
+    //
+    // 背景: Column に .imePadding() が掛かっているため、IME 表示中の pause 後の resume では
+    // SurfaceView が一旦 IME 込み寸法 (例 968x1311) で再作成され、layout が settle した後で
+    // 正しい寸法 (例 968x2116) にリサイズされる。この resize タイミングで Gecko compositor を
+    // activate 済みだと、Gecko は "SyncResumeResizeCompositor" IPC 経路に入り、GPU プロセス
+    // との通信が 10 秒タイムアウトしてプロセスが kill され、結果として画面が黒いまま固まる。
+    //
+    // 対策: setActive(true) による light 経路では上記ハング経路が誘発されるため、復元時は
+    // 常に releaseSession → setSession で compositor を fresh に attach し直す。fresh attach は
+    // "resume" ではなく "initial" 扱いなので IPC ハング経路を通らない。
+    // OneShotPreDrawListener で layout が最新寸法で 1 度計測された後に実行する。
     fun restoreSurfaceIfNeeded(gecko: GeckoView) {
         if (surfaceResumeState == SurfaceResumeState.ACTIVE) return
-        gecko.post {
-            // post 内でも state を再確認し、先行発火済みなら skip する。
-            if (surfaceResumeState == SurfaceResumeState.ACTIVE) return@post
-            if (surfaceResumeState == SurfaceResumeState.RELEASED) {
-                gecko.setSession(session)
+        // stale フレームが一瞬表示されるのを防ぐため pre-draw 待ちより前に cover する。
+        gecko.coverUntilFirstPaint(resumeCoverColor)
+        OneShotPreDrawListener.add(gecko) {
+            if (surfaceResumeState == SurfaceResumeState.ACTIVE) return@add
+            val wasReleased = surfaceResumeState == SurfaceResumeState.RELEASED
+            // 常に重経路で compositor を作り直す。
+            // wasReleased (ON_STOP 経由) なら既に release 済みなので setSession のみ。
+            // PAUSED_KEEP_SESSION でも release→setSession で fresh attach に統一する。
+            if (!wasReleased) {
+                gecko.releaseSession()
             }
-            // idiomatic な engine 側 pause/resume。Surface バインドは維持される。
+            gecko.setSession(session)
             session.setActive(true)
-            // SurfaceView を明示的に再作成し、HWUI 合成ツリーの不整合を解消する。
-            gecko.coverUntilFirstPaint(resumeCoverColor)
-            gecko.requestNewSurface()
             gecko.requestLayout()
             gecko.invalidate()
-            // ComposeView 側のルートにも再描画要求を出す。
             view.rootView.invalidate()
             surfaceResumeState = SurfaceResumeState.ACTIVE
         }
