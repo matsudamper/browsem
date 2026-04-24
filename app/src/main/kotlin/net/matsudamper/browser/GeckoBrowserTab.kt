@@ -9,7 +9,6 @@ import android.view.ActionMode
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
-import android.view.ViewTreeObserver
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -148,7 +147,7 @@ internal fun GeckoBrowserTab(
     var urlBarFocusStartedAtMs by remember { mutableLongStateOf(0L) }
     var geckoView: GeckoView? by remember { mutableStateOf(null) }
     // Surface と Session の復元状態を一元管理する state machine。
-    // ON_START / ON_RESUME / onWindowFocusChanged が重複発火しても state=ACTIVE なら即 no-op にする。
+    // ON_START / ON_RESUME が重複発火しても state=ACTIVE なら即 no-op にする。
     var surfaceResumeState by remember(session) { mutableStateOf(SurfaceResumeState.ACTIVE) }
     val resumeCoverColor = MaterialTheme.colorScheme.surface.toArgb()
 
@@ -214,30 +213,22 @@ internal fun GeckoBrowserTab(
 
     // Surface 復元処理本体。ACTIVE なら即 return。
     //
-    // 背景: Column に .imePadding() が掛かっているため、IME 表示中の pause 後の resume では
-    // SurfaceView が一旦 IME 込み寸法 (例 968x1311) で再作成され、layout が settle した後で
-    // 正しい寸法 (例 968x2116) にリサイズされる。この resize タイミングで Gecko compositor を
-    // activate 済みだと、Gecko は "SyncResumeResizeCompositor" IPC 経路に入り、GPU プロセス
-    // との通信が 10 秒タイムアウトしてプロセスが kill され、結果として画面が黒いまま固まる。
+    // Column に .imePadding() が掛かっているため IME 表示中に pause すると GeckoView の
+    // 親が縮む。resume 時は SurfaceView が一旦 stale 寸法で再作成され、layout settle 後に
+    // 正しい寸法へ resize される。ここで Gecko compositor が attach 済みだと
+    // SyncResumeResizeCompositor の IPC 経路でハング → GPU プロセス kill 発生。
     //
-    // 対策: setActive(true) による light 経路では上記ハング経路が誘発されるため、復元時は
-    // 常に releaseSession → setSession で compositor を fresh に attach し直す。fresh attach は
-    // "resume" ではなく "initial" 扱いなので IPC ハング経路を通らない。
-    // OneShotPreDrawListener で layout が最新寸法で 1 度計測された後に実行する。
+    // そこで ON_PAUSE 側で releaseSession 済の前提で、OneShotPreDrawListener で layout が
+    // 最新寸法で計測された後に setSession で fresh attach する。fresh attach は "resume"
+    // ではなく "initial" 扱いのため IPC ハング経路を通らない。
     fun restoreSurfaceIfNeeded(gecko: GeckoView) {
         if (surfaceResumeState == SurfaceResumeState.ACTIVE) return
         // stale フレームが一瞬表示されるのを防ぐため pre-draw 待ちより前に cover する。
         gecko.coverUntilFirstPaint(resumeCoverColor)
         OneShotPreDrawListener.add(gecko) {
             if (surfaceResumeState == SurfaceResumeState.ACTIVE) return@add
-            // ON_PAUSE で release 済みなので setSession で fresh attach するだけ。
-            // layout が最新寸法で 1 度計測された後の pre-draw で実行することで、
-            // Gecko compositor が stale サイズで attach されないようにする。
             gecko.setSession(session)
             session.setActive(true)
-            gecko.requestLayout()
-            gecko.invalidate()
-            view.rootView.invalidate()
             surfaceResumeState = SurfaceResumeState.ACTIVE
         }
     }
@@ -290,23 +281,6 @@ internal fun GeckoBrowserTab(
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
-    }
-
-    // パスワードマネージャーの Autofill オーバーレイなど、Activity の ON_STOP を経由せず
-    // window focus だけを奪う UI がある。そのケースでも Surface が壊れるため、
-    // onWindowFocusChanged を別経路でフックして復元する。
-    DisposableEffect(view, session) {
-        val listener = ViewTreeObserver.OnWindowFocusChangeListener { hasFocus ->
-            if (hasFocus) {
-                geckoView?.also(::restoreSurfaceIfNeeded)
-            }
-        }
-        view.viewTreeObserver.addOnWindowFocusChangeListener(listener)
-        onDispose {
-            if (view.viewTreeObserver.isAlive) {
-                view.viewTreeObserver.removeOnWindowFocusChangeListener(listener)
-            }
-        }
     }
 
     // theme-color WebExtensionのコールバック登録
