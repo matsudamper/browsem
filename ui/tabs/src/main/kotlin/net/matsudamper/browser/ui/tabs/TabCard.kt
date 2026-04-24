@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
-import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Card
@@ -80,6 +79,25 @@ private fun PreviewTabCardLongTitle() {
 }
 
 @Composable
+@Preview
+private fun PreviewTabCardVeryLongTitle() {
+    TabCard(
+        tab = TabsScreenTabData(
+            id = "3",
+            title = "非常に長いタイトルで最大フォントでは2行に収まらず縮小が必要になるケースのサンプルテキスト",
+            previewImage = null,
+        ),
+        selected = false,
+        onSelectTab = {},
+        onCloseTab = {},
+        bitmapCache = LruCache(1),
+        modifier = Modifier
+            .width(160.dp)
+            .height(220.dp),
+    )
+}
+
+@Composable
 internal fun TabCard(
     tab: TabsScreenTabData,
     selected: Boolean,
@@ -123,10 +141,10 @@ internal fun TabCard(
                     text = tab.title.ifBlank { "Untitled" },
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
-                    autoSize = TextAutoSize.StepBased(
+                    autoSize = FitLinesTextAutoSize(
                         minFontSize = 8.sp,
                         maxFontSize = 14.sp,
-                        stepSize = 1.sp,
+                        overflowExtraReduction = 4.sp,
                     ),
                     style = MaterialTheme.typography.titleSmall.copy(
                         color = LocalContentColor.current,
