@@ -81,4 +81,93 @@ class BrowserTabPoliciesTest {
             )
         )
     }
+
+    // --- shouldResetTranslationOnLocationChange ---
+
+    /**
+     * 翻訳済みページからフルページロードで別ページへ遷移すると翻訳状態がリセットされることを確認するリグレッション防止テスト。
+     */
+    @Test
+    fun translationStateIsResetWhenNavigatingToDifferentPage() {
+        assertTrue(
+            shouldResetTranslationOnLocationChange(
+                translationState = TranslationState.Translated,
+                url = "https://example.com/page-b",
+                originalPageUrlForRevert = "https://example.com/page-a",
+                isFullPageLoad = true,
+            )
+        )
+    }
+
+    @Test
+    fun translationStateIsNotResetOnSpaNavigation() {
+        assertFalse(
+            shouldResetTranslationOnLocationChange(
+                translationState = TranslationState.Translated,
+                url = "https://example.com/page-b",
+                originalPageUrlForRevert = "https://example.com/page-a",
+                isFullPageLoad = false,
+            )
+        )
+    }
+
+    @Test
+    fun translationStateIsNotResetWhenNavigatingBackToOriginalPage() {
+        assertFalse(
+            shouldResetTranslationOnLocationChange(
+                translationState = TranslationState.Translated,
+                url = "https://example.com/page-a",
+                originalPageUrlForRevert = "https://example.com/page-a",
+                isFullPageLoad = true,
+            )
+        )
+    }
+
+    @Test
+    fun translationStateIsNotResetWhenAlreadyIdle() {
+        assertFalse(
+            shouldResetTranslationOnLocationChange(
+                translationState = TranslationState.Idle,
+                url = "https://example.com/page-b",
+                originalPageUrlForRevert = "https://example.com/page-a",
+                isFullPageLoad = true,
+            )
+        )
+    }
+
+    @Test
+    fun translationStateIsNotResetForDataUrl() {
+        assertFalse(
+            shouldResetTranslationOnLocationChange(
+                translationState = TranslationState.Translated,
+                url = "data:text/html,<html></html>",
+                originalPageUrlForRevert = "https://example.com/page-a",
+                isFullPageLoad = true,
+            )
+        )
+    }
+
+    @Test
+    fun translationLoadingStateIsResetOnNavigation() {
+        assertTrue(
+            shouldResetTranslationOnLocationChange(
+                translationState = TranslationState.Loading,
+                url = "https://example.com/page-b",
+                originalPageUrlForRevert = "https://example.com/page-a",
+                isFullPageLoad = true,
+            )
+        )
+    }
+
+    @Test
+    fun translationStateIsResetWhenOriginalPageUrlIsNull() {
+        assertTrue(
+            shouldResetTranslationOnLocationChange(
+                translationState = TranslationState.Translated,
+                url = "https://example.com/page-b",
+                originalPageUrlForRevert = null,
+                isFullPageLoad = true,
+            )
+        )
+    }
 }
