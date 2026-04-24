@@ -227,6 +227,13 @@ internal fun GeckoBrowserTab(
         gecko.coverUntilFirstPaint(resumeCoverColor)
         OneShotPreDrawListener.add(gecko) {
             if (surfaceResumeState == SurfaceResumeState.ACTIVE) return@add
+            // ON_RESUME→ON_PAUSE の短時間遷移で遅延 callback がフォアグラウンド外で
+            // 実行されると、paused activity で session を再活性化した上に stale サイズで
+            // setActive(true) を呼んでしまい本来防ぎたいハング経路に再突入する。
+            // 次回の ON_START / ON_RESUME で改めて登録されるので、ここでは state 遷移させずに抜ける。
+            if (!lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
+                return@add
+            }
             gecko.setSession(session)
             session.setActive(true)
             surfaceResumeState = SurfaceResumeState.ACTIVE
