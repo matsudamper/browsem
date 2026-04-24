@@ -9,6 +9,7 @@ import android.view.ActionMode
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
+import android.view.ViewTreeObserver
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -146,8 +147,9 @@ internal fun GeckoBrowserTab(
     var imeWasVisibleDuringUrlFocus by remember { mutableStateOf(false) }
     var urlBarFocusStartedAtMs by remember { mutableLongStateOf(0L) }
     var geckoView: GeckoView? by remember { mutableStateOf(null) }
-    var sessionReleasedOnStop by remember(session) { mutableStateOf(false) }
-    var waitingForSurfaceRestore by remember(session) { mutableStateOf(false) }
+    // Surface と Session の復元状態を一元管理する state machine。
+    // ON_START / ON_RESUME / onWindowFocusChanged が重複発火しても state=ACTIVE なら即 no-op にする。
+    var surfaceResumeState by remember(session) { mutableStateOf(SurfaceResumeState.ACTIVE) }
     val resumeCoverColor = MaterialTheme.colorScheme.surface.toArgb()
 
     // ファイルピッカー（単一ファイル選択）Google Photos を含むピッカーを表示するため ACTION_GET_CONTENT を使用
@@ -210,57 +212,86 @@ internal fun GeckoBrowserTab(
             }
     }
 
-    DisposableEffect(lifecycleOwner, session, resumeCoverColor) {
-        fun restoreGeckoSurface(gecko: GeckoView) {
-            if (!waitingForSurfaceRestore && !sessionReleasedOnStop) {
-                return
-            }
-            if (sessionReleasedOnStop) {
+    // Surface 復元処理本体。ACTIVE なら即 return。
+    // Window 再アタッチと同フレームに Surface 操作すると空振りするため、gecko.post {} で 1 フレーム遅延させる。
+    fun restoreSurfaceIfNeeded(gecko: GeckoView) {
+        if (surfaceResumeState == SurfaceResumeState.ACTIVE) return
+        gecko.post {
+            // post 内でも state を再確認し、先行発火済みなら skip する。
+            if (surfaceResumeState == SurfaceResumeState.ACTIVE) return@post
+            if (surfaceResumeState == SurfaceResumeState.RELEASED) {
                 gecko.setSession(session)
-                sessionReleasedOnStop = false
             }
-            // GeckoView 内部の SurfaceView を明示的に再作成する。
+            // idiomatic な engine 側 pause/resume。Surface バインドは維持される。
+            session.setActive(true)
+            // SurfaceView を明示的に再作成し、HWUI 合成ツリーの不整合を解消する。
             gecko.coverUntilFirstPaint(resumeCoverColor)
             gecko.requestNewSurface()
             gecko.requestLayout()
             gecko.invalidate()
-            waitingForSurfaceRestore = false
+            // ComposeView 側のルートにも再描画要求を出す。
+            view.rootView.invalidate()
+            surfaceResumeState = SurfaceResumeState.ACTIVE
         }
+    }
+
+    DisposableEffect(lifecycleOwner, session, resumeCoverColor) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
+                Lifecycle.Event.ON_PAUSE -> {
+                    // メディア再生中は active のまま維持（音声停止を避ける）。
+                    if (!mediaWebExtension.shouldKeepSessionAttached(session) &&
+                        surfaceResumeState == SurfaceResumeState.ACTIVE
+                    ) {
+                        session.setActive(false)
+                        surfaceResumeState = SurfaceResumeState.PAUSED_KEEP_SESSION
+                    }
+                }
                 Lifecycle.Event.ON_STOP -> {
-                    waitingForSurfaceRestore = true
                     session.flushSessionState()
                     geckoView?.also { gv ->
                         if (mediaWebExtension.shouldKeepSessionAttached(session)) {
                             state.captureTabPreview(gv)
-                            sessionReleasedOnStop = false
                         } else {
-                            // capturePixels()はセッションに依存するため、キャプチャ完了後にreleaseSession()を呼ぶ
+                            // capturePixels() はセッションに依存するため、キャプチャ完了後に releaseSession() を呼ぶ。
                             state.captureTabPreview(gv) {
-                                // ON_STARTが先に来てwaitingForSurfaceRestoreがリセットされた場合はスキップ
-                                if (waitingForSurfaceRestore) {
+                                // ON_START が先に戻って ACTIVE 化していたら skip。
+                                if (surfaceResumeState == SurfaceResumeState.PAUSED_KEEP_SESSION) {
                                     gv.releaseSession()
-                                    sessionReleasedOnStop = true
+                                    surfaceResumeState = SurfaceResumeState.RELEASED
                                 }
                             }
                         }
                     }
                 }
                 Lifecycle.Event.ON_START -> {
-                    geckoView?.also(::restoreGeckoSurface)
-                    // ComposeView 側のルートにも再描画要求を出す。
-                    view.rootView.invalidate()
+                    geckoView?.also(::restoreSurfaceIfNeeded)
                 }
                 Lifecycle.Event.ON_RESUME -> {
-                    geckoView?.also(::restoreGeckoSurface)
-                    view.rootView.invalidate()
+                    geckoView?.also(::restoreSurfaceIfNeeded)
                 }
                 else -> Unit
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    // パスワードマネージャーの Autofill オーバーレイなど、Activity の ON_STOP を経由せず
+    // window focus だけを奪う UI がある。そのケースでも Surface が壊れるため、
+    // onWindowFocusChanged を別経路でフックして復元する。
+    DisposableEffect(view, session) {
+        val listener = ViewTreeObserver.OnWindowFocusChangeListener { hasFocus ->
+            if (hasFocus) {
+                geckoView?.also(::restoreSurfaceIfNeeded)
+            }
+        }
+        view.viewTreeObserver.addOnWindowFocusChangeListener(listener)
+        onDispose {
+            if (view.viewTreeObserver.isAlive) {
+                view.viewTreeObserver.removeOnWindowFocusChangeListener(listener)
+            }
+        }
     }
 
     // theme-color WebExtensionのコールバック登録
@@ -711,6 +742,19 @@ private fun TabHistoryBottomSheet(
             }
         }
     }
+}
+
+/**
+ * Surface/Session 復元の進行状態。
+ *
+ * - ACTIVE: 前面表示中。復元処理は全て no-op。
+ * - PAUSED_KEEP_SESSION: ON_PAUSE で setActive(false) 済。releaseSession は未実施。
+ * - RELEASED: ON_STOP で releaseSession() 済。ON_START で setSession が必要。
+ */
+private enum class SurfaceResumeState {
+    ACTIVE,
+    PAUSED_KEEP_SESSION,
+    RELEASED,
 }
 
 sealed interface GeckoBrowserTabTestTags {

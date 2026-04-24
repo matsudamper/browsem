@@ -227,6 +227,17 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        // パスワードマネージャーの Autofill オーバーレイ等、ON_STOP を経由せず focus だけ奪う UI から
+        // 復帰した際に HWUI 合成ツリーが崩れて全画面が黒くなるケースがある。
+        // DecorView レベルで再描画を要求し、SurfaceView 復元は Composable 側の
+        // OnWindowFocusChangeListener に任せる。
+        if (hasFocus) {
+            window.decorView.postInvalidateOnAnimation()
+        }
+    }
+
     override fun onDestroy() {
         unregisterSystemNavigationObserverIfNeeded()
         if (hostsBrowserContent && isFinishing) {

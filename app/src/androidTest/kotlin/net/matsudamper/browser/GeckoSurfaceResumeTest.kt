@@ -43,6 +43,29 @@ class GeckoSurfaceResumeTest {
         waitForNonBlackGeckoPixels()
     }
 
+    /**
+     * パスワードマネージャーの Autofill オーバーレイのように、Activity を STOP させず
+     * window focus だけを奪って戻すケースを再現する。
+     */
+    @Test
+    fun geckoPixelsRemainVisibleAfterWindowFocusLossWithoutStop() {
+        val pageUri = prepareSurfaceResumePageUri()
+
+        composeRule.openUrlFromUrlBar(pageUri)
+        composeRule.waitForUrlBarContains(SURFACE_RESUME_FILE_NAME, timeoutMillis = 60_000)
+        composeRule.waitForUrlBarNotFocused(timeoutMillis = 30_000)
+        waitForGeckoContainer()
+        waitForNonBlackGeckoPixels()
+
+        InstrumentationRegistry.getInstrumentation().runOnMainSync {
+            composeRule.activity.onWindowFocusChanged(false)
+            composeRule.activity.onWindowFocusChanged(true)
+        }
+
+        waitForGeckoContainer()
+        waitForNonBlackGeckoPixels()
+    }
+
     private fun waitForGeckoContainer() {
         composeRule.waitUntil(timeoutMillis = 20_000) {
             composeRule.onAllNodesWithTag(GeckoBrowserTabTestTags.GeckoContainer.testTag)
