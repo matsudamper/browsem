@@ -26,6 +26,7 @@ import java.net.URL
 import net.matsudamper.browser.data.TranslationProvider
 import net.matsudamper.browser.ReadabilityArticle
 import net.matsudamper.browser.ReadabilityWebExtension
+import net.matsudamper.browser.translate.TranslationPriorityLanguage
 import org.json.JSONObject
 import org.koin.compose.koinInject
 import org.mozilla.geckoview.AllowOrDeny
@@ -221,7 +222,6 @@ internal class BrowserTabScreenState(
         maybeResetToolbarColor(currentPageUrl, resolved)
         currentPageUrl = resolved
         clearPageLoadError()
-        markRenderingPending()
         session.loadUri(resolved)
     }
 
@@ -230,7 +230,6 @@ internal class BrowserTabScreenState(
         maybeResetToolbarColor(currentPageUrl, homepageUrl)
         currentPageUrl = homepageUrl
         clearPageLoadError()
-        markRenderingPending()
         session.loadUri(homepageUrl)
     }
 
@@ -255,8 +254,7 @@ internal class BrowserTabScreenState(
             tabHistoryCurrentIndex++
         }
         // 履歴移動先が SPA 同一ドキュメント遷移かフルページロードか不明のため
-        // ここでは markRenderingPending() を呼ばず、フルロードなら onPageStart で
-        // プレースホルダーを出す。SPA では一瞬プレースホルダーが見えるのを防ぐ
+        // プレビューオーバーレイは表示しない（タブ切り替え・セッション復元時のみ表示）
         session.goForward()
     }
 
@@ -426,7 +424,7 @@ internal class BrowserTabScreenState(
 
     fun onTranslate(translationProvider: TranslationProvider) {
         if (translationState == TranslationState.Loading) return
-        runTranslation(translationProvider, fromLanguage = detectedPageLanguage, toLanguage = "ja")
+        runTranslation(translationProvider, fromLanguage = detectedPageLanguage, toLanguage = TranslationPriorityLanguage.TO)
     }
 
     /** ステータスバーの言語ドロップダウンから再翻訳を実行する */
@@ -477,7 +475,6 @@ internal class BrowserTabScreenState(
         translationToLanguage = null
         if (savedUrl != null) {
             clearPageLoadError()
-            markRenderingPending()
             session.loadUri(savedUrl)
         }
     }
@@ -743,10 +740,7 @@ internal class BrowserTabScreenState(
             isFullPageLoadPending = false
         } else {
             // SPA 遷移（pushState / 同一ドキュメント内 history 移動）では
-            // onPageStart / onPageStop が発火しないため、onGoBack 等で
-            // markRenderingPending() により false になった renderReady が戻らず、
-            // プレースホルダーが被り続ける。GeckoView は既に新しいコンテンツを
-            // 描画しており、遷移前のページは FCP 済みなので両フラグを復帰させる
+            // onPageStart / onPageStop が発火しないため両フラグを復帰させる
             markRenderingDone()
         }
         currentPageUrl = url
@@ -847,7 +841,7 @@ internal class BrowserTabScreenState(
 
     override fun onPageStart(url: String) {
         clearPageLoadError()
-        markRenderingPending()
+        previewCaptureReady = false
         // 新しいページへの遷移時にfaviconをリセット
         browserTab.faviconBitmap = null
         webAppManifestJson = null
@@ -949,11 +943,9 @@ internal class BrowserTabScreenState(
             if (!isUrlInputFocused) {
                 urlInput = retryUrl
             }
-            markRenderingPending()
             session.loadUri(retryUrl)
             return
         }
-        markRenderingPending()
         session.reload()
     }
 
@@ -1006,13 +998,7 @@ internal class BrowserTabScreenState(
             urlInput = url
         }
         clearPageLoadError()
-        markRenderingPending()
         session.loadUri(url)
-    }
-
-    private fun markRenderingPending() {
-        renderReady = false
-        previewCaptureReady = false
     }
 
     private fun markRenderingDone() {
