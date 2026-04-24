@@ -230,13 +230,9 @@ internal fun GeckoBrowserTab(
         gecko.coverUntilFirstPaint(resumeCoverColor)
         OneShotPreDrawListener.add(gecko) {
             if (surfaceResumeState == SurfaceResumeState.ACTIVE) return@add
-            val wasReleased = surfaceResumeState == SurfaceResumeState.RELEASED
-            // 常に重経路で compositor を作り直す。
-            // wasReleased (ON_STOP 経由) なら既に release 済みなので setSession のみ。
-            // PAUSED_KEEP_SESSION でも release→setSession で fresh attach に統一する。
-            if (!wasReleased) {
-                gecko.releaseSession()
-            }
+            // ON_PAUSE で release 済みなので setSession で fresh attach するだけ。
+            // layout が最新寸法で 1 度計測された後の pre-draw で実行することで、
+            // Gecko compositor が stale サイズで attach されないようにする。
             gecko.setSession(session)
             session.setActive(true)
             gecko.requestLayout()
@@ -250,28 +246,36 @@ internal fun GeckoBrowserTab(
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
                 Lifecycle.Event.ON_PAUSE -> {
-                    // メディア再生中は active のまま維持（音声停止を避ける）。
-                    if (!mediaWebExtension.shouldKeepSessionAttached(session) &&
-                        surfaceResumeState == SurfaceResumeState.ACTIVE
+                    // ON_STOP まで待つと surface 破棄→再作成時に GeckoView 内部の
+                    // SurfaceHolder.Callback が Gecko compositor を自動 resume-resize させ、
+                    // IME 由来の stale サイズで frame 産出 → BLAST reject → GPU プロセス kill
+                    // というハングが発生する。ON_PAUSE 時点で releaseSession して session を
+                    // GeckoView から detach しておけば、surface 再作成時の自動レンダリングを
+                    // 抑止できる。
+                    //
+                    // capture preview は release 前に start する。capturePixels() は非同期
+                    // GeckoResult を返すため release 直後に走るキャプチャ完了率は低下するが、
+                    // ハング回避を優先する。
+                    if (surfaceResumeState == SurfaceResumeState.ACTIVE &&
+                        !mediaWebExtension.shouldKeepSessionAttached(session)
                     ) {
-                        session.setActive(false)
-                        surfaceResumeState = SurfaceResumeState.PAUSED_KEEP_SESSION
+                        geckoView?.also { gv ->
+                            session.setActive(false)
+                            // best-effort capture（非同期 GeckoResult、release 後に失敗する可能性あり）。
+                            state.captureTabPreview(gv)
+                            // surface 再作成時の自動 compositor resume を防ぐため即 detach。
+                            gv.releaseSession()
+                            surfaceResumeState = SurfaceResumeState.RELEASED
+                        }
                     }
                 }
                 Lifecycle.Event.ON_STOP -> {
                     session.flushSessionState()
+                    // non-media の場合は ON_PAUSE で release 済み。
+                    // media の場合は session 維持のため capture のみ実行（従来どおり）。
                     geckoView?.also { gv ->
                         if (mediaWebExtension.shouldKeepSessionAttached(session)) {
                             state.captureTabPreview(gv)
-                        } else {
-                            // capturePixels() はセッションに依存するため、キャプチャ完了後に releaseSession() を呼ぶ。
-                            state.captureTabPreview(gv) {
-                                // ON_START が先に戻って ACTIVE 化していたら skip。
-                                if (surfaceResumeState == SurfaceResumeState.PAUSED_KEEP_SESSION) {
-                                    gv.releaseSession()
-                                    surfaceResumeState = SurfaceResumeState.RELEASED
-                                }
-                            }
                         }
                     }
                 }
@@ -739,12 +743,10 @@ private fun TabHistoryBottomSheet(
  * Surface/Session 復元の進行状態。
  *
  * - ACTIVE: 前面表示中。復元処理は全て no-op。
- * - PAUSED_KEEP_SESSION: ON_PAUSE で setActive(false) 済。releaseSession は未実施。
- * - RELEASED: ON_STOP で releaseSession() 済。ON_START で setSession が必要。
+ * - RELEASED: ON_PAUSE で releaseSession() 済。ON_START で setSession が必要。
  */
 private enum class SurfaceResumeState {
     ACTIVE,
-    PAUSED_KEEP_SESSION,
     RELEASED,
 }
 
