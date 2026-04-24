@@ -106,7 +106,6 @@ class WebAppActivity : ComponentActivity() {
                         onOpenTabs = {},
                         enableTabUi = false,
                         showInstallExtensionItem = false,
-                        enableBackNavigation = true,
                         // ウェブアプリモード: 閉じるボタンなし、カスタムタブ風のツールバー
                         webAppMode = true,
                         onOpenNewSessionRequest = { uri ->

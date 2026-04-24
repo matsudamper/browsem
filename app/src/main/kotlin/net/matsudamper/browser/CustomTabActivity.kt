@@ -245,7 +245,6 @@ private fun CustomTabScreen(
         onOpenTabs = {},
         enableTabUi = false,
         showInstallExtensionItem = false,
-        enableBackNavigation = true,
         customTabMode = true,
         onCloseCustomTab = onClose,
         onOpenInBrowser = onOpenInBrowser,
