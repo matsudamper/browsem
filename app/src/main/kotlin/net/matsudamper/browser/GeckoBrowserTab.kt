@@ -65,8 +65,8 @@ import net.matsudamper.browser.data.TranslationProvider
 import net.matsudamper.browser.media.GeckoMediaSessionDelegate
 import net.matsudamper.browser.media.MediaWebExtension
 import net.matsudamper.browser.FindInPageWebExtension
+import net.matsudamper.browser.translate.TranslationPriorityLanguage
 import net.matsudamper.browser.ui.common.resolveBrowserToolbarColors
-import net.matsudamper.browser.ui.browser.SimpleViewScreen
 import net.matsudamper.browser.ui.browser.UrlBarSuggestionsUiState
 import org.koin.compose.koinInject
 import org.mozilla.geckoview.BasicSelectionActionDelegate
@@ -109,7 +109,6 @@ internal fun GeckoBrowserTab(
     onUrlInputChanged: ((String) -> Unit)? = null,
 ) {
     val context = LocalContext.current
-    val readabilityWebExtension: ReadabilityWebExtension = koinInject()
     val findInPageWebExtension: FindInPageWebExtension = koinInject()
     // URLバーフォーカス時にクリップボードから読み取ったURL
     var clipboardUrl by remember { mutableStateOf<String?>(null) }
@@ -311,16 +310,6 @@ internal fun GeckoBrowserTab(
         mediaWebExtension.registerSession(session)
         onDispose {
             mediaWebExtension.unregisterSession(session)
-        }
-    }
-
-    // ReadabilityWebExtension のセッション登録
-    DisposableEffect(session, state, readabilityWebExtension) {
-        readabilityWebExtension.registerSession(session) { article ->
-            state.simpleViewArticle = article
-        }
-        onDispose {
-            readabilityWebExtension.unregisterSession(session)
         }
     }
 
@@ -561,8 +550,6 @@ internal fun GeckoBrowserTab(
                     onRefresh = state::onRefresh,
                     onSuperRefresh = state::onSuperRefresh,
                     onTranslatePage = { state.onTranslate(translationProvider) },
-                    isSimpleView = state.isSimpleViewActive,
-                    onSimpleView = state::toggleSimpleView,
                     pageZoomPercent = state.pageZoomPercent,
                     onPageZoomIn = state::pageZoomIn,
                     onPageZoomOut = state::pageZoomOut,
@@ -582,11 +569,11 @@ internal fun GeckoBrowserTab(
             val detectedLang = state.detectedPageLanguage
             val languageOptions = remember(detectedLang) {
                 buildList {
-                    if (detectedLang != null && detectedLang != "en" && detectedLang != "ja") {
+                    if (detectedLang != null && detectedLang != TranslationPriorityLanguage.FROM && detectedLang != TranslationPriorityLanguage.TO) {
                         add(detectedLang)
                     }
-                    add("en")
-                    add("ja")
+                    add(TranslationPriorityLanguage.FROM)
+                    add(TranslationPriorityLanguage.TO)
                 }
             }
             TranslationStatusBar(
@@ -598,7 +585,7 @@ internal fun GeckoBrowserTab(
                 fromLanguageOptions = languageOptions,
                 toLanguageOptions = languageOptions,
                 onFromLanguageSelected = { lang ->
-                    state.onRetranslate(translationProvider, fromLanguage = lang, toLanguage = state.translationToLanguage ?: "ja")
+                    state.onRetranslate(translationProvider, fromLanguage = lang, toLanguage = state.translationToLanguage ?: TranslationPriorityLanguage.TO)
                 },
                 onToLanguageSelected = { lang ->
                     state.onRetranslate(translationProvider, fromLanguage = state.translationFromLanguage, toLanguage = lang)
@@ -643,14 +630,6 @@ internal fun GeckoBrowserTab(
                 },
                 modifier = Modifier.fillMaxSize(),
             )
-            // シンプル表示オーバーレイ
-            state.simpleViewArticle?.let { article ->
-                SimpleViewScreen(
-                    article = article,
-                    onClose = state::dismissSimpleView,
-                    modifier = Modifier.fillMaxSize(),
-                )
-            }
         }
         BrowserTabDialogLayer(
             state = state,
