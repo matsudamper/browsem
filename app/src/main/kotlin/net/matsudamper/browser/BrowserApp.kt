@@ -415,10 +415,12 @@ private fun BrowserAppContent(
                                 it(object : ExtensionsScreenViewModel.Event {
                                     override fun navigateToExtensionSettings(url: String) {
                                         context.startActivity(
-                                            Intent(context, CustomTabActivity::class.java).apply {
-                                                action = Intent.ACTION_VIEW
-                                                data = Uri.parse(url)
-                                            }
+                                            Intent(
+                                                Intent.ACTION_VIEW,
+                                                Uri.parse(url),
+                                                context,
+                                                CustomTabActivity::class.java,
+                                            )
                                         )
                                     }
                                 })
