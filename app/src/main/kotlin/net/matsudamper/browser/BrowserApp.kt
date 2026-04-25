@@ -1,5 +1,7 @@
 package net.matsudamper.browser
 
+import android.content.Intent
+import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.ContentTransform
@@ -412,16 +414,12 @@ private fun BrowserAppContent(
                             extensionsViewModel.eventHandler.receiveAsFlow().collect {
                                 it(object : ExtensionsScreenViewModel.Event {
                                     override fun navigateToExtensionSettings(url: String) {
-                                        scope.launch {
-                                            val tabId = UUID.randomUUID().toString()
-                                            withContext(Dispatchers.Main) {
-                                                browserTabController.createAndAppendTab(
-                                                    tabId = tabId,
-                                                    initialUrl = url,
-                                                )
-                                                selectTab(tabId, null)
+                                        context.startActivity(
+                                            Intent(context, CustomTabActivity::class.java).apply {
+                                                action = Intent.ACTION_VIEW
+                                                data = Uri.parse(url)
                                             }
-                                        }
+                                        )
                                     }
                                 })
                             }
