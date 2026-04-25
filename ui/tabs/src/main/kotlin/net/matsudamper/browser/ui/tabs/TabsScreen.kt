@@ -340,7 +340,7 @@ private fun TabsScreenLoadedContent(
                             IconButton(onClick = { groupMenuExpanded = true }) {
                                 Icon(
                                     imageVector = Icons.Default.MoreVert,
-                                    contentDescription = "メニュー",
+                                    contentDescription = "グループメニュー",
                                 )
                             }
                             DropdownMenu(
@@ -495,6 +495,43 @@ private fun Preview() {
             ),
             listOf(
                 TabsScreenTabData(id = "3", title = "GitHub", previewImage = null),
+            ),
+        )
+    }
+    TabsScreenLoadedContent(
+        groupedTabs = groupedTabs,
+        groups = groups,
+        activeGroupIndex = 0,
+        selectedTabId = "1",
+        onSelectTab = {},
+        onCloseTab = {},
+        onOpenNewTab = {},
+        onReorderTabs = { _, _, _ -> },
+        onReorderGroups = { _, _ -> },
+        onGroupSelected = {},
+        onGroupPageChanged = {},
+        onAddGroup = {},
+        onMoveTabToGroup = { _, _ -> },
+        onRenameGroup = { _, _ -> },
+        onDeleteGroup = {},
+        onToggleDefaultGroup = {},
+    )
+}
+
+/** グループが1つのみの場合 (削除メニューが disabled になる状態) */
+@Composable
+@Preview
+private fun PreviewSingleGroup() {
+    val groups = remember {
+        listOf(
+            TabGroupData(TabGroupId("g1"), "デフォルト"),
+        )
+    }
+    val groupedTabs = remember {
+        listOf(
+            listOf(
+                TabsScreenTabData(id = "1", title = "Example Domain", previewImage = null),
+                TabsScreenTabData(id = "2", title = "Google", previewImage = null),
             ),
         )
     }
