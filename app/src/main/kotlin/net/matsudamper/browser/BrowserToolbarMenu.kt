@@ -54,8 +54,6 @@ internal fun ToolbarMenu(
     onFindInPage: () -> Unit,
     onOpenSettings: () -> Unit,
     onAddToHomeScreen: () -> Unit,
-    isSimpleView: Boolean,
-    onSimpleView: () -> Unit,
     pageZoomPercent: Int,
     onPageZoomIn: () -> Unit,
     onPageZoomOut: () -> Unit,
@@ -266,26 +264,6 @@ internal fun ToolbarMenu(
             },
             onClick = { onPcModeToggle() },
         )
-        DropdownMenuItem(
-            modifier = Modifier.testTag(BrowserToolbarMenuTestTags.SimpleViewMenuItem.testTag),
-            text = { Text(text = "シンプル表示") },
-            leadingIcon = {
-                Icon(
-                    painter = painterResource(id = ResourcesR.drawable.ic_article_24dp),
-                    contentDescription = null,
-                )
-            },
-            trailingIcon = {
-                Checkbox(
-                    checked = isSimpleView,
-                    onCheckedChange = null,
-                )
-            },
-            onClick = {
-                onDismissRequest()
-                onSimpleView()
-            },
-        )
         if (showInstallExtensionItem) {
             DropdownMenuItem(
                 text = {
@@ -388,5 +366,4 @@ sealed interface BrowserToolbarMenuTestTags {
     object ZoomLabel : BrowserToolbarMenuTestTags { override val id = "zoom_label" }
     object ZoomPercentButton : BrowserToolbarMenuTestTags { override val id = "zoom_percent_button" }
     object RefreshButton : BrowserToolbarMenuTestTags { override val id = "refresh_button" }
-    object SimpleViewMenuItem : BrowserToolbarMenuTestTags { override val id = "simple_view_menu_item" }
 }

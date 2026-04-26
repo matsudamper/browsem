@@ -24,8 +24,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import java.net.URL
 import net.matsudamper.browser.data.TranslationProvider
-import net.matsudamper.browser.ReadabilityArticle
-import net.matsudamper.browser.ReadabilityWebExtension
+import net.matsudamper.browser.translate.TranslationPriorityLanguage
 import org.json.JSONObject
 import org.koin.compose.koinInject
 import org.mozilla.geckoview.AllowOrDeny
@@ -60,7 +59,6 @@ internal fun rememberBrowserTabScreenState(
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val geckoDownloadManager: GeckoDownloadManager = koinInject()
-    val readabilityWebExtension: ReadabilityWebExtension = koinInject()
     val findInPageWebExtension: FindInPageWebExtension = koinInject()
     val state = remember(browserTab) {
         BrowserTabScreenState(
@@ -69,7 +67,6 @@ internal fun rememberBrowserTabScreenState(
             searchTemplate = searchTemplate,
             coroutineScope = coroutineScope,
             geckoDownloadManager = geckoDownloadManager,
-            readabilityWebExtension = readabilityWebExtension,
             findInPageWebExtension = findInPageWebExtension,
             context = context,
             onHistoryRecord = onHistoryRecord,
@@ -91,7 +88,6 @@ internal class BrowserTabScreenState(
     searchTemplate: String,
     private val coroutineScope: CoroutineScope,
     private val geckoDownloadManager: GeckoDownloadManager,
-    private val readabilityWebExtension: ReadabilityWebExtension,
     internal val findInPageWebExtension: FindInPageWebExtension,
     private val context: Context,
     private val onRequestDownloadNotificationPermission: suspend () -> Unit = {},
@@ -144,10 +140,6 @@ internal class BrowserTabScreenState(
     var translationFromLanguage by mutableStateOf<String?>(null)
     /** 翻訳先言語タグ（例: "ja"） */
     var translationToLanguage by mutableStateOf<String?>(null)
-
-    // --- シンプル表示状態 ---
-    var simpleViewArticle by mutableStateOf<ReadabilityArticle?>(null)
-    val isSimpleViewActive: Boolean get() = simpleViewArticle != null
 
     // --- Find-in-page state ---
     private var findInPageState by mutableStateOf(FindInPageState.Closed)
@@ -221,7 +213,6 @@ internal class BrowserTabScreenState(
         maybeResetToolbarColor(currentPageUrl, resolved)
         currentPageUrl = resolved
         clearPageLoadError()
-        markRenderingPending()
         session.loadUri(resolved)
     }
 
@@ -230,7 +221,6 @@ internal class BrowserTabScreenState(
         maybeResetToolbarColor(currentPageUrl, homepageUrl)
         currentPageUrl = homepageUrl
         clearPageLoadError()
-        markRenderingPending()
         session.loadUri(homepageUrl)
     }
 
@@ -255,8 +245,7 @@ internal class BrowserTabScreenState(
             tabHistoryCurrentIndex++
         }
         // 履歴移動先が SPA 同一ドキュメント遷移かフルページロードか不明のため
-        // ここでは markRenderingPending() を呼ばず、フルロードなら onPageStart で
-        // プレースホルダーを出す。SPA では一瞬プレースホルダーが見えるのを防ぐ
+        // プレビューオーバーレイは表示しない（タブ切り替え・セッション復元時のみ表示）
         session.goForward()
     }
 
@@ -426,7 +415,7 @@ internal class BrowserTabScreenState(
 
     fun onTranslate(translationProvider: TranslationProvider) {
         if (translationState == TranslationState.Loading) return
-        runTranslation(translationProvider, fromLanguage = detectedPageLanguage, toLanguage = "ja")
+        runTranslation(translationProvider, fromLanguage = detectedPageLanguage, toLanguage = TranslationPriorityLanguage.TO)
     }
 
     /** ステータスバーの言語ドロップダウンから再翻訳を実行する */
@@ -441,8 +430,10 @@ internal class BrowserTabScreenState(
             if (originalPageUrlForRevert == null) {
                 originalPageUrlForRevert = currentPageUrl
             }
+            // 非同期処理完了後にページ遷移済みかを検出するために翻訳開始時のURLを保持する
+            val translationStartUrl = originalPageUrlForRevert
             translationState = TranslationState.Loading
-            val pageUrl = originalPageUrlForRevert ?: currentPageUrl
+            val pageUrl = translationStartUrl ?: currentPageUrl
             val result = runCatching {
                 PageTranslator(session, pageUrl).translatePage(
                     translationProvider,
@@ -450,6 +441,9 @@ internal class BrowserTabScreenState(
                     toLanguage,
                 )
             }
+            // 翻訳中にページ遷移が発生した場合（onLocationChange が originalPageUrlForRevert をクリア済み）は
+            // 翻訳結果を破棄して翻訳バーを表示しない
+            if (originalPageUrlForRevert != translationStartUrl) return@launch
             if (result.isSuccess) {
                 val langs = result.getOrNull()
                 translationFromLanguage = langs?.fromLanguage
@@ -472,7 +466,6 @@ internal class BrowserTabScreenState(
         translationToLanguage = null
         if (savedUrl != null) {
             clearPageLoadError()
-            markRenderingPending()
             session.loadUri(savedUrl)
         }
     }
@@ -586,20 +579,6 @@ internal class BrowserTabScreenState(
 
     fun retryPageLoad() {
         refreshCurrentPage()
-    }
-
-    fun toggleSimpleView() {
-        if (simpleViewArticle != null) {
-            // シンプル表示を閉じる
-            simpleViewArticle = null
-        } else {
-            // コンテンツスクリプトに記事抽出を要求する
-            readabilityWebExtension.requestExtraction(session)
-        }
-    }
-
-    fun dismissSimpleView() {
-        simpleViewArticle = null
     }
 
     fun requestAddToHomeScreen() {
@@ -733,32 +712,22 @@ internal class BrowserTabScreenState(
         // SPA 遷移（pushState）では onPageStart が発火しないためリセットしない
         // ダウンロードリンクのように onPageStart だけ発火して onLocationChange が呼ばれない
         // ケースは isFullPageLoadPending が onPageStop でクリアされるため色をリセットしない
+        val wasFullPageLoad = isFullPageLoadPending
         if (isFullPageLoadPending) {
             maybeResetToolbarColorOnPageStart(url)
             isFullPageLoadPending = false
         } else {
             // SPA 遷移（pushState / 同一ドキュメント内 history 移動）では
-            // onPageStart / onPageStop が発火しないため、onGoBack 等で
-            // markRenderingPending() により false になった renderReady が戻らず、
-            // プレースホルダーが被り続ける。GeckoView は既に新しいコンテンツを
-            // 描画しており、遷移前のページは FCP 済みなので両フラグを復帰させる
+            // onPageStart / onPageStop が発火しないため両フラグを復帰させる
             markRenderingDone()
         }
         currentPageUrl = url
         if (!isUrlInputFocused) {
             urlInput = url
         }
-        val revertUrl = originalPageUrlForRevert
-        if (translationState != TranslationState.Idle &&
-            !url.startsWith("data:") &&
-            url != revertUrl
-        ) {
+        if (shouldResetTranslationOnLocationChange(translationState, url, originalPageUrlForRevert, wasFullPageLoad)) {
             translationState = TranslationState.Idle
             originalPageUrlForRevert = null
-        }
-        // ページ遷移時にシンプル表示をリセット
-        if (simpleViewArticle != null) {
-            simpleViewArticle = null
         }
         if (!url.startsWith("data:")) {
             detectedPageLanguage = null
@@ -846,7 +815,7 @@ internal class BrowserTabScreenState(
 
     override fun onPageStart(url: String) {
         clearPageLoadError()
-        markRenderingPending()
+        previewCaptureReady = false
         // 新しいページへの遷移時にfaviconをリセット
         browserTab.faviconBitmap = null
         webAppManifestJson = null
@@ -948,11 +917,9 @@ internal class BrowserTabScreenState(
             if (!isUrlInputFocused) {
                 urlInput = retryUrl
             }
-            markRenderingPending()
             session.loadUri(retryUrl)
             return
         }
-        markRenderingPending()
         session.reload()
     }
 
@@ -1005,13 +972,7 @@ internal class BrowserTabScreenState(
             urlInput = url
         }
         clearPageLoadError()
-        markRenderingPending()
         session.loadUri(url)
-    }
-
-    private fun markRenderingPending() {
-        renderReady = false
-        previewCaptureReady = false
     }
 
     private fun markRenderingDone() {

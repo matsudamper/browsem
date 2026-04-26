@@ -6,12 +6,14 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
@@ -43,6 +45,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
@@ -306,7 +309,8 @@ private fun TabsScreenLoadedContent(
             ) { page ->
                 val tabsForPage = groupedTabs.getOrElse(page) { emptyList() }
                 Column(
-                    modifier = Modifier.fillMaxSize()
+                    modifier = Modifier
+                        .fillMaxSize()
                         .testTag(TabsScreenTestTags.Page(page).testTag),
                 ) {
                     // ページヘッダー: デフォルトトグル・3点メニュー
@@ -317,6 +321,7 @@ private fun TabsScreenLoadedContent(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
+                        Spacer(modifier = Modifier.weight(1f))
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -329,9 +334,9 @@ private fun TabsScreenLoadedContent(
                             // 外部アプリ（Intent）経由でURLを開いた際に割り当てるグループを指定する。
                             // タブ一覧での新規追加・target=_blank など、アプリ内操作には適用されない。
                             Switch(
+                                modifier = Modifier.testTag(TabsScreenTestTags.DefaultGroupSwitch(page).testTag),
                                 checked = groups.getOrNull(page)?.isDefault ?: false,
                                 onCheckedChange = { onToggleDefaultGroup(page) },
-                                modifier = Modifier.testTag(TabsScreenTestTags.DefaultGroupSwitch(page).testTag),
                             )
                         }
                         // グループの名前変更・削除を格納する3点メニュー
@@ -340,7 +345,7 @@ private fun TabsScreenLoadedContent(
                             IconButton(onClick = { groupMenuExpanded = true }) {
                                 Icon(
                                     imageVector = Icons.Default.MoreVert,
-                                    contentDescription = "グループメニュー",
+                                    contentDescription = "メニュー",
                                 )
                             }
                             DropdownMenu(
@@ -560,7 +565,7 @@ sealed interface TabsScreenTestTags {
 
     val testTag get() = "${TabsScreenTestTags::class.java.name}#$id"
 
-    class Page(index: Int): TabsScreenTestTags {
+    class Page(index: Int) : TabsScreenTestTags {
         override val id: String = "page_$index"
     }
 

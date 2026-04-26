@@ -101,8 +101,6 @@ internal fun BrowserToolBar(
     onPcModeToggle: () -> Unit,
     onTranslatePage: () -> Unit,
     onAddToHomeScreen: () -> Unit,
-    isSimpleView: Boolean,
-    onSimpleView: () -> Unit,
     pageZoomPercent: Int,
     onPageZoomIn: () -> Unit,
     onPageZoomOut: () -> Unit,
@@ -163,8 +161,6 @@ internal fun BrowserToolBar(
                 onFindInPage = onFindInPage,
                 onOpenSettings = onOpenSettings,
                 onAddToHomeScreen = onAddToHomeScreen,
-                isSimpleView = isSimpleView,
-                onSimpleView = onSimpleView,
                 pageZoomPercent = pageZoomPercent,
                 onPageZoomIn = onPageZoomIn,
                 onPageZoomOut = onPageZoomOut,
@@ -244,21 +240,24 @@ internal fun BrowserToolbar(
             .semantics {
                 stateDescription = "toolbarColor|${toolbarColors.colorSource}|${toolbarColors.resolvedToolbarColor.toArgbHex()}"
             }
-            .then(gestureState?.modifier ?: Modifier)
-            .onSizeChanged {
-                heightCache = it.height.coerceAtLeast(heightCache)
-            }
-            .defaultMinSize(
-                minHeight = with(LocalDensity.current) { heightCache.toDp() }
-            ),
+            .then(gestureState?.modifier ?: Modifier),
     ) {
         Row(
             // ステータスバーが一時的に非表示扱いになっても通常時の領域分だけコンテンツを下に押し出す。
             // Surface の背景色はステータスバー領域まで延びて塗りつぶされる。
+            // サイズキャッシュは windowInsetsPadding の内側（Row 自身）で取ることで、
+            // フローティング／マルチウィンドウで status bar のインセットが 0 になっても
+            // 旧フルスクリーン時の「URL バー + status bar」分の高さで固定されないようにする。
             // IntrinsicSize.Min で Row 高さを子の最小 intrinsic 高さに合わせる（URL バーの自然高さ）。
             modifier = Modifier
                 .windowInsetsPadding(
                     WindowInsets.statusBarsIgnoringVisibility.only(WindowInsetsSides.Top)
+                )
+                .onSizeChanged {
+                    heightCache = it.height.coerceAtLeast(heightCache)
+                }
+                .defaultMinSize(
+                    minHeight = with(LocalDensity.current) { heightCache.toDp() }
                 )
                 .height(IntrinsicSize.Min),
             verticalAlignment = Alignment.CenterVertically,
@@ -488,8 +487,6 @@ private fun Preview() {
                     onPcModeToggle = {},
                     onFindInPage = {},
                     onAddToHomeScreen = {},
-                    isSimpleView = false,
-                    onSimpleView = {},
                     pageZoomPercent = 100,
                     onPageZoomIn = {},
                     onPageZoomOut = {},
@@ -533,8 +530,6 @@ private fun PreviewTabCountVariants() {
                     onPcModeToggle = {},
                     onFindInPage = {},
                     onAddToHomeScreen = {},
-                    isSimpleView = false,
-                    onSimpleView = {},
                     pageZoomPercent = 100,
                     onPageZoomIn = {},
                     onPageZoomOut = {},
