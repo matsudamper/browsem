@@ -313,62 +313,22 @@ private fun TabsScreenLoadedContent(
                         .fillMaxSize()
                         .testTag(TabsScreenTestTags.Page(page).testTag),
                 ) {
-                    // ページヘッダー: デフォルトトグル・3点メニュー
-                    Row(
+                    TabGroupMenu(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 16.dp, vertical = 8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Spacer(modifier = Modifier.weight(1f))
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        ) {
-                            Text(
-                                text = "デフォルト",
-                                style = MaterialTheme.typography.labelMedium,
-                            )
-                            // 外部アプリ（Intent）経由でURLを開いた際に割り当てるグループを指定する。
-                            // タブ一覧での新規追加・target=_blank など、アプリ内操作には適用されない。
-                            Switch(
-                                modifier = Modifier.testTag(TabsScreenTestTags.DefaultGroupSwitch(page).testTag),
-                                checked = groups.getOrNull(page)?.isDefault ?: false,
-                                onCheckedChange = { onToggleDefaultGroup(page) },
-                            )
+                        page = page,
+                        groups = groups,
+                        onClickDelete = {
+                            deleteDialogGroupIndex = page
+                        },
+                        onClickRename = {
+                            renameDialogGroupIndex = page
+                        },
+                        onToggleDefaultGroup = {
+                            onToggleDefaultGroup(page)
                         }
-                        // グループの名前変更・削除を格納する3点メニュー
-                        var groupMenuExpanded by remember { mutableStateOf(false) }
-                        Box {
-                            IconButton(onClick = { groupMenuExpanded = true }) {
-                                Icon(
-                                    imageVector = Icons.Default.MoreVert,
-                                    contentDescription = "メニュー",
-                                )
-                            }
-                            DropdownMenu(
-                                expanded = groupMenuExpanded,
-                                onDismissRequest = { groupMenuExpanded = false },
-                            ) {
-                                DropdownMenuItem(
-                                    text = { Text("名前変更") },
-                                    onClick = {
-                                        groupMenuExpanded = false
-                                        renameDialogGroupIndex = page
-                                    },
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("削除") },
-                                    enabled = groups.size > 1,
-                                    onClick = {
-                                        groupMenuExpanded = false
-                                        deleteDialogGroupIndex = page
-                                    },
-                                )
-                            }
-                        }
-                    }
+                    )
                     GroupTabGrid(
                         tabs = tabsForPage,
                         selectedTabId = selectedTabId,
@@ -446,6 +406,71 @@ private fun TabsScreenLoadedContent(
     }
 }
 
+@Composable
+private fun TabGroupMenu(
+    page: Int,
+    groups: List<TabGroupData>,
+    onToggleDefaultGroup: (page: Int) -> Unit,
+    onClickRename: () -> Unit,
+    onClickDelete: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Spacer(modifier = Modifier.weight(1f))
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text(
+                text = "デフォルト",
+                style = MaterialTheme.typography.labelMedium,
+            )
+            // 外部アプリ（Intent）経由でURLを開いた際に割り当てるグループを指定する。
+            // タブ一覧での新規追加・target=_blank など、アプリ内操作には適用されない。
+            Switch(
+                modifier = Modifier.testTag(TabsScreenTestTags.DefaultGroupSwitch(page).testTag),
+                checked = groups.getOrNull(page)?.isDefault ?: false,
+                onCheckedChange = { onToggleDefaultGroup(page) },
+            )
+        }
+        // グループの名前変更・削除を格納する3点メニュー
+        var groupMenuExpanded by remember { mutableStateOf(false) }
+        Box {
+            IconButton(onClick = { groupMenuExpanded = true }) {
+                Icon(
+                    imageVector = Icons.Default.MoreVert,
+                    contentDescription = "メニュー",
+                )
+            }
+            DropdownMenu(
+                expanded = groupMenuExpanded,
+                onDismissRequest = { groupMenuExpanded = false },
+            ) {
+                DropdownMenuItem(
+                    text = { Text("名前変更") },
+                    onClick = {
+                        groupMenuExpanded = false
+                        onClickRename()
+                    },
+                )
+                DropdownMenuItem(
+                    text = { Text("削除") },
+                    enabled = groups.size > 1,
+                    onClick = {
+                        groupMenuExpanded = false
+                        onClickDelete()
+                    },
+                )
+            }
+        }
+    }
+
+}
+
 /**
  * HorizontalPager のスクロール進捗に連動して動くインジケータ。
  * グループタブバーの直下に表示し、LazyRow の実際のアイテム位置に合わせてスライドするバーを描画する。
@@ -499,6 +524,43 @@ private fun Preview() {
             ),
             listOf(
                 TabsScreenTabData(id = "3", title = "GitHub", previewImage = null),
+            ),
+        )
+    }
+    TabsScreenLoadedContent(
+        groupedTabs = groupedTabs,
+        groups = groups,
+        activeGroupIndex = 0,
+        selectedTabId = "1",
+        onSelectTab = {},
+        onCloseTab = {},
+        onOpenNewTab = {},
+        onReorderTabs = { _, _, _ -> },
+        onReorderGroups = { _, _ -> },
+        onGroupSelected = {},
+        onGroupPageChanged = {},
+        onAddGroup = {},
+        onMoveTabToGroup = { _, _ -> },
+        onRenameGroup = { _, _ -> },
+        onDeleteGroup = {},
+        onToggleDefaultGroup = {},
+    )
+}
+
+/** グループが1つのみの場合 (削除メニューが disabled になる状態) */
+@Composable
+@Preview
+private fun PreviewSingleGroup() {
+    val groups = remember {
+        listOf(
+            TabGroupData(TabGroupId("g1"), "デフォルト"),
+        )
+    }
+    val groupedTabs = remember {
+        listOf(
+            listOf(
+                TabsScreenTabData(id = "1", title = "Example Domain", previewImage = null),
+                TabsScreenTabData(id = "2", title = "Google", previewImage = null),
             ),
         )
     }
