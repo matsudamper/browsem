@@ -83,8 +83,34 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
+      - name: テスト前のシステムリソース確認
+        run: |
+          echo "=== メモリ ==="
+          free -h
+          echo "=== ディスク空き容量 ==="
+          df -h
+          echo "=== CPU 数 ==="
+          nproc
+          echo "=== KVM デバイス ==="
+          ls -la /dev/kvm 2>/dev/null || echo "KVM デバイスが存在しません"
+
       - name: Run Android Instrumentation Tests (Managed Device)
         run: ./gradlew :app:pixel6Api34DebugAndroidTest
+
+      - name: テスト失敗時の診断情報収集
+        if: failure()
+        run: |
+          echo "=== テスト失敗時のメモリ ==="
+          free -h
+          echo "=== テスト失敗時のディスク ==="
+          df -h
+          echo "=== Gradle Managed Device ログファイル一覧 ==="
+          find app/build -name "*.log" 2>/dev/null | head -30 || true
+          find ~/.android -name "*.log" 2>/dev/null | head -30 || true
+          echo "=== adb デバイス一覧 ==="
+          adb devices 2>/dev/null || true
+          echo "=== ビルド出力ディレクトリ構造 ==="
+          find app/build/outputs -type f 2>/dev/null | head -50 || true
 
       - name: Upload Android test report
         if: always()
@@ -94,6 +120,16 @@ jobs:
           path: |
             app/build/reports/androidTests/managedDevice/debug/pixel6Api34
             app/build/outputs/androidTest-results/managedDevice/debug/pixel6Api34
+
+      - name: テスト失敗時の追加ログアップロード
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: android-test-failure-logs
+          path: |
+            app/build/outputs/managed_device_android_test_additional_output/
+            app/build/reports/androidTests/
+          retention-days: 7
 
   detekt:
     runs-on: ubuntu-latest
