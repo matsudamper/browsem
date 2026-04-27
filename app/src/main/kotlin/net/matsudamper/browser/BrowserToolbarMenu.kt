@@ -58,6 +58,10 @@ internal fun ToolbarMenu(
     onPageZoomIn: () -> Unit,
     onPageZoomOut: () -> Unit,
     onResetPageZoom: () -> Unit,
+    showOpenSettings: Boolean = true,
+    showAddToHomeScreen: Boolean = true,
+    showHome: Boolean = true,
+    onOpenInBrowser: (() -> Unit)? = null,
 ) {
     DropdownMenu(
         expanded = visibleMenu,
@@ -151,22 +155,24 @@ internal fun ToolbarMenu(
                     style = MaterialTheme.typography.labelSmall,
                 )
             }
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                IconButton(
-                    onClick = {
-                        onDismissRequest()
-                        onHome()
+            if (showHome) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    IconButton(
+                        onClick = {
+                            onDismissRequest()
+                            onHome()
+                        }
+                    ) {
+                        Icon(
+                            painter = painterResource(ResourcesR.drawable.ic_home_24dp),
+                            contentDescription = null,
+                        )
                     }
-                ) {
-                    Icon(
-                        painter = painterResource(ResourcesR.drawable.ic_home_24dp),
-                        contentDescription = null,
+                    Text(
+                        text = "ホーム",
+                        style = MaterialTheme.typography.labelSmall,
                     )
                 }
-                Text(
-                    text = "ホーム",
-                    style = MaterialTheme.typography.labelSmall,
-                )
             }
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 // 短押しで通常更新、長押しでキャッシュをバイパスしてスーパーリフレッシュ
@@ -326,36 +332,57 @@ internal fun ToolbarMenu(
                 onShare()
             },
         )
-        DropdownMenuItem(
-            text = {
-                Text(text = "ホームに追加")
-            },
-            leadingIcon = {
-                Icon(
-                    painter = painterResource(id = ResourcesR.drawable.ic_add_to_home_screen_24dp),
-                    contentDescription = null,
-                )
-            },
-            onClick = {
-                onDismissRequest()
-                onAddToHomeScreen()
-            },
-        )
-        DropdownMenuItem(
-            text = {
-                Text(text = "設定")
-            },
-            leadingIcon = {
-                Icon(
-                    painter = painterResource(id = ResourcesR.drawable.ic_settings_24dp),
-                    contentDescription = null,
-                )
-            },
-            onClick = {
-                onDismissRequest()
-                onOpenSettings()
-            },
-        )
+        if (showAddToHomeScreen) {
+            DropdownMenuItem(
+                text = {
+                    Text(text = "ホームに追加")
+                },
+                leadingIcon = {
+                    Icon(
+                        painter = painterResource(id = ResourcesR.drawable.ic_add_to_home_screen_24dp),
+                        contentDescription = null,
+                    )
+                },
+                onClick = {
+                    onDismissRequest()
+                    onAddToHomeScreen()
+                },
+            )
+        }
+        onOpenInBrowser?.let { openInBrowser ->
+            DropdownMenuItem(
+                text = {
+                    Text(text = "ブラウザで開く")
+                },
+                leadingIcon = {
+                    Icon(
+                        painter = painterResource(id = ResourcesR.drawable.ic_open_in_browser_24dp),
+                        contentDescription = null,
+                    )
+                },
+                onClick = {
+                    onDismissRequest()
+                    openInBrowser()
+                },
+            )
+        }
+        if (showOpenSettings) {
+            DropdownMenuItem(
+                text = {
+                    Text(text = "設定")
+                },
+                leadingIcon = {
+                    Icon(
+                        painter = painterResource(id = ResourcesR.drawable.ic_settings_24dp),
+                        contentDescription = null,
+                    )
+                },
+                onClick = {
+                    onDismissRequest()
+                    onOpenSettings()
+                },
+            )
+        }
     }
 }
 
