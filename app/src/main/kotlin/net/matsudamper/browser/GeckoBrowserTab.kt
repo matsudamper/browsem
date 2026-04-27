@@ -476,12 +476,32 @@ internal fun GeckoBrowserTab(
                     title = state.currentPageTitle.ifBlank { "ページ" },
                     url = state.currentPageUrl,
                     onClose = { onCloseCustomTab?.invoke() ?: onCloseTab?.invoke() },
+                    toolbarColor = state.toolbarColor,
                     onRefresh = state::onRefresh,
+                    onSuperRefresh = state::onSuperRefresh,
+                    onHome = state::onHome,
+                    onForward = state::onGoForward,
+                    canGoForward = state.canGoForward,
+                    onBack = state::onGoBack,
+                    canGoBack = state.canGoBack,
+                    onLongPressHistory = { showTabHistorySheet = true },
+                    isPcMode = state.isPcMode,
+                    onPcModeToggle = state::togglePcMode,
+                    showInstallExtensionItem = showInstallExtensionItem && state.showInstallExtensionItem,
+                    onInstallExtension = { onInstallExtensionRequest(state.currentPageUrl) },
+                    onTranslatePage = { state.onTranslate(translationProvider) },
                     onShare = state::sharePage,
+                    onFindInPage = state::openFindInPage,
+                    onAddToHomeScreen = state::requestAddToHomeScreen,
+                    // ウェブアプリモードでは「ホームに追加」を非表示
+                    showAddToHomeScreen = !webAppMode,
                     onOpenInBrowser = onOpenInBrowser?.let { callback ->
                         { callback(state.currentPageUrl) }
                     },
-                    toolbarColor = state.toolbarColor,
+                    pageZoomPercent = state.pageZoomPercent,
+                    onPageZoomIn = state::pageZoomIn,
+                    onPageZoomOut = state::pageZoomOut,
+                    onResetPageZoom = state::resetPageZoom,
                     // ウェブアプリモードでは閉じるボタンを非表示にする
                     showCloseButton = customTabMode,
                 )

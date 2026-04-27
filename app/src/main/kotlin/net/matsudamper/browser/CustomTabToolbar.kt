@@ -11,8 +11,6 @@ import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsIgnoringVisibility
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -46,10 +44,29 @@ internal fun CustomTabToolbar(
     title: String,
     url: String,
     onClose: () -> Unit,
-    onRefresh: () -> Unit,
-    onShare: () -> Unit,
-    onOpenInBrowser: (() -> Unit)?,
     toolbarColor: Color?,
+    onRefresh: () -> Unit,
+    onSuperRefresh: () -> Unit,
+    onHome: () -> Unit,
+    onForward: () -> Unit,
+    canGoForward: Boolean,
+    onBack: () -> Unit,
+    canGoBack: Boolean,
+    onLongPressHistory: () -> Unit,
+    isPcMode: Boolean,
+    onPcModeToggle: () -> Unit,
+    showInstallExtensionItem: Boolean,
+    onInstallExtension: () -> Unit,
+    onTranslatePage: () -> Unit,
+    onShare: () -> Unit,
+    onFindInPage: () -> Unit,
+    onAddToHomeScreen: () -> Unit,
+    showAddToHomeScreen: Boolean,
+    onOpenInBrowser: (() -> Unit)?,
+    pageZoomPercent: Int,
+    onPageZoomIn: () -> Unit,
+    onPageZoomOut: () -> Unit,
+    onResetPageZoom: () -> Unit,
     showCloseButton: Boolean = true,
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
@@ -112,34 +129,35 @@ internal fun CustomTabToolbar(
                         contentDescription = "メニュー",
                     )
                 }
-                DropdownMenu(
-                    expanded = menuExpanded,
+                ToolbarMenu(
+                    visibleMenu = menuExpanded,
                     onDismissRequest = { menuExpanded = false },
-                ) {
-                    onOpenInBrowser?.let { openInBrowser ->
-                        DropdownMenuItem(
-                            text = { Text("ブラウザで開く") },
-                            onClick = {
-                                menuExpanded = false
-                                openInBrowser()
-                            },
-                        )
-                    }
-                    DropdownMenuItem(
-                        text = { Text("共有") },
-                        onClick = {
-                            menuExpanded = false
-                            onShare()
-                        },
-                    )
-                    DropdownMenuItem(
-                        text = { Text("更新") },
-                        onClick = {
-                            menuExpanded = false
-                            onRefresh()
-                        },
-                    )
-                }
+                    onRefresh = onRefresh,
+                    onSuperRefresh = onSuperRefresh,
+                    onHome = onHome,
+                    onForward = onForward,
+                    canGoForward = canGoForward,
+                    onBack = onBack,
+                    canGoBack = canGoBack,
+                    onLongPressHistory = onLongPressHistory,
+                    isPcMode = isPcMode,
+                    onPcModeToggle = onPcModeToggle,
+                    showInstallExtensionItem = showInstallExtensionItem,
+                    onInstallExtension = onInstallExtension,
+                    onTranslatePage = onTranslatePage,
+                    onShare = onShare,
+                    onFindInPage = onFindInPage,
+                    onOpenSettings = {},
+                    onAddToHomeScreen = onAddToHomeScreen,
+                    pageZoomPercent = pageZoomPercent,
+                    onPageZoomIn = onPageZoomIn,
+                    onPageZoomOut = onPageZoomOut,
+                    onResetPageZoom = onResetPageZoom,
+                    showOpenSettings = false,
+                    showAddToHomeScreen = showAddToHomeScreen,
+                    showHome = false,
+                    onOpenInBrowser = onOpenInBrowser,
+                )
             }
         }
     }
