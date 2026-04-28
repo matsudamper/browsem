@@ -93,7 +93,7 @@ internal fun UrlTextInput(
                                 color = resolvedTextColor,
                                 textAlign = TextAlign.Start,
                             ),
-                        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                        cursorBrush = SolidColor(resolvedTextColor),
                         keyboardOptions = KeyboardOptions.Default.copy(
                             imeAction = ImeAction.Go,
                             keyboardType = KeyboardType.Uri,
