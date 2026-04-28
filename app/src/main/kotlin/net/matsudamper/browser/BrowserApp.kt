@@ -293,6 +293,12 @@ private fun BrowserAppContent(
                                     toolbarMenu = {},
                                     gestureState = null,
                                     updateVisibleMenu = {},
+                                    canGoForward = false,
+                                    onForward = {},
+                                    canGoBack = false,
+                                    onBack = {},
+                                    onRefresh = {},
+                                    onTranslatePage = {},
                                     urlInputState = UrlInputState(
                                         value = tab.currentUrl,
                                         onValueChange = {},

@@ -7,6 +7,7 @@ import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.IntrinsicSize
@@ -129,6 +130,12 @@ internal fun BrowserToolBar(
         onOpenTabs = onOpenTabs,
         tabCount = tabCount,
         showTabButton = showTabActions,
+        canGoForward = canGoForward,
+        onForward = onForward,
+        canGoBack = canGoBack,
+        onBack = onBack,
+        onRefresh = onRefresh,
+        onTranslatePage = onTranslatePage,
         urlInputState = UrlInputState(
             value = value,
             onValueChange = onValueChange,
@@ -221,6 +228,12 @@ internal fun BrowserToolbar(
     updateVisibleMenu: (Boolean) -> Unit,
     onOpenTabs: () -> Unit,
     tabCount: Int?,
+    canGoForward: Boolean,
+    onForward: () -> Unit,
+    canGoBack: Boolean,
+    onBack: () -> Unit,
+    onRefresh: () -> Unit,
+    onTranslatePage: () -> Unit,
     modifier: Modifier = Modifier,
     showTabButton: Boolean = true,
     toolbarMenu: @Composable () -> Unit,
@@ -242,105 +255,188 @@ internal fun BrowserToolbar(
             }
             .then(gestureState?.modifier ?: Modifier),
     ) {
-        Row(
-            // ステータスバーが一時的に非表示扱いになっても通常時の領域分だけコンテンツを下に押し出す。
-            // Surface の背景色はステータスバー領域まで延びて塗りつぶされる。
-            // サイズキャッシュは windowInsetsPadding の内側（Row 自身）で取ることで、
-            // フローティング／マルチウィンドウで status bar のインセットが 0 になっても
-            // 旧フルスクリーン時の「URL バー + status bar」分の高さで固定されないようにする。
-            // IntrinsicSize.Min で Row 高さを子の最小 intrinsic 高さに合わせる（URL バーの自然高さ）。
-            modifier = Modifier
-                .windowInsetsPadding(
-                    WindowInsets.statusBarsIgnoringVisibility.only(WindowInsetsSides.Top)
-                )
-                .onSizeChanged {
-                    heightCache = it.height.coerceAtLeast(heightCache)
-                }
-                .defaultMinSize(
-                    minHeight = with(LocalDensity.current) { heightCache.toDp() }
-                )
-                .height(IntrinsicSize.Min),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Surface(
-                modifier = Modifier
-                    .height(IntrinsicSize.Min)
-                    .weight(1f)
-                    .padding(4.dp),
-                contentColor = toolbarColors.toolbarContentColor,
-                color = toolbarColors.urlBarBackgroundColor,
-                shape = CircleShape,
-            ) {
-                Row(
-                    modifier = Modifier
-                        .padding(
-                            end = 4.dp,
-                        ),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    UrlTextInput(
-                        modifier = Modifier
-                            .testTag(BrowserToolbarTestTags.Url(urlInputState.value).testTag)
-                            .weight(1f),
-                        enableSuggest = urlInputState.enableSuggest,
-                        paddingValues = PaddingValues(
-                            start = 8.dp,
-                            top = 4.dp,
-                            bottom = 4.dp
-                        ),
-                        scrollEnabled = isFocused,
-                        value = urlInputState.value,
-                        onValueChange = urlInputState.onValueChange,
-                        onSubmit = urlInputState.onSubmit,
-                        onFocusChanged = urlInputState.onFocusChanged,
-                        textColor = LocalContentColor.current,
-                    )
+        BoxWithConstraints {
+            // URLバーの最小幅
+            val minUrlBarWidth = 150.dp
+            // IconButtonのデフォルトサイズ
+            val iconButtonWidth = 48.dp
+            // タブカウントボタンの幅（表示時）
+            val tabCountWidth = if (showTabButton && !isFocused) iconButtonWidth else 0.dp
+            // メニューボタンは常に表示
+            val menuWidth = iconButtonWidth
+            // URLバーSurfaceの左右パディング分
+            val urlBarPaddingWidth = 8.dp
+            // 固定要素とURLバー最小幅を除いた余裕幅
+            var extraWidth = maxWidth - tabCountWidth - menuWidth - minUrlBarWidth - urlBarPaddingWidth
 
-                    if (isFocused) {
-                        CompositionLocalProvider(
-                            LocalMinimumInteractiveComponentSize provides 0.dp
-                        ) {
-                            Icon(
-                                modifier = Modifier
-                                    .fillMaxHeight()
-                                    .aspectRatio(1f)
-                                    .clickable(
-                                        indication = ripple(),
-                                        interactionSource = remember { MutableInteractionSource() },
-                                        onClick = { urlInputState.onValueChange("") }
-                                    ),
-                                painter = painterResource(ResourcesR.drawable.close_24dp),
-                                contentDescription = "クリア",
-                            )
+            // 幅の余裕に応じて以下の順でアイコンを追加する
+            // 1. 翻訳ボタン（タブ数の右側）
+            val showTranslate = !isFocused && extraWidth >= iconButtonWidth
+            if (showTranslate) extraWidth -= iconButtonWidth
+
+            // 2. 進むボタン（URLバーの左側）
+            val showForward = !isFocused && extraWidth >= iconButtonWidth
+            if (showForward) extraWidth -= iconButtonWidth
+
+            // 3. 戻るボタン（進むボタンの左側）
+            val showBack = !isFocused && extraWidth >= iconButtonWidth
+            if (showBack) extraWidth -= iconButtonWidth
+
+            // 4. 更新ボタン（進むボタンの右側）
+            val showRefresh = !isFocused && extraWidth >= iconButtonWidth
+
+            Row(
+                // ステータスバーが一時的に非表示扱いになっても通常時の領域分だけコンテンツを下に押し出す。
+                // Surface の背景色はステータスバー領域まで延びて塗りつぶされる。
+                // サイズキャッシュは windowInsetsPadding の内側（Row 自身）で取ることで、
+                // フローティング／マルチウィンドウで status bar のインセットが 0 になっても
+                // 旧フルスクリーン時の「URL バー + status bar」分の高さで固定されないようにする。
+                // IntrinsicSize.Min で Row 高さを子の最小 intrinsic 高さに合わせる（URL バーの自然高さ）。
+                modifier = Modifier
+                    .windowInsetsPadding(
+                        WindowInsets.statusBarsIgnoringVisibility.only(WindowInsetsSides.Top)
+                    )
+                    .onSizeChanged {
+                        heightCache = it.height.coerceAtLeast(heightCache)
+                    }
+                    .defaultMinSize(
+                        minHeight = with(LocalDensity.current) { heightCache.toDp() }
+                    )
+                    .height(IntrinsicSize.Min),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                // 戻るボタン（進むボタンの左側）
+                if (showBack) {
+                    IconButton(onClick = onBack) {
+                        Icon(
+                            painter = painterResource(ResourcesR.drawable.ic_arrow_back_24dp),
+                            contentDescription = "戻る",
+                            tint = if (canGoBack) {
+                                LocalContentColor.current
+                            } else {
+                                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                            },
+                        )
+                    }
+                }
+
+                // 進むボタン（URLバーの左側）
+                if (showForward) {
+                    IconButton(onClick = onForward) {
+                        Icon(
+                            painter = painterResource(ResourcesR.drawable.ic_arrow_forward_24dp),
+                            contentDescription = "進む",
+                            tint = if (canGoForward) {
+                                LocalContentColor.current
+                            } else {
+                                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                            },
+                        )
+                    }
+                }
+
+                // 更新ボタン（進むボタンの右側）
+                if (showRefresh) {
+                    IconButton(onClick = onRefresh) {
+                        Icon(
+                            painter = painterResource(ResourcesR.drawable.ic_refresh_24dp),
+                            contentDescription = "更新",
+                        )
+                    }
+                }
+
+                Surface(
+                    modifier = Modifier
+                        .height(IntrinsicSize.Min)
+                        .weight(1f)
+                        .padding(4.dp),
+                    contentColor = toolbarColors.toolbarContentColor,
+                    color = toolbarColors.urlBarBackgroundColor,
+                    shape = CircleShape,
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .padding(
+                                end = 4.dp,
+                            ),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        UrlTextInput(
+                            modifier = Modifier
+                                .testTag(BrowserToolbarTestTags.Url(urlInputState.value).testTag)
+                                .weight(1f),
+                            enableSuggest = urlInputState.enableSuggest,
+                            paddingValues = PaddingValues(
+                                start = 8.dp,
+                                top = 4.dp,
+                                bottom = 4.dp
+                            ),
+                            scrollEnabled = isFocused,
+                            value = urlInputState.value,
+                            onValueChange = urlInputState.onValueChange,
+                            onSubmit = urlInputState.onSubmit,
+                            onFocusChanged = urlInputState.onFocusChanged,
+                            textColor = LocalContentColor.current,
+                        )
+
+                        if (isFocused) {
+                            CompositionLocalProvider(
+                                LocalMinimumInteractiveComponentSize provides 0.dp
+                            ) {
+                                Icon(
+                                    modifier = Modifier
+                                        .fillMaxHeight()
+                                        .aspectRatio(1f)
+                                        .clickable(
+                                            indication = ripple(),
+                                            interactionSource = remember { MutableInteractionSource() },
+                                            onClick = { urlInputState.onValueChange("") }
+                                        ),
+                                    painter = painterResource(ResourcesR.drawable.close_24dp),
+                                    contentDescription = "クリア",
+                                )
+                            }
                         }
                     }
                 }
-            }
 
-            if (!isFocused) {
-                if (showTabButton) {
-                    TabCountButton(
-                        modifier = Modifier
-                            .semantics(mergeDescendants = true) {
-                                contentDescription = "タブ件数、${tabCount?.toString()?.plus("件").orEmpty()}"
-                                role = Role.Button
-                            }
-                            .fillMaxHeight()
-                            .padding(4.dp)
-                            .padding(vertical = 4.dp),
-                        tabCount = tabCount,
-                        onOpenTabs = onOpenTabs,
-                    )
-                }
-                IconButton(
-                    modifier = Modifier.testTag(BrowserToolbarTestTags.MenuButton.testTag),
-                    onClick = { updateVisibleMenu(true) },
-                ) {
-                    Icon(
-                        painter = painterResource(ResourcesR.drawable.ic_more_vert_24dp),
-                        contentDescription = "Menu",
-                    )
-                    toolbarMenu()
+                if (!isFocused) {
+                    if (showTabButton) {
+                        TabCountButton(
+                            modifier = Modifier
+                                .semantics(mergeDescendants = true) {
+                                    contentDescription = "タブ件数、${tabCount?.toString()?.plus("件").orEmpty()}"
+                                    role = Role.Button
+                                }
+                                .fillMaxHeight()
+                                .padding(4.dp)
+                                .padding(vertical = 4.dp),
+                            tabCount = tabCount,
+                            onOpenTabs = onOpenTabs,
+                        )
+                    }
+                    // 翻訳ボタン（タブ数の右側）
+                    if (showTranslate) {
+                        IconButton(
+                            modifier = Modifier.testTag(BrowserToolbarTestTags.TranslateButton.testTag),
+                            onClick = onTranslatePage,
+                        ) {
+                            Icon(
+                                painter = painterResource(ResourcesR.drawable.ic_translate_24dp),
+                                contentDescription = "翻訳",
+                            )
+                        }
+                    }
+                    IconButton(
+                        modifier = Modifier.testTag(BrowserToolbarTestTags.MenuButton.testTag),
+                        onClick = { updateVisibleMenu(true) },
+                    ) {
+                        Icon(
+                            painter = painterResource(ResourcesR.drawable.ic_more_vert_24dp),
+                            contentDescription = "Menu",
+                        )
+                        toolbarMenu()
+                    }
                 }
             }
         }
@@ -462,6 +558,10 @@ sealed class BrowserToolbarTestTags(val id: String) {
     object MenuButton : BrowserToolbarTestTags(
         id = "MenuButton",
     )
+
+    object TranslateButton : BrowserToolbarTestTags(
+        id = "translate_button",
+    )
 }
 
 @Preview(name = "Light")
@@ -547,6 +647,46 @@ private fun PreviewTabCountVariants() {
                 )
                 Spacer(modifier = Modifier.height(8.dp))
             }
+        }
+    }
+}
+
+@Preview(name = "WideToolbar", widthDp = 600)
+@Composable
+private fun PreviewWideToolbar() {
+    BrowserTheme(themeMode = net.matsudamper.browser.data.ThemeMode.THEME_SYSTEM) {
+        Column {
+            BrowserToolBar(
+                value = "https://google.com",
+                onValueChange = {},
+                onSubmit = {},
+                isFocused = false,
+                onFocusChanged = {},
+                showInstallExtensionItem = true,
+                onInstallExtension = {},
+                onOpenSettings = {},
+                onShare = {},
+                tabCount = 2,
+                onOpenTabs = {},
+                isPcMode = false,
+                onPcModeToggle = {},
+                onFindInPage = {},
+                onAddToHomeScreen = {},
+                pageZoomPercent = 100,
+                onPageZoomIn = {},
+                onPageZoomOut = {},
+                onResetPageZoom = {},
+                toolbarColor = null,
+                onRefresh = {},
+                onSuperRefresh = {},
+                onHome = {},
+                onForward = {},
+                canGoForward = true,
+                onBack = {},
+                canGoBack = false,
+                onLongPressHistory = {},
+                onTranslatePage = {},
+            )
         }
     }
 }
