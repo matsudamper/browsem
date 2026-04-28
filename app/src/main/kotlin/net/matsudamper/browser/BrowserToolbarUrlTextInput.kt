@@ -11,8 +11,12 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.autofill.ContentDataType
 import androidx.compose.ui.autofill.ContentType
@@ -25,8 +29,11 @@ import androidx.compose.ui.semantics.contentDataType
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.contentType
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.viewinterop.AndroidView
 
@@ -63,11 +70,46 @@ internal fun UrlTextInput(
         factory = { context ->
             ComposeView(context).apply {
                 setContent {
+                    val scrollState = rememberScrollState()
+                    var textFieldValue by remember { mutableStateOf(TextFieldValue(currentValue)) }
+                    var textLayoutResult by remember { mutableStateOf<TextLayoutResult?>(null) }
+
+                    // 外部から値が変更された場合にテキストを反映（カーソルは末尾へ）
+                    LaunchedEffect(currentValue) {
+                        if (textFieldValue.text != currentValue) {
+                            textFieldValue = TextFieldValue(
+                                text = currentValue,
+                                selection = TextRange(currentValue.length),
+                            )
+                        }
+                    }
+
+                    // カーソルが画面外に出た場合に追従してスクロール
+                    LaunchedEffect(textFieldValue.selection, textLayoutResult) {
+                        if (!resolvedScrollEnabled) return@LaunchedEffect
+                        val layout = textLayoutResult ?: return@LaunchedEffect
+                        if (textFieldValue.text.isEmpty()) return@LaunchedEffect
+                        val offset = textFieldValue.selection.end
+                            .coerceIn(0, textFieldValue.text.length)
+                        val cursorRect = layout.getCursorRect(offset)
+                        // viewportWidth = コンテンツ幅 - 最大スクロール量
+                        val viewportWidth = layout.size.width - scrollState.maxValue
+                        val currentScroll = scrollState.value
+                        val targetScroll = when {
+                            cursorRect.right.toInt() > currentScroll + viewportWidth ->
+                                (cursorRect.right.toInt() - viewportWidth).coerceAtLeast(0)
+                            cursorRect.left.toInt() < currentScroll ->
+                                cursorRect.left.toInt().coerceAtLeast(0)
+                            else -> return@LaunchedEffect
+                        }
+                        scrollState.scrollTo(targetScroll)
+                    }
+
                     BasicTextField(
                         modifier = Modifier
                             .fillMaxWidth()
                             .horizontalScroll(
-                                state = rememberScrollState(),
+                                state = scrollState,
                                 enabled = resolvedScrollEnabled,
                             )
                             .padding(resolvedPaddingValues)
@@ -86,8 +128,17 @@ internal fun UrlTextInput(
                                     contentDataType = ContentDataType.Text
                                 }
                             },
-                        value = currentValue,
-                        onValueChange = { currentOnValueChange(it) },
+                        value = textFieldValue,
+                        onValueChange = { newValue ->
+                            val previousText = textFieldValue.text
+                            textFieldValue = newValue
+                            // selection だけの更新で親 state を上書きすると、
+                            // フォーカス直後の空文字化が古い URL で戻されてしまう。
+                            if (newValue.text != previousText) {
+                                currentOnValueChange(newValue.text)
+                            }
+                        },
+                        onTextLayout = { textLayoutResult = it },
                         singleLine = true,
                         textStyle = MaterialTheme.typography.bodyLarge
                             .merge(
