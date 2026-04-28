@@ -140,6 +140,7 @@ internal class BrowserTabScreenState(
     var translationFromLanguage by mutableStateOf<String?>(null)
     /** 翻訳先言語タグ（例: "ja"） */
     var translationToLanguage by mutableStateOf<String?>(null)
+    private var translationJob: Job? = null
 
     // --- Find-in-page state ---
     private var findInPageState by mutableStateOf(FindInPageState.Closed)
@@ -414,8 +415,24 @@ internal class BrowserTabScreenState(
     }
 
     fun onTranslate(translationProvider: TranslationProvider) {
-        if (translationState == TranslationState.Loading) return
-        runTranslation(translationProvider, fromLanguage = detectedPageLanguage, toLanguage = TranslationPriorityLanguage.TO)
+        when (translationState) {
+            TranslationState.Idle -> {
+                runTranslation(
+                    translationProvider,
+                    fromLanguage = detectedPageLanguage,
+                    toLanguage = TranslationPriorityLanguage.TO,
+                )
+            }
+
+            TranslationState.Loading,
+            TranslationState.Translated -> {
+                closeTranslationBar(revertPage = true)
+            }
+
+            TranslationState.Error -> {
+                closeTranslationBar(revertPage = false)
+            }
+        }
     }
 
     /** ステータスバーの言語ドロップダウンから再翻訳を実行する */
@@ -425,7 +442,8 @@ internal class BrowserTabScreenState(
     }
 
     private fun runTranslation(translationProvider: TranslationProvider, fromLanguage: String?, toLanguage: String) {
-        coroutineScope.launch {
+        translationJob?.cancel()
+        translationJob = coroutineScope.launch {
             // 初回翻訳時のみ元URLを保存する
             if (originalPageUrlForRevert == null) {
                 originalPageUrlForRevert = currentPageUrl
@@ -460,10 +478,7 @@ internal class BrowserTabScreenState(
 
     fun onRevertTranslation() {
         val savedUrl = originalPageUrlForRevert
-        translationState = TranslationState.Idle
-        originalPageUrlForRevert = null
-        translationFromLanguage = null
-        translationToLanguage = null
+        closeTranslationBar(revertPage = false)
         if (savedUrl != null) {
             clearPageLoadError()
             session.loadUri(savedUrl)
@@ -471,10 +486,21 @@ internal class BrowserTabScreenState(
     }
 
     fun onDismissTranslationError() {
+        closeTranslationBar(revertPage = false)
+    }
+
+    private fun closeTranslationBar(revertPage: Boolean) {
+        translationJob?.cancel()
+        translationJob = null
+        val savedUrl = originalPageUrlForRevert
         translationState = TranslationState.Idle
         originalPageUrlForRevert = null
         translationFromLanguage = null
         translationToLanguage = null
+        if (revertPage && savedUrl != null) {
+            clearPageLoadError()
+            session.loadUri(savedUrl)
+        }
     }
 
     fun sharePage() {
