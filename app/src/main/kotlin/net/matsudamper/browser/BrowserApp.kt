@@ -298,7 +298,9 @@ private fun BrowserAppContent(
                                     canGoBack = false,
                                     onBack = {},
                                     onRefresh = {},
+                                    onSuperRefresh = {},
                                     onTranslatePage = {},
+                                    onLongPressHistory = {},
                                     urlInputState = UrlInputState(
                                         value = tab.currentUrl,
                                         onValueChange = {},
