@@ -1,7 +1,9 @@
 package net.matsudamper.browser
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -23,6 +25,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsIgnoringVisibility
 import androidx.compose.foundation.layout.windowInsetsPadding
@@ -135,7 +138,9 @@ internal fun BrowserToolBar(
         canGoBack = canGoBack,
         onBack = onBack,
         onRefresh = onRefresh,
+        onSuperRefresh = onSuperRefresh,
         onTranslatePage = onTranslatePage,
+        onLongPressHistory = onLongPressHistory,
         urlInputState = UrlInputState(
             value = value,
             onValueChange = onValueChange,
@@ -219,7 +224,7 @@ data class UrlInputState(
 )
 
 @Composable
-@OptIn(ExperimentalLayoutApi::class)
+@OptIn(ExperimentalLayoutApi::class, ExperimentalFoundationApi::class)
 internal fun BrowserToolbar(
     isFocused: Boolean,
     gestureState: BrowserToolBarGestureState?,
@@ -233,7 +238,9 @@ internal fun BrowserToolbar(
     canGoBack: Boolean,
     onBack: () -> Unit,
     onRefresh: () -> Unit,
+    onSuperRefresh: () -> Unit,
     onTranslatePage: () -> Unit,
+    onLongPressHistory: () -> Unit,
     modifier: Modifier = Modifier,
     showTabButton: Boolean = true,
     toolbarMenu: @Composable () -> Unit,
@@ -305,9 +312,21 @@ internal fun BrowserToolbar(
                     .height(IntrinsicSize.Min),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                // 戻るボタン（進むボタンの左側）
+                // 戻るボタン（進むボタンの左側）: 短押しで戻る、長押しでタブ履歴BottomSheetを表示
                 if (showBack) {
-                    IconButton(onClick = onBack) {
+                    Box(
+                        modifier = Modifier
+                            .size(48.dp)
+                            .combinedClickable(
+                                enabled = canGoBack,
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = ripple(bounded = false),
+                                role = Role.Button,
+                                onLongClick = onLongPressHistory,
+                                onClick = onBack,
+                            ),
+                        contentAlignment = Alignment.Center,
+                    ) {
                         Icon(
                             painter = painterResource(ResourcesR.drawable.ic_arrow_back_24dp),
                             contentDescription = "戻る",
@@ -320,9 +339,21 @@ internal fun BrowserToolbar(
                     }
                 }
 
-                // 進むボタン（URLバーの左側）
+                // 進むボタン（URLバーの左側）: 短押しで進む、長押しでタブ履歴BottomSheetを表示
                 if (showForward) {
-                    IconButton(onClick = onForward) {
+                    Box(
+                        modifier = Modifier
+                            .size(48.dp)
+                            .combinedClickable(
+                                enabled = canGoForward,
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = ripple(bounded = false),
+                                role = Role.Button,
+                                onLongClick = onLongPressHistory,
+                                onClick = onForward,
+                            ),
+                        contentAlignment = Alignment.Center,
+                    ) {
                         Icon(
                             painter = painterResource(ResourcesR.drawable.ic_arrow_forward_24dp),
                             contentDescription = "進む",
@@ -335,9 +366,20 @@ internal fun BrowserToolbar(
                     }
                 }
 
-                // 更新ボタン（進むボタンの右側）
+                // 更新ボタン（進むボタンの右側）: 短押しで通常更新、長押しでスーパーリフレッシュ
                 if (showRefresh) {
-                    IconButton(onClick = onRefresh) {
+                    Box(
+                        modifier = Modifier
+                            .size(48.dp)
+                            .combinedClickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = ripple(bounded = false),
+                                role = Role.Button,
+                                onLongClick = onSuperRefresh,
+                                onClick = onRefresh,
+                            ),
+                        contentAlignment = Alignment.Center,
+                    ) {
                         Icon(
                             painter = painterResource(ResourcesR.drawable.ic_refresh_24dp),
                             contentDescription = "更新",
