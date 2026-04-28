@@ -130,8 +130,13 @@ internal fun UrlTextInput(
                             },
                         value = textFieldValue,
                         onValueChange = { newValue ->
+                            val previousText = textFieldValue.text
                             textFieldValue = newValue
-                            currentOnValueChange(newValue.text)
+                            // selection だけの更新で親 state を上書きすると、
+                            // フォーカス直後の空文字化が古い URL で戻されてしまう。
+                            if (newValue.text != previousText) {
+                                currentOnValueChange(newValue.text)
+                            }
                         },
                         onTextLayout = { textLayoutResult = it },
                         singleLine = true,
