@@ -52,6 +52,7 @@ internal fun rememberBrowserTabScreenState(
     browserTab: BrowserTab,
     homepageUrl: String,
     searchTemplate: String,
+    isSinglePageMode: Boolean = false,
     onHistoryRecord: (suspend (url: String, title: String) -> Long)? = null,
     onHistoryTitleUpdate: (suspend (id: Long, title: String) -> Unit)? = null,
     onRequestDownloadNotificationPermission: suspend () -> Unit = {},
@@ -65,6 +66,7 @@ internal fun rememberBrowserTabScreenState(
             browserTab = browserTab,
             homepageUrl = homepageUrl,
             searchTemplate = searchTemplate,
+            isSinglePageMode = isSinglePageMode,
             coroutineScope = coroutineScope,
             geckoDownloadManager = geckoDownloadManager,
             findInPageWebExtension = findInPageWebExtension,
@@ -86,6 +88,7 @@ internal class BrowserTabScreenState(
     val browserTab: BrowserTab,
     homepageUrl: String,
     searchTemplate: String,
+    private val isSinglePageMode: Boolean = false,
     private val coroutineScope: CoroutineScope,
     private val geckoDownloadManager: GeckoDownloadManager,
     internal val findInPageWebExtension: FindInPageWebExtension,
@@ -902,20 +905,40 @@ internal class BrowserTabScreenState(
             skipExternalAppCheckForNextLoad = false
             return null
         }
-        return when (val action = resolveExternalAppNavigationAction(context, request.uri)) {
+        val externalAction = resolveExternalAppNavigationAction(context, request.uri)
+        // single-page モードで TARGET_WINDOW_NEW は外部アプリ判定を先に通してから現在タブへ畳み込む
+        if (isSinglePageMode && request.target == GeckoSession.NavigationDelegate.TARGET_WINDOW_NEW) {
+            when (externalAction) {
+                ExternalAppNavigationAction.AllowInBrowser -> {
+                    val uri = request.uri
+                    if (uri.isNotBlank() && uri != "about:blank") {
+                        session.loadUri(uri)
+                    }
+                }
+                ExternalAppNavigationAction.AppNotFound -> {
+                    Toast.makeText(context, "対応するアプリが見つかりません", Toast.LENGTH_SHORT).show()
+                }
+                is ExternalAppNavigationAction.Launch -> {
+                    pendingExternalAppLaunch = externalAction.request
+                }
+                is ExternalAppNavigationAction.OpenFallback -> {
+                    openFallbackUrl(externalAction.url)
+                }
+            }
+            return GeckoResult.fromValue(AllowOrDeny.DENY)
+        }
+        return when (externalAction) {
             ExternalAppNavigationAction.AllowInBrowser -> null
             ExternalAppNavigationAction.AppNotFound -> {
                 Toast.makeText(context, "対応するアプリが見つかりません", Toast.LENGTH_SHORT).show()
                 GeckoResult.fromValue(AllowOrDeny.DENY)
             }
-
             is ExternalAppNavigationAction.Launch -> {
-                pendingExternalAppLaunch = action.request
+                pendingExternalAppLaunch = externalAction.request
                 GeckoResult.fromValue(AllowOrDeny.DENY)
             }
-
             is ExternalAppNavigationAction.OpenFallback -> {
-                openFallbackUrl(action.url)
+                openFallbackUrl(externalAction.url)
                 GeckoResult.fromValue(AllowOrDeny.DENY)
             }
         }

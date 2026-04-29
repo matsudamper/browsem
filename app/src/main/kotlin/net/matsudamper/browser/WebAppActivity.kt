@@ -108,12 +108,9 @@ class WebAppActivity : ComponentActivity() {
                         showInstallExtensionItem = false,
                         // ウェブアプリモード: 閉じるボタンなし、カスタムタブ風のツールバー
                         webAppMode = true,
-                        onOpenNewSessionRequest = { uri ->
-                            // ウェブアプリモードでは新規タブを作成せず、同じセッションでURLを読み込む
-                            // 新規タブを作成するとユーザーから見えないタブになるため
-                            browserTab.session.loadUri(uri)
-                            browserTab.session
-                        },
+                        // onLoadRequest で TARGET_WINDOW_NEW を現在タブへ畳み込むため、
+                        // ここへ到達することは想定しない。GeckoView 契約上 null を返して安全に拒否する。
+                        onOpenNewSessionRequest = { null },
                         onOpenNewTabRequest = { uri ->
                             browserTab.session.loadUri(uri)
                         },
