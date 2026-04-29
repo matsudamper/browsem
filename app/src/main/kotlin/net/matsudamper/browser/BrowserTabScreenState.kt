@@ -459,6 +459,9 @@ internal class BrowserTabScreenState(
                     toLanguage,
                 )
             }
+            // CancellationException は runCatching で握りつぶさずに伝播させる。
+            // キャンセル済みジョブが新ジョブの状態を上書きするのを防ぐ。
+            result.exceptionOrNull()?.let { if (it is CancellationException) throw it }
             // 翻訳中にページ遷移が発生した場合（onLocationChange が originalPageUrlForRevert をクリア済み）は
             // 翻訳結果を破棄して翻訳バーを表示しない
             if (originalPageUrlForRevert != translationStartUrl) return@launch
