@@ -248,10 +248,9 @@ private fun CustomTabScreen(
         customTabMode = true,
         onCloseCustomTab = onClose,
         onOpenInBrowser = onOpenInBrowser,
-        onOpenNewSessionRequest = { uri ->
-            activeTab.session.loadUri(uri)
-            activeTab.session
-        },
+        // onLoadRequest で TARGET_WINDOW_NEW を現在タブへ畳み込むため、
+        // ここへ到達することは想定しない。GeckoView 契約上 null を返して安全に拒否する。
+        onOpenNewSessionRequest = { null },
         onOpenNewTabRequest = { uri ->
             activeTab.session.loadUri(uri)
         },
