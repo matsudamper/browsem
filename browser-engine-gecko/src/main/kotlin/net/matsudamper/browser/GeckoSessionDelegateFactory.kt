@@ -120,6 +120,8 @@ fun createGeckoSessionDelegateBundle(
                 perms: MutableList<GeckoSession.PermissionDelegate.ContentPermission>,
                 hasUserGesture: Boolean,
             ) {
+                // javascript: URI は injectViewportZoom の loadUri 呼び出しが発火するため無視する。
+                if (url?.startsWith("javascript:") == true) return
                 // onNewSession 経由タブのナビゲーション完了時に pendingInitialUrl をクリア。
                 // GeckoView は about:blank の後に実 URL を発火するため、実 URL の発火でクリアする。
                 if (url != null && url != "about:blank") {
@@ -235,6 +237,7 @@ internal class BrowserTabSessionDelegateHost(
             }
 
             override fun onLocationChange(url: String) {
+                if (url.startsWith("javascript:")) return
                 if (!(url == "about:blank" && browserTab.currentUrl != "about:blank")) {
                     browserTab.currentUrl = url
                 }
