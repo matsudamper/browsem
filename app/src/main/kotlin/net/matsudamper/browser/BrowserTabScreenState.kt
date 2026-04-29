@@ -708,6 +708,7 @@ internal class BrowserTabScreenState(
         if (url == "about:blank" && currentPageUrl != "about:blank") {
             return
         }
+        if (url.startsWith("javascript:")) return
         if (pageLoadError?.failingUrl != url) {
             clearPageLoadError()
         }
