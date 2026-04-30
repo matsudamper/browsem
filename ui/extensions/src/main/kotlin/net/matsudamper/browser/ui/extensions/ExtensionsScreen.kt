@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.selection.selectable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Refresh
@@ -137,10 +136,6 @@ private fun ExtensionRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .selectable(
-                selected = false,
-                onClick = onOpenSettings,
-            )
             .padding(horizontal = 16.dp, vertical = 12.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
@@ -170,11 +165,23 @@ private fun ExtensionRow(
             )
         }
         Spacer(modifier = Modifier.width(8.dp))
-        TextButton(
-            onClick = onUninstall,
-            enabled = uninstallEnabled,
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            Text(if (isUninstalling) "削除中..." else "アンインストール")
+            if (extension.hasSettingsPage) {
+                TextButton(
+                    onClick = onOpenSettings,
+                    enabled = uninstallEnabled,
+                ) {
+                    Text("設定")
+                }
+            }
+            TextButton(
+                onClick = onUninstall,
+                enabled = uninstallEnabled,
+            ) {
+                Text(if (isUninstalling) "削除中..." else "アンインストール")
+            }
         }
     }
 }
