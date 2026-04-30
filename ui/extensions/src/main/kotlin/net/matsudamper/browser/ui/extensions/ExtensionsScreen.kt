@@ -28,6 +28,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -184,4 +185,80 @@ private fun ExtensionRow(
             }
         }
     }
+}
+
+private val previewCallbacks = object : ExtensionsScreenUiState.Callbacks {
+    override fun refreshExtensions() = Unit
+    override fun uninstallExtension(extensionId: String) = Unit
+    override fun openExtensionSettings(extensionId: String) = Unit
+    override fun dismissError() = Unit
+}
+
+/** 設定ページあり・なしの両方の拡張機能が列挙される状態 */
+@Preview(showBackground = true)
+@Composable
+private fun PreviewExtensionsScreenLoaded() {
+    ExtensionsScreen(
+        uiState = ExtensionsScreenUiState(
+            callbacks = previewCallbacks,
+            loadingState = ExtensionsScreenUiState.LoadingState.Loaded(
+                extensions = listOf(
+                    ExtensionsScreenUiState.ExtensionUiState(
+                        id = "ublock@example.com",
+                        displayName = "uBlock Origin",
+                        version = "1.54.0",
+                        hasSettingsPage = true,
+                    ),
+                    ExtensionsScreenUiState.ExtensionUiState(
+                        id = "no-settings@example.com",
+                        displayName = "設定ページなしの拡張機能",
+                        version = "0.1.0",
+                        hasSettingsPage = false,
+                    ),
+                ),
+            ),
+            errorMessage = null,
+            uninstallingId = null,
+        ),
+        onBack = {},
+    )
+}
+
+/** アンインストール中の拡張機能がある状態 */
+@Preview(showBackground = true)
+@Composable
+private fun PreviewExtensionsScreenUninstalling() {
+    ExtensionsScreen(
+        uiState = ExtensionsScreenUiState(
+            callbacks = previewCallbacks,
+            loadingState = ExtensionsScreenUiState.LoadingState.Loaded(
+                extensions = listOf(
+                    ExtensionsScreenUiState.ExtensionUiState(
+                        id = "ublock@example.com",
+                        displayName = "uBlock Origin",
+                        version = "1.54.0",
+                        hasSettingsPage = true,
+                    ),
+                ),
+            ),
+            errorMessage = null,
+            uninstallingId = "ublock@example.com",
+        ),
+        onBack = {},
+    )
+}
+
+/** ロード中の状態 */
+@Preview(showBackground = true)
+@Composable
+private fun PreviewExtensionsScreenLoading() {
+    ExtensionsScreen(
+        uiState = ExtensionsScreenUiState(
+            callbacks = previewCallbacks,
+            loadingState = ExtensionsScreenUiState.LoadingState.Loading,
+            errorMessage = null,
+            uninstallingId = null,
+        ),
+        onBack = {},
+    )
 }
