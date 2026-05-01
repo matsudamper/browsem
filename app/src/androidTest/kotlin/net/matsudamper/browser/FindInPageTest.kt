@@ -7,7 +7,10 @@ import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
+import java.io.File
 import net.matsudamper.browser.ui.tabs.TabsScreenTestTags
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -50,17 +53,24 @@ class FindInPageTest {
     fun backButtonClosesFindInPageWithoutNavigatingBack() {
         ensureBrowserScreen()
 
-        openFindInPage()
-        waitForFindInPageVisible()
+        composeRule.openUrlFromUrlBar("https://example.com")
+        composeRule.waitForUrlBarContains("example.com")
 
         val urlBeforeBack = composeRule.currentUrlBarText()
+
+        openFindInPage()
+        waitForFindInPageVisible()
 
         pressSystemBack()
 
         waitForFindInPageHidden()
 
         val urlAfterBack = composeRule.currentUrlBarText()
-        assertTrue("検索を閉じた後にURLが変わった（ページが戻った）", urlBeforeBack == urlAfterBack)
+        assertEquals(
+            "検索を閉じた後にURLが変わった（ページが戻った）",
+            urlBeforeBack,
+            urlAfterBack
+        )
         assertTrue(
             "アプリが終了している",
             !composeRule.activity.isFinishing,
@@ -68,6 +78,14 @@ class FindInPageTest {
     }
 
     // ---- ヘルパー ----
+
+    private fun prepareLocalPageUri(): String {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val targetContext = instrumentation.targetContext
+        val destination = File(targetContext.cacheDir, "find_in_page_test.html")
+        destination.writeText("<html><body><h1>Find In Page Test</h1></body></html>")
+        return destination.toURI().toString()
+    }
 
     private fun ensureBrowserScreen() {
         val browserReady = runCatching {
