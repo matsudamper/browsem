@@ -382,4 +382,60 @@ class BrowserScreenViewModelTest {
         assertNull(viewModel.uiState.value.swipePreview.previousTab)
         assertEquals(1, viewModel.uiState.value.groupTabCount)
     }
+
+    // -----------------------------------------------------------------------
+    // ロード未完了時のスワイプ抑制テスト
+    // -----------------------------------------------------------------------
+
+    @Test
+    fun `tabGroupAssignmentsの初回発行前はswipePreviewが空`() = runTest(testDispatcher) {
+        // 実機では Room の Flow が初回値を発行する前に他の Flow が先に走り、
+        // 「グループ未割り当て」と判別不能な状態でスワイプができてしまう不具合があった。
+        // ここでは observeTabGroupAssignments が値を発行しないリポジトリで再現する。
+        val tabA = createTab("a")
+        val tabB = createTab("b")
+        val browserTabsFlow = MutableStateFlow(listOf(tabA, tabB))
+        val repo = object : TabGroupRepository {
+            override fun observeGroups() = MutableStateFlow<List<TabGroupData>>(
+                listOf(TabGroupData(TabGroupId("g1"), "グループ1")),
+            )
+            // 値を発行しない Flow（初回ロード未完了状態）
+            override fun observeTabGroupAssignments() = kotlinx.coroutines.flow.flow<List<TabGroupAssignment>> {
+                kotlinx.coroutines.awaitCancellation()
+            }
+            override suspend fun createDefaultGroupIfEmpty(tabIds: List<String>) = TabGroupId("default")
+            override suspend fun addGroup(name: String, sortOrder: Int) = TabGroupId("new")
+            override suspend fun assignTabToGroup(tabId: String, groupId: TabGroupId) {}
+            override suspend fun assignTabToGroupIfUnassigned(tabId: String, groupId: TabGroupId) {}
+            override suspend fun removeTabFromGroup(tabId: String) {}
+            override suspend fun reorderGroups(orderedGroupIds: List<String>) {}
+            override suspend fun renameGroup(groupId: TabGroupId, name: String) {}
+            override suspend fun deleteGroup(groupId: TabGroupId, fallbackGroupId: TabGroupId?) {}
+            override suspend fun setDefaultGroup(groupId: TabGroupId, isDefault: Boolean) {}
+            override suspend fun getDefaultGroupId(): TabGroupId? = null
+        }
+
+        val historyRepository = mockk<HistoryRepository>(relaxed = true) {
+            every { searchSuggestions(any(), any()) } returns emptyFlow()
+            every { getRecentSuggestions(any()) } returns emptyFlow()
+        }
+        val settingsRepository = mockk<SettingsRepository>(relaxed = true) {
+            every { settings } returns emptyFlow()
+        }
+        val webSuggestionRepository = mockk<WebSuggestionRepository>(relaxed = true)
+
+        val viewModel = BrowserScreenViewModel(
+            historyRepository = historyRepository,
+            settingsRepository = settingsRepository,
+            webSuggestionRepository = webSuggestionRepository,
+            tabGroupRepository = repo,
+            browserTabsFlow = browserTabsFlow,
+            screenTabId = "a",
+        )
+        advanceUntilIdle()
+
+        // assignments が未発行のため前後タブは null。グループ間誤スワイプを防ぐ。
+        assertNull(viewModel.uiState.value.swipePreview.previousTab)
+        assertNull(viewModel.uiState.value.swipePreview.nextTab)
+    }
 }

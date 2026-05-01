@@ -101,14 +101,20 @@ class BrowserScreenViewModel(
         scope.launch {
             tabGroupRepository.observeGroups().collectLatest { groups ->
                 viewModelStateFlow.update {
-                    it.copy(tabGroups = groups).withResolvedOrderedBrowserTabs()
+                    it.copy(
+                        tabGroups = groups,
+                        tabGroupsLoaded = true,
+                    ).withResolvedOrderedBrowserTabs()
                 }
             }
         }
         scope.launch {
             tabGroupRepository.observeTabGroupAssignments().collectLatest { assignments ->
                 viewModelStateFlow.update {
-                    it.copy(tabGroupAssignments = assignments).withResolvedOrderedBrowserTabs()
+                    it.copy(
+                        tabGroupAssignments = assignments,
+                        tabGroupAssignmentsLoaded = true,
+                    ).withResolvedOrderedBrowserTabs()
                 }
             }
         }
@@ -124,6 +130,11 @@ private data class ViewModelState(
     val browserTabs: List<BrowserTab> = emptyList(),
     val orderedBrowserTabs: List<BrowserTab> = emptyList(),
     val screenTabId: String? = null,
+    // tabGroups / tabGroupAssignments の Flow が初回値を発行済みかどうか。
+    // 未ロード時は空リストと「グループが存在しない」状態が区別できず、
+    // 別グループのタブまでスワイプ移動できてしまうため、ロード完了まで待つ判定に使う。
+    val tabGroupsLoaded: Boolean = false,
+    val tabGroupAssignmentsLoaded: Boolean = false,
 ) {
     fun withResolvedOrderedBrowserTabs(): ViewModelState {
         val orderedBrowserTabs = resolveOrderedBrowserTabs()
@@ -132,7 +143,15 @@ private data class ViewModelState(
         )
     }
 
+    private fun isTabGroupStateLoaded(): Boolean {
+        return tabGroupsLoaded && tabGroupAssignmentsLoaded
+    }
+
     fun resolveAdjacentTabs(): AdjacentTabs {
+        // タブグループの状態がロード完了するまでは前後タブを解決しない。
+        // 未ロード時はすべてのタブが「グループ未割り当て」と見なされてしまい、
+        // グループ間でスワイプ移動できてしまう不具合を防ぐ。
+        if (!isTabGroupStateLoaded()) return AdjacentTabs()
         // 同じタブグループ内のタブのみを対象にして前後タブを解決する。
         // グループ間の移動を防ぐため、現在のタブが属するグループのタブだけに絞り込む。
         val sameGroupTabIds = resolveGroupTabIds()
