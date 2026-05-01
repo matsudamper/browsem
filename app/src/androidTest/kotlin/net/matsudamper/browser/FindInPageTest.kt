@@ -1,6 +1,5 @@
 package net.matsudamper.browser
 
-import android.view.WindowInsets
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
@@ -11,7 +10,6 @@ import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
 import net.matsudamper.browser.ui.tabs.TabsScreenTestTags
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -53,8 +51,10 @@ class FindInPageTest {
     fun backButtonClosesFindInPageWithoutNavigatingBack() {
         ensureBrowserScreen()
 
-        composeRule.openUrlFromUrlBar("https://example.com")
-        composeRule.waitForUrlBarContains("example.com")
+        val localPageUri = prepareLocalPageUri()
+        composeRule.openUrlFromUrlBar(localPageUri)
+        composeRule.waitForUrlBarContains(LOCAL_PAGE_FILE_NAME)
+        composeRule.waitForUrlBarNotFocused()
 
         val urlBeforeBack = composeRule.currentUrlBarText()
 
@@ -82,7 +82,7 @@ class FindInPageTest {
     private fun prepareLocalPageUri(): String {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val targetContext = instrumentation.targetContext
-        val destination = File(targetContext.cacheDir, "find_in_page_test.html")
+        val destination = File(targetContext.cacheDir, LOCAL_PAGE_FILE_NAME)
         destination.writeText("<html><body><h1>Find In Page Test</h1></body></html>")
         return destination.toURI().toString()
     }
@@ -151,5 +151,9 @@ class FindInPageTest {
         composeRule.runOnIdle {
             composeRule.activity.onBackPressedDispatcher.onBackPressed()
         }
+    }
+
+    companion object {
+        private const val LOCAL_PAGE_FILE_NAME = "find_in_page_test.html"
     }
 }
