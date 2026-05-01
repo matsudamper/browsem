@@ -694,7 +694,11 @@ internal class BrowserTabScreenState(
                 coroutineScope.launch(Dispatchers.IO) {
                     val stream = ByteArrayOutputStream()
                     previewBitmap.compress(Bitmap.CompressFormat.WEBP_LOSSY, 0, stream)
-                    browserTab.previewBitmap = stream.toByteArray()
+                    // compress失敗時は空バイトになるため、既存プレビューを上書きしない
+                    val bytes = stream.toByteArray()
+                    if (bytes.isNotEmpty()) {
+                        browserTab.previewBitmap = bytes
+                    }
                 }
             },
             { onCaptured?.invoke() },
