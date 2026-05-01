@@ -288,6 +288,7 @@ internal fun ToolbarMenu(
             )
         }
         DropdownMenuItem(
+            modifier = Modifier.testTag(BrowserToolbarMenuTestTags.FindInPageButton.testTag),
             text = {
                 Text(text = "ページ内検索")
             },
@@ -393,4 +394,5 @@ sealed interface BrowserToolbarMenuTestTags {
     object ZoomLabel : BrowserToolbarMenuTestTags { override val id = "zoom_label" }
     object ZoomPercentButton : BrowserToolbarMenuTestTags { override val id = "zoom_percent_button" }
     object RefreshButton : BrowserToolbarMenuTestTags { override val id = "refresh_button" }
+    object FindInPageButton : BrowserToolbarMenuTestTags { override val id = "find_in_page_button" }
 }
