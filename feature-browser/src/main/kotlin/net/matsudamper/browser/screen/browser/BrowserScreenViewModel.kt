@@ -101,20 +101,14 @@ class BrowserScreenViewModel(
         scope.launch {
             tabGroupRepository.observeGroups().collectLatest { groups ->
                 viewModelStateFlow.update {
-                    it.copy(
-                        tabGroups = groups,
-                        tabGroupsLoaded = true,
-                    ).withResolvedOrderedBrowserTabs()
+                    it.copy(tabGroups = Loadable.Loaded(groups)).withResolvedOrderedBrowserTabs()
                 }
             }
         }
         scope.launch {
             tabGroupRepository.observeTabGroupAssignments().collectLatest { assignments ->
                 viewModelStateFlow.update {
-                    it.copy(
-                        tabGroupAssignments = assignments,
-                        tabGroupAssignmentsLoaded = true,
-                    ).withResolvedOrderedBrowserTabs()
+                    it.copy(tabGroupAssignments = Loadable.Loaded(assignments)).withResolvedOrderedBrowserTabs()
                 }
             }
         }
@@ -123,18 +117,20 @@ class BrowserScreenViewModel(
     interface Event
 }
 
+// ロード状態とデータを 1 つの値で表現する。
+// Flow の初回値発行前は Loading、発行後は Loaded(value) になる。
+private sealed interface Loadable<out T> {
+    data object Loading : Loadable<Nothing>
+    data class Loaded<T>(val value: T) : Loadable<T>
+}
+
 private data class ViewModelState(
     val urlBarSuggestions: UrlBarSuggestionsUiState = UrlBarSuggestionsUiState(),
-    val tabGroups: List<TabGroupData> = emptyList(),
-    val tabGroupAssignments: List<TabGroupAssignment> = emptyList(),
+    val tabGroups: Loadable<List<TabGroupData>> = Loadable.Loading,
+    val tabGroupAssignments: Loadable<List<TabGroupAssignment>> = Loadable.Loading,
     val browserTabs: List<BrowserTab> = emptyList(),
     val orderedBrowserTabs: List<BrowserTab> = emptyList(),
     val screenTabId: String? = null,
-    // tabGroups / tabGroupAssignments の Flow が初回値を発行済みかどうか。
-    // 未ロード時は空リストと「グループが存在しない」状態が区別できず、
-    // 別グループのタブまでスワイプ移動できてしまうため、ロード完了まで待つ判定に使う。
-    val tabGroupsLoaded: Boolean = false,
-    val tabGroupAssignmentsLoaded: Boolean = false,
 ) {
     fun withResolvedOrderedBrowserTabs(): ViewModelState {
         val orderedBrowserTabs = resolveOrderedBrowserTabs()
@@ -143,18 +139,15 @@ private data class ViewModelState(
         )
     }
 
-    private fun isTabGroupStateLoaded(): Boolean {
-        return tabGroupsLoaded && tabGroupAssignmentsLoaded
-    }
-
     fun resolveAdjacentTabs(): AdjacentTabs {
         // タブグループの状態がロード完了するまでは前後タブを解決しない。
         // 未ロード時はすべてのタブが「グループ未割り当て」と見なされてしまい、
         // グループ間でスワイプ移動できてしまう不具合を防ぐ。
-        if (!isTabGroupStateLoaded()) return AdjacentTabs()
+        val groups = (tabGroups as? Loadable.Loaded)?.value ?: return AdjacentTabs()
+        val assignments = (tabGroupAssignments as? Loadable.Loaded)?.value ?: return AdjacentTabs()
         // 同じタブグループ内のタブのみを対象にして前後タブを解決する。
         // グループ間の移動を防ぐため、現在のタブが属するグループのタブだけに絞り込む。
-        val sameGroupTabIds = resolveGroupTabIds()
+        val sameGroupTabIds = resolveGroupTabIds(groups, assignments)
         val adjacentTabIds = resolveAdjacentTabIds(
             orderedTabIds = sameGroupTabIds,
             anchorTabId = screenTabId,
@@ -169,9 +162,12 @@ private data class ViewModelState(
      * 現在のタブと同じグループに属するタブIDのリストを返す。
      * グループ未割り当ての場合は未割り当てタブのみを返す。
      */
-    private fun resolveGroupTabIds(): List<String> {
-        val assignmentMap = tabGroupAssignments.associate { it.tabId to it.groupId }
-        val knownGroupIds = tabGroups.map { it.id.value }.toSet()
+    private fun resolveGroupTabIds(
+        groups: List<TabGroupData>,
+        assignments: List<TabGroupAssignment>,
+    ): List<String> {
+        val assignmentMap = assignments.associate { it.tabId to it.groupId }
+        val knownGroupIds = groups.map { it.id.value }.toSet()
         val currentGroupId = assignmentMap[screenTabId]?.takeIf { it in knownGroupIds }
         return orderedBrowserTabs
             .filter { tab ->
@@ -187,15 +183,19 @@ private data class ViewModelState(
 
     fun resolveGroupTabCount(): Int? {
         if (browserTabs.isEmpty()) return null
-        val assignmentMap = tabGroupAssignments.associate { it.tabId to it.groupId }
-        val knownGroupIds = tabGroups.map { it.id.value }.toSet()
+        val groups = (tabGroups as? Loadable.Loaded)?.value ?: return null
+        val assignments = (tabGroupAssignments as? Loadable.Loaded)?.value ?: return null
+        val assignmentMap = assignments.associate { it.tabId to it.groupId }
+        val knownGroupIds = groups.map { it.id.value }.toSet()
         val currentGroupId = assignmentMap[screenTabId]?.takeIf { it in knownGroupIds } ?: return null
         return browserTabs.count { tab -> assignmentMap[tab.tabId] == currentGroupId }
     }
 
     private fun resolveOrderedBrowserTabs(): List<BrowserTab> {
-        val assignmentMap = tabGroupAssignments.associate { it.tabId to it.groupId }
-        val groupedTabs = tabGroups.flatMap { group ->
+        val groups = (tabGroups as? Loadable.Loaded)?.value ?: return browserTabs
+        val assignments = (tabGroupAssignments as? Loadable.Loaded)?.value ?: return browserTabs
+        val assignmentMap = assignments.associate { it.tabId to it.groupId }
+        val groupedTabs = groups.flatMap { group ->
             browserTabs.filter { tab -> assignmentMap[tab.tabId] == group.id.value }
         }
         val groupedTabIds = groupedTabs.map { it.tabId }.toSet()
