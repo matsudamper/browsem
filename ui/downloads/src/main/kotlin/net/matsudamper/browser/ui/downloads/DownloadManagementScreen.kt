@@ -12,6 +12,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -64,32 +65,47 @@ fun DownloadManagementScreen(
             )
         },
     ) { paddingValues ->
-        if (uiState.downloads.isEmpty()) {
-            Box(
-                modifier = Modifier
-                    .padding(paddingValues)
-                    .fillMaxSize()
-                    .padding(16.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text("ダウンロード履歴はありません。")
+        when (val loadingState = uiState.loadingState) {
+            is DownloadManagementScreenUiState.LoadingState.Loading -> {
+                Box(
+                    modifier = Modifier
+                        .padding(paddingValues)
+                        .fillMaxSize(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    CircularProgressIndicator()
+                }
             }
-        } else {
-            LazyColumn(
-                modifier = Modifier
-                    .padding(paddingValues)
-                    .fillMaxSize(),
-            ) {
-                items(
-                    items = uiState.downloads,
-                    key = { it.id },
-                ) { item ->
-                    DownloadItemRow(
-                        item = item,
-                        onCancel = { uiState.callbacks.onCancel(item.id) },
-                        onOpenFile = { fileUri -> uiState.callbacks.onOpenFile(fileUri) },
-                        onResume = { uiState.callbacks.onResume(item.id) },
-                    )
+
+            is DownloadManagementScreenUiState.LoadingState.Loaded -> {
+                if (loadingState.downloads.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .padding(paddingValues)
+                            .fillMaxSize()
+                            .padding(16.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text("ダウンロード履歴はありません。")
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier
+                            .padding(paddingValues)
+                            .fillMaxSize(),
+                    ) {
+                        items(
+                            items = loadingState.downloads,
+                            key = { it.id },
+                        ) { item ->
+                            DownloadItemRow(
+                                item = item,
+                                onCancel = { uiState.callbacks.onCancel(item.id) },
+                                onOpenFile = { fileUri -> uiState.callbacks.onOpenFile(fileUri) },
+                                onResume = { uiState.callbacks.onResume(item.id) },
+                            )
+                        }
+                    }
                 }
             }
         }

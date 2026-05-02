@@ -36,7 +36,7 @@ internal class DownloadManagementScreenViewModel(
 
     val uiState: StateFlow<DownloadManagementScreenUiState> = MutableStateFlow(
         DownloadManagementScreenUiState(
-            downloads = emptyList(),
+            loadingState = DownloadManagementScreenUiState.LoadingState.Loading,
             callbacks = callbacks,
         ),
     ).also { uiStateFlow ->
@@ -46,7 +46,7 @@ internal class DownloadManagementScreenViewModel(
                 val items = records.map { record -> record.toDownloadItem() }
                 uiStateFlow.update {
                     DownloadManagementScreenUiState(
-                        downloads = items,
+                        loadingState = DownloadManagementScreenUiState.LoadingState.Loaded(items),
                         callbacks = callbacks,
                     )
                 }

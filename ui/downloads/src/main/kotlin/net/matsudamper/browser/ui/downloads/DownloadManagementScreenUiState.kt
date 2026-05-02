@@ -5,9 +5,19 @@ import java.util.UUID
 
 @Stable
 data class DownloadManagementScreenUiState(
-    val downloads: List<DownloadItem>,
+    val loadingState: LoadingState,
     val callbacks: Callbacks,
 ) {
+    @Stable
+    sealed interface LoadingState {
+        data object Loading : LoadingState
+
+        @Stable
+        data class Loaded(
+            val downloads: List<DownloadItem>,
+        ) : LoadingState
+    }
+
     @Stable
     sealed interface DownloadStatus {
         data class InProgress(
