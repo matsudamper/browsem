@@ -4,8 +4,10 @@ import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -91,7 +93,7 @@ class BrowserScreenViewModelTest {
 
     private fun buildViewModel(
         browserTabsFlow: MutableStateFlow<List<BrowserTab>>,
-        tabGroupRepository: FakeTabGroupRepository,
+        tabGroupRepository: TabGroupRepository,
         screenTabId: String,
     ): BrowserScreenViewModel {
         // HistoryRepository/SettingsRepository は Android SDK に依存しているため relaxed mock で代替
@@ -395,46 +397,46 @@ class BrowserScreenViewModelTest {
         val tabA = createTab("a")
         val tabB = createTab("b")
         val browserTabsFlow = MutableStateFlow(listOf(tabA, tabB))
-        val repo = object : TabGroupRepository {
+        val repo = object : TabGroupRepository by FakeTabGroupRepository() {
             override fun observeGroups() = MutableStateFlow<List<TabGroupData>>(
                 listOf(TabGroupData(TabGroupId("g1"), "グループ1")),
             )
             // 値を発行しない Flow（初回ロード未完了状態）
-            override fun observeTabGroupAssignments() = kotlinx.coroutines.flow.flow<List<TabGroupAssignment>> {
-                kotlinx.coroutines.awaitCancellation()
+            override fun observeTabGroupAssignments() = flow<List<TabGroupAssignment>> {
+                awaitCancellation()
             }
-            override suspend fun createDefaultGroupIfEmpty(tabIds: List<String>) = TabGroupId("default")
-            override suspend fun addGroup(name: String, sortOrder: Int) = TabGroupId("new")
-            override suspend fun assignTabToGroup(tabId: String, groupId: TabGroupId) {}
-            override suspend fun assignTabToGroupIfUnassigned(tabId: String, groupId: TabGroupId) {}
-            override suspend fun removeTabFromGroup(tabId: String) {}
-            override suspend fun reorderGroups(orderedGroupIds: List<String>) {}
-            override suspend fun renameGroup(groupId: TabGroupId, name: String) {}
-            override suspend fun deleteGroup(groupId: TabGroupId, fallbackGroupId: TabGroupId?) {}
-            override suspend fun setDefaultGroup(groupId: TabGroupId, isDefault: Boolean) {}
-            override suspend fun getDefaultGroupId(): TabGroupId? = null
         }
 
-        val historyRepository = mockk<HistoryRepository>(relaxed = true) {
-            every { searchSuggestions(any(), any()) } returns emptyFlow()
-            every { getRecentSuggestions(any()) } returns emptyFlow()
-        }
-        val settingsRepository = mockk<SettingsRepository>(relaxed = true) {
-            every { settings } returns emptyFlow()
-        }
-        val webSuggestionRepository = mockk<WebSuggestionRepository>(relaxed = true)
-
-        val viewModel = BrowserScreenViewModel(
-            historyRepository = historyRepository,
-            settingsRepository = settingsRepository,
-            webSuggestionRepository = webSuggestionRepository,
-            tabGroupRepository = repo,
-            browserTabsFlow = browserTabsFlow,
-            screenTabId = "a",
-        )
+        val viewModel = buildViewModel(browserTabsFlow, repo, "a")
         advanceUntilIdle()
 
         // assignments が未発行のため前後タブは null。グループ間誤スワイプを防ぐ。
+        assertNull(viewModel.uiState.value.swipePreview.previousTab)
+        assertNull(viewModel.uiState.value.swipePreview.nextTab)
+    }
+
+    @Test
+    fun `tabGroupsの初回発行前はswipePreviewが空`() = runTest(testDispatcher) {
+        // observeGroups が未発行の場合も前後タブを解決しないことを検証する。
+        val tabA = createTab("a")
+        val tabB = createTab("b")
+        val browserTabsFlow = MutableStateFlow(listOf(tabA, tabB))
+        val repo = object : TabGroupRepository by FakeTabGroupRepository() {
+            // 値を発行しない Flow（初回ロード未完了状態）
+            override fun observeGroups() = flow<List<TabGroupData>> {
+                awaitCancellation()
+            }
+            override fun observeTabGroupAssignments() = MutableStateFlow(
+                listOf(
+                    TabGroupAssignment("a", "g1"),
+                    TabGroupAssignment("b", "g1"),
+                ),
+            )
+        }
+
+        val viewModel = buildViewModel(browserTabsFlow, repo, "a")
+        advanceUntilIdle()
+
         assertNull(viewModel.uiState.value.swipePreview.previousTab)
         assertNull(viewModel.uiState.value.swipePreview.nextTab)
     }
