@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import net.matsudamper.browser.MockLocationWebExtension
 import net.matsudamper.browser.data.BrowserSettings
 import net.matsudamper.browser.data.HomepageType
 import net.matsudamper.browser.data.SearchProvider
@@ -20,9 +21,13 @@ import net.matsudamper.browser.ui.settings.SettingsScreenUiState
 
 internal class SettingsScreenViewModel(
     private val settingsRepository: SettingsRepository,
+    private val mockLocationWebExtension: MockLocationWebExtension,
 ) : ViewModel() {
 
     val eventHandler = Channel<(Event) -> Unit>(Channel.UNLIMITED)
+
+    // 設定入力中の一時的な文字列（バリデーション前）
+    private val mockLocationInputFlow = MutableStateFlow("")
 
     private val callbacks = object : SettingsScreenUiState.Callbacks {
         override fun setHomepageType(type: HomepageType) {
@@ -56,24 +61,109 @@ internal class SettingsScreenViewModel(
         override fun setEnableWebSuggestions(enabled: Boolean) {
             viewModelScope.launch { settingsRepository.setEnableWebSuggestions(enabled) }
         }
+
+        override fun setMockLocationEnabled(enabled: Boolean) {
+            viewModelScope.launch {
+                settingsRepository.setMockLocationEnabled(enabled)
+            }
+        }
+
+        override fun setMockLocationInput(input: String) {
+            mockLocationInputFlow.value = input
+            val parsed = parseMockLocationInput(input) ?: return
+            viewModelScope.launch {
+                settingsRepository.setMockLocationCoordinates(parsed.first, parsed.second)
+            }
+        }
+
+        override fun openMockLocationOnMap() {
+            eventHandler.trySend { it.onOpenMockLocationOnMap() }
+        }
     }
 
     val uiState: StateFlow<SettingsScreenUiState?> = MutableStateFlow<SettingsScreenUiState?>(null)
         .also { uiStateFlow ->
             viewModelScope.launch {
                 settingsRepository.settings.collectLatest { settings ->
+                    // 初回だけ入力欄をリポジトリの値で初期化する
+                    if (mockLocationInputFlow.value.isEmpty()) {
+                        mockLocationInputFlow.value = formatMockLocationInput(
+                            settings.mockLocationLatitude,
+                            settings.mockLocationLongitude,
+                        )
+                    }
                     uiStateFlow.update {
-                        settings.toUiState(callbacks)
+                        settings.toUiState(
+                            callbacks = callbacks,
+                            mockLocationInput = mockLocationInputFlow.value,
+                        )
+                    }
+                    // 拡張機能にも最新設定を通知する
+                    mockLocationWebExtension.updateConfig(
+                        MockLocationWebExtension.MockLocationConfig(
+                            enabled = settings.mockLocationEnabled,
+                            latitude = settings.mockLocationLatitude,
+                            longitude = settings.mockLocationLongitude,
+                        )
+                    )
+                }
+            }
+            // 入力欄が変化したら UiState を再構築する
+            viewModelScope.launch {
+                mockLocationInputFlow.collectLatest { input ->
+                    val current = uiStateFlow.value ?: return@collectLatest
+                    uiStateFlow.update {
+                        current.copy(
+                            mockLocationInput = input,
+                            mockLocationInputError = validateMockLocationInput(input),
+                        )
                     }
                 }
             }
         }.asStateFlow()
 
-    interface Event
+    interface Event {
+        fun onOpenMockLocationOnMap()
+    }
+}
+
+/** "緯度,経度" 形式の文字列を (latitude, longitude) にパースする。不正な場合は null */
+internal fun parseMockLocationInput(input: String): Pair<Double, Double>? {
+    val parts = input.split(",")
+    if (parts.size != 2) return null
+    val lat = parts[0].trim().toDoubleOrNull() ?: return null
+    val lng = parts[1].trim().toDoubleOrNull() ?: return null
+    if (lat < -90.0 || lat > 90.0) return null
+    if (lng < -180.0 || lng > 180.0) return null
+    return lat to lng
+}
+
+/** バリデーションエラーメッセージを返す。問題なければ null */
+internal fun validateMockLocationInput(input: String): String? {
+    if (input.isBlank()) return null
+    val parts = input.split(",")
+    if (parts.size != 2) return "「緯度,経度」の形式で入力してください"
+    val lat = parts[0].trim().toDoubleOrNull()
+        ?: return "緯度が数値ではありません"
+    val lng = parts[1].trim().toDoubleOrNull()
+        ?: return "経度が数値ではありません"
+    if (lat < -90.0 || lat > 90.0) return "緯度は -90 〜 90 の範囲で入力してください"
+    if (lng < -180.0 || lng > 180.0) return "経度は -180 〜 180 の範囲で入力してください"
+    return null
+}
+
+internal fun formatMockLocationInput(latitude: Double, longitude: Double): String {
+    // デフォルト値（0.0, 0.0）のときは皇居の座標を使用する
+    return if (latitude == 0.0 && longitude == 0.0) {
+        "${MockLocationWebExtension.DEFAULT_LATITUDE},${MockLocationWebExtension.DEFAULT_LONGITUDE}"
+    } else {
+        "$latitude,$longitude"
+    }
 }
 
 private fun BrowserSettings.toUiState(
     callbacks: SettingsScreenUiState.Callbacks,
+    mockLocationInput: String,
 ): SettingsScreenUiState {
     return SettingsScreenUiState(
         callbacks = callbacks,
@@ -85,5 +175,8 @@ private fun BrowserSettings.toUiState(
         translationProvider = translationProvider,
         enableThirdPartyCa = enableThirdPartyCa,
         enableWebSuggestions = resolvedEnableWebSuggestions(),
+        mockLocationEnabled = mockLocationEnabled,
+        mockLocationInput = mockLocationInput,
+        mockLocationInputError = validateMockLocationInput(mockLocationInput),
     )
 }

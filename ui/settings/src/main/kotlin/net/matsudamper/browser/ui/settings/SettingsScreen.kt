@@ -16,6 +16,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -233,6 +234,70 @@ fun SettingsScreen(
                             )
                         },
                     )
+                }
+            }
+
+            Spacer(Modifier.height(betweenPadding))
+
+            SettingSection(title = "位置情報") {
+                Column {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .toggleable(
+                                value = uiState.mockLocationEnabled,
+                                role = Role.Switch,
+                                onValueChange = uiState.callbacks::setMockLocationEnabled,
+                            )
+                            .padding(vertical = 4.dp),
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "モック位置情報を使用する",
+                                style = MaterialTheme.typography.bodyLarge,
+                            )
+                            Text(
+                                text = "Webページへの位置情報要求に実際の位置ではなく指定した座標を返します",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Switch(
+                            checked = uiState.mockLocationEnabled,
+                            onCheckedChange = null,
+                        )
+                    }
+                    Spacer(Modifier.height(4.dp))
+                    OutlinedTextField(
+                        value = uiState.mockLocationInput,
+                        onValueChange = uiState.callbacks::setMockLocationInput,
+                        label = { Text("緯度,経度") },
+                        placeholder = { Text("35.685175,139.752797") },
+                        supportingText = {
+                            val error = uiState.mockLocationInputError
+                            if (error != null) {
+                                Text(error, color = MaterialTheme.colorScheme.error)
+                            } else {
+                                Text("カンマ区切りで「緯度,経度」を入力してください")
+                            }
+                        },
+                        isError = uiState.mockLocationInputError != null,
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Decimal,
+                            imeAction = ImeAction.Done,
+                        ),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Button(
+                        onClick = uiState.callbacks::openMockLocationOnMap,
+                        enabled = uiState.mockLocationInputError == null && uiState.mockLocationInput.isNotBlank(),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("地図で確認")
+                    }
                 }
             }
 
