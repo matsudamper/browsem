@@ -39,6 +39,8 @@ import org.mozilla.geckoview.WebResponse
 import java.io.ByteArrayOutputStream
 
 
+private const val TAG = "BrowserTabScreenState"
+
 private val PAGE_ZOOM_STEPS = listOf(20, 25, 33, 50, 67, 75, 80, 90, 100, 110, 125, 150, 175, 200)
 
 private enum class FindInPageState {
@@ -474,7 +476,7 @@ internal class BrowserTabScreenState(
                 translationToLanguage = langs?.toLanguage
                 translationState = TranslationState.Translated
             } else {
-                Log.e("BrowserTabScreenState", "翻訳に失敗しました", result.exceptionOrNull())
+                Log.e(TAG, "翻訳に失敗しました", result.exceptionOrNull())
                 translationFromLanguage = null
                 translationToLanguage = null
                 translationState = TranslationState.Error
@@ -693,15 +695,16 @@ internal class BrowserTabScreenState(
                 onCaptured?.invoke()
                 coroutineScope.launch(Dispatchers.IO) {
                     if (previewBitmap.isRecycled) {
-                        Log.w("BrowserTabScreenState", "プレビューBitmapが既にrecycle済み")
+                        Log.w(TAG, "プレビューBitmapが既にrecycle済み")
                         return@launch
                     }
+                    val originalConfig = previewBitmap.config
                     // HARDWARE configはcompress()できないためソフトウェアBitmapにコピーする
-                    val sourceBitmap = if (previewBitmap.config == Bitmap.Config.HARDWARE) {
-                        Log.d("BrowserTabScreenState", "プレビューBitmapがHARDWARE configのためARGB_8888へコピー")
+                    val sourceBitmap = if (originalConfig == Bitmap.Config.HARDWARE) {
+                        Log.w(TAG, "プレビューBitmapがHARDWARE configのためARGB_8888へコピー")
                         runCatching { previewBitmap.copy(Bitmap.Config.ARGB_8888, false) }
                             .getOrElse { error ->
-                                Log.e("BrowserTabScreenState", "HARDWARE Bitmapのコピーに失敗", error)
+                                Log.e(TAG, "HARDWARE Bitmapのコピーに失敗", error)
                                 return@launch
                             }
                     } else {
@@ -712,15 +715,16 @@ internal class BrowserTabScreenState(
                         // quality 0 はWebPエンコーダで失敗することがあるため75を使用
                         sourceBitmap.compress(Bitmap.CompressFormat.WEBP_LOSSY, 75, stream)
                     }.getOrElse { error ->
-                        Log.e("BrowserTabScreenState", "プレビューBitmapのcompress中に例外", error)
+                        Log.e(TAG, "プレビューBitmapのcompress中に例外", error)
                         false
                     }
                     val bytes = stream.toByteArray()
                     if (!success || bytes.isEmpty()) {
                         Log.w(
-                            "BrowserTabScreenState",
+                            TAG,
                             "プレビューBitmapのcompress失敗 success=$success size=${bytes.size} " +
-                                "config=${sourceBitmap.config} ${sourceBitmap.width}x${sourceBitmap.height}",
+                                "originalConfig=$originalConfig " +
+                                "sourceConfig=${sourceBitmap.config} ${sourceBitmap.width}x${sourceBitmap.height}",
                         )
                         return@launch
                     }
