@@ -4,6 +4,7 @@ import net.matsudamper.browser.BrowserViewModel
 import net.matsudamper.browser.DownloadWorker
 import net.matsudamper.browser.FindInPageWebExtension
 import net.matsudamper.browser.GeckoDownloadManager
+import net.matsudamper.browser.MockLocationWebExtension
 import net.matsudamper.browser.ThemeColorWebExtension
 import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.TabGroupRepository
@@ -43,7 +44,8 @@ val appModule = module {
     single { ThemeColorWebExtension().also { it.install(get()) } }
     single { MediaWebExtension(androidContext()).also { it.install(get()) } }
     single { FindInPageWebExtension().also { it.install(get()) } }
+    single { MockLocationWebExtension().also { it.install(get()) } }
     factory { GeckoDownloadManager(androidContext(), get()) }
-    viewModel { BrowserViewModel(get(), get(), get(), get(), get(), get()) }
+    viewModel { BrowserViewModel(get(), get(), get(), get(), get(), get(), get()) }
     worker { DownloadWorker(get(), get(), get()) }
 }

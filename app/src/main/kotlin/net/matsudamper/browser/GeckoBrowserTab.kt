@@ -315,6 +315,14 @@ internal fun GeckoBrowserTab(
         }
     }
 
+    val mockLocationWebExtension: MockLocationWebExtension = koinInject()
+    DisposableEffect(session, mockLocationWebExtension) {
+        mockLocationWebExtension.registerSession(session)
+        onDispose {
+            mockLocationWebExtension.unregisterSession(session)
+        }
+    }
+
     // FindInPageWebExtension のセッション登録
     DisposableEffect(session, state, findInPageWebExtension) {
         findInPageWebExtension.registerSession(session) { current, total, error ->
@@ -426,11 +434,12 @@ internal fun GeckoBrowserTab(
     }
 
     // Back handlers
-    BackHandler(enabled = state.showFindInPage) { state.closeFindInPage() }
+    // 優先度は後に登録したものが高くなるため、最も優先度の高い showFindInPage を最後に置く
     BackHandler(enabled = state.canGoBack && !state.isUrlInputFocused) {
         state.onGoBack()
     }
     BackHandler(enabled = state.isUrlInputFocused) { closeUrlInput(true) }
+    BackHandler(enabled = state.showFindInPage) { state.closeFindInPage() }
 
     // IME visibility tracking:
     // URLバーにフォーカスした直後はIMEがまだ非表示のことがあるため、

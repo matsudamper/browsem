@@ -369,10 +369,33 @@ private fun BrowserAppContent(
                     }
 
                     AppDestination.Settings -> navEntry(key) {
-                        val settingsViewModel = remember(settingsRepository) {
-                            SettingsScreenViewModel(settingsRepository)
+                        val mockLocationWebExtension: MockLocationWebExtension = koinInject()
+                        val settingsViewModel = remember(settingsRepository, mockLocationWebExtension) {
+                            SettingsScreenViewModel(settingsRepository, mockLocationWebExtension)
                         }
                         val settingsUiState by settingsViewModel.uiState.collectAsState()
+                        LaunchedEffect(settingsViewModel) {
+                            settingsViewModel.eventHandler.receiveAsFlow().collect { handler ->
+                                handler(object : SettingsScreenViewModel.Event {
+                                    override fun onOpenMockLocationOnMap() {
+                                        val settingsUiState = settingsViewModel.uiState.value ?: return
+                                        val parts = settingsUiState.mockLocationInput.split(",")
+                                        if (parts.size != 2) return
+                                        val lat = parts[0].trim().toDoubleOrNull() ?: return
+                                        val lng = parts[1].trim().toDoubleOrNull() ?: return
+                                        val intent = Intent(
+                                            Intent.ACTION_VIEW,
+                                            Uri.parse("geo:$lat,$lng?q=$lat,$lng"),
+                                        )
+                                        try {
+                                            context.startActivity(intent)
+                                        } catch (_: android.content.ActivityNotFoundException) {
+                                            // 地図アプリがインストールされていない端末では何もしない
+                                        }
+                                    }
+                                })
+                            }
+                        }
                         settingsUiState?.let { uiState ->
                             SettingsScreen(
                                 uiState = uiState,

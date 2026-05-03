@@ -1,0 +1,29 @@
+{
+  "manifest_version": 2,
+  "name": "Mock Location Bridge",
+  "version": "1.0",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "mock-location-bridge@browsem"
+    }
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "exclude_matches": [
+        "about:*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_start"
+    }
+  ],
+  "permissions": [
+    "geckoViewAddons",
+    "nativeMessaging",
+    "nativeMessagingFromContent"
+  ]
+}
