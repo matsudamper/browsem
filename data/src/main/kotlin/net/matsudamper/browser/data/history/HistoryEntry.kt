@@ -8,9 +8,9 @@ import androidx.room.PrimaryKey
     tableName = "history",
     indices = [
         // ORDER BY visitedAt DESC を高速化
-        Index(value = ["visitedAt"]),
+        Index(value = ["visitedAt"], name = "index_history_visitedAt"),
         // 相関サブクエリの WHERE url = h.url ORDER BY visitedAt DESC を高速化
-        Index(value = ["url", "visitedAt"]),
+        Index(value = ["url", "visitedAt"], name = "index_history_url_visitedAt"),
     ],
 )
 data class HistoryEntry(
