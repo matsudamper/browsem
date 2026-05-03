@@ -717,6 +717,14 @@ internal class BrowserTabScreenState(
                         null
                     }
                     val sourceBitmap = copiedBitmap ?: previewBitmap
+                    // 原因特定用: quality=0 でも成功するか並行検証
+                    val streamQ0 = ByteArrayOutputStream()
+                    val successQ0 = runCatching {
+                        sourceBitmap.compress(Bitmap.CompressFormat.WEBP_LOSSY, 0, streamQ0)
+                    }.getOrElse { error ->
+                        Log.w(TAG, "プレビュー診断: quality=0 で例外 ${error.javaClass.simpleName}: ${error.message}")
+                        false
+                    }
                     val stream = ByteArrayOutputStream()
                     val success = runCatching {
                         // quality 0 はWebPエンコーダで失敗することがあるため75を使用
@@ -725,6 +733,12 @@ internal class BrowserTabScreenState(
                         Log.e(TAG, "プレビューBitmapのcompress中に例外", error)
                         false
                     }
+                    Log.i(
+                        TAG,
+                        "プレビュー診断: originalConfig=$originalConfig hardwareCopied=${copiedBitmap != null} " +
+                            "q0Success=$successQ0 q0Size=${streamQ0.size()} " +
+                            "q75Success=$success q75Size=${stream.size()}",
+                    )
                     // コピーしたBitmapは使用後にrecycleしてメモリを解放
                     copiedBitmap?.recycle()
                     val bytes = stream.toByteArray()
