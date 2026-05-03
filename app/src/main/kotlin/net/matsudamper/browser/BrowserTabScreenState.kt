@@ -700,16 +700,23 @@ internal class BrowserTabScreenState(
                     }
                     val originalConfig = previewBitmap.config
                     // HARDWARE configはcompress()できないためソフトウェアBitmapにコピーする
-                    val sourceBitmap = if (originalConfig == Bitmap.Config.HARDWARE) {
+                    // copy()はメモリ不足時にnullを返す（例外ではない）ため、nullチェックが必要
+                    val copiedBitmap: Bitmap? = if (originalConfig == Bitmap.Config.HARDWARE) {
                         Log.w(TAG, "プレビューBitmapがHARDWARE configのためARGB_8888へコピー")
-                        runCatching { previewBitmap.copy(Bitmap.Config.ARGB_8888, false) }
+                        val copied = runCatching { previewBitmap.copy(Bitmap.Config.ARGB_8888, false) }
                             .getOrElse { error ->
                                 Log.e(TAG, "HARDWARE Bitmapのコピーに失敗", error)
                                 return@launch
                             }
+                        if (copied == null) {
+                            Log.e(TAG, "HARDWARE Bitmapのコピーがnullを返した（メモリ不足の可能性）")
+                            return@launch
+                        }
+                        copied
                     } else {
-                        previewBitmap
+                        null
                     }
+                    val sourceBitmap = copiedBitmap ?: previewBitmap
                     val stream = ByteArrayOutputStream()
                     val success = runCatching {
                         // quality 0 はWebPエンコーダで失敗することがあるため75を使用
@@ -718,6 +725,8 @@ internal class BrowserTabScreenState(
                         Log.e(TAG, "プレビューBitmapのcompress中に例外", error)
                         false
                     }
+                    // コピーしたBitmapは使用後にrecycleしてメモリを解放
+                    copiedBitmap?.recycle()
                     val bytes = stream.toByteArray()
                     if (!success || bytes.isEmpty()) {
                         Log.w(
