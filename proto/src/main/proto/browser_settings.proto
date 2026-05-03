@@ -37,4 +37,7 @@ message BrowserSettings {
   TranslationProvider translation_provider = 9;
   bool enable_third_party_ca = 10;
   optional bool enable_web_suggestions = 11;
+  bool mock_location_enabled = 12;
+  double mock_location_latitude = 13;
+  double mock_location_longitude = 14;
 }

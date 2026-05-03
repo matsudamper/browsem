@@ -21,6 +21,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import net.matsudamper.browser.data.ResolvedBrowserSettings
 import net.matsudamper.browser.data.SettingsRepository
+import net.matsudamper.browser.MockLocationWebExtension
 import net.matsudamper.browser.data.TabGroupRepository
 import net.matsudamper.browser.data.TabRepository
 import net.matsudamper.browser.data.ThemeMode
@@ -60,6 +61,7 @@ internal class BrowserViewModel(
     private val settingsRepository: SettingsRepository,
     private val tabRepository: TabRepository,
     private val tabGroupRepository: TabGroupRepository,
+    private val mockLocationWebExtension: MockLocationWebExtension,
 ) : ViewModel() {
     val browserTabController = BrowserTabController(
         tabRepository = tabRepository,
@@ -103,6 +105,23 @@ internal class BrowserViewModel(
                 .collect { enableThirdPartyCa ->
                     runtime.settings.setEnterpriseRootsEnabled(enableThirdPartyCa)
                 }
+        }
+        // アプリ起動時にモック位置情報設定を拡張機能へ反映する。
+        // 設定画面を開かなくても前回セッションの設定が即座に有効になる。
+        viewModelScope.launch {
+            settingsRepository.settings.collectLatest { settings ->
+                val lat = settings.mockLocationLatitude
+                val lng = settings.mockLocationLongitude
+                val resolvedLat = if (lat == 0.0 && lng == 0.0) MockLocationWebExtension.DEFAULT_LATITUDE else lat
+                val resolvedLng = if (lat == 0.0 && lng == 0.0) MockLocationWebExtension.DEFAULT_LONGITUDE else lng
+                mockLocationWebExtension.updateConfig(
+                    MockLocationWebExtension.MockLocationConfig(
+                        enabled = settings.mockLocationEnabled,
+                        latitude = resolvedLat,
+                        longitude = resolvedLng,
+                    )
+                )
+            }
         }
         // ViewModel 生成時にタブ復元を開始する。
         // バックスタックの状態に依存せず、復元は必ず実行される。
