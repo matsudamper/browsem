@@ -315,6 +315,14 @@ internal fun GeckoBrowserTab(
         }
     }
 
+    val mockLocationWebExtension: MockLocationWebExtension = koinInject()
+    DisposableEffect(session, mockLocationWebExtension) {
+        mockLocationWebExtension.registerSession(session)
+        onDispose {
+            mockLocationWebExtension.unregisterSession(session)
+        }
+    }
+
     // FindInPageWebExtension のセッション登録
     DisposableEffect(session, state, findInPageWebExtension) {
         findInPageWebExtension.registerSession(session) { current, total, error ->

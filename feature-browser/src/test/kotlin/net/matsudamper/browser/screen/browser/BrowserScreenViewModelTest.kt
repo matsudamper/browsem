@@ -4,8 +4,10 @@ import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -91,7 +93,7 @@ class BrowserScreenViewModelTest {
 
     private fun buildViewModel(
         browserTabsFlow: MutableStateFlow<List<BrowserTab>>,
-        tabGroupRepository: FakeTabGroupRepository,
+        tabGroupRepository: TabGroupRepository,
         screenTabId: String,
     ): BrowserScreenViewModel {
         // HistoryRepository/SettingsRepository は Android SDK に依存しているため relaxed mock で代替
@@ -381,5 +383,61 @@ class BrowserScreenViewModelTest {
         assertNull(viewModel.uiState.value.swipePreview.nextTab)
         assertNull(viewModel.uiState.value.swipePreview.previousTab)
         assertEquals(1, viewModel.uiState.value.groupTabCount)
+    }
+
+    // -----------------------------------------------------------------------
+    // ロード未完了時のスワイプ抑制テスト
+    // -----------------------------------------------------------------------
+
+    @Test
+    fun `tabGroupAssignmentsの初回発行前はswipePreviewが空`() = runTest(testDispatcher) {
+        // 実機では Room の Flow が初回値を発行する前に他の Flow が先に走り、
+        // 「グループ未割り当て」と判別不能な状態でスワイプができてしまう不具合があった。
+        // ここでは observeTabGroupAssignments が値を発行しないリポジトリで再現する。
+        val tabA = createTab("a")
+        val tabB = createTab("b")
+        val browserTabsFlow = MutableStateFlow(listOf(tabA, tabB))
+        val repo = object : TabGroupRepository by FakeTabGroupRepository() {
+            override fun observeGroups() = MutableStateFlow<List<TabGroupData>>(
+                listOf(TabGroupData(TabGroupId("g1"), "グループ1")),
+            )
+            // 値を発行しない Flow（初回ロード未完了状態）
+            override fun observeTabGroupAssignments() = flow<List<TabGroupAssignment>> {
+                awaitCancellation()
+            }
+        }
+
+        val viewModel = buildViewModel(browserTabsFlow, repo, "a")
+        advanceUntilIdle()
+
+        // assignments が未発行のため前後タブは null。グループ間誤スワイプを防ぐ。
+        assertNull(viewModel.uiState.value.swipePreview.previousTab)
+        assertNull(viewModel.uiState.value.swipePreview.nextTab)
+    }
+
+    @Test
+    fun `tabGroupsの初回発行前はswipePreviewが空`() = runTest(testDispatcher) {
+        // observeGroups が未発行の場合も前後タブを解決しないことを検証する。
+        val tabA = createTab("a")
+        val tabB = createTab("b")
+        val browserTabsFlow = MutableStateFlow(listOf(tabA, tabB))
+        val repo = object : TabGroupRepository by FakeTabGroupRepository() {
+            // 値を発行しない Flow（初回ロード未完了状態）
+            override fun observeGroups() = flow<List<TabGroupData>> {
+                awaitCancellation()
+            }
+            override fun observeTabGroupAssignments() = MutableStateFlow(
+                listOf(
+                    TabGroupAssignment("a", "g1"),
+                    TabGroupAssignment("b", "g1"),
+                ),
+            )
+        }
+
+        val viewModel = buildViewModel(browserTabsFlow, repo, "a")
+        advanceUntilIdle()
+
+        assertNull(viewModel.uiState.value.swipePreview.previousTab)
+        assertNull(viewModel.uiState.value.swipePreview.nextTab)
     }
 }
