@@ -692,9 +692,39 @@ internal class BrowserTabScreenState(
                 // ビットマップ取得済みのため、セッションリリースはこの後でも問題ない
                 onCaptured?.invoke()
                 coroutineScope.launch(Dispatchers.IO) {
+                    if (previewBitmap.isRecycled) {
+                        Log.w("BrowserTabScreenState", "プレビューBitmapが既にrecycle済み")
+                        return@launch
+                    }
+                    // HARDWARE configはcompress()できないためソフトウェアBitmapにコピーする
+                    val sourceBitmap = if (previewBitmap.config == Bitmap.Config.HARDWARE) {
+                        Log.d("BrowserTabScreenState", "プレビューBitmapがHARDWARE configのためARGB_8888へコピー")
+                        runCatching { previewBitmap.copy(Bitmap.Config.ARGB_8888, false) }
+                            .getOrElse { error ->
+                                Log.e("BrowserTabScreenState", "HARDWARE Bitmapのコピーに失敗", error)
+                                return@launch
+                            }
+                    } else {
+                        previewBitmap
+                    }
                     val stream = ByteArrayOutputStream()
-                    previewBitmap.compress(Bitmap.CompressFormat.WEBP_LOSSY, 0, stream)
-                    browserTab.previewBitmap = stream.toByteArray()
+                    val success = runCatching {
+                        // quality 0 はWebPエンコーダで失敗することがあるため75を使用
+                        sourceBitmap.compress(Bitmap.CompressFormat.WEBP_LOSSY, 75, stream)
+                    }.getOrElse { error ->
+                        Log.e("BrowserTabScreenState", "プレビューBitmapのcompress中に例外", error)
+                        false
+                    }
+                    val bytes = stream.toByteArray()
+                    if (!success || bytes.isEmpty()) {
+                        Log.w(
+                            "BrowserTabScreenState",
+                            "プレビューBitmapのcompress失敗 success=$success size=${bytes.size} " +
+                                "config=${sourceBitmap.config} ${sourceBitmap.width}x${sourceBitmap.height}",
+                        )
+                        return@launch
+                    }
+                    browserTab.previewBitmap = bytes
                 }
             },
             { onCaptured?.invoke() },
