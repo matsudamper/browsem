@@ -12,6 +12,11 @@
   var configLoaded = false;
   var mockConfig = null;
 
+  // キュー保留中にキャンセルされた watchPosition の一時ID集合
+  var cancelledTempIds = new Set();
+  // 一時ID（負数）→ origGeo から返された実ID のマッピング（モック無効時のキュー処理後に使用）
+  var tempToRealWatchId = new Map();
+
   function buildPosition(lat, lng) {
     return cloneInto(
       {
@@ -61,6 +66,7 @@
 
   mockGeo.watchPosition = exportFunction(function (success, error, options) {
     if (!configLoaded) {
+      // 設定未到着のため一時IDを返しキューに積む
       var id = -(Math.floor(Math.random() * 1000000) + 1);
       pendingCalls.push({ type: 'watch', success: success, error: error, options: options, id: id });
       return id;
@@ -77,8 +83,18 @@
   }, pageWin);
 
   mockGeo.clearWatch = exportFunction(function (id) {
-    // 実 geolocation の clearWatch は正の ID のみ対象
-    if (id > 0 && origGeo) {
+    if (id < 0) {
+      // まだキュー内にある場合はキャンセル済みとしてマーク
+      cancelledTempIds.add(id);
+      // すでに origGeo へ転送済みで実IDが紐付いている場合はキャンセル
+      var realId = tempToRealWatchId.get(id);
+      if (realId !== undefined) {
+        tempToRealWatchId.delete(id);
+        if (origGeo) origGeo.clearWatch(realId);
+      }
+      return;
+    }
+    if (origGeo) {
       origGeo.clearWatch(id);
     }
   }, pageWin);
@@ -105,10 +121,17 @@
         if (call.type === 'current') {
           handleGetCurrentPosition(call.success, call.error, call.options);
         } else if (call.type === 'watch') {
+          // clearWatch で取り消し済みのものはスキップ
+          if (cancelledTempIds.has(call.id)) {
+            cancelledTempIds.delete(call.id);
+            continue;
+          }
           if (mockConfig && mockConfig.enabled) {
             try { call.success(buildPosition(mockConfig.latitude, mockConfig.longitude)); } catch (_) {}
           } else if (origGeo) {
-            origGeo.watchPosition(call.success, call.error, call.options);
+            // origGeo の実IDを保持し、後から clearWatch(tempId) で停止できるようにする
+            var realId = origGeo.watchPosition(call.success, call.error, call.options);
+            tempToRealWatchId.set(call.id, realId);
           }
         }
       }

@@ -99,11 +99,17 @@ internal class SettingsScreenViewModel(
                         )
                     }
                     // 拡張機能にも最新設定を通知する
+                    // 座標が未保存（0,0）の場合はデフォルト値（皇居）を使用し、
+                    // UI表示と拡張機能への返却値を一致させる
+                    val (resolvedLat, resolvedLng) = resolveCoordinates(
+                        settings.mockLocationLatitude,
+                        settings.mockLocationLongitude,
+                    )
                     mockLocationWebExtension.updateConfig(
                         MockLocationWebExtension.MockLocationConfig(
                             enabled = settings.mockLocationEnabled,
-                            latitude = settings.mockLocationLatitude,
-                            longitude = settings.mockLocationLongitude,
+                            latitude = resolvedLat,
+                            longitude = resolvedLng,
                         )
                     )
                 }
@@ -152,13 +158,18 @@ internal fun validateMockLocationInput(input: String): String? {
     return null
 }
 
-internal fun formatMockLocationInput(latitude: Double, longitude: Double): String {
-    // デフォルト値（0.0, 0.0）のときは皇居の座標を使用する
+/** 未保存（0.0, 0.0）の場合にデフォルト座標へ解決する */
+internal fun resolveCoordinates(latitude: Double, longitude: Double): Pair<Double, Double> {
     return if (latitude == 0.0 && longitude == 0.0) {
-        "${MockLocationWebExtension.DEFAULT_LATITUDE},${MockLocationWebExtension.DEFAULT_LONGITUDE}"
+        MockLocationWebExtension.DEFAULT_LATITUDE to MockLocationWebExtension.DEFAULT_LONGITUDE
     } else {
-        "$latitude,$longitude"
+        latitude to longitude
     }
+}
+
+internal fun formatMockLocationInput(latitude: Double, longitude: Double): String {
+    val (lat, lng) = resolveCoordinates(latitude, longitude)
+    return "$lat,$lng"
 }
 
 private fun BrowserSettings.toUiState(
