@@ -28,6 +28,9 @@ internal class SettingsScreenViewModel(
 
     // 設定入力中の一時的な文字列（バリデーション前）
     private val mockLocationInputFlow = MutableStateFlow("")
+    // リポジトリ値による初回セットを完了したかどうかのフラグ
+    // isEmpty() では空文字入力と未初期化を区別できないため専用フラグを使用する
+    private var mockLocationInputInitialized = false
 
     private val callbacks = object : SettingsScreenUiState.Callbacks {
         override fun setHomepageType(type: HomepageType) {
@@ -86,11 +89,12 @@ internal class SettingsScreenViewModel(
             viewModelScope.launch {
                 settingsRepository.settings.collectLatest { settings ->
                     // 初回だけ入力欄をリポジトリの値で初期化する
-                    if (mockLocationInputFlow.value.isEmpty()) {
+                    if (!mockLocationInputInitialized) {
                         mockLocationInputFlow.value = formatMockLocationInput(
                             settings.mockLocationLatitude,
                             settings.mockLocationLongitude,
                         )
+                        mockLocationInputInitialized = true
                     }
                     uiStateFlow.update {
                         settings.toUiState(

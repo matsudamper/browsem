@@ -95,6 +95,9 @@ class MockLocationWebExtension {
                 override fun onConnect(port: WebExtension.Port) {
                     Log.d(TAG, "onConnect: ポート接続")
                     sessionPorts[session] = port
+                    // ナビゲーション/リロード時に新しいポートが先に sessionPorts に書き込まれた後で
+                    // 古いポートの onDisconnect が発火する場合があるため、自分のポートのみ削除する。
+                    val connectedPort = port
                     port.setDelegate(object : WebExtension.PortDelegate {
                         override fun onPortMessage(message: Any, port: WebExtension.Port) {
                             val json = message as? JSONObject ?: return
@@ -110,7 +113,7 @@ class MockLocationWebExtension {
 
                         override fun onDisconnect(port: WebExtension.Port) {
                             Log.d(TAG, "onDisconnect: ポート切断")
-                            sessionPorts.remove(session)
+                            sessionPorts.remove(session, connectedPort)
                         }
                     })
                 }

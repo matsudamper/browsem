@@ -3,6 +3,7 @@ package net.matsudamper.browser.ui.settings
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -285,7 +286,7 @@ fun SettingsScreen(
                         isError = uiState.mockLocationInputError != null,
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(
-                            keyboardType = KeyboardType.Decimal,
+                            keyboardType = KeyboardType.Text,
                             imeAction = ImeAction.Done,
                         ),
                         modifier = Modifier.fillMaxWidth(),
@@ -381,6 +382,45 @@ private fun SettingSection(
             Spacer(Modifier.height(8.dp))
             content()
         }
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun SettingsScreenPreview() {
+    MaterialTheme {
+        SettingsScreen(
+            uiState = SettingsScreenUiState(
+                callbacks = object : SettingsScreenUiState.Callbacks {
+                    override fun setHomepageType(type: HomepageType) = Unit
+                    override fun setCustomHomepageUrl(url: String) = Unit
+                    override fun setSearchProvider(provider: SearchProvider) = Unit
+                    override fun setCustomSearchUrl(url: String) = Unit
+                    override fun setThemeMode(mode: ThemeMode) = Unit
+                    override fun setTranslationProvider(provider: TranslationProvider) = Unit
+                    override fun setEnableThirdPartyCa(enabled: Boolean) = Unit
+                    override fun setEnableWebSuggestions(enabled: Boolean) = Unit
+                    override fun setMockLocationEnabled(enabled: Boolean) = Unit
+                    override fun setMockLocationInput(input: String) = Unit
+                    override fun openMockLocationOnMap() = Unit
+                },
+                homepageType = HomepageType.HOMEPAGE_GOOGLE,
+                customHomepageUrl = "",
+                searchProvider = SearchProvider.GOOGLE,
+                customSearchUrl = "",
+                themeMode = ThemeMode.THEME_SYSTEM,
+                translationProvider = TranslationProvider.TRANSLATION_PROVIDER_GECKO,
+                enableThirdPartyCa = false,
+                enableWebSuggestions = false,
+                mockLocationEnabled = true,
+                mockLocationInput = "35.685175,139.752797",
+                mockLocationInputError = null,
+            ),
+            onOpenExtensions = {},
+            onOpenHistory = {},
+            onOpenDownloads = {},
+            onBack = {},
+        )
     }
 }
 

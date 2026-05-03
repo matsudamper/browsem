@@ -378,8 +378,8 @@ private fun BrowserAppContent(
                             settingsViewModel.eventHandler.receiveAsFlow().collect { handler ->
                                 handler(object : SettingsScreenViewModel.Event {
                                     override fun onOpenMockLocationOnMap() {
-                                        val uiState = settingsViewModel.uiState.value ?: return
-                                        val parts = uiState.mockLocationInput.split(",")
+                                        val settingsUiState = settingsViewModel.uiState.value ?: return
+                                        val parts = settingsUiState.mockLocationInput.split(",")
                                         if (parts.size != 2) return
                                         val lat = parts[0].trim().toDoubleOrNull() ?: return
                                         val lng = parts[1].trim().toDoubleOrNull() ?: return
@@ -387,7 +387,11 @@ private fun BrowserAppContent(
                                             Intent.ACTION_VIEW,
                                             Uri.parse("geo:$lat,$lng?q=$lat,$lng"),
                                         )
-                                        context.startActivity(intent)
+                                        try {
+                                            context.startActivity(intent)
+                                        } catch (_: android.content.ActivityNotFoundException) {
+                                            // 地図アプリがインストールされていない端末では何もしない
+                                        }
                                     }
                                 })
                             }

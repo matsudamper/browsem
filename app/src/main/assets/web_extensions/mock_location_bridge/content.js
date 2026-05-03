@@ -4,18 +4,18 @@
   'use strict';
 
   // ページコンテキストの navigator.geolocation を保持（モック無効時のフォールバック用）
-  var pageWin = window.wrappedJSObject;
-  var origGeo = pageWin.navigator.geolocation;
+  const pageWin = window.wrappedJSObject;
+  const origGeo = pageWin.navigator.geolocation;
 
   // 設定が届く前にページから呼ばれた getCurrentPosition/watchPosition を一時保留するキュー
-  var pendingCalls = [];
-  var configLoaded = false;
-  var mockConfig = null;
+  let pendingCalls = [];
+  let configLoaded = false;
+  let mockConfig = null;
 
   // キュー保留中にキャンセルされた watchPosition の一時ID集合
-  var cancelledTempIds = new Set();
+  const cancelledTempIds = new Set();
   // 一時ID（負数）→ origGeo から返された実ID のマッピング（モック無効時のキュー処理後に使用）
-  var tempToRealWatchId = new Map();
+  const tempToRealWatchId = new Map();
 
   function buildPosition(lat, lng) {
     return cloneInto(
@@ -54,7 +54,7 @@
   }
 
   // モック geolocation オブジェクトを作成してページコンテキストへ設定
-  var mockGeo = cloneInto({}, pageWin);
+  const mockGeo = cloneInto({}, pageWin);
 
   mockGeo.getCurrentPosition = exportFunction(function (success, error, options) {
     if (!configLoaded) {
@@ -67,12 +67,12 @@
   mockGeo.watchPosition = exportFunction(function (success, error, options) {
     if (!configLoaded) {
       // 設定未到着のため一時IDを返しキューに積む
-      var id = -(Math.floor(Math.random() * 1000000) + 1);
+      const id = -(Math.floor(Math.random() * 1000000) + 1);
       pendingCalls.push({ type: 'watch', success: success, error: error, options: options, id: id });
       return id;
     }
     if (mockConfig && mockConfig.enabled) {
-      var watchId = Math.floor(Math.random() * 1000000) + 1;
+      const watchId = Math.floor(Math.random() * 1000000) + 1;
       try {
         success(buildPosition(mockConfig.latitude, mockConfig.longitude));
       } catch (_) {}
@@ -87,7 +87,7 @@
       // まだキュー内にある場合はキャンセル済みとしてマーク
       cancelledTempIds.add(id);
       // すでに origGeo へ転送済みで実IDが紐付いている場合はキャンセル
-      var realId = tempToRealWatchId.get(id);
+      const realId = tempToRealWatchId.get(id);
       if (realId !== undefined) {
         tempToRealWatchId.delete(id);
         if (origGeo) origGeo.clearWatch(realId);
@@ -106,7 +106,7 @@
   });
 
   // ネイティブとのポートを確立して設定を要求
-  var port = browser.runtime.connectNative('mockLocationBridge');
+  const port = browser.runtime.connectNative('mockLocationBridge');
   port.postMessage({ action: 'getConfig' });
 
   port.onMessage.addListener(function (msg) {
@@ -115,9 +115,9 @@
       configLoaded = true;
 
       // 保留中のリクエストを処理
-      var calls = pendingCalls.splice(0);
-      for (var i = 0; i < calls.length; i++) {
-        var call = calls[i];
+      const calls = pendingCalls.splice(0);
+      for (let i = 0; i < calls.length; i++) {
+        const call = calls[i];
         if (call.type === 'current') {
           handleGetCurrentPosition(call.success, call.error, call.options);
         } else if (call.type === 'watch') {
@@ -130,7 +130,7 @@
             try { call.success(buildPosition(mockConfig.latitude, mockConfig.longitude)); } catch (_) {}
           } else if (origGeo) {
             // origGeo の実IDを保持し、後から clearWatch(tempId) で停止できるようにする
-            var realId = origGeo.watchPosition(call.success, call.error, call.options);
+            const realId = origGeo.watchPosition(call.success, call.error, call.options);
             tempToRealWatchId.set(call.id, realId);
           }
         }

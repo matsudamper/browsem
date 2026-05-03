@@ -1,10 +1,12 @@
 package net.matsudamper.browser.ui.settings
 
+import androidx.compose.runtime.Stable
 import net.matsudamper.browser.data.HomepageType
 import net.matsudamper.browser.data.SearchProvider
 import net.matsudamper.browser.data.ThemeMode
 import net.matsudamper.browser.data.TranslationProvider
 
+@Stable
 data class SettingsScreenUiState(
     val callbacks: Callbacks,
     val homepageType: HomepageType,
