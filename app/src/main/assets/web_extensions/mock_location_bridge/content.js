@@ -7,15 +7,20 @@
   const pageWin = window.wrappedJSObject;
   const origGeo = pageWin.navigator.geolocation;
 
-  // 設定が届く前にページから呼ばれた getCurrentPosition/watchPosition を一時保留するキュー
-  let pendingCalls = [];
   let configLoaded = false;
   let mockConfig = null;
 
-  // キュー保留中にキャンセルされた watchPosition の一時ID集合
-  const cancelledTempIds = new Set();
-  // 一時ID（負数）→ origGeo から返された実ID のマッピング（モック無効時のキュー処理後に使用）
-  const tempToRealWatchId = new Map();
+  // 設定が届く前にページから呼ばれた getCurrentPosition を一時保留するキュー
+  let pendingCurrentCalls = [];
+
+  // アクティブな watchPosition セッション
+  // key: クライアントに返す合成watchID（常に正の整数）
+  // value: { success, error, options, realId: number|undefined, pending: boolean }
+  //   pending=true  : config 未到着のため未処理
+  //   realId 定義済み: origGeo に転送中（モック無効時）
+  //   realId 未定義 : モックウォッチ（origGeo 未使用）
+  const activeWatches = new Map();
+  let nextWatchId = 1;
 
   function buildPosition(lat, lng) {
     return cloneInto(
@@ -44,12 +49,10 @@
           try { error(cloneInto({ code: 2, message: 'mock error' }, pageWin)); } catch (_) {}
         }
       }
-    } else {
-      if (origGeo) {
-        origGeo.getCurrentPosition(success, error, options);
-      } else if (error) {
-        try { error(cloneInto({ code: 1, message: 'Geolocation not supported' }, pageWin)); } catch (_) {}
-      }
+    } else if (origGeo) {
+      origGeo.getCurrentPosition(success, error, options);
+    } else if (error) {
+      try { error(cloneInto({ code: 1, message: 'Geolocation not supported' }, pageWin)); } catch (_) {}
     }
   }
 
@@ -58,44 +61,39 @@
 
   mockGeo.getCurrentPosition = exportFunction(function (success, error, options) {
     if (!configLoaded) {
-      pendingCalls.push({ type: 'current', success: success, error: error, options: options });
+      pendingCurrentCalls.push({ success: success, error: error, options: options });
       return;
     }
     handleGetCurrentPosition(success, error, options);
   }, pageWin);
 
   mockGeo.watchPosition = exportFunction(function (success, error, options) {
+    // 常に合成IDを返すことでモック有効/無効切り替え時にウォッチを追跡可能にする
+    const id = nextWatchId++;
+
     if (!configLoaded) {
-      // 設定未到着のため一時IDを返しキューに積む
-      const id = -(Math.floor(Math.random() * 1000000) + 1);
-      pendingCalls.push({ type: 'watch', success: success, error: error, options: options, id: id });
+      // config 未到着 → pending として積む（config 到着後に処理）
+      activeWatches.set(id, { success: success, error: error, options: options, realId: undefined, pending: true });
       return id;
     }
+
     if (mockConfig && mockConfig.enabled) {
-      const watchId = Math.floor(Math.random() * 1000000) + 1;
-      try {
-        success(buildPosition(mockConfig.latitude, mockConfig.longitude));
-      } catch (_) {}
-      return watchId;
+      activeWatches.set(id, { success: success, error: error, options: options, realId: undefined, pending: false });
+      try { success(buildPosition(mockConfig.latitude, mockConfig.longitude)); } catch (_) {}
     } else {
-      return origGeo ? origGeo.watchPosition(success, error, options) : -1;
+      const realId = origGeo ? origGeo.watchPosition(success, error, options) : undefined;
+      activeWatches.set(id, { success: success, error: error, options: options, realId: realId, pending: false });
     }
+    return id;
   }, pageWin);
 
   mockGeo.clearWatch = exportFunction(function (id) {
-    if (id < 0) {
-      // まだキュー内にある場合はキャンセル済みとしてマーク
-      cancelledTempIds.add(id);
-      // すでに origGeo へ転送済みで実IDが紐付いている場合はキャンセル
-      const realId = tempToRealWatchId.get(id);
-      if (realId !== undefined) {
-        tempToRealWatchId.delete(id);
-        if (origGeo) origGeo.clearWatch(realId);
+    const entry = activeWatches.get(id);
+    if (entry) {
+      if (entry.realId !== undefined && origGeo) {
+        origGeo.clearWatch(entry.realId);
       }
-      return;
-    }
-    if (origGeo) {
-      origGeo.clearWatch(id);
+      activeWatches.delete(id);
     }
   }, pageWin);
 
@@ -110,28 +108,47 @@
   port.postMessage({ action: 'getConfig' });
 
   port.onMessage.addListener(function (msg) {
-    if (msg.action === 'config' || msg.action === 'update') {
-      mockConfig = msg;
-      configLoaded = true;
+    if (msg.action !== 'config' && msg.action !== 'update') return;
 
-      // 保留中のリクエストを処理
-      const calls = pendingCalls.splice(0);
-      for (let i = 0; i < calls.length; i++) {
-        const call = calls[i];
-        if (call.type === 'current') {
-          handleGetCurrentPosition(call.success, call.error, call.options);
-        } else if (call.type === 'watch') {
-          // clearWatch で取り消し済みのものはスキップ
-          if (cancelledTempIds.has(call.id)) {
-            cancelledTempIds.delete(call.id);
-            continue;
+    const wasEnabled = mockConfig ? mockConfig.enabled : null;
+    mockConfig = msg;
+    configLoaded = true;
+
+    // 設定待ちの getCurrentPosition を処理
+    const currCalls = pendingCurrentCalls.splice(0);
+    for (let i = 0; i < currCalls.length; i++) {
+      handleGetCurrentPosition(currCalls[i].success, currCalls[i].error, currCalls[i].options);
+    }
+
+    // 設定待ちの watchPosition を処理（pending=true のエントリ）
+    for (const [, entry] of activeWatches) {
+      if (!entry.pending) continue;
+      entry.pending = false;
+      if (mockConfig.enabled) {
+        try { entry.success(buildPosition(mockConfig.latitude, mockConfig.longitude)); } catch (_) {}
+      } else if (origGeo) {
+        entry.realId = origGeo.watchPosition(entry.success, entry.error, entry.options);
+      }
+    }
+
+    // update 時: モック有効/無効の切り替えによるアクティブウォッチの移行
+    if (msg.action === 'update') {
+      if (mockConfig.enabled && wasEnabled === false) {
+        // 無効→有効: 既存の origGeo ウォッチをキャンセルしてモック座標を配信
+        for (const [, entry] of activeWatches) {
+          if (entry.pending) continue;
+          if (entry.realId !== undefined && origGeo) {
+            origGeo.clearWatch(entry.realId);
+            entry.realId = undefined;
           }
-          if (mockConfig && mockConfig.enabled) {
-            try { call.success(buildPosition(mockConfig.latitude, mockConfig.longitude)); } catch (_) {}
-          } else if (origGeo) {
-            // origGeo の実IDを保持し、後から clearWatch(tempId) で停止できるようにする
-            const realId = origGeo.watchPosition(call.success, call.error, call.options);
-            tempToRealWatchId.set(call.id, realId);
+          try { entry.success(buildPosition(mockConfig.latitude, mockConfig.longitude)); } catch (_) {}
+        }
+      } else if (!mockConfig.enabled && wasEnabled === true) {
+        // 有効→無効: モックウォッチを実 origGeo ウォッチへ切り替え
+        for (const [, entry] of activeWatches) {
+          if (entry.pending || entry.realId !== undefined) continue;
+          if (origGeo) {
+            entry.realId = origGeo.watchPosition(entry.success, entry.error, entry.options);
           }
         }
       }

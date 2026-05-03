@@ -143,6 +143,8 @@ internal fun parseMockLocationInput(input: String): Pair<Double, Double>? {
     if (parts.size != 2) return null
     val lat = parts[0].trim().toDoubleOrNull() ?: return null
     val lng = parts[1].trim().toDoubleOrNull() ?: return null
+    if (!lat.isFinite()) return null
+    if (!lng.isFinite()) return null
     if (lat < -90.0 || lat > 90.0) return null
     if (lng < -180.0 || lng > 180.0) return null
     return lat to lng
@@ -157,6 +159,8 @@ internal fun validateMockLocationInput(input: String): String? {
         ?: return "緯度が数値ではありません"
     val lng = parts[1].trim().toDoubleOrNull()
         ?: return "経度が数値ではありません"
+    if (!lat.isFinite()) return "緯度が有効な数値ではありません"
+    if (!lng.isFinite()) return "経度が有効な数値ではありません"
     if (lat < -90.0 || lat > 90.0) return "緯度は -90 〜 90 の範囲で入力してください"
     if (lng < -180.0 || lng > 180.0) return "経度は -180 〜 180 の範囲で入力してください"
     return null
