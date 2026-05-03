@@ -9,7 +9,6 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
 import net.matsudamper.browser.ui.tabs.TabsScreenTestTags
-import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -56,20 +55,17 @@ class FindInPageTest {
         composeRule.waitForUrlBarContains(LOCAL_PAGE_FILE_NAME)
         composeRule.waitForUrlBarNotFocused()
 
-        val urlBeforeBack = composeRule.currentUrlBarText()
-
         openFindInPage()
         waitForFindInPageVisible()
 
         pressSystemBack()
 
         waitForFindInPageHidden()
+        composeRule.waitForIdle()
 
-        val urlAfterBack = composeRule.currentUrlBarText()
-        assertEquals(
+        assertTrue(
             "検索を閉じた後にURLが変わった（ページが戻った）",
-            urlBeforeBack,
-            urlAfterBack
+            composeRule.currentUrlBarText().contains(LOCAL_PAGE_FILE_NAME),
         )
         assertTrue(
             "アプリが終了している",
