@@ -1,10 +1,12 @@
 package net.matsudamper.browser.ui.settings
 
+import androidx.compose.runtime.Stable
 import net.matsudamper.browser.data.HomepageType
 import net.matsudamper.browser.data.SearchProvider
 import net.matsudamper.browser.data.ThemeMode
 import net.matsudamper.browser.data.TranslationProvider
 
+@Stable
 data class SettingsScreenUiState(
     val callbacks: Callbacks,
     val homepageType: HomepageType,
@@ -15,6 +17,9 @@ data class SettingsScreenUiState(
     val translationProvider: TranslationProvider,
     val enableThirdPartyCa: Boolean,
     val enableWebSuggestions: Boolean,
+    val mockLocationEnabled: Boolean,
+    val mockLocationInput: String,
+    val mockLocationInputError: String?,
 ) {
     interface Callbacks {
         fun setHomepageType(type: HomepageType)
@@ -25,5 +30,8 @@ data class SettingsScreenUiState(
         fun setTranslationProvider(provider: TranslationProvider)
         fun setEnableThirdPartyCa(enabled: Boolean)
         fun setEnableWebSuggestions(enabled: Boolean)
+        fun setMockLocationEnabled(enabled: Boolean)
+        fun setMockLocationInput(input: String)
+        fun openMockLocationOnMap()
     }
 }
