@@ -11,6 +11,11 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: write
+      id-token: write
 
     steps:
       - name: Checkout
@@ -45,7 +50,6 @@ jobs:
           REPOSITORY: ${{ github.repository }}
         run: |
           SHORT_SHA="${GITHUB_SHA:0:7}"
-          # リポジトリ名のみ取得（org名を除去）し、ブランチ名のスラッシュをハイフンに置換してファイル名に使えるようにする
           SAFE_REPO="${REPOSITORY##*/}"
           SAFE_BRANCH="${BRANCH_NAME//\//-}"
           APK_NAME="app-${SAFE_REPO}-${SAFE_BRANCH}-${SHORT_SHA}.apk"
@@ -54,13 +58,64 @@ jobs:
           echo "APK_NAME=${APK_NAME}" >> "$GITHUB_ENV"
           echo "APK_PATH=app/build/outputs/apk/debug/${APK_NAME}" >> "$GITHUB_ENV"
 
-      - name: Upload debug APK
+      - name: Upload debug APK to GitHub Artifacts
         id: upload_apk
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ${{ env.APK_NAME }}
           path: ${{ env.APK_PATH }}
           compression-level: 9
+
+      - name: Upload APK to MinIO
+        id: upload_minio
+        uses: matsudamper/actions/upload-matsudamper-s3@a1ecf81b1a0ce320824a49711e456f396e4e8fea # v1.0.0
+        continue-on-error: true
+        with:
+          file_path: ${{ env.APK_PATH }}
+
+      - name: Generate and Upload GitHub QR code
+        id: upload_github_qr
+        run: |
+          pip install "qrcode[pil]" --quiet
+          python3 -c "import qrcode, sys; qrcode.make(sys.argv[1]).save('qrcode-github.png')" "${{ steps.upload_apk.outputs.artifact-url }}"
+
+      - name: Upload GitHub QR artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        id: github_qr_artifact
+        with:
+          name: apk-qr-code-github
+          path: qrcode-github.png
+          archive: false
+
+      - name: Generate and Upload MinIO QR code
+        if: steps.upload_minio.outputs.url != ''
+        id: upload_minio_qr
+        run: |
+          python3 -c "import qrcode, sys; qrcode.make(sys.argv[1]).save('qrcode-minio.png')" "${{ steps.upload_minio.outputs.url }}"
+
+      - name: Upload MinIO QR artifact
+        if: steps.upload_minio.outputs.url != ''
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        id: minio_qr_artifact
+        with:
+          name: apk-qr-code-minio
+          path: qrcode-minio.png
+          archive: false
+
+      - name: Comment APK download URLs
+        uses: marocchino/sticky-pull-request-comment@0ea0beb66eb9baf113663a64ec522f60e49231c0 # v3.0.4
+        with:
+          header: apk-download
+          message: |
+            ✅ **Debug APK is ready!**
+
+            | Storage | Download Link | QR Code |
+            | :--- | :--- | :--- |
+            | 🐙 GitHub Artifacts | [Download](${{ steps.upload_apk.outputs.artifact-url }}) | [View](${{ steps.github_qr_artifact.outputs.artifact-url }}) |
+            ${{ steps.upload_minio.outputs.url && format('| ☁️ MinIO | [Download]({0}) | [View]({1}) |', steps.upload_minio.outputs.url, steps.minio_qr_artifact.outputs.artifact-url) || '' }}
+
+            ---
+            *Artifact Name: `${{ env.APK_NAME }}`*
 
       - name: Run Android Lint
         run: ./gradlew :app:lintDebug
@@ -72,32 +127,6 @@ jobs:
           name: app-lint-report
           path: app/build/reports/lint-results-debug.html
           archive: false
-
-      - name: Generate QR code for APK download URL
-        run: |
-          pip install "qrcode[pil]" --quiet
-          ARTIFACT_URL="${{ steps.upload_apk.outputs.artifact-url }}"
-          # APKダウンロードURLを埋め込んだ QRコード PNG を生成
-          python3 -c "import qrcode, sys; qrcode.make(sys.argv[1]).save('qrcode.png')" "$ARTIFACT_URL"
-
-      - name: Upload QR code (未圧縮アーティファクト)
-        id: upload_qr
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: apk-qr-code
-          path: qrcode.png
-          archive: false
-
-      - name: Comment APK download URL
-        uses: marocchino/sticky-pull-request-comment@0ea0beb66eb9baf113663a64ec522f60e49231c0 # v3.0.4
-        with:
-          header: apk-download
-          message: |
-            ✅ Debug APK artifact is ready.
-
-            - Download URL: ${{ steps.upload_apk.outputs.artifact-url }}
-            - Artifact Name: `${{ env.APK_NAME }}`
-            - QR Code: ${{ steps.upload_qr.outputs.artifact-url }}
 
   android-test:
     runs-on: ubuntu-latest
