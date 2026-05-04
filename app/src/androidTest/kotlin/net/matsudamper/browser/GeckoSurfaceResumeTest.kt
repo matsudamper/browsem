@@ -62,7 +62,8 @@ class GeckoSurfaceResumeTest {
     }
 
     private fun waitForNonBlackGeckoPixels(timeoutMillis: Long = 30_000): Bitmap {
-        val deadline = System.currentTimeMillis() + timeoutMillis
+        val startTime = System.currentTimeMillis()
+        val deadline = startTime + timeoutMillis
         var latestBitmap: Bitmap? = null
         var lastError: Throwable? = null
         var attempts = 0
@@ -89,10 +90,10 @@ class GeckoSurfaceResumeTest {
             }
             Thread.sleep(250L)
         }
-        val elapsed = timeoutMillis - (deadline - System.currentTimeMillis())
+        val elapsed = System.currentTimeMillis() - startTime
         Log.e(
             TAG,
-            "タイムアウト: ${attempts}回試行 (約${elapsed}ms) 後もGeckoViewのピクセルが黒のまま。" +
+            "タイムアウト: ${attempts}回試行 (${elapsed}ms) 後もGeckoViewのピクセルが黒のまま。" +
                 "lastBitmap=${latestBitmap?.width}x${latestBitmap?.height}, lastError=$lastError",
         )
         error(
@@ -155,8 +156,6 @@ class GeckoSurfaceResumeTest {
         }
         return if (sampled > 0) black.toDouble() / sampled else 0.0
     }
-
-    private fun Bitmap.isMostlyBlack(): Boolean = blackRatio() >= BLACK_RATIO_THRESHOLD
 
     private fun View.findGeckoView(): GeckoView? {
         if (this is GeckoView) return this
