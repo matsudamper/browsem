@@ -20,6 +20,7 @@ import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import java.net.URL
@@ -693,7 +694,9 @@ internal class BrowserTabScreenState(
                 }
                 // ビットマップ取得済みのため、セッションリリースはこの後でも問題ない
                 onCaptured?.invoke()
-                coroutineScope.launch(Dispatchers.IO) {
+                // coroutineScope はタブ切替ナビゲーション直後に Composable が composition から
+                // 外れるとキャンセルされる。compress〜保存は独立したスコープで完走させる。
+                CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
                     if (previewBitmap.isRecycled) return@launch
                     // HARDWARE configはcompress()できないためソフトウェアBitmapにコピーする
                     // copy()はメモリ不足時にnullを返す（例外ではない）
