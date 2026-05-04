@@ -66,8 +66,8 @@ jobs:
           path: ${{ env.APK_PATH }}
           compression-level: 9
 
-      - name: Upload APK to MinIO
-        id: upload_minio
+      - name: Upload APK to S3
+        id: upload_s3
         uses: matsudamper/actions/upload-matsudamper-s3@a1ecf81b1a0ce320824a49711e456f396e4e8fea # v1.0.0
         continue-on-error: true
         with:
@@ -87,19 +87,19 @@ jobs:
           path: qrcode-github.png
           archive: false
 
-      - name: Generate and Upload MinIO QR code
-        if: steps.upload_minio.outputs.url != ''
-        id: upload_minio_qr
+      - name: Generate and Upload S3 QR code
+        if: steps.upload_s3.outputs.url != ''
+        id: upload_s3_qr
         run: |
-          python3 -c "import qrcode, sys; qrcode.make(sys.argv[1]).save('qrcode-minio.png')" "${{ steps.upload_minio.outputs.url }}"
+          python3 -c "import qrcode, sys; qrcode.make(sys.argv[1]).save('qrcode-s3.png')" "${{ steps.upload_s3.outputs.url }}"
 
-      - name: Upload MinIO QR artifact
-        if: steps.upload_minio.outputs.url != ''
+      - name: Upload S3 QR artifact
+        if: steps.upload_s3.outputs.url != ''
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        id: minio_qr_artifact
+        id: s3_qr_artifact
         with:
-          name: apk-qr-code-minio
-          path: qrcode-minio.png
+          name: apk-qr-code-s3
+          path: qrcode-s3.png
           archive: false
 
       - name: Comment APK download URLs
@@ -112,7 +112,7 @@ jobs:
             | Storage | Download Link | QR Code |
             | :--- | :--- | :--- |
             | 🐙 GitHub Artifacts | [Download](${{ steps.upload_apk.outputs.artifact-url }}) | [View](${{ steps.github_qr_artifact.outputs.artifact-url }}) |
-            ${{ steps.upload_minio.outputs.url && format('| ☁️ MinIO | [Download]({0}) | [View]({1}) |', steps.upload_minio.outputs.url, steps.minio_qr_artifact.outputs.artifact-url) || '' }}
+            ${{ steps.upload_s3.outputs.url && format('| ☁️ S3 | [Download]({0}) | [View]({1}) |', steps.upload_s3.outputs.url, steps.s3_qr_artifact.outputs.artifact-url) || '' }}
 
             ---
             *Artifact Name: `${{ env.APK_NAME }}`*
