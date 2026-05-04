@@ -32,12 +32,17 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Color.Companion
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -61,6 +66,11 @@ internal fun FindInPageBar(
     onToggleRegex: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val focusRequester = remember { FocusRequester() }
+    LaunchedEffect(Unit) {
+        focusRequester.requestFocus()
+    }
+
     Surface(
         color = MaterialTheme.colorScheme.surfaceVariant,
         modifier = modifier.fillMaxWidth(),
@@ -105,7 +115,9 @@ internal fun FindInPageBar(
                         .weight(1f)
                         .clip(CircleShape)
                         .background(MaterialTheme.colorScheme.surface)
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                        .focusRequester(focusRequester)
+                        .testTag(FindInPageBarTestTags.SearchInput.testTag),
                     singleLine = true,
                     textStyle = TextStyle(color = MaterialTheme.colorScheme.onSurface),
                     cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
@@ -168,4 +180,11 @@ internal fun FindInPageBar(
             }
         }
     }
+}
+
+sealed interface FindInPageBarTestTags {
+    val id: String
+    val testTag get() = "${FindInPageBarTestTags::class.java.name}#$id"
+
+    object SearchInput : FindInPageBarTestTags { override val id = "search_input" }
 }
