@@ -694,63 +694,24 @@ internal class BrowserTabScreenState(
                 // ビットマップ取得済みのため、セッションリリースはこの後でも問題ない
                 onCaptured?.invoke()
                 coroutineScope.launch(Dispatchers.IO) {
-                    if (previewBitmap.isRecycled) {
-                        Log.w(TAG, "プレビューBitmapが既にrecycle済み")
-                        return@launch
-                    }
-                    val originalConfig = previewBitmap.config
+                    if (previewBitmap.isRecycled) return@launch
                     // HARDWARE configはcompress()できないためソフトウェアBitmapにコピーする
-                    // copy()はメモリ不足時にnullを返す（例外ではない）ため、nullチェックが必要
-                    val copiedBitmap: Bitmap? = if (originalConfig == Bitmap.Config.HARDWARE) {
-                        Log.w(TAG, "プレビューBitmapがHARDWARE configのためARGB_8888へコピー")
-                        val copied = runCatching { previewBitmap.copy(Bitmap.Config.ARGB_8888, false) }
-                            .getOrElse { error ->
-                                Log.e(TAG, "HARDWARE Bitmapのコピーに失敗", error)
-                                return@launch
-                            }
-                        if (copied == null) {
-                            Log.e(TAG, "HARDWARE Bitmapのコピーがnullを返した（メモリ不足の可能性）")
-                            return@launch
-                        }
-                        copied
+                    // copy()はメモリ不足時にnullを返す（例外ではない）
+                    val copiedBitmap: Bitmap? = if (previewBitmap.config == Bitmap.Config.HARDWARE) {
+                        runCatching { previewBitmap.copy(Bitmap.Config.ARGB_8888, false) }
+                            .getOrElse { return@launch }
+                            ?: return@launch
                     } else {
                         null
                     }
                     val sourceBitmap = copiedBitmap ?: previewBitmap
-                    // 原因特定用: quality=0 でも成功するか並行検証
-                    val streamQ0 = ByteArrayOutputStream()
-                    val successQ0 = runCatching {
-                        sourceBitmap.compress(Bitmap.CompressFormat.WEBP_LOSSY, 0, streamQ0)
-                    }.getOrElse { error ->
-                        Log.w(TAG, "プレビュー診断: quality=0 で例外 ${error.javaClass.simpleName}: ${error.message}")
-                        false
-                    }
                     val stream = ByteArrayOutputStream()
                     val success = runCatching {
-                        // quality 0 はWebPエンコーダで失敗することがあるため75を使用
                         sourceBitmap.compress(Bitmap.CompressFormat.WEBP_LOSSY, 75, stream)
-                    }.getOrElse { error ->
-                        Log.e(TAG, "プレビューBitmapのcompress中に例外", error)
-                        false
-                    }
-                    Log.i(
-                        TAG,
-                        "プレビュー診断: originalConfig=$originalConfig hardwareCopied=${copiedBitmap != null} " +
-                            "q0Success=$successQ0 q0Size=${streamQ0.size()} " +
-                            "q75Success=$success q75Size=${stream.size()}",
-                    )
-                    // コピーしたBitmapは使用後にrecycleしてメモリを解放
+                    }.getOrElse { false }
                     copiedBitmap?.recycle()
                     val bytes = stream.toByteArray()
-                    if (!success || bytes.isEmpty()) {
-                        Log.w(
-                            TAG,
-                            "プレビューBitmapのcompress失敗 success=$success size=${bytes.size} " +
-                                "originalConfig=$originalConfig " +
-                                "sourceConfig=${sourceBitmap.config} ${sourceBitmap.width}x${sourceBitmap.height}",
-                        )
-                        return@launch
-                    }
+                    if (!success || bytes.isEmpty()) return@launch
                     browserTab.previewBitmap = bytes
                 }
             },
