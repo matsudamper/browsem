@@ -2,6 +2,7 @@ package net.matsudamper.browser
 
 import android.graphics.Bitmap
 import android.graphics.Color
+import android.util.Log
 import android.view.View
 import android.view.ViewGroup
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -29,18 +30,27 @@ class GeckoSurfaceResumeTest {
     fun geckoPixelsRemainVisibleAfterActivityReturnsFromBackground() {
         val pageUri = prepareSurfaceResumePageUri()
 
+        Log.d(TAG, "ページを開きます: $pageUri")
         composeRule.openUrlFromUrlBar(pageUri)
         composeRule.waitForUrlBarContains(SURFACE_RESUME_FILE_NAME, timeoutMillis = 60_000)
         composeRule.waitForUrlBarNotFocused(timeoutMillis = 30_000)
+        Log.d(TAG, "ページロード完了。GeckoContainerを待機します")
         waitForGeckoContainer()
+        Log.d(TAG, "GeckoContainer確認済み。フォアグラウンドでのピクセル確認を開始します")
         waitForNonBlackGeckoPixels()
+        Log.d(TAG, "フォアグラウンドでのピクセル確認完了。バックグラウンドに移行します")
 
         composeRule.activityRule.scenario.moveToState(Lifecycle.State.CREATED)
+        Log.d(TAG, "バックグラウンド移行完了。フォアグラウンドに復帰します")
         composeRule.activityRule.scenario.moveToState(Lifecycle.State.RESUMED)
+        Log.d(TAG, "フォアグラウンド復帰完了。URLバー確認を待機します")
 
         composeRule.waitForUrlBarContains(SURFACE_RESUME_FILE_NAME, timeoutMillis = 60_000)
+        Log.d(TAG, "URLバー確認済み。GeckoContainerを待機します")
         waitForGeckoContainer()
+        Log.d(TAG, "GeckoContainer確認済み。復帰後のピクセル確認を開始します")
         waitForNonBlackGeckoPixels()
+        Log.d(TAG, "復帰後のピクセル確認完了。テスト成功")
     }
 
     private fun waitForGeckoContainer() {
@@ -55,19 +65,36 @@ class GeckoSurfaceResumeTest {
         val deadline = System.currentTimeMillis() + timeoutMillis
         var latestBitmap: Bitmap? = null
         var lastError: Throwable? = null
+        var attempts = 0
         while (System.currentTimeMillis() < deadline) {
+            attempts++
             try {
                 latestBitmap = captureGeckoPixels()
-                if (!latestBitmap.isMostlyBlack()) {
+                val ratio = latestBitmap.blackRatio()
+                val isMostlyBlack = ratio >= BLACK_RATIO_THRESHOLD
+                Log.d(
+                    TAG,
+                    "試行 $attempts: キャプチャ成功 (${latestBitmap.width}x${latestBitmap.height}), " +
+                        "blackRatio=${"%,.2f".format(ratio * 100)}%, isMostlyBlack=$isMostlyBlack",
+                )
+                if (!isMostlyBlack) {
+                    Log.d(TAG, "試行 $attempts: 非黒ピクセルを検出。正常")
                     return latestBitmap
                 }
             } catch (e: AssertionError) {
                 // Activity リジューム直後は GeckoView の Compositor がまだ準備できておらず
                 // capturePixels() が失敗することがある。一時的なエラーとしてリトライする。
+                Log.w(TAG, "試行 $attempts: capturePixels 失敗 (一時的エラー、リトライします)", e)
                 lastError = e
             }
             Thread.sleep(250L)
         }
+        val elapsed = timeoutMillis - (deadline - System.currentTimeMillis())
+        Log.e(
+            TAG,
+            "タイムアウト: ${attempts}回試行 (約${elapsed}ms) 後もGeckoViewのピクセルが黒のまま。" +
+                "lastBitmap=${latestBitmap?.width}x${latestBitmap?.height}, lastError=$lastError",
+        )
         error(
             "GeckoView pixels stayed mostly black or capture failed. " +
                 "lastBitmap=${latestBitmap?.width}x${latestBitmap?.height}, " +
@@ -102,7 +129,7 @@ class GeckoSurfaceResumeTest {
         }
     }
 
-    private fun Bitmap.isMostlyBlack(): Boolean {
+    private fun Bitmap.blackRatio(): Double {
         val stepX = max(1, width / SAMPLE_GRID_SIZE)
         val stepY = max(1, height / SAMPLE_GRID_SIZE)
         var sampled = 0
@@ -126,8 +153,10 @@ class GeckoSurfaceResumeTest {
             }
             y += stepY
         }
-        return sampled > 0 && black.toDouble() / sampled >= BLACK_RATIO_THRESHOLD
+        return if (sampled > 0) black.toDouble() / sampled else 0.0
     }
+
+    private fun Bitmap.isMostlyBlack(): Boolean = blackRatio() >= BLACK_RATIO_THRESHOLD
 
     private fun View.findGeckoView(): GeckoView? {
         if (this is GeckoView) return this
@@ -173,6 +202,7 @@ class GeckoSurfaceResumeTest {
     }
 
     private companion object {
+        private const val TAG = "GeckoSurfaceResumeTest"
         private const val SURFACE_RESUME_DIR_NAME = "surface-resume"
         private const val SURFACE_RESUME_FILE_NAME = "index.html"
         private const val SAMPLE_GRID_SIZE = 20

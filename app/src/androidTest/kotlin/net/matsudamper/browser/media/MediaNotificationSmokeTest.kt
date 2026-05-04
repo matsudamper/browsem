@@ -3,6 +3,7 @@ package net.matsudamper.browser.media
 import android.content.Intent
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import androidx.test.ext.junit.rules.ActivityScenarioRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -67,21 +68,39 @@ class MediaNotificationSmokeTest {
         val mediaPageUri = prepareLocalMediaPageUri()
         val uiDevice = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
 
+        Log.d(TAG, "ページを開きます: $mediaPageUri")
         openMediaPage(mediaPageUri)
+        Log.d(TAG, "ページオープン後、${PAGE_READY_DELAY_MS}ms 固定待機します")
         Thread.sleep(PAGE_READY_DELAY_MS)
+        Log.d(
+            TAG,
+            "固定待機完了。currentPackage=${uiDevice.currentPackageName}, " +
+                "displaySize=${uiDevice.displayWidth}x${uiDevice.displayHeight}",
+        )
 
         // ユーザー操作で再生を開始する（自動再生制限の影響を避ける）。
-        repeat(PLAYBACK_TAP_RETRY_COUNT) {
+        repeat(PLAYBACK_TAP_RETRY_COUNT) { attempt ->
+            val cx = uiDevice.displayWidth / 2
+            val cy = uiDevice.displayHeight / 2
+            Log.d(TAG, "タップ試行 ${attempt + 1}/$PLAYBACK_TAP_RETRY_COUNT: ($cx, $cy)")
             tapScreenCenter(uiDevice)
             Thread.sleep(PLAYBACK_TAP_INTERVAL_MS)
+            Log.d(TAG, "タップ ${attempt + 1}回目完了: currentPackage=${uiDevice.currentPackageName}")
         }
 
+        Log.d(TAG, "通知パネルを開きます")
         uiDevice.openNotification()
         try {
-            assertTrue(
-                "通知タイトルが表示されない",
-                uiDevice.wait(Until.hasObject(By.text(EXPECTED_TITLE)), NOTIFICATION_CONTROL_TIMEOUT_MS),
+            val found = uiDevice.wait(Until.hasObject(By.text(EXPECTED_TITLE)), NOTIFICATION_CONTROL_TIMEOUT_MS)
+            Log.d(
+                TAG,
+                "通知タイトル '$EXPECTED_TITLE' 検索結果: found=$found " +
+                    "(timeout=${NOTIFICATION_CONTROL_TIMEOUT_MS}ms)",
             )
+            if (!found) {
+                Log.e(TAG, "期待した通知が見つかりませんでした。EXPECTED_TITLE='$EXPECTED_TITLE'")
+            }
+            assertTrue("通知タイトルが表示されない", found)
         } finally {
             uiDevice.pressBack()
         }
@@ -126,6 +145,7 @@ class MediaNotificationSmokeTest {
     }
 
     companion object {
+        private const val TAG = "MediaNotifSmokeTest"
         private const val TEST_TIMEOUT_MS = 180_000L
         private const val PAGE_READY_DELAY_MS = 3_000L
         private const val PLAYBACK_TAP_RETRY_COUNT = 3
