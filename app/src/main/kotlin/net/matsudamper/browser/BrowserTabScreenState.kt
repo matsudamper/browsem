@@ -200,8 +200,20 @@ internal class BrowserTabScreenState(
     // プレビューキャプチャの可否を表すフラグ。
     // false の間は captureTabPreview() が早期 return するため、状態遷移が
     // 想定通りに行われないと「いつまで経ってもプレビューが保存されない」状態に
-    // 陥る。デバッグしやすいよう、すべての遷移をログに残す。
-    private var previewCaptureReady: Boolean = false
+    // 陥る。デバッグしやすいよう、すべての遷移を理由付きでログに残す。
+    //
+    // 設計判断:
+    // - 初期値は「過去にプレビューが保存されているか」または「セッション状態が
+    //   復元される予定か」を基準に true にする。プロセス再起動時に、復元タブで
+    //   onPageStart/onPageStop が発火しないままタブ切替が走ると永遠に false の
+    //   ままになる問題を防ぐ。
+    // - onPageStart では false に戻さない。GeckoView は新ページのロード中も
+    //   古いページを表示し続けるため、ロード中にキャプチャしても白ページには
+    //   ならない。一方、ロードが完了せずに外部アプリ遷移・ダウンロード判定・
+    //   ナビゲーションキャンセル等が起きると onPageStop が発火せずフラグが
+    //   false のまま固まる問題があった。
+    private var previewCaptureReady: Boolean =
+        browserTab.previewBitmap?.isNotEmpty() == true || browserTab.sessionState.isNotBlank()
         set(value) {
             if (field == value) return
             Log.d(
@@ -210,6 +222,13 @@ internal class BrowserTabScreenState(
             )
             field = value
         }
+
+    init {
+        Log.d(
+            TAG,
+            "init previewCaptureReady=$previewCaptureReady (tabId=${browserTab.tabId} hasPreview=${browserTab.previewBitmap?.isNotEmpty() == true} hasSessionState=${browserTab.sessionState.isNotBlank()})",
+        )
+    }
     var pageLoadError by mutableStateOf<PageLoadError?>(null)
 
     // --- ズーム状態（viewport width 操作によりテキスト・画像含め全体をズーム）---
@@ -905,7 +924,11 @@ internal class BrowserTabScreenState(
 
     override fun onPageStart(url: String) {
         clearPageLoadError()
-        previewCaptureReady = false
+        // previewCaptureReady は false に戻さない。
+        // GeckoView は新ページの描画が始まるまで古いページを表示し続けるため、
+        // ロード中のキャプチャは古いページの画像となり問題ない。
+        // 一方、外部アプリ遷移・ダウンロード判定・onLoadRequest DENY 等で
+        // onPageStop が発火しないケースで flag が false のまま固まる問題を回避する。
         // 新しいページへの遷移時にfaviconをリセット
         browserTab.faviconBitmap = null
         webAppManifestJson = null
