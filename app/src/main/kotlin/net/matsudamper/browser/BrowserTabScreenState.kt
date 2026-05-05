@@ -20,6 +20,7 @@ import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import java.net.URL
@@ -38,6 +39,8 @@ import org.mozilla.geckoview.WebRequestError
 import org.mozilla.geckoview.WebResponse
 import java.io.ByteArrayOutputStream
 
+
+private const val TAG = "BrowserTabScreenState"
 
 private val PAGE_ZOOM_STEPS = listOf(20, 25, 33, 50, 67, 75, 80, 90, 100, 110, 125, 150, 175, 200)
 
@@ -193,7 +196,39 @@ internal class BrowserTabScreenState(
     private var skipExternalAppCheckForNextLoad = false
 
     var renderReady by mutableStateOf(false)
-    private var previewCaptureReady = false
+
+    // プレビューキャプチャの可否を表すフラグ。
+    // false の間は captureTabPreview() が早期 return するため、状態遷移が
+    // 想定通りに行われないと「いつまで経ってもプレビューが保存されない」状態に
+    // 陥る。デバッグしやすいよう、すべての遷移を理由付きでログに残す。
+    //
+    // 設計判断:
+    // - 初期値は「過去にプレビューが保存されているか」または「セッション状態が
+    //   復元される予定か」を基準に true にする。プロセス再起動時に、復元タブで
+    //   onPageStart/onPageStop が発火しないままタブ切替が走ると永遠に false の
+    //   ままになる問題を防ぐ。
+    // - onPageStart では false に戻さない。GeckoView は新ページのロード中も
+    //   古いページを表示し続けるため、ロード中にキャプチャしても白ページには
+    //   ならない。一方、ロードが完了せずに外部アプリ遷移・ダウンロード判定・
+    //   ナビゲーションキャンセル等が起きると onPageStop が発火せずフラグが
+    //   false のまま固まる問題があった。
+    private var previewCaptureReady: Boolean =
+        browserTab.previewBitmap?.isNotEmpty() == true || browserTab.sessionState.isNotBlank()
+        set(value) {
+            if (field == value) return
+            Log.d(
+                TAG,
+                "previewCaptureReady ${field} -> $value (tabId=${browserTab.tabId} url=$currentPageUrl)",
+            )
+            field = value
+        }
+
+    init {
+        Log.d(
+            TAG,
+            "init previewCaptureReady=$previewCaptureReady (tabId=${browserTab.tabId} hasPreview=${browserTab.previewBitmap?.isNotEmpty() == true} hasSessionState=${browserTab.sessionState.isNotBlank()})",
+        )
+    }
     var pageLoadError by mutableStateOf<PageLoadError?>(null)
 
     // --- ズーム状態（viewport width 操作によりテキスト・画像含め全体をズーム）---
@@ -474,7 +509,7 @@ internal class BrowserTabScreenState(
                 translationToLanguage = langs?.toLanguage
                 translationState = TranslationState.Translated
             } else {
-                Log.e("BrowserTabScreenState", "翻訳に失敗しました", result.exceptionOrNull())
+                Log.e(TAG, "翻訳に失敗しました", result.exceptionOrNull())
                 translationFromLanguage = null
                 translationToLanguage = null
                 translationState = TranslationState.Error
@@ -680,28 +715,65 @@ internal class BrowserTabScreenState(
 
     fun captureTabPreview(geckoView: GeckoView, onCaptured: (() -> Unit)? = null) {
         if (!shouldCaptureTabPreview(previewCaptureReady)) {
+            Log.d(TAG, "captureTabPreview skipped: previewCaptureReady=false (tabId=${browserTab.tabId} url=$currentPageUrl)")
             onCaptured?.invoke()
             return
         }
+        Log.d(TAG, "captureTabPreview start (tabId=${browserTab.tabId} url=$currentPageUrl)")
         geckoView.capturePixels().accept(
             { bitmap ->
                 val previewBitmap = bitmap ?: run {
+                    Log.w(TAG, "capturePixels returned null bitmap (tabId=${browserTab.tabId})")
                     onCaptured?.invoke()
                     return@accept
                 }
                 // ビットマップ取得済みのため、セッションリリースはこの後でも問題ない
                 onCaptured?.invoke()
-                coroutineScope.launch(Dispatchers.IO) {
-                    val stream = ByteArrayOutputStream()
-                    previewBitmap.compress(Bitmap.CompressFormat.WEBP_LOSSY, 0, stream)
-                    // compress失敗時は空バイトになるため、既存プレビューを上書きしない
-                    val bytes = stream.toByteArray()
-                    if (bytes.isNotEmpty()) {
-                        browserTab.previewBitmap = bytes
+                // coroutineScope はタブ切替ナビゲーション直後に Composable が composition から
+                // 外れるとキャンセルされる。compress〜保存は独立したスコープで完走させる。
+                val tabIdForLog = browserTab.tabId
+                CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+                    if (previewBitmap.isRecycled) {
+                        Log.w(TAG, "previewBitmap recycled before compress (tabId=$tabIdForLog)")
+                        return@launch
                     }
+                    // HARDWARE configはcompress()できないためソフトウェアBitmapにコピーする
+                    // copy()はメモリ不足時にnullを返す（例外ではない）
+                    val copiedBitmap: Bitmap? = if (previewBitmap.config == Bitmap.Config.HARDWARE) {
+                        runCatching { previewBitmap.copy(Bitmap.Config.ARGB_8888, false) }
+                            .getOrElse {
+                                Log.e(TAG, "HARDWARE copy threw (tabId=$tabIdForLog)", it)
+                                return@launch
+                            }
+                            ?: run {
+                                Log.e(TAG, "HARDWARE copy returned null (tabId=$tabIdForLog)")
+                                return@launch
+                            }
+                    } else {
+                        null
+                    }
+                    val sourceBitmap = copiedBitmap ?: previewBitmap
+                    val stream = ByteArrayOutputStream()
+                    val success = runCatching {
+                        sourceBitmap.compress(Bitmap.CompressFormat.WEBP_LOSSY, 75, stream)
+                    }.getOrElse {
+                        Log.e(TAG, "compress threw (tabId=$tabIdForLog)", it)
+                        false
+                    }
+                    copiedBitmap?.recycle()
+                    val bytes = stream.toByteArray()
+                    if (!success || bytes.isEmpty()) {
+                        Log.w(TAG, "compress failed success=$success size=${bytes.size} (tabId=$tabIdForLog)")
+                        return@launch
+                    }
+                    browserTab.previewBitmap = bytes
+                    Log.d(TAG, "previewBitmap saved size=${bytes.size} (tabId=$tabIdForLog)")
                 }
             },
-            { onCaptured?.invoke() },
+            { error ->
+                Log.w(TAG, "capturePixels error (tabId=${browserTab.tabId})", error)
+                onCaptured?.invoke()
+            },
         )
     }
 
@@ -852,7 +924,11 @@ internal class BrowserTabScreenState(
 
     override fun onPageStart(url: String) {
         clearPageLoadError()
-        previewCaptureReady = false
+        // previewCaptureReady は false に戻さない。
+        // GeckoView は新ページの描画が始まるまで古いページを表示し続けるため、
+        // ロード中のキャプチャは古いページの画像となり問題ない。
+        // 一方、外部アプリ遷移・ダウンロード判定・onLoadRequest DENY 等で
+        // onPageStop が発火しないケースで flag が false のまま固まる問題を回避する。
         // 新しいページへの遷移時にfaviconをリセット
         browserTab.faviconBitmap = null
         webAppManifestJson = null
@@ -863,6 +939,10 @@ internal class BrowserTabScreenState(
         // ダウンロードリンク等で onLocationChange が来ない場合のフラグをクリア
         isFullPageLoadPending = false
         renderReady = true
+        // onFirstContentfulPaint が発火しないページ（エラー、リダイレクト、キャッシュ等）でも
+        // ページロード完了時点でキャプチャを許可する。これがないと previewCaptureReady が
+        // false のまま戻らず、以降のタブのキャプチャが全て拒否される。
+        previewCaptureReady = true
         if (success) {
             fetchFavicon(currentPageUrl)
             // ページ遷移後もズームを維持する
