@@ -53,7 +53,8 @@ internal class UrlBarSuggestionsStateOwner(
             viewModelStateFlow.collectLatest { state ->
                 uiStateFlow.update {
                     UrlBarSuggestionsUiState(
-                        historySuggestions = state.historySuggestions,
+                        historySuggestions = state.historySuggestionState.suggestions,
+                        isLoadingHistorySuggestions = state.historySuggestionState.isLoading,
                         webSuggestions = state.webSuggestionState.suggestions,
                         isLoadingWebSuggestions = state.webSuggestionState.isLoading,
                     )
@@ -67,8 +68,11 @@ internal class UrlBarSuggestionsStateOwner(
             suggestionQuery
                 .map(String::trim)
                 .distinctUntilChanged()
-                .flatMapLatest { query ->
-                    if (query.isBlank()) {
+                .collectLatest { query ->
+                    viewModelStateFlow.update {
+                        it.copy(historySuggestionState = HistorySuggestionState(isLoading = true))
+                    }
+                    val historyFlow = if (query.isBlank()) {
                         historyRepository.getRecentSuggestions(limit = HISTORY_SUGGESTION_LIMIT)
                     } else {
                         historyRepository.searchSuggestions(
@@ -76,9 +80,16 @@ internal class UrlBarSuggestionsStateOwner(
                             limit = HISTORY_SUGGESTION_LIMIT,
                         )
                     }
-                }
-                .collectLatest { suggestions ->
-                    viewModelStateFlow.update { it.copy(historySuggestions = suggestions) }
+                    historyFlow.collectLatest { suggestions ->
+                        viewModelStateFlow.update {
+                            it.copy(
+                                historySuggestionState = HistorySuggestionState(
+                                    suggestions = suggestions,
+                                    isLoading = false,
+                                ),
+                            )
+                        }
+                    }
                 }
         }
         scope.launch {
@@ -168,7 +179,12 @@ private data class WebSuggestionState(
     val isLoading: Boolean = false,
 )
 
+private data class HistorySuggestionState(
+    val suggestions: List<HistoryEntry> = emptyList(),
+    val isLoading: Boolean = false,
+)
+
 private data class UrlBarSuggestionsViewModelState(
-    val historySuggestions: List<HistoryEntry> = emptyList(),
+    val historySuggestionState: HistorySuggestionState = HistorySuggestionState(),
     val webSuggestionState: WebSuggestionState = WebSuggestionState(),
 )

@@ -182,6 +182,7 @@ internal fun BrowserTabOverlayLayer(
                 isUrlInputFocused = state.isUrlInputFocused,
                 suggestionCount = urlBarSuggestions.historySuggestions.size +
                     urlBarSuggestions.webSuggestions.size +
+                    if (urlBarSuggestions.isLoadingHistorySuggestions) 1 else 0 +
                     if (urlBarSuggestions.isLoadingWebSuggestions) 1 else 0 +
                     if (clipboardUrl != null) 1 else 0,
                 currentPageUrl = state.currentPageUrl,
@@ -190,6 +191,7 @@ internal fun BrowserTabOverlayLayer(
             UrlSuggestionList(
                 currentPageUrl = state.currentPageUrl,
                 historySuggestions = urlBarSuggestions.historySuggestions,
+                isLoadingHistorySuggestions = urlBarSuggestions.isLoadingHistorySuggestions,
                 webSuggestions = urlBarSuggestions.webSuggestions,
                 isLoadingWebSuggestions = urlBarSuggestions.isLoadingWebSuggestions,
                 onHistorySuggestionClick = onHistorySuggestionClick,
@@ -211,6 +213,7 @@ internal fun BrowserTabOverlayLayer(
 internal fun UrlSuggestionList(
     currentPageUrl: String,
     historySuggestions: List<net.matsudamper.browser.data.history.HistoryEntry>,
+    isLoadingHistorySuggestions: Boolean,
     webSuggestions: List<String>,
     isLoadingWebSuggestions: Boolean,
     onHistorySuggestionClick: (net.matsudamper.browser.data.history.HistoryEntry) -> Unit,
@@ -221,7 +224,7 @@ internal fun UrlSuggestionList(
     onClipboardUrlClick: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val hasHistorySuggestions = historySuggestions.isNotEmpty()
+    val hasHistorySuggestions = historySuggestions.isNotEmpty() || isLoadingHistorySuggestions
     val hasWebSuggestions = webSuggestions.isNotEmpty() || isLoadingWebSuggestions
 
     LazyColumn(modifier = modifier.fillMaxWidth()) {
@@ -253,6 +256,15 @@ internal fun UrlSuggestionList(
         if (hasHistorySuggestions) {
             item(key = "history_header") {
                 SuggestionSectionHeader(title = "履歴")
+            }
+            if (isLoadingHistorySuggestions && historySuggestions.isEmpty()) {
+                item(key = "history_loading") {
+                    ListItem(
+                        headlineContent = {
+                            Text(text = "候補を取得中...")
+                        },
+                    )
+                }
             }
             items(historySuggestions, key = { it.id }) { entry ->
                 ListItem(
