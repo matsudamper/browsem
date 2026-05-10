@@ -197,6 +197,11 @@ internal class BrowserTabScreenState(
 
     var renderReady by mutableStateOf(false)
 
+    // プレビュー画像が未取得の状態でページロードが完了した際にインクリメントされるカウンター。
+    // GeckoBrowserTab がこの値を監視してキャプチャをトリガーする。
+    var captureOnPageLoadRequestCount by mutableIntStateOf(0)
+        private set
+
     // プレビューキャプチャの可否を表すフラグ。
     // false の間は captureTabPreview() が早期 return するため、状態遷移が
     // 想定通りに行われないと「いつまで経ってもプレビューが保存されない」状態に
@@ -943,6 +948,10 @@ internal class BrowserTabScreenState(
         // ページロード完了時点でキャプチャを許可する。これがないと previewCaptureReady が
         // false のまま戻らず、以降のタブのキャプチャが全て拒否される。
         previewCaptureReady = true
+        // プレビュー画像がまだない場合はページロード完了時にキャプチャをリクエストする
+        if (browserTab.previewBitmap.isNullOrEmpty()) {
+            captureOnPageLoadRequestCount++
+        }
         if (success) {
             fetchFavicon(currentPageUrl)
             // ページ遷移後もズームを維持する

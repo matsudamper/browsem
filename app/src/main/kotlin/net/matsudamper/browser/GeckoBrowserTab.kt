@@ -201,6 +201,15 @@ internal fun GeckoBrowserTab(
         geckoView?.requestFocus()
     }
 
+    // プレビュー画像未取得時にページロードが完了したらキャプチャを実行する
+    LaunchedEffect(state) {
+        snapshotFlow { state.captureOnPageLoadRequestCount }
+            .collectLatest { count ->
+                if (count == 0) return@collectLatest
+                geckoView?.also { gv -> state.captureTabPreview(gv) }
+            }
+    }
+
     // URLバー入力変更時にサジェスト検索を発火
     LaunchedEffect(state, onUrlInputChanged) {
         snapshotFlow { state.urlInput to state.isUrlInputFocused }
