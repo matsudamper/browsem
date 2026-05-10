@@ -949,7 +949,7 @@ internal class BrowserTabScreenState(
         // false のまま戻らず、以降のタブのキャプチャが全て拒否される。
         previewCaptureReady = true
         // プレビュー画像がまだない場合はページロード完了時にキャプチャをリクエストする
-        if (browserTab.previewBitmap.isNullOrEmpty()) {
+        if (browserTab.previewBitmap == null || browserTab.previewBitmap!!.isEmpty()) {
             captureOnPageLoadRequestCount++
         }
         if (success) {
