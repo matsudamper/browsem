@@ -135,21 +135,18 @@ internal fun GroupTabGrid(
                     gridBoundsInRoot = boundsInRoot
                 }
                 .pointerInput(dragDropState) {
-                    detectDragGesturesAfterLongPress(
-                        onDragStart = { offset ->
-                            dragDropState.onDragStart(offset)
-                        },
-                        onDrag = { change, dragAmount ->
-                            change.consume()
-                            dragDropState.onDrag(dragAmount)
-                        },
-                        onDragEnd = {
-                            val result = dragDropState.endDrag() ?: return@detectDragGesturesAfterLongPress
-                            val tabId = result.key as? String ?: return@detectDragGesturesAfterLongPress
+                    // onDragEnd / onDragCancel どちらでも同じロジックでメニュー判定する。
+                    // Compose の detectDragGesturesAfterLongPress は親（Pager 等）が pointer event を
+                    // 消費すると onDragCancel を呼ぶため、cancel 側で何もしないと
+                    // 長押し→指を離すという同じ操作でもメニューが出たり出なかったりする。
+                    val handleEnd: () -> Unit = {
+                        val result = dragDropState.endDrag()
+                        val tabId = result?.key as? String
+                        if (result != null && tabId != null) {
                             // メニューを開く条件:
                             //   - 並び替え未発生（タブが動いていない）
                             //   - ドラッグ中心がグリッド内（グループバー上でリリースしていない）
-                            //   - 押してから 2 秒以内に離した（長く押しっぱなしの場合は意図不明と見なし表示しない）
+                            //   - 押してから 2 秒以内に離した
                             val shouldShowMenu = !result.didReorder &&
                                     result.releasedInsideGrid &&
                                     result.elapsedMs <= MENU_RELEASE_WINDOW_MS
@@ -160,10 +157,18 @@ internal fun GroupTabGrid(
                                 // それ以外（並び替え済みでグリッド内に戻したケース等）は no-op。
                                 currentOnTabDropped(tabId)
                             }
+                        }
+                    }
+                    detectDragGesturesAfterLongPress(
+                        onDragStart = { offset ->
+                            dragDropState.onDragStart(offset)
                         },
-                        onDragCancel = {
-                            dragDropState.endDrag()
+                        onDrag = { change, dragAmount ->
+                            change.consume()
+                            dragDropState.onDrag(dragAmount)
                         },
+                        onDragEnd = handleEnd,
+                        onDragCancel = handleEnd,
                     )
                 },
             contentPadding = PaddingValues(
