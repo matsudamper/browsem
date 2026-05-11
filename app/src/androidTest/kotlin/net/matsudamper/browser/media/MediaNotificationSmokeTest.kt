@@ -3,6 +3,7 @@ package net.matsudamper.browser.media
 import android.content.Intent
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import androidx.test.ext.junit.rules.ActivityScenarioRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -68,19 +69,31 @@ class MediaNotificationSmokeTest {
         val uiDevice = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
 
         openMediaPage(mediaPageUri)
+
+        val displayWidth = uiDevice.displayWidth
+        val displayHeight = uiDevice.displayHeight
+        Log.d(TAG, "ページオープン完了: package=${uiDevice.currentPackageName}," +
+            " 画面サイズ=${displayWidth}x${displayHeight}, ${PAGE_READY_DELAY_MS}ms sleep開始")
         Thread.sleep(PAGE_READY_DELAY_MS)
+        Log.d(TAG, "sleep完了: package=${uiDevice.currentPackageName}")
 
         // ユーザー操作で再生を開始する（自動再生制限の影響を避ける）。
-        repeat(PLAYBACK_TAP_RETRY_COUNT) {
-            tapScreenCenter(uiDevice)
+        val tapX = displayWidth / 2
+        val tapY = displayHeight / 2
+        repeat(PLAYBACK_TAP_RETRY_COUNT) { index ->
+            Log.d(TAG, "タップ${index + 1}/${PLAYBACK_TAP_RETRY_COUNT}: ($tapX, $tapY)")
+            uiDevice.click(tapX, tapY)
             Thread.sleep(PLAYBACK_TAP_INTERVAL_MS)
+            Log.d(TAG, "タップ${index + 1}完了: package=${uiDevice.currentPackageName}")
         }
 
         uiDevice.openNotification()
+        val found = uiDevice.wait(Until.hasObject(By.text(EXPECTED_TITLE)), NOTIFICATION_CONTROL_TIMEOUT_MS)
+        Log.d(TAG, "通知検索結果: found=$found, title=\"$EXPECTED_TITLE\", timeout=${NOTIFICATION_CONTROL_TIMEOUT_MS}ms")
         try {
             assertTrue(
-                "通知タイトルが表示されない",
-                uiDevice.wait(Until.hasObject(By.text(EXPECTED_TITLE)), NOTIFICATION_CONTROL_TIMEOUT_MS),
+                "通知タイトル \"$EXPECTED_TITLE\" が ${NOTIFICATION_CONTROL_TIMEOUT_MS}ms 以内に表示されなかった",
+                found,
             )
         } finally {
             uiDevice.pressBack()
@@ -103,12 +116,6 @@ class MediaNotificationSmokeTest {
         }
     }
 
-    private fun tapScreenCenter(uiDevice: UiDevice) {
-        val displayWidth = uiDevice.displayWidth
-        val displayHeight = uiDevice.displayHeight
-        uiDevice.click(displayWidth / 2, displayHeight / 2)
-    }
-
     private fun prepareLocalMediaPageUri(): String {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val targetContext = instrumentation.targetContext
@@ -126,6 +133,7 @@ class MediaNotificationSmokeTest {
     }
 
     companion object {
+        private const val TAG = "MediaNotificationSmoke"
         private const val TEST_TIMEOUT_MS = 180_000L
         private const val PAGE_READY_DELAY_MS = 3_000L
         private const val PLAYBACK_TAP_RETRY_COUNT = 3
