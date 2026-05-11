@@ -25,6 +25,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -83,6 +84,9 @@ internal fun GroupTabGrid(
             gridState = gridState,
             onMove = onReorderTabs,
         )
+        // 2 秒タイマー用。pointerInput の PointerInputScope は CoroutineScope を継承していないので
+        // 別途 Composable に紐づくスコープを用意する。
+        val menuTriggerScope = rememberCoroutineScope()
         var gridBoundsInRoot by remember { mutableStateOf(Rect.Zero) }
         val density = LocalDensity.current
         val floatingActionButtonBottomPadding = remember(
@@ -139,7 +143,7 @@ internal fun GroupTabGrid(
                             // 押し続けて 2 秒経っても並び替えが発生していなければ
                             // 移動メニューを開く。指の位置ではなく「タブが移動されたか」で
                             // 判定するので、わずかな指の震えは無視される。
-                            menuTimerJob = launch {
+                            menuTimerJob = menuTriggerScope.launch {
                                 delay(MENU_AUTO_SHOW_HOLD_MS)
                                 // 並び替え発生済み、もしくはタブをグリッドの外
                                 //（例えばグループタブバーの上）まで運んでいる場合は
