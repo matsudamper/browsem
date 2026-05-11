@@ -41,6 +41,9 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.round
 import androidx.compose.ui.unit.toOffset
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 
 /**
@@ -129,26 +132,49 @@ internal fun GroupTabGrid(
                     gridBoundsInRoot = boundsInRoot
                 }
                 .pointerInput(dragDropState) {
+                    var menuTimerJob: Job? = null
                     detectDragGesturesAfterLongPress(
                         onDragStart = { offset ->
-                            dragDropState.onDragStart(offset)
+                            if (!dragDropState.onDragStart(offset)) return@detectDragGesturesAfterLongPress
+                            // 押し続けて 2 秒経っても並び替えが発生していなければ
+                            // 移動メニューを開く。指の位置ではなく「タブが移動されたか」で
+                            // 判定するので、わずかな指の震えは無視される。
+                            menuTimerJob = launch {
+                                delay(MENU_AUTO_SHOW_HOLD_MS)
+                                // 並び替え発生済み、もしくはタブをグリッドの外
+                                //（例えばグループタブバーの上）まで運んでいる場合は
+                                // 「移動中」と見なしてメニューを開かない。
+                                if (dragDropState.isDragging &&
+                                    !dragDropState.didReorder &&
+                                    dragDropState.isDragCenterInsideGrid()
+                                ) {
+                                    val tabId = dragDropState.draggedItemKey as? String
+                                    dragDropState.endDrag()
+                                    if (tabId != null) {
+                                        onTabLongPressWithoutDrag(tabId)
+                                    }
+                                }
+                            }
                         },
                         onDrag = { change, dragAmount ->
                             change.consume()
                             dragDropState.onDrag(dragAmount)
                         },
                         onDragEnd = {
-                            val result = dragDropState.onDragEnd()
-                            if (result != null) {
-                                val tabId = result.key as String
-                                if (result.didMove) {
-                                    onTabDropped(tabId)
-                                } else {
-                                    onTabLongPressWithoutDrag(tabId)
-                                }
+                            menuTimerJob?.cancel()
+                            menuTimerJob = null
+                            val tabId = dragDropState.endDrag() as? String
+                            if (tabId != null) {
+                                // 別グループへホバーしていればクロスグループ移動が走る。
+                                // 元の位置から動いていなければ何もしない（onTabDropped 内で判定）。
+                                onTabDropped(tabId)
                             }
                         },
-                        onDragCancel = { dragDropState.onDragEnd() },
+                        onDragCancel = {
+                            menuTimerJob?.cancel()
+                            menuTimerJob = null
+                            dragDropState.endDrag()
+                        },
                     )
                 },
             contentPadding = PaddingValues(
@@ -220,6 +246,9 @@ private fun Rect.overlapsHorizontally(other: Rect): Boolean {
 // 典型的なタブ数（〜50）をカバーできる容量。
 private const val TAB_BITMAP_CACHE_BYTES: Int = 16 * 1024 * 1024
 
+// 押し続けて移動メニューが自動表示されるまでのホールド時間（ミリ秒）。
+private const val MENU_AUTO_SHOW_HOLD_MS: Long = 2_000L
+
 
 @Composable
 private fun rememberDragDropState(
@@ -254,8 +283,9 @@ private class DragDropState(
     /** ドラッグ中かどうか */
     val isDragging: Boolean get() = draggedItemKey != null
 
-    /** ドラッグ開始からの累積移動距離（ピクセル） */
-    private var totalDragDistance: Float = 0f
+    /** このドラッグ中に並び替えが発生したか（onMove が一度でも呼ばれたか） */
+    var didReorder: Boolean = false
+        private set
 
     /** ルート座標でのドラッグ中の中心位置（グループ間移動の衝突判定用） */
     var dragCenterInRoot: Offset by mutableStateOf(Offset.Zero)
@@ -264,8 +294,8 @@ private class DragDropState(
     /** グリッドのルート座標上の bounds（onGloballyPositioned で設定） */
     var gridBoundsInRoot: Rect by mutableStateOf(Rect.Zero)
 
-    /** ドラッグ開始時の処理 */
-    fun onDragStart(offset: Offset) {
+    /** ドラッグ開始時の処理。対象アイテムが見つかれば true。 */
+    fun onDragStart(offset: Offset): Boolean {
         val viewportOffset = gridState.layoutInfo.viewportStartOffset
         val item = gridState.layoutInfo.visibleItemsInfo.firstOrNull { info ->
             // visibleItemsInfo の offset は絶対座標なのでビューポート相対に変換して比較する
@@ -275,16 +305,17 @@ private class DragDropState(
             val itemRight = itemLeft + info.size.width
             offset.x >= itemLeft && offset.x <= itemRight &&
                     offset.y >= itemTop && offset.y <= itemBottom
-        } ?: return
+        } ?: return false
 
         draggedItemKey = item.key
         draggedItemOffset = IntOffset(item.offset.x, item.offset.y - viewportOffset)
         draggedItemSize = item.size
         currentDragIndex = item.index
-        totalDragDistance = 0f
+        didReorder = false
 
         // ルート座標での中心位置を初期化
         updateDragCenterInRoot()
+        return true
     }
 
     /** ドラッグ中の移動処理 */
@@ -292,7 +323,6 @@ private class DragDropState(
         if (!isDragging) return
 
         draggedItemOffset = (draggedItemOffset.toOffset() + dragAmount).round()
-        totalDragDistance += dragAmount.getDistance()
 
         // ルート座標を更新
         updateDragCenterInRoot()
@@ -327,30 +357,20 @@ private class DragDropState(
         ) {
             onMove(currentDragIndex, targetItem.index)
             currentDragIndex = targetItem.index
+            didReorder = true
         }
     }
 
-    /** ドラッグ終了時の処理。ドラッグされていたアイテムのキーと移動したかどうかを返す。 */
-    fun onDragEnd(): DragEndResult? {
+    /** ドラッグ状態をリセットし、ドラッグされていたアイテムのキーを返す。 */
+    fun endDrag(): Any? {
         val key = draggedItemKey ?: return null
-        val didMove = totalDragDistance > DRAG_THRESHOLD
         draggedItemKey = null
         draggedItemOffset = IntOffset.Zero
         draggedItemSize = IntSize.Zero
         currentDragIndex = -1
         dragCenterInRoot = Offset.Zero
-        totalDragDistance = 0f
-        return DragEndResult(key = key, didMove = didMove)
-    }
-
-    data class DragEndResult(
-        val key: Any,
-        val didMove: Boolean,
-    )
-
-    companion object {
-        /** ドラッグと判定する最低移動距離（ピクセル） */
-        private const val DRAG_THRESHOLD = 20f
+        didReorder = false
+        return key
     }
 
     private fun updateDragCenterInRoot() {
@@ -360,5 +380,12 @@ private class DragDropState(
             x = gridBoundsInRoot.left + centerX,
             y = gridBoundsInRoot.top + centerY,
         )
+    }
+
+    /** ドラッグ中心がグリッド領域の内側にあるか。グループバーの上などへ運ぶと false。 */
+    fun isDragCenterInsideGrid(): Boolean {
+        if (!isDragging) return false
+        if (gridBoundsInRoot.isEmpty) return true
+        return gridBoundsInRoot.contains(dragCenterInRoot)
     }
 }
