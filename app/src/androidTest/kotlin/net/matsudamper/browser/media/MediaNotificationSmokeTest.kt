@@ -72,24 +72,24 @@ class MediaNotificationSmokeTest {
 
         val displayWidth = uiDevice.displayWidth
         val displayHeight = uiDevice.displayHeight
-        Log.d(TAG, "ページオープン完了: package=${uiDevice.currentPackageName}," +
-            " 画面サイズ=${displayWidth}x${displayHeight}, ${PAGE_READY_DELAY_MS}ms sleep開始")
+        Log.d(TAG, "ページオープン完了: package=${uiDevice.currentPackageName}, " +
+            "画面サイズ=${displayWidth}x${displayHeight}, ${PAGE_READY_DELAY_MS}ms待機開始")
         Thread.sleep(PAGE_READY_DELAY_MS)
-        Log.d(TAG, "sleep完了: package=${uiDevice.currentPackageName}")
+        Log.d(TAG, "待機完了: package=${uiDevice.currentPackageName}")
 
         // ユーザー操作で再生を開始する（自動再生制限の影響を避ける）。
         val tapX = displayWidth / 2
         val tapY = displayHeight / 2
         repeat(PLAYBACK_TAP_RETRY_COUNT) { index ->
-            Log.d(TAG, "タップ${index + 1}/${PLAYBACK_TAP_RETRY_COUNT}: ($tapX, $tapY)")
+            Log.d(TAG, "タップ試行${index + 1}/${PLAYBACK_TAP_RETRY_COUNT}: 座標=($tapX, $tapY)")
             uiDevice.click(tapX, tapY)
             Thread.sleep(PLAYBACK_TAP_INTERVAL_MS)
-            Log.d(TAG, "タップ${index + 1}完了: package=${uiDevice.currentPackageName}")
+            Log.d(TAG, "タップ試行${index + 1}完了: package=${uiDevice.currentPackageName}")
         }
 
         uiDevice.openNotification()
         val found = uiDevice.wait(Until.hasObject(By.text(EXPECTED_TITLE)), NOTIFICATION_CONTROL_TIMEOUT_MS)
-        Log.d(TAG, "通知検索結果: found=$found, title=\"$EXPECTED_TITLE\", timeout=${NOTIFICATION_CONTROL_TIMEOUT_MS}ms")
+        Log.d(TAG, "通知検索完了: 発見=$found, タイトル=\"$EXPECTED_TITLE\", タイムアウト=${NOTIFICATION_CONTROL_TIMEOUT_MS}ms")
         try {
             assertTrue(
                 "通知タイトル \"$EXPECTED_TITLE\" が ${NOTIFICATION_CONTROL_TIMEOUT_MS}ms 以内に表示されなかった",
