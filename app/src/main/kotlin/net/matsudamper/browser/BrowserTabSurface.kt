@@ -32,6 +32,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -47,6 +48,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import net.matsudamper.browser.ui.browser.UrlBarSuggestionsUiState
+import net.matsudamper.browser.ui.common.BrowserTheme
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.GeckoView
@@ -182,9 +184,9 @@ internal fun BrowserTabOverlayLayer(
                 isUrlInputFocused = state.isUrlInputFocused,
                 suggestionCount = urlBarSuggestions.historySuggestions.size +
                     urlBarSuggestions.webSuggestions.size +
-                    if (urlBarSuggestions.isLoadingHistorySuggestions) 1 else 0 +
-                    if (urlBarSuggestions.isLoadingWebSuggestions) 1 else 0 +
-                    if (clipboardUrl != null) 1 else 0,
+                    (if (urlBarSuggestions.isLoadingHistorySuggestions) 1 else 0) +
+                    (if (urlBarSuggestions.isLoadingWebSuggestions) 1 else 0) +
+                    (if (clipboardUrl != null) 1 else 0),
                 currentPageUrl = state.currentPageUrl,
             )
         ) {
@@ -471,6 +473,46 @@ internal fun PageLoadErrorOverlay(
                 }
             }
         }
+    }
+}
+
+@Preview(name = "履歴ローディング中")
+@Composable
+private fun PreviewUrlSuggestionListHistoryLoading() {
+    BrowserTheme(themeMode = net.matsudamper.browser.data.ThemeMode.THEME_SYSTEM) {
+        UrlSuggestionList(
+            currentPageUrl = "https://example.com",
+            historySuggestions = emptyList(),
+            isLoadingHistorySuggestions = true,
+            webSuggestions = emptyList(),
+            isLoadingWebSuggestions = false,
+            onHistorySuggestionClick = {},
+            onWebSuggestionClick = {},
+            onCopyCurrentUrl = {},
+            onRestoreCurrentUrl = {},
+            clipboardUrl = null,
+            onClipboardUrlClick = {},
+        )
+    }
+}
+
+@Preview(name = "履歴・Webローディング中")
+@Composable
+private fun PreviewUrlSuggestionListAllLoading() {
+    BrowserTheme(themeMode = net.matsudamper.browser.data.ThemeMode.THEME_SYSTEM) {
+        UrlSuggestionList(
+            currentPageUrl = "https://example.com",
+            historySuggestions = emptyList(),
+            isLoadingHistorySuggestions = true,
+            webSuggestions = emptyList(),
+            isLoadingWebSuggestions = true,
+            onHistorySuggestionClick = {},
+            onWebSuggestionClick = {},
+            onCopyCurrentUrl = {},
+            onRestoreCurrentUrl = {},
+            clipboardUrl = null,
+            onClipboardUrlClick = {},
+        )
     }
 }
 
