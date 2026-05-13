@@ -44,5 +44,18 @@ abstract class TabDatabase : RoomDatabase() {
                     .build().also { instance = it }
             }
         }
+
+        /**
+         * シングルトンを閉じてキャッシュを破棄する。バックアップから tab.db を
+         * 上書き復元する直前など、Room の接続を解放したい場面で使う。
+         * 呼び出し後すぐに次の Room アクセスがあると新しいインスタンスが
+         * 復元後のファイルを開くので、復元完了→プロセス終了の流れで使うこと。
+         */
+        fun closeInstance() {
+            synchronized(this) {
+                instance?.close()
+                instance = null
+            }
+        }
     }
 }

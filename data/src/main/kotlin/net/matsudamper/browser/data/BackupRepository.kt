@@ -25,7 +25,8 @@ class BackupRepository(private val context: Context) {
         snapshotFile.delete()
         try {
             // WAL を含めた整合性のあるスナップショットを別ファイルに書き出す。
-            // VACUUM INTO は実行中の他トランザクションに影響しないため安全。
+            // VACUUM INTO は実行中に主データベースへ排他ロックを取るため、
+            // 他のコルーチンの書き込みがあれば一時的にブロックされる点に注意。
             val db = TabDatabase.getInstance(context)
             val escapedPath = snapshotFile.absolutePath.replace("'", "''")
             db.openHelper.writableDatabase.execSQL("VACUUM INTO '$escapedPath'")
@@ -74,6 +75,12 @@ class BackupRepository(private val context: Context) {
             // 設定ファイルの置き換え
             val settingsTarget = settingsFile().apply { parentFile?.mkdirs() }
             settingsExtracted.copyTo(settingsTarget, overwrite = true)
+
+            // タブ永続化が裏で tab.db を書き続けているため、置き換え前に
+            // Room の接続を完全に閉じてインフライト書き込みを止める。
+            // closeInstance() 後の getInstance() は新ファイルを開くが、
+            // 呼び出し側はインポート成功後すぐにプロセスを終了させる前提。
+            TabDatabase.closeInstance()
 
             // タブ DB の置き換え。古い WAL/SHM は新 DB と整合しないので削除する
             val tabDbTarget = context.getDatabasePath(TAB_DB_FILE_NAME).apply {

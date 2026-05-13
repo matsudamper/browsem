@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
 import net.matsudamper.browser.MockLocationWebExtension
 import net.matsudamper.browser.data.BackupRepository
 import net.matsudamper.browser.data.BrowserSettings
@@ -42,6 +43,9 @@ internal class SettingsScreenViewModel(
             pendingRestart = false,
         ),
     )
+    // export/import 同時起動による状態の二重更新を防ぐ。
+    // UI 側のボタン無効化と二重に守ることで、外部呼び出しからも安全にする。
+    private val backupMutex = Mutex()
 
     private val callbacks = object : SettingsScreenUiState.Callbacks {
         override fun setHomepageType(type: HomepageType) {
@@ -112,39 +116,47 @@ internal class SettingsScreenViewModel(
     }
 
     fun exportToZip(uri: Uri) {
-        if (backupStateFlow.value.isBusy) return
-        backupStateFlow.update { it.copy(isBusy = true, message = null) }
         viewModelScope.launch {
-            val result = runCatching { backupRepository.exportToZip(uri) }
-            backupStateFlow.update {
-                it.copy(
-                    isBusy = false,
-                    message = result.fold(
-                        onSuccess = { "バックアップを書き出しました" },
-                        onFailure = { e -> "エクスポートに失敗しました: ${e.message ?: e::class.simpleName}" },
-                    ),
-                )
+            if (!backupMutex.tryLock()) return@launch
+            try {
+                backupStateFlow.update { it.copy(isBusy = true, message = null) }
+                val result = runCatching { backupRepository.exportToZip(uri) }
+                backupStateFlow.update {
+                    it.copy(
+                        isBusy = false,
+                        message = result.fold(
+                            onSuccess = { "バックアップを書き出しました" },
+                            onFailure = { e -> "エクスポートに失敗しました: ${e.message ?: e::class.simpleName}" },
+                        ),
+                    )
+                }
+            } finally {
+                backupMutex.unlock()
             }
         }
     }
 
     fun importFromZip(uri: Uri) {
-        if (backupStateFlow.value.isBusy) return
-        backupStateFlow.update { it.copy(isBusy = true, message = null) }
         viewModelScope.launch {
-            val result = runCatching { backupRepository.importFromZip(uri) }
-            backupStateFlow.update { state ->
-                result.fold(
-                    onSuccess = {
-                        state.copy(isBusy = false, message = null, pendingRestart = true)
-                    },
-                    onFailure = { e ->
-                        state.copy(
-                            isBusy = false,
-                            message = "復元に失敗しました: ${e.message ?: e::class.simpleName}",
-                        )
-                    },
-                )
+            if (!backupMutex.tryLock()) return@launch
+            try {
+                backupStateFlow.update { it.copy(isBusy = true, message = null) }
+                val result = runCatching { backupRepository.importFromZip(uri) }
+                backupStateFlow.update { state ->
+                    result.fold(
+                        onSuccess = {
+                            state.copy(isBusy = false, message = null, pendingRestart = true)
+                        },
+                        onFailure = { e ->
+                            state.copy(
+                                isBusy = false,
+                                message = "復元に失敗しました: ${e.message ?: e::class.simpleName}",
+                            )
+                        },
+                    )
+                }
+            } finally {
+                backupMutex.unlock()
             }
         }
     }
