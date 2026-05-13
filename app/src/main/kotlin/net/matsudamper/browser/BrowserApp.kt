@@ -378,17 +378,16 @@ private fun BrowserAppContent(
                     AppDestination.Settings -> navEntry(key) {
                         val mockLocationWebExtension: MockLocationWebExtension = koinInject()
                         val backupRepository: BackupRepository = koinInject()
-                        val settingsViewModel = remember(
-                            settingsRepository,
-                            mockLocationWebExtension,
-                            backupRepository,
-                        ) {
+                        // navigation3 の ViewModelStore に乗せて onCleared() を確実に
+                        // 呼ばせる。復元中に画面を離れた場合、ViewModel 側の onCleared で
+                        // pendingRestart を見て安全弁の再起動を発火するため必須。
+                        val settingsViewModel = composeViewModel(initializer = {
                             SettingsScreenViewModel(
                                 settingsRepository,
                                 mockLocationWebExtension,
                                 backupRepository,
                             )
-                        }
+                        })
                         val settingsUiState by settingsViewModel.uiState.collectAsState()
                         val exportLauncher = rememberLauncherForActivityResult(
                             ActivityResultContracts.CreateDocument(BackupRepository.MIME_TYPE),
