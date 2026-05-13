@@ -50,6 +50,15 @@ class BackupRepository(private val context: Context) {
             deleteRecursively()
             mkdirs()
         }
+        // 置換先と同じファイルシステムにステージング用ファイルを置く。
+        // 同 FS であれば renameTo がほぼ確実に成功し、close 後の置換が短時間で完了する。
+        val settingsTarget = settingsFile().apply { parentFile?.mkdirs() }
+        val tabDbTarget = context.getDatabasePath(TAB_DB_FILE_NAME).apply {
+            parentFile?.mkdirs()
+        }
+        val settingsStaging = File(settingsTarget.parentFile, "$SETTINGS_FILE_NAME.import")
+        val tabDbStaging = File(tabDbTarget.parentFile, "$TAB_DB_FILE_NAME.import")
+        var dbClosed = false
         try {
             val extracted = mutableMapOf<String, File>()
             val inputStream = context.contentResolver.openInputStream(inputUri)
@@ -72,25 +81,45 @@ class BackupRepository(private val context: Context) {
             val tabDbExtracted = extracted[TAB_DB_ENTRY_NAME]
                 ?: error("バックアップにタブデータが含まれていません")
 
-            // 設定ファイルの置き換え
-            val settingsTarget = settingsFile().apply { parentFile?.mkdirs() }
-            settingsExtracted.copyTo(settingsTarget, overwrite = true)
+            // リスクのあるコピー (容量不足・I/O エラー) を先に済ませる。
+            // この時点では Room は生きているので失敗しても app は通常動作に戻れる。
+            settingsExtracted.copyTo(settingsStaging, overwrite = true)
+            tabDbExtracted.copyTo(tabDbStaging, overwrite = true)
 
+            // ステージング成功後に DB を閉じて置換に入る。
             // タブ永続化が裏で tab.db を書き続けているため、置き換え前に
             // Room の接続を完全に閉じてインフライト書き込みを止める。
-            // closeInstance() 後の getInstance() は新ファイルを開くが、
-            // 呼び出し側はインポート成功後すぐにプロセスを終了させる前提。
             TabDatabase.closeInstance()
+            dbClosed = true
 
-            // タブ DB の置き換え。古い WAL/SHM は新 DB と整合しないので削除する
-            val tabDbTarget = context.getDatabasePath(TAB_DB_FILE_NAME).apply {
-                parentFile?.mkdirs()
-            }
+            // 古い WAL/SHM は新 DB と整合しないので削除する
             File(tabDbTarget.parentFile, "$TAB_DB_FILE_NAME-shm").delete()
             File(tabDbTarget.parentFile, "$TAB_DB_FILE_NAME-wal").delete()
-            tabDbExtracted.copyTo(tabDbTarget, overwrite = true)
+            replaceWithStaging(settingsStaging, settingsTarget)
+            replaceWithStaging(tabDbStaging, tabDbTarget)
+        } catch (t: Throwable) {
+            // ステージング段階の失敗ならファイルを掃除して通常動作に戻れる。
+            // DB を閉じた後の失敗は app の状態が壊れているので、
+            // ステージングだけ掃除して例外を再送出し、UI 側で再起動を促す。
+            settingsStaging.delete()
+            tabDbStaging.delete()
+            throw t
         } finally {
             workDir.deleteRecursively()
+            // 念のため: 正常終了時にもステージングが残らないようにする
+            if (!dbClosed) {
+                settingsStaging.delete()
+                tabDbStaging.delete()
+            }
+        }
+    }
+
+    /** 同 FS 上でのファイル置換。rename が失敗した場合のみ copy にフォールバック */
+    private fun replaceWithStaging(src: File, dst: File) {
+        if (dst.exists()) dst.delete()
+        if (!src.renameTo(dst)) {
+            src.copyTo(dst, overwrite = true)
+            src.delete()
         }
     }
 

@@ -34,8 +34,10 @@ abstract class TabDatabase : RoomDatabase() {
         }
 
         fun getInstance(context: Context): TabDatabase {
-            return instance ?: synchronized(this) {
-                instance ?: Room.databaseBuilder(
+            // closeInstance() 後の fast-path で閉じた DB を返さないよう isOpen を確認する
+            instance?.takeIf { it.isOpen }?.let { return it }
+            return synchronized(this) {
+                instance?.takeIf { it.isOpen } ?: Room.databaseBuilder(
                     context.applicationContext,
                     TabDatabase::class.java,
                     "tab.db",
@@ -52,10 +54,15 @@ abstract class TabDatabase : RoomDatabase() {
          * 復元後のファイルを開くので、復元完了→プロセス終了の流れで使うこと。
          */
         fun closeInstance() {
-            synchronized(this) {
-                instance?.close()
+            // 参照を先に切ってから close する。ロック内で close まで行うと
+            // close 完了前に getInstance() を素通りした呼び出しが
+            // すでに閉じたインスタンスを掴む可能性があるため。
+            val toClose = synchronized(this) {
+                val current = instance
                 instance = null
+                current
             }
+            toClose?.close()
         }
     }
 }

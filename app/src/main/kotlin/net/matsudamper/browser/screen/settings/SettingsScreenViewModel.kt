@@ -3,6 +3,7 @@ package net.matsudamper.browser.screen.settings
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -120,7 +121,16 @@ internal class SettingsScreenViewModel(
             if (!backupMutex.tryLock()) return@launch
             try {
                 backupStateFlow.update { it.copy(isBusy = true, message = null) }
-                val result = runCatching { backupRepository.exportToZip(uri) }
+                // runCatching を直接使うと CancellationException も飲まれ
+                // viewModelScope のキャンセル伝播が壊れるため、明示的に再送出する
+                val result = try {
+                    backupRepository.exportToZip(uri)
+                    Result.success(Unit)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (t: Throwable) {
+                    Result.failure(t)
+                }
                 backupStateFlow.update {
                     it.copy(
                         isBusy = false,
@@ -141,7 +151,14 @@ internal class SettingsScreenViewModel(
             if (!backupMutex.tryLock()) return@launch
             try {
                 backupStateFlow.update { it.copy(isBusy = true, message = null) }
-                val result = runCatching { backupRepository.importFromZip(uri) }
+                val result = try {
+                    backupRepository.importFromZip(uri)
+                    Result.success(Unit)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (t: Throwable) {
+                    Result.failure(t)
+                }
                 backupStateFlow.update { state ->
                     result.fold(
                         onSuccess = {
@@ -208,11 +225,12 @@ internal class SettingsScreenViewModel(
                     }
                 }
             }
-            // バックアップ処理の進行状況を UiState に反映する
+            // バックアップ処理の進行状況を UiState に反映する。
+            // uiStateFlow.value のスナップショットを先に捕まえると settings/mockLocation 側の
+            // 直近更新を巻き戻す恐れがあるので、update のラムダ引数で受け取った最新 state を合成する
             viewModelScope.launch {
                 backupStateFlow.collectLatest { backup ->
-                    val current = uiStateFlow.value ?: return@collectLatest
-                    uiStateFlow.update { current.copy(backup = backup) }
+                    uiStateFlow.update { state -> state?.copy(backup = backup) }
                 }
             }
         }.asStateFlow()
