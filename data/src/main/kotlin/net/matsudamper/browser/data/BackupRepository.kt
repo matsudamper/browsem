@@ -29,7 +29,9 @@ class BackupRepository(private val context: Context) {
 
     suspend fun exportToZip(outputUri: Uri): Unit = withContext(Dispatchers.IO) {
         val snapshotFile = File(context.cacheDir, "backup_tab_snapshot.db")
+        val defaultSettingsFile = File(context.cacheDir, "backup_default_settings.pb")
         snapshotFile.delete()
+        defaultSettingsFile.delete()
         try {
             // WAL を含めた整合性のあるスナップショットを別ファイルに書き出す。
             // VACUUM INTO は実行中に主データベースへ排他ロックを取るため、
@@ -38,17 +40,25 @@ class BackupRepository(private val context: Context) {
             val escapedPath = snapshotFile.absolutePath.replace("'", "''")
             db.openHelper.writableDatabase.execSQL("VACUUM INTO '$escapedPath'")
 
-            val settingsFile = settingsFile()
-            require(settingsFile.exists()) { "設定ファイルが見つかりません" }
+            // 新規インストール直後など、まだ DataStore が一度も書き込みを
+            // 行っていない場合は本体ファイルが存在しない。その場合は
+            // デフォルト設定のシリアライズ結果を書き出してエントリに含める。
+            val settingsForExport = settingsFile().takeIf { it.exists() } ?: run {
+                defaultSettingsFile.outputStream().use { out ->
+                    BrowserSettings.getDefaultInstance().writeTo(out)
+                }
+                defaultSettingsFile
+            }
 
             val outputStream = context.contentResolver.openOutputStream(outputUri, "w")
                 ?: error("出力先を開けませんでした")
             ZipOutputStream(outputStream.buffered()).use { zos ->
-                writeEntry(zos, SETTINGS_ENTRY_NAME, settingsFile)
+                writeEntry(zos, SETTINGS_ENTRY_NAME, settingsForExport)
                 writeEntry(zos, TAB_DB_ENTRY_NAME, snapshotFile)
             }
         } finally {
             snapshotFile.delete()
+            defaultSettingsFile.delete()
         }
     }
 

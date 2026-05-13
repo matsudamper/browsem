@@ -65,18 +65,32 @@ fun SettingsScreen(
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
     val pendingMessage = uiState.backup.message
-    LaunchedEffect(pendingMessage) {
-        if (pendingMessage != null) {
+    val pendingRestart = uiState.backup.pendingRestart
+    // 再起動ダイアログ表示中はメッセージをダイアログ側に集約するためスナックバーは抑制する
+    LaunchedEffect(pendingMessage, pendingRestart) {
+        if (pendingMessage != null && !pendingRestart) {
             snackbarHostState.showSnackbar(pendingMessage)
             uiState.callbacks.consumeBackupMessage()
         }
     }
-    if (uiState.backup.pendingRestart) {
+    if (pendingRestart) {
+        // 再起動を要求するが message が残っている場合は close 後の失敗。
+        // 成功復元と区別できるよう、ダイアログのタイトルと本文を分岐させる。
+        val failureMessage = pendingMessage
         AlertDialog(
             onDismissRequest = { /* 再起動完了まで閉じない */ },
-            title = { Text("復元しました") },
+            title = {
+                Text(if (failureMessage != null) "復元に失敗しました" else "復元しました")
+            },
             text = {
-                Text("設定とタブを復元しました。反映するためにアプリを終了します。再度起動してください。")
+                if (failureMessage != null) {
+                    Text(
+                        "$failureMessage。一部のファイルが置き換わっている可能性があるため、" +
+                            "アプリを終了します。再度起動してください。",
+                    )
+                } else {
+                    Text("設定とタブを復元しました。反映するためにアプリを終了します。再度起動してください。")
+                }
             },
             confirmButton = {
                 TextButton(onClick = uiState.callbacks::confirmRestartAfterImport) {
