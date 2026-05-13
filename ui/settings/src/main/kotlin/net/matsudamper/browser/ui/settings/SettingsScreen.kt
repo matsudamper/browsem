@@ -1,8 +1,10 @@
 package net.matsudamper.browser.ui.settings
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.size
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxSize
@@ -17,20 +19,28 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Snackbar
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -50,10 +60,31 @@ fun SettingsScreen(
     onOpenExtensions: () -> Unit,
     onOpenHistory: () -> Unit,
     onOpenDownloads: () -> Unit,
-    onOpenBackupSettings: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val snackbarHostState = remember { SnackbarHostState() }
+    val pendingMessage = uiState.backup.message
+    LaunchedEffect(pendingMessage) {
+        if (pendingMessage != null) {
+            snackbarHostState.showSnackbar(pendingMessage)
+            uiState.callbacks.consumeBackupMessage()
+        }
+    }
+    if (uiState.backup.pendingRestart) {
+        AlertDialog(
+            onDismissRequest = { /* 再起動完了まで閉じない */ },
+            title = { Text("復元しました") },
+            text = {
+                Text("設定とタブを復元しました。反映するためにアプリを終了します。再度起動してください。")
+            },
+            confirmButton = {
+                TextButton(onClick = uiState.callbacks::confirmRestartAfterImport) {
+                    Text("アプリを終了")
+                }
+            },
+        )
+    }
     Scaffold(
         modifier = modifier,
         topBar = {
@@ -68,6 +99,9 @@ fun SettingsScreen(
                     }
                 },
             )
+        },
+        snackbarHost = {
+            SnackbarHost(snackbarHostState) { data -> Snackbar(data) }
         },
     ) { paddingValues ->
         Column(
@@ -362,18 +396,41 @@ fun SettingsScreen(
             SettingSection(title = "バックアップと復元") {
                 Column {
                     Text(
-                        text = "設定・タブ・タブグループを Google アカウントへバックアップします。" +
-                            "履歴・ダウンロード記録・Cookie・ログイン情報は対象外です。" +
-                            "復元はアプリの再インストール時に自動で行われます。",
+                        text = "設定・タブ・タブグループを zip ファイルにエクスポート/インポートします。" +
+                            "履歴・ダウンロード記録・Cookie・ログイン情報は対象外です。",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Spacer(Modifier.height(8.dp))
-                    TextButton(
-                        onClick = onOpenBackupSettings,
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                         modifier = Modifier.fillMaxWidth(),
                     ) {
-                        Text("システムのバックアップ設定を開く")
+                        OutlinedButton(
+                            onClick = uiState.callbacks::requestBackupExport,
+                            enabled = !uiState.backup.isBusy,
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            Text("エクスポート")
+                        }
+                        OutlinedButton(
+                            onClick = uiState.callbacks::requestBackupImport,
+                            enabled = !uiState.backup.isBusy,
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            Text("インポート")
+                        }
+                    }
+                    if (uiState.backup.isBusy) {
+                        Spacer(Modifier.height(8.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            CircularProgressIndicator(modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.size(8.dp))
+                            Text(
+                                text = "処理中…",
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                        }
                     }
                 }
             }
@@ -425,6 +482,10 @@ private fun SettingsScreenPreview() {
                     override fun setMockLocationEnabled(enabled: Boolean) = Unit
                     override fun setMockLocationInput(input: String) = Unit
                     override fun openMockLocationOnMap() = Unit
+                    override fun requestBackupExport() = Unit
+                    override fun requestBackupImport() = Unit
+                    override fun consumeBackupMessage() = Unit
+                    override fun confirmRestartAfterImport() = Unit
                 },
                 homepageType = HomepageType.HOMEPAGE_GOOGLE,
                 customHomepageUrl = "",
@@ -437,11 +498,15 @@ private fun SettingsScreenPreview() {
                 mockLocationEnabled = true,
                 mockLocationInput = "35.685175,139.752797",
                 mockLocationInputError = null,
+                backup = SettingsScreenUiState.BackupUiState(
+                    isBusy = false,
+                    message = null,
+                    pendingRestart = false,
+                ),
             ),
             onOpenExtensions = {},
             onOpenHistory = {},
             onOpenDownloads = {},
-            onOpenBackupSettings = {},
             onBack = {},
         )
     }

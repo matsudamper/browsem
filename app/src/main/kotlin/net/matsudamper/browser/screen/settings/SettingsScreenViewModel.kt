@@ -1,5 +1,6 @@
 package net.matsudamper.browser.screen.settings
 
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.channels.Channel
@@ -10,6 +11,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import net.matsudamper.browser.MockLocationWebExtension
+import net.matsudamper.browser.data.BackupRepository
 import net.matsudamper.browser.data.BrowserSettings
 import net.matsudamper.browser.data.HomepageType
 import net.matsudamper.browser.data.SearchProvider
@@ -22,6 +24,7 @@ import net.matsudamper.browser.ui.settings.SettingsScreenUiState
 internal class SettingsScreenViewModel(
     private val settingsRepository: SettingsRepository,
     private val mockLocationWebExtension: MockLocationWebExtension,
+    private val backupRepository: BackupRepository,
 ) : ViewModel() {
 
     val eventHandler = Channel<(Event) -> Unit>(Channel.UNLIMITED)
@@ -31,6 +34,14 @@ internal class SettingsScreenViewModel(
     // リポジトリ値による初回セットを完了したかどうかのフラグ
     // isEmpty() では空文字入力と未初期化を区別できないため専用フラグを使用する
     private var mockLocationInputInitialized = false
+
+    private val backupStateFlow = MutableStateFlow(
+        SettingsScreenUiState.BackupUiState(
+            isBusy = false,
+            message = null,
+            pendingRestart = false,
+        ),
+    )
 
     private val callbacks = object : SettingsScreenUiState.Callbacks {
         override fun setHomepageType(type: HomepageType) {
@@ -82,6 +93,60 @@ internal class SettingsScreenViewModel(
         override fun openMockLocationOnMap() {
             eventHandler.trySend { it.onOpenMockLocationOnMap() }
         }
+
+        override fun requestBackupExport() {
+            eventHandler.trySend { it.onRequestBackupExport() }
+        }
+
+        override fun requestBackupImport() {
+            eventHandler.trySend { it.onRequestBackupImport() }
+        }
+
+        override fun consumeBackupMessage() {
+            backupStateFlow.update { it.copy(message = null) }
+        }
+
+        override fun confirmRestartAfterImport() {
+            eventHandler.trySend { it.onRestartApp() }
+        }
+    }
+
+    fun exportToZip(uri: Uri) {
+        if (backupStateFlow.value.isBusy) return
+        backupStateFlow.update { it.copy(isBusy = true, message = null) }
+        viewModelScope.launch {
+            val result = runCatching { backupRepository.exportToZip(uri) }
+            backupStateFlow.update {
+                it.copy(
+                    isBusy = false,
+                    message = result.fold(
+                        onSuccess = { "バックアップを書き出しました" },
+                        onFailure = { e -> "エクスポートに失敗しました: ${e.message ?: e::class.simpleName}" },
+                    ),
+                )
+            }
+        }
+    }
+
+    fun importFromZip(uri: Uri) {
+        if (backupStateFlow.value.isBusy) return
+        backupStateFlow.update { it.copy(isBusy = true, message = null) }
+        viewModelScope.launch {
+            val result = runCatching { backupRepository.importFromZip(uri) }
+            backupStateFlow.update { state ->
+                result.fold(
+                    onSuccess = {
+                        state.copy(isBusy = false, message = null, pendingRestart = true)
+                    },
+                    onFailure = { e ->
+                        state.copy(
+                            isBusy = false,
+                            message = "復元に失敗しました: ${e.message ?: e::class.simpleName}",
+                        )
+                    },
+                )
+            }
+        }
     }
 
     val uiState: StateFlow<SettingsScreenUiState?> = MutableStateFlow<SettingsScreenUiState?>(null)
@@ -100,6 +165,7 @@ internal class SettingsScreenViewModel(
                         settings.toUiState(
                             callbacks = callbacks,
                             mockLocationInput = mockLocationInputFlow.value,
+                            backup = backupStateFlow.value,
                         )
                     }
                     // 拡張機能にも最新設定を通知する
@@ -130,10 +196,20 @@ internal class SettingsScreenViewModel(
                     }
                 }
             }
+            // バックアップ処理の進行状況を UiState に反映する
+            viewModelScope.launch {
+                backupStateFlow.collectLatest { backup ->
+                    val current = uiStateFlow.value ?: return@collectLatest
+                    uiStateFlow.update { current.copy(backup = backup) }
+                }
+            }
         }.asStateFlow()
 
     interface Event {
         fun onOpenMockLocationOnMap()
+        fun onRequestBackupExport()
+        fun onRequestBackupImport()
+        fun onRestartApp()
     }
 }
 
@@ -183,6 +259,7 @@ internal fun formatMockLocationInput(latitude: Double, longitude: Double): Strin
 private fun BrowserSettings.toUiState(
     callbacks: SettingsScreenUiState.Callbacks,
     mockLocationInput: String,
+    backup: SettingsScreenUiState.BackupUiState,
 ): SettingsScreenUiState {
     return SettingsScreenUiState(
         callbacks = callbacks,
@@ -197,5 +274,6 @@ private fun BrowserSettings.toUiState(
         mockLocationEnabled = mockLocationEnabled,
         mockLocationInput = mockLocationInput,
         mockLocationInputError = validateMockLocationInput(mockLocationInput),
+        backup = backup,
     )
 }

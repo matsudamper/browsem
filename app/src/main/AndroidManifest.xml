@@ -30,10 +30,8 @@
 
     <application
         android:name=".BrowserApplication"
-        android:allowBackup="true"
-        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:allowBackup="false"
         android:enableOnBackInvokedCallback="true"
-        android:fullBackupContent="@xml/backup_rules"
         android:icon="@drawable/ic_firefox_like"
         android:label="@string/app_name"
         android:roundIcon="@drawable/ic_firefox_like"
