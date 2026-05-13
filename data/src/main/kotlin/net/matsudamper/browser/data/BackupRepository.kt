@@ -3,6 +3,9 @@ package net.matsudamper.browser.data
 import android.content.Context
 import android.net.Uri
 import java.io.File
+import java.io.IOException
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
@@ -19,6 +22,10 @@ import net.matsudamper.browser.data.tab.TabDatabase
  * 呼び出し側はインポート成功後に必ずプロセスを終了させ、再起動を促すこと。
  */
 class BackupRepository(private val context: Context) {
+
+    /** Room を閉じた後に失敗したことを示す。受け取った側は強制再起動 UX に分岐すること */
+    class RestartRequiredException(cause: Throwable) :
+        IOException(cause.message ?: cause::class.simpleName, cause)
 
     suspend fun exportToZip(outputUri: Uri): Unit = withContext(Dispatchers.IO) {
         val snapshotFile = File(context.cacheDir, "backup_tab_snapshot.db")
@@ -51,7 +58,7 @@ class BackupRepository(private val context: Context) {
             mkdirs()
         }
         // 置換先と同じファイルシステムにステージング用ファイルを置く。
-        // 同 FS であれば renameTo がほぼ確実に成功し、close 後の置換が短時間で完了する。
+        // 同 FS であれば atomic な rename で置換でき、close 後の置換が短時間で完了する。
         val settingsTarget = settingsFile().apply { parentFile?.mkdirs() }
         val tabDbTarget = context.getDatabasePath(TAB_DB_FILE_NAME).apply {
             parentFile?.mkdirs()
@@ -92,35 +99,36 @@ class BackupRepository(private val context: Context) {
             TabDatabase.closeInstance()
             dbClosed = true
 
-            // 古い WAL/SHM は新 DB と整合しないので削除する
-            File(tabDbTarget.parentFile, "$TAB_DB_FILE_NAME-shm").delete()
-            File(tabDbTarget.parentFile, "$TAB_DB_FILE_NAME-wal").delete()
-            replaceWithStaging(settingsStaging, settingsTarget)
-            replaceWithStaging(tabDbStaging, tabDbTarget)
+            // close 後の失敗は強制再起動が必要 (Repository が閉じた DB 参照を持つため)
+            try {
+                // 古い WAL/SHM は新 DB と整合しないので削除する
+                File(tabDbTarget.parentFile, "$TAB_DB_FILE_NAME-shm").delete()
+                File(tabDbTarget.parentFile, "$TAB_DB_FILE_NAME-wal").delete()
+                replaceWithStaging(settingsStaging, settingsTarget)
+                replaceWithStaging(tabDbStaging, tabDbTarget)
+            } catch (t: Throwable) {
+                throw RestartRequiredException(t)
+            }
         } catch (t: Throwable) {
-            // ステージング段階の失敗ならファイルを掃除して通常動作に戻れる。
-            // DB を閉じた後の失敗は app の状態が壊れているので、
-            // ステージングだけ掃除して例外を再送出し、UI 側で再起動を促す。
-            settingsStaging.delete()
-            tabDbStaging.delete()
-            throw t
-        } finally {
-            workDir.deleteRecursively()
-            // 念のため: 正常終了時にもステージングが残らないようにする
+            // close 前の失敗ならステージングを掃除して通常動作に戻る。
+            // close 後の失敗 (RestartRequiredException) はそのまま再送出。
             if (!dbClosed) {
                 settingsStaging.delete()
                 tabDbStaging.delete()
             }
+            throw t
+        } finally {
+            workDir.deleteRecursively()
         }
     }
 
-    /** 同 FS 上でのファイル置換。rename が失敗した場合のみ copy にフォールバック */
+    /**
+     * 同 FS 上で staging ファイルを dst の位置に置換する。
+     * `Files.move` の REPLACE_EXISTING は同 FS では atomic な rename(2) になるため、
+     * 失敗時にも dst が消えてしまう (= データ消失) ことがない。
+     */
     private fun replaceWithStaging(src: File, dst: File) {
-        if (dst.exists()) dst.delete()
-        if (!src.renameTo(dst)) {
-            src.copyTo(dst, overwrite = true)
-            src.delete()
-        }
+        Files.move(src.toPath(), dst.toPath(), StandardCopyOption.REPLACE_EXISTING)
     }
 
     private fun settingsFile(): File =

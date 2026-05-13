@@ -151,26 +151,32 @@ internal class SettingsScreenViewModel(
             if (!backupMutex.tryLock()) return@launch
             try {
                 backupStateFlow.update { it.copy(isBusy = true, message = null) }
-                val result = try {
+                try {
                     backupRepository.importFromZip(uri)
-                    Result.success(Unit)
+                    backupStateFlow.update {
+                        it.copy(isBusy = false, message = null, pendingRestart = true)
+                    }
                 } catch (e: CancellationException) {
                     throw e
+                } catch (e: BackupRepository.RestartRequiredException) {
+                    // DB を閉じた後の失敗。Repository が閉じた DB 参照を持つので
+                    // 通常動作には戻れない。エラー表示と同時に再起動ダイアログを出す。
+                    backupStateFlow.update {
+                        it.copy(
+                            isBusy = false,
+                            message = "復元中にエラーが発生しました: " +
+                                "${e.cause?.message ?: e.message ?: e::class.simpleName}。" +
+                                "アプリを終了します",
+                            pendingRestart = true,
+                        )
+                    }
                 } catch (t: Throwable) {
-                    Result.failure(t)
-                }
-                backupStateFlow.update { state ->
-                    result.fold(
-                        onSuccess = {
-                            state.copy(isBusy = false, message = null, pendingRestart = true)
-                        },
-                        onFailure = { e ->
-                            state.copy(
-                                isBusy = false,
-                                message = "復元に失敗しました: ${e.message ?: e::class.simpleName}",
-                            )
-                        },
-                    )
+                    backupStateFlow.update {
+                        it.copy(
+                            isBusy = false,
+                            message = "復元に失敗しました: ${t.message ?: t::class.simpleName}",
+                        )
+                    }
                 }
             } finally {
                 backupMutex.unlock()
