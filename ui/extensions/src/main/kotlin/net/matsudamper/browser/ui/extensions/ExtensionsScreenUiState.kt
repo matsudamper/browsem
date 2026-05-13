@@ -5,11 +5,13 @@ data class ExtensionsScreenUiState(
     val loadingState: LoadingState,
     val errorMessage: String?,
     val uninstallingId: String?,
+    val togglingId: String?,
 ) {
     interface Callbacks {
         fun refreshExtensions()
         fun uninstallExtension(extensionId: String)
         fun openExtensionSettings(extensionId: String)
+        fun toggleExtension(extensionId: String)
         fun dismissError()
     }
 
@@ -26,5 +28,6 @@ data class ExtensionsScreenUiState(
         val displayName: String,
         val version: String,
         val hasSettingsPage: Boolean,
+        val isEnabled: Boolean,
     )
 }

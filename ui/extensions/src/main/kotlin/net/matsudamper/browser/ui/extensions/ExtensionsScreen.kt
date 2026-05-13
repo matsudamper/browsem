@@ -22,6 +22,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -101,9 +102,12 @@ fun ExtensionsScreen(
                             ExtensionRow(
                                 extension = extension,
                                 isUninstalling = uiState.uninstallingId == extension.id,
-                                uninstallEnabled = uiState.uninstallingId == null,
+                                uninstallEnabled = uiState.uninstallingId == null && uiState.togglingId == null,
+                                isToggling = uiState.togglingId == extension.id,
+                                toggleEnabled = uiState.togglingId == null && uiState.uninstallingId == null,
                                 onOpenSettings = { uiState.callbacks.openExtensionSettings(extension.id) },
                                 onUninstall = { uiState.callbacks.uninstallExtension(extension.id) },
+                                onToggle = { uiState.callbacks.toggleExtension(extension.id) },
                             )
                         }
                     }
@@ -131,8 +135,11 @@ private fun ExtensionRow(
     extension: ExtensionsScreenUiState.ExtensionUiState,
     isUninstalling: Boolean,
     uninstallEnabled: Boolean,
+    isToggling: Boolean,
+    toggleEnabled: Boolean,
     onOpenSettings: () -> Unit,
     onUninstall: () -> Unit,
+    onToggle: () -> Unit,
 ) {
     Row(
         modifier = Modifier
@@ -169,6 +176,12 @@ private fun ExtensionRow(
                 overflow = TextOverflow.Ellipsis,
             )
         }
+        Spacer(modifier = Modifier.width(8.dp))
+        Switch(
+            checked = extension.isEnabled,
+            onCheckedChange = { onToggle() },
+            enabled = toggleEnabled && !isToggling,
+        )
         Spacer(modifier = Modifier.width(8.dp))
         TextButton(
             onClick = onUninstall,

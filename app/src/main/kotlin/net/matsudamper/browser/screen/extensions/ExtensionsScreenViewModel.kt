@@ -12,6 +12,7 @@ import kotlinx.coroutines.launch
 import net.matsudamper.browser.ui.extensions.ExtensionsScreenUiState
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.WebExtension
+import org.mozilla.geckoview.WebExtensionController
 
 internal class ExtensionsScreenViewModel(
     private val runtime: GeckoRuntime,
@@ -45,6 +46,37 @@ internal class ExtensionsScreenViewModel(
             )
         }
 
+        override fun toggleExtension(extensionId: String) {
+            val extension = viewModelStateFlow.value.extensions
+                .firstOrNull { it.id == extensionId } ?: return
+            viewModelStateFlow.update { it.copy(togglingId = extensionId) }
+            val result = if (extension.metaData.enabled) {
+                runtime.webExtensionController.disable(extension, WebExtensionController.EnableSource.USER)
+            } else {
+                runtime.webExtensionController.enable(extension, WebExtensionController.EnableSource.USER)
+            }
+            result.accept(
+                { updatedExtension ->
+                    viewModelStateFlow.update { state ->
+                        state.copy(
+                            togglingId = null,
+                            extensions = state.extensions.map { ext ->
+                                if (ext.id == extensionId && updatedExtension != null) updatedExtension else ext
+                            },
+                        )
+                    }
+                },
+                { error ->
+                    viewModelStateFlow.update {
+                        it.copy(
+                            togglingId = null,
+                            errorMessage = error?.message ?: "拡張機能の切り替えに失敗しました。",
+                        )
+                    }
+                },
+            )
+        }
+
         override fun openExtensionSettings(extensionId: String) {
             val extension = viewModelStateFlow.value.extensions
                 .firstOrNull { it.id == extensionId } ?: return
@@ -67,6 +99,7 @@ internal class ExtensionsScreenViewModel(
             loadingState = ExtensionsScreenUiState.LoadingState.Loading,
             errorMessage = null,
             uninstallingId = null,
+            togglingId = null,
         )
     ).also { uiStateFlow ->
         viewModelScope.launch {
@@ -84,12 +117,14 @@ internal class ExtensionsScreenViewModel(
                                         displayName = ext.metaData.name?.takeIf { it.isNotBlank() } ?: ext.id,
                                         version = ext.metaData.version,
                                         hasSettingsPage = ext.metaData.optionsPageUrl?.isNotBlank() == true,
+                                        isEnabled = ext.metaData.enabled,
                                     )
                                 },
                             )
                         },
                         errorMessage = state.errorMessage,
                         uninstallingId = state.uninstallingId,
+                        togglingId = state.togglingId,
                     )
                 }
             }
@@ -132,6 +167,7 @@ internal class ExtensionsScreenViewModel(
         val extensions: List<WebExtension> = emptyList(),
         val isLoading: Boolean = true,
         val uninstallingId: String? = null,
+        val togglingId: String? = null,
         val errorMessage: String? = null,
     )
 }
