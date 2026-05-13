@@ -50,6 +50,7 @@ fun SettingsScreen(
     onOpenExtensions: () -> Unit,
     onOpenHistory: () -> Unit,
     onOpenDownloads: () -> Unit,
+    onOpenBackupSettings: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -357,6 +358,27 @@ fun SettingsScreen(
             }
 
             Spacer(Modifier.height(betweenPadding))
+
+            SettingSection(title = "バックアップと復元") {
+                Column {
+                    Text(
+                        text = "設定・タブ・タブグループを Google アカウントへバックアップします。" +
+                            "履歴・ダウンロード記録・Cookie・ログイン情報は対象外です。" +
+                            "復元はアプリの再インストール時に自動で行われます。",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    TextButton(
+                        onClick = onOpenBackupSettings,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("システムのバックアップ設定を開く")
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(betweenPadding))
             Spacer(Modifier.height(8.dp))
             Spacer(Modifier.padding(bottom = paddingValues.calculateBottomPadding()))
         }
@@ -419,6 +441,7 @@ private fun SettingsScreenPreview() {
             onOpenExtensions = {},
             onOpenHistory = {},
             onOpenDownloads = {},
+            onOpenBackupSettings = {},
             onBack = {},
         )
     }

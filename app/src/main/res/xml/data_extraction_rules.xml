@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Android 12 (API 31) 以降で使用される Auto Backup / D2D 移行ルール。
+    バックアップ対象は「設定 (Proto DataStore)」と「タブ・タブグループ (tab.db)」のみ。
+    include を指定するとそれ以外 (履歴 browser.db / ダウンロード download.db /
+    GeckoView プロファイル files/mozilla/ / Cookie・セッション類) はすべて自動的に除外される。
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <include domain="file" path="datastore/browser_settings.pb" />
+        <include domain="database" path="tab.db" />
+    </cloud-backup>
+    <device-transfer>
+        <include domain="file" path="datastore/browser_settings.pb" />
+        <include domain="database" path="tab.db" />
+    </device-transfer>
+</data-extraction-rules>

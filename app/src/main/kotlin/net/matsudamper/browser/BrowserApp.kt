@@ -1,7 +1,9 @@
 package net.matsudamper.browser
 
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
+import android.provider.Settings
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.ContentTransform
@@ -389,7 +391,7 @@ private fun BrowserAppContent(
                                         )
                                         try {
                                             context.startActivity(intent)
-                                        } catch (_: android.content.ActivityNotFoundException) {
+                                        } catch (_: ActivityNotFoundException) {
                                             // 地図アプリがインストールされていない端末では何もしない
                                         }
                                     }
@@ -402,6 +404,22 @@ private fun BrowserAppContent(
                                 onOpenExtensions = { backStack.add(AppDestination.Extensions) },
                                 onOpenHistory = { backStack.add(AppDestination.History) },
                                 onOpenDownloads = { backStack.add(AppDestination.Downloads) },
+                                onOpenBackupSettings = {
+                                    // 端末によって項目名やパスが異なるため、
+                                    // プライバシー設定 → 端末全体設定の順でフォールバックする
+                                    val intents = listOf(
+                                        Intent(Settings.ACTION_PRIVACY_SETTINGS),
+                                        Intent(Settings.ACTION_SETTINGS),
+                                    )
+                                    for (intent in intents) {
+                                        try {
+                                            context.startActivity(intent)
+                                            break
+                                        } catch (_: ActivityNotFoundException) {
+                                            // 次の候補へフォールバック
+                                        }
+                                    }
+                                },
                                 onBack = { backStack.removeLastOrNull() },
                             )
                         }
