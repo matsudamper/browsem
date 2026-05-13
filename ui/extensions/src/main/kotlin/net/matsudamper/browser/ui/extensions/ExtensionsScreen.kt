@@ -30,6 +30,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -126,6 +127,75 @@ fun ExtensionsScreen(
                     Text("OK")
                 }
             },
+        )
+    }
+}
+
+private val previewCallbacks = object : ExtensionsScreenUiState.Callbacks {
+    override fun refreshExtensions() = Unit
+    override fun uninstallExtension(extensionId: String) = Unit
+    override fun openExtensionSettings(extensionId: String) = Unit
+    override fun setExtensionEnabled(extensionId: String, enabled: Boolean) = Unit
+    override fun dismissError() = Unit
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun ExtensionsScreenLoadedPreview() {
+    MaterialTheme {
+        ExtensionsScreen(
+            uiState = ExtensionsScreenUiState(
+                callbacks = previewCallbacks,
+                loadingState = ExtensionsScreenUiState.LoadingState.Loaded(
+                    extensions = listOf(
+                        ExtensionsScreenUiState.ExtensionUiState(
+                            id = "ublock-origin@raymondhill.net",
+                            displayName = "uBlock Origin",
+                            version = "1.57.2",
+                            hasSettingsPage = true,
+                            isEnabled = true,
+                        ),
+                        ExtensionsScreenUiState.ExtensionUiState(
+                            id = "some-disabled-extension@example.com",
+                            displayName = "無効な拡張機能",
+                            version = "0.9.0",
+                            hasSettingsPage = false,
+                            isEnabled = false,
+                        ),
+                    ),
+                ),
+                errorMessage = null,
+                uninstallingId = null,
+                togglingId = null,
+            ),
+            onBack = {},
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun ExtensionsScreenTogglingPreview() {
+    MaterialTheme {
+        ExtensionsScreen(
+            uiState = ExtensionsScreenUiState(
+                callbacks = previewCallbacks,
+                loadingState = ExtensionsScreenUiState.LoadingState.Loaded(
+                    extensions = listOf(
+                        ExtensionsScreenUiState.ExtensionUiState(
+                            id = "ublock-origin@raymondhill.net",
+                            displayName = "uBlock Origin",
+                            version = "1.57.2",
+                            hasSettingsPage = true,
+                            isEnabled = true,
+                        ),
+                    ),
+                ),
+                errorMessage = null,
+                uninstallingId = null,
+                togglingId = "ublock-origin@raymondhill.net",
+            ),
+            onBack = {},
         )
     }
 }

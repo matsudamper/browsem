@@ -47,7 +47,9 @@ internal class ExtensionsScreenViewModel(
         }
 
         override fun setExtensionEnabled(extensionId: String, enabled: Boolean) {
-            val extension = viewModelStateFlow.value.extensions
+            val currentState = viewModelStateFlow.value
+            if (currentState.togglingId != null || currentState.uninstallingId != null) return
+            val extension = currentState.extensions
                 .firstOrNull { it.id == extensionId } ?: return
             viewModelStateFlow.update { it.copy(togglingId = extensionId) }
             val result = if (enabled) {

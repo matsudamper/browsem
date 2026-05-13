@@ -1,5 +1,8 @@
 package net.matsudamper.browser.ui.extensions
 
+import androidx.compose.runtime.Stable
+
+@Stable
 data class ExtensionsScreenUiState(
     val callbacks: Callbacks,
     val loadingState: LoadingState,
@@ -23,6 +26,7 @@ data class ExtensionsScreenUiState(
         ) : LoadingState
     }
 
+    @Stable
     data class ExtensionUiState(
         val id: String,
         val displayName: String,
