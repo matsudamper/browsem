@@ -50,6 +50,11 @@ internal class SettingsScreenViewModel(
     // UI 側のボタン無効化と二重に守ることで、外部呼び出しからも安全にする。
     private val backupMutex = Mutex()
 
+    // onCleared を通過済みかどうか。NonCancellable で復元が画面離脱後に完了した場合、
+    // onCleared の安全弁は既に過ぎているので直接 kill する必要がある。
+    @Volatile
+    private var cleared = false
+
     private val callbacks = object : SettingsScreenUiState.Callbacks {
         override fun setHomepageType(type: HomepageType) {
             viewModelScope.launch { settingsRepository.setHomepageType(type) }
@@ -163,6 +168,7 @@ internal class SettingsScreenViewModel(
                         backupStateFlow.update {
                             it.copy(isBusy = false, message = null, pendingRestart = true)
                         }
+                        forceRestartIfDetached()
                     } catch (e: BackupRepository.RestartRequiredException) {
                         // DB を閉じた後の失敗。Repository が閉じた DB 参照を持つので
                         // 通常動作には戻れない。エラー表示と同時に再起動ダイアログを出す。
@@ -175,6 +181,7 @@ internal class SettingsScreenViewModel(
                                 pendingRestart = true,
                             )
                         }
+                        forceRestartIfDetached()
                     } catch (t: Throwable) {
                         backupStateFlow.update {
                             it.copy(
@@ -192,12 +199,28 @@ internal class SettingsScreenViewModel(
 
     override fun onCleared() {
         super.onCleared()
+        cleared = true
         // 画面遷移などで本 ViewModel が破棄されたとき、復元によって
         // プロセスが degraded 状態 (閉じた Room を保持) のままになるのを避ける。
         // UI ダイアログを経由しなくても確実に再起動を発火する。
         if (backupStateFlow.value.pendingRestart) {
-            android.os.Process.killProcess(android.os.Process.myPid())
+            killSelfProcess()
         }
+    }
+
+    /**
+     * NonCancellable で動かしている復元処理が onCleared 通過後に完了したケースを救う。
+     * onCleared 時点では pendingRestart=false なので onCleared 側の安全弁は素通り
+     * している。完了直後の本メソッドで cleared フラグを見て直接 kill する。
+     */
+    private fun forceRestartIfDetached() {
+        if (cleared) {
+            killSelfProcess()
+        }
+    }
+
+    private fun killSelfProcess() {
+        android.os.Process.killProcess(android.os.Process.myPid())
     }
 
     val uiState: StateFlow<SettingsScreenUiState?> = MutableStateFlow<SettingsScreenUiState?>(null)
