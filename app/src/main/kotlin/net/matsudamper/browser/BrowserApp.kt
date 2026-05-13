@@ -315,6 +315,10 @@ private fun BrowserAppContent(
                                 GeckoBrowserTab(
                                     modifier = modifier,
                                     browserTab = selectedTab,
+                                    // Navigation 3 のバックスタックには複数の Browser エントリが残り得る。
+                                    // 現在 top のエントリだけがフォアグラウンドであり、テストはこのフラグを根拠に
+                                    // 唯一のフォアグラウンド GeckoContainer をタップ対象として一意に特定する。
+                                    isForeground = backStack.lastOrNull() == key,
                                     homepageUrl = uiState.homepageUrl,
                                     searchTemplate = uiState.searchTemplate,
                                     translationProvider = uiState.translationProvider,

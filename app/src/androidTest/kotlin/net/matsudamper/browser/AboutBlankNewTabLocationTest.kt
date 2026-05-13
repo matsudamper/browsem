@@ -238,7 +238,9 @@ class AboutBlankNewTabLocationTest {
     }
 
     private fun tapLinkOnGeckoContainer() {
-        val node = composeRule.onNodeWithTag(GeckoBrowserTabTestTags.GeckoContainer.testTag)
+        // バックスタックに複数の Browser エントリが残っていると GeckoContainer は複数ノードに
+        // なり onNodeWithTag が "Expected exactly 1" で失敗する。フォアグラウンド限定タグで一意化する。
+        val node = composeRule.onNodeWithTag(GeckoBrowserTabTestTags.ForegroundGeckoContainer.testTag)
         node.performTouchInput {
             click()
         }
