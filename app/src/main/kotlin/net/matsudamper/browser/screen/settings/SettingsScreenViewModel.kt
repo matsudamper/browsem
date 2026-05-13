@@ -4,7 +4,9 @@ import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -151,36 +153,50 @@ internal class SettingsScreenViewModel(
             if (!backupMutex.tryLock()) return@launch
             try {
                 backupStateFlow.update { it.copy(isBusy = true, message = null) }
-                try {
-                    backupRepository.importFromZip(uri)
-                    backupStateFlow.update {
-                        it.copy(isBusy = false, message = null, pendingRestart = true)
-                    }
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: BackupRepository.RestartRequiredException) {
-                    // DB を閉じた後の失敗。Repository が閉じた DB 参照を持つので
-                    // 通常動作には戻れない。エラー表示と同時に再起動ダイアログを出す。
-                    backupStateFlow.update {
-                        it.copy(
-                            isBusy = false,
-                            message = "復元中にエラーが発生しました: " +
-                                "${e.cause?.message ?: e.message ?: e::class.simpleName}。" +
-                                "アプリを終了します",
-                            pendingRestart = true,
-                        )
-                    }
-                } catch (t: Throwable) {
-                    backupStateFlow.update {
-                        it.copy(
-                            isBusy = false,
-                            message = "復元に失敗しました: ${t.message ?: t::class.simpleName}",
-                        )
+                // 復元中に画面遷移されて viewModelScope が cancel されると、
+                // TabDatabase.closeInstance() 後にファイル置換だけが中途半端に終わり、
+                // app が degraded 状態のまま残る。NonCancellable で囲んで最後まで
+                // 完了させ、必要なら onCleared 側で再起動を強制する。
+                withContext(NonCancellable) {
+                    try {
+                        backupRepository.importFromZip(uri)
+                        backupStateFlow.update {
+                            it.copy(isBusy = false, message = null, pendingRestart = true)
+                        }
+                    } catch (e: BackupRepository.RestartRequiredException) {
+                        // DB を閉じた後の失敗。Repository が閉じた DB 参照を持つので
+                        // 通常動作には戻れない。エラー表示と同時に再起動ダイアログを出す。
+                        backupStateFlow.update {
+                            it.copy(
+                                isBusy = false,
+                                message = "復元中にエラーが発生しました: " +
+                                    "${e.cause?.message ?: e.message ?: e::class.simpleName}。" +
+                                    "アプリを終了します",
+                                pendingRestart = true,
+                            )
+                        }
+                    } catch (t: Throwable) {
+                        backupStateFlow.update {
+                            it.copy(
+                                isBusy = false,
+                                message = "復元に失敗しました: ${t.message ?: t::class.simpleName}",
+                            )
+                        }
                     }
                 }
             } finally {
                 backupMutex.unlock()
             }
+        }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        // 画面遷移などで本 ViewModel が破棄されたとき、復元によって
+        // プロセスが degraded 状態 (閉じた Room を保持) のままになるのを避ける。
+        // UI ダイアログを経由しなくても確実に再起動を発火する。
+        if (backupStateFlow.value.pendingRestart) {
+            android.os.Process.killProcess(android.os.Process.myPid())
         }
     }
 

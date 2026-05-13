@@ -7,12 +7,19 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
-@Database(entities = [TabStateEntity::class, TabGroupEntity::class], version = 3, exportSchema = false)
+@Database(
+    entities = [TabStateEntity::class, TabGroupEntity::class],
+    version = TabDatabase.SCHEMA_VERSION,
+    exportSchema = false,
+)
 abstract class TabDatabase : RoomDatabase() {
     abstract fun tabDao(): TabDao
     abstract fun tabGroupDao(): TabGroupDao
 
     companion object {
+        /** Room の @Database version と連動。バックアップ互換性チェックでも参照する */
+        const val SCHEMA_VERSION: Int = 3
+
         @Volatile
         private var instance: TabDatabase? = null
 

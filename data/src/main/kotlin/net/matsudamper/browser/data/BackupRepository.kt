@@ -1,9 +1,11 @@
 package net.matsudamper.browser.data
 
 import android.content.Context
+import android.database.sqlite.SQLiteDatabase
 import android.net.Uri
 import java.io.File
 import java.io.IOException
+import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import java.util.zip.ZipEntry
@@ -103,6 +105,17 @@ class BackupRepository(private val context: Context) {
             settingsExtracted.copyTo(settingsStaging, overwrite = true)
             tabDbExtracted.copyTo(tabDbStaging, overwrite = true)
 
+            // 新しいアプリ版で作成したバックアップを古いアプリ版で復元すると Room が起動不能に
+            // なるため、close 前に staging の tab.db を読み取って互換性を確認する。
+            val backupSchemaVersion = readSchemaVersion(tabDbStaging)
+            if (backupSchemaVersion > TabDatabase.SCHEMA_VERSION) {
+                error(
+                    "バックアップは新しいアプリ版で作成されています " +
+                        "(スキーマ $backupSchemaVersion > 現バージョン ${TabDatabase.SCHEMA_VERSION})。" +
+                        "アプリを更新してから復元してください",
+                )
+            }
+
             // ステージング成功後に DB を閉じて置換に入る。
             // タブ永続化が裏で tab.db を書き続けているため、置き換え前に
             // Room の接続を完全に閉じてインフライト書き込みを止める。
@@ -134,11 +147,35 @@ class BackupRepository(private val context: Context) {
 
     /**
      * 同 FS 上で staging ファイルを dst の位置に置換する。
-     * `Files.move` の REPLACE_EXISTING は同 FS では atomic な rename(2) になるため、
-     * 失敗時にも dst が消えてしまう (= データ消失) ことがない。
+     * `ATOMIC_MOVE` を明示することで、対応する FS (Android 内部ストレージの ext4
+     * 等) では rename(2) による atomic な置換を保証する。
+     * 仮に非対応 FS だった場合は `AtomicMoveNotSupportedException` を捕まえて
+     * REPLACE_EXISTING のみで再試行することで、復元動作自体が止まらないようにする。
      */
     private fun replaceWithStaging(src: File, dst: File) {
-        Files.move(src.toPath(), dst.toPath(), StandardCopyOption.REPLACE_EXISTING)
+        try {
+            Files.move(
+                src.toPath(),
+                dst.toPath(),
+                StandardCopyOption.REPLACE_EXISTING,
+                StandardCopyOption.ATOMIC_MOVE,
+            )
+        } catch (_: AtomicMoveNotSupportedException) {
+            Files.move(src.toPath(), dst.toPath(), StandardCopyOption.REPLACE_EXISTING)
+        }
+    }
+
+    /** SQLite の PRAGMA user_version (= Room の schema version) を読み取る */
+    private fun readSchemaVersion(file: File): Int {
+        return SQLiteDatabase.openDatabase(
+            file.absolutePath,
+            null,
+            SQLiteDatabase.OPEN_READONLY,
+        ).use { db ->
+            db.rawQuery("PRAGMA user_version", null).use { cursor ->
+                if (cursor.moveToFirst()) cursor.getInt(0) else 0
+            }
+        }
     }
 
     private fun settingsFile(): File =
