@@ -107,7 +107,7 @@ fun ExtensionsScreen(
                                 toggleEnabled = uiState.togglingId == null && uiState.uninstallingId == null,
                                 onOpenSettings = { uiState.callbacks.openExtensionSettings(extension.id) },
                                 onUninstall = { uiState.callbacks.uninstallExtension(extension.id) },
-                                onToggle = { uiState.callbacks.toggleExtension(extension.id) },
+                                onToggle = { enabled -> uiState.callbacks.setExtensionEnabled(extension.id, enabled) },
                             )
                         }
                     }
@@ -139,7 +139,7 @@ private fun ExtensionRow(
     toggleEnabled: Boolean,
     onOpenSettings: () -> Unit,
     onUninstall: () -> Unit,
-    onToggle: () -> Unit,
+    onToggle: (Boolean) -> Unit,
 ) {
     Row(
         modifier = Modifier
@@ -179,7 +179,7 @@ private fun ExtensionRow(
         Spacer(modifier = Modifier.width(8.dp))
         Switch(
             checked = extension.isEnabled,
-            onCheckedChange = { onToggle() },
+            onCheckedChange = { onToggle(it) },
             enabled = toggleEnabled && !isToggling,
         )
         Spacer(modifier = Modifier.width(8.dp))

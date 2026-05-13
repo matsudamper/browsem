@@ -11,7 +11,7 @@ data class ExtensionsScreenUiState(
         fun refreshExtensions()
         fun uninstallExtension(extensionId: String)
         fun openExtensionSettings(extensionId: String)
-        fun toggleExtension(extensionId: String)
+        fun setExtensionEnabled(extensionId: String, enabled: Boolean)
         fun dismissError()
     }
 

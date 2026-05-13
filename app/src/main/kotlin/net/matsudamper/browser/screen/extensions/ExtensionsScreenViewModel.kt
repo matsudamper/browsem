@@ -46,14 +46,14 @@ internal class ExtensionsScreenViewModel(
             )
         }
 
-        override fun toggleExtension(extensionId: String) {
+        override fun setExtensionEnabled(extensionId: String, enabled: Boolean) {
             val extension = viewModelStateFlow.value.extensions
                 .firstOrNull { it.id == extensionId } ?: return
             viewModelStateFlow.update { it.copy(togglingId = extensionId) }
-            val result = if (extension.metaData.enabled) {
-                runtime.webExtensionController.disable(extension, WebExtensionController.EnableSource.USER)
-            } else {
+            val result = if (enabled) {
                 runtime.webExtensionController.enable(extension, WebExtensionController.EnableSource.USER)
+            } else {
+                runtime.webExtensionController.disable(extension, WebExtensionController.EnableSource.USER)
             }
             result.accept(
                 { updatedExtension ->
