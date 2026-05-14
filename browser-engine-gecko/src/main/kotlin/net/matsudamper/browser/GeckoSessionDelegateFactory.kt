@@ -215,7 +215,9 @@ internal class BrowserTabSessionDelegateHost(
     private var pendingCloseAction: (() -> Unit)? = null
 
     fun scheduleCloseOnBlankNavigation(action: () -> Unit) {
-        pendingCloseAction = action
+        synchronized(lock) {
+            pendingCloseAction = action
+        }
     }
 
     // タブ切り替え時にUI側コールバックが再生成されるため、最新のナビゲーション状態をキャッシュして
@@ -255,10 +257,10 @@ internal class BrowserTabSessionDelegateHost(
                 // about:blank へのナビゲーション完了時にクローズ処理を実行する
                 // (拡張機能の設定ページを閉じる際に browser.storage.local 書き込みを待つため)
                 if (url == "about:blank") {
-                    pendingCloseAction?.let { action ->
-                        pendingCloseAction = null
-                        action()
+                    val action = synchronized(lock) {
+                        pendingCloseAction.also { pendingCloseAction = null }
                     }
+                    action?.invoke()
                 }
                 currentCallbacks()?.onLocationChange(url)
             }
