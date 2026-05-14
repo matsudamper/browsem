@@ -1,15 +1,19 @@
 package net.matsudamper.browser
 
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasParent
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.isDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.printToString
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import net.matsudamper.browser.ui.tabs.TabsScreenTestTags
@@ -165,6 +169,7 @@ class AboutBlankNewTabLocationTest {
             }.getOrDefault(false)
             var lastUrl = composeRule.currentUrlBarText()
             if (!opened) {
+                dumpUiDiagnostics("after-initial-wait")
                 repeat(3) { attempt ->
                     if (opened) return@repeat
                     tapLinkOnGeckoContainer()
@@ -177,11 +182,15 @@ class AboutBlankNewTabLocationTest {
                     }.getOrDefault(false)
                     lastUrl = composeRule.currentUrlBarText()
                     println("target-open-fallback-attempt=${attempt + 1}, opened=$opened, currentUrl=$lastUrl")
+                    if (!opened) {
+                        dumpUiDiagnostics("fallback-attempt-${attempt + 1}")
+                    }
                 }
             }
             if (!opened) {
                 val targetUrl = localServer.indexUrl.substringBeforeLast("/") + "/$TARGET_FILE_NAME"
                 println("target=_blank click failed in this environment. fallback openUrlFromUrlBar: $targetUrl")
+                dumpUiDiagnostics("before-openUrlFromUrlBar")
                 composeRule.openUrlFromUrlBar(targetUrl)
                 composeRule.waitForUrlBarContains(TARGET_FILE_NAME, timeoutMillis = 30_000)
                 lastUrl = composeRule.currentUrlBarText()
@@ -236,6 +245,59 @@ class AboutBlankNewTabLocationTest {
         }
         composeRule.waitForTabsScreenLoaded()
     }
+
+    /**
+     * 失敗時の Compose semantics tree を最低限ダンプする診断ヘルパー。
+     * UrlBar / GeckoContainer / ForegroundGeckoContainer の現在の数と、
+     * UrlBar の EditableText 値、ツールバーの存在有無、root semantics の概要を出力する。
+     * fallback path がさらに失敗したケースで、原因切り分け（多重ノード／ノード不在／別画面表示）に使う。
+     */
+    private fun dumpUiDiagnostics(label: String) {
+        val urlBarTag = UrlTextInputTestTags.UrlBar.testTag
+        val geckoTag = GeckoBrowserTabTestTags.GeckoContainer.testTag
+        val foregroundGeckoTag = GeckoBrowserTabTestTags.ForegroundGeckoContainer.testTag
+        val toolbarTag = BrowserToolbarTestTags.Toolbar.testTag
+        val tabsAddTag = TabsScreenTestTags.AddTabButton.testTag
+
+        val urlBarNodes = runCatching {
+            composeRule.onAllNodesWithTag(urlBarTag).fetchSemanticsNodes()
+        }.getOrDefault(emptyList())
+        val geckoNodes = runCatching {
+            composeRule.onAllNodesWithTag(geckoTag).fetchSemanticsNodes()
+        }.getOrDefault(emptyList())
+        val foregroundNodes = runCatching {
+            composeRule.onAllNodesWithTag(foregroundGeckoTag).fetchSemanticsNodes()
+        }.getOrDefault(emptyList())
+        val toolbarNodes = runCatching {
+            composeRule.onAllNodesWithTag(toolbarTag).fetchSemanticsNodes()
+        }.getOrDefault(emptyList())
+        val tabsAddNodes = runCatching {
+            composeRule.onAllNodesWithTag(tabsAddTag).fetchSemanticsNodes()
+        }.getOrDefault(emptyList())
+
+        val urlBarTexts = urlBarNodes.mapIndexed { index, node ->
+            val text = node.config.getOrNull(SemanticsProperties.EditableText)?.text ?: "<no editable text>"
+            "[$index]=\"$text\""
+        }
+
+        println(
+            "ui-diag[$label] urlBars=${urlBarNodes.size} gecko=${geckoNodes.size} " +
+                "foregroundGecko=${foregroundNodes.size} toolbars=${toolbarNodes.size} " +
+                "tabsAdd=${tabsAddNodes.size} urlBarTexts=${urlBarTexts.joinToString(",")}"
+        )
+
+        // 各 UrlBar 周辺のセマンティクスもダンプして、どのスクリーン由来かを見える化する。
+        if (urlBarNodes.isEmpty()) {
+            val rootDump = runCatching {
+                composeRule.onRoot().printToString(maxDepth = 4)
+            }.getOrElse { "root dump failed: ${it.message}" }
+            println("ui-diag[$label] root(maxDepth=4)=\n$rootDump")
+        }
+    }
+
+    private fun <T> androidx.compose.ui.semantics.SemanticsConfiguration.getOrNull(
+        key: androidx.compose.ui.semantics.SemanticsPropertyKey<T>,
+    ): T? = if (contains(key)) get(key) else null
 
     private fun tapLinkOnGeckoContainer() {
         // バックスタックに複数の Browser エントリが残っていると GeckoContainer は複数ノードに
