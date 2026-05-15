@@ -33,5 +33,6 @@ data class ExtensionsScreenUiState(
         val version: String,
         val hasSettingsPage: Boolean,
         val isEnabled: Boolean,
+        val isBuiltIn: Boolean,
     )
 }

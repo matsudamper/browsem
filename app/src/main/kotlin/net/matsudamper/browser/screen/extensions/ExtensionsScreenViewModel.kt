@@ -120,6 +120,7 @@ internal class ExtensionsScreenViewModel(
                                         version = ext.metaData.version,
                                         hasSettingsPage = ext.metaData.optionsPageUrl?.isNotBlank() == true,
                                         isEnabled = ext.metaData.enabled,
+                                        isBuiltIn = ext.isBuiltIn,
                                     )
                                 },
                             )

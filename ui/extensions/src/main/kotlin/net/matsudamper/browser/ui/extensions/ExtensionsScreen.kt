@@ -29,6 +29,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
@@ -156,6 +157,7 @@ private fun ExtensionsScreenLoadedPreview() {
                             version = "1.57.2",
                             hasSettingsPage = true,
                             isEnabled = true,
+                            isBuiltIn = false,
                         ),
                         ExtensionsScreenUiState.ExtensionUiState(
                             id = "some-disabled-extension@example.com",
@@ -163,6 +165,15 @@ private fun ExtensionsScreenLoadedPreview() {
                             version = "0.9.0",
                             hasSettingsPage = false,
                             isEnabled = false,
+                            isBuiltIn = false,
+                        ),
+                        ExtensionsScreenUiState.ExtensionUiState(
+                            id = "readability@built-in",
+                            displayName = "Readability (ビルトイン)",
+                            version = "1.0.0",
+                            hasSettingsPage = false,
+                            isEnabled = true,
+                            isBuiltIn = true,
                         ),
                     ),
                 ),
@@ -190,6 +201,7 @@ private fun ExtensionsScreenTogglingPreview() {
                             version = "1.57.2",
                             hasSettingsPage = true,
                             isEnabled = true,
+                            isBuiltIn = false,
                         ),
                     ),
                 ),
@@ -260,7 +272,8 @@ private fun ExtensionRow(
         Spacer(modifier = Modifier.width(8.dp))
         TextButton(
             onClick = onUninstall,
-            enabled = uninstallEnabled,
+            enabled = uninstallEnabled && !extension.isBuiltIn,
+            modifier = Modifier.alpha(if (extension.isBuiltIn) 0f else 1f),
         ) {
             Text(if (isUninstalling) "削除中..." else "アンインストール")
         }
