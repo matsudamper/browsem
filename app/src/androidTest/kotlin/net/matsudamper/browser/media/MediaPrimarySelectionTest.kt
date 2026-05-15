@@ -154,11 +154,13 @@ class MediaPrimarySelectionTest {
         }
     }
 
+    /**
+     * playlist.html は loadedmetadata 内で currentTime=30 / updateMetadata('Track 1') を
+     * play() より前に実行する。そのため title・positionMs・isActive は autoplay が
+     * ブロックされて paused のままでも true になり、tap によるユーザージェスチャ補填を
+     * スキップしてしまう。実際に再生されている isPlaying のみを信頼する。
+     */
     private fun hasPlaybackStarted(state: MediaPlaybackState): Boolean {
-        // playlist.html は loadedmetadata 内で currentTime=30 / updateMetadata('Track 1') を
-        // play() より前に実行する。そのため title・positionMs・isActive は autoplay が
-        // ブロックされて paused のままでも true になり、tap によるユーザージェスチャ補填を
-        // スキップしてしまう。実際に再生されている isPlaying のみを信頼する。
         return state.isPlaying
     }
 
