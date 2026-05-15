@@ -641,9 +641,11 @@ internal fun GeckoBrowserTab(
                 .weight(1f)
                 .testTag(GeckoBrowserTabTestTags.GeckoContainer.testTag),
         ) {
-            // testTag は Modifier 上では単一の値しか保持できない。フォアグラウンド限定の
-            // セマンティクスを別ノードに分離するため、isForeground のときだけ
-            // matchParentSize の内側 Box にもう一つの testTag を付与する。
+            /**
+             * testTag は Modifier 上では単一の値しか保持できない。フォアグラウンド限定の
+             * セマンティクスを別ノードに分離するため、isForeground のときだけ
+             * matchParentSize の内側 Box にもう一つの testTag を付与する。
+             */
             val foregroundOverlayModifier = if (isForeground) {
                 Modifier
                     .matchParentSize()
@@ -792,9 +794,11 @@ sealed interface GeckoBrowserTabTestTags {
 
     object GeckoContainer : GeckoBrowserTabTestTags { override val id = "gecko_container" }
 
-    // Navigation 3 のバックスタックに複数の Browser エントリが残ると GeckoContainer は
-    // 複数ノードとして見える。フォアグラウンド（現在表示中）のタブだけが持つ専用タグを用意し、
-    // テストはこちらをタップ対象として一意に特定する。
+    /**
+     * Navigation 3 のバックスタックに複数の Browser エントリが残ると GeckoContainer は
+     * 複数ノードとして見える。フォアグラウンド（現在表示中）のタブだけが持つ専用タグを用意し、
+     * テストはこちらをタップ対象として一意に特定する。
+     */
     object ForegroundGeckoContainer : GeckoBrowserTabTestTags { override val id = "foreground_gecko_container" }
 }
 

@@ -299,9 +299,11 @@ class AboutBlankNewTabLocationTest {
         key: androidx.compose.ui.semantics.SemanticsPropertyKey<T>,
     ): T? = if (contains(key)) get(key) else null
 
+    /**
+     * バックスタックに複数の Browser エントリが残っていると GeckoContainer は複数ノードに
+     * なり onNodeWithTag が "Expected exactly 1" で失敗する。フォアグラウンド限定タグで一意化する。
+     */
     private fun tapLinkOnGeckoContainer() {
-        // バックスタックに複数の Browser エントリが残っていると GeckoContainer は複数ノードに
-        // なり onNodeWithTag が "Expected exactly 1" で失敗する。フォアグラウンド限定タグで一意化する。
         val node = composeRule.onNodeWithTag(GeckoBrowserTabTestTags.ForegroundGeckoContainer.testTag)
         node.performTouchInput {
             click()
