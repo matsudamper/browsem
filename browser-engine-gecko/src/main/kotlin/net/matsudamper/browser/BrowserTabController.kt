@@ -405,9 +405,20 @@ class BrowserTabController(
     }
 
     private fun disposeTab(tab: BrowserTab, reason: String) {
-        tab.disposeSessionDelegates(CancellationException(reason))
-        if (tab.session.isOpen) {
-            tab.session.close()
+        if (tab.session.isOpen && tab.currentUrl.startsWith("moz-extension://")) {
+            // 拡張機能のオプションページを閉じる際は、about:blank へのナビゲーション完了を待ってから
+            // セッションを閉じる。これにより pagehide イベントが発火し、
+            // browser.storage.local の書き込みが完了する機会を確保する。
+            tab.disposeSessionDelegates(CancellationException(reason))
+            tab.scheduleCloseOnBlankNavigation {
+                tab.session.close()
+            }
+            tab.session.loadUri("about:blank")
+        } else {
+            tab.disposeSessionDelegates(CancellationException(reason))
+            if (tab.session.isOpen) {
+                tab.session.close()
+            }
         }
     }
 

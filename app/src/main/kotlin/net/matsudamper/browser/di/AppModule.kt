@@ -39,6 +39,10 @@ val appModule = module {
             androidContext(),
             GeckoRuntimeSettings.Builder()
                 .forceUserScalableEnabled(true)
+                // ユーザーインストール拡張機能のバックグラウンドスクリプトを専用プロセスで実行し、
+                // webRequest.onBeforeRequest 等によるリクエストのブロッキングを有効にする。
+                // この設定がないと AdGuard などのコンテンツブロッカーが機能しない。
+                .extensionsProcessEnabled(true)
                 .build()
         )
     }
