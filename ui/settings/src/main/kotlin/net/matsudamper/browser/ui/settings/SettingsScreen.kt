@@ -89,7 +89,10 @@ fun SettingsScreen(
                             "アプリを終了します。再度起動してください。",
                     )
                 } else {
-                    Text("設定とタブを復元しました。反映するためにアプリを終了します。再度起動してください。")
+                    Text(
+                        "設定・タブ・GeckoView プロファイル (Cookie・ログイン・履歴等) を復元しました。" +
+                            "反映するためにアプリを終了します。再度起動してください。",
+                    )
                 }
             },
             confirmButton = {
@@ -410,8 +413,9 @@ fun SettingsScreen(
             SettingSection(title = "バックアップと復元") {
                 Column {
                     Text(
-                        text = "設定・タブ・タブグループを zip ファイルにエクスポート/インポートします。" +
-                            "履歴・ダウンロード記録・Cookie・ログイン情報は対象外です。",
+                        text = "設定・タブ・タブグループ・Cookie・ログイン情報・履歴 (Gecko 側)・" +
+                            "サイト権限・サイト別設定を zip ファイルにエクスポート/インポートします。" +
+                            "キャッシュ・ダウンロード記録・閲覧履歴 (アプリ側 DB) は対象外です。",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
