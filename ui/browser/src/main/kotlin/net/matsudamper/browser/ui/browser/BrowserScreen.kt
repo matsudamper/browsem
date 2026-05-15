@@ -1,6 +1,7 @@
 package net.matsudamper.browser.ui.browser
 
 import android.graphics.BitmapFactory
+import android.util.Log
 import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
@@ -70,6 +71,16 @@ fun BrowserScreen(
         }
     }
     if (selectedTab == null) {
+        /**
+         * フォアグラウンド遷移直後に findTab が空を返すケースのフレーキー解析用ログ。
+         * 該当時間帯に UrlBar が semantics tree から消えるテスト失敗との突き合わせに使う。
+         */
+        LaunchedEffect(tabId) {
+            Log.d(
+                "BrowserScreen",
+                "selectedTab=null tabId=$tabId wasClosed=${browserTabController.wasTabClosed(tabId)}",
+            )
+        }
         Box(
             modifier = modifier.fillMaxSize(),
             contentAlignment = Alignment.Center,
