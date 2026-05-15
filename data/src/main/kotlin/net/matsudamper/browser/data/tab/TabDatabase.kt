@@ -7,12 +7,19 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
-@Database(entities = [TabStateEntity::class, TabGroupEntity::class], version = 3, exportSchema = false)
+@Database(
+    entities = [TabStateEntity::class, TabGroupEntity::class],
+    version = TabDatabase.SCHEMA_VERSION,
+    exportSchema = false,
+)
 abstract class TabDatabase : RoomDatabase() {
     abstract fun tabDao(): TabDao
     abstract fun tabGroupDao(): TabGroupDao
 
     companion object {
+        /** Room の @Database version と連動。バックアップ互換性チェックでも参照する */
+        const val SCHEMA_VERSION: Int = 3
+
         @Volatile
         private var instance: TabDatabase? = null
 
@@ -34,8 +41,10 @@ abstract class TabDatabase : RoomDatabase() {
         }
 
         fun getInstance(context: Context): TabDatabase {
-            return instance ?: synchronized(this) {
-                instance ?: Room.databaseBuilder(
+            // closeInstance() 後の fast-path で閉じた DB を返さないよう isOpen を確認する
+            instance?.takeIf { it.isOpen }?.let { return it }
+            return synchronized(this) {
+                instance?.takeIf { it.isOpen } ?: Room.databaseBuilder(
                     context.applicationContext,
                     TabDatabase::class.java,
                     "tab.db",
@@ -43,6 +52,24 @@ abstract class TabDatabase : RoomDatabase() {
                     .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                     .build().also { instance = it }
             }
+        }
+
+        /**
+         * シングルトンを閉じてキャッシュを破棄する。バックアップから tab.db を
+         * 上書き復元する直前など、Room の接続を解放したい場面で使う。
+         * 呼び出し後すぐに次の Room アクセスがあると新しいインスタンスが
+         * 復元後のファイルを開くので、復元完了→プロセス終了の流れで使うこと。
+         */
+        fun closeInstance() {
+            // 参照を先に切ってから close する。ロック内で close まで行うと
+            // close 完了前に getInstance() を素通りした呼び出しが
+            // すでに閉じたインスタンスを掴む可能性があるため。
+            val toClose = synchronized(this) {
+                val current = instance
+                instance = null
+                current
+            }
+            toClose?.close()
         }
     }
 }

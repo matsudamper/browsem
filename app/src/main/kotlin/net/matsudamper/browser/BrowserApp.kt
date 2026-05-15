@@ -1,9 +1,15 @@
 package net.matsudamper.browser
 
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
 import android.util.Log
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.ContentTransform
 import androidx.compose.animation.EnterTransition
@@ -52,6 +58,7 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import net.matsudamper.browser.data.BackupRepository
 import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.TabGroupId
 import net.matsudamper.browser.data.TabGroupRepository
@@ -394,10 +401,28 @@ private fun BrowserAppContent(
 
                     AppDestination.Settings -> navEntry(key) {
                         val mockLocationWebExtension: MockLocationWebExtension = koinInject()
-                        val settingsViewModel = remember(settingsRepository, mockLocationWebExtension) {
-                            SettingsScreenViewModel(settingsRepository, mockLocationWebExtension)
-                        }
+                        val backupRepository: BackupRepository = koinInject()
+                        // navigation3 の ViewModelStore に乗せて onCleared() を確実に
+                        // 呼ばせる。復元中に画面を離れた場合、ViewModel 側の onCleared で
+                        // pendingRestart を見て安全弁の再起動を発火するため必須。
+                        val settingsViewModel = composeViewModel(initializer = {
+                            SettingsScreenViewModel(
+                                settingsRepository,
+                                mockLocationWebExtension,
+                                backupRepository,
+                            )
+                        })
                         val settingsUiState by settingsViewModel.uiState.collectAsState()
+                        val exportLauncher = rememberLauncherForActivityResult(
+                            ActivityResultContracts.CreateDocument(BackupRepository.MIME_TYPE),
+                        ) { uri ->
+                            if (uri != null) settingsViewModel.exportToZip(uri)
+                        }
+                        val importLauncher = rememberLauncherForActivityResult(
+                            ActivityResultContracts.OpenDocument(),
+                        ) { uri ->
+                            if (uri != null) settingsViewModel.importFromZip(uri)
+                        }
                         LaunchedEffect(settingsViewModel) {
                             settingsViewModel.eventHandler.receiveAsFlow().collect { handler ->
                                 handler(object : SettingsScreenViewModel.Event {
@@ -413,9 +438,28 @@ private fun BrowserAppContent(
                                         )
                                         try {
                                             context.startActivity(intent)
-                                        } catch (_: android.content.ActivityNotFoundException) {
+                                        } catch (_: ActivityNotFoundException) {
                                             // 地図アプリがインストールされていない端末では何もしない
                                         }
+                                    }
+
+                                    override fun onRequestBackupExport() {
+                                        // 日時付きの初期ファイル名で SAF の作成ピッカーを開く
+                                        val suggestedName = buildBackupFileName()
+                                        exportLauncher.launch(suggestedName)
+                                    }
+
+                                    override fun onRequestBackupImport() {
+                                        // zip 以外の MIME を選んだ端末でも開けるよう、フォールバックを並べる
+                                        importLauncher.launch(
+                                            arrayOf(BackupRepository.MIME_TYPE, "application/octet-stream", "*/*"),
+                                        )
+                                    }
+
+                                    override fun onRestartApp() {
+                                        // DataStore と Room のキャッシュを完全に捨てて新しいファイルを読み込ませるため、
+                                        // プロセスごと終了する。次回起動時に置き換え後のファイルが読み込まれる。
+                                        android.os.Process.killProcess(android.os.Process.myPid())
                                     }
                                 })
                             }
@@ -559,6 +603,11 @@ private fun BrowserAppContent(
             },
         )
     }
+}
+
+private fun buildBackupFileName(): String {
+    val formatter = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US)
+    return "browsem-backup-${formatter.format(Date())}.${BackupRepository.FILE_EXTENSION}"
 }
 
 private fun navEntry(
