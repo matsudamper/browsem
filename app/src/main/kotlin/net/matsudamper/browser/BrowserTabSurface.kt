@@ -45,7 +45,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import net.matsudamper.browser.ui.browser.UrlBarSuggestionsUiState
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
@@ -68,7 +67,7 @@ internal fun BrowserContentHost(
                 .fillMaxSize()
                 .clipToBounds(),
             factory = { context ->
-                SwipeRefreshLayout(context).also { swipeRefreshLayout ->
+                GeckoSwipeRefreshLayout(context).also { swipeRefreshLayout ->
                     var swipeRefreshScrollEnabled = false
                     val gecko = GeckoView(context).also { geckoView ->
                         geckoView.id = id
