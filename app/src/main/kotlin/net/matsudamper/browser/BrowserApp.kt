@@ -2,6 +2,7 @@ package net.matsudamper.browser
 
 import android.content.Intent
 import android.net.Uri
+import android.util.Log
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.ContentTransform
@@ -127,8 +128,10 @@ private fun BrowserAppContent(
     // タブ復元完了シグナルは ViewModel で保持（構成変更後も有効）
     val setupComplete = viewModel.setupComplete
 
-    // AboutBlankNewTabLocationTest 等のフレーキー解析用に backStack 変化を logcat に流す。
-    // NavDisplay に新旧 Browser エントリが残るかどうかを後追いで確認できる。
+    /**
+     * AboutBlankNewTabLocationTest 等のフレーキー解析用に backStack 変化を logcat に流す。
+     * NavDisplay に新旧 Browser エントリが残るかどうかを後追いで確認できる。
+     */
     LaunchedEffect(backStack) {
         snapshotFlow { backStack.toList() }
             .collect { snapshot ->
@@ -138,7 +141,7 @@ private fun BrowserAppContent(
                         else -> key::class.simpleName ?: key.toString()
                     }
                 }
-                android.util.Log.d("BackStackDiag", "size=${snapshot.size} entries=[$descriptions]")
+                Log.d("BackStackDiag", "size=${snapshot.size} entries=[$descriptions]")
             }
     }
 
@@ -271,15 +274,17 @@ private fun BrowserAppContent(
                     }
 
                     is AppDestination.Browser -> navEntry(key) {
-                        // フレーキー解析用に Browser navEntry の生存期間を logcat に出力する。
-                        // 同じ瞬間に複数 navEntry がアクティブだと twin Browser entries が確認できる。
+                        /**
+                         * フレーキー解析用に Browser navEntry の生存期間を logcat に出力する。
+                         * 同じ瞬間に複数 navEntry がアクティブだと twin Browser entries が確認できる。
+                         */
                         DisposableEffect(key) {
-                            android.util.Log.d(
+                            Log.d(
                                 "BackStackDiag",
                                 "navEntry enter Browser tabId=${key.tabId.takeLast(6)} isTop=${backStack.lastOrNull() == key}",
                             )
                             onDispose {
-                                android.util.Log.d(
+                                Log.d(
                                     "BackStackDiag",
                                     "navEntry exit Browser tabId=${key.tabId.takeLast(6)}",
                                 )
