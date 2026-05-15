@@ -210,6 +210,16 @@ internal class BrowserTabSessionDelegateHost(
     private var onCloseRequest: (() -> Unit)? = null
     private val pendingNewSessionRequests = ArrayDeque<PendingNewSessionRequest>()
 
+    // about:blank ナビゲーション完了時に実行するクローズ処理
+    // disposeSessionDelegates 後に session.close() を遅延させるために使用
+    private var pendingCloseAction: (() -> Unit)? = null
+
+    fun scheduleCloseOnBlankNavigation(action: () -> Unit) {
+        synchronized(lock) {
+            pendingCloseAction = action
+        }
+    }
+
     // タブ切り替え時にUI側コールバックが再生成されるため、最新のナビゲーション状態をキャッシュして
     // attachUi 時にリプレイする
     private var cachedCanGoBack: Boolean = false
@@ -243,6 +253,14 @@ internal class BrowserTabSessionDelegateHost(
                 }
                 if (url.isNotBlank() && url != "about:blank") {
                     browserTab.pendingInitialUrl = null
+                }
+                // about:blank へのナビゲーション完了時にクローズ処理を実行する
+                // (拡張機能の設定ページを閉じる際に browser.storage.local 書き込みを待つため)
+                if (url == "about:blank") {
+                    val action = synchronized(lock) {
+                        pendingCloseAction.also { pendingCloseAction = null }
+                    }
+                    action?.invoke()
                 }
                 currentCallbacks()?.onLocationChange(url)
             }
