@@ -98,6 +98,14 @@ class BrowserTab(
         sessionDelegateHost.detachUi()
     }
 
+    /**
+     * session.close() を about:blank へのナビゲーション完了後に遅延実行するよう登録する。
+     * moz-extension:// ページを閉じる際に browser.storage.local の書き込みが完了するまで待つために使用する。
+     */
+    internal fun scheduleCloseOnBlankNavigation(action: () -> Unit) {
+        sessionDelegateHost.scheduleCloseOnBlankNavigation(action)
+    }
+
     fun attachSessionCallbacks(
         callbacks: BrowserSessionStateCallbacks,
         onOpenNewSessionRequest: (String) -> GeckoResult<GeckoSession>,

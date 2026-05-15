@@ -522,10 +522,18 @@ class GmdSmokeTest {
 
     /**
      * 現在の URL バー文字列が期待値になるまで待機する。
+     * timeout 時には実際の URL バー値を例外メッセージに含める。
      */
     private fun waitForUrlBarText(expected: String) {
-        composeRule.waitUntil(timeoutMillis = 20_000) {
-            getUrlBarText() == expected
+        try {
+            composeRule.waitUntil(timeoutMillis = 20_000) {
+                getUrlBarText() == expected
+            }
+        } catch (e: androidx.compose.ui.test.ComposeTimeoutException) {
+            throw AssertionError(
+                "URL バー復元待機がタイムアウト: expected=\"$expected\" actual=\"${getUrlBarText()}\"",
+                e,
+            )
         }
     }
 
