@@ -333,11 +333,6 @@ private fun BrowserAppContent(
                             },
                             browserTabContent = { modifier, selectedTab, tabCount, onToolbarHorizontalDrag, onToolbarDragEnd ->
                                 GeckoBrowserTab(
-                                    /**
-                                     * Navigation 3 のバックスタックには複数の Browser エントリが残り得るため、
-                                     * 前面表示中のタブだけが持つ派生 testTag を外側 Modifier に注入し、
-                                     * テストはその testTag をもとに唯一のフォアグラウンド GeckoContainer を特定する。
-                                     */
                                     modifier = modifier.testTag(
                                         GeckoBrowserTabTestTags.GeckoContainer.testTag(
                                             isForeground = backStack.lastOrNull() == key,
