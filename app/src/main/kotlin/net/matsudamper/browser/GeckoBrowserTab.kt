@@ -60,7 +60,9 @@ import androidx.core.view.WindowCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.withContext
 import net.matsudamper.browser.data.TranslationProvider
 import net.matsudamper.browser.media.GeckoMediaSessionDelegate
 import net.matsudamper.browser.media.MediaWebExtension
@@ -206,7 +208,15 @@ internal fun GeckoBrowserTab(
         snapshotFlow { state.captureOnPageLoadRequestCount }
             .collectLatest { count ->
                 if (count == 0) return@collectLatest
-                geckoView?.also { gv -> state.captureTabPreview(gv) }
+                /**
+                 * GeckoView.capturePixels は Main スレッド必須。collectLatest の継続が
+                 * テスト環境（UnconfinedTestDispatcher 等）で arch_disk_io スレッドに
+                 * 流れて IllegalThreadStateException を引き起こすため、Main.immediate に
+                 * 切り替えてから呼び出す。
+                 */
+                withContext(Dispatchers.Main.immediate) {
+                    geckoView?.also { gv -> state.captureTabPreview(gv) }
+                }
             }
     }
 
