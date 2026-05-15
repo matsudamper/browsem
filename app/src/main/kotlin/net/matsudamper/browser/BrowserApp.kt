@@ -3,12 +3,13 @@ package net.matsudamper.browser
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
+import android.util.Log
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.ContentTransform
 import androidx.compose.animation.EnterTransition
@@ -30,9 +31,11 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.IntOffset
 import androidx.lifecycle.viewmodel.compose.viewModel as composeViewModel
 import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
@@ -132,6 +135,23 @@ private fun BrowserAppContent(
     val navController = remember(backStack) { NavController(backStack = backStack) }
     // タブ復元完了シグナルは ViewModel で保持（構成変更後も有効）
     val setupComplete = viewModel.setupComplete
+
+    /**
+     * AboutBlankNewTabLocationTest 等のフレーキー解析用に backStack 変化を logcat に流す。
+     * NavDisplay に新旧 Browser エントリが残るかどうかを後追いで確認できる。
+     */
+    LaunchedEffect(backStack) {
+        snapshotFlow { backStack.toList() }
+            .collect { snapshot ->
+                val descriptions = snapshot.joinToString { key ->
+                    when (key) {
+                        is AppDestination.Browser -> "Browser(${key.tabId.takeLast(6)},before=${key.beforeTab?.tabId?.takeLast(6) ?: "null"})"
+                        else -> key::class.simpleName ?: key.toString()
+                    }
+                }
+                Log.d("BackStackDiag", "size=${snapshot.size} entries=[$descriptions]")
+            }
+    }
 
     // ナビゲーションとViewModelの両方にタブ選択を通知するヘルパー
     val selectTab: (String, AppDestination.Browser?) -> Unit = remember(navController, browserTabController) {
@@ -320,7 +340,11 @@ private fun BrowserAppContent(
                             },
                             browserTabContent = { modifier, selectedTab, tabCount, onToolbarHorizontalDrag, onToolbarDragEnd ->
                                 GeckoBrowserTab(
-                                    modifier = modifier,
+                                    modifier = modifier.testTag(
+                                        GeckoBrowserTabTestTags.GeckoContainer.testTag(
+                                            isForeground = backStack.lastOrNull() == key,
+                                        ),
+                                    ),
                                     browserTab = selectedTab,
                                     homepageUrl = uiState.homepageUrl,
                                     searchTemplate = uiState.searchTemplate,
