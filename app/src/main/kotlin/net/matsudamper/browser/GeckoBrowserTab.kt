@@ -106,7 +106,6 @@ internal fun GeckoBrowserTab(
     onHistoryTitleUpdate: (suspend (id: Long, title: String) -> Unit)? = null,
     urlBarSuggestions: UrlBarSuggestionsUiState = UrlBarSuggestionsUiState(),
     onUrlInputChanged: ((String) -> Unit)? = null,
-    isForeground: Boolean = true,
 ) {
     val context = LocalContext.current
     val findInPageWebExtension: FindInPageWebExtension = koinInject()
@@ -641,19 +640,6 @@ internal fun GeckoBrowserTab(
                 .weight(1f)
                 .testTag(GeckoBrowserTabTestTags.GeckoContainer.testTag),
         ) {
-            /**
-             * testTag は Modifier 上では単一の値しか保持できない。フォアグラウンド限定の
-             * セマンティクスを別ノードに分離するため、isForeground のときだけ
-             * matchParentSize の内側 Box にもう一つの testTag を付与する。
-             */
-            val foregroundOverlayModifier = if (isForeground) {
-                Modifier
-                    .matchParentSize()
-                    .testTag(GeckoBrowserTabTestTags.ForegroundGeckoContainer.testTag)
-            } else {
-                Modifier.matchParentSize()
-            }
-            Box(modifier = foregroundOverlayModifier)
             BrowserContentHost(
                 modifier = Modifier.fillMaxSize(),
                 state = state,
@@ -792,14 +778,17 @@ sealed interface GeckoBrowserTabTestTags {
     val id: String
     val testTag get() = "${GeckoBrowserTabTestTags::class.java.name}#$id"
 
-    object GeckoContainer : GeckoBrowserTabTestTags { override val id = "gecko_container" }
+    object GeckoContainer : GeckoBrowserTabTestTags {
+        override val id = "gecko_container"
 
-    /**
-     * Navigation 3 のバックスタックに複数の Browser エントリが残ると GeckoContainer は
-     * 複数ノードとして見える。フォアグラウンド（現在表示中）のタブだけが持つ専用タグを用意し、
-     * テストはこちらをタップ対象として一意に特定する。
-     */
-    object ForegroundGeckoContainer : GeckoBrowserTabTestTags { override val id = "foreground_gecko_container" }
+        /**
+         * Navigation 3 のバックスタックに複数の Browser エントリが残ると GeckoContainer は
+         * 複数ノードとして見える。前面表示中のタブだけが持つ派生 testTag を返し、
+         * テストはこちらをタップ対象として一意に特定する。
+         */
+        fun testTag(isForeground: Boolean): String =
+            if (isForeground) "$testTag#foreground" else testTag
+    }
 }
 
 private const val URL_BAR_IME_HIDE_GRACE_MS = 700L

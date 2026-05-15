@@ -248,14 +248,14 @@ class AboutBlankNewTabLocationTest {
 
     /**
      * 失敗時の Compose semantics tree を最低限ダンプする診断ヘルパー。
-     * UrlBar / GeckoContainer / ForegroundGeckoContainer の現在の数と、
+     * UrlBar / GeckoContainer / 前面 GeckoContainer の現在の数と、
      * UrlBar の EditableText 値、ツールバーの存在有無、root semantics の概要を出力する。
      * fallback path がさらに失敗したケースで、原因切り分け（多重ノード／ノード不在／別画面表示）に使う。
      */
     private fun dumpUiDiagnostics(label: String) {
         val urlBarTag = UrlTextInputTestTags.UrlBar.testTag
         val geckoTag = GeckoBrowserTabTestTags.GeckoContainer.testTag
-        val foregroundGeckoTag = GeckoBrowserTabTestTags.ForegroundGeckoContainer.testTag
+        val foregroundGeckoTag = GeckoBrowserTabTestTags.GeckoContainer.testTag(isForeground = true)
         val toolbarTag = BrowserToolbarTestTags.Toolbar.testTag
         val tabsAddTag = TabsScreenTestTags.AddTabButton.testTag
 
@@ -301,10 +301,12 @@ class AboutBlankNewTabLocationTest {
 
     /**
      * バックスタックに複数の Browser エントリが残っていると GeckoContainer は複数ノードに
-     * なり onNodeWithTag が "Expected exactly 1" で失敗する。フォアグラウンド限定タグで一意化する。
+     * なり onNodeWithTag が "Expected exactly 1" で失敗する。フォアグラウンド限定 testTag で一意化する。
      */
     private fun tapLinkOnGeckoContainer() {
-        val node = composeRule.onNodeWithTag(GeckoBrowserTabTestTags.ForegroundGeckoContainer.testTag)
+        val node = composeRule.onNodeWithTag(
+            GeckoBrowserTabTestTags.GeckoContainer.testTag(isForeground = true),
+        )
         node.performTouchInput {
             click()
         }

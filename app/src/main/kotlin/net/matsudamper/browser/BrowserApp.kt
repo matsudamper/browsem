@@ -29,6 +29,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.IntOffset
 import androidx.lifecycle.viewmodel.compose.viewModel as composeViewModel
 import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
@@ -348,14 +349,17 @@ private fun BrowserAppContent(
                             },
                             browserTabContent = { modifier, selectedTab, tabCount, onToolbarHorizontalDrag, onToolbarDragEnd ->
                                 GeckoBrowserTab(
-                                    modifier = modifier,
-                                    browserTab = selectedTab,
                                     /**
-                                     * Navigation 3 のバックスタックには複数の Browser エントリが残り得る。
-                                     * 現在 top のエントリだけがフォアグラウンドであり、テストはこのフラグを根拠に
-                                     * 唯一のフォアグラウンド GeckoContainer をタップ対象として一意に特定する。
+                                     * Navigation 3 のバックスタックには複数の Browser エントリが残り得るため、
+                                     * 前面表示中のタブだけが持つ派生 testTag を外側 Modifier に注入し、
+                                     * テストはその testTag をもとに唯一のフォアグラウンド GeckoContainer を特定する。
                                      */
-                                    isForeground = backStack.lastOrNull() == key,
+                                    modifier = modifier.testTag(
+                                        GeckoBrowserTabTestTags.GeckoContainer.testTag(
+                                            isForeground = backStack.lastOrNull() == key,
+                                        ),
+                                    ),
+                                    browserTab = selectedTab,
                                     homepageUrl = uiState.homepageUrl,
                                     searchTemplate = uiState.searchTemplate,
                                     translationProvider = uiState.translationProvider,
