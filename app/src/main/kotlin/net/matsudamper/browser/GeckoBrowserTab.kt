@@ -209,10 +209,7 @@ internal fun GeckoBrowserTab(
             .collectLatest { count ->
                 if (count == 0) return@collectLatest
                 /**
-                 * GeckoView.capturePixels は Main スレッド必須。collectLatest の継続が
-                 * テスト環境（UnconfinedTestDispatcher 等）で arch_disk_io スレッドに
-                 * 流れて IllegalThreadStateException を引き起こすため、Main.immediate に
-                 * 切り替えてから呼び出す。
+                 * GeckoView.capturePixels は Main スレッド必須。
                  */
                 withContext(Dispatchers.Main.immediate) {
                     geckoView?.also { gv -> state.captureTabPreview(gv) }
