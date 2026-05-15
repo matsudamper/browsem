@@ -24,6 +24,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -125,6 +126,21 @@ private fun BrowserAppContent(
     val navController = remember(backStack) { NavController(backStack = backStack) }
     // タブ復元完了シグナルは ViewModel で保持（構成変更後も有効）
     val setupComplete = viewModel.setupComplete
+
+    // AboutBlankNewTabLocationTest 等のフレーキー解析用に backStack 変化を logcat に流す。
+    // NavDisplay に新旧 Browser エントリが残るかどうかを後追いで確認できる。
+    LaunchedEffect(backStack) {
+        snapshotFlow { backStack.toList() }
+            .collect { snapshot ->
+                val descriptions = snapshot.joinToString { key ->
+                    when (key) {
+                        is AppDestination.Browser -> "Browser(${key.tabId.takeLast(6)},before=${key.beforeTab?.tabId?.takeLast(6) ?: "null"})"
+                        else -> key::class.simpleName ?: key.toString()
+                    }
+                }
+                android.util.Log.d("BackStackDiag", "size=${snapshot.size} entries=[$descriptions]")
+            }
+    }
 
     // ナビゲーションとViewModelの両方にタブ選択を通知するヘルパー
     val selectTab: (String, AppDestination.Browser?) -> Unit = remember(navController, browserTabController) {
@@ -255,6 +271,20 @@ private fun BrowserAppContent(
                     }
 
                     is AppDestination.Browser -> navEntry(key) {
+                        // フレーキー解析用に Browser navEntry の生存期間を logcat に出力する。
+                        // 同じ瞬間に複数 navEntry がアクティブだと twin Browser entries が確認できる。
+                        DisposableEffect(key) {
+                            android.util.Log.d(
+                                "BackStackDiag",
+                                "navEntry enter Browser tabId=${key.tabId.takeLast(6)} isTop=${backStack.lastOrNull() == key}",
+                            )
+                            onDispose {
+                                android.util.Log.d(
+                                    "BackStackDiag",
+                                    "navEntry exit Browser tabId=${key.tabId.takeLast(6)}",
+                                )
+                            }
+                        }
                         val browserTabsFlow = remember(browserTabController) {
                             browserTabController.tabStoreState
                                 .map { browserTabController.tabs.toList() }
