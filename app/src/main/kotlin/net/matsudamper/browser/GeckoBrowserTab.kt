@@ -791,11 +791,6 @@ sealed interface GeckoBrowserTabTestTags {
     object GeckoContainer : GeckoBrowserTabTestTags {
         override val id = "gecko_container"
 
-        /**
-         * Navigation 3 のバックスタックに複数の Browser エントリが残ると GeckoContainer は
-         * 複数ノードとして見える。前面表示中のタブだけが持つ派生 testTag を返し、
-         * テストはこちらをタップ対象として一意に特定する。
-         */
         fun testTag(isForeground: Boolean): String =
             if (isForeground) "$testTag#foreground" else testTag
     }
