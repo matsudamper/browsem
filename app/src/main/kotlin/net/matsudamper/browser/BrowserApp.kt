@@ -275,22 +275,6 @@ private fun BrowserAppContent(
                     }
 
                     is AppDestination.Browser -> navEntry(key) {
-                        /**
-                         * フレーキー解析用に Browser navEntry の生存期間を logcat に出力する。
-                         * 同じ瞬間に複数 navEntry がアクティブだと twin Browser entries が確認できる。
-                         */
-                        DisposableEffect(key) {
-                            Log.d(
-                                "BackStackDiag",
-                                "navEntry enter Browser tabId=${key.tabId.takeLast(6)} isTop=${backStack.lastOrNull() == key}",
-                            )
-                            onDispose {
-                                Log.d(
-                                    "BackStackDiag",
-                                    "navEntry exit Browser tabId=${key.tabId.takeLast(6)}",
-                                )
-                            }
-                        }
                         val browserTabsFlow = remember(browserTabController) {
                             browserTabController.tabStoreState
                                 .map { browserTabController.tabs.toList() }
