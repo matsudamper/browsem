@@ -72,10 +72,13 @@ fun BrowserScreen(
     if (selectedTab == null) {
         // フォアグラウンド遷移直後に findTab が空を返すケースのフレーキー解析用ログ。
         // 該当時間帯に UrlBar が semantics tree から消えるテスト失敗との突き合わせに使う。
-        android.util.Log.d(
-            "BrowserScreen",
-            "selectedTab=null tabId=$tabId wasClosed=${browserTabController.wasTabClosed(tabId)}",
-        )
+        // 毎フレーム発火を避けるため tabId 単位の LaunchedEffect で 1 回だけ出力する。
+        LaunchedEffect(tabId) {
+            android.util.Log.d(
+                "BrowserScreen",
+                "selectedTab=null tabId=$tabId wasClosed=${browserTabController.wasTabClosed(tabId)}",
+            )
+        }
         Box(
             modifier = modifier.fillMaxSize(),
             contentAlignment = Alignment.Center,
