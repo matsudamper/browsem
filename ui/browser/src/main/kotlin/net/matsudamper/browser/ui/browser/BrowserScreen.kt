@@ -74,7 +74,6 @@ fun BrowserScreen(
         /**
          * フォアグラウンド遷移直後に findTab が空を返すケースのフレーキー解析用ログ。
          * 該当時間帯に UrlBar が semantics tree から消えるテスト失敗との突き合わせに使う。
-         * 毎フレーム発火を避けるため tabId 単位の LaunchedEffect で 1 回だけ出力する。
          */
         LaunchedEffect(tabId) {
             Log.d(
