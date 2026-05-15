@@ -107,12 +107,14 @@ class BackupRepository(private val context: Context) {
 
             // 新しいアプリ版で作成したバックアップを古いアプリ版で復元すると Room が起動不能に
             // なるため、close 前に staging の tab.db を読み取って互換性を確認する。
+            // user_version=0 (未初期化や外部由来) や対応マイグレーションがないバージョンも、
+            // 復元後の起動で Room が「missing migration」で落ちるため弾く。
             val backupSchemaVersion = readSchemaVersion(tabDbStaging)
-            if (backupSchemaVersion > TabDatabase.SCHEMA_VERSION) {
+            if (backupSchemaVersion !in 1..TabDatabase.SCHEMA_VERSION) {
                 error(
-                    "バックアップは新しいアプリ版で作成されています " +
-                        "(スキーマ $backupSchemaVersion > 現バージョン ${TabDatabase.SCHEMA_VERSION})。" +
-                        "アプリを更新してから復元してください",
+                    "バックアップの tab.db スキーマバージョン ($backupSchemaVersion) はサポート範囲外です " +
+                        "(対応範囲: 1〜${TabDatabase.SCHEMA_VERSION})。" +
+                        "破損したバックアップか、新しいアプリ版で作成された可能性があります",
                 )
             }
 
