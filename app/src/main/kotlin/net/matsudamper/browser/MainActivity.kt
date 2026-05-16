@@ -118,6 +118,11 @@ class MainActivity : ComponentActivity() {
         runtime.settings.setExtensionsWebAPIEnabled(true)
         runtime.webExtensionController.setPromptDelegate(extensionInstaller.promptDelegate)
         runtime.webExtensionController.setAddonManagerDelegate(extensionInstaller.addonManagerDelegate)
+        // 拡張プロセスのクラッシュ閾値超過時に spawning を再有効化するための delegate。
+        // これがないと一度プロセスがダウンすると webRequest 系 API が永続的に死んだままになる。
+        runtime.webExtensionController.setExtensionProcessDelegate(
+            extensionInstaller.extensionProcessDelegate,
+        )
         warmUpWebExtensionController()
 
         // ACTION_OPEN_DOWNLOADS は savedInstanceState の有無にかかわらず処理する。
@@ -161,6 +166,12 @@ class MainActivity : ComponentActivity() {
                 InstallPromptDialog(
                     prompt = prompt,
                     resolveInstallPrompt = extensionInstaller::resolveInstallPrompt,
+                )
+            }
+            extensionInstaller.permissionPromptState?.let { prompt ->
+                PermissionPromptDialog(
+                    prompt = prompt,
+                    resolvePermissionPrompt = extensionInstaller::resolvePermissionPrompt,
                 )
             }
             extensionInstaller.installFailureMessage?.let { message ->
@@ -258,6 +269,7 @@ class MainActivity : ComponentActivity() {
             runtime.webExtensionController.setPromptDelegate(null)
         }
         runtime.webExtensionController.setAddonManagerDelegate(null)
+        runtime.webExtensionController.setExtensionProcessDelegate(null)
         super.onDestroy()
     }
 
@@ -388,6 +400,28 @@ private fun InstallPromptDialog(
         dismissButton = {
             TextButton(onClick = { resolveInstallPrompt(false) }) {
                 Text("Cancel")
+            }
+        }
+    )
+}
+
+@Composable
+private fun PermissionPromptDialog(
+    prompt: PermissionPromptState,
+    resolvePermissionPrompt: (allow: Boolean) -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = { resolvePermissionPrompt(false) },
+        title = { Text(prompt.title) },
+        text = { Text(prompt.message) },
+        confirmButton = {
+            TextButton(onClick = { resolvePermissionPrompt(true) }) {
+                Text("Allow")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = { resolvePermissionPrompt(false) }) {
+                Text("Deny")
             }
         }
     )
