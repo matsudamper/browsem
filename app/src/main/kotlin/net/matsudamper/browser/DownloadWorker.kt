@@ -371,7 +371,6 @@ internal class DownloadWorker(
             .setContentTitle(title)
             .setContentText(sizeText)
             .setProgress(100, progress, indeterminate)
-            .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setContentIntent(pendingIntent)
             .build()
