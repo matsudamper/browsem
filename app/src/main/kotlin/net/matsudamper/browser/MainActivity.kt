@@ -123,6 +123,12 @@ class MainActivity : ComponentActivity() {
         runtime.webExtensionController.setExtensionProcessDelegate(
             extensionInstaller.extensionProcessDelegate,
         )
+        Log.i(
+            AD_GUARD_DIAG_TAG,
+            "MainActivity.onCreate runtimeSettings " +
+                "extensionsWebAPIEnabled=${runtime.settings.extensionsWebAPIEnabled} " +
+                "extensionsProcessEnabled=${runtime.settings.extensionsProcessEnabled}",
+        )
         warmUpWebExtensionController()
 
         // ACTION_OPEN_DOWNLOADS は savedInstanceState の有無にかかわらず処理する。
@@ -282,13 +288,38 @@ class MainActivity : ComponentActivity() {
         }
         webExtensionWarmUpInProgress = true
         runtime.webExtensionController.list().accept(
-            {
+            { extensions ->
                 webExtensionWarmUpInProgress = false
                 webExtensionWarmUpCompleted = true
+                Log.i(
+                    AD_GUARD_DIAG_TAG,
+                    "warmup list completed count=${extensions?.size ?: 0}",
+                )
+                extensions?.forEach { ext ->
+                    val md = ext.metaData
+                    Log.i(
+                        AD_GUARD_DIAG_TAG,
+                        "warmup list entry id=${ext.id} name=${md.name} version=${md.version} " +
+                            "enabled=${md.enabled} isBuiltIn=${ext.isBuiltIn} " +
+                            "signedState=${md.signedState} blocklistState=${md.blocklistState} " +
+                            "disabledFlags=${md.disabledFlags} " +
+                            "requiredPermissions=${md.requiredPermissions.toList()} " +
+                            "requiredOrigins=${md.requiredOrigins.toList()} " +
+                            "optionalPermissions=${md.optionalPermissions.toList()} " +
+                            "grantedOptionalPermissions=${md.grantedOptionalPermissions.toList()} " +
+                            "optionalOrigins=${md.optionalOrigins.toList()} " +
+                            "grantedOptionalOrigins=${md.grantedOptionalOrigins.toList()}",
+                    )
+                }
             },
-            {
+            { error ->
                 webExtensionWarmUpInProgress = false
                 webExtensionWarmUpRetryCount++
+                Log.w(
+                    AD_GUARD_DIAG_TAG,
+                    "warmup list error retry=$webExtensionWarmUpRetryCount",
+                    error,
+                )
                 if (!isFinishing && !isDestroyed && webExtensionWarmUpRetryCount < MAX_WARMUP_RETRIES) {
                     window.decorView.postDelayed(
                         { warmUpWebExtensionController() },

@@ -11,6 +11,8 @@ import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.WebExtension
 import org.mozilla.geckoview.WebExtensionController
 
+internal const val AD_GUARD_DIAG_TAG = "AdGuardDiag"
+
 internal class WebExtensionInstaller(
     private val runtime: GeckoRuntime,
 ) {
@@ -27,6 +29,12 @@ internal class WebExtensionInstaller(
             origins: Array<String>,
             dataCollectionPermissions: Array<String>,
         ): GeckoResult<WebExtension.PermissionPromptResponse> {
+            Log.i(
+                AD_GUARD_DIAG_TAG,
+                "onInstallPromptRequest id=${extension.id} name=${extension.metaData.name} " +
+                    "permissions=${permissions.toList()} origins=${origins.toList()} " +
+                    "dataCollection=${dataCollectionPermissions.toList()}",
+            )
             return createInstallPromptResult(
                 extension = extension,
                 permissions = permissions,
@@ -35,15 +43,17 @@ internal class WebExtensionInstaller(
             )
         }
 
-        // 既にインストール済みの拡張がアップデートで新しい権限を要求した際に呼ばれる。
-        // 未実装だとデフォルトの null 戻りがアップデート拒否扱いとなり、AdGuard 等の自動更新が
-        // 永続的にブロックされ、機能停止する原因となるため必ず実装する。
         override fun onUpdatePrompt(
             extension: WebExtension,
             newPermissions: Array<String>,
             newOrigins: Array<String>,
             newDataCollectionPermissions: Array<String>,
         ): GeckoResult<AllowOrDeny> {
+            Log.i(
+                AD_GUARD_DIAG_TAG,
+                "onUpdatePrompt id=${extension.id} newPermissions=${newPermissions.toList()} " +
+                    "newOrigins=${newOrigins.toList()} newDataCollection=${newDataCollectionPermissions.toList()}",
+            )
             return createPermissionPromptResult(
                 title = "Update extension",
                 extension = extension,
@@ -54,16 +64,17 @@ internal class WebExtensionInstaller(
             )
         }
 
-        // 拡張機能が runtime 中に追加の権限/オリジンを要求する (browser.permissions.request 等) 場合
-        // に呼ばれる。MV3 の host_permissions など、ユーザーが個別に許可する必要がある権限はここで
-        // 要求される。未実装だと拒否扱いとなり、AdGuard が <all_urls> 等にアクセス出来なくなる
-        // ケースがあるため必ず実装する。
         override fun onOptionalPrompt(
             extension: WebExtension,
             permissions: Array<String>,
             origins: Array<String>,
             dataCollectionPermissions: Array<String>,
         ): GeckoResult<AllowOrDeny> {
+            Log.i(
+                AD_GUARD_DIAG_TAG,
+                "onOptionalPrompt id=${extension.id} permissions=${permissions.toList()} " +
+                    "origins=${origins.toList()} dataCollection=${dataCollectionPermissions.toList()}",
+            )
             return createPermissionPromptResult(
                 title = "Allow extension permission",
                 extension = extension,
@@ -75,14 +86,11 @@ internal class WebExtensionInstaller(
         }
     }
 
-    // 拡張プロセスがクラッシュ閾値を超えると Gecko 側で spawning が無効化され、
-    // この delegate が呼ばれる。再有効化しないと再起動しても webRequest 等の API が
-    // 動かないままになるため、即時に spawning を有効化する。
     val extensionProcessDelegate = object : WebExtensionController.ExtensionProcessDelegate {
         override fun onDisabledProcessSpawning() {
             Log.w(
-                "WebExtensionInstaller",
-                "拡張プロセスの spawning が無効化されたため再有効化",
+                AD_GUARD_DIAG_TAG,
+                "onDisabledProcessSpawning: 拡張プロセスの spawning が無効化されたため再有効化を呼ぶ",
             )
             runtime.webExtensionController.enableExtensionProcessSpawning()
         }
@@ -90,13 +98,58 @@ internal class WebExtensionInstaller(
 
     val addonManagerDelegate = object : WebExtensionController.AddonManagerDelegate {
         override fun onInstalling(extension: WebExtension) {
+            Log.i(AD_GUARD_DIAG_TAG, "AddonManager.onInstalling id=${extension.id} name=${extension.metaData.name}")
             installFailureMessage = null
+        }
+
+        override fun onInstalled(extension: WebExtension) {
+            logExtensionState("AddonManager.onInstalled", extension)
+        }
+
+        override fun onEnabling(extension: WebExtension) {
+            logExtensionState("AddonManager.onEnabling", extension)
+        }
+
+        override fun onEnabled(extension: WebExtension) {
+            logExtensionState("AddonManager.onEnabled", extension)
+        }
+
+        override fun onDisabling(extension: WebExtension) {
+            logExtensionState("AddonManager.onDisabling", extension)
+        }
+
+        override fun onDisabled(extension: WebExtension) {
+            logExtensionState("AddonManager.onDisabled", extension)
+        }
+
+        override fun onUninstalling(extension: WebExtension) {
+            Log.i(AD_GUARD_DIAG_TAG, "AddonManager.onUninstalling id=${extension.id}")
+        }
+
+        override fun onUninstalled(extension: WebExtension) {
+            Log.i(AD_GUARD_DIAG_TAG, "AddonManager.onUninstalled id=${extension.id}")
+        }
+
+        override fun onReady(extension: WebExtension) {
+            // onReady は拡張のバックグラウンドスクリプトが起動完了して API 利用可能になった
+            // ことを示す。AdGuard の webRequest ハンドラ登録もこのタイミングで完了するはず。
+            logExtensionState("AddonManager.onReady", extension)
+        }
+
+        override fun onOptionalPermissionsChanged(extension: WebExtension) {
+            logExtensionState("AddonManager.onOptionalPermissionsChanged", extension)
         }
 
         override fun onInstallationFailed(
             extension: WebExtension?,
             installException: WebExtension.InstallException,
         ) {
+            Log.w(
+                AD_GUARD_DIAG_TAG,
+                "AddonManager.onInstallationFailed id=${extension?.id} " +
+                    "code=${installException.code} extensionName=${installException.extensionName} " +
+                    "message=${installException.message}",
+            )
             installPromptState?.result?.complete(buildInstallPromptResponse(allow = false))
             installPromptState = null
             installFailureMessage = buildInstallFailureMessage(
@@ -109,6 +162,7 @@ internal class WebExtensionInstaller(
     fun installFromCurrentPage(pageUrl: String) {
         installFailureMessage = null
         val installUri = resolveAmoInstallUriFromPage(pageUrl)
+        Log.i(AD_GUARD_DIAG_TAG, "installFromCurrentPage pageUrl=$pageUrl installUri=$installUri")
         if (installUri == null) {
             installFailureMessage =
                 "Extension install is available on AMO add-on pages.\n\nCurrent URL:\n$pageUrl"
@@ -120,9 +174,18 @@ internal class WebExtensionInstaller(
                 WebExtensionController.INSTALLATION_METHOD_MANAGER,
             )
             .accept(
-                {},
+                { ext ->
+                    Log.i(
+                        AD_GUARD_DIAG_TAG,
+                        "install accepted id=${ext?.id} name=${ext?.metaData?.name} " +
+                            "version=${ext?.metaData?.version} enabled=${ext?.metaData?.enabled} " +
+                            "signedState=${ext?.metaData?.signedState} blocklistState=${ext?.metaData?.blocklistState} " +
+                            "disabledFlags=${ext?.metaData?.disabledFlags}",
+                    )
+                },
                 { throwable ->
                     val error = throwable ?: RuntimeException("Unknown install error.")
+                    Log.w(AD_GUARD_DIAG_TAG, "install rejected uri=$installUri", error)
                     when (error) {
                         is WebExtension.InstallException -> {
                             installFailureMessage = buildInstallFailureMessage(
@@ -138,6 +201,24 @@ internal class WebExtensionInstaller(
                     }
                 },
             )
+    }
+
+    private fun logExtensionState(label: String, extension: WebExtension) {
+        val md = extension.metaData
+        Log.i(
+            AD_GUARD_DIAG_TAG,
+            "$label id=${extension.id} name=${md.name} version=${md.version} " +
+                "enabled=${md.enabled} allowedInPrivateBrowsing=${md.allowedInPrivateBrowsing} " +
+                "signedState=${md.signedState} blocklistState=${md.blocklistState} " +
+                "disabledFlags=${md.disabledFlags} optionsPageUrl=${md.optionsPageUrl} " +
+                "requiredPermissions=${md.requiredPermissions.toList()} " +
+                "requiredOrigins=${md.requiredOrigins.toList()} " +
+                "optionalPermissions=${md.optionalPermissions.toList()} " +
+                "grantedOptionalPermissions=${md.grantedOptionalPermissions.toList()} " +
+                "optionalOrigins=${md.optionalOrigins.toList()} " +
+                "grantedOptionalOrigins=${md.grantedOptionalOrigins.toList()} " +
+                "incognito=${md.incognito} temporary=${md.temporary}",
+        )
     }
 
     fun resolveInstallPrompt(allow: Boolean) {

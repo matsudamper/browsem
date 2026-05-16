@@ -1,11 +1,14 @@
 package net.matsudamper.browser
 
+import android.util.Log
 import androidx.compose.runtime.Stable
 import kotlinx.coroutines.flow.StateFlow
 import net.matsudamper.browser.core.TabStore
 import net.matsudamper.browser.core.TabStoreState
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoSession
+
+private const val AD_GUARD_DIAG_TAG = "AdGuardDiag"
 
 @Stable
 class BrowserSessionController internal constructor(
@@ -109,12 +112,26 @@ class BrowserSessionLifecycleController(
      * blocking をスキップすることがあるため必要。
      */
     private fun markActiveForExtensions(session: GeckoSession) {
-        if (!session.isOpen) return
+        if (!session.isOpen) {
+            Log.i(
+                AD_GUARD_DIAG_TAG,
+                "markActiveForExtensions skipped (not open) hash=${System.identityHashCode(session)}",
+            )
+            return
+        }
         if (activeExtensionSession === session) return
         val previous = activeExtensionSession
         if (previous != null && previous !== session && previous.isOpen) {
+            Log.i(
+                AD_GUARD_DIAG_TAG,
+                "setTabActive(prev,false) hash=${System.identityHashCode(previous)}",
+            )
             geckoRuntime.webExtensionController.setTabActive(previous, false)
         }
+        Log.i(
+            AD_GUARD_DIAG_TAG,
+            "setTabActive(new,true) hash=${System.identityHashCode(session)}",
+        )
         geckoRuntime.webExtensionController.setTabActive(session, true)
         activeExtensionSession = session
     }
