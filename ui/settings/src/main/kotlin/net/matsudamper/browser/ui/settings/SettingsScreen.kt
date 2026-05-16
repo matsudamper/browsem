@@ -1,10 +1,8 @@
 package net.matsudamper.browser.ui.settings
 
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.size
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxSize
@@ -19,28 +17,20 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Snackbar
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -63,45 +53,6 @@ fun SettingsScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val snackbarHostState = remember { SnackbarHostState() }
-    val pendingMessage = uiState.backup.message
-    val pendingRestart = uiState.backup.pendingRestart
-    // 再起動ダイアログ表示中はメッセージをダイアログ側に集約するためスナックバーは抑制する
-    LaunchedEffect(pendingMessage, pendingRestart) {
-        if (pendingMessage != null && !pendingRestart) {
-            snackbarHostState.showSnackbar(pendingMessage)
-            uiState.callbacks.consumeBackupMessage()
-        }
-    }
-    if (pendingRestart) {
-        // 再起動を要求するが message が残っている場合は close 後の失敗。
-        // 成功復元と区別できるよう、ダイアログのタイトルと本文を分岐させる。
-        val failureMessage = pendingMessage
-        AlertDialog(
-            onDismissRequest = { /* 再起動完了まで閉じない */ },
-            title = {
-                Text(if (failureMessage != null) "復元に失敗しました" else "復元しました")
-            },
-            text = {
-                if (failureMessage != null) {
-                    Text(
-                        "$failureMessage。一部のファイルが置き換わっている可能性があるため、" +
-                            "アプリを終了します。再度起動してください。",
-                    )
-                } else {
-                    Text(
-                        "設定・タブ・GeckoView プロファイル (Cookie・ログイン・履歴等) を復元しました。" +
-                            "反映するためにアプリを終了します。再度起動してください。",
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = uiState.callbacks::confirmRestartAfterImport) {
-                    Text("アプリを終了")
-                }
-            },
-        )
-    }
     Scaffold(
         modifier = modifier,
         topBar = {
@@ -116,9 +67,6 @@ fun SettingsScreen(
                     }
                 },
             )
-        },
-        snackbarHost = {
-            SnackbarHost(snackbarHostState) { data -> Snackbar(data) }
         },
     ) { paddingValues ->
         Column(
@@ -388,6 +336,25 @@ fun SettingsScreen(
 
             Spacer(Modifier.height(betweenPadding))
 
+            SettingSection(title = "バックアップ") {
+                Column {
+                    TextButton(
+                        onClick = uiState.callbacks::requestBackupExport,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("エクスポート")
+                    }
+                    TextButton(
+                        onClick = uiState.callbacks::requestBackupImport,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("インポート")
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(betweenPadding))
+
             SettingSection(title = "拡張機能") {
                 TextButton(
                     onClick = onOpenExtensions,
@@ -405,51 +372,6 @@ fun SettingsScreen(
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text("閲覧履歴を検索")
-                }
-            }
-
-            Spacer(Modifier.height(betweenPadding))
-
-            SettingSection(title = "バックアップと復元") {
-                Column {
-                    Text(
-                        text = "設定・タブ・タブグループ・Cookie・ログイン情報・履歴 (Gecko 側)・" +
-                            "サイト権限・サイト別設定を zip ファイルにエクスポート/インポートします。" +
-                            "キャッシュ・ダウンロード記録・閲覧履歴 (アプリ側 DB) は対象外です。",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        OutlinedButton(
-                            onClick = uiState.callbacks::requestBackupExport,
-                            enabled = !uiState.backup.isBusy,
-                            modifier = Modifier.weight(1f),
-                        ) {
-                            Text("エクスポート")
-                        }
-                        OutlinedButton(
-                            onClick = uiState.callbacks::requestBackupImport,
-                            enabled = !uiState.backup.isBusy,
-                            modifier = Modifier.weight(1f),
-                        ) {
-                            Text("インポート")
-                        }
-                    }
-                    if (uiState.backup.isBusy) {
-                        Spacer(Modifier.height(8.dp))
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            CircularProgressIndicator(modifier = Modifier.size(16.dp))
-                            Spacer(Modifier.size(8.dp))
-                            Text(
-                                text = "処理中…",
-                                style = MaterialTheme.typography.bodyMedium,
-                            )
-                        }
-                    }
                 }
             }
 
@@ -502,8 +424,6 @@ private fun SettingsScreenPreview() {
                     override fun openMockLocationOnMap() = Unit
                     override fun requestBackupExport() = Unit
                     override fun requestBackupImport() = Unit
-                    override fun consumeBackupMessage() = Unit
-                    override fun confirmRestartAfterImport() = Unit
                 },
                 homepageType = HomepageType.HOMEPAGE_GOOGLE,
                 customHomepageUrl = "",
@@ -516,11 +436,6 @@ private fun SettingsScreenPreview() {
                 mockLocationEnabled = true,
                 mockLocationInput = "35.685175,139.752797",
                 mockLocationInputError = null,
-                backup = SettingsScreenUiState.BackupUiState(
-                    isBusy = false,
-                    message = null,
-                    pendingRestart = false,
-                ),
             ),
             onOpenExtensions = {},
             onOpenHistory = {},

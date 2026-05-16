@@ -20,15 +20,7 @@ data class SettingsScreenUiState(
     val mockLocationEnabled: Boolean,
     val mockLocationInput: String,
     val mockLocationInputError: String?,
-    val backup: BackupUiState,
 ) {
-    @Stable
-    data class BackupUiState(
-        val isBusy: Boolean,
-        val message: String?,
-        val pendingRestart: Boolean,
-    )
-
     interface Callbacks {
         fun setHomepageType(type: HomepageType)
         fun setCustomHomepageUrl(url: String)
@@ -41,9 +33,9 @@ data class SettingsScreenUiState(
         fun setMockLocationEnabled(enabled: Boolean)
         fun setMockLocationInput(input: String)
         fun openMockLocationOnMap()
+        /** バックアップのエクスポートを要求する */
         fun requestBackupExport()
+        /** バックアップのインポートを要求する */
         fun requestBackupImport()
-        fun consumeBackupMessage()
-        fun confirmRestartAfterImport()
     }
 }

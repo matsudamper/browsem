@@ -24,6 +24,7 @@ import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoRuntimeSettings
 
 val dataModule = module {
+    single { BackupRepository(androidContext()) }
     single { SettingsRepository(androidContext()) }
     single { TabRepository(androidContext()) }
     single<TabGroupRepository> { TabGroupRepositoryImpl(androidContext()) }

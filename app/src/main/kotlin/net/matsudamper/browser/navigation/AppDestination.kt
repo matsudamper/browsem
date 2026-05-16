@@ -25,4 +25,7 @@ sealed interface AppDestination : NavKey, java.io.Serializable {
 
     @Serializable
     data object Downloads : AppDestination, java.io.Serializable
+
+    @Serializable
+    data class BackupProgress(val isImport: Boolean) : AppDestination, java.io.Serializable
 }
