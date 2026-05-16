@@ -30,7 +30,6 @@ val dataModule = module {
     single<TabGroupRepository> { TabGroupRepositoryImpl(androidContext()) }
     single { HistoryRepository(androidContext()) }
     single { DownloadRepository(androidContext()) }
-    single { BackupRepository(androidContext()) }
     single<WebSuggestionRepository> { HttpWebSuggestionRepository() }
 }
 

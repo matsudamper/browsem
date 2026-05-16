@@ -69,6 +69,7 @@ import net.matsudamper.browser.ui.downloads.DownloadManagementScreen
 import net.matsudamper.browser.ui.extensions.ExtensionsScreen
 import net.matsudamper.browser.ui.history.HistoryScreen
 import net.matsudamper.browser.ui.settings.BackupProgressScreen
+import net.matsudamper.browser.ui.settings.BackupProgressUiState
 import net.matsudamper.browser.ui.settings.SettingsScreen
 import net.matsudamper.browser.ui.tabs.TabsScreen
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -376,9 +377,9 @@ private fun BrowserAppContent(
 
                     AppDestination.Settings -> navEntry(key) {
                         val mockLocationWebExtension: MockLocationWebExtension = koinInject()
-                        val settingsViewModel = remember(settingsRepository, mockLocationWebExtension) {
+                        val settingsViewModel = composeViewModel(initializer = {
                             SettingsScreenViewModel(settingsRepository, mockLocationWebExtension)
-                        }
+                        })
                         val settingsUiState by settingsViewModel.uiState.collectAsState()
                         LaunchedEffect(settingsViewModel) {
                             settingsViewModel.eventHandler.receiveAsFlow().collect { handler ->
@@ -547,23 +548,37 @@ private fun BrowserAppContent(
                         })
                         val backupUiState by backupViewModel.uiState.collectAsState()
 
-                        // 全ブラウザセッションを一時停止する
-                        DisposableEffect(browserTabController, browserSessionLifecycleController) {
-                            val pausedTabs = browserTabController.tabs.toList()
-                            pausedTabs.forEach { tab ->
-                                browserSessionLifecycleController.pauseSession(tab)
-                            }
-                            onDispose {
-                                pausedTabs.forEach { tab ->
-                                    browserSessionLifecycleController.resumeSession(tab)
+                        // 一時停止したタブIDを記録する（後から追加されるタブも追跡するため）
+                        val pausedTabIds = remember { mutableSetOf<String>() }
+
+                        // タブ一覧の変化を監視し、新たに追加されたタブも含めて一時停止する
+                        LaunchedEffect(browserTabController, browserSessionLifecycleController) {
+                            browserTabController.tabStoreState.collect {
+                                browserTabController.tabs.forEach { tab ->
+                                    if (pausedTabIds.add(tab.tabId)) {
+                                        browserSessionLifecycleController.pauseSession(tab)
+                                    }
                                 }
                             }
                         }
 
-                        // 進行中のダウンロードをキャンセルする
-                        LaunchedEffect(Unit) {
-                            WorkManager.getInstance(context)
-                                .cancelAllWorkByTag(DownloadWorker.TAG_DOWNLOAD)
+                        // 画面離脱時に一時停止したすべてのタブを再開する
+                        DisposableEffect(browserTabController, browserSessionLifecycleController) {
+                            onDispose {
+                                browserTabController.tabs
+                                    .filter { it.tabId in pausedTabIds }
+                                    .forEach { tab ->
+                                        browserSessionLifecycleController.resumeSession(tab)
+                                    }
+                            }
+                        }
+
+                        // InProgress に移行した時点でダウンロードをキャンセルする
+                        LaunchedEffect(backupUiState.phase) {
+                            if (backupUiState.phase is BackupProgressUiState.Phase.InProgress) {
+                                WorkManager.getInstance(context)
+                                    .cancelAllWorkByTag(DownloadWorker.TAG_DOWNLOAD)
+                            }
                         }
 
                         val exportLauncher = rememberLauncherForActivityResult(

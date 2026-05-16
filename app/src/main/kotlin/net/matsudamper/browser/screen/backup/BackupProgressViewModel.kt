@@ -68,8 +68,10 @@ internal class BackupProgressViewModel(
      * フェーズを InProgress に変更し、エクスポートまたはインポートを実行する。
      */
     fun startWithUri(uri: Uri) {
+        // Confirming 以外のフェーズで呼ばれた場合は多重起動を防ぐため無視する
+        if (_phaseFlow.value !is BackupProgressUiState.Phase.Confirming) return
+        _phaseFlow.update { BackupProgressUiState.Phase.InProgress }
         viewModelScope.launch {
-            _phaseFlow.update { BackupProgressUiState.Phase.InProgress }
             if (isImport) {
                 runImport(uri)
             } else {
