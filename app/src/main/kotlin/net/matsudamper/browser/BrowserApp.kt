@@ -1,8 +1,15 @@
 package net.matsudamper.browser
 
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
+import android.util.Log
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.ContentTransform
 import androidx.compose.animation.EnterTransition
@@ -24,9 +31,11 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.IntOffset
 import androidx.lifecycle.viewmodel.compose.viewModel as composeViewModel
 import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
@@ -49,6 +58,7 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import net.matsudamper.browser.data.BackupRepository
 import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.TabGroupId
 import net.matsudamper.browser.data.TabGroupRepository
@@ -125,6 +135,23 @@ private fun BrowserAppContent(
     val navController = remember(backStack) { NavController(backStack = backStack) }
     // タブ復元完了シグナルは ViewModel で保持（構成変更後も有効）
     val setupComplete = viewModel.setupComplete
+
+    /**
+     * AboutBlankNewTabLocationTest 等のフレーキー解析用に backStack 変化を logcat に流す。
+     * NavDisplay に新旧 Browser エントリが残るかどうかを後追いで確認できる。
+     */
+    LaunchedEffect(backStack) {
+        snapshotFlow { backStack.toList() }
+            .collect { snapshot ->
+                val descriptions = snapshot.joinToString { key ->
+                    when (key) {
+                        is AppDestination.Browser -> "Browser(${key.tabId.takeLast(6)},before=${key.beforeTab?.tabId?.takeLast(6) ?: "null"})"
+                        else -> key::class.simpleName ?: key.toString()
+                    }
+                }
+                Log.d("BackStackDiag", "size=${snapshot.size} entries=[$descriptions]")
+            }
+    }
 
     // ナビゲーションとViewModelの両方にタブ選択を通知するヘルパー
     val selectTab: (String, AppDestination.Browser?) -> Unit = remember(navController, browserTabController) {
@@ -313,7 +340,11 @@ private fun BrowserAppContent(
                             },
                             browserTabContent = { modifier, selectedTab, tabCount, onToolbarHorizontalDrag, onToolbarDragEnd ->
                                 GeckoBrowserTab(
-                                    modifier = modifier,
+                                    modifier = modifier.testTag(
+                                        GeckoBrowserTabTestTags.GeckoContainer.testTag(
+                                            isForeground = backStack.lastOrNull() == key,
+                                        ),
+                                    ),
                                     browserTab = selectedTab,
                                     homepageUrl = uiState.homepageUrl,
                                     searchTemplate = uiState.searchTemplate,
@@ -370,10 +401,28 @@ private fun BrowserAppContent(
 
                     AppDestination.Settings -> navEntry(key) {
                         val mockLocationWebExtension: MockLocationWebExtension = koinInject()
-                        val settingsViewModel = remember(settingsRepository, mockLocationWebExtension) {
-                            SettingsScreenViewModel(settingsRepository, mockLocationWebExtension)
-                        }
+                        val backupRepository: BackupRepository = koinInject()
+                        // navigation3 の ViewModelStore に乗せて onCleared() を確実に
+                        // 呼ばせる。復元中に画面を離れた場合、ViewModel 側の onCleared で
+                        // pendingRestart を見て安全弁の再起動を発火するため必須。
+                        val settingsViewModel = composeViewModel(initializer = {
+                            SettingsScreenViewModel(
+                                settingsRepository,
+                                mockLocationWebExtension,
+                                backupRepository,
+                            )
+                        })
                         val settingsUiState by settingsViewModel.uiState.collectAsState()
+                        val exportLauncher = rememberLauncherForActivityResult(
+                            ActivityResultContracts.CreateDocument(BackupRepository.MIME_TYPE),
+                        ) { uri ->
+                            if (uri != null) settingsViewModel.exportToZip(uri)
+                        }
+                        val importLauncher = rememberLauncherForActivityResult(
+                            ActivityResultContracts.OpenDocument(),
+                        ) { uri ->
+                            if (uri != null) settingsViewModel.importFromZip(uri)
+                        }
                         LaunchedEffect(settingsViewModel) {
                             settingsViewModel.eventHandler.receiveAsFlow().collect { handler ->
                                 handler(object : SettingsScreenViewModel.Event {
@@ -389,9 +438,28 @@ private fun BrowserAppContent(
                                         )
                                         try {
                                             context.startActivity(intent)
-                                        } catch (_: android.content.ActivityNotFoundException) {
+                                        } catch (_: ActivityNotFoundException) {
                                             // 地図アプリがインストールされていない端末では何もしない
                                         }
+                                    }
+
+                                    override fun onRequestBackupExport() {
+                                        // 日時付きの初期ファイル名で SAF の作成ピッカーを開く
+                                        val suggestedName = buildBackupFileName()
+                                        exportLauncher.launch(suggestedName)
+                                    }
+
+                                    override fun onRequestBackupImport() {
+                                        // zip 以外の MIME を選んだ端末でも開けるよう、フォールバックを並べる
+                                        importLauncher.launch(
+                                            arrayOf(BackupRepository.MIME_TYPE, "application/octet-stream", "*/*"),
+                                        )
+                                    }
+
+                                    override fun onRestartApp() {
+                                        // DataStore と Room のキャッシュを完全に捨てて新しいファイルを読み込ませるため、
+                                        // プロセスごと終了する。次回起動時に置き換え後のファイルが読み込まれる。
+                                        android.os.Process.killProcess(android.os.Process.myPid())
                                     }
                                 })
                             }
@@ -535,6 +603,11 @@ private fun BrowserAppContent(
             },
         )
     }
+}
+
+private fun buildBackupFileName(): String {
+    val formatter = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US)
+    return "browsem-backup-${formatter.format(Date())}.${BackupRepository.FILE_EXTENSION}"
 }
 
 private fun navEntry(

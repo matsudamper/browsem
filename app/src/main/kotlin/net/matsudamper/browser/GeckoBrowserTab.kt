@@ -60,7 +60,9 @@ import androidx.core.view.WindowCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.withContext
 import net.matsudamper.browser.data.TranslationProvider
 import net.matsudamper.browser.media.GeckoMediaSessionDelegate
 import net.matsudamper.browser.media.MediaWebExtension
@@ -199,6 +201,20 @@ internal fun GeckoBrowserTab(
         keyboardController?.hide()
         runCatching { session.setFocused(true) }
         geckoView?.requestFocus()
+    }
+
+    // プレビュー画像未取得時にページロードが完了したらキャプチャを実行する
+    LaunchedEffect(state) {
+        snapshotFlow { state.captureOnPageLoadRequestCount }
+            .collectLatest { count ->
+                if (count == 0) return@collectLatest
+                /**
+                 * GeckoView.capturePixels は Main スレッド必須。
+                 */
+                withContext(Dispatchers.Main.immediate) {
+                    geckoView?.also { gv -> state.captureTabPreview(gv) }
+                }
+            }
     }
 
     // URLバー入力変更時にサジェスト検索を発火
@@ -769,7 +785,12 @@ sealed interface GeckoBrowserTabTestTags {
     val id: String
     val testTag get() = "${GeckoBrowserTabTestTags::class.java.name}#$id"
 
-    object GeckoContainer : GeckoBrowserTabTestTags { override val id = "gecko_container" }
+    object GeckoContainer : GeckoBrowserTabTestTags {
+        override val id = "gecko_container"
+
+        fun testTag(isForeground: Boolean): String =
+            if (isForeground) "$testTag#foreground" else testTag
+    }
 }
 
 private const val URL_BAR_IME_HIDE_GRACE_MS = 700L
