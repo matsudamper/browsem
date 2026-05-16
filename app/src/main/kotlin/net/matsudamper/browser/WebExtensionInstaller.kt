@@ -1,6 +1,7 @@
 package net.matsudamper.browser
 
 import android.util.Log
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -320,11 +321,13 @@ internal class WebExtensionInstaller(
     }
 }
 
+@Stable
 internal data class InstallPromptState(
     val message: String,
     val result: GeckoResult<WebExtension.PermissionPromptResponse>,
 )
 
+@Stable
 internal data class PermissionPromptState(
     val title: String,
     val message: String,

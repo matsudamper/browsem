@@ -268,8 +268,11 @@ class MainActivity : ComponentActivity() {
         ) {
             runtime.webExtensionController.setPromptDelegate(null)
         }
-        runtime.webExtensionController.setAddonManagerDelegate(null)
-        runtime.webExtensionController.setExtensionProcessDelegate(null)
+        // setAddonManagerDelegate / setExtensionProcessDelegate には getter が公開されておらず、
+        // promptDelegate のように所有者チェックを行えない。構成変更時に旧 MainActivity が
+        // 解除すると新 MainActivity が登録した delegate まで外れてしまうため、ここでは
+        // 解除しない。次の onCreate で必ず上書き登録される。WebExtensionInstaller は
+        // MainActivity を参照していないので Activity リークは発生しない。
         super.onDestroy()
     }
 
