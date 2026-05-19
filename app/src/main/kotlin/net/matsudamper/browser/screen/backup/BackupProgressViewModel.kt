@@ -26,20 +26,10 @@ internal class BackupProgressViewModel(
     private var cleared = false
 
     private val _phaseFlow = MutableStateFlow<BackupProgressUiState.Phase>(
-        BackupProgressUiState.Phase.Confirming,
+        BackupProgressUiState.Phase.WaitingForFile,
     )
 
     private val callbacks = object : BackupProgressUiState.Callbacks {
-        override fun onConfirm() {
-            // ファイルピッカーを要求するイベントを送信する。
-            // フェーズは Confirming のまま維持し、URI 取得後に startWithUri で InProgress へ遷移する
-            eventHandler.trySend { it.onRequestFilePicker() }
-        }
-
-        override fun onCancel() {
-            eventHandler.trySend { it.onNavigateBack() }
-        }
-
         override fun onDismiss() {
             eventHandler.trySend { it.onNavigateBack() }
         }
@@ -52,7 +42,7 @@ internal class BackupProgressViewModel(
     val uiState: StateFlow<BackupProgressUiState> = MutableStateFlow(
         BackupProgressUiState(
             isImport = isImport,
-            phase = BackupProgressUiState.Phase.Confirming,
+            phase = BackupProgressUiState.Phase.WaitingForFile,
             callbacks = callbacks,
         ),
     ).also { uiStateFlow ->
@@ -63,13 +53,17 @@ internal class BackupProgressViewModel(
         }
     }.asStateFlow()
 
+    init {
+        // 設定画面での確認は済んでいるため、画面表示と同時にファイルピッカーを要求する
+        eventHandler.trySend { it.onRequestFilePicker() }
+    }
+
     /**
      * ファイルピッカーで取得した URI を渡してバックアップ処理を開始する。
-     * フェーズを InProgress に変更し、エクスポートまたはインポートを実行する。
+     * WaitingForFile 以外のフェーズで呼ばれた場合は多重起動を防ぐため無視する。
      */
     fun startWithUri(uri: Uri) {
-        // Confirming 以外のフェーズで呼ばれた場合は多重起動を防ぐため無視する
-        if (_phaseFlow.value !is BackupProgressUiState.Phase.Confirming) return
+        if (_phaseFlow.value !is BackupProgressUiState.Phase.WaitingForFile) return
         _phaseFlow.update { BackupProgressUiState.Phase.InProgress }
         viewModelScope.launch {
             if (isImport) {

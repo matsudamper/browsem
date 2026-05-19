@@ -9,8 +9,8 @@ data class BackupProgressUiState(
     val callbacks: Callbacks,
 ) {
     sealed interface Phase {
-        /** ユーザーに操作確認を求めているフェーズ */
-        data object Confirming : Phase
+        /** ファイルピッカー表示中（選択待ち） */
+        data object WaitingForFile : Phase
 
         /** バックアップ処理を実行中のフェーズ */
         data object InProgress : Phase
@@ -26,12 +26,6 @@ data class BackupProgressUiState(
     }
 
     interface Callbacks {
-        /** ダイアログの「開始」ボタンが押された */
-        fun onConfirm()
-
-        /** ダイアログの「キャンセル」ボタンが押された */
-        fun onCancel()
-
         /** 画面を閉じる */
         fun onDismiss()
 

@@ -44,14 +44,7 @@ fun BackupProgressScreen(
                 navigationIcon = {
                     // 処理中は戻るボタンを非表示にする
                     if (uiState.phase !is BackupProgressUiState.Phase.InProgress) {
-                        IconButton(
-                            onClick = {
-                                when (uiState.phase) {
-                                    is BackupProgressUiState.Phase.Confirming -> uiState.callbacks.onCancel()
-                                    else -> uiState.callbacks.onDismiss()
-                                }
-                            },
-                        ) {
+                        IconButton(onClick = uiState.callbacks::onDismiss) {
                             Icon(
                                 painter = painterResource(ResourcesR.drawable.ic_arrow_back_24dp),
                                 contentDescription = "戻る",
@@ -69,13 +62,9 @@ fun BackupProgressScreen(
             contentAlignment = Alignment.Center,
         ) {
             when (val phase = uiState.phase) {
-                is BackupProgressUiState.Phase.Confirming -> {
-                    // 確認ダイアログを表示する
-                    ConfirmingDialog(
-                        isImport = uiState.isImport,
-                        onConfirm = uiState.callbacks::onConfirm,
-                        onCancel = uiState.callbacks::onCancel,
-                    )
+                is BackupProgressUiState.Phase.WaitingForFile -> {
+                    // ファイルピッカーが開いている間は待機表示のみ
+                    CircularProgressIndicator()
                 }
 
                 is BackupProgressUiState.Phase.InProgress -> {
@@ -136,43 +125,14 @@ fun BackupProgressScreen(
     }
 }
 
-/**
- * バックアップ操作開始前の確認ダイアログ。
- */
-@Composable
-private fun ConfirmingDialog(
-    isImport: Boolean,
-    onConfirm: () -> Unit,
-    onCancel: () -> Unit,
-) {
-    val dialogTitle = if (isImport) "インポートを開始しますか？" else "エクスポートを開始しますか？"
-    AlertDialog(
-        onDismissRequest = onCancel,
-        title = { Text(dialogTitle) },
-        text = { Text("ブラウザのセッションおよび進行中のダウンロードを停止します。この操作中は他の操作を行えません。") },
-        confirmButton = {
-            Button(onClick = onConfirm) {
-                Text("開始")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onCancel) {
-                Text("キャンセル")
-            }
-        },
-    )
-}
-
 @Preview(showBackground = true)
 @Composable
-private fun BackupProgressScreenConfirmingPreview() {
+private fun BackupProgressScreenWaitingPreview() {
     BackupProgressScreen(
         uiState = BackupProgressUiState(
             isImport = false,
-            phase = BackupProgressUiState.Phase.Confirming,
+            phase = BackupProgressUiState.Phase.WaitingForFile,
             callbacks = object : BackupProgressUiState.Callbacks {
-                override fun onConfirm() = Unit
-                override fun onCancel() = Unit
                 override fun onDismiss() = Unit
                 override fun onRestart() = Unit
             },
@@ -188,8 +148,6 @@ private fun BackupProgressScreenInProgressPreview() {
             isImport = true,
             phase = BackupProgressUiState.Phase.InProgress,
             callbacks = object : BackupProgressUiState.Callbacks {
-                override fun onConfirm() = Unit
-                override fun onCancel() = Unit
                 override fun onDismiss() = Unit
                 override fun onRestart() = Unit
             },
@@ -205,8 +163,6 @@ private fun BackupProgressScreenCompletedPreview() {
             isImport = false,
             phase = BackupProgressUiState.Phase.Completed("バックアップを書き出しました"),
             callbacks = object : BackupProgressUiState.Callbacks {
-                override fun onConfirm() = Unit
-                override fun onCancel() = Unit
                 override fun onDismiss() = Unit
                 override fun onRestart() = Unit
             },
