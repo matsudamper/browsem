@@ -169,3 +169,36 @@ private fun BackupProgressScreenCompletedPreview() {
         ),
     )
 }
+
+@Preview(showBackground = true)
+@Composable
+private fun BackupProgressScreenPendingRestartPreview() {
+    BackupProgressScreen(
+        uiState = BackupProgressUiState(
+            isImport = true,
+            phase = BackupProgressUiState.Phase.PendingRestart(errorMessage = null),
+            callbacks = object : BackupProgressUiState.Callbacks {
+                override fun onDismiss() = Unit
+                override fun onRestart() = Unit
+            },
+        ),
+    )
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun BackupProgressScreenErrorPreview() {
+    BackupProgressScreen(
+        uiState = BackupProgressUiState(
+            isImport = false,
+            phase = BackupProgressUiState.Phase.Error(
+                message = "復元に失敗しました: ファイルが見つかりません",
+                pendingRestart = false,
+            ),
+            callbacks = object : BackupProgressUiState.Callbacks {
+                override fun onDismiss() = Unit
+                override fun onRestart() = Unit
+            },
+        ),
+    )
+}

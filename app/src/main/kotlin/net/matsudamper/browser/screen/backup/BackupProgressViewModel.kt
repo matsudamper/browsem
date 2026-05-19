@@ -1,6 +1,7 @@
 package net.matsudamper.browser.screen.backup
 
 import android.net.Uri
+import android.os.Process
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.NonCancellable
@@ -155,7 +156,7 @@ internal class BackupProgressViewModel(
     }
 
     private fun killSelfProcess() {
-        android.os.Process.killProcess(android.os.Process.myPid())
+        Process.killProcess(Process.myPid())
     }
 
     interface Event {
