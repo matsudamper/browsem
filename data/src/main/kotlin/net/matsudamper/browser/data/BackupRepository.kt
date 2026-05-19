@@ -31,7 +31,10 @@ class BackupRepository(private val context: Context) {
     class RestartRequiredException(cause: Throwable) :
         IOException(cause.message ?: cause::class.simpleName, cause)
 
-    suspend fun exportToZip(outputUri: Uri): Unit = withContext(Dispatchers.IO) {
+    suspend fun exportToZip(
+        outputUri: Uri,
+        onProgress: (String) -> Unit = {},
+    ): Unit = withContext(Dispatchers.IO) {
         val snapshotFile = File(context.cacheDir, "backup_tab_snapshot.db")
         val defaultSettingsFile = File(context.cacheDir, "backup_default_settings.pb")
         snapshotFile.delete()
@@ -40,6 +43,7 @@ class BackupRepository(private val context: Context) {
             // WAL を含めた整合性のあるスナップショットを別ファイルに書き出す。
             // VACUUM INTO は実行中に主データベースへ排他ロックを取るため、
             // 他のコルーチンの書き込みがあれば一時的にブロックされる点に注意。
+            onProgress("タブデータのスナップショットを作成中…")
             val db = TabDatabase.getInstance(context)
             val escapedPath = snapshotFile.absolutePath.replace("'", "''")
             db.openHelper.writableDatabase.execSQL("VACUUM INTO '$escapedPath'")
@@ -47,6 +51,7 @@ class BackupRepository(private val context: Context) {
             // 新規インストール直後など、まだ DataStore が一度も書き込みを
             // 行っていない場合は本体ファイルが存在しない。その場合は
             // デフォルト設定のシリアライズ結果を書き出してエントリに含める。
+            onProgress("設定を読み込み中…")
             val settingsForExport = settingsFile().takeIf { it.exists() } ?: run {
                 defaultSettingsFile.outputStream().use { out ->
                     BrowserSettings.getDefaultInstance().writeTo(out)
@@ -57,8 +62,11 @@ class BackupRepository(private val context: Context) {
             val outputStream = context.contentResolver.openOutputStream(outputUri, "w")
                 ?: error("出力先を開けませんでした")
             ZipOutputStream(outputStream.buffered()).use { zos ->
+                onProgress("設定を書き出し中…")
                 writeEntry(zos, SETTINGS_ENTRY_NAME, settingsForExport)
+                onProgress("タブデータを書き出し中…")
                 writeEntry(zos, TAB_DB_ENTRY_NAME, snapshotFile)
+                onProgress("プロファイルを書き出し中…")
                 writeMozillaProfileEntries(zos)
             }
         } finally {
@@ -67,7 +75,10 @@ class BackupRepository(private val context: Context) {
         }
     }
 
-    suspend fun importFromZip(inputUri: Uri): Unit = withContext(Dispatchers.IO) {
+    suspend fun importFromZip(
+        inputUri: Uri,
+        onProgress: (String) -> Unit = {},
+    ): Unit = withContext(Dispatchers.IO) {
         val workDir = File(context.cacheDir, "backup_restore").apply {
             deleteRecursively()
             mkdirs()
@@ -92,6 +103,7 @@ class BackupRepository(private val context: Context) {
             val extracted = mutableMapOf<String, File>()
             var hasMozillaPayload = false
             val mozillaStagingRoot = mozillaStaging.canonicalFile
+            onProgress("バックアップを展開中…")
             val inputStream = context.contentResolver.openInputStream(inputUri)
                 ?: error("バックアップファイルを開けませんでした")
             ZipInputStream(inputStream.buffered()).use { zis ->
@@ -138,6 +150,7 @@ class BackupRepository(private val context: Context) {
 
             // リスクのあるコピー (容量不足・I/O エラー) を先に済ませる。
             // この時点では Room は生きているので失敗しても app は通常動作に戻れる。
+            onProgress("ファイルを準備中…")
             settingsExtracted.copyTo(settingsStaging, overwrite = true)
             tabDbExtracted.copyTo(tabDbStaging, overwrite = true)
 
@@ -145,6 +158,7 @@ class BackupRepository(private val context: Context) {
             // なるため、close 前に staging の tab.db を読み取って互換性を確認する。
             // user_version=0 (未初期化や外部由来) や対応マイグレーションがないバージョンも、
             // 復元後の起動で Room が「missing migration」で落ちるため弾く。
+            onProgress("バックアップを検証中…")
             val backupSchemaVersion = readSchemaVersion(tabDbStaging)
             if (backupSchemaVersion !in 1..TabDatabase.SCHEMA_VERSION) {
                 error(
@@ -157,6 +171,7 @@ class BackupRepository(private val context: Context) {
             // ステージング成功後に DB を閉じて置換に入る。
             // タブ永続化が裏で tab.db を書き続けているため、置き換え前に
             // Room の接続を完全に閉じてインフライト書き込みを止める。
+            onProgress("データベースを閉じています…")
             TabDatabase.closeInstance()
             dbClosed = true
 
@@ -165,9 +180,11 @@ class BackupRepository(private val context: Context) {
                 // 古い WAL/SHM は新 DB と整合しないので削除する
                 File(tabDbTarget.parentFile, "$TAB_DB_FILE_NAME-shm").delete()
                 File(tabDbTarget.parentFile, "$TAB_DB_FILE_NAME-wal").delete()
+                onProgress("設定とタブデータを置き換え中…")
                 replaceWithStaging(settingsStaging, settingsTarget)
                 replaceWithStaging(tabDbStaging, tabDbTarget)
                 if (hasMozillaPayload) {
+                    onProgress("プロファイルを置き換え中…")
                     swapMozillaProfile(mozillaStaging, mozillaTarget)
                     mozillaReplaced = true
                 }
