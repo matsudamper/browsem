@@ -65,7 +65,7 @@ internal class BackupProgressViewModel(
      */
     fun startWithUri(uri: Uri) {
         if (_phaseFlow.value !is BackupProgressUiState.Phase.WaitingForFile) return
-        _phaseFlow.update { BackupProgressUiState.Phase.InProgress }
+        _phaseFlow.update { BackupProgressUiState.Phase.InProgress(message = "準備中…") }
         viewModelScope.launch {
             if (isImport) {
                 runImport(uri)
@@ -80,7 +80,7 @@ internal class BackupProgressViewModel(
      */
     private suspend fun runExport(uri: Uri) {
         val result = try {
-            backupRepository.exportToZip(uri)
+            backupRepository.exportToZip(uri, onProgress = ::updateProgressMessage)
             Result.success(Unit)
         } catch (t: Throwable) {
             Result.failure(t)
@@ -112,7 +112,7 @@ internal class BackupProgressViewModel(
         // アプリが degraded 状態になる可能性がある。NonCancellable で最後まで完了させる。
         withContext(NonCancellable) {
             try {
-                backupRepository.importFromZip(uri)
+                backupRepository.importFromZip(uri, onProgress = ::updateProgressMessage)
                 _phaseFlow.update { BackupProgressUiState.Phase.PendingRestart(errorMessage = null) }
                 forceRestartIfDetached()
             } catch (e: BackupRepository.RestartRequiredException) {
@@ -131,6 +131,20 @@ internal class BackupProgressViewModel(
                         pendingRestart = false,
                     )
                 }
+            }
+        }
+    }
+
+    /**
+     * Repository から通知された処理内容を InProgress フェーズに反映する。
+     * 既に完了/エラー/再起動待ちに遷移している場合は無視する。
+     */
+    private fun updateProgressMessage(message: String) {
+        _phaseFlow.update { current ->
+            if (current is BackupProgressUiState.Phase.InProgress) {
+                BackupProgressUiState.Phase.InProgress(message = message)
+            } else {
+                current
             }
         }
     }

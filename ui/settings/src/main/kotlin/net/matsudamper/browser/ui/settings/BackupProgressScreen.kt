@@ -68,11 +68,11 @@ fun BackupProgressScreen(
                 }
 
                 is BackupProgressUiState.Phase.InProgress -> {
-                    // 処理中はプログレスインジケーターを表示する
+                    // 処理中はプログレスインジケーターと現在処理中の内容を表示する
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         CircularProgressIndicator()
                         Spacer(Modifier.height(16.dp))
-                        Text("処理中…")
+                        Text(phase.message)
                     }
                 }
 
@@ -146,7 +146,7 @@ private fun BackupProgressScreenInProgressPreview() {
     BackupProgressScreen(
         uiState = BackupProgressUiState(
             isImport = true,
-            phase = BackupProgressUiState.Phase.InProgress,
+            phase = BackupProgressUiState.Phase.InProgress(message = "タブデータを書き出し中…"),
             callbacks = object : BackupProgressUiState.Callbacks {
                 override fun onDismiss() = Unit
                 override fun onRestart() = Unit
