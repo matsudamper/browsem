@@ -573,9 +573,12 @@ private fun BrowserAppContent(
                             }
                         }
 
-                        // InProgress に移行した時点でダウンロードをキャンセルする
-                        LaunchedEffect(backupUiState.phase) {
-                            if (backupUiState.phase is BackupProgressUiState.Phase.InProgress) {
+                        // InProgress に移行した時点で1度だけダウンロードをキャンセルする。
+                        // phase 自体を key にすると進捗メッセージ更新ごとに再実行されるため、
+                        // InProgress であるかどうかの boolean を key にして遷移時のみ走らせる。
+                        val isInProgress = backupUiState.phase is BackupProgressUiState.Phase.InProgress
+                        LaunchedEffect(isInProgress) {
+                            if (isInProgress) {
                                 WorkManager.getInstance(context)
                                     .cancelAllWorkByTag(DownloadWorker.TAG_DOWNLOAD)
                             }
