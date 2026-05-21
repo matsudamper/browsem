@@ -1,21 +1,16 @@
 package net.matsudamper.browser.screen.settings
 
-import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
 import net.matsudamper.browser.MockLocationWebExtension
-import net.matsudamper.browser.data.BackupRepository
 import net.matsudamper.browser.data.BrowserSettings
 import net.matsudamper.browser.data.HomepageType
 import net.matsudamper.browser.data.SearchProvider
@@ -28,7 +23,6 @@ import net.matsudamper.browser.ui.settings.SettingsScreenUiState
 internal class SettingsScreenViewModel(
     private val settingsRepository: SettingsRepository,
     private val mockLocationWebExtension: MockLocationWebExtension,
-    private val backupRepository: BackupRepository,
 ) : ViewModel() {
 
     val eventHandler = Channel<(Event) -> Unit>(Channel.UNLIMITED)
@@ -39,21 +33,9 @@ internal class SettingsScreenViewModel(
     // isEmpty() では空文字入力と未初期化を区別できないため専用フラグを使用する
     private var mockLocationInputInitialized = false
 
-    private val backupStateFlow = MutableStateFlow(
-        SettingsScreenUiState.BackupUiState(
-            isBusy = false,
-            message = null,
-            pendingRestart = false,
-        ),
-    )
-    // export/import 同時起動による状態の二重更新を防ぐ。
-    // UI 側のボタン無効化と二重に守ることで、外部呼び出しからも安全にする。
-    private val backupMutex = Mutex()
-
-    // onCleared を通過済みかどうか。NonCancellable で復元が画面離脱後に完了した場合、
-    // onCleared の安全弁は既に過ぎているので直接 kill する必要がある。
-    @Volatile
-    private var cleared = false
+    // 確認ダイアログの表示状態
+    private val backupConfirmDialogFlow =
+        MutableStateFlow<SettingsScreenUiState.BackupConfirmType?>(null)
 
     private val callbacks = object : SettingsScreenUiState.Callbacks {
         override fun setHomepageType(type: HomepageType) {
@@ -107,126 +89,34 @@ internal class SettingsScreenViewModel(
         }
 
         override fun requestBackupExport() {
-            eventHandler.trySend { it.onRequestBackupExport() }
+            backupConfirmDialogFlow.value = SettingsScreenUiState.BackupConfirmType.Export
         }
 
         override fun requestBackupImport() {
-            eventHandler.trySend { it.onRequestBackupImport() }
+            backupConfirmDialogFlow.value = SettingsScreenUiState.BackupConfirmType.Import
         }
 
-        override fun consumeBackupMessage() {
-            backupStateFlow.update { it.copy(message = null) }
-        }
-
-        override fun confirmRestartAfterImport() {
-            eventHandler.trySend { it.onRestartApp() }
-        }
-    }
-
-    fun exportToZip(uri: Uri) {
-        viewModelScope.launch {
-            if (!backupMutex.tryLock()) return@launch
-            try {
-                backupStateFlow.update { it.copy(isBusy = true, message = null) }
-                // runCatching を直接使うと CancellationException も飲まれ
-                // viewModelScope のキャンセル伝播が壊れるため、明示的に再送出する
-                val result = try {
-                    backupRepository.exportToZip(uri)
-                    Result.success(Unit)
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (t: Throwable) {
-                    Result.failure(t)
-                }
-                backupStateFlow.update {
-                    it.copy(
-                        isBusy = false,
-                        message = result.fold(
-                            onSuccess = { "バックアップを書き出しました" },
-                            onFailure = { e -> "エクスポートに失敗しました: ${e.message ?: e::class.simpleName}" },
-                        ),
-                    )
-                }
-            } finally {
-                backupMutex.unlock()
+        override fun confirmBackup() {
+            val type = backupConfirmDialogFlow.value ?: return
+            backupConfirmDialogFlow.value = null
+            eventHandler.trySend {
+                it.onNavigateToBackupProgress(type == SettingsScreenUiState.BackupConfirmType.Import)
             }
         }
-    }
 
-    fun importFromZip(uri: Uri) {
-        viewModelScope.launch {
-            if (!backupMutex.tryLock()) return@launch
-            try {
-                backupStateFlow.update { it.copy(isBusy = true, message = null) }
-                // 復元中に画面遷移されて viewModelScope が cancel されると、
-                // TabDatabase.closeInstance() 後にファイル置換だけが中途半端に終わり、
-                // app が degraded 状態のまま残る。NonCancellable で囲んで最後まで
-                // 完了させ、必要なら onCleared 側で再起動を強制する。
-                withContext(NonCancellable) {
-                    try {
-                        backupRepository.importFromZip(uri)
-                        backupStateFlow.update {
-                            it.copy(isBusy = false, message = null, pendingRestart = true)
-                        }
-                        forceRestartIfDetached()
-                    } catch (e: BackupRepository.RestartRequiredException) {
-                        // DB を閉じた後の失敗。Repository が閉じた DB 参照を持つので
-                        // 通常動作には戻れない。エラー表示と同時に再起動ダイアログを出す。
-                        backupStateFlow.update {
-                            it.copy(
-                                isBusy = false,
-                                message = "復元中にエラーが発生しました: " +
-                                    "${e.cause?.message ?: e.message ?: e::class.simpleName}。" +
-                                    "アプリを終了します",
-                                pendingRestart = true,
-                            )
-                        }
-                        forceRestartIfDetached()
-                    } catch (t: Throwable) {
-                        backupStateFlow.update {
-                            it.copy(
-                                isBusy = false,
-                                message = "復元に失敗しました: ${t.message ?: t::class.simpleName}",
-                            )
-                        }
-                    }
-                }
-            } finally {
-                backupMutex.unlock()
-            }
+        override fun dismissBackupConfirm() {
+            backupConfirmDialogFlow.value = null
         }
-    }
-
-    override fun onCleared() {
-        super.onCleared()
-        cleared = true
-        // 画面遷移などで本 ViewModel が破棄されたとき、復元によって
-        // プロセスが degraded 状態 (閉じた Room を保持) のままになるのを避ける。
-        // UI ダイアログを経由しなくても確実に再起動を発火する。
-        if (backupStateFlow.value.pendingRestart) {
-            killSelfProcess()
-        }
-    }
-
-    /**
-     * NonCancellable で動かしている復元処理が onCleared 通過後に完了したケースを救う。
-     * onCleared 時点では pendingRestart=false なので onCleared 側の安全弁は素通り
-     * している。完了直後の本メソッドで cleared フラグを見て直接 kill する。
-     */
-    private fun forceRestartIfDetached() {
-        if (cleared) {
-            killSelfProcess()
-        }
-    }
-
-    private fun killSelfProcess() {
-        android.os.Process.killProcess(android.os.Process.myPid())
     }
 
     val uiState: StateFlow<SettingsScreenUiState?> = MutableStateFlow<SettingsScreenUiState?>(null)
         .also { uiStateFlow ->
             viewModelScope.launch {
-                settingsRepository.settings.collectLatest { settings ->
+                combine(
+                    settingsRepository.settings,
+                    backupConfirmDialogFlow,
+                ) { settings, confirmDialog -> settings to confirmDialog }
+                    .collectLatest { (settings, confirmDialog) ->
                     // 初回だけ入力欄をリポジトリの値で初期化する
                     if (!mockLocationInputInitialized) {
                         mockLocationInputFlow.value = formatMockLocationInput(
@@ -239,7 +129,7 @@ internal class SettingsScreenViewModel(
                         settings.toUiState(
                             callbacks = callbacks,
                             mockLocationInput = mockLocationInputFlow.value,
-                            backup = backupStateFlow.value,
+                            backupConfirmDialog = confirmDialog,
                         )
                     }
                     // 拡張機能にも最新設定を通知する
@@ -270,21 +160,12 @@ internal class SettingsScreenViewModel(
                     }
                 }
             }
-            // バックアップ処理の進行状況を UiState に反映する。
-            // uiStateFlow.value のスナップショットを先に捕まえると settings/mockLocation 側の
-            // 直近更新を巻き戻す恐れがあるので、update のラムダ引数で受け取った最新 state を合成する
-            viewModelScope.launch {
-                backupStateFlow.collectLatest { backup ->
-                    uiStateFlow.update { state -> state?.copy(backup = backup) }
-                }
-            }
         }.asStateFlow()
 
     interface Event {
         fun onOpenMockLocationOnMap()
-        fun onRequestBackupExport()
-        fun onRequestBackupImport()
-        fun onRestartApp()
+        /** バックアップ進行画面に遷移する */
+        fun onNavigateToBackupProgress(isImport: Boolean)
     }
 }
 
@@ -334,7 +215,7 @@ internal fun formatMockLocationInput(latitude: Double, longitude: Double): Strin
 private fun BrowserSettings.toUiState(
     callbacks: SettingsScreenUiState.Callbacks,
     mockLocationInput: String,
-    backup: SettingsScreenUiState.BackupUiState,
+    backupConfirmDialog: SettingsScreenUiState.BackupConfirmType?,
 ): SettingsScreenUiState {
     return SettingsScreenUiState(
         callbacks = callbacks,
@@ -349,6 +230,6 @@ private fun BrowserSettings.toUiState(
         mockLocationEnabled = mockLocationEnabled,
         mockLocationInput = mockLocationInput,
         mockLocationInputError = validateMockLocationInput(mockLocationInput),
-        backup = backup,
+        backupConfirmDialog = backupConfirmDialog,
     )
 }
