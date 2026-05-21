@@ -361,20 +361,23 @@ class MainActivity : ComponentActivity() {
                     details: WebExtension.CreateTabDetails,
                 ): GeckoResult<GeckoSession> {
                     val url = details.url ?: "about:blank"
+                    val active = details.active != false
                     Log.i(
                         AD_GUARD_DIAG_TAG,
-                        "TabDelegate.onNewTab id=${source.id} url=$url active=${details.active}",
+                        "TabDelegate.onNewTab id=${source.id} url=$url active=$active",
                     )
-                    val session = GeckoSession()
-                    val controller = browserViewModel.browserTabController
-                    val newTab = controller.createAndAppendTabWithSession(
-                        session = session,
-                        initialUrl = url,
-                    )
-                    if (details.active != false) {
-                        controller.selectTab(newTab.tabId)
+                    val result = GeckoResult<GeckoSession>()
+                    lifecycleScope.launch {
+                        try {
+                            result.complete(
+                                browserViewModel.createExtensionRequestedTab(url, active),
+                            )
+                        } catch (e: Throwable) {
+                            Log.w(AD_GUARD_DIAG_TAG, "onNewTab failed", e)
+                            result.completeExceptionally(e)
+                        }
                     }
-                    return GeckoResult.fromValue(session)
+                    return result
                 }
 
                 override fun onOpenOptionsPage(source: WebExtension) {
@@ -384,13 +387,11 @@ class MainActivity : ComponentActivity() {
                         "TabDelegate.onOpenOptionsPage id=${source.id} url=$optionsPageUrl",
                     )
                     if (optionsPageUrl.isNullOrBlank()) return
-                    val session = GeckoSession()
-                    val controller = browserViewModel.browserTabController
-                    val newTab = controller.createAndAppendTabWithSession(
-                        session = session,
-                        initialUrl = optionsPageUrl,
-                    )
-                    controller.selectTab(newTab.tabId)
+                    lifecycleScope.launch {
+                        runCatching {
+                            browserViewModel.createExtensionRequestedTab(optionsPageUrl, active = true)
+                        }.onFailure { Log.w(AD_GUARD_DIAG_TAG, "onOpenOptionsPage failed", it) }
+                    }
                 }
             },
         )
