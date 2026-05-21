@@ -10,6 +10,7 @@ import net.matsudamper.browser.di.appModule
 import net.matsudamper.browser.di.dataModule
 import org.koin.android.ext.koin.androidContext
 import org.koin.androidx.workmanager.koin.workManagerFactory
+import org.koin.core.context.GlobalContext
 import org.koin.core.context.startKoin
 
 class BrowserApplication : Application() {
@@ -23,6 +24,9 @@ class BrowserApplication : Application() {
             workManagerFactory()
             modules(dataModule, appModule)
         }
+        // 診断用拡張機能を起動時に強制インスタンス化してインストールさせる。
+        // どこからも inject されないため明示的に get() しないとロードされない。
+        GlobalContext.get().get<WebRequestProbeExtension>()
     }
 
     private fun cleanFilePromptsCache() {
