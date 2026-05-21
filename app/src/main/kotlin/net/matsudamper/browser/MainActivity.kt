@@ -35,6 +35,8 @@ import org.koin.android.ext.android.inject
 import org.koin.androidx.viewmodel.ext.android.viewModel
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoRuntime
+import org.mozilla.geckoview.GeckoSession
+import org.mozilla.geckoview.WebExtension
 import java.util.concurrent.CancellationException
 
 class MainActivity : ComponentActivity() {
@@ -112,7 +114,10 @@ class MainActivity : ComponentActivity() {
         }
         hostsBrowserContent = true
         registerSystemNavigationObserverIfAvailable()
-        extensionInstaller = WebExtensionInstaller(runtime)
+        extensionInstaller = WebExtensionInstaller(
+            runtime = runtime,
+            onExtensionReady = ::setupDelegatesForExtension,
+        )
 
         runtime.setActivityDelegate(activityDelegate)
         runtime.settings.setExtensionsWebAPIEnabled(true)
@@ -310,6 +315,8 @@ class MainActivity : ComponentActivity() {
                             "optionalOrigins=${md.optionalOrigins.toList()} " +
                             "grantedOptionalOrigins=${md.grantedOptionalOrigins.toList()}",
                     )
+                    // 起動時点ですでにインストール済みの拡張機能にも delegate を設定する。
+                    setupDelegatesForExtension(ext)
                 }
             },
             { error ->
@@ -327,6 +334,63 @@ class MainActivity : ComponentActivity() {
                     )
                 } else if (webExtensionWarmUpRetryCount >= MAX_WARMUP_RETRIES) {
                     Log.w("MainActivity", "WebExtension warmup を ${MAX_WARMUP_RETRIES}回リトライしても失敗")
+                }
+            },
+        )
+    }
+
+    /**
+     * 拡張機能 (主に AdGuard 等のユーザーインストール拡張) が ready になったタイミングで
+     * 必要な runtime-level delegate を登録する。
+     * `setTabDelegate` を設定しないと AdGuard の "フィルタリングログ" 等の chrome.tabs.create
+     * 呼び出しが GeckoView:WebExtension:NewTab のリスナー不在で失敗し、拡張機能内部の
+     * 多くの処理がフェイルする（結果として webRequest blocking もスキップされる）。
+     */
+    private fun setupDelegatesForExtension(extension: WebExtension) {
+        // ビルトイン拡張機能 (ThemeColor/Media/FindInPage/MockLocation) は session-level の
+        // MessageDelegate で完結する設計のため runtime-level delegate は不要。
+        if (extension.isBuiltIn) return
+        Log.i(
+            AD_GUARD_DIAG_TAG,
+            "setupDelegatesForExtension id=${extension.id} name=${extension.metaData.name}",
+        )
+        extension.setTabDelegate(
+            object : WebExtension.TabDelegate {
+                override fun onNewTab(
+                    source: WebExtension,
+                    details: WebExtension.CreateTabDetails,
+                ): GeckoResult<GeckoSession> {
+                    val url = details.url ?: "about:blank"
+                    Log.i(
+                        AD_GUARD_DIAG_TAG,
+                        "TabDelegate.onNewTab id=${source.id} url=$url active=${details.active}",
+                    )
+                    val session = GeckoSession()
+                    val controller = browserViewModel.browserTabController
+                    val newTab = controller.createAndAppendTabWithSession(
+                        session = session,
+                        initialUrl = url,
+                    )
+                    if (details.active != false) {
+                        controller.selectTab(newTab.tabId)
+                    }
+                    return GeckoResult.fromValue(session)
+                }
+
+                override fun onOpenOptionsPage(source: WebExtension) {
+                    val optionsPageUrl = source.metaData.optionsPageUrl
+                    Log.i(
+                        AD_GUARD_DIAG_TAG,
+                        "TabDelegate.onOpenOptionsPage id=${source.id} url=$optionsPageUrl",
+                    )
+                    if (optionsPageUrl.isNullOrBlank()) return
+                    val session = GeckoSession()
+                    val controller = browserViewModel.browserTabController
+                    val newTab = controller.createAndAppendTabWithSession(
+                        session = session,
+                        initialUrl = optionsPageUrl,
+                    )
+                    controller.selectTab(newTab.tabId)
                 }
             },
         )

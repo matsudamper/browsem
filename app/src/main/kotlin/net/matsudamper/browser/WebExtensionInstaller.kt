@@ -15,6 +15,9 @@ internal const val AD_GUARD_DIAG_TAG = "AdGuardDiag"
 
 internal class WebExtensionInstaller(
     private val runtime: GeckoRuntime,
+    // 拡張機能が ready / インストール完了したタイミングで通知される。
+    // MainActivity がこれを受けて TabDelegate 等を設定する。
+    private val onExtensionReady: (WebExtension) -> Unit = {},
 ) {
     var installPromptState by mutableStateOf<InstallPromptState?>(null)
         private set
@@ -134,6 +137,7 @@ internal class WebExtensionInstaller(
             // onReady は拡張のバックグラウンドスクリプトが起動完了して API 利用可能になった
             // ことを示す。AdGuard の webRequest ハンドラ登録もこのタイミングで完了するはず。
             logExtensionState("AddonManager.onReady", extension)
+            onExtensionReady(extension)
         }
 
         override fun onOptionalPermissionsChanged(extension: WebExtension) {
