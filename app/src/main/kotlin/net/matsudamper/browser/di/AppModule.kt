@@ -43,6 +43,9 @@ val appModule = module {
                 // webRequest.onBeforeRequest 等によるリクエストのブロッキングを有効にする。
                 // この設定がないと AdGuard などのコンテンツブロッカーが機能しない。
                 .extensionsProcessEnabled(true)
+                // 診断用: 拡張機能 (AdGuard 等) と Web ページの console.log を logcat に流す。
+                // GeckoConsole タグで出力される（API 上タグ変更不可）。
+                .consoleOutput(true)
                 .build()
         )
     }
