@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -15,13 +16,13 @@ import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
@@ -34,6 +35,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -42,6 +44,7 @@ import net.matsudamper.browser.data.HomepageType
 import net.matsudamper.browser.data.SearchProvider
 import net.matsudamper.browser.data.ThemeMode
 import net.matsudamper.browser.data.TranslationProvider
+import net.matsudamper.browser.resources.R as ResourcesR
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -61,7 +64,7 @@ fun SettingsScreen(
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            painter = painterResource(ResourcesR.drawable.ic_arrow_back_24dp),
                             contentDescription = "戻る",
                         )
                     }
@@ -336,6 +339,38 @@ fun SettingsScreen(
 
             Spacer(Modifier.height(betweenPadding))
 
+            SettingSection(title = "バックアップ") {
+                Column {
+                    Text(
+                        text = "設定・タブ・タブグループ・Cookie・ログイン情報・履歴 (Gecko 側)・" +
+                            "サイト権限・サイト別設定を zip ファイルにエクスポート/インポートします。" +
+                            "キャッシュ・ダウンロード記録・閲覧履歴 (アプリ側 DB) は対象外です。",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        OutlinedButton(
+                            onClick = uiState.callbacks::requestBackupExport,
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            Text("エクスポート")
+                        }
+                        OutlinedButton(
+                            onClick = uiState.callbacks::requestBackupImport,
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            Text("インポート")
+                        }
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(betweenPadding))
+
             SettingSection(title = "拡張機能") {
                 TextButton(
                     onClick = onOpenExtensions,
@@ -360,6 +395,32 @@ fun SettingsScreen(
             Spacer(Modifier.height(8.dp))
             Spacer(Modifier.padding(bottom = paddingValues.calculateBottomPadding()))
         }
+    }
+
+    // バックアップ操作の確認ダイアログ（設定画面の上に重ねて表示する）
+    val confirmDialog = uiState.backupConfirmDialog
+    if (confirmDialog != null) {
+        val isImport = confirmDialog == SettingsScreenUiState.BackupConfirmType.Import
+        AlertDialog(
+            onDismissRequest = uiState.callbacks::dismissBackupConfirm,
+            title = { Text(if (isImport) "インポートを開始しますか？" else "エクスポートを開始しますか？") },
+            text = {
+                Text(
+                    "ブラウザのセッションおよび進行中のダウンロードを停止します。" +
+                        "この操作中は他の操作を行えません。",
+                )
+            },
+            confirmButton = {
+                Button(onClick = uiState.callbacks::confirmBackup) {
+                    Text("開始")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = uiState.callbacks::dismissBackupConfirm) {
+                    Text("キャンセル")
+                }
+            },
+        )
     }
 }
 
@@ -403,6 +464,10 @@ private fun SettingsScreenPreview() {
                     override fun setMockLocationEnabled(enabled: Boolean) = Unit
                     override fun setMockLocationInput(input: String) = Unit
                     override fun openMockLocationOnMap() = Unit
+                    override fun requestBackupExport() = Unit
+                    override fun requestBackupImport() = Unit
+                    override fun confirmBackup() = Unit
+                    override fun dismissBackupConfirm() = Unit
                 },
                 homepageType = HomepageType.HOMEPAGE_GOOGLE,
                 customHomepageUrl = "",
@@ -415,6 +480,7 @@ private fun SettingsScreenPreview() {
                 mockLocationEnabled = true,
                 mockLocationInput = "35.685175,139.752797",
                 mockLocationInputError = null,
+                backupConfirmDialog = null,
             ),
             onOpenExtensions = {},
             onOpenHistory = {},

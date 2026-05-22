@@ -22,13 +22,18 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -101,9 +106,12 @@ fun ExtensionsScreen(
                             ExtensionRow(
                                 extension = extension,
                                 isUninstalling = uiState.uninstallingId == extension.id,
-                                uninstallEnabled = uiState.uninstallingId == null,
+                                uninstallEnabled = uiState.uninstallingId == null && uiState.togglingId == null,
+                                isToggling = uiState.togglingId == extension.id,
+                                toggleEnabled = uiState.togglingId == null && uiState.uninstallingId == null,
                                 onOpenSettings = { uiState.callbacks.openExtensionSettings(extension.id) },
                                 onUninstall = { uiState.callbacks.uninstallExtension(extension.id) },
+                                onToggle = { enabled -> uiState.callbacks.setExtensionEnabled(extension.id, enabled) },
                             )
                         }
                     }
@@ -126,13 +134,96 @@ fun ExtensionsScreen(
     }
 }
 
+private val previewCallbacks = object : ExtensionsScreenUiState.Callbacks {
+    override fun refreshExtensions() = Unit
+    override fun uninstallExtension(extensionId: String) = Unit
+    override fun openExtensionSettings(extensionId: String) = Unit
+    override fun setExtensionEnabled(extensionId: String, enabled: Boolean) = Unit
+    override fun dismissError() = Unit
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun ExtensionsScreenLoadedPreview() {
+    MaterialTheme {
+        ExtensionsScreen(
+            uiState = ExtensionsScreenUiState(
+                callbacks = previewCallbacks,
+                loadingState = ExtensionsScreenUiState.LoadingState.Loaded(
+                    extensions = listOf(
+                        ExtensionsScreenUiState.ExtensionUiState(
+                            id = "ublock-origin@raymondhill.net",
+                            displayName = "uBlock Origin",
+                            version = "1.57.2",
+                            hasSettingsPage = true,
+                            isEnabled = true,
+                            isBuiltIn = false,
+                        ),
+                        ExtensionsScreenUiState.ExtensionUiState(
+                            id = "some-disabled-extension@example.com",
+                            displayName = "無効な拡張機能",
+                            version = "0.9.0",
+                            hasSettingsPage = false,
+                            isEnabled = false,
+                            isBuiltIn = false,
+                        ),
+                        ExtensionsScreenUiState.ExtensionUiState(
+                            id = "readability@built-in",
+                            displayName = "Readability (ビルトイン)",
+                            version = "1.0.0",
+                            hasSettingsPage = false,
+                            isEnabled = true,
+                            isBuiltIn = true,
+                        ),
+                    ),
+                ),
+                errorMessage = null,
+                uninstallingId = null,
+                togglingId = null,
+            ),
+            onBack = {},
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun ExtensionsScreenTogglingPreview() {
+    MaterialTheme {
+        ExtensionsScreen(
+            uiState = ExtensionsScreenUiState(
+                callbacks = previewCallbacks,
+                loadingState = ExtensionsScreenUiState.LoadingState.Loaded(
+                    extensions = listOf(
+                        ExtensionsScreenUiState.ExtensionUiState(
+                            id = "ublock-origin@raymondhill.net",
+                            displayName = "uBlock Origin",
+                            version = "1.57.2",
+                            hasSettingsPage = true,
+                            isEnabled = true,
+                            isBuiltIn = false,
+                        ),
+                    ),
+                ),
+                errorMessage = null,
+                uninstallingId = null,
+                togglingId = "ublock-origin@raymondhill.net",
+            ),
+            onBack = {},
+        )
+    }
+}
+
 @Composable
 private fun ExtensionRow(
     extension: ExtensionsScreenUiState.ExtensionUiState,
     isUninstalling: Boolean,
     uninstallEnabled: Boolean,
+    isToggling: Boolean,
+    toggleEnabled: Boolean,
     onOpenSettings: () -> Unit,
     onUninstall: () -> Unit,
+    onToggle: (Boolean) -> Unit,
 ) {
     Row(
         modifier = Modifier
@@ -170,9 +261,19 @@ private fun ExtensionRow(
             )
         }
         Spacer(modifier = Modifier.width(8.dp))
+        Switch(
+            checked = extension.isEnabled,
+            onCheckedChange = { onToggle(it) },
+            enabled = toggleEnabled && !isToggling,
+            modifier = Modifier.semantics {
+                contentDescription = "${extension.displayName} の有効/無効"
+            },
+        )
+        Spacer(modifier = Modifier.width(8.dp))
         TextButton(
             onClick = onUninstall,
-            enabled = uninstallEnabled,
+            enabled = uninstallEnabled && !extension.isBuiltIn,
+            modifier = Modifier.alpha(if (extension.isBuiltIn) 0f else 1f),
         ) {
             Text(if (isUninstalling) "削除中..." else "アンインストール")
         }

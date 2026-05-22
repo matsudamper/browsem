@@ -6,6 +6,7 @@ import net.matsudamper.browser.FindInPageWebExtension
 import net.matsudamper.browser.GeckoDownloadManager
 import net.matsudamper.browser.MockLocationWebExtension
 import net.matsudamper.browser.ThemeColorWebExtension
+import net.matsudamper.browser.data.BackupRepository
 import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.TabGroupRepository
 import net.matsudamper.browser.data.TabGroupRepositoryImpl
@@ -23,6 +24,7 @@ import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoRuntimeSettings
 
 val dataModule = module {
+    single { BackupRepository(androidContext()) }
     single { SettingsRepository(androidContext()) }
     single { TabRepository(androidContext()) }
     single<TabGroupRepository> { TabGroupRepositoryImpl(androidContext()) }
@@ -37,6 +39,10 @@ val appModule = module {
             androidContext(),
             GeckoRuntimeSettings.Builder()
                 .forceUserScalableEnabled(true)
+                // ユーザーインストール拡張機能のバックグラウンドスクリプトを専用プロセスで実行し、
+                // webRequest.onBeforeRequest 等によるリクエストのブロッキングを有効にする。
+                // この設定がないと AdGuard などのコンテンツブロッカーが機能しない。
+                .extensionsProcessEnabled(true)
                 .build()
         )
     }

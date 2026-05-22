@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.SystemClock
+import android.util.Log
 import android.view.ActionMode
 import android.view.Menu
 import android.view.MenuItem
@@ -55,12 +56,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
-import androidx.core.view.OneShotPreDrawListener
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.withContext
 import net.matsudamper.browser.data.TranslationProvider
 import net.matsudamper.browser.media.GeckoMediaSessionDelegate
 import net.matsudamper.browser.media.MediaWebExtension
@@ -206,7 +208,12 @@ internal fun GeckoBrowserTab(
         snapshotFlow { state.captureOnPageLoadRequestCount }
             .collectLatest { count ->
                 if (count == 0) return@collectLatest
-                geckoView?.also { gv -> state.captureTabPreview(gv) }
+                /**
+                 * GeckoView.capturePixels は Main スレッド必須。
+                 */
+                withContext(Dispatchers.Main.immediate) {
+                    geckoView?.also { gv -> state.captureTabPreview(gv) }
+                }
             }
     }
 
@@ -222,35 +229,129 @@ internal fun GeckoBrowserTab(
 
     // Surface 復元処理本体。ACTIVE なら即 return。
     //
-    // Column に .imePadding() が掛かっているため IME 表示中に pause すると GeckoView の
-    // 親が縮む。resume 時は SurfaceView が一旦 stale 寸法で再作成され、layout settle 後に
-    // 正しい寸法へ resize される。ここで Gecko compositor が attach 済みだと
-    // SyncResumeResizeCompositor の IPC 経路でハング → GPU プロセス kill 発生。
+    // Column に .imePadding() が掛かっているため IME 表示中に pause すると GeckoView が
+    // 縮む。ここで素直に setSession すると、setSession 直後の IME show/hide アニメーション
+    // による resize が Mozilla 内部の SyncResumeResizeCompositor 経路でハングして GPU
+    // プロセス kill に至る (1/5 程度の確率で観測)。
     //
-    // そこで ON_PAUSE 側で releaseSession 済の前提で、OneShotPreDrawListener で layout が
-    // 最新寸法で計測された後に setSession で fresh attach する。fresh attach は "resume"
-    // ではなく "initial" 扱いのため IPC ハング経路を通らない。
+    // そこで gv.height が連続して STABLE_FRAMES_THRESHOLD フレーム同じ値になるまで
+    // setSession を遅延する。これで IME アニメーション完了後の安定したサイズで attach
+    // できるため、setSession 直後の resize 経路を回避できる。最大 STABLE_TIMEOUT_MS で
+    // 強制 attach する fallback も用意。待機中は coverUntilFirstPaint で覆い隠す。
+    //
+    // local function は前方参照不可なので attach → schedule → restore の順で定義する。
+    fun attachSessionAfterStableSize(gecko: GeckoView) {
+        gecko.setSession(session)
+        session.setActive(true)
+        surfaceResumeState = SurfaceResumeState.ACTIVE
+    }
+
+    fun scheduleStableSizeAttach(
+        gecko: GeckoView,
+        recordedHeight: Int,
+        stableCount: Int,
+        startTimeMs: Long,
+    ) {
+        // 旧実装は OneShotPreDrawListener を使っていたが、preDraw は描画が必要なフレーム
+        // でしか発火しないため、サイズ安定後に画面の再描画トリガがないと stable check が
+        // 進まず復帰が遅延する事象が観測された (再現で 31 秒待たされた)。
+        // postOnAnimation は Choreographer のアニメーションフレームで毎 vsync 発火する
+        // ため、UI 操作がなくても安定検出を進められる。
+        gecko.postOnAnimation {
+            if (surfaceResumeState == SurfaceResumeState.ACTIVE) {
+                Log.d(TAG_SURFACE_RESUME, "stable-check skipped: already ACTIVE")
+                return@postOnAnimation
+            }
+            // ON_RESUME→ON_PAUSE の短時間遷移で遅延 callback が paused 中に動くのを防ぐ。
+            // ON_PAUSE 側で surfaceResumeState は RELEASED に戻され、次回 ON_START で
+            // 再度 scheduleStableSizeAttach が呼ばれる。
+            if (!lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
+                Log.d(TAG_SURFACE_RESUME, "stable-check skipped: lifecycle not STARTED")
+                surfaceResumeState = SurfaceResumeState.RELEASED
+                return@postOnAnimation
+            }
+            // ON_PAUSE で releaseSession + INVISIBLE 済の場合、state は RELEASED に戻っているので
+            // 復帰時の restoreSurfaceIfNeeded で再度 WAITING_STABLE に遷移しなおす。
+            if (surfaceResumeState != SurfaceResumeState.WAITING_STABLE) {
+                Log.d(
+                    TAG_SURFACE_RESUME,
+                    "stable-check skipped: state=$surfaceResumeState (not WAITING_STABLE)",
+                )
+                return@postOnAnimation
+            }
+            val h = gecko.height
+            if (h == 0 || gecko.width == 0) {
+                Log.d(TAG_SURFACE_RESUME, "stable-check: layout not settled, retry next frame")
+                scheduleStableSizeAttach(gecko, recordedHeight, stableCount, startTimeMs)
+                return@postOnAnimation
+            }
+            val elapsed = SystemClock.elapsedRealtime() - startTimeMs
+            if (h == recordedHeight) {
+                val nextCount = stableCount + 1
+                if (nextCount >= STABLE_FRAMES_THRESHOLD) {
+                    Log.d(
+                        TAG_SURFACE_RESUME,
+                        "stable-check: stable confirmed (h=$h, frames=$nextCount, elapsed=${elapsed}ms)" +
+                            " → setSession",
+                    )
+                    attachSessionAfterStableSize(gecko)
+                } else {
+                    scheduleStableSizeAttach(gecko, h, nextCount, startTimeMs)
+                }
+            } else {
+                if (elapsed >= STABLE_TIMEOUT_MS) {
+                    Log.w(
+                        TAG_SURFACE_RESUME,
+                        "stable-check: timeout after ${elapsed}ms while size still changing" +
+                            " (prev=$recordedHeight, current=$h) → 強制 setSession",
+                    )
+                    attachSessionAfterStableSize(gecko)
+                } else {
+                    Log.d(
+                        TAG_SURFACE_RESUME,
+                        "stable-check: size changed $recordedHeight → $h (elapsed=${elapsed}ms), reset counter",
+                    )
+                    scheduleStableSizeAttach(gecko, h, 0, startTimeMs)
+                }
+            }
+        }
+    }
+
     fun restoreSurfaceIfNeeded(gecko: GeckoView) {
-        if (surfaceResumeState == SurfaceResumeState.ACTIVE) return
+        Log.d(
+            TAG_SURFACE_RESUME,
+            "restoreSurfaceIfNeeded: state=$surfaceResumeState gv.size=${gecko.width}x${gecko.height}" +
+                " measured=${gecko.measuredWidth}x${gecko.measuredHeight} visibility=${gecko.visibility}" +
+                " session=${session.logKey()}",
+        )
+        if (surfaceResumeState != SurfaceResumeState.RELEASED) return
+        // ON_PAUSE で INVISIBLE にして Surface を破棄しているので VISIBLE に戻して
+        // SurfaceView 内部の Surface を新規作成させる。
+        if (gecko.visibility != View.VISIBLE) {
+            Log.d(TAG_SURFACE_RESUME, "restoreSurfaceIfNeeded: visibility VISIBLE に戻す")
+            gecko.visibility = View.VISIBLE
+        }
         // stale フレームが一瞬表示されるのを防ぐため pre-draw 待ちより前に cover する。
         gecko.coverUntilFirstPaint(resumeCoverColor)
-        OneShotPreDrawListener.add(gecko) {
-            if (surfaceResumeState == SurfaceResumeState.ACTIVE) return@add
-            // ON_RESUME→ON_PAUSE の短時間遷移で遅延 callback がフォアグラウンド外で
-            // 実行されると、paused activity で session を再活性化した上に stale サイズで
-            // setActive(true) を呼んでしまい本来防ぎたいハング経路に再突入する。
-            // 次回の ON_START / ON_RESUME で改めて登録されるので、ここでは state 遷移させずに抜ける。
-            if (!lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
-                return@add
-            }
-            gecko.setSession(session)
-            session.setActive(true)
-            surfaceResumeState = SurfaceResumeState.ACTIVE
-        }
+        surfaceResumeState = SurfaceResumeState.WAITING_STABLE
+        scheduleStableSizeAttach(
+            gecko = gecko,
+            recordedHeight = -1,
+            stableCount = 0,
+            startTimeMs = SystemClock.elapsedRealtime(),
+        )
     }
 
     DisposableEffect(lifecycleOwner, session, resumeCoverColor) {
         val observer = LifecycleEventObserver { _, event ->
+            val gv = geckoView
+            Log.d(
+                TAG_SURFACE_RESUME,
+                "lifecycle event=$event state=$surfaceResumeState gv=${gv != null}" +
+                    " gv.size=${gv?.width ?: -1}x${gv?.height ?: -1}" +
+                    " session=${session.logKey()} sessionOpen=${session.isOpen}" +
+                    " mediaKeep=${mediaWebExtension.shouldKeepSessionAttached(session)}",
+            )
             when (event) {
                 Lifecycle.Event.ON_PAUSE -> {
                     // ON_STOP まで待つと surface 破棄→再作成時に GeckoView 内部の
@@ -263,17 +364,45 @@ internal fun GeckoBrowserTab(
                     // capture preview は release 前に start する。capturePixels() は非同期
                     // GeckoResult を返すため release 直後に走るキャプチャ完了率は低下するが、
                     // ハング回避を優先する。
-                    if (surfaceResumeState == SurfaceResumeState.ACTIVE &&
+                    //
+                    // WAITING_STABLE 中（前回 resume の安定待ちが完了する前に再度 pause した
+                    // 場合）も releaseSession を行いたいので ACTIVE と同じ扱いにする。
+                    if (surfaceResumeState != SurfaceResumeState.RELEASED &&
                         !mediaWebExtension.shouldKeepSessionAttached(session)
                     ) {
-                        geckoView?.also { gv ->
+                        val target = geckoView
+                        if (target == null) {
+                            // geckoView が更新されないまま ON_PAUSE が来ると release できず、
+                            // 復帰時に session 付きで surface が再作成され BLAST reject が起きる。
+                            // ここで検知できれば再現条件を絞り込めるため明示的に警告を残す。
+                            Log.w(
+                                TAG_SURFACE_RESUME,
+                                "ON_PAUSE: geckoView=null のため releaseSession 不可。" +
+                                    " 復帰時にハングする可能性あり session=${session.logKey()}",
+                            )
+                        } else {
+                            Log.d(
+                                TAG_SURFACE_RESUME,
+                                "ON_PAUSE: releaseSession + INVISIBLE 実行 gv.size=${target.width}x${target.height}",
+                            )
                             session.setActive(false)
                             // best-effort capture（非同期 GeckoResult、release 後に失敗する可能性あり）。
-                            state.captureTabPreview(gv)
+                            state.captureTabPreview(target)
                             // surface 再作成時の自動 compositor resume を防ぐため即 detach。
-                            gv.releaseSession()
+                            target.releaseSession()
+                            // releaseSession だけでは Mozilla 側に古い surface 参照が残るらしく、
+                            // 復帰時の setSession 直後に GPU プロセスが kill される事象が観測された。
+                            // SurfaceView を INVISIBLE にすると内部 Surface を破棄するため、
+                            // 復帰時の setSession を完全な新規 attach として扱わせる。
+                            target.visibility = View.INVISIBLE
                             surfaceResumeState = SurfaceResumeState.RELEASED
                         }
+                    } else {
+                        Log.d(
+                            TAG_SURFACE_RESUME,
+                            "ON_PAUSE skipped: state=$surfaceResumeState" +
+                                " mediaKeep=${mediaWebExtension.shouldKeepSessionAttached(session)}",
+                        )
                     }
                 }
                 Lifecycle.Event.ON_STOP -> {
@@ -285,9 +414,9 @@ internal fun GeckoBrowserTab(
                     //       再現を確認したら、audio を殺さない形で compositor 再構築する手段
                     //       （releaseSession しても MediaSession 経由で音は継続する可能性が高い）
                     //       を検討する。
-                    geckoView?.also { gv ->
+                    geckoView?.also { target ->
                         if (mediaWebExtension.shouldKeepSessionAttached(session)) {
-                            state.captureTabPreview(gv)
+                            state.captureTabPreview(target)
                         }
                     }
                 }
@@ -472,8 +601,12 @@ internal fun GeckoBrowserTab(
     Column(
         modifier = modifier
             .fillMaxSize()
-            // 上部（ステータスバー）は BrowserToolBar の背景色で塗りつぶすため除外する
+            // 上部（ステータスバー）は BrowserToolBar の背景色で塗りつぶすため除外する。
             .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal))
+            // ime 表示時に Web 下部入力欄が隠れないよう GeckoView も IME 上に押し上げる。
+            // ただし resume 直後の resize で GPU プロセス kill が起きる経路があるため、
+            // setSession のタイミングを restoreSurfaceIfNeeded 側で「サイズが安定するまで
+            // 待つ」よう制御している。
             .imePadding()
     ) {
         if (state.showFindInPage) {
@@ -767,21 +900,51 @@ private fun TabHistoryBottomSheet(
  * Surface/Session 復元の進行状態。
  *
  * - ACTIVE: 前面表示中。復元処理は全て no-op。
- * - RELEASED: ON_PAUSE で releaseSession() 済。ON_START で setSession が必要。
+ * - RELEASED: ON_PAUSE で releaseSession() 済。ON_START で復元処理が必要。
+ * - WAITING_STABLE: 復元の preDraw ループ中で gv.height が安定するのを待っている。
+ *   IME アニメーション中の resize で GPU プロセスが kill される現象を避けるため、
+ *   サイズが連続フレーム同じになるまで setSession を遅延する。
  */
 private enum class SurfaceResumeState {
     ACTIVE,
     RELEASED,
+    WAITING_STABLE,
 }
 
 sealed interface GeckoBrowserTabTestTags {
     val id: String
     val testTag get() = "${GeckoBrowserTabTestTags::class.java.name}#$id"
 
-    object GeckoContainer : GeckoBrowserTabTestTags { override val id = "gecko_container" }
+    object GeckoContainer : GeckoBrowserTabTestTags {
+        override val id = "gecko_container"
+
+        fun testTag(isForeground: Boolean): String =
+            if (isForeground) "$testTag#foreground" else testTag
+    }
 }
 
 private const val URL_BAR_IME_HIDE_GRACE_MS = 700L
+
+/**
+ * パスワードマネージャ等の Activity 切替復帰時に GeckoView の surface 復元で起きる
+ * BLAST reject → GPU プロセス kill 経路を診断するためのログタグ。
+ */
+private const val TAG_SURFACE_RESUME = "GeckoSurfaceResume"
+
+/**
+ * 復帰時に gv.height が何フレーム連続で同じ値なら「安定した」とみなして setSession するか。
+ * IME アニメーションは概ね 200-300ms かかるため、60fps で 3 フレーム (=約 50ms) 連続
+ * 同じであれば、その時点で当面サイズ変化はないと判断する。
+ */
+private const val STABLE_FRAMES_THRESHOLD = 3
+
+/**
+ * 復帰時のサイズ安定待ちのタイムアウト。これを超えるとサイズが安定していなくても強制的に
+ * setSession する。Web 入力欄の表示遅延と GPU kill 防止のトレードオフ。
+ */
+private const val STABLE_TIMEOUT_MS = 1000L
+
+private fun GeckoSession.logKey(): String = Integer.toHexString(System.identityHashCode(this))
 
 // テキスト選択メニューのカスタム項目 ID
 private const val MENU_ID_SEARCH = 0x10001

@@ -23,10 +23,16 @@ internal fun resolveAmoInstallUriFromPage(pageUrl: String): String? {
         return null
     }
 
+    val appTarget = if (segments.take(addonIndex).any { it.equals("android", ignoreCase = true) }) {
+        "android"
+    } else {
+        "firefox"
+    }
+
     val slug = segments[addonIndex + 1]
     if (slug.isBlank()) {
         return null
     }
 
-    return "https://addons.mozilla.org/firefox/downloads/latest/$slug/latest.xpi"
+    return "https://addons.mozilla.org/$appTarget/downloads/latest/$slug/latest.xpi"
 }

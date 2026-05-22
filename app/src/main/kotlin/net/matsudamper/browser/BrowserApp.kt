@@ -60,6 +60,7 @@ import net.matsudamper.browser.screen.browser.BrowserScreenViewModel
 import net.matsudamper.browser.screen.extensions.ExtensionsScreenViewModel
 import net.matsudamper.browser.screen.history.HistoryScreenViewModel
 import net.matsudamper.browser.screen.downloads.DownloadManagementScreenViewModel
+import net.matsudamper.browser.screen.backup.BackupProgressViewModel
 import net.matsudamper.browser.screen.settings.SettingsScreenViewModel
 import net.matsudamper.browser.screen.tab.TabsScreenViewModel
 import net.matsudamper.browser.ui.common.BrowserTheme
@@ -67,8 +68,14 @@ import net.matsudamper.browser.ui.browser.BrowserScreen
 import net.matsudamper.browser.ui.downloads.DownloadManagementScreen
 import net.matsudamper.browser.ui.extensions.ExtensionsScreen
 import net.matsudamper.browser.ui.history.HistoryScreen
+import net.matsudamper.browser.ui.settings.BackupProgressScreen
+import net.matsudamper.browser.ui.settings.BackupProgressUiState
 import net.matsudamper.browser.ui.settings.SettingsScreen
 import net.matsudamper.browser.ui.tabs.TabsScreen
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.work.WorkManager
+import net.matsudamper.browser.data.BackupRepository
 import org.koin.compose.koinInject
 
 @Composable
@@ -370,9 +377,9 @@ private fun BrowserAppContent(
 
                     AppDestination.Settings -> navEntry(key) {
                         val mockLocationWebExtension: MockLocationWebExtension = koinInject()
-                        val settingsViewModel = remember(settingsRepository, mockLocationWebExtension) {
+                        val settingsViewModel = composeViewModel(initializer = {
                             SettingsScreenViewModel(settingsRepository, mockLocationWebExtension)
-                        }
+                        })
                         val settingsUiState by settingsViewModel.uiState.collectAsState()
                         LaunchedEffect(settingsViewModel) {
                             settingsViewModel.eventHandler.receiveAsFlow().collect { handler ->
@@ -392,6 +399,10 @@ private fun BrowserAppContent(
                                         } catch (_: android.content.ActivityNotFoundException) {
                                             // 地図アプリがインストールされていない端末では何もしない
                                         }
+                                    }
+
+                                    override fun onNavigateToBackupProgress(isImport: Boolean) {
+                                        backStack.add(AppDestination.BackupProgress(isImport))
                                     }
                                 })
                             }
@@ -530,11 +541,113 @@ private fun BrowserAppContent(
                         )
                     }
 
+                    is AppDestination.BackupProgress -> navEntry(key) {
+                        val backupRepository: BackupRepository = koinInject()
+                        val backupViewModel = composeViewModel(initializer = {
+                            BackupProgressViewModel(key.isImport, backupRepository)
+                        })
+                        val backupUiState by backupViewModel.uiState.collectAsState()
+
+                        // 一時停止したタブIDを記録する（後から追加されるタブも追跡するため）
+                        val pausedTabIds = remember { mutableSetOf<String>() }
+
+                        // タブ一覧の変化を監視し、新たに追加されたタブも含めて一時停止する
+                        LaunchedEffect(browserTabController, browserSessionLifecycleController) {
+                            browserTabController.tabStoreState.collect {
+                                browserTabController.tabs.forEach { tab ->
+                                    if (pausedTabIds.add(tab.tabId)) {
+                                        browserSessionLifecycleController.pauseSession(tab)
+                                    }
+                                }
+                            }
+                        }
+
+                        // 画面離脱時に一時停止したすべてのタブを再開する
+                        DisposableEffect(browserTabController, browserSessionLifecycleController) {
+                            onDispose {
+                                browserTabController.tabs
+                                    .filter { it.tabId in pausedTabIds }
+                                    .forEach { tab ->
+                                        browserSessionLifecycleController.resumeSession(tab)
+                                    }
+                            }
+                        }
+
+                        // InProgress に移行した時点で1度だけダウンロードをキャンセルする。
+                        // phase 自体を key にすると進捗メッセージ更新ごとに再実行されるため、
+                        // InProgress であるかどうかの boolean を key にして遷移時のみ走らせる。
+                        val isInProgress = backupUiState.phase is BackupProgressUiState.Phase.InProgress
+                        LaunchedEffect(isInProgress) {
+                            if (isInProgress) {
+                                WorkManager.getInstance(context)
+                                    .cancelAllWorkByTag(DownloadWorker.TAG_DOWNLOAD)
+                            }
+                        }
+
+                        val exportLauncher = rememberLauncherForActivityResult(
+                            ActivityResultContracts.CreateDocument(BackupRepository.MIME_TYPE),
+                        ) { uri ->
+                            if (uri != null) {
+                                backupViewModel.startWithUri(uri)
+                            } else {
+                                backStack.removeLastOrNull()
+                            }
+                        }
+                        val importLauncher = rememberLauncherForActivityResult(
+                            ActivityResultContracts.OpenDocument(),
+                        ) { uri ->
+                            if (uri != null) {
+                                backupViewModel.startWithUri(uri)
+                            } else {
+                                backStack.removeLastOrNull()
+                            }
+                        }
+
+                        LaunchedEffect(backupViewModel) {
+                            backupViewModel.eventHandler.receiveAsFlow().collect { handler ->
+                                handler(object : BackupProgressViewModel.Event {
+                                    override fun onRequestFilePicker() {
+                                        if (key.isImport) {
+                                            importLauncher.launch(
+                                                arrayOf(BackupRepository.MIME_TYPE, "application/octet-stream", "*/*"),
+                                            )
+                                        } else {
+                                            exportLauncher.launch(buildBackupFileName())
+                                        }
+                                    }
+
+                                    override fun onRestartApp() {
+                                        // DataStore と Room のキャッシュを完全に捨てて
+                                        // 新しいファイルを読み込ませるため、プロセスごと終了する
+                                        android.os.Process.killProcess(android.os.Process.myPid())
+                                    }
+
+                                    override fun onNavigateBack() {
+                                        backStack.removeLastOrNull()
+                                    }
+                                })
+                            }
+                        }
+
+                        BackupProgressScreen(
+                            uiState = backupUiState,
+                        )
+                    }
+
                     else -> error("Unknown destination: $key")
                 }
             },
         )
     }
+}
+
+/**
+ * 日時付きのバックアップファイル名を生成する。
+ * SAF のファイル作成ピッカーに初期ファイル名として渡す。
+ */
+private fun buildBackupFileName(): String {
+    val formatter = java.text.SimpleDateFormat("yyyyMMdd-HHmmss", java.util.Locale.US)
+    return "browsem-backup-${formatter.format(java.util.Date())}.${BackupRepository.FILE_EXTENSION}"
 }
 
 private fun navEntry(

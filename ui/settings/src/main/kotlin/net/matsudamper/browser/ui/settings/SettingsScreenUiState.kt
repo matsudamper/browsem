@@ -20,7 +20,10 @@ data class SettingsScreenUiState(
     val mockLocationEnabled: Boolean,
     val mockLocationInput: String,
     val mockLocationInputError: String?,
+    val backupConfirmDialog: BackupConfirmType?,
 ) {
+    enum class BackupConfirmType { Export, Import }
+
     interface Callbacks {
         fun setHomepageType(type: HomepageType)
         fun setCustomHomepageUrl(url: String)
@@ -33,5 +36,13 @@ data class SettingsScreenUiState(
         fun setMockLocationEnabled(enabled: Boolean)
         fun setMockLocationInput(input: String)
         fun openMockLocationOnMap()
+        /** バックアップのエクスポートを要求する（確認ダイアログを表示） */
+        fun requestBackupExport()
+        /** バックアップのインポートを要求する（確認ダイアログを表示） */
+        fun requestBackupImport()
+        /** 確認ダイアログで「開始」を押した */
+        fun confirmBackup()
+        /** 確認ダイアログを閉じる */
+        fun dismissBackupConfirm()
     }
 }

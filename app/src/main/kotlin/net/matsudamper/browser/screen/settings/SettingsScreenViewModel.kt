@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import net.matsudamper.browser.MockLocationWebExtension
@@ -31,6 +32,10 @@ internal class SettingsScreenViewModel(
     // リポジトリ値による初回セットを完了したかどうかのフラグ
     // isEmpty() では空文字入力と未初期化を区別できないため専用フラグを使用する
     private var mockLocationInputInitialized = false
+
+    // 確認ダイアログの表示状態
+    private val backupConfirmDialogFlow =
+        MutableStateFlow<SettingsScreenUiState.BackupConfirmType?>(null)
 
     private val callbacks = object : SettingsScreenUiState.Callbacks {
         override fun setHomepageType(type: HomepageType) {
@@ -82,12 +87,36 @@ internal class SettingsScreenViewModel(
         override fun openMockLocationOnMap() {
             eventHandler.trySend { it.onOpenMockLocationOnMap() }
         }
+
+        override fun requestBackupExport() {
+            backupConfirmDialogFlow.value = SettingsScreenUiState.BackupConfirmType.Export
+        }
+
+        override fun requestBackupImport() {
+            backupConfirmDialogFlow.value = SettingsScreenUiState.BackupConfirmType.Import
+        }
+
+        override fun confirmBackup() {
+            val type = backupConfirmDialogFlow.value ?: return
+            backupConfirmDialogFlow.value = null
+            eventHandler.trySend {
+                it.onNavigateToBackupProgress(type == SettingsScreenUiState.BackupConfirmType.Import)
+            }
+        }
+
+        override fun dismissBackupConfirm() {
+            backupConfirmDialogFlow.value = null
+        }
     }
 
     val uiState: StateFlow<SettingsScreenUiState?> = MutableStateFlow<SettingsScreenUiState?>(null)
         .also { uiStateFlow ->
             viewModelScope.launch {
-                settingsRepository.settings.collectLatest { settings ->
+                combine(
+                    settingsRepository.settings,
+                    backupConfirmDialogFlow,
+                ) { settings, confirmDialog -> settings to confirmDialog }
+                    .collectLatest { (settings, confirmDialog) ->
                     // 初回だけ入力欄をリポジトリの値で初期化する
                     if (!mockLocationInputInitialized) {
                         mockLocationInputFlow.value = formatMockLocationInput(
@@ -100,6 +129,7 @@ internal class SettingsScreenViewModel(
                         settings.toUiState(
                             callbacks = callbacks,
                             mockLocationInput = mockLocationInputFlow.value,
+                            backupConfirmDialog = confirmDialog,
                         )
                     }
                     // 拡張機能にも最新設定を通知する
@@ -134,6 +164,8 @@ internal class SettingsScreenViewModel(
 
     interface Event {
         fun onOpenMockLocationOnMap()
+        /** バックアップ進行画面に遷移する */
+        fun onNavigateToBackupProgress(isImport: Boolean)
     }
 }
 
@@ -183,6 +215,7 @@ internal fun formatMockLocationInput(latitude: Double, longitude: Double): Strin
 private fun BrowserSettings.toUiState(
     callbacks: SettingsScreenUiState.Callbacks,
     mockLocationInput: String,
+    backupConfirmDialog: SettingsScreenUiState.BackupConfirmType?,
 ): SettingsScreenUiState {
     return SettingsScreenUiState(
         callbacks = callbacks,
@@ -197,5 +230,6 @@ private fun BrowserSettings.toUiState(
         mockLocationEnabled = mockLocationEnabled,
         mockLocationInput = mockLocationInput,
         mockLocationInputError = validateMockLocationInput(mockLocationInput),
+        backupConfirmDialog = backupConfirmDialog,
     )
 }
