@@ -35,6 +35,12 @@ class BrowserSessionController internal constructor(
 class BrowserSessionLifecycleController(
     private val geckoRuntime: GeckoRuntime,
 ) {
+    // 拡張機能 (AdGuard 等) に「現在アクティブなタブ」を通知するための追跡用。
+    // WebExtensionController.setTabActive(session, true) は同時に一つの session のみ
+    // active として扱うのが意図された使い方なので、直前の active session を覚えておき
+    // 切り替え時に false→true の順で更新する。
+    private var activeExtensionSession: GeckoSession? = null
+
     /**
      * タブを前面表示して利用可能にする直前に呼ぶ。
      *
@@ -50,6 +56,7 @@ class BrowserSessionLifecycleController(
                 tab.session.loadUri(url)
             }
             tab.session.setActive(true)
+            markActiveForExtensions(tab.session)
             return
         }
         if (tab.pendingInitialUrl != null) {
@@ -66,11 +73,13 @@ class BrowserSessionLifecycleController(
                 tab.initHistoryFromSessionState(parsed)
                 tab.session.restoreState(parsed)
                 tab.session.setActive(true)
+                markActiveForExtensions(tab.session)
                 return
             }
         }
         tab.session.loadUri(tab.currentUrl.ifBlank { "about:blank" })
         tab.session.setActive(true)
+        markActiveForExtensions(tab.session)
     }
 
     /**
@@ -89,6 +98,24 @@ class BrowserSessionLifecycleController(
     fun resumeSession(tab: BrowserTab) {
         if (tab.session.isOpen) {
             tab.session.setActive(true)
+            markActiveForExtensions(tab.session)
         }
+    }
+
+    /**
+     * 拡張機能側に「これがアクティブタブ」と通知する。直前の active session があれば
+     * 先に false で解除してから新しい session を true で設定する。webRequest 等が
+     * tabId を参照して動作する拡張 (AdGuard など) は、active タブが分からないと
+     * blocking をスキップすることがあるため必要。
+     */
+    private fun markActiveForExtensions(session: GeckoSession) {
+        if (!session.isOpen) return
+        if (activeExtensionSession === session) return
+        val previous = activeExtensionSession
+        if (previous != null && previous !== session && previous.isOpen) {
+            geckoRuntime.webExtensionController.setTabActive(previous, false)
+        }
+        geckoRuntime.webExtensionController.setTabActive(session, true)
+        activeExtensionSession = session
     }
 }

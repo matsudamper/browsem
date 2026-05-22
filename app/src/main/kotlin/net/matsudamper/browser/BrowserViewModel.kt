@@ -28,6 +28,8 @@ import net.matsudamper.browser.data.ThemeMode
 import net.matsudamper.browser.data.TranslationProvider
 import net.matsudamper.browser.data.resolvedBrowserSettings
 import org.mozilla.geckoview.GeckoRuntime
+import org.mozilla.geckoview.GeckoSession
+import java.util.UUID
 
 internal data class BrowserAppUiState(
     val themeMode: ThemeMode,
@@ -135,6 +137,39 @@ internal class BrowserViewModel(
                 browserTabController.tabs.map { it.tabId },
             )
             eventHandler.trySend { it.onTabsRestored(tabId) }
+        }
+    }
+
+    /**
+     * 拡張機能 (AdGuard 等) から chrome.tabs.create / onOpenOptionsPage で要求された
+     * 新タブを生成する。
+     *
+     * ユーザーが「デフォルト」指定したタブグループ (isDefault=true) があれば、
+     * createAndAppendTabWithSession より先に DB へグループ割当を書き込む。
+     * これをしないと TabsScreenViewModel のウォッチャーが先に発火して
+     * アクティブグループ (最初のグループになりがち) へ自動割当されてしまう。
+     * 外部 Intent からのタブ作成 (BrowserApp.kt) と同じ手順。
+     */
+    suspend fun createExtensionRequestedTab(
+        url: String,
+        active: Boolean,
+    ): GeckoSession {
+        val tabId = UUID.randomUUID().toString()
+        val defaultGroupId = tabGroupRepository.getDefaultGroupId()
+        if (defaultGroupId != null) {
+            tabGroupRepository.assignTabToGroup(tabId, defaultGroupId)
+        }
+        return withContext(Dispatchers.Main) {
+            val session = GeckoSession()
+            val newTab = browserTabController.createAndAppendTabWithSession(
+                session = session,
+                tabId = tabId,
+                initialUrl = url,
+            )
+            if (active) {
+                browserTabController.selectTab(newTab.tabId)
+            }
+            session
         }
     }
 

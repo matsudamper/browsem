@@ -35,6 +35,8 @@ import org.koin.android.ext.android.inject
 import org.koin.androidx.viewmodel.ext.android.viewModel
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoRuntime
+import org.mozilla.geckoview.GeckoSession
+import org.mozilla.geckoview.WebExtension
 import java.util.concurrent.CancellationException
 
 class MainActivity : ComponentActivity() {
@@ -112,12 +114,20 @@ class MainActivity : ComponentActivity() {
         }
         hostsBrowserContent = true
         registerSystemNavigationObserverIfAvailable()
-        extensionInstaller = WebExtensionInstaller(runtime)
+        extensionInstaller = WebExtensionInstaller(
+            runtime = runtime,
+            onExtensionReady = ::setupDelegatesForExtension,
+        )
 
         runtime.setActivityDelegate(activityDelegate)
         runtime.settings.setExtensionsWebAPIEnabled(true)
         runtime.webExtensionController.setPromptDelegate(extensionInstaller.promptDelegate)
         runtime.webExtensionController.setAddonManagerDelegate(extensionInstaller.addonManagerDelegate)
+        // 拡張プロセスのクラッシュ閾値超過時に spawning を再有効化するための delegate。
+        // これがないと一度プロセスがダウンすると webRequest 系 API が永続的に死んだままになる。
+        runtime.webExtensionController.setExtensionProcessDelegate(
+            extensionInstaller.extensionProcessDelegate,
+        )
         warmUpWebExtensionController()
 
         // ACTION_OPEN_DOWNLOADS は savedInstanceState の有無にかかわらず処理する。
@@ -161,6 +171,12 @@ class MainActivity : ComponentActivity() {
                 InstallPromptDialog(
                     prompt = prompt,
                     resolveInstallPrompt = extensionInstaller::resolveInstallPrompt,
+                )
+            }
+            extensionInstaller.permissionPromptState?.let { prompt ->
+                PermissionPromptDialog(
+                    prompt = prompt,
+                    resolvePermissionPrompt = extensionInstaller::resolvePermissionPrompt,
                 )
             }
             extensionInstaller.installFailureMessage?.let { message ->
@@ -257,7 +273,11 @@ class MainActivity : ComponentActivity() {
         ) {
             runtime.webExtensionController.setPromptDelegate(null)
         }
-        runtime.webExtensionController.setAddonManagerDelegate(null)
+        // setAddonManagerDelegate / setExtensionProcessDelegate には getter が公開されておらず、
+        // promptDelegate のように所有者チェックを行えない。構成変更時に旧 MainActivity が
+        // 解除すると新 MainActivity が登録した delegate まで外れてしまうため、ここでは
+        // 解除しない。次の onCreate で必ず上書き登録される。WebExtensionInstaller は
+        // MainActivity を参照していないので Activity リークは発生しない。
         super.onDestroy()
     }
 
@@ -267,9 +287,11 @@ class MainActivity : ComponentActivity() {
         }
         webExtensionWarmUpInProgress = true
         runtime.webExtensionController.list().accept(
-            {
+            { extensions ->
                 webExtensionWarmUpInProgress = false
                 webExtensionWarmUpCompleted = true
+                // 起動時点ですでにインストール済みの拡張機能にも delegate を設定する。
+                extensions?.forEach { ext -> setupDelegatesForExtension(ext) }
             },
             {
                 webExtensionWarmUpInProgress = false
@@ -281,6 +303,49 @@ class MainActivity : ComponentActivity() {
                     )
                 } else if (webExtensionWarmUpRetryCount >= MAX_WARMUP_RETRIES) {
                     Log.w("MainActivity", "WebExtension warmup を ${MAX_WARMUP_RETRIES}回リトライしても失敗")
+                }
+            },
+        )
+    }
+
+    /**
+     * 拡張機能 (主に AdGuard 等のユーザーインストール拡張) が ready になったタイミングで
+     * 必要な runtime-level delegate を登録する。
+     * `setTabDelegate` を設定しないと AdGuard の "フィルタリングログ" 等の chrome.tabs.create
+     * 呼び出しが GeckoView:WebExtension:NewTab のリスナー不在で失敗し、拡張機能内部の
+     * 多くの処理がフェイルする（結果として webRequest blocking もスキップされる）。
+     */
+    private fun setupDelegatesForExtension(extension: WebExtension) {
+        // ビルトイン拡張機能 (ThemeColor/Media/FindInPage/MockLocation) は session-level の
+        // MessageDelegate で完結する設計のため runtime-level delegate は不要。
+        if (extension.isBuiltIn) return
+        extension.setTabDelegate(
+            object : WebExtension.TabDelegate {
+                override fun onNewTab(
+                    source: WebExtension,
+                    details: WebExtension.CreateTabDetails,
+                ): GeckoResult<GeckoSession> {
+                    val url = details.url ?: "about:blank"
+                    val active = details.active != false
+                    val result = GeckoResult<GeckoSession>()
+                    lifecycleScope.launch {
+                        try {
+                            result.complete(
+                                browserViewModel.createExtensionRequestedTab(url, active),
+                            )
+                        } catch (e: Throwable) {
+                            result.completeExceptionally(e)
+                        }
+                    }
+                    return result
+                }
+
+                override fun onOpenOptionsPage(source: WebExtension) {
+                    val optionsPageUrl = source.metaData.optionsPageUrl
+                    if (optionsPageUrl.isNullOrBlank()) return
+                    lifecycleScope.launch {
+                        browserViewModel.createExtensionRequestedTab(optionsPageUrl, active = true)
+                    }
                 }
             },
         )
@@ -388,6 +453,28 @@ private fun InstallPromptDialog(
         dismissButton = {
             TextButton(onClick = { resolveInstallPrompt(false) }) {
                 Text("Cancel")
+            }
+        }
+    )
+}
+
+@Composable
+private fun PermissionPromptDialog(
+    prompt: PermissionPromptState,
+    resolvePermissionPrompt: (allow: Boolean) -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = { resolvePermissionPrompt(false) },
+        title = { Text(prompt.title) },
+        text = { Text(prompt.message) },
+        confirmButton = {
+            TextButton(onClick = { resolvePermissionPrompt(true) }) {
+                Text("Allow")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = { resolvePermissionPrompt(false) }) {
+                Text("Deny")
             }
         }
     )
