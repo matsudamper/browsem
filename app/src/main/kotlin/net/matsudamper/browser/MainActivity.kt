@@ -128,12 +128,6 @@ class MainActivity : ComponentActivity() {
         runtime.webExtensionController.setExtensionProcessDelegate(
             extensionInstaller.extensionProcessDelegate,
         )
-        Log.i(
-            AD_GUARD_DIAG_TAG,
-            "MainActivity.onCreate runtimeSettings " +
-                "extensionsWebAPIEnabled=${runtime.settings.extensionsWebAPIEnabled} " +
-                "extensionsProcessEnabled=${runtime.settings.extensionsProcessEnabled}",
-        )
         warmUpWebExtensionController()
 
         // ACTION_OPEN_DOWNLOADS は savedInstanceState の有無にかかわらず処理する。
@@ -296,37 +290,12 @@ class MainActivity : ComponentActivity() {
             { extensions ->
                 webExtensionWarmUpInProgress = false
                 webExtensionWarmUpCompleted = true
-                Log.i(
-                    AD_GUARD_DIAG_TAG,
-                    "warmup list completed count=${extensions?.size ?: 0}",
-                )
-                extensions?.forEach { ext ->
-                    val md = ext.metaData
-                    Log.i(
-                        AD_GUARD_DIAG_TAG,
-                        "warmup list entry id=${ext.id} name=${md.name} version=${md.version} " +
-                            "enabled=${md.enabled} isBuiltIn=${ext.isBuiltIn} " +
-                            "signedState=${md.signedState} blocklistState=${md.blocklistState} " +
-                            "disabledFlags=${md.disabledFlags} " +
-                            "requiredPermissions=${md.requiredPermissions.toList()} " +
-                            "requiredOrigins=${md.requiredOrigins.toList()} " +
-                            "optionalPermissions=${md.optionalPermissions.toList()} " +
-                            "grantedOptionalPermissions=${md.grantedOptionalPermissions.toList()} " +
-                            "optionalOrigins=${md.optionalOrigins.toList()} " +
-                            "grantedOptionalOrigins=${md.grantedOptionalOrigins.toList()}",
-                    )
-                    // 起動時点ですでにインストール済みの拡張機能にも delegate を設定する。
-                    setupDelegatesForExtension(ext)
-                }
+                // 起動時点ですでにインストール済みの拡張機能にも delegate を設定する。
+                extensions?.forEach { ext -> setupDelegatesForExtension(ext) }
             },
-            { error ->
+            {
                 webExtensionWarmUpInProgress = false
                 webExtensionWarmUpRetryCount++
-                Log.w(
-                    AD_GUARD_DIAG_TAG,
-                    "warmup list error retry=$webExtensionWarmUpRetryCount",
-                    error,
-                )
                 if (!isFinishing && !isDestroyed && webExtensionWarmUpRetryCount < MAX_WARMUP_RETRIES) {
                     window.decorView.postDelayed(
                         { warmUpWebExtensionController() },
@@ -350,10 +319,6 @@ class MainActivity : ComponentActivity() {
         // ビルトイン拡張機能 (ThemeColor/Media/FindInPage/MockLocation) は session-level の
         // MessageDelegate で完結する設計のため runtime-level delegate は不要。
         if (extension.isBuiltIn) return
-        Log.i(
-            AD_GUARD_DIAG_TAG,
-            "setupDelegatesForExtension id=${extension.id} name=${extension.metaData.name}",
-        )
         extension.setTabDelegate(
             object : WebExtension.TabDelegate {
                 override fun onNewTab(
@@ -362,10 +327,6 @@ class MainActivity : ComponentActivity() {
                 ): GeckoResult<GeckoSession> {
                     val url = details.url ?: "about:blank"
                     val active = details.active != false
-                    Log.i(
-                        AD_GUARD_DIAG_TAG,
-                        "TabDelegate.onNewTab id=${source.id} url=$url active=$active",
-                    )
                     val result = GeckoResult<GeckoSession>()
                     lifecycleScope.launch {
                         try {
@@ -373,7 +334,6 @@ class MainActivity : ComponentActivity() {
                                 browserViewModel.createExtensionRequestedTab(url, active),
                             )
                         } catch (e: Throwable) {
-                            Log.w(AD_GUARD_DIAG_TAG, "onNewTab failed", e)
                             result.completeExceptionally(e)
                         }
                     }
@@ -382,15 +342,9 @@ class MainActivity : ComponentActivity() {
 
                 override fun onOpenOptionsPage(source: WebExtension) {
                     val optionsPageUrl = source.metaData.optionsPageUrl
-                    Log.i(
-                        AD_GUARD_DIAG_TAG,
-                        "TabDelegate.onOpenOptionsPage id=${source.id} url=$optionsPageUrl",
-                    )
                     if (optionsPageUrl.isNullOrBlank()) return
                     lifecycleScope.launch {
-                        runCatching {
-                            browserViewModel.createExtensionRequestedTab(optionsPageUrl, active = true)
-                        }.onFailure { Log.w(AD_GUARD_DIAG_TAG, "onOpenOptionsPage failed", it) }
+                        browserViewModel.createExtensionRequestedTab(optionsPageUrl, active = true)
                     }
                 }
             },
