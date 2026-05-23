@@ -149,12 +149,20 @@ class CustomTabActivity : ComponentActivity() {
         deferred.await()
     }
 
-    private fun openInMainBrowser(url: String) {
+    private fun openInMainBrowser(url: String, sessionState: String) {
         val targetUri = Uri.parse(url)
         startActivity(
             Intent(this, MainActivity::class.java).apply {
                 action = Intent.ACTION_VIEW
                 data = targetUri
+                // 履歴・スクロール位置などを引き継ぐため、SessionState をプロセス内ストアへ預けて
+                // トークンのみを Intent に載せる（Intent extra へ直接載せると Binder サイズ上限に当たり得る）
+                sessionState.takeIf { it.isNotBlank() }?.let { state ->
+                    putExtra(
+                        CustomTabHandoffStore.EXTRA_HANDOFF_TOKEN,
+                        CustomTabHandoffStore.store(state),
+                    )
+                }
             }
         )
         finish()
@@ -176,7 +184,7 @@ private fun CustomTabScreen(
     themeColorExtension: ThemeColorWebExtension,
     mediaWebExtension: MediaWebExtension,
     onClose: () -> Unit,
-    onOpenInBrowser: (String) -> Unit,
+    onOpenInBrowser: (url: String, sessionState: String) -> Unit,
     onRequestDownloadNotificationPermission: suspend () -> Unit,
 ) {
     val viewModel = viewModel(initializer = {
@@ -247,7 +255,7 @@ private fun CustomTabScreen(
         showInstallExtensionItem = false,
         customTabMode = true,
         onCloseCustomTab = onClose,
-        onOpenInBrowser = onOpenInBrowser,
+        onOpenInBrowser = { url -> onOpenInBrowser(url, activeTab.sessionState) },
         // onLoadRequest で TARGET_WINDOW_NEW を現在タブへ畳み込むため、
         // ここへ到達することは想定しない。GeckoView 契約上 null を返して安全に拒否する。
         onOpenNewSessionRequest = { null },

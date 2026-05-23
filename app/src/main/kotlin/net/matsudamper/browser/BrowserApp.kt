@@ -81,7 +81,7 @@ import org.koin.compose.koinInject
 @Composable
 internal fun BrowserApp(
     viewModel: BrowserViewModel,
-    newTabUrlFlow: Flow<String>,
+    newTabUrlFlow: Flow<NewTabRequest>,
     openDownloadsFlow: Flow<Unit>,
     onInstallExtensionRequest: (String) -> Unit,
     onRequestDownloadNotificationPermission: suspend () -> Unit,
@@ -111,7 +111,7 @@ internal fun BrowserApp(
 private fun BrowserAppContent(
     uiState: BrowserAppUiState,
     viewModel: BrowserViewModel,
-    newTabUrlFlow: Flow<String>,
+    newTabUrlFlow: Flow<NewTabRequest>,
     openDownloadsFlow: Flow<Unit>,
     onInstallExtensionRequest: (String) -> Unit,
     onRequestDownloadNotificationPermission: suspend () -> Unit,
@@ -192,7 +192,7 @@ private fun BrowserAppContent(
     LaunchedEffect(newTabUrlFlow) {
         // タブ復元完了を待ってから外部URLを処理する（レースコンディション防止）
         setupComplete.await()
-        newTabUrlFlow.collect { url ->
+        newTabUrlFlow.collect { request ->
             // デフォルトグループが設定されている場合、createAndAppendTab より先に DB 行を作成して
             // グループを確定させる。こうすることで TabsScreenViewModel のウォッチャーが発火した際に
             // このタブはすでに assignedTabIds に含まれ、アクティブグループへの上書きを防ぐ。
@@ -203,7 +203,12 @@ private fun BrowserAppContent(
             if (defaultGroupId != null) {
                 tabGroupRepository.assignTabToGroup(tabId, defaultGroupId)
             }
-            val newTab = browserTabController.createAndAppendTab(tabId = tabId, initialUrl = url)
+            // カスタムタブからの引き継ぎがある場合は SessionState を復元して履歴ごと開く
+            val newTab = browserTabController.createAndAppendTab(
+                tabId = tabId,
+                initialUrl = request.url,
+                restoredSessionState = request.sessionState,
+            )
             // selectTab より前に呼ぶことで、外部タブ開封前の selectedTabId を記録できる
             viewModel.registerExternalTab(newTab.tabId)
             selectTab(newTab.tabId, null)
