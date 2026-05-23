@@ -1,8 +1,10 @@
 package net.matsudamper.browser
 
 import android.Manifest
+import android.app.ActivityManager
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -90,6 +92,26 @@ class WebAppActivity : ComponentActivity() {
                     browserTabController = browserTabController,
                     uiState = uiState,
                 ) { modifier, browserTab, webAppUiState ->
+                    // Recents (最近のアプリ) のサムネイル左上に表示されるアイコンとラベルを
+                    // ページのタイトル / favicon に追従させる。setTaskDescription が呼ばれない
+                    // 場合はアプリの label / icon (ic_firefox_like) にフォールバックするため、
+                    // ホーム追加のアプリピンと同じく "アプリのデフォルトアイコン" に見えてしまう。
+                    val taskTitle = browserTab.title
+                    val taskFavicon = browserTab.faviconBitmap
+                    LaunchedEffect(taskTitle, taskFavicon) {
+                        updateTaskDescription(taskTitle, taskFavicon)
+                    }
+                    // GeckoView が onMetadataChanged で配る favicon は小さい (16x16 程度) ことが
+                    // 多く、また <origin>/favicon.ico を返さないサイト (例: sns.plusmember.jp) では
+                    // BrowserTabScreenState の fetchFavicon が失敗し faviconBitmap が null になる。
+                    // ホーム追加のアプリピンから WebAppActivity を起動すると、その時点では favicon
+                    // の手がかりが無く Recents アイコンがデフォルトアイコンのままになるため、
+                    // ここで HomeScreenIconFetcher を走らせて apple-touch-icon / manifest 由来の
+                    // 高品質アイコンを取得しておく。
+                    val currentUrl = browserTab.currentUrl
+                    LaunchedEffect(currentUrl) {
+                        fetchHighQualityFavicon(browserTab, currentUrl)
+                    }
                     GeckoBrowserTab(
                         modifier = modifier,
                         browserTab = browserTab,
@@ -134,6 +156,40 @@ class WebAppActivity : ComponentActivity() {
             browserTabController.close()
         }
         super.onDestroy()
+    }
+
+    /**
+     * Recents に表示するタイトルとアイコンを更新する。
+     * favicon が無い場合はアイコン未指定とし、ランチャー側のデフォルトに任せる。
+     *
+     * 公開 API の TaskDescription.Builder.setIcon は drawable resource id のみ受け付け、
+     * Bitmap を渡すには deprecated コンストラクタを使う必要があるため、ここでは
+     * Bitmap を直接渡す旧コンストラクタを使用する。
+     */
+    @Suppress("DEPRECATION")
+    private fun updateTaskDescription(title: String, favicon: Bitmap?) {
+        val label = title.takeIf { it.isNotBlank() }
+        val description = ActivityManager.TaskDescription(label, favicon)
+        setTaskDescription(description)
+    }
+
+    /**
+     * HomeScreenIconFetcher を用いてページの高品質アイコンを取得し、BrowserTab に保存する。
+     * GeckoView が提供する 16x16 favicon や、<origin>/favicon.ico が 404 を返すサイトでも
+     * apple-touch-icon や Web App Manifest 由来の大きなアイコンを取得できる。
+     */
+    private suspend fun fetchHighQualityFavicon(browserTab: BrowserTab, pageUrl: String) {
+        if (pageUrl.isBlank()) return
+        val fetched = try {
+            HomeScreenIconFetcher.fetchIcon(pageUrl = pageUrl, webAppManifestJson = null)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            null
+        } ?: return
+        if (browserTab.currentUrl == pageUrl) {
+            browserTab.faviconBitmap = fetched
+        }
     }
 
     /**
