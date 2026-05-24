@@ -22,12 +22,17 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.TabRepository
 import net.matsudamper.browser.data.TranslationProvider
@@ -195,6 +200,7 @@ private fun CustomTabScreen(
         )
     })
     val uiState by viewModel.uiState.collectAsState()
+    val coroutineScope = rememberCoroutineScope()
     val prewarmedSession = remember(customTabsSessionToken, initialUrl) {
         customTabsSessionToken?.let { token ->
             CustomTabsWarmupStore.consumePreparedSession(
@@ -255,7 +261,13 @@ private fun CustomTabScreen(
         showInstallExtensionItem = false,
         customTabMode = true,
         onCloseCustomTab = onClose,
-        onOpenInBrowser = { url -> onOpenInBrowser(url, activeTab.sessionState) },
+        onOpenInBrowser = { url ->
+            // キャッシュ済みの sessionState はスクロール位置などを取りこぼした古いスナップショットの
+            // ことがあるため、flushSessionState() で最新状態の反映を待ってから引き継ぐ。
+            coroutineScope.launch {
+                onOpenInBrowser(url, captureFreshSessionState(activeTab))
+            }
+        },
         // onLoadRequest で TARGET_WINDOW_NEW を現在タブへ畳み込むため、
         // ここへ到達することは想定しない。GeckoView 契約上 null を返して安全に拒否する。
         onOpenNewSessionRequest = { null },
@@ -269,3 +281,18 @@ private fun CustomTabScreen(
         onUrlInputChanged = uiState.callbacks::onUrlInputChanged,
     )
 }
+
+/**
+ * flushSessionState() で最新の SessionState を onSessionStateChange 経由で反映させ、
+ * 更新後の [BrowserTab.sessionState] を返す。スクロール位置などを取りこぼさないために使う。
+ * 反映が一定時間内に来ない場合（既に最新の場合を含む）は現在のキャッシュ値を返す。
+ */
+private suspend fun captureFreshSessionState(tab: BrowserTab): String {
+    val before = tab.sessionState
+    tab.session.flushSessionState()
+    return withTimeoutOrNull(FLUSH_SESSION_STATE_TIMEOUT_MS) {
+        snapshotFlow { tab.sessionState }.first { it != before }
+    } ?: tab.sessionState
+}
+
+private const val FLUSH_SESSION_STATE_TIMEOUT_MS = 300L
