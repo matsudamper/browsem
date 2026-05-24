@@ -242,7 +242,11 @@ internal class BrowserTabScreenState(
 
     // --- Scroll / Refresh state ---
     var isRefreshing by mutableStateOf(false)
-    var scrollY by mutableIntStateOf(0)
+    // BrowserTab.scrollY に委譲することで、タブ切替で State が再生成されても
+    // スクロール位置を保持し、復元タブでの PullToRefresh 誤発動を防ぐ。
+    var scrollY: Int
+        get() = browserTab.scrollY
+        set(value) { browserTab.scrollY = value }
 
     val showInstallExtensionItem: Boolean
         get() = resolveAmoInstallUriFromPage(currentPageUrl) != null
