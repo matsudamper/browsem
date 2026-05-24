@@ -152,6 +152,9 @@ internal fun GeckoBrowserTab(
     // ON_START / ON_RESUME が重複発火しても state=ACTIVE なら即 no-op にする。
     var surfaceResumeState by remember(session) { mutableStateOf(SurfaceResumeState.ACTIVE) }
     val resumeCoverColor = MaterialTheme.colorScheme.surface.toArgb()
+    // LifecycleEventObserver は DisposableEffect のキーが変わらない限り再生成されないため、
+    // ラムダ内で ON_PAUSE 時点の最新 IME 表示状態を読めるよう rememberUpdatedState で包む。
+    val currentIsImeVisible by rememberUpdatedState(isImeVisible)
 
     // ファイルピッカー（単一ファイル選択）Google Photos を含むピッカーを表示するため ACTION_GET_CONTENT を使用
     val singleFileLauncher = rememberLauncherForActivityResult(
@@ -342,6 +345,24 @@ internal fun GeckoBrowserTab(
         )
     }
 
+    // pause からの復帰処理。RELEASED は surface 破棄済みのため再作成を伴う重い復元、
+    // PAUSED_KEEP_SURFACE は surface を維持しているため setActive(true) のみの軽い復元。
+    fun resumeFromPauseIfNeeded(gecko: GeckoView) {
+        when (surfaceResumeState) {
+            SurfaceResumeState.RELEASED -> restoreSurfaceIfNeeded(gecko)
+            SurfaceResumeState.PAUSED_KEEP_SURFACE -> {
+                Log.d(
+                    TAG_SURFACE_RESUME,
+                    "resumeFromPauseIfNeeded: PAUSED_KEEP_SURFACE → setActive(true)" +
+                        " session=${session.logKey()}",
+                )
+                session.setActive(true)
+                surfaceResumeState = SurfaceResumeState.ACTIVE
+            }
+            SurfaceResumeState.ACTIVE, SurfaceResumeState.WAITING_STABLE -> Unit
+        }
+    }
+
     DisposableEffect(lifecycleOwner, session, resumeCoverColor) {
         val observer = LifecycleEventObserver { _, event ->
             val gv = geckoView
@@ -354,36 +375,60 @@ internal fun GeckoBrowserTab(
             )
             when (event) {
                 Lifecycle.Event.ON_PAUSE -> {
-                    // ON_STOP まで待つと surface 破棄→再作成時に GeckoView 内部の
-                    // SurfaceHolder.Callback が Gecko compositor を自動 resume-resize させ、
-                    // IME 由来の stale サイズで frame 産出 → BLAST reject → GPU プロセス kill
-                    // というハングが発生する。ON_PAUSE 時点で releaseSession して session を
-                    // GeckoView から detach しておけば、surface 再作成時の自動レンダリングを
-                    // 抑止できる。
+                    // IME 表示中 (.imePadding() で GeckoView が縮んでいる状態) に pause すると、
+                    // surface 破棄→再作成時に GeckoView 内部の SurfaceHolder.Callback が Gecko
+                    // compositor を自動 resume-resize させ、IME 由来の stale サイズで frame 産出
+                    // → BLAST reject → GPU プロセス kill というハングが発生する。これを避けるため
+                    // IME 表示中の pause では ON_PAUSE 時点で releaseSession + INVISIBLE して
+                    // session を detach し surface を破棄しておき、復帰時に fresh attach する。
+                    // capture preview は release 前に start する（非同期 GeckoResult のため取りこぼす
+                    // 可能性があるがハング回避を優先）。
                     //
-                    // capture preview は release 前に start する。capturePixels() は非同期
-                    // GeckoResult を返すため release 直後に走るキャプチャ完了率は低下するが、
-                    // ハング回避を優先する。
+                    // 一方 IME 非表示の pause (Gemini 等のアシスタントオーバーレイによる focus-only
+                    // 離脱を含む) では GeckoView は縮んでおらず、上記の stale サイズ resize 経路を
+                    // 踏まない。この場合に surface を破棄するとオーバーレイ表示中に GeckoView だけが
+                    // 灰色になってしまうため、surface は維持して setActive(false) のみ行う。
                     //
-                    // WAITING_STABLE 中（前回 resume の安定待ちが完了する前に再度 pause した
-                    // 場合）も releaseSession を行いたいので ACTIVE と同じ扱いにする。
-                    if (surfaceResumeState != SurfaceResumeState.RELEASED &&
-                        !mediaWebExtension.shouldKeepSessionAttached(session)
-                    ) {
-                        val target = geckoView
-                        if (target == null) {
+                    // WAITING_STABLE 中（前回 resume の安定待ちが完了する前に再度 pause した場合）は
+                    // 復元途中で session が未 attach のため、IME 状態に依らず破棄側 (RELEASED) に倒す。
+                    val mediaKeep = mediaWebExtension.shouldKeepSessionAttached(session)
+                    val target = geckoView
+                    when {
+                        mediaKeep -> {
+                            Log.d(TAG_SURFACE_RESUME, "ON_PAUSE skipped: mediaKeep state=$surfaceResumeState")
+                        }
+                        surfaceResumeState == SurfaceResumeState.RELEASED ||
+                            surfaceResumeState == SurfaceResumeState.PAUSED_KEEP_SURFACE -> {
+                            Log.d(TAG_SURFACE_RESUME, "ON_PAUSE skipped: state=$surfaceResumeState")
+                        }
+                        target == null -> {
                             // geckoView が更新されないまま ON_PAUSE が来ると release できず、
                             // 復帰時に session 付きで surface が再作成され BLAST reject が起きる。
                             // ここで検知できれば再現条件を絞り込めるため明示的に警告を残す。
                             Log.w(
                                 TAG_SURFACE_RESUME,
-                                "ON_PAUSE: geckoView=null のため releaseSession 不可。" +
+                                "ON_PAUSE: geckoView=null のため処理不可。" +
                                     " 復帰時にハングする可能性あり session=${session.logKey()}",
                             )
-                        } else {
+                        }
+                        surfaceResumeState == SurfaceResumeState.ACTIVE && !currentIsImeVisible -> {
+                            // IME 非表示: surface を維持し、オーバーレイ表示中の灰色化を防ぐ。
                             Log.d(
                                 TAG_SURFACE_RESUME,
-                                "ON_PAUSE: releaseSession + INVISIBLE 実行 gv.size=${target.width}x${target.height}",
+                                "ON_PAUSE: IME 非表示のため surface 維持 (setActive(false) のみ)" +
+                                    " gv.size=${target.width}x${target.height}",
+                            )
+                            session.setActive(false)
+                            surfaceResumeState = SurfaceResumeState.PAUSED_KEEP_SURFACE
+                        }
+                        else -> {
+                            // IME 表示中の ACTIVE、または復元途中の WAITING_STABLE: 従来どおり
+                            // releaseSession + INVISIBLE で surface を破棄し、復帰時に fresh attach。
+                            Log.d(
+                                TAG_SURFACE_RESUME,
+                                "ON_PAUSE: releaseSession + INVISIBLE 実行" +
+                                    " (ime=$currentIsImeVisible state=$surfaceResumeState)" +
+                                    " gv.size=${target.width}x${target.height}",
                             )
                             session.setActive(false)
                             // best-effort capture（非同期 GeckoResult、release 後に失敗する可能性あり）。
@@ -397,34 +442,31 @@ internal fun GeckoBrowserTab(
                             target.visibility = View.INVISIBLE
                             surfaceResumeState = SurfaceResumeState.RELEASED
                         }
-                    } else {
-                        Log.d(
-                            TAG_SURFACE_RESUME,
-                            "ON_PAUSE skipped: state=$surfaceResumeState" +
-                                " mediaKeep=${mediaWebExtension.shouldKeepSessionAttached(session)}",
-                        )
                     }
                 }
                 Lifecycle.Event.ON_STOP -> {
                     session.flushSessionState()
-                    // non-media の場合は ON_PAUSE で release 済み。
-                    // media の場合は session 維持のため capture のみ実行（従来どおり）。
+                    // IME 表示中の pause で RELEASED になったケースは ON_PAUSE で capture 済み。
+                    // media 維持中、および IME 非表示で surface を維持した PAUSED_KEEP_SURFACE の
+                    // ケースは ON_PAUSE で capture していないため、ここで capture する。
                     // TODO: media 再生継続中の session は release しないため、surface 再作成時の
                     //       SyncResumeResizeCompositor ハング経路を踏むリスクが残る。実機で
                     //       再現を確認したら、audio を殺さない形で compositor 再構築する手段
                     //       （releaseSession しても MediaSession 経由で音は継続する可能性が高い）
                     //       を検討する。
                     geckoView?.also { target ->
-                        if (mediaWebExtension.shouldKeepSessionAttached(session)) {
+                        if (mediaWebExtension.shouldKeepSessionAttached(session) ||
+                            surfaceResumeState == SurfaceResumeState.PAUSED_KEEP_SURFACE
+                        ) {
                             state.captureTabPreview(target)
                         }
                     }
                 }
                 Lifecycle.Event.ON_START -> {
-                    geckoView?.also(::restoreSurfaceIfNeeded)
+                    geckoView?.also(::resumeFromPauseIfNeeded)
                 }
                 Lifecycle.Event.ON_RESUME -> {
-                    geckoView?.also(::restoreSurfaceIfNeeded)
+                    geckoView?.also(::resumeFromPauseIfNeeded)
                 }
                 else -> Unit
             }
@@ -900,15 +942,23 @@ private fun TabHistoryBottomSheet(
  * Surface/Session 復元の進行状態。
  *
  * - ACTIVE: 前面表示中。復元処理は全て no-op。
- * - RELEASED: ON_PAUSE で releaseSession() 済。ON_START で復元処理が必要。
+ * - RELEASED: IME 表示中の ON_PAUSE で releaseSession() + INVISIBLE 済。surface も破棄
+ *   されているため、ON_START で surface 再作成 + サイズ安定待ち setSession による
+ *   fresh attach が必要。
  * - WAITING_STABLE: 復元の preDraw ループ中で gv.height が安定するのを待っている。
  *   IME アニメーション中の resize で GPU プロセスが kill される現象を避けるため、
  *   サイズが連続フレーム同じになるまで setSession を遅延する。
+ * - PAUSED_KEEP_SURFACE: IME 非表示の ON_PAUSE (Gemini 等のアシスタントオーバーレイに
+ *   よる focus-only 離脱を含む)。GeckoView は縮んでおらず復帰時の stale サイズ resize
+ *   ハング経路を踏まないため surface は破棄せず維持し、setActive(false) のみ行う。
+ *   復帰時は setActive(true) で即座に戻す。surface を破棄しないのでオーバーレイ表示中に
+ *   GeckoView が灰色化しない。
  */
 private enum class SurfaceResumeState {
     ACTIVE,
     RELEASED,
     WAITING_STABLE,
+    PAUSED_KEEP_SURFACE,
 }
 
 sealed interface GeckoBrowserTabTestTags {
