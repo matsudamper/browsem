@@ -22,13 +22,13 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.produceState
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -154,7 +154,20 @@ class CustomTabActivity : ComponentActivity() {
         deferred.await()
     }
 
-    private fun openInMainBrowser(url: String, sessionState: String) {
+    /**
+     * カスタムタブの内容を通常ブラウザへ引き継いで開く。
+     *
+     * SessionState の flush 待ち（最大数百ミリ秒）と遷移を、composition に紐づくスコープでなく
+     * Activity の lifecycleScope で完遂させる。タップ直後の再コンポーズで Composable が
+     * composition から外れても処理がキャンセルされず、「ブラウザで開く」が無効化されないようにする。
+     */
+    private fun openInMainBrowser(url: String, tab: BrowserTab) {
+        lifecycleScope.launch {
+            startMainBrowser(url, captureFreshSessionState(tab))
+        }
+    }
+
+    private fun startMainBrowser(url: String, sessionState: String) {
         val targetUri = Uri.parse(url)
         startActivity(
             Intent(this, MainActivity::class.java).apply {
@@ -189,7 +202,7 @@ private fun CustomTabScreen(
     themeColorExtension: ThemeColorWebExtension,
     mediaWebExtension: MediaWebExtension,
     onClose: () -> Unit,
-    onOpenInBrowser: (url: String, sessionState: String) -> Unit,
+    onOpenInBrowser: (url: String, tab: BrowserTab) -> Unit,
     onRequestDownloadNotificationPermission: suspend () -> Unit,
 ) {
     val viewModel = viewModel(initializer = {
@@ -200,7 +213,6 @@ private fun CustomTabScreen(
         )
     })
     val uiState by viewModel.uiState.collectAsState()
-    val coroutineScope = rememberCoroutineScope()
     val prewarmedSession = remember(customTabsSessionToken, initialUrl) {
         customTabsSessionToken?.let { token ->
             CustomTabsWarmupStore.consumePreparedSession(
@@ -261,13 +273,7 @@ private fun CustomTabScreen(
         showInstallExtensionItem = false,
         customTabMode = true,
         onCloseCustomTab = onClose,
-        onOpenInBrowser = { url ->
-            // キャッシュ済みの sessionState はスクロール位置などを取りこぼした古いスナップショットの
-            // ことがあるため、flushSessionState() で最新状態の反映を待ってから引き継ぐ。
-            coroutineScope.launch {
-                onOpenInBrowser(url, captureFreshSessionState(activeTab))
-            }
-        },
+        onOpenInBrowser = { url -> onOpenInBrowser(url, activeTab) },
         // onLoadRequest で TARGET_WINDOW_NEW を現在タブへ畳み込むため、
         // ここへ到達することは想定しない。GeckoView 契約上 null を返して安全に拒否する。
         onOpenNewSessionRequest = { null },
