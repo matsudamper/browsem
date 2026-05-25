@@ -49,7 +49,7 @@ class MainActivity : ComponentActivity() {
     private var webExtensionWarmUpInProgress = false
     private var webExtensionWarmUpRetryCount = 0
     private var lastProcessedDeepLinkUrl: String? = null
-    private val createNewTabChannel = Channel<String>(Channel.UNLIMITED)
+    private val createNewTabChannel = Channel<NewTabRequest>(Channel.UNLIMITED)
     private val openDownloadsChannel = Channel<Unit>(Channel.CONFLATED)
 
     // リコンポーズのたびに新しい Flow が生成されチャネルがキャンセルされるのを防ぐため、
@@ -140,7 +140,9 @@ class MainActivity : ComponentActivity() {
             // 設定変更（画面回転等）後の再起動では直前に処理した URL を復元し、
             // 同じ URL であれば重複タブを作らないようスキップする。
             if (url != null && url != lastProcessedDeepLinkUrl) {
-                val result = createNewTabChannel.trySend(url)
+                val result = createNewTabChannel.trySend(
+                    NewTabRequest(url = url, sessionState = consumeHandoffSessionState(intent)),
+                )
                 if (result.isFailure) {
                     Log.e("MainActivity", "URL の送信に失敗: $url, reason=${result.exceptionOrNull()}")
                 } else {
@@ -200,13 +202,24 @@ class MainActivity : ComponentActivity() {
         }
         val url = intent.dataString
         if (url != null) {
-            val result = createNewTabChannel.trySend(url)
+            val result = createNewTabChannel.trySend(
+                NewTabRequest(url = url, sessionState = consumeHandoffSessionState(intent)),
+            )
             if (result.isFailure) {
                 Log.e("MainActivity", "URL の送信に失敗: $url, reason=${result.exceptionOrNull()}")
             } else {
                 lastProcessedDeepLinkUrl = url
             }
         }
+    }
+
+    /**
+     * カスタムタブからの「ブラウザで開く」遷移であれば、預けられた SessionState を取り出す。
+     * トークンは一度のみ消費され、構成変更後の再 onCreate では null（重複生成は URL 重複判定で防止）。
+     */
+    private fun consumeHandoffSessionState(intent: Intent): String? {
+        val token = intent.getStringExtra(CustomTabHandoffStore.EXTRA_HANDOFF_TOKEN) ?: return null
+        return CustomTabHandoffStore.consume(token)
     }
 
     /**
