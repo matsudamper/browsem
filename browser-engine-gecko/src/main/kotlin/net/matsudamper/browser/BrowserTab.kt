@@ -3,6 +3,7 @@ package net.matsudamper.browser
 import android.graphics.Bitmap
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import org.mozilla.geckoview.GeckoResult
@@ -78,6 +79,12 @@ class BrowserTab(
 
     // ページのfavicon（ホーム追加時のアイコンに使用、永続化は不要）
     var faviconBitmap: Bitmap? by mutableStateOf(null)
+
+    // スクロール位置（永続化は不要）。BrowserTabScreenState がタブ切替で再生成されても
+    // GeckoSession と同じ寿命を持つここで保持することで、復元タブのスクロール位置を維持する。
+    // State 側にだけ持つと、復元直後は GeckoSession のスクロール位置が変化せず
+    // onScrollChanged が発火しないため 0 のままとなり、PullToRefresh が誤発動する。
+    var scrollY: Int by mutableIntStateOf(0)
 
     // 未オープンタブのセッション復元情報を保持
     internal var pendingSessionState: String? by mutableStateOf(null)
