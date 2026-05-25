@@ -22,12 +22,17 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.TabRepository
 import net.matsudamper.browser.data.TranslationProvider
@@ -149,12 +154,33 @@ class CustomTabActivity : ComponentActivity() {
         deferred.await()
     }
 
-    private fun openInMainBrowser(url: String) {
+    /**
+     * カスタムタブの内容を通常ブラウザへ引き継いで開く。
+     *
+     * SessionState の flush 待ち（最大数百ミリ秒）と遷移を、composition に紐づくスコープでなく
+     * Activity の lifecycleScope で完遂させる。タップ直後の再コンポーズで Composable が
+     * composition から外れても処理がキャンセルされず、「ブラウザで開く」が無効化されないようにする。
+     */
+    private fun openInMainBrowser(url: String, tab: BrowserTab) {
+        lifecycleScope.launch {
+            startMainBrowser(url, captureFreshSessionState(tab))
+        }
+    }
+
+    private fun startMainBrowser(url: String, sessionState: String) {
         val targetUri = Uri.parse(url)
         startActivity(
             Intent(this, MainActivity::class.java).apply {
                 action = Intent.ACTION_VIEW
                 data = targetUri
+                // 履歴・スクロール位置などを引き継ぐため、SessionState をプロセス内ストアへ預けて
+                // トークンのみを Intent に載せる（Intent extra へ直接載せると Binder サイズ上限に当たり得る）
+                sessionState.takeIf { it.isNotBlank() }?.let { state ->
+                    putExtra(
+                        CustomTabHandoffStore.EXTRA_HANDOFF_TOKEN,
+                        CustomTabHandoffStore.store(state),
+                    )
+                }
             }
         )
         finish()
@@ -176,7 +202,7 @@ private fun CustomTabScreen(
     themeColorExtension: ThemeColorWebExtension,
     mediaWebExtension: MediaWebExtension,
     onClose: () -> Unit,
-    onOpenInBrowser: (String) -> Unit,
+    onOpenInBrowser: (url: String, tab: BrowserTab) -> Unit,
     onRequestDownloadNotificationPermission: suspend () -> Unit,
 ) {
     val viewModel = viewModel(initializer = {
@@ -247,7 +273,7 @@ private fun CustomTabScreen(
         showInstallExtensionItem = false,
         customTabMode = true,
         onCloseCustomTab = onClose,
-        onOpenInBrowser = onOpenInBrowser,
+        onOpenInBrowser = { url -> onOpenInBrowser(url, activeTab) },
         // onLoadRequest で TARGET_WINDOW_NEW を現在タブへ畳み込むため、
         // ここへ到達することは想定しない。GeckoView 契約上 null を返して安全に拒否する。
         onOpenNewSessionRequest = { null },
@@ -261,3 +287,18 @@ private fun CustomTabScreen(
         onUrlInputChanged = uiState.callbacks::onUrlInputChanged,
     )
 }
+
+/**
+ * flushSessionState() で最新の SessionState を onSessionStateChange 経由で反映させ、
+ * 更新後の [BrowserTab.sessionState] を返す。スクロール位置などを取りこぼさないために使う。
+ * 反映が一定時間内に来ない場合（既に最新の場合を含む）は現在のキャッシュ値を返す。
+ */
+private suspend fun captureFreshSessionState(tab: BrowserTab): String {
+    val before = tab.sessionState
+    tab.session.flushSessionState()
+    return withTimeoutOrNull(FLUSH_SESSION_STATE_TIMEOUT_MS) {
+        snapshotFlow { tab.sessionState }.first { it != before }
+    } ?: tab.sessionState
+}
+
+private const val FLUSH_SESSION_STATE_TIMEOUT_MS = 300L
