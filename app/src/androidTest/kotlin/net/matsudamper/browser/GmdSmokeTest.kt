@@ -1,5 +1,6 @@
 package net.matsudamper.browser
 
+import android.util.Log
 import android.view.WindowInsets
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.hasAnyDescendant
@@ -42,26 +43,32 @@ class GmdSmokeTest {
      */
     @Test
     fun openHatenablogAndApplyThemeColor() {
+        Log.d(TAG, "=== テスト開始: openHatenablogAndApplyThemeColor ===")
         ensureBrowserScreen()
         val localThemeColorPageUri = prepareLocalThemeColorPageUri()
         val initialToolbarState = waitForToolbarState()
+        Log.d(TAG, "初期ツールバー状態: source=${initialToolbarState.source}, argb=${initialToolbarState.argbHex}")
         assertEquals("default", initialToolbarState.source)
 
+        Log.d(TAG, "テーマカラーページをオープン: $localThemeColorPageUri")
         openLocalPage(
             url = localThemeColorPageUri,
             urlMarker = LOCAL_THEME_COLOR_INDEX_FILE_NAME,
         )
 
+        Log.d(TAG, "テーマカラー適用を待機中")
         composeRule.waitUntil(timeoutMillis = 60_000) {
             waitForToolbarState().source == "theme"
         }
 
         val resolvedToolbarState = waitForToolbarState()
         val currentUrl = composeRule.currentUrlBarText()
+        Log.d(TAG, "解決後ツールバー状態: source=${resolvedToolbarState.source}, argb=${resolvedToolbarState.argbHex}, url=$currentUrl")
         assertTrue(currentUrl.startsWith("file:"))
         assertTrue(currentUrl.contains(LOCAL_THEME_COLOR_INDEX_FILE_NAME))
         assertEquals("theme", resolvedToolbarState.source)
         assertNotEquals(initialToolbarState.argbHex, resolvedToolbarState.argbHex)
+        Log.d(TAG, "=== テスト完了: openHatenablogAndApplyThemeColor ===")
     }
 
     /**
@@ -69,17 +76,22 @@ class GmdSmokeTest {
      */
     @Test
     fun urlBarShowsHistorySuggestions() {
+        Log.d(TAG, "=== テスト開始: urlBarShowsHistorySuggestions ===")
         ensureBrowserScreen()
         val query = "codex-suggest-20260307"
         val suggestionTitle = "Codex Suggest Test Title 20260307"
         val suggestionUrl = "https://$query.example/test"
 
+        Log.d(TAG, "履歴シード作成: url=$suggestionUrl, title=$suggestionTitle")
         seedHistoryEntry(url = suggestionUrl, title = suggestionTitle)
 
+        Log.d(TAG, "URLバーをタップしてクエリを入力: $query")
         composeRule.onNodeWithTag(UrlTextInputTestTags.UrlBar.testTag).performClick()
         composeRule.onNodeWithTag(UrlTextInputTestTags.UrlBar.testTag).performTextReplacement(query)
 
+        Log.d(TAG, "履歴サジェスト表示を待機中")
         waitForHistorySuggestionsVisible()
+        Log.d(TAG, "=== テスト完了: urlBarShowsHistorySuggestions ===")
     }
 
     /**
@@ -89,31 +101,39 @@ class GmdSmokeTest {
      */
     @Test
     fun tappingUrlBarClearsInputAndShowsCurrentUrlActions() {
+        Log.d(TAG, "=== テスト開始: tappingUrlBarClearsInputAndShowsCurrentUrlActions ===")
         ensureBrowserScreen()
         val focusPageUri = prepareLocalFocusPageUri()
 
+        Log.d(TAG, "フォーカステストページをオープン")
         openLocalPage(
             url = focusPageUri,
             urlMarker = LOCAL_FOCUS_INDEX_FILE_NAME,
         )
         val currentUrl = composeRule.currentUrlBarText()
+        Log.d(TAG, "現在のURL: $currentUrl")
 
+        Log.d(TAG, "URLバーをタップ")
         composeRule.onNodeWithTag(UrlTextInputTestTags.UrlBar.testTag).performClick()
         waitForUrlBarFocused()
         waitForUrlBarText("")
+        Log.d(TAG, "URLバーフォーカス確認済み、CurrentUrlActionsを待機中")
         composeRule.waitUntil(timeoutMillis = 30_000) {
             composeRule.onAllNodesWithTag(BrowserTabSurfaceTestTags.CurrentUrlActions.testTag)
                 .fetchSemanticsNodes().isNotEmpty()
         }
         // ListItem の mergeDescendants により子ノードは merged tree で不可視のため unmerged tree を使用
+        Log.d(TAG, "CurrentUrlTextを待機中")
         composeRule.waitUntil(timeoutMillis = 30_000) {
             composeRule.onAllNodesWithTag(BrowserTabSurfaceTestTags.CurrentUrlText.testTag, useUnmergedTree = true)
                 .fetchSemanticsNodes().isNotEmpty()
         }
+        Log.d(TAG, "CopyButtonを待機中")
         composeRule.waitUntil(timeoutMillis = 30_000) {
             composeRule.onAllNodesWithTag(BrowserTabSurfaceTestTags.CopyButton.testTag)
                 .fetchSemanticsNodes().isNotEmpty()
         }
+        Log.d(TAG, "RestoreUrlButtonを待機中")
         composeRule.waitUntil(timeoutMillis = 30_000) {
             composeRule.onAllNodesWithTag(BrowserTabSurfaceTestTags.RestoreUrlButton.testTag)
                 .fetchSemanticsNodes().isNotEmpty()
@@ -125,10 +145,13 @@ class GmdSmokeTest {
             .fetchSemanticsNode()
             .config[SemanticsProperties.Text]
             .joinToString(separator = "") { it.text }
+        Log.d(TAG, "表示URL検証: expected=\"$currentUrl\" actual=\"$displayedUrl\"")
         assertEquals(currentUrl, displayedUrl)
 
+        Log.d(TAG, "RestoreUrlButtonをタップしてURLを復元")
         composeRule.onNodeWithTag(BrowserTabSurfaceTestTags.RestoreUrlButton.testTag).performClick()
         waitForUrlBarText(currentUrl)
+        Log.d(TAG, "=== テスト完了: tappingUrlBarClearsInputAndShowsCurrentUrlActions ===")
     }
 
     /**
@@ -139,27 +162,36 @@ class GmdSmokeTest {
      */
     @Test
     fun searchEngineSearchWithHistorySuggestionsBringsGeckoViewToFront() {
+        Log.d(TAG, "=== テスト開始: searchEngineSearchWithHistorySuggestionsBringsGeckoViewToFront ===")
         ensureBrowserScreen()
         val token = "history-search-20260307"
         val searchQuery = "$token normal query"
         val historyTitle = searchQuery
         val historyUrl = "https://$token.example/path"
+        Log.d(TAG, "履歴シード作成: url=$historyUrl")
         val seededUrl = seedHistoryEntry(url = historyUrl, title = historyTitle)
+        Log.d(TAG, "履歴シード完了: seededUrl=$seededUrl")
 
+        Log.d(TAG, "URLバーをタップしてクエリを入力: $searchQuery")
         composeRule.onNodeWithTag(UrlTextInputTestTags.UrlBar.testTag).performClick()
         composeRule.onNodeWithTag(UrlTextInputTestTags.UrlBar.testTag).performTextReplacement(searchQuery)
+        Log.d(TAG, "履歴サジェスト表示を待機中: $historyTitle")
         waitForHistorySuggestionsVisible(historyTitle)
 
+        Log.d(TAG, "IMEアクション実行（検索）")
         composeRule.onNodeWithTag(UrlTextInputTestTags.UrlBar.testTag).performImeAction()
 
+        Log.d(TAG, "検索結果URLへの遷移を待機中 (token=$token)")
         composeRule.waitUntil(timeoutMillis = 30_000) {
             val currentUrl = composeRule.currentUrlBarText()
             currentUrl.contains(token) && !currentUrl.startsWith(seededUrl)
         }
+        Log.d(TAG, "遷移完了: 現在URL=${composeRule.currentUrlBarText()}")
         waitForHistorySuggestionsHidden()
         waitForUrlBarNotFocused()
         waitForImeClosed()
         assertGeckoViewInFront()
+        Log.d(TAG, "=== テスト完了: searchEngineSearchWithHistorySuggestionsBringsGeckoViewToFront ===")
     }
 
     /**
@@ -170,19 +202,26 @@ class GmdSmokeTest {
      */
     @Test
     fun selectingHistorySuggestionBringsGeckoViewToFront() {
+        Log.d(TAG, "=== テスト開始: selectingHistorySuggestionBringsGeckoViewToFront ===")
         ensureBrowserScreen()
         val token = "history-pick-20260307"
         val historyTitle = "History Pick Seed 20260307"
         val historyUrl = "https://$token.example/path"
 
+        Log.d(TAG, "履歴シード作成: url=$historyUrl, title=$historyTitle")
         val seededUrl = seedHistoryEntry(url = historyUrl, title = historyTitle)
+        Log.d(TAG, "履歴シード完了: seededUrl=$seededUrl")
 
+        Log.d(TAG, "URLバーをタップしてトークンを入力: $token")
         composeRule.onNodeWithTag(UrlTextInputTestTags.UrlBar.testTag).performClick()
         composeRule.onNodeWithTag(UrlTextInputTestTags.UrlBar.testTag).performTextReplacement(token)
+        Log.d(TAG, "履歴サジェスト表示を待機中: $historyTitle")
         waitForHistorySuggestionsVisible(historyTitle)
 
+        Log.d(TAG, "履歴サジェストをタップ: $historyTitle")
         composeRule.onNodeWithText(historyTitle).performClick()
 
+        Log.d(TAG, "シードURLへの遷移を待機中")
         composeRule.waitUntil(timeoutMillis = 30_000) {
             // file URL の表記ゆれ（file:/ と file:/// など）で誤検知しないよう、
             // 生成した seed URL 先頭一致またはファイル名トークン一致で判定する。
@@ -190,10 +229,12 @@ class GmdSmokeTest {
             currentUrl.startsWith(seededUrl) ||
                 currentUrl.contains("${HISTORY_SEED_FILE_PREFIX}_${token}")
         }
+        Log.d(TAG, "遷移完了: 現在URL=${composeRule.currentUrlBarText()}")
         waitForHistorySuggestionsHidden()
         waitForUrlBarNotFocused()
         waitForImeClosed()
         assertGeckoViewInFront()
+        Log.d(TAG, "=== テスト完了: selectingHistorySuggestionBringsGeckoViewToFront ===")
     }
 
     /**
@@ -206,9 +247,11 @@ class GmdSmokeTest {
      */
     @Test
     fun openingUrlBarFromGeckoViewDoesNotImmediatelyCloseKeyboard() {
+        Log.d(TAG, "=== テスト開始: openingUrlBarFromGeckoViewDoesNotImmediatelyCloseKeyboard ===")
         ensureBrowserScreen()
         val focusPageUri = prepareLocalFocusPageUri()
 
+        Log.d(TAG, "フォーカステストページをオープン")
         openLocalPage(
             url = focusPageUri,
             urlMarker = LOCAL_FOCUS_INDEX_FILE_NAME,
@@ -216,14 +259,19 @@ class GmdSmokeTest {
         waitForUrlBarNotFocused()
         assertGeckoViewInFront()
 
+        Log.d(TAG, "GeckoContainerをタップ")
         composeRule.tapGeckoContainer()
         val imeWasVisibleBeforeTap = waitForImeVisible(timeoutMillis = 5_000)
+        Log.d(TAG, "タップ前のIME表示状態: $imeWasVisibleBeforeTap")
 
+        Log.d(TAG, "URLバーをタップ")
         composeRule.onNodeWithTag(UrlTextInputTestTags.UrlBar.testTag).performClick()
         waitForUrlBarFocused()
+        Log.d(TAG, "URLバーフォーカス確認済み、安定性を観察中")
         assertUrlBarFocusAndImeStayStableAfterOpening(
             requireImeWasVisibleBeforeTap = imeWasVisibleBeforeTap,
         )
+        Log.d(TAG, "=== テスト完了: openingUrlBarFromGeckoViewDoesNotImmediatelyCloseKeyboard ===")
     }
 
     /**
@@ -232,25 +280,34 @@ class GmdSmokeTest {
      */
     @Test
     fun backButtonClosesUrlBarWithHistorySuggestionsWithoutExitingApp() {
+        Log.d(TAG, "=== テスト開始: backButtonClosesUrlBarWithHistorySuggestionsWithoutExitingApp ===")
         ensureBrowserScreen()
         val query = "back-history-20260307"
         val suggestionTitle = "Back History Suggestion 20260307"
         val suggestionUrl = "https://$query.example/test"
 
+        Log.d(TAG, "履歴シード作成: url=$suggestionUrl")
         seedHistoryEntry(url = suggestionUrl, title = suggestionTitle)
 
+        Log.d(TAG, "URLバーをタップしてクエリを入力: $query")
         composeRule.onNodeWithTag(UrlTextInputTestTags.UrlBar.testTag).performClick()
         composeRule.onNodeWithTag(UrlTextInputTestTags.UrlBar.testTag).performTextReplacement(query)
+        Log.d(TAG, "履歴サジェスト表示を待機中: $suggestionTitle")
         waitForHistorySuggestionsVisible(suggestionTitle)
 
+        Log.d(TAG, "戻るボタンを押下")
         pressSystemBack()
 
+        Log.d(TAG, "サジェスト非表示・URLバー非フォーカスを待機中")
         waitForHistorySuggestionsHidden()
         waitForUrlBarNotFocused()
         assertGeckoViewInFront()
         composeRule.runOnIdle {
-            assertTrue(!composeRule.activity.isFinishing)
+            val finishing = composeRule.activity.isFinishing
+            Log.d(TAG, "Activity.isFinishing=$finishing")
+            assertTrue(!finishing)
         }
+        Log.d(TAG, "=== テスト完了: backButtonClosesUrlBarWithHistorySuggestionsWithoutExitingApp ===")
     }
 
     /**
@@ -258,67 +315,95 @@ class GmdSmokeTest {
      */
     @Test
     fun retryOnPageLoadErrorRetriesFailedUrl() {
+        Log.d(TAG, "=== テスト開始: retryOnPageLoadErrorRetriesFailedUrl ===")
         ensureBrowserScreen()
         val focusPageUri = prepareLocalFocusPageUri()
 
+        Log.d(TAG, "フォーカステストページをオープン")
         openLocalPage(
             url = focusPageUri,
             urlMarker = LOCAL_FOCUS_INDEX_FILE_NAME,
         )
+        Log.d(TAG, "エラーURL（無効ドメイン）へ遷移: $PAGE_LOAD_ERROR_TEST_URL")
         composeRule.openUrlFromUrlBar(PAGE_LOAD_ERROR_TEST_URL)
 
+        Log.d(TAG, "ページロードエラー画面を待機中")
         waitForPageLoadErrorVisible(PAGE_LOAD_ERROR_TEST_URL)
-        assertEquals(PAGE_LOAD_ERROR_TEST_URL, composeRule.currentUrlBarText())
+        val urlAfterError = composeRule.currentUrlBarText()
+        Log.d(TAG, "エラー画面確認: urlBar=$urlAfterError")
+        assertEquals(PAGE_LOAD_ERROR_TEST_URL, urlAfterError)
         waitForUrlBarText(PAGE_LOAD_ERROR_TEST_URL)
 
+        Log.d(TAG, "再試行ボタンをタップ")
         composeRule.onNodeWithTag(BrowserTabSurfaceTestTags.RetryButton.testTag).performClick()
 
+        Log.d(TAG, "再試行後のエラー画面を待機中")
         waitForPageLoadErrorVisible(PAGE_LOAD_ERROR_TEST_URL)
-        assertEquals(PAGE_LOAD_ERROR_TEST_URL, composeRule.currentUrlBarText())
+        val urlAfterRetry = composeRule.currentUrlBarText()
+        Log.d(TAG, "再試行後エラー確認: urlBar=$urlAfterRetry")
+        assertEquals(PAGE_LOAD_ERROR_TEST_URL, urlAfterRetry)
         waitForUrlBarText(PAGE_LOAD_ERROR_TEST_URL)
+        Log.d(TAG, "=== テスト完了: retryOnPageLoadErrorRetriesFailedUrl ===")
     }
 
     /**
      * テスト用に履歴エントリを 1 件追加する。
      */
     private fun seedHistoryEntry(url: String, title: String): String {
+        Log.d(TAG, "seedHistoryEntry: url=$url, title=$title")
         val seedPageUri = prepareHistorySeedPageUri(url, title)
         openLocalPage(
             url = seedPageUri,
             urlMarker = HISTORY_SEED_FILE_PREFIX,
         )
+        Log.d(TAG, "seedHistoryEntry完了: seedPageUri=$seedPageUri")
         return seedPageUri
     }
 
     private fun openLocalPage(url: String, urlMarker: String) {
+        Log.d(TAG, "openLocalPage: url=$url, marker=$urlMarker")
         composeRule.openUrlViaViewIntent(url)
         val openedByIntent = runCatching {
             composeRule.waitForUrlBarContains(urlMarker, timeoutMillis = 20_000)
             true
         }.getOrDefault(false)
         if (!openedByIntent) {
+            Log.d(TAG, "openLocalPage: Intent経由での遷移失敗、URLバー経由で再試行: $url")
             composeRule.openUrlFromUrlBar(url)
             composeRule.waitForUrlBarContains(urlMarker, timeoutMillis = 60_000)
+        } else {
+            Log.d(TAG, "openLocalPage: Intent経由で遷移成功")
         }
         composeRule.waitForUrlBarNotFocused(timeoutMillis = 30_000)
+        Log.d(TAG, "openLocalPage完了: 現在URL=${composeRule.currentUrlBarText()}")
     }
 
     private fun ensureBrowserScreen() {
+        Log.d(TAG, "ensureBrowserScreen: ツールバー確認開始")
         val browserReady = runCatching {
             waitForToolbarState()
             true
         }.getOrDefault(false)
-        if (browserReady) return
+        if (browserReady) {
+            Log.d(TAG, "ensureBrowserScreen: ブラウザ画面は既に表示中")
+            return
+        }
 
+        Log.d(TAG, "ensureBrowserScreen: ツールバー未表示、タブ画面を確認中")
         val tabsReady = runCatching {
             composeRule.waitForTabsScreenLoaded(timeoutMillis = 10_000)
             true
         }.getOrDefault(false)
         if (tabsReady) {
+            Log.d(TAG, "ensureBrowserScreen: タブ画面表示中、新規タブを追加")
             composeRule.onNodeWithTag(TabsScreenTestTags.AddTabButton.testTag).performClick()
             composeRule.waitForIdle()
+        } else {
+            Log.d(TAG, "ensureBrowserScreen: タブ画面も未表示")
         }
+        Log.d(TAG, "ensureBrowserScreen: ツールバー表示を待機中")
         waitForToolbarState()
+        Log.d(TAG, "ensureBrowserScreen: 完了")
     }
 
     /**
@@ -372,6 +457,7 @@ class GmdSmokeTest {
      * 履歴サジェストオーバーレイと指定タイトル候補が表示されるまで待機する。
      */
     private fun waitForHistorySuggestionsVisible(suggestionTitle: String? = null) {
+        Log.d(TAG, "waitForHistorySuggestionsVisible: title=${suggestionTitle ?: "(任意)"}")
         composeRule.waitUntil(timeoutMillis = 60_000) {
             val overlayVisible = composeRule
                 .onAllNodesWithTag(BrowserTabSurfaceTestTags.UrlSuggestionList.testTag)
@@ -385,18 +471,21 @@ class GmdSmokeTest {
             } ?: true
             overlayVisible && itemVisible
         }
+        Log.d(TAG, "waitForHistorySuggestionsVisible完了")
     }
 
     /**
      * 履歴サジェストオーバーレイが非表示になるまで待機する。
      */
     private fun waitForHistorySuggestionsHidden() {
+        Log.d(TAG, "waitForHistorySuggestionsHidden")
         composeRule.waitUntil(timeoutMillis = 20_000) {
             composeRule
                 .onAllNodesWithTag(BrowserTabSurfaceTestTags.UrlSuggestionList.testTag)
                 .fetchSemanticsNodes()
                 .isEmpty()
         }
+        Log.d(TAG, "waitForHistorySuggestionsHidden完了")
     }
 
     /**
@@ -611,6 +700,7 @@ class GmdSmokeTest {
     )
 
     companion object {
+        private const val TAG = "GmdSmokeTest"
         private const val LOCAL_THEME_COLOR_ASSET_DIR = "test-theme-color"
         private const val LOCAL_THEME_COLOR_DIR_NAME = "test-theme-color"
         private const val LOCAL_THEME_COLOR_INDEX_FILE_NAME = "index.html"
