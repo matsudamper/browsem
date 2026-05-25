@@ -345,15 +345,28 @@ internal fun GeckoBrowserTab(
         )
     }
 
-    // pause からの復帰処理。RELEASED は surface 破棄済みのため再作成を伴う重い復元、
-    // PAUSED_KEEP_SURFACE は surface を維持しているため setActive(true) のみの軽い復元。
+    // pause からの復帰処理。
+    // - RELEASED: surface 破棄済みのため再作成を伴う重い復元。
+    // - PAUSED_KEEP_SURFACE: オーバーレイ等で active を保持したまま戻ってきたケース。
+    //   surface も session も生きているので state を ACTIVE に戻すだけ。setActive は呼ばない
+    //   (可視のまま deactivate していないので再 activate も不要。呼ぶと単一色フラッシュの恐れ)。
+    // - STOPPED_KEEP_SURFACE: ON_STOP で deactivate 済み。surface は生きているので
+    //   setActive(true) で軽く復元する。
     fun resumeFromPauseIfNeeded(gecko: GeckoView) {
         when (surfaceResumeState) {
             SurfaceResumeState.RELEASED -> restoreSurfaceIfNeeded(gecko)
             SurfaceResumeState.PAUSED_KEEP_SURFACE -> {
                 Log.d(
                     TAG_SURFACE_RESUME,
-                    "resumeFromPauseIfNeeded: PAUSED_KEEP_SURFACE → setActive(true)" +
+                    "resumeFromPauseIfNeeded: PAUSED_KEEP_SURFACE → ACTIVE (active 保持済み)" +
+                        " session=${session.logKey()}",
+                )
+                surfaceResumeState = SurfaceResumeState.ACTIVE
+            }
+            SurfaceResumeState.STOPPED_KEEP_SURFACE -> {
+                Log.d(
+                    TAG_SURFACE_RESUME,
+                    "resumeFromPauseIfNeeded: STOPPED_KEEP_SURFACE → setActive(true)" +
                         " session=${session.logKey()}",
                 )
                 session.setActive(true)
@@ -398,7 +411,8 @@ internal fun GeckoBrowserTab(
                             Log.d(TAG_SURFACE_RESUME, "ON_PAUSE skipped: mediaKeep state=$surfaceResumeState")
                         }
                         surfaceResumeState == SurfaceResumeState.RELEASED ||
-                            surfaceResumeState == SurfaceResumeState.PAUSED_KEEP_SURFACE -> {
+                            surfaceResumeState == SurfaceResumeState.PAUSED_KEEP_SURFACE ||
+                            surfaceResumeState == SurfaceResumeState.STOPPED_KEEP_SURFACE -> {
                             Log.d(TAG_SURFACE_RESUME, "ON_PAUSE skipped: state=$surfaceResumeState")
                         }
                         target == null -> {
@@ -412,13 +426,16 @@ internal fun GeckoBrowserTab(
                             )
                         }
                         surfaceResumeState == SurfaceResumeState.ACTIVE && !currentIsImeVisible -> {
-                            // IME 非表示: surface を維持し、オーバーレイ表示中の灰色化を防ぐ。
+                            // IME 非表示 (オーバーレイ等): surface を維持し灰色化を防ぐ。
+                            // この時点では view はまだ可視 (オーバーレイは画面の一部/一時的) のため
+                            // setActive(false) はしない。可視中に deactivate すると、復帰時の再
+                            // activate でコンポジタが一瞬クリアされ単一色フラッシュが出るため。
+                            // 完全に不可視になる ON_STOP まで active を保持する。
                             Log.d(
                                 TAG_SURFACE_RESUME,
-                                "ON_PAUSE: IME 非表示のため surface 維持 (setActive(false) のみ)" +
+                                "ON_PAUSE: IME 非表示のため surface 維持 (active 保持)" +
                                     " gv.size=${target.width}x${target.height}",
                             )
-                            session.setActive(false)
                             surfaceResumeState = SurfaceResumeState.PAUSED_KEEP_SURFACE
                         }
                         else -> {
@@ -460,6 +477,15 @@ internal fun GeckoBrowserTab(
                         ) {
                             state.captureTabPreview(target)
                         }
+                    }
+                    // PAUSED_KEEP_SURFACE は ON_PAUSE 時点では view が可視だったため active を
+                    // 保持していた。ON_STOP で完全に不可視になったので、ここで初めて
+                    // setActive(false) してバックグラウンドのリソースを抑える (surface は維持)。
+                    // capture を先に start してから deactivate する (capturePixels は active な
+                    // compositor を要するため。非同期 GeckoResult なので best-effort)。
+                    if (surfaceResumeState == SurfaceResumeState.PAUSED_KEEP_SURFACE) {
+                        session.setActive(false)
+                        surfaceResumeState = SurfaceResumeState.STOPPED_KEEP_SURFACE
                     }
                 }
                 Lifecycle.Event.ON_START -> {
@@ -950,15 +976,20 @@ private fun TabHistoryBottomSheet(
  *   サイズが連続フレーム同じになるまで setSession を遅延する。
  * - PAUSED_KEEP_SURFACE: IME 非表示の ON_PAUSE (Gemini 等のアシスタントオーバーレイに
  *   よる focus-only 離脱を含む)。GeckoView は縮んでおらず復帰時の stale サイズ resize
- *   ハング経路を踏まないため surface は破棄せず維持し、setActive(false) のみ行う。
- *   復帰時は setActive(true) で即座に戻す。surface を破棄しないのでオーバーレイ表示中に
- *   GeckoView が灰色化しない。
+ *   ハング経路を踏まないため surface は破棄せず維持する。オーバーレイ中はまだ画面に
+ *   見えているため session は active のまま保持する (setActive(false) しない)。これにより
+ *   オーバーレイ表示中の灰色化に加え、復帰時の再 activate に伴う単一色フラッシュも防ぐ。
+ *   (setActive(false) は可視中に呼ぶと復帰時の再 activate でコンポジタが一瞬クリアされる)
+ * - STOPPED_KEEP_SURFACE: PAUSED_KEEP_SURFACE のまま ON_STOP まで到達したケース
+ *   (ホームボタン等で完全に不可視化)。不可視になったので surface は維持しつつ
+ *   setActive(false) でバックグラウンドのリソースを抑える。復帰時は setActive(true) で戻す。
  */
 private enum class SurfaceResumeState {
     ACTIVE,
     RELEASED,
     WAITING_STABLE,
     PAUSED_KEEP_SURFACE,
+    STOPPED_KEEP_SURFACE,
 }
 
 sealed interface GeckoBrowserTabTestTags {
