@@ -118,11 +118,11 @@ private fun addWebAppToHome(context: Context, url: String, title: String, favico
         Toast.makeText(context, "ランチャーがショートカット追加に対応していません", Toast.LENGTH_SHORT).show()
         return
     }
-    // FLAG_ACTIVITY_NEW_DOCUMENT により各ショートカットが独立したRecentsエントリを持つ
+    // 独立した Recents エントリは WebAppActivity の documentLaunchMode="intoExisting"
+    // (= FLAG_ACTIVITY_NEW_DOCUMENT 相当) が保証するため、ピン Intent 側にフラグは不要。
     val intent = Intent(context, WebAppActivity::class.java).apply {
         action = Intent.ACTION_VIEW
         data = Uri.parse(url)
-        addFlags(Intent.FLAG_ACTIVITY_NEW_DOCUMENT)
     }
     // ショートカットと違い、アプリ追加 (FLAG_ACTIVITY_NEW_DOCUMENT + documentLaunchMode)
     // のピンはランチャーが TYPE_BITMAP アイコンを採用しないケースが報告されている
