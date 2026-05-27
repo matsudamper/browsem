@@ -124,12 +124,10 @@ private fun addWebAppToHome(context: Context, url: String, title: String, favico
         action = Intent.ACTION_VIEW
         data = Uri.parse(url)
     }
-    // ショートカットと違い、アプリ追加 (FLAG_ACTIVITY_NEW_DOCUMENT + documentLaunchMode)
-    // のピンはランチャーが TYPE_BITMAP アイコンを採用しないケースが報告されている
-    // (アイコンがアプリのデフォルト ic_firefox_like にフォールバックする)。
-    // そのため、明示的に adaptive icon としてラップして渡すことで安定して反映させる。
+    // favicon の透過をそのまま活かすため、ショートカットと同じく bitmap アイコンを使う。
+    // adaptive icon は全面塗り前提でランチャーが透過部分を黒背景として描画してしまう。
     val icon = if (favicon != null) {
-        LauncherIconFactory.toAdaptiveIconCompat(favicon)
+        IconCompat.createWithBitmap(favicon)
     } else {
         IconCompat.createWithResource(context, ResourcesR.drawable.ic_firefox_like)
     }
