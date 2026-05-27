@@ -177,9 +177,15 @@ class WebAppActivity : ComponentActivity() {
      * HomeScreenIconFetcher を用いてページの高品質アイコンを取得し、BrowserTab に保存する。
      * GeckoView が提供する 16x16 favicon や、<origin>/favicon.ico が 404 を返すサイトでも
      * apple-touch-icon や Web App Manifest 由来の大きなアイコンを取得できる。
+     *
+     * ただしセッションが既に favicon を持っている場合は上書きしない。
+     * HomeScreenIconFetcher は Gecko セッション外の HttpURLConnection で取得するため、
+     * 認証ページが未認証リクエストをログイン/ランディングページへリダイレクトすると
+     * 無関係なアイコンを掴む恐れがある。あくまで favicon が無い場合のフォールバックに留める。
      */
     private suspend fun fetchHighQualityFavicon(browserTab: BrowserTab, pageUrl: String) {
         if (pageUrl.isBlank()) return
+        if (browserTab.faviconBitmap != null) return
         val fetched = try {
             HomeScreenIconFetcher.fetchIcon(pageUrl = pageUrl, webAppManifestJson = null)
         } catch (e: CancellationException) {
@@ -187,7 +193,8 @@ class WebAppActivity : ComponentActivity() {
         } catch (_: Exception) {
             null
         } ?: return
-        if (browserTab.currentUrl == pageUrl) {
+        // fetch 中にセッション側が favicon を設定した場合も上書きしない
+        if (browserTab.currentUrl == pageUrl && browserTab.faviconBitmap == null) {
             browserTab.faviconBitmap = fetched
         }
     }
