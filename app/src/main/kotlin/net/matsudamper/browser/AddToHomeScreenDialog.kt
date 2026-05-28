@@ -3,6 +3,8 @@ package net.matsudamper.browser
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Color
 import android.net.Uri
 import android.widget.Toast
 import androidx.compose.foundation.layout.Column
@@ -23,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.pm.ShortcutInfoCompat
 import androidx.core.content.pm.ShortcutManagerCompat
 import androidx.core.graphics.drawable.IconCompat
+import kotlin.math.max
 import net.matsudamper.browser.resources.R as ResourcesR
 import net.matsudamper.browser.ui.common.BrowserTheme
 
@@ -124,10 +127,10 @@ private fun addWebAppToHome(context: Context, url: String, title: String, favico
         action = Intent.ACTION_VIEW
         data = Uri.parse(url)
     }
-    // favicon の透過をそのまま活かすため、ショートカットと同じく bitmap アイコンを使う。
-    // adaptive icon は全面塗り前提でランチャーが透過部分を黒背景として描画してしまう。
+    // documentLaunchMode のアプリピンは、ランチャーがアイコンの透過部分を黒で塗りつぶし、
+    // 暗い favicon と合わさって真っ黒に見える。透過を不透明な白背景で埋めてから渡す。
     val icon = if (favicon != null) {
-        IconCompat.createWithBitmap(favicon)
+        IconCompat.createWithBitmap(favicon.toOpaqueSquareIcon())
     } else {
         IconCompat.createWithResource(context, ResourcesR.drawable.ic_firefox_like)
     }
@@ -138,6 +141,23 @@ private fun addWebAppToHome(context: Context, url: String, title: String, favico
         .setIntent(intent)
         .build()
     ShortcutManagerCompat.requestPinShortcut(context, info, null)
+}
+
+/**
+ * favicon を不透明な白背景の正方形 Bitmap に合成する。
+ * documentLaunchMode のアプリピンではランチャーがアイコンの透過部分を黒で塗るため、
+ * 透過を白で埋めて真っ黒化を防ぐ。元 Bitmap が長方形でも短辺側を余白とした正方形にする。
+ */
+private fun Bitmap.toOpaqueSquareIcon(): Bitmap {
+    val size = max(width, height)
+    val squared = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(squared)
+    canvas.drawColor(Color.WHITE)
+    // 元画像を中央に配置する
+    val left = (size - width) / 2f
+    val top = (size - height) / 2f
+    canvas.drawBitmap(this, left, top, null)
+    return squared
 }
 
 @Preview(name = "favicon あり")
