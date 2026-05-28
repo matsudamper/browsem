@@ -84,7 +84,27 @@ jobs:
           sudo udevadm trigger --name-match=kvm
 
       - name: Run Android Instrumentation Tests (Managed Device)
-        run: ./gradlew :app:pixel6Api34DebugAndroidTest
+        run: |
+          # GMD インストルメンテーションテストは flaky なため最大 2 回試行する。
+          # 失敗するたびに失敗テストの詳細をコンソールへ出力し、原因調査を容易にする。
+          attempts=2
+          success=false
+          for i in $(seq 1 "${attempts}"); do
+            echo "::group::android-test 試行 ${i}/${attempts}"
+            if ./gradlew :app:pixel6Api34DebugAndroidTest; then
+              echo "::endgroup::"
+              echo "android-test は試行 ${i} で成功しました"
+              success=true
+              break
+            fi
+            echo "::endgroup::"
+            echo "::warning::android-test が試行 ${i}/${attempts} で失敗しました"
+            python3 scripts/ci/print-instrumentation-failures.py || true
+          done
+          if [ "${success}" != "true" ]; then
+            echo "::error::android-test が ${attempts} 回の試行すべてで失敗しました"
+            exit 1
+          fi
 
       - name: Upload Android test report
         if: always()
