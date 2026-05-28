@@ -3,6 +3,7 @@ package net.matsudamper.browser.screen.downloads
 import android.app.Application
 import android.app.DownloadManager
 import android.content.Intent
+import android.provider.Settings
 import androidx.core.net.toUri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -155,6 +156,19 @@ internal class DownloadManagementScreenViewModel(
         val app = getApplication<Application>()
         val uri = fileUri.toUri()
         val mimeType = app.contentResolver.getType(uri) ?: "*/*"
+
+        // APKの場合、提供元不明アプリのインストール権限がなければ設定画面へ誘導する
+        if (mimeType == "application/vnd.android.package-archive" &&
+            !app.packageManager.canRequestPackageInstalls()
+        ) {
+            val settingsIntent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
+                data = "package:${app.packageName}".toUri()
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            runCatching { app.startActivity(settingsIntent) }
+            return
+        }
+
         val intent = Intent(Intent.ACTION_VIEW).apply {
             setDataAndType(uri, mimeType)
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION
