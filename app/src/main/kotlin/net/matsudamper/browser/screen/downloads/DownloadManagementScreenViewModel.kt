@@ -3,6 +3,8 @@ package net.matsudamper.browser.screen.downloads
 import android.app.Application
 import android.app.DownloadManager
 import android.content.Intent
+import android.provider.MediaStore
+import android.provider.Settings
 import androidx.core.net.toUri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -155,8 +157,30 @@ internal class DownloadManagementScreenViewModel(
         val app = getApplication<Application>()
         val uri = fileUri.toUri()
         val mimeType = app.contentResolver.getType(uri) ?: "*/*"
+        // MediaStore の content:// URI では lastPathSegment が数値IDになるため、
+        // DISPLAY_NAME を取得してファイル名による拡張子チェックも行う
+        val displayName = app.contentResolver.query(
+            uri, arrayOf(MediaStore.MediaColumns.DISPLAY_NAME), null, null, null,
+        )?.use { cursor ->
+            if (cursor.moveToFirst()) cursor.getString(0) else null
+        }
+        val isApk = mimeType.equals("application/vnd.android.package-archive", ignoreCase = true) ||
+            (displayName?.endsWith(".apk", ignoreCase = true) == true)
+
+        // APKの場合、提供元不明アプリのインストール権限がなければ設定画面へ誘導する
+        if (isApk && !app.packageManager.canRequestPackageInstalls()) {
+            val settingsIntent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
+                data = "package:${app.packageName}".toUri()
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            runCatching { app.startActivity(settingsIntent) }
+            return
+        }
+
+        // 拡張子でAPKと判定された場合は確実にインストーラーが起動するようMIMEタイプを補正する
+        val effectiveMimeType = if (isApk) "application/vnd.android.package-archive" else mimeType
         val intent = Intent(Intent.ACTION_VIEW).apply {
-            setDataAndType(uri, mimeType)
+            setDataAndType(uri, effectiveMimeType)
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION
         }
         runCatching { app.startActivity(intent) }
