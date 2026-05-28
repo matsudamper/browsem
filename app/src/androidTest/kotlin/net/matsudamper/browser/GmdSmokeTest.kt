@@ -119,13 +119,19 @@ class GmdSmokeTest {
                 .fetchSemanticsNodes().isNotEmpty()
         }
 
-        // CurrentUrlText の実テキストが捕捉した currentUrl と一致することを直接検証する
+        // CurrentUrlText の実テキストが捕捉した currentUrl と一致することを直接検証する。
+        // urlInput は送信値(file:/)、CurrentUrlText は Gecko 正規化値(file:///)になる
+        // タイミングがあり、file URL のスラッシュ表記ゆれで誤検知するため正規化して比較する。
         val displayedUrl = composeRule
             .onNodeWithTag(BrowserTabSurfaceTestTags.CurrentUrlText.testTag, useUnmergedTree = true)
             .fetchSemanticsNode()
             .config[SemanticsProperties.Text]
             .joinToString(separator = "") { it.text }
-        assertEquals(currentUrl, displayedUrl)
+        assertEquals(
+            "現在URL表示が一致しない: currentUrl=\"$currentUrl\" displayedUrl=\"$displayedUrl\"",
+            normalizeFileUrl(currentUrl),
+            normalizeFileUrl(displayedUrl),
+        )
 
         composeRule.onNodeWithTag(BrowserTabSurfaceTestTags.RestoreUrlButton.testTag).performClick()
         waitForUrlBarText(currentUrl)
@@ -535,6 +541,14 @@ class GmdSmokeTest {
                 e,
             )
         }
+    }
+
+    /**
+     * file URL のスラッシュ表記ゆれ（file:/ ・ file:// ・ file:///）を file:/// に正規化する。
+     * file 以外のスキームはそのまま返す。
+     */
+    private fun normalizeFileUrl(url: String): String {
+        return url.replaceFirst(Regex("^file:/+"), "file:///")
     }
 
     /**
