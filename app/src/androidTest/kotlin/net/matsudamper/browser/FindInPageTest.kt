@@ -61,11 +61,18 @@ class FindInPageTest {
         pressSystemBack()
 
         waitForFindInPageHidden()
-        composeRule.waitForIdle()
+
+        // 検索を閉じた直後は URL バーがフォーカスを奪い urlInput が空にクリアされることがある。
+        // waitForUrlBarContains が内部でフォーカスを外して現在ページ URL を復元するため、
+        // その結果でページが戻っていない（現在 URL が保持されている）ことを検証する。
+        val urlRetained = runCatching {
+            composeRule.waitForUrlBarContains(LOCAL_PAGE_FILE_NAME, timeoutMillis = 10_000)
+            true
+        }.getOrDefault(false)
 
         assertTrue(
             "検索を閉じた後にURLが変わった（ページが戻った）",
-            composeRule.currentUrlBarText().contains(LOCAL_PAGE_FILE_NAME),
+            urlRetained,
         )
         assertTrue(
             "アプリが終了している",

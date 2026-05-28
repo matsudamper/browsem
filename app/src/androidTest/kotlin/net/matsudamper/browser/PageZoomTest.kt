@@ -150,6 +150,8 @@ class PageZoomTest {
             composeRule.onAllNodesWithTag(BrowserToolbarMenuTestTags.RefreshButton.testTag).fetchSemanticsNodes().isNotEmpty()
         }
         composeRule.onNodeWithTag(BrowserToolbarMenuTestTags.RefreshButton.testTag).performClick()
+        // 再読み込み直後に URL バーがフォーカスを得ると urlInput が空にクリアされる。
+        // waitForUrlBarContains が内部でフォーカスを外して現在ページ URL を復元する。
         composeRule.waitForUrlBarContains(ZOOM_INDEX_FILE_NAME, timeoutMillis = 60_000)
 
         openMenuFromToolbar()

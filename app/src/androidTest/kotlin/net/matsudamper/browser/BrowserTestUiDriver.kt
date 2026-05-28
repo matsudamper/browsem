@@ -3,6 +3,7 @@ package net.matsudamper.browser
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
@@ -45,9 +46,37 @@ internal fun AndroidComposeTestRule<*, MainActivity>.waitForUrlBarContains(
     value: String,
     timeoutMillis: Long = 30_000,
 ) {
-    waitUntil(timeoutMillis = timeoutMillis) {
-        currentUrlBarText().contains(value)
+    // URL バーがフォーカス中は urlInput が "" にクリアされ、さらにフォーカス中は
+    // onLocationChange が来ても urlInput を更新しない（BrowserTabScreenState）。
+    // この状態のまま読むと現在ページ URL を永遠に取得できずタイムアウトする。
+    // アプリの戻る処理（closeUrlInput(true) → restoreCurrentPageUrlToInput）で
+    // フォーカスを外し現在 URL を復元してから待機する。
+    // GeckoView タップはフォーカス中にサジェストオーバーレイが覆うため復元できない。
+    dismissUrlBarFocusViaBack()
+    try {
+        waitUntil(timeoutMillis = timeoutMillis) {
+            currentUrlBarText().contains(value)
+        }
+    } catch (e: ComposeTimeoutException) {
+        throw AssertionError(
+            "waitForUrlBarContains timeout: expected=\"$value\" " +
+                "actual=\"${currentUrlBarText()}\" urlBarFocused=${isUrlBarFocused()}",
+            e,
+        )
     }
+}
+
+/**
+ * URL バーがフォーカス中の場合のみ、アプリの戻る処理でフォーカスを外す。
+ *
+ * フォーカス中は BackHandler 優先度により closeUrlInput(true) が発火し、
+ * URL バー入力だけが閉じて現在ページ URL が復元される（ページ遷移は起きない）。
+ * 非フォーカス時は戻るがページ遷移を起こし得るため、フォーカス時のみ実行する。
+ */
+internal fun AndroidComposeTestRule<*, MainActivity>.dismissUrlBarFocusViaBack() {
+    if (!isUrlBarFocused()) return
+    runOnIdle { activity.onBackPressedDispatcher.onBackPressed() }
+    runCatching { waitForUrlBarNotFocused(timeoutMillis = 5_000) }
 }
 
 internal fun AndroidComposeTestRule<*, MainActivity>.waitForTabsScreenLoaded(
@@ -63,12 +92,16 @@ internal fun AndroidComposeTestRule<*, MainActivity>.waitForUrlBarNotFocused(
     timeoutMillis: Long = 20_000,
 ) {
     waitUntil(timeoutMillis = timeoutMillis) {
-        !runCatching {
-            onNodeWithTag(UrlTextInputTestTags.UrlBar.testTag)
-                .fetchSemanticsNode()
-                .config[SemanticsProperties.Focused]
-        }.getOrDefault(false)
+        !isUrlBarFocused()
     }
+}
+
+internal fun AndroidComposeTestRule<*, MainActivity>.isUrlBarFocused(): Boolean {
+    return runCatching {
+        onNodeWithTag(UrlTextInputTestTags.UrlBar.testTag)
+            .fetchSemanticsNode()
+            .config[SemanticsProperties.Focused]
+    }.getOrDefault(false)
 }
 
 internal fun AndroidComposeTestRule<*, MainActivity>.tapGeckoContainer() {
