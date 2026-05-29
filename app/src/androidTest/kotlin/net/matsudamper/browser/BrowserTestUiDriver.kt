@@ -46,37 +46,23 @@ internal fun AndroidComposeTestRule<*, MainActivity>.waitForUrlBarContains(
     value: String,
     timeoutMillis: Long = 30_000,
 ) {
-    // URL バーがフォーカス中は urlInput が "" にクリアされ、さらにフォーカス中は
-    // onLocationChange が来ても urlInput を更新しない（BrowserTabScreenState）。
-    // この状態のまま読むと現在ページ URL を永遠に取得できずタイムアウトする。
-    // アプリの戻る処理（closeUrlInput(true) → restoreCurrentPageUrlToInput）で
-    // フォーカスを外し現在 URL を復元してから待機する。
-    // GeckoView タップはフォーカス中にサジェストオーバーレイが覆うため復元できない。
-    dismissUrlBarFocusViaBack()
+    // フォーカス中は urlInput が "" にクリアされ、フォーカス中は onLocationChange でも
+    // urlInput を更新しないため、URL バーだけを読むと現在ページ URL を取得できずタイム
+    // アウトする。currentPageUrlFromUi() は非フォーカス時は urlInput、フォーカス時は
+    // サジェストの現在URL表示(CurrentUrlText=currentPageUrl)を読むことで、フォーカス状態に
+    // 依存せず副作用なしで現在ページ URL を取得する（戻る操作による誤遷移リスクを避ける）。
     try {
         waitUntil(timeoutMillis = timeoutMillis) {
-            currentUrlBarText().contains(value)
+            currentPageUrlFromUi().contains(value)
         }
     } catch (e: ComposeTimeoutException) {
         throw AssertionError(
             "waitForUrlBarContains timeout: expected=\"$value\" " +
-                "actual=\"${currentUrlBarText()}\" urlBarFocused=${isUrlBarFocused()}",
+                "urlInput=\"${currentUrlBarText()}\" currentUrlText=\"${currentUrlActionsText()}\" " +
+                "urlBarFocused=${isUrlBarFocused()}",
             e,
         )
     }
-}
-
-/**
- * URL バーがフォーカス中の場合のみ、アプリの戻る処理でフォーカスを外す。
- *
- * フォーカス中は BackHandler 優先度により closeUrlInput(true) が発火し、
- * URL バー入力だけが閉じて現在ページ URL が復元される（ページ遷移は起きない）。
- * 非フォーカス時は戻るがページ遷移を起こし得るため、フォーカス時のみ実行する。
- */
-internal fun AndroidComposeTestRule<*, MainActivity>.dismissUrlBarFocusViaBack() {
-    if (!isUrlBarFocused()) return
-    runOnIdle { activity.onBackPressedDispatcher.onBackPressed() }
-    runCatching { waitForUrlBarNotFocused(timeoutMillis = 5_000) }
 }
 
 internal fun AndroidComposeTestRule<*, MainActivity>.waitForTabsScreenLoaded(
@@ -116,5 +102,34 @@ internal fun AndroidComposeTestRule<*, MainActivity>.currentUrlBarText(): String
             .fetchSemanticsNode()
             .config[SemanticsProperties.EditableText]
             .text
+    }.getOrDefault("")
+}
+
+/**
+ * フォーカス状態に依存せず現在ページ URL を副作用なしで取得する。
+ *
+ * - 非フォーカス時: urlInput(EditableText) が現在ページ URL。
+ * - フォーカス時: urlInput は "" にクリアされるが、サジェストの「今のURL」表示
+ *   (CurrentUrlText) が currentPageUrl をそのまま表示するためそちらを読む。
+ *
+ * 戻る操作などでフォーカスを外す必要がないため、ページ遷移を誘発しない。
+ */
+internal fun AndroidComposeTestRule<*, MainActivity>.currentPageUrlFromUi(): String {
+    val barText = currentUrlBarText()
+    if (barText.isNotEmpty()) return barText
+    return currentUrlActionsText()
+}
+
+/**
+ * サジェストの「今のURL」表示(CurrentUrlText)のテキストを返す。未表示なら空文字。
+ *
+ * ListItem の mergeDescendants により子ノードは merged tree で不可視のため unmerged tree を使う。
+ */
+internal fun AndroidComposeTestRule<*, MainActivity>.currentUrlActionsText(): String {
+    return runCatching {
+        onNodeWithTag(BrowserTabSurfaceTestTags.CurrentUrlText.testTag, useUnmergedTree = true)
+            .fetchSemanticsNode()
+            .config[SemanticsProperties.Text]
+            .joinToString(separator = "") { it.text }
     }.getOrDefault("")
 }
