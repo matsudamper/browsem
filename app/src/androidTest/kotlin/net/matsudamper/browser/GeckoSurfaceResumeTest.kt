@@ -44,8 +44,11 @@ class GeckoSurfaceResumeTest {
         Log.d(TAG, "フォアグラウンド復帰")
         composeRule.activityRule.scenario.moveToState(Lifecycle.State.RESUMED)
 
-        composeRule.waitForUrlBarContains(SURFACE_RESUME_FILE_NAME, timeoutMillis = 60_000)
+        // 復帰直後に URL バーがフォーカスを得ると urlInput が空にクリアされる。
+        // GeckoContainer の復帰を待ってから検証する。waitForUrlBarContains は
+        // フォーカス状態に依存せず現在ページ URL を読む。
         waitForGeckoContainer()
+        composeRule.waitForUrlBarContains(SURFACE_RESUME_FILE_NAME, timeoutMillis = 60_000)
         Log.d(TAG, "復帰後レンダリング確認開始")
         waitForNonBlackGeckoPixels()
         Log.d(TAG, "復帰後レンダリング確認完了")
