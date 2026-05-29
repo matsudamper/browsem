@@ -4,6 +4,7 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.paparazzi)
     id("detekt-compose-convention")
+    id("instrumentation-failures-report-convention")
 }
 
 val ciDebugKeystorePath = System.getenv("DEBUG_KEYSTORE_PATH")

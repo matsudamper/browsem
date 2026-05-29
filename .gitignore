@@ -6,4 +6,3 @@ local.properties
 .idea/
 .keystore
 .kotlin
-__pycache__/
