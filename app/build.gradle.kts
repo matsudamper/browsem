@@ -165,6 +165,7 @@ dependencies {
 
     testImplementation(libs.junit4)
     testImplementation(libs.composable.preview.scanner)
+    testImplementation(libs.kotlinx.coroutines.test)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.androidx.test.espresso.core)
