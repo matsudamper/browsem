@@ -11,6 +11,7 @@ import java.util.UUID
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import net.matsudamper.browser.data.download.DownloadRepository
+import net.matsudamper.browser.download.PendingDownloadBodyStore
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.WebResponse
 
@@ -23,10 +24,20 @@ internal class GeckoDownloadManager(
      * Workerが起動する前にENQUEUEDレコードをRoomに挿入し、UIに即時反映させる。
      * 進捗は通知で表示される。
      */
-    fun enqueueDownload(url: String, referrerUrl: String, coroutineScope: CoroutineScope) {
+    fun enqueueDownload(
+        url: String,
+        referrerUrl: String,
+        coroutineScope: CoroutineScope,
+        response: WebResponse? = null,
+    ) {
         DownloadWorker.ensureNotificationChannel(context)
         // ダウンロードごとに一意な通知IDを事前に生成し、WorkerとGeckoDownloadManagerで共有する
         val workId = UUID.randomUUID()
+        // 元レスポンス（POST結果・ワンタイムURL等）があれば、Workerがボディを直接保存できるよう保持する。
+        // プロセス再起動などで取り出せなかった場合はWorker側でURL再取得にフォールバックする。
+        if (response != null) {
+            PendingDownloadBodyStore.put(workId.toString(), response)
+        }
         val notificationId = workId.hashCode() and 0x7fffffff
         val workRequest = OneTimeWorkRequestBuilder<DownloadWorker>()
             .setId(workId)
@@ -61,13 +72,19 @@ internal class GeckoDownloadManager(
     }
 
     /**
-     * GeckoViewがレンダリングできないレスポンス（ダウンロード対象ファイル等）を受け取った際に、
-     * レスポンスボディは破棄し、URLでWorkManagerに再ダウンロードさせる。
-     * WorkManagerで実行するため、アプリが終了してもダウンロードが継続される。
+     * GeckoViewがレンダリングできないレスポンス（ダウンロード対象ファイル等）を受け取った際に呼ばれる。
+     * レスポンスボディ（実データ）を破棄せず保持したままWorkManagerにエンキューし、Workerがそれを直接保存する。
+     * これにより、パスワード submit(POST)・ワンタイムURL・セッション依存のダウンロードでも
+     * URL再取得による 0 バイト化を避けられる。WorkManagerで実行するため、
+     * プロセスが生きている限りバックグラウンドでダウンロードが継続される。
      */
     fun enqueueDownloadFromResponse(response: WebResponse, referrerUrl: String, coroutineScope: CoroutineScope) {
-        response.body?.close()
-        enqueueDownload(url = response.uri, referrerUrl = referrerUrl, coroutineScope = coroutineScope)
+        enqueueDownload(
+            url = response.uri,
+            referrerUrl = referrerUrl,
+            coroutineScope = coroutineScope,
+            response = response,
+        )
     }
 
     /**
