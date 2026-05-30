@@ -8,3 +8,15 @@ plugins {
     alias(libs.plugins.ksp) apply false
     alias(libs.plugins.paparazzi) apply false
 }
+
+subprojects {
+    tasks.withType<Test>().configureEach {
+        testLogging {
+            events("failed", "skipped")
+            showExceptions = true
+            showCauses = true
+            showStackTraces = true
+            exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+        }
+    }
+}
