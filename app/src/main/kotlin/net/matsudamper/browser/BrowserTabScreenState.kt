@@ -587,19 +587,26 @@ internal class BrowserTabScreenState(
     fun confirmPendingDownload() {
         val response = pendingDownloadResponse ?: return
         pendingDownloadResponse = null
-        // suspend 前に必要な情報を取り出し、body は即座にクローズする
-        // （許可ダイアログ中にキャンセルされても body がリークしないようにするため）
-        val downloadUrl = response.uri
-        response.body?.close()
+        // body はクローズせず、Worker がボディ（実データ）を直接保存できるよう response ごと引き渡す。
+        // パスワード submit(POST)・ワンタイムURL のダウンロードを 0 バイトにしないため。
         val referrerUrl = currentPageUrl
         coroutineScope.launch {
-            // ダウンロード進捗を通知で表示するためにパーミッションを要求し、ユーザーの応答を待つ
-            onRequestDownloadNotificationPermission()
-            geckoDownloadManager.enqueueDownload(
-                url = downloadUrl,
-                referrerUrl = referrerUrl,
-                coroutineScope = coroutineScope,
-            )
+            var enqueued = false
+            try {
+                // ダウンロード進捗を通知で表示するためにパーミッションを要求し、ユーザーの応答を待つ
+                onRequestDownloadNotificationPermission()
+                geckoDownloadManager.enqueueDownloadFromResponse(
+                    response = response,
+                    referrerUrl = referrerUrl,
+                    coroutineScope = coroutineScope,
+                )
+                enqueued = true
+            } finally {
+                // 権限待ち中などにキャンセルされ、エンキューに到達しなかった場合はボディを閉じてリークを防ぐ
+                if (!enqueued) {
+                    response.body?.close()
+                }
+            }
         }
     }
 
