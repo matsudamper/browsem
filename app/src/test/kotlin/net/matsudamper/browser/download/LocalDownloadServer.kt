@@ -3,6 +3,7 @@ package net.matsudamper.browser.download
 import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpServer
 import java.net.InetSocketAddress
+import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
 /**
@@ -11,17 +12,21 @@ import java.util.concurrent.Executors
  */
 class LocalDownloadServer {
     private val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
+    private var executor: ExecutorService? = null
 
     /** 割り当てられたポートを含むベースURL */
     val baseUrl: String get() = "http://127.0.0.1:${server.address.port}"
 
     fun start() {
-        server.executor = Executors.newCachedThreadPool()
+        // HttpServer.stop() は外部設定の executor を終了しないため、参照を保持して stop() で解放する
+        executor = Executors.newCachedThreadPool().also { server.executor = it }
         server.start()
     }
 
     fun stop() {
         server.stop(0)
+        executor?.shutdownNow()
+        executor = null
     }
 
     /** パスにハンドラを登録する。ハンドラ例外時もExchangeを確実にクローズする */

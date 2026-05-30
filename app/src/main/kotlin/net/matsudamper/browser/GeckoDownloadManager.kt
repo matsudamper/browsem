@@ -52,13 +52,19 @@ internal class GeckoDownloadManager(
             .build()
         // WorkerがENQUEUED状態の間もUI上に表示するため、事前にレコードを挿入する
         coroutineScope.launch {
-            downloadRepository.insertEnqueued(
-                workerId = workRequest.id.toString(),
-                url = url,
-                referrerUrl = referrerUrl,
-                enqueuedAt = System.currentTimeMillis(),
-            )
-            WorkManager.getInstance(context).enqueue(workRequest)
+            try {
+                downloadRepository.insertEnqueued(
+                    workerId = workRequest.id.toString(),
+                    url = url,
+                    referrerUrl = referrerUrl,
+                    enqueuedAt = System.currentTimeMillis(),
+                )
+                WorkManager.getInstance(context).enqueue(workRequest)
+            } catch (e: Throwable) {
+                // エンキュー失敗・キャンセル時は保持した元レスポンスのボディを確実に閉じてリークを防ぐ
+                PendingDownloadBodyStore.discard(workId.toString())
+                throw e
+            }
             // Workerが起動する前から即座に通知を表示する
             val notification = NotificationCompat.Builder(context, DownloadWorker.CHANNEL_ID)
                 .setSmallIcon(android.R.drawable.stat_sys_download)

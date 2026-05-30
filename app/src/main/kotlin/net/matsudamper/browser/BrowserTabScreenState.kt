@@ -591,13 +591,22 @@ internal class BrowserTabScreenState(
         // パスワード submit(POST)・ワンタイムURL のダウンロードを 0 バイトにしないため。
         val referrerUrl = currentPageUrl
         coroutineScope.launch {
-            // ダウンロード進捗を通知で表示するためにパーミッションを要求し、ユーザーの応答を待つ
-            onRequestDownloadNotificationPermission()
-            geckoDownloadManager.enqueueDownloadFromResponse(
-                response = response,
-                referrerUrl = referrerUrl,
-                coroutineScope = coroutineScope,
-            )
+            var enqueued = false
+            try {
+                // ダウンロード進捗を通知で表示するためにパーミッションを要求し、ユーザーの応答を待つ
+                onRequestDownloadNotificationPermission()
+                geckoDownloadManager.enqueueDownloadFromResponse(
+                    response = response,
+                    referrerUrl = referrerUrl,
+                    coroutineScope = coroutineScope,
+                )
+                enqueued = true
+            } finally {
+                // 権限待ち中などにキャンセルされ、エンキューに到達しなかった場合はボディを閉じてリークを防ぐ
+                if (!enqueued) {
+                    response.body?.close()
+                }
+            }
         }
     }
 
