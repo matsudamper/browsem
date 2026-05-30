@@ -3,6 +3,7 @@ package net.matsudamper.browser
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.content.ContentResolver
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
@@ -197,12 +198,16 @@ internal class DownloadWorker(
             val fileName = URLUtil.guessFileName(urlString, response.header("Content-Disposition"), mimeType)
                 .ifBlank { "download-${System.currentTimeMillis()}" }
 
-            setForeground(createForegroundInfo(notificationId, 0, contentLength <= 0, fileName, 0L, contentLength))
-            repository.updateProgress(id.toString(), fileName, 0, 0L, contentLength)
-
             val resolver = context.contentResolver
+            // MediaStoreによる自動リネームは拡張子を壊す（例: file.pdf → file.pdf(1)）ため、
+            // 挿入前に重複を検出して正しい形式（例: file(1).pdf）の名前を生成する
+            val uniqueFileName = generateUniqueFileName(resolver, fileName)
+
+            setForeground(createForegroundInfo(notificationId, 0, contentLength <= 0, uniqueFileName, 0L, contentLength))
+            repository.updateProgress(id.toString(), uniqueFileName, 0, 0L, contentLength)
+
             val values = ContentValues().apply {
-                put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+                put(MediaStore.MediaColumns.DISPLAY_NAME, uniqueFileName)
                 put(MediaStore.MediaColumns.MIME_TYPE, mimeType)
                 put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
                 put(MediaStore.Downloads.IS_PENDING, 1)
@@ -212,7 +217,7 @@ internal class DownloadWorker(
 
             // 失敗時に部分ファイルURIを参照できるよう保存する
             partialResultUri = uri
-            partialResultFileName = fileName
+            partialResultFileName = uniqueFileName
             partialResultContentLength = contentLength
 
             var lastUpdateTime = 0L
@@ -229,8 +234,8 @@ internal class DownloadWorker(
                     val now = System.currentTimeMillis()
                     if (now - lastUpdateTime >= PROGRESS_UPDATE_INTERVAL_MILLIS) {
                         val progress = if (contentLength > 0) (totalRead * 100 / contentLength).toInt() else 0
-                        repository.updateProgress(id.toString(), fileName, progress, totalRead, contentLength)
-                        setForeground(createForegroundInfo(notificationId, progress, contentLength <= 0, fileName, totalRead, contentLength))
+                        repository.updateProgress(id.toString(), uniqueFileName, progress, totalRead, contentLength)
+                        setForeground(createForegroundInfo(notificationId, progress, contentLength <= 0, uniqueFileName, totalRead, contentLength))
                         lastUpdateTime = now
                     }
                 }
@@ -240,17 +245,7 @@ internal class DownloadWorker(
             resolver.update(uri, completeValues, null, null)
             // 完了したので部分ファイル情報をクリアする
             partialResultUri = null
-            // IS_PENDING=0 更新後にMediaStoreが重複を避けてリネームした場合に備え、実際のファイル名を取得する
-            val actualFileName = resolver.query(
-                uri,
-                arrayOf(MediaStore.MediaColumns.DISPLAY_NAME),
-                null,
-                null,
-                null,
-            )?.use { cursor ->
-                if (cursor.moveToFirst()) cursor.getString(0) else null
-            }
-            return Pair(uri, actualFileName ?: fileName)
+            return Pair(uri, uniqueFileName)
         } finally {
             // ボディを確実にクローズする（pendingResponse 経由・fetch 経由いずれの場合も）
             response.close()
@@ -376,6 +371,21 @@ internal class DownloadWorker(
         )
     }
 
+    private fun generateUniqueFileName(resolver: ContentResolver, fileName: String): String {
+        return buildUniqueFileName(
+            existsInDownloads = { name ->
+                resolver.query(
+                    MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+                    arrayOf(MediaStore.MediaColumns.DISPLAY_NAME),
+                    "${MediaStore.MediaColumns.DISPLAY_NAME} = ? AND ${MediaStore.MediaColumns.RELATIVE_PATH} = ?",
+                    arrayOf(name, Environment.DIRECTORY_DOWNLOADS + "/"),
+                    null,
+                )?.use { cursor -> cursor.count > 0 } ?: false
+            },
+            fileName = fileName,
+        )
+    }
+
     companion object {
         /** 進捗（通知・Room）の更新間隔。頻繁な更新を避けるためのレート制限 */
         private const val PROGRESS_UPDATE_INTERVAL_MILLIS = 1000L
@@ -427,6 +437,24 @@ internal class DownloadWorker(
                     NotificationManager.IMPORTANCE_LOW,
                 )
                 notificationManager.createNotificationChannel(channel)
+            }
+        }
+
+        /**
+         * 拡張子の前にカウンタを付けた重複しないファイル名を生成する。
+         * MediaStoreの自動リネームは拡張子の後ろにカウンタを付けてしまうため（例: file.pdf → file.pdf(1)）、
+         * 挿入前に自前で重複チェックを行う。
+         */
+        internal fun buildUniqueFileName(existsInDownloads: (String) -> Boolean, fileName: String): String {
+            if (!existsInDownloads(fileName)) return fileName
+            val dotIndex = fileName.lastIndexOf('.')
+            val baseName = if (dotIndex > 0) fileName.substring(0, dotIndex) else fileName
+            val extension = if (dotIndex > 0) fileName.substring(dotIndex) else ""
+            var counter = 1
+            while (true) {
+                val candidate = "$baseName($counter)$extension"
+                if (!existsInDownloads(candidate)) return candidate
+                counter++
             }
         }
     }
