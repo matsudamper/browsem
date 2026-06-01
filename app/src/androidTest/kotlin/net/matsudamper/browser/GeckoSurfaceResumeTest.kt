@@ -101,9 +101,21 @@ class GeckoSurfaceResumeTest {
         val latch = CountDownLatch(1)
 
         InstrumentationRegistry.getInstrumentation().runOnMainSync {
-            requireNotNull(composeRule.activity.window.decorView.findGeckoView()) {
-                "GeckoView was not found in the activity view hierarchy"
-            }.capturePixels().accept(
+            val geckoView = composeRule.activity.window.decorView.findGeckoView()
+            if (geckoView == null) {
+                // GeckoView が見つからない場合にビュー階層を記録し、原因特定を容易にする。
+                // Compose の AndroidView ラッパーがまだアタッチ中か、ライフサイクル復帰の
+                // タイミングずれで一時的に除外されている可能性がある。
+                val hierarchy = composeRule.activity.window.decorView.summarizeViewHierarchy(maxDepth = 4)
+                errorRef.set(
+                    AssertionError(
+                        "GeckoView was not found in the activity view hierarchy.\n$hierarchy"
+                    )
+                )
+                latch.countDown()
+                return@runOnMainSync
+            }
+            geckoView.capturePixels().accept(
                 { bitmap ->
                     bitmapRef.set(bitmap)
                     latch.countDown()
@@ -120,6 +132,29 @@ class GeckoSurfaceResumeTest {
         return requireNotNull(bitmapRef.get()) {
             "GeckoView.capturePixels() returned null"
         }
+    }
+
+    /**
+     * ビュー階層を `maxDepth` 段まで辿り、クラス名と可視状態(V/I/G)の1行サマリを返す。
+     * GeckoView 不在時の診断用。
+     */
+    private fun View.summarizeViewHierarchy(maxDepth: Int, currentDepth: Int = 0): String {
+        val indent = "  ".repeat(currentDepth)
+        val visChar = when (visibility) {
+            View.VISIBLE -> "V"
+            View.INVISIBLE -> "I"
+            View.GONE -> "G"
+            else -> "?"
+        }
+        val self = "$indent${javaClass.simpleName}($visChar)"
+        if (currentDepth >= maxDepth || this !is ViewGroup) return self
+        val children = buildString {
+            for (i in 0 until childCount) {
+                append("\n")
+                append(getChildAt(i).summarizeViewHierarchy(maxDepth, currentDepth + 1))
+            }
+        }
+        return "$self$children"
     }
 
     private fun Bitmap.blackRatio(): Double {
