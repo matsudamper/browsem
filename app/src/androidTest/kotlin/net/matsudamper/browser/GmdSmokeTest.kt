@@ -461,7 +461,26 @@ class GmdSmokeTest {
             if (imeVisible && System.currentTimeMillis() >= stableWindowStart) {
                 imeVisibleInStableWindow = true
             }
-            assertTrue("URL bar focus was dropped while observing keyboard state", focused)
+            if (!focused) {
+                // フォーカスが外れた原因を特定するため診断情報を収集する。
+                // ノード自体が消えた（Compose の一時的なリコンポーズ）か、ノードは
+                // あるがフォーカスが解除されたかを区別できるようにする。
+                val elapsedMs = System.currentTimeMillis() - start
+                val nodeExists = runCatching {
+                    composeRule.onNodeWithTag(UrlTextInputTestTags.UrlBar.testTag).fetchSemanticsNode()
+                    true
+                }.getOrDefault(false)
+                val urlBarText = runCatching { getUrlBarText() }.getOrDefault("<error>")
+                val geckoCount = runCatching {
+                    composeRule.onAllNodesWithTag(GeckoBrowserTabTestTags.GeckoContainer.testTag)
+                        .fetchSemanticsNodes().size
+                }.getOrDefault(-1)
+                throw AssertionError(
+                    "URL bar focus was dropped while observing keyboard state " +
+                        "(elapsed=${elapsedMs}ms nodeExists=$nodeExists " +
+                        "urlBarText=\"$urlBarText\" geckoCount=$geckoCount)"
+                )
+            }
             Thread.sleep(100)
         }
         if (requireImeWasVisibleBeforeTap) {
