@@ -128,7 +128,11 @@ class GeckoSurfaceResumeTest {
         }
 
         assertTrue("Timed out waiting for GeckoView.capturePixels()", latch.await(10, TimeUnit.SECONDS))
-        errorRef.get()?.let { throw AssertionError("GeckoView.capturePixels() failed", it) }
+        errorRef.get()?.let { error ->
+            // AssertionError はそのまま再throw して診断メッセージ（階層ダンプ等）を保持する。
+            if (error is AssertionError) throw error
+            throw AssertionError("GeckoView.capturePixels() failed", error)
+        }
         return requireNotNull(bitmapRef.get()) {
             "GeckoView.capturePixels() returned null"
         }

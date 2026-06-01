@@ -1,5 +1,6 @@
 package net.matsudamper.browser
 
+import android.os.SystemClock
 import android.view.WindowInsets
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.hasAnyDescendant
@@ -446,11 +447,11 @@ class GmdSmokeTest {
         observeMillis: Long = 1_500L,
         requireImeWasVisibleBeforeTap: Boolean = false,
     ) {
-        val start = System.currentTimeMillis()
+        val start = SystemClock.elapsedRealtime()
         val deadline = start + observeMillis
         val stableWindowStart = start + 700L
         var imeVisibleInStableWindow = false
-        while (System.currentTimeMillis() < deadline) {
+        while (SystemClock.elapsedRealtime() < deadline) {
             val focused = isUrlBarFocused()
             var imeVisible = false
             composeRule.runOnIdle {
@@ -458,14 +459,14 @@ class GmdSmokeTest {
                 imeVisible = insets?.isVisible(WindowInsets.Type.ime()) == true
             }
 
-            if (imeVisible && System.currentTimeMillis() >= stableWindowStart) {
+            if (imeVisible && SystemClock.elapsedRealtime() >= stableWindowStart) {
                 imeVisibleInStableWindow = true
             }
             if (!focused) {
                 // フォーカスが外れた原因を特定するため診断情報を収集する。
                 // ノード自体が消えた（Compose の一時的なリコンポーズ）か、ノードは
                 // あるがフォーカスが解除されたかを区別できるようにする。
-                val elapsedMs = System.currentTimeMillis() - start
+                val elapsedMs = SystemClock.elapsedRealtime() - start
                 val nodeExists = runCatching {
                     composeRule.onNodeWithTag(UrlTextInputTestTags.UrlBar.testTag).fetchSemanticsNode()
                     true
