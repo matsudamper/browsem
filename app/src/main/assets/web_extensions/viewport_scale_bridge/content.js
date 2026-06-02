@@ -1,20 +1,20 @@
 (function () {
   if (window !== window.top) return;
-  var vv = window.visualViewport;
-  if (!vv) return;
+  const visualViewport = window.visualViewport;
+  if (!visualViewport) return;
 
-  var lastScale = -1;
+  let lastScale = -1;
 
   function send() {
-    var s = vv.scale;
-    if (s === lastScale) return;
-    lastScale = s;
+    const scale = visualViewport.scale;
+    if (scale === lastScale) return;
+    lastScale = scale;
     browser.runtime
-      .sendNativeMessage("viewportScaleBridge", { scale: s })
+      .sendNativeMessage("viewportScaleBridge", { scale })
       .catch(function () {});
   }
 
   send();
-  vv.addEventListener("resize", send);
-  vv.addEventListener("scroll", send);
+  visualViewport.addEventListener("resize", send);
+  visualViewport.addEventListener("scroll", send);
 })();

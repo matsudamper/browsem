@@ -837,6 +837,7 @@ internal class BrowserTabScreenState(
         }
         if (url.startsWith("javascript:")) return
         hadPinchGesture = false
+        visualViewportScale = 1f
         if (pageLoadError?.failingUrl != url) {
             clearPageLoadError()
         }
@@ -948,6 +949,7 @@ internal class BrowserTabScreenState(
     override fun onPageStart(url: String) {
         clearPageLoadError()
         hadPinchGesture = false
+        visualViewportScale = 1f
         // previewCaptureReady は false に戻さない。
         // GeckoView は新ページの描画が始まるまで古いページを表示し続けるため、
         // ロード中のキャプチャは古いページの画像となり問題ない。
