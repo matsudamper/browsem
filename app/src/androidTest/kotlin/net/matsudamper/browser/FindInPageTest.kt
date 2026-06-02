@@ -58,6 +58,10 @@ class FindInPageTest {
         openFindInPage()
         waitForFindInPageVisible()
 
+        // BackHandler の SideEffect が OnBackPressedDispatcher に反映されるのを確実に待つ
+        composeRule.waitForIdle()
+        composeRule.mainClock.advanceUntilIdle()
+
         pressSystemBack()
 
         waitForFindInPageHidden()
