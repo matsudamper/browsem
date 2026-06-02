@@ -86,12 +86,14 @@ internal fun BrowserContentHost(
                                 (view as GeckoView).onTouchEventForDetailResult(event).then { detail ->
                                     if (detail != null) {
                                         val handledResult = detail.handledResult()
-                                        // HANDLED はPanZoomがパン/ズームを処理中（ズームイン時のパンを含む）
-                                        // PanZoomのパン位置はGeckoSessionのscrollYに反映されないため、
-                                        // HANDLEDのときはPullToRefreshを有効にしてはいけない。
-                                        // UNHANDLEDのとき（ページ最上部で何も処理できない）のみ有効化する。
+                                        val canScrollUp = (detail.scrollableDirections()
+                                            and PanZoomController.SCROLLABLE_FLAG_TOP) != 0
+                                        // APZが未処理かつ上方向スクロール不可のときのみ有効化。
+                                        // ズームイン中はAPZがHANDLEDを返すか、
+                                        // scrollableDirectionsにTOPが含まれるため無効化される。
                                         swipeRefreshScrollEnabled =
                                             handledResult == PanZoomController.INPUT_RESULT_UNHANDLED
+                                                && !canScrollUp
                                     }
                                     GeckoResult.fromValue<Void>(null)
                                 }
