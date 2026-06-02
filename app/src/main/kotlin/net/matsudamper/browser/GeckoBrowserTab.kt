@@ -465,6 +465,9 @@ internal fun GeckoBrowserTab(
     DisposableEffect(session, state, viewportScaleWebExtension) {
         viewportScaleWebExtension.registerSession(session) { scale ->
             state.visualViewportScale = scale
+            if (scale <= 1.05f) {
+                state.hadPinchGesture = false
+            }
         }
         onDispose {
             viewportScaleWebExtension.unregisterSession(session)
