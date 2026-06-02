@@ -81,20 +81,25 @@ internal fun BrowserContentHost(
                         session.setActive(true)
                         @SuppressLint("ClickableViewAccessibility")
                         geckoView.setOnTouchListener { view, event ->
-                            if (event.actionMasked == MotionEvent.ACTION_DOWN) {
-                                swipeRefreshScrollEnabled = false
-                                (view as GeckoView).onTouchEventForDetailResult(event).then { detail ->
-                                    if (detail != null) {
-                                        val handledResult = detail.handledResult()
-                                        val isUnhandled = handledResult == PanZoomController.INPUT_RESULT_UNHANDLED
-                                        val isHandled = handledResult == PanZoomController.INPUT_RESULT_HANDLED
-                                        swipeRefreshScrollEnabled = isHandled || isUnhandled
+                            when (event.actionMasked) {
+                                MotionEvent.ACTION_DOWN -> {
+                                    swipeRefreshScrollEnabled = false
+                                    (view as GeckoView).onTouchEventForDetailResult(event).then { detail ->
+                                        if (detail != null) {
+                                            val handledResult = detail.handledResult()
+                                            val isUnhandled = handledResult == PanZoomController.INPUT_RESULT_UNHANDLED
+                                            val isHandled = handledResult == PanZoomController.INPUT_RESULT_HANDLED
+                                            swipeRefreshScrollEnabled = isHandled || isUnhandled
+                                        }
+                                        GeckoResult.fromValue<Void>(null)
                                     }
-                                    GeckoResult.fromValue<Void>(null)
+                                    true
                                 }
-                                true
-                            } else {
-                                false
+                                MotionEvent.ACTION_POINTER_DOWN -> {
+                                    state.hadPinchGesture = true
+                                    false
+                                }
+                                else -> false
                             }
                         }
                     }
@@ -108,6 +113,8 @@ internal fun BrowserContentHost(
                     )
                     swipeRefreshLayout.setOnChildScrollUpCallback { _, _ ->
                         !swipeRefreshScrollEnabled || state.scrollY > 0
+                            || state.visualViewportScale > 1.05f
+                            || state.hadPinchGesture
                     }
                     swipeRefreshLayout.setOnRefreshListener {
                         state.isRefreshing = true
