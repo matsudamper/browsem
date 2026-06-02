@@ -461,6 +461,16 @@ internal fun GeckoBrowserTab(
         }
     }
 
+    val viewportScaleWebExtension: ViewportScaleWebExtension = koinInject()
+    DisposableEffect(session, state, viewportScaleWebExtension) {
+        viewportScaleWebExtension.registerSession(session) { scale ->
+            state.visualViewportScale = scale
+        }
+        onDispose {
+            viewportScaleWebExtension.unregisterSession(session)
+        }
+    }
+
     // FindInPageWebExtension のセッション登録
     DisposableEffect(session, state, findInPageWebExtension) {
         findInPageWebExtension.registerSession(session) { current, total, error ->

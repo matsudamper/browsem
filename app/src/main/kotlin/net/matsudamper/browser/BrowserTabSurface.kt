@@ -86,14 +86,9 @@ internal fun BrowserContentHost(
                                 (view as GeckoView).onTouchEventForDetailResult(event).then { detail ->
                                     if (detail != null) {
                                         val handledResult = detail.handledResult()
-                                        val canScrollUp = (detail.scrollableDirections()
-                                            and PanZoomController.SCROLLABLE_FLAG_TOP) != 0
-                                        // APZが未処理かつ上方向スクロール不可のときのみ有効化。
-                                        // ズームイン中はAPZがHANDLEDを返すか、
-                                        // scrollableDirectionsにTOPが含まれるため無効化される。
-                                        swipeRefreshScrollEnabled =
-                                            handledResult == PanZoomController.INPUT_RESULT_UNHANDLED
-                                                && !canScrollUp
+                                        val isUnhandled = handledResult == PanZoomController.INPUT_RESULT_UNHANDLED
+                                        val isHandled = handledResult == PanZoomController.INPUT_RESULT_HANDLED
+                                        swipeRefreshScrollEnabled = isHandled || isUnhandled
                                     }
                                     GeckoResult.fromValue<Void>(null)
                                 }
@@ -113,6 +108,7 @@ internal fun BrowserContentHost(
                     )
                     swipeRefreshLayout.setOnChildScrollUpCallback { _, _ ->
                         !swipeRefreshScrollEnabled || state.scrollY > 0
+                            || state.visualViewportScale > 1.05f
                     }
                     swipeRefreshLayout.setOnRefreshListener {
                         state.isRefreshing = true

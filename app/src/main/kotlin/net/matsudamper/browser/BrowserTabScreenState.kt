@@ -9,6 +9,7 @@ import android.widget.Toast
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -241,6 +242,7 @@ internal class BrowserTabScreenState(
         private set
 
     // --- Scroll / Refresh state ---
+    var visualViewportScale by mutableFloatStateOf(1f)
     var isRefreshing by mutableStateOf(false)
     // BrowserTab.scrollY に委譲することで、タブ切替で State が再生成されても
     // スクロール位置を保持し、復元タブでの PullToRefresh 誤発動を防ぐ。
