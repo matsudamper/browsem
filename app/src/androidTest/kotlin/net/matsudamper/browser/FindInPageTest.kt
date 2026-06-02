@@ -72,7 +72,7 @@ class FindInPageTest {
 
             // BackHandler の SideEffect が OnBackPressedDispatcher に反映されるのを確実に待つ
             composeRule.waitForIdle()
-            composeRule.mainClock.advanceUntilIdle()
+            composeRule.waitForIdle()
 
             urlRetained = runCatching {
                 pressSystemBack()
