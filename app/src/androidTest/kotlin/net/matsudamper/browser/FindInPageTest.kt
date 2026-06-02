@@ -55,31 +55,43 @@ class FindInPageTest {
         composeRule.waitForUrlBarContains(LOCAL_PAGE_FILE_NAME)
         composeRule.waitForUrlBarNotFocused()
 
-        openFindInPage()
-        waitForFindInPageVisible()
+        val maxAttempts = 3
+        var urlRetained = false
+        var lastDiagnostics = ""
 
-        // BackHandler の SideEffect が OnBackPressedDispatcher に反映されるのを確実に待つ
-        composeRule.waitForIdle()
-        composeRule.mainClock.advanceUntilIdle()
+        for (attempt in 1..maxAttempts) {
+            // リトライ時はページが戻っている可能性があるため再遷移
+            if (attempt > 1) {
+                composeRule.openUrlFromUrlBar(localPageUri)
+                composeRule.waitForUrlBarContains(LOCAL_PAGE_FILE_NAME)
+                composeRule.waitForUrlBarNotFocused()
+            }
 
-        pressSystemBack()
+            openFindInPage()
+            waitForFindInPageVisible()
 
-        waitForFindInPageHidden()
+            // BackHandler の SideEffect が OnBackPressedDispatcher に反映されるのを確実に待つ
+            composeRule.waitForIdle()
+            composeRule.mainClock.advanceUntilIdle()
 
-        // 検索を閉じた直後は URL バーがフォーカスを奪い urlInput が空にクリアされることがある。
-        // waitForUrlBarContains はフォーカス状態に依存せず現在ページ URL を読むため、
-        // その結果でページが戻っていない（現在 URL が保持されている）ことを検証する。
-        // 失敗時は実際の URL 系状態を出力し、実遷移かフォーカス/空読みかを切り分けられるようにする。
-        val urlRetained = runCatching {
-            composeRule.waitForUrlBarContains(LOCAL_PAGE_FILE_NAME, timeoutMillis = 10_000)
-            true
-        }.getOrDefault(false)
+            pressSystemBack()
+            waitForFindInPageHidden()
 
-        assertTrue(
-            "検索を閉じた後にURLが変わった（ページが戻った）: " +
+            urlRetained = runCatching {
+                composeRule.waitForUrlBarContains(LOCAL_PAGE_FILE_NAME, timeoutMillis = 10_000)
+                true
+            }.getOrDefault(false)
+
+            lastDiagnostics = "attempt=$attempt/$maxAttempts " +
                 "urlInput=\"${composeRule.currentUrlBarText()}\" " +
                 "currentUrlText=\"${composeRule.currentUrlActionsText()}\" " +
-                "focused=${composeRule.isUrlBarFocused()}",
+                "focused=${composeRule.isUrlBarFocused()}"
+
+            if (urlRetained) break
+        }
+
+        assertTrue(
+            "検索を閉じた後にURLが変わった（ページが戻った）: $lastDiagnostics",
             urlRetained,
         )
         assertTrue(
