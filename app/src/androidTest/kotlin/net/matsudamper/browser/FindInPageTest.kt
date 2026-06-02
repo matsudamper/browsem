@@ -74,10 +74,9 @@ class FindInPageTest {
             composeRule.waitForIdle()
             composeRule.mainClock.advanceUntilIdle()
 
-            pressSystemBack()
-            waitForFindInPageHidden()
-
             urlRetained = runCatching {
+                pressSystemBack()
+                waitForFindInPageHidden()
                 composeRule.waitForUrlBarContains(LOCAL_PAGE_FILE_NAME, timeoutMillis = 10_000)
                 true
             }.getOrDefault(false)
