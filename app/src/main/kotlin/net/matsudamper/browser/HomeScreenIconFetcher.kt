@@ -25,6 +25,7 @@ internal object HomeScreenIconFetcher {
     private const val MAX_DECODED_ICON_DIMENSION = 1024
     private const val MAX_SHORTCUT_ICON_SIZE = 192
     private const val MAX_ICON_FETCH_ATTEMPTS = 20
+    private const val APPLE_TOUCH_ICON_DEFAULT_SIZE = 180
     private const val USER_AGENT = "Mozilla/5.0 (Android) Browsem"
 
     private val linkTagRegex = Regex("""<link\b[^>]*>""", RegexOption.IGNORE_CASE)
@@ -117,9 +118,20 @@ internal object HomeScreenIconFetcher {
             }
             if (relValues.any { it == "icon" || it == "apple-touch-icon" || it == "apple-touch-icon-precomposed" }) {
                 val url = resolveUrl(pageUri, href) ?: return@forEach
+                val declaredSize = parseIconSize(attributes["sizes"])
+                val isAppleTouchIcon = relValues.any {
+                    it == "apple-touch-icon" || it == "apple-touch-icon-precomposed"
+                }
+                // apple-touch-icon は sizes 未指定でも 180x180 が標準。
+                // favicon.ico (32x32 程度) より優先するためデフォルトサイズを補完する。
+                val effectiveSize = if (declaredSize == 0 && isAppleTouchIcon) {
+                    APPLE_TOUCH_ICON_DEFAULT_SIZE
+                } else {
+                    declaredSize
+                }
                 icons += IconCandidate(
                     url = url,
-                    size = parseIconSize(attributes["sizes"]),
+                    size = effectiveSize,
                     type = attributes["type"],
                     source = IconSource.Html,
                 )
