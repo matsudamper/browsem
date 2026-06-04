@@ -349,8 +349,7 @@ internal fun GeckoBrowserTab(
                 TAG_SURFACE_RESUME,
                 "lifecycle event=$event state=$surfaceResumeState gv=${gv != null}" +
                     " gv.size=${gv?.width ?: -1}x${gv?.height ?: -1}" +
-                    " session=${session.logKey()} sessionOpen=${session.isOpen}" +
-                    " mediaKeep=${mediaWebExtension.shouldKeepSessionAttached(session)}",
+                    " session=${session.logKey()} sessionOpen=${session.isOpen}",
             )
             when (event) {
                 Lifecycle.Event.ON_PAUSE -> {
@@ -367,9 +366,10 @@ internal fun GeckoBrowserTab(
                     //
                     // WAITING_STABLE 中（前回 resume の安定待ちが完了する前に再度 pause した
                     // 場合）も releaseSession を行いたいので ACTIVE と同じ扱いにする。
-                    if (surfaceResumeState != SurfaceResumeState.RELEASED &&
-                        !mediaWebExtension.shouldKeepSessionAttached(session)
-                    ) {
+                    // メディア再生中でも releaseSession する。releaseSession しても
+                    // MediaSession 経由で音声再生は継続する。release しないと復帰時に
+                    // surface 再作成でコンポジタがハングしフリーズする。
+                    if (surfaceResumeState != SurfaceResumeState.RELEASED) {
                         val target = geckoView
                         if (target == null) {
                             // geckoView が更新されないまま ON_PAUSE が来ると release できず、
@@ -400,25 +400,12 @@ internal fun GeckoBrowserTab(
                     } else {
                         Log.d(
                             TAG_SURFACE_RESUME,
-                            "ON_PAUSE skipped: state=$surfaceResumeState" +
-                                " mediaKeep=${mediaWebExtension.shouldKeepSessionAttached(session)}",
+                            "ON_PAUSE skipped: state=$surfaceResumeState (already RELEASED)",
                         )
                     }
                 }
                 Lifecycle.Event.ON_STOP -> {
                     session.flushSessionState()
-                    // non-media の場合は ON_PAUSE で release 済み。
-                    // media の場合は session 維持のため capture のみ実行（従来どおり）。
-                    // TODO: media 再生継続中の session は release しないため、surface 再作成時の
-                    //       SyncResumeResizeCompositor ハング経路を踏むリスクが残る。実機で
-                    //       再現を確認したら、audio を殺さない形で compositor 再構築する手段
-                    //       （releaseSession しても MediaSession 経由で音は継続する可能性が高い）
-                    //       を検討する。
-                    geckoView?.also { target ->
-                        if (mediaWebExtension.shouldKeepSessionAttached(session)) {
-                            state.captureTabPreview(target)
-                        }
-                    }
                 }
                 Lifecycle.Event.ON_START -> {
                     geckoView?.also(::restoreSurfaceIfNeeded)
