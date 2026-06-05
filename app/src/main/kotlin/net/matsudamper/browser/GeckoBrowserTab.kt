@@ -385,7 +385,12 @@ internal fun GeckoBrowserTab(
                                 TAG_SURFACE_RESUME,
                                 "ON_PAUSE: releaseSession + INVISIBLE 実行 gv.size=${target.width}x${target.height}",
                             )
-                            session.setActive(false)
+                            // session.setActive(false) は呼ばない。
+                            // setActive(false) は Gecko エンジンのイベント処理を非同期に停止するが、
+                            // 復帰時の setActive(true) による再開が x.com 等の複雑なページで
+                            // 失敗し、セッションが完全に無応答になる（reload() すら効かない）。
+                            // releaseSession() でディスプレイを切り離せばコンポジタの描画は止まる。
+                            // JS 実行は継続するが、WebApp として望ましい動作でもある。
                             // best-effort capture（非同期 GeckoResult、release 後に失敗する可能性あり）。
                             state.captureTabPreview(target)
                             // surface 再作成時の自動 compositor resume を防ぐため即 detach。
