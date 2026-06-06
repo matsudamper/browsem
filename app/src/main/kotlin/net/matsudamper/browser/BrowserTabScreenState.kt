@@ -60,6 +60,7 @@ internal fun rememberBrowserTabScreenState(
     onHistoryRecord: (suspend (url: String, title: String) -> Long)? = null,
     onHistoryTitleUpdate: (suspend (id: Long, title: String) -> Unit)? = null,
     onRequestDownloadNotificationPermission: suspend () -> Unit = {},
+    onRequestAndroidPermissions: suspend (Array<String>) -> Array<String> = { emptyArray() },
 ): BrowserTabScreenState {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -78,6 +79,7 @@ internal fun rememberBrowserTabScreenState(
             onHistoryRecord = onHistoryRecord,
             onHistoryTitleUpdate = onHistoryTitleUpdate,
             onRequestDownloadNotificationPermission = onRequestDownloadNotificationPermission,
+            onRequestAndroidPermissions = onRequestAndroidPermissions,
         )
     }
     state.homepageUrl = homepageUrl
@@ -98,6 +100,7 @@ internal class BrowserTabScreenState(
     internal val findInPageWebExtension: FindInPageWebExtension,
     private val context: Context,
     private val onRequestDownloadNotificationPermission: suspend () -> Unit = {},
+    private val onRequestAndroidPermissions: suspend (Array<String>) -> Array<String> = { emptyArray() },
     var onHistoryRecord: (suspend (url: String, title: String) -> Long)? = null,
     var onHistoryTitleUpdate: (suspend (id: Long, title: String) -> Unit)? = null,
 ) : BrowserSessionStateCallbacks {
@@ -1068,6 +1071,23 @@ internal class BrowserTabScreenState(
 
     override fun onScrollChanged(scrollY: Int) {
         this.scrollY = scrollY
+    }
+
+    override fun onAndroidPermissionsRequest(
+        permissions: Array<String>?,
+        onGrant: () -> Unit,
+        onReject: () -> Unit,
+    ) {
+        val perms = permissions ?: run { onReject(); return }
+        coroutineScope.launch {
+            runCatching {
+                onRequestAndroidPermissions(perms)
+            }.onSuccess { granted ->
+                if (granted.size == perms.size) onGrant() else onReject()
+            }.onFailure {
+                onReject()
+            }
+        }
     }
 
     private fun maybeResetToolbarColor(fromUrl: String, toUrl: String) {

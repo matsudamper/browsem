@@ -31,6 +31,11 @@ interface BrowserSessionStateCallbacks {
         request: GeckoSession.NavigationDelegate.LoadRequest,
     ): GeckoResult<AllowOrDeny>?
     fun onHistoryStateChange(items: List<HistoryStateItem>, currentIndex: Int)
+    fun onAndroidPermissionsRequest(
+        permissions: Array<String>?,
+        onGrant: () -> Unit,
+        onReject: () -> Unit,
+    )
 }
 
 /** タブ内ナビゲーション履歴の項目 */
@@ -79,6 +84,22 @@ fun createGeckoSessionDelegateBundle(
                 Log.d("BrowserTabPermission", "non-notification permission prompted")
                 return GeckoResult.fromValue(
                     GeckoSession.PermissionDelegate.ContentPermission.VALUE_PROMPT
+                )
+            }
+
+            override fun onAndroidPermissionsRequest(
+                session: GeckoSession,
+                permissions: Array<out String>?,
+                callback: GeckoSession.PermissionDelegate.Callback,
+            ) {
+                Log.d(
+                    "BrowserTabPermission",
+                    "onAndroidPermissionsRequest: permissions=${permissions?.toList()}"
+                )
+                callbacks.onAndroidPermissionsRequest(
+                    permissions = permissions?.let { it.toList().toTypedArray() },
+                    onGrant = { callback.grant() },
+                    onReject = { callback.reject() },
                 )
             }
         },
@@ -324,6 +345,19 @@ internal class BrowserTabSessionDelegateHost(
 
             override fun onHistoryStateChange(items: List<HistoryStateItem>, currentIndex: Int) {
                 // bindToSession で設定する historyDelegate 経由で呼ばれるため、ここでは何もしない
+            }
+
+            override fun onAndroidPermissionsRequest(
+                permissions: Array<String>?,
+                onGrant: () -> Unit,
+                onReject: () -> Unit,
+            ) {
+                val cb = currentCallbacks()
+                if (cb != null) {
+                    cb.onAndroidPermissionsRequest(permissions, onGrant, onReject)
+                } else {
+                    onReject()
+                }
             }
         },
         browserTab = browserTab,
