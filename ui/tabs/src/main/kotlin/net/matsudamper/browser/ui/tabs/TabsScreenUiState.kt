@@ -5,9 +5,17 @@ import net.matsudamper.browser.data.TabGroupData
 data class TabsScreenUiState(
     val callbacks: Callbacks,
     val loadingState: LoadingState,
+    val pendingClosedTab: PendingClosedTab? = null,
 ) {
+    data class PendingClosedTab(
+        val tabId: String,
+        val title: String,
+    )
+
     interface Callbacks {
         fun onCloseTab(tabId: String)
+        fun onUndoCloseTab()
+        fun onConfirmCloseTab()
         fun onReorderTabs(groupIndex: Int, fromLocalIndex: Int, toLocalIndex: Int)
         fun onReorderGroups(fromIndex: Int, toIndex: Int)
         fun onGroupSelected(index: Int)

@@ -40,9 +40,43 @@ class TabsScreenViewModel(
 
     private val callbacks = object : TabsScreenUiState.Callbacks {
         override fun onCloseTab(tabId: String) {
-            // イベントを先に送信してタブを閉じてから、グループ割り当てを解除する
+            val state = viewModelStateFlow.value
+            // 前の保留中タブがあれば確定させる
+            val prevPendingId = state.pendingClosedTabId
+            if (prevPendingId != null) {
+                eventHandler.trySend { it.closeTab(prevPendingId) }
+                viewModelScope.launch { tabGroupRepository.removeTabFromGroup(prevPendingId) }
+            }
+            val tab = state.tabStoreState.tabs.firstOrNull { it.id == tabId }
+            val title = tab?.title.orEmpty().ifBlank { tabId }
+            viewModelStateFlow.update {
+                it.copy(
+                    pendingClosedTabId = tabId,
+                    pendingClosedTabTitle = title,
+                )
+            }
+        }
+
+        override fun onUndoCloseTab() {
+            viewModelStateFlow.update {
+                it.copy(
+                    pendingClosedTabId = null,
+                    pendingClosedTabTitle = null,
+                )
+            }
+        }
+
+        override fun onConfirmCloseTab() {
+            val state = viewModelStateFlow.value
+            val tabId = state.pendingClosedTabId ?: return
+            viewModelStateFlow.update {
+                it.copy(
+                    pendingClosedTabId = null,
+                    pendingClosedTabTitle = null,
+                )
+            }
             eventHandler.trySend { it.closeTab(tabId) }
-            onTabClosed(tabId)
+            viewModelScope.launch { tabGroupRepository.removeTabFromGroup(tabId) }
         }
 
         override fun onReorderTabs(groupIndex: Int, fromLocalIndex: Int, toLocalIndex: Int) {
@@ -94,6 +128,7 @@ class TabsScreenViewModel(
                 val assignmentMap = state.assignments.associate { it.tabId to it.groupId }
                 val groupedTabs = groups.map { group ->
                     state.tabStoreState.tabs
+                        .filter { it.id != state.pendingClosedTabId }
                         .filter { assignmentMap[it.id] == group.id.value }
                         .map { tab ->
                             TabsScreenTabData(
@@ -103,9 +138,15 @@ class TabsScreenViewModel(
                             )
                         }
                 }
+                val pendingClosedTab = state.pendingClosedTabId?.let { tabId ->
+                    state.pendingClosedTabTitle?.let { title ->
+                        TabsScreenUiState.PendingClosedTab(tabId, title)
+                    }
+                }
                 uiStateFlow.update {
                     TabsScreenUiState(
                         callbacks = callbacks,
+                        pendingClosedTab = pendingClosedTab,
                         loadingState = if (state.activeGroupIndex == null) {
                             TabsScreenUiState.LoadingState.Loading
                         } else {
@@ -283,13 +324,6 @@ class TabsScreenViewModel(
         }
     }
 
-    /** タブが閉じられたときにグループ割り当てを解除する */
-    private fun onTabClosed(tabId: String) {
-        viewModelScope.launch {
-            tabGroupRepository.removeTabFromGroup(tabId)
-        }
-    }
-
     /** タブを別のグループへ移動する */
     private fun moveTabToGroup(tabId: String, targetGroupIndex: Int) {
         val targetGroup = viewModelStateFlow.value.groups.getOrNull(targetGroupIndex) ?: return
@@ -395,6 +429,8 @@ class TabsScreenViewModel(
         val activeGroupIndex: Int? = null,
         val tabStoreState: TabStoreState = TabStoreState(),
         val assignments: List<TabGroupAssignment> = emptyList(),
+        val pendingClosedTabId: String? = null,
+        val pendingClosedTabTitle: String? = null,
     ) {
         /** ドラッグ中はローカル順序を優先し、DB の更新が遅れても表示が乱れないようにする。 */
         val groups: List<TabGroupData> get() = localGroupOrder ?: dbGroups
