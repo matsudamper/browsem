@@ -96,8 +96,9 @@ fun createGeckoSessionDelegateBundle(
                     "BrowserTabPermission",
                     "onAndroidPermissionsRequest: permissions=${permissions?.toList()}"
                 )
+                @Suppress("UNCHECKED_CAST")
                 callbacks.onAndroidPermissionsRequest(
-                    permissions = permissions?.let { it.toList().toTypedArray() },
+                    permissions = permissions as Array<String>?,
                     onGrant = { callback.grant() },
                     onReject = { callback.reject() },
                 )

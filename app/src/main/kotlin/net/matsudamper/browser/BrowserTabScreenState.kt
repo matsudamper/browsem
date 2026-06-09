@@ -1083,7 +1083,7 @@ internal class BrowserTabScreenState(
             runCatching {
                 onRequestAndroidPermissions(perms)
             }.onSuccess { granted ->
-                if (granted.size == perms.size) onGrant() else onReject()
+                if (perms.all { it in granted }) onGrant() else onReject()
             }.onFailure {
                 onReject()
             }
