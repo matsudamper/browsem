@@ -586,6 +586,11 @@ internal fun GeckoBrowserTab(
 
     // Back handlers
     // 優先度は後に登録したものが高くなるため、最も優先度の高い showFindInPage を最後に置く
+    // webAppMode: canGoBack=false 時は Activity を終了せずタスクをバックグラウンドへ移動して
+    // セッション（ブラウザ履歴・入力状態）を保持する
+    BackHandler(enabled = webAppMode && !state.canGoBack) {
+        (context as? Activity)?.moveTaskToBack(true)
+    }
     BackHandler(enabled = state.canGoBack && !state.isUrlInputFocused) {
         state.onGoBack()
     }
