@@ -50,8 +50,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import net.matsudamper.browser.data.SettingsRepository
+import net.matsudamper.browser.data.SiteSettingsRepository
 import net.matsudamper.browser.data.TabGroupId
 import net.matsudamper.browser.data.TabGroupRepository
+import net.matsudamper.browser.data.extractSiteHost
 import net.matsudamper.browser.data.history.HistoryRepository
 import net.matsudamper.browser.data.websuggestion.WebSuggestionRepository
 import net.matsudamper.browser.navigation.AppDestination
@@ -62,6 +64,7 @@ import net.matsudamper.browser.screen.history.HistoryScreenViewModel
 import net.matsudamper.browser.screen.downloads.DownloadManagementScreenViewModel
 import net.matsudamper.browser.screen.backup.BackupProgressViewModel
 import net.matsudamper.browser.screen.settings.SettingsScreenViewModel
+import net.matsudamper.browser.screen.sitesettings.SiteSettingsScreenViewModel
 import net.matsudamper.browser.screen.tab.TabsScreenViewModel
 import net.matsudamper.browser.ui.common.BrowserTheme
 import net.matsudamper.browser.ui.browser.BrowserScreen
@@ -71,6 +74,7 @@ import net.matsudamper.browser.ui.history.HistoryScreen
 import net.matsudamper.browser.ui.settings.BackupProgressScreen
 import net.matsudamper.browser.ui.settings.BackupProgressUiState
 import net.matsudamper.browser.ui.settings.SettingsScreen
+import net.matsudamper.browser.ui.settings.SiteSettingsScreen
 import net.matsudamper.browser.ui.tabs.TabsScreen
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -336,6 +340,12 @@ private fun BrowserAppContent(
                                     onInstallExtensionRequest = onInstallExtensionRequest,
                                     onRequestDownloadNotificationPermission = onRequestDownloadNotificationPermission,
                                     onOpenSettings = { backStack.add(AppDestination.Settings) },
+                                    onOpenSiteSettings = { currentUrl ->
+                                        val host = extractSiteHost(currentUrl)
+                                        if (host != null) {
+                                            backStack.add(AppDestination.SiteSettings(host))
+                                        }
+                                    },
                                     onOpenTabs = { backStack.add(AppDestination.Tabs) },
                                     browserSessionLifecycleController = browserSessionLifecycleController,
                                     onOpenNewSessionRequest = { uri ->
@@ -421,6 +431,21 @@ private fun BrowserAppContent(
                                 onBack = { backStack.removeLastOrNull() },
                             )
                         }
+                    }
+
+                    is AppDestination.SiteSettings -> navEntry(key) {
+                        val siteSettingsRepository: SiteSettingsRepository = koinInject()
+                        val siteSettingsViewModel = composeViewModel(initializer = {
+                            SiteSettingsScreenViewModel(
+                                host = key.host,
+                                siteSettingsRepository = siteSettingsRepository,
+                            )
+                        })
+                        val siteSettingsUiState by siteSettingsViewModel.uiState.collectAsState()
+                        SiteSettingsScreen(
+                            uiState = siteSettingsUiState,
+                            onBack = { backStack.removeLastOrNull() },
+                        )
                     }
 
                     AppDestination.History -> navEntry(key) {

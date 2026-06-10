@@ -425,7 +425,7 @@ fun SettingsScreen(
 }
 
 @Composable
-private fun SettingSection(
+internal fun SettingSection(
     title: String,
     content: @Composable () -> Unit,
 ) {
@@ -491,7 +491,7 @@ private fun SettingsScreenPreview() {
 }
 
 @Composable
-private fun SettingsRadioOption(
+internal fun SettingsRadioOption(
     label: String,
     selected: Boolean,
     onClick: () -> Unit,
