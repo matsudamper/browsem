@@ -1,5 +1,6 @@
 package net.matsudamper.browser
 
+import android.Manifest
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
@@ -19,13 +20,17 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import java.net.URL
+import net.matsudamper.browser.data.SitePermissionState
+import net.matsudamper.browser.data.SiteSettingsRepository
 import net.matsudamper.browser.data.TranslationProvider
+import net.matsudamper.browser.data.extractSiteHost
 import net.matsudamper.browser.translate.TranslationPriorityLanguage
 import org.json.JSONObject
 import org.koin.compose.koinInject
@@ -60,11 +65,13 @@ internal fun rememberBrowserTabScreenState(
     onHistoryRecord: (suspend (url: String, title: String) -> Long)? = null,
     onHistoryTitleUpdate: (suspend (id: Long, title: String) -> Unit)? = null,
     onRequestDownloadNotificationPermission: suspend () -> Unit = {},
+    onRequestAndroidPermissions: suspend (Array<String>) -> Array<String> = { emptyArray() },
 ): BrowserTabScreenState {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val geckoDownloadManager: GeckoDownloadManager = koinInject()
     val findInPageWebExtension: FindInPageWebExtension = koinInject()
+    val siteSettingsRepository: SiteSettingsRepository = koinInject()
     val state = remember(browserTab) {
         BrowserTabScreenState(
             browserTab = browserTab,
@@ -74,10 +81,12 @@ internal fun rememberBrowserTabScreenState(
             coroutineScope = coroutineScope,
             geckoDownloadManager = geckoDownloadManager,
             findInPageWebExtension = findInPageWebExtension,
+            siteSettingsRepository = siteSettingsRepository,
             context = context,
             onHistoryRecord = onHistoryRecord,
             onHistoryTitleUpdate = onHistoryTitleUpdate,
             onRequestDownloadNotificationPermission = onRequestDownloadNotificationPermission,
+            onRequestAndroidPermissions = onRequestAndroidPermissions,
         )
     }
     state.homepageUrl = homepageUrl
@@ -96,8 +105,10 @@ internal class BrowserTabScreenState(
     private val coroutineScope: CoroutineScope,
     private val geckoDownloadManager: GeckoDownloadManager,
     internal val findInPageWebExtension: FindInPageWebExtension,
+    private val siteSettingsRepository: SiteSettingsRepository,
     private val context: Context,
     private val onRequestDownloadNotificationPermission: suspend () -> Unit = {},
+    private val onRequestAndroidPermissions: suspend (Array<String>) -> Array<String> = { emptyArray() },
     var onHistoryRecord: (suspend (url: String, title: String) -> Long)? = null,
     var onHistoryTitleUpdate: (suspend (id: Long, title: String) -> Unit)? = null,
 ) : BrowserSessionStateCallbacks {
@@ -189,6 +200,65 @@ internal class BrowserTabScreenState(
 
     // --- プロンプトダイアログ状態（分離済み） ---
     val promptDialogState = PromptDialogState(coroutineScope)
+
+    // --- サイトごとのマイク許可確認ダイアログ状態 ---
+    var microphonePermissionDialog by mutableStateOf<MicrophonePermissionDialogState?>(null)
+        private set
+
+    /**
+     * @param onResult true=許可(永続化), false=ブロック(永続化), null=今回のみ拒否
+     */
+    @Stable
+    class MicrophonePermissionDialogState(
+        val host: String,
+        internal val onResult: (Boolean?) -> Unit,
+    )
+
+    fun confirmMicrophonePermissionDialog(allow: Boolean) {
+        val dialog = microphonePermissionDialog ?: return
+        microphonePermissionDialog = null
+        dialog.onResult(allow)
+    }
+
+    fun dismissMicrophonePermissionDialog() {
+        val dialog = microphonePermissionDialog ?: return
+        microphonePermissionDialog = null
+        dialog.onResult(null)
+    }
+
+    /**
+     * サイトごとのマイク権限を解決する。
+     * 未設定 (ASK) の場合は確認ダイアログを表示してユーザーの応答を待ち、
+     * 許可/ブロックの選択をサイト設定として永続化する。
+     */
+    private suspend fun resolveMicrophonePermission(host: String): Boolean {
+        when (siteSettingsRepository.getMicrophonePermission(host)) {
+            SitePermissionState.SITE_PERMISSION_ALLOW -> return true
+            SitePermissionState.SITE_PERMISSION_DENY -> return false
+            else -> Unit
+        }
+        // 表示中のダイアログが残っている場合は今回のみ拒否として閉じる
+        microphonePermissionDialog?.also { previous ->
+            microphonePermissionDialog = null
+            previous.onResult(null)
+        }
+        val result = CompletableDeferred<Boolean?>()
+        microphonePermissionDialog = MicrophonePermissionDialogState(host) { allow ->
+            result.complete(allow)
+        }
+        val choice = result.await()
+        if (choice != null) {
+            siteSettingsRepository.setMicrophonePermission(
+                host = host,
+                state = if (choice) {
+                    SitePermissionState.SITE_PERMISSION_ALLOW
+                } else {
+                    SitePermissionState.SITE_PERMISSION_DENY
+                },
+            )
+        }
+        return choice == true
+    }
 
     // --- ファイルダウンロード確認ダイアログ用state ---
     var pendingDownloadResponse by mutableStateOf<WebResponse?>(null)
@@ -1068,6 +1138,51 @@ internal class BrowserTabScreenState(
 
     override fun onScrollChanged(scrollY: Int) {
         this.scrollY = scrollY
+    }
+
+    override fun onAndroidPermissionsRequest(
+        permissions: Array<String>?,
+        onGrant: () -> Unit,
+        onReject: () -> Unit,
+    ) {
+        val perms = permissions ?: run { onReject(); return }
+        coroutineScope.launch {
+            // OS の権限要求の前に、サイトごとのマイク許可を確認する
+            if (Manifest.permission.RECORD_AUDIO in perms) {
+                val host = extractSiteHost(currentPageUrl)
+                if (host == null || !resolveMicrophonePermission(host)) {
+                    onReject()
+                    return@launch
+                }
+            }
+            runCatching {
+                onRequestAndroidPermissions(perms)
+            }.onSuccess { granted ->
+                if (perms.all { it in granted }) onGrant() else onReject()
+            }.onFailure {
+                onReject()
+            }
+        }
+    }
+
+    override fun onMediaPermissionRequest(
+        uri: String,
+        hasVideo: Boolean,
+        hasAudio: Boolean,
+        onResult: (grantVideo: Boolean, grantAudio: Boolean) -> Unit,
+    ) {
+        // マイクを含まない要求（カメラのみ等）は従来通り許可する
+        if (!hasAudio) {
+            onResult(hasVideo, false)
+            return
+        }
+        coroutineScope.launch {
+            // OS 権限が許可済みの場合は onAndroidPermissionsRequest を経由しないため、
+            // ここでもサイトごとのマイク許可を確認する（未設定ならダイアログを表示する）
+            val host = extractSiteHost(uri) ?: extractSiteHost(currentPageUrl)
+            val grantAudio = host != null && resolveMicrophonePermission(host)
+            onResult(hasVideo, grantAudio)
+        }
     }
 
     private fun maybeResetToolbarColor(fromUrl: String, toUrl: String) {

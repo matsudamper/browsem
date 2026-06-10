@@ -36,6 +36,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContract
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
+import android.content.pm.PackageManager
+import kotlinx.coroutines.CompletableDeferred
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -91,6 +95,7 @@ internal fun GeckoBrowserTab(
     tabCount: Int?,
     onInstallExtensionRequest: (String) -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenSiteSettings: ((currentUrl: String) -> Unit)?,
     onOpenTabs: () -> Unit,
     onOpenNewSessionRequest: (String) -> GeckoSession?,
     onOpenNewTabRequest: (String) -> Unit,
@@ -116,6 +121,21 @@ internal fun GeckoBrowserTab(
     var clipboardUrl by remember { mutableStateOf<String?>(null) }
     // タブ履歴BottomSheetの表示状態
     var showTabHistorySheet by remember { mutableStateOf(false) }
+
+    // Androidランタイムパーミッション要求用（マイク・カメラ等）
+    val pendingPermissionsRef = remember {
+        object {
+            var pending: CompletableDeferred<Array<String>>? = null
+        }
+    }
+    val requestPermissionsLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { results ->
+        val granted = results.filterValues { it }.keys.toTypedArray()
+        pendingPermissionsRef.pending?.complete(granted)
+        pendingPermissionsRef.pending = null
+    }
+
     val state = rememberBrowserTabScreenState(
         browserTab = browserTab,
         homepageUrl = homepageUrl,
@@ -124,6 +144,23 @@ internal fun GeckoBrowserTab(
         onHistoryRecord = onHistoryRecord,
         onHistoryTitleUpdate = onHistoryTitleUpdate,
         onRequestDownloadNotificationPermission = onRequestDownloadNotificationPermission,
+        onRequestAndroidPermissions = { permissions ->
+            val alreadyGranted = permissions.filter {
+                ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED
+            }
+            val notGranted = permissions.filter {
+                ContextCompat.checkSelfPermission(context, it) != PackageManager.PERMISSION_GRANTED
+            }
+            if (notGranted.isEmpty()) {
+                alreadyGranted.toTypedArray()
+            } else {
+                val deferred = CompletableDeferred<Array<String>>()
+                pendingPermissionsRef.pending = deferred
+                requestPermissionsLauncher.launch(notGranted.toTypedArray())
+                val newlyGranted = deferred.await()
+                (alreadyGranted + newlyGranted).toTypedArray()
+            }
+        },
     )
 
     // ツールバー色の輝度に応じてステータスバーアイコン色（黒/白）を動的に切り替える
@@ -718,6 +755,9 @@ internal fun GeckoBrowserTab(
                     showInstallExtensionItem = showInstallExtensionItem && state.showInstallExtensionItem,
                     onInstallExtension = { onInstallExtensionRequest(state.currentPageUrl) },
                     onOpenSettings = onOpenSettings,
+                    onOpenSiteSettings = onOpenSiteSettings?.let { callback ->
+                        { callback(state.currentPageUrl) }
+                    },
                     onShare = state::sharePage,
                     tabCount = tabCount,
                     showTabActions = enableTabUi,

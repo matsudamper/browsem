@@ -31,6 +31,17 @@ interface BrowserSessionStateCallbacks {
         request: GeckoSession.NavigationDelegate.LoadRequest,
     ): GeckoResult<AllowOrDeny>?
     fun onHistoryStateChange(items: List<HistoryStateItem>, currentIndex: Int)
+    fun onAndroidPermissionsRequest(
+        permissions: Array<String>?,
+        onGrant: () -> Unit,
+        onReject: () -> Unit,
+    )
+    fun onMediaPermissionRequest(
+        uri: String,
+        hasVideo: Boolean,
+        hasAudio: Boolean,
+        onResult: (grantVideo: Boolean, grantAudio: Boolean) -> Unit,
+    )
 }
 
 /** タブ内ナビゲーション履歴の項目 */
@@ -79,6 +90,60 @@ fun createGeckoSessionDelegateBundle(
                 Log.d("BrowserTabPermission", "non-notification permission prompted")
                 return GeckoResult.fromValue(
                     GeckoSession.PermissionDelegate.ContentPermission.VALUE_PROMPT
+                )
+            }
+
+            override fun onAndroidPermissionsRequest(
+                session: GeckoSession,
+                permissions: Array<out String>?,
+                callback: GeckoSession.PermissionDelegate.Callback,
+            ) {
+                Log.d(
+                    "BrowserTabPermission",
+                    "onAndroidPermissionsRequest: permissions=${permissions?.toList()}"
+                )
+                @Suppress("UNCHECKED_CAST")
+                callbacks.onAndroidPermissionsRequest(
+                    permissions = permissions as Array<String>?,
+                    onGrant = { callback.grant() },
+                    onReject = { callback.reject() },
+                )
+            }
+
+            // getUserMedia のデバイス選択。デフォルト実装は reject するため、
+            // 未実装だと Android パーミッションを許可してもマイク・カメラが拒否される。
+            override fun onMediaPermissionRequest(
+                session: GeckoSession,
+                uri: String,
+                video: Array<out GeckoSession.PermissionDelegate.MediaSource>?,
+                audio: Array<out GeckoSession.PermissionDelegate.MediaSource>?,
+                callback: GeckoSession.PermissionDelegate.MediaCallback,
+            ) {
+                Log.d(
+                    "BrowserTabPermission",
+                    "onMediaPermissionRequest: uri=$uri, " +
+                        "video=${video?.map { it.name }}, audio=${audio?.map { it.name }}"
+                )
+                val videoSource = video?.firstOrNull()
+                val audioSource = audio?.firstOrNull()
+                if (videoSource == null && audioSource == null) {
+                    callback.reject()
+                    return
+                }
+                // マイクの可否はサイトごとの設定に基づいて UI 層で判断する
+                callbacks.onMediaPermissionRequest(
+                    uri = uri,
+                    hasVideo = videoSource != null,
+                    hasAudio = audioSource != null,
+                    onResult = { grantVideo, grantAudio ->
+                        val grantedVideo = videoSource.takeIf { grantVideo }
+                        val grantedAudio = audioSource.takeIf { grantAudio }
+                        if (grantedVideo == null && grantedAudio == null) {
+                            callback.reject()
+                        } else {
+                            callback.grant(grantedVideo, grantedAudio)
+                        }
+                    },
                 )
             }
         },
@@ -324,6 +389,33 @@ internal class BrowserTabSessionDelegateHost(
 
             override fun onHistoryStateChange(items: List<HistoryStateItem>, currentIndex: Int) {
                 // bindToSession で設定する historyDelegate 経由で呼ばれるため、ここでは何もしない
+            }
+
+            override fun onAndroidPermissionsRequest(
+                permissions: Array<String>?,
+                onGrant: () -> Unit,
+                onReject: () -> Unit,
+            ) {
+                val cb = currentCallbacks()
+                if (cb != null) {
+                    cb.onAndroidPermissionsRequest(permissions, onGrant, onReject)
+                } else {
+                    onReject()
+                }
+            }
+
+            override fun onMediaPermissionRequest(
+                uri: String,
+                hasVideo: Boolean,
+                hasAudio: Boolean,
+                onResult: (grantVideo: Boolean, grantAudio: Boolean) -> Unit,
+            ) {
+                val cb = currentCallbacks()
+                if (cb != null) {
+                    cb.onMediaPermissionRequest(uri, hasVideo, hasAudio, onResult)
+                } else {
+                    onResult(false, false)
+                }
             }
         },
         browserTab = browserTab,
