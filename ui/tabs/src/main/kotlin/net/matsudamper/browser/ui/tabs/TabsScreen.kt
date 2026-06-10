@@ -30,9 +30,14 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -112,6 +117,31 @@ fun TabsScreen(
     onOpenNewTab: (currentGroupId: TabGroupId?) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val snackbarHostState = remember { SnackbarHostState() }
+    val currentCallbacks by rememberUpdatedState(uiState.callbacks)
+    val pendingClosedTab = uiState.pendingClosedTab
+
+    LaunchedEffect(pendingClosedTab) {
+        if (pendingClosedTab != null) {
+            val result = snackbarHostState.showSnackbar(
+                message = "「${pendingClosedTab.title}」を閉じました",
+                actionLabel = "戻す",
+                duration = SnackbarDuration.Long,
+            )
+            when (result) {
+                SnackbarResult.ActionPerformed -> currentCallbacks.onUndoCloseTab()
+                SnackbarResult.Dismissed -> currentCallbacks.onConfirmCloseTab()
+            }
+        }
+    }
+
+    // 画面から離れるときに保留中のタブ削除を確定する
+    DisposableEffect(Unit) {
+        onDispose {
+            currentCallbacks.onConfirmCloseTab()
+        }
+    }
+
     when (val loadingState = uiState.loadingState) {
         is TabsScreenUiState.LoadingState.Loading -> {
             Box(
@@ -128,25 +158,25 @@ fun TabsScreen(
                 groups = loadingState.groups,
                 activeGroupIndex = loadingState.activeGroupIndex,
                 selectedTabId = loadingState.selectedTabId,
+                snackbarHostState = snackbarHostState,
                 onSelectTab = onSelectTab,
-                onCloseTab = uiState.callbacks::onCloseTab,
+                onCloseTab = currentCallbacks::onCloseTab,
                 onOpenNewTab = onOpenNewTab,
-                onReorderTabs = uiState.callbacks::onReorderTabs,
-                onReorderGroups = uiState.callbacks::onReorderGroups,
-                onGroupSelected = uiState.callbacks::onGroupSelected,
-                onGroupPageChanged = uiState.callbacks::onGroupPageChanged,
-                onAddGroup = uiState.callbacks::onAddGroup,
+                onReorderTabs = currentCallbacks::onReorderTabs,
+                onReorderGroups = currentCallbacks::onReorderGroups,
+                onGroupSelected = currentCallbacks::onGroupSelected,
+                onGroupPageChanged = currentCallbacks::onGroupPageChanged,
+                onAddGroup = currentCallbacks::onAddGroup,
                 onMoveTabToGroup = { tabId, targetGroupIndex ->
-                    uiState.callbacks.onMoveTabToGroup(tabId, targetGroupIndex)
+                    currentCallbacks.onMoveTabToGroup(tabId, targetGroupIndex)
                 },
-                onRenameGroup = uiState.callbacks::onRenameGroup,
-                onDeleteGroup = uiState.callbacks::onDeleteGroup,
-                onToggleDefaultGroup = uiState.callbacks::onToggleDefaultGroup,
+                onRenameGroup = currentCallbacks::onRenameGroup,
+                onDeleteGroup = currentCallbacks::onDeleteGroup,
+                onToggleDefaultGroup = currentCallbacks::onToggleDefaultGroup,
                 modifier = modifier,
             )
         }
     }
-
 }
 
 
@@ -156,6 +186,7 @@ private fun TabsScreenLoadedContent(
     groups: List<TabGroupData>,
     activeGroupIndex: Int,
     selectedTabId: String?,
+    snackbarHostState: SnackbarHostState,
     onSelectTab: (String) -> Unit,
     onCloseTab: (String) -> Unit,
     onOpenNewTab: (currentGroupId: TabGroupId?) -> Unit,
@@ -258,6 +289,7 @@ private fun TabsScreenLoadedContent(
         modifier = modifier
             .fillMaxSize(),
         contentWindowInsets = WindowInsets.safeDrawing,
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         floatingActionButton = {
             FloatingActionButton(
                 onClick = { onOpenNewTab(groups.getOrNull(activeGroupIndex)?.id) },
@@ -532,6 +564,7 @@ private fun Preview() {
         groups = groups,
         activeGroupIndex = 0,
         selectedTabId = "1",
+        snackbarHostState = remember { SnackbarHostState() },
         onSelectTab = {},
         onCloseTab = {},
         onOpenNewTab = {},
@@ -569,6 +602,7 @@ private fun PreviewSingleGroup() {
         groups = groups,
         activeGroupIndex = 0,
         selectedTabId = "1",
+        snackbarHostState = remember { SnackbarHostState() },
         onSelectTab = {},
         onCloseTab = {},
         onOpenNewTab = {},
@@ -581,6 +615,59 @@ private fun PreviewSingleGroup() {
         onRenameGroup = { _, _ -> },
         onDeleteGroup = {},
         onToggleDefaultGroup = {},
+    )
+}
+
+/** Snackbar が表示されている状態（pendingClosedTab が non-null）の Preview */
+@Composable
+@Preview
+private fun PreviewWithPendingClosedTab() {
+    val groups = remember {
+        listOf(
+            TabGroupData(TabGroupId("g1"), "デフォルト"),
+            TabGroupData(TabGroupId("g2"), "開発"),
+        )
+    }
+    val groupedTabs = remember {
+        listOf(
+            listOf(
+                TabsScreenTabData(id = "1", title = "Example Domain", previewImage = null),
+                TabsScreenTabData(id = "3", title = "GitHub", previewImage = null),
+            ),
+            listOf(
+                TabsScreenTabData(id = "3", title = "GitHub", previewImage = null),
+            ),
+        )
+    }
+    TabsScreen(
+        uiState = TabsScreenUiState(
+            callbacks = object : TabsScreenUiState.Callbacks {
+                override fun onCloseTab(tabId: String) {}
+                override fun onUndoCloseTab() {}
+                override fun onConfirmCloseTab() {}
+                override fun onReorderTabs(groupIndex: Int, fromLocalIndex: Int, toLocalIndex: Int) {}
+                override fun onReorderGroups(fromIndex: Int, toIndex: Int) {}
+                override fun onGroupSelected(index: Int) {}
+                override fun onGroupPageChanged(page: Int) {}
+                override fun onAddGroup() {}
+                override fun onMoveTabToGroup(tabId: String, targetGroupIndex: Int) {}
+                override fun onRenameGroup(groupIndex: Int, newName: String) {}
+                override fun onDeleteGroup(groupIndex: Int) {}
+                override fun onToggleDefaultGroup(groupIndex: Int) {}
+            },
+            loadingState = TabsScreenUiState.LoadingState.Loaded(
+                groupedTabs = groupedTabs,
+                groups = groups,
+                activeGroupIndex = 0,
+                selectedTabId = "1",
+            ),
+            pendingClosedTab = TabsScreenUiState.PendingClosedTab(
+                tabId = "2",
+                title = "Google",
+            ),
+        ),
+        onSelectTab = {},
+        onOpenNewTab = {},
     )
 }
 
