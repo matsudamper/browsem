@@ -71,6 +71,31 @@ internal fun BrowserTabDialogLayer(
         )
     }
 
+    // サイトごとのマイク許可確認ダイアログ。
+    // OS の権限ダイアログより前に表示され、選択はサイト設定として永続化される。
+    state.microphonePermissionDialog?.let { dialog ->
+        AlertDialog(
+            onDismissRequest = state::dismissMicrophonePermissionDialog,
+            title = { Text("マイクの使用許可") },
+            text = {
+                Text(
+                    "${dialog.host} がマイクの使用を求めています。" +
+                        "この設定はメニューの「サイトの設定」から変更できます。",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { state.confirmMicrophonePermissionDialog(true) }) {
+                    Text("許可")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { state.confirmMicrophonePermissionDialog(false) }) {
+                    Text("ブロック")
+                }
+            },
+        )
+    }
+
     state.pendingDownloadResponse?.let { response ->
         AlertDialog(
             onDismissRequest = state::dismissPendingDownload,
