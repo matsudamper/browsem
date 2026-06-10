@@ -22,7 +22,6 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -31,15 +30,12 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Snackbar
-import androidx.compose.material3.SnackbarDefaults
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -59,7 +55,6 @@ import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -294,29 +289,7 @@ private fun TabsScreenLoadedContent(
         modifier = modifier
             .fillMaxSize(),
         contentWindowInsets = WindowInsets.safeDrawing,
-        snackbarHost = {
-            SnackbarHost(snackbarHostState) { snackbarData ->
-                Snackbar(
-                    action = {
-                        snackbarData.visuals.actionLabel?.let { label ->
-                            TextButton(
-                                onClick = { snackbarData.performAction() },
-                                colors = ButtonDefaults.textButtonColors(
-                                    contentColor = SnackbarDefaults.actionContentColor,
-                                ),
-                            ) {
-                                Text(label)
-                            }
-                        }
-                    },
-                ) {
-                    MiddleEllipsisText(
-                        text = snackbarData.visuals.message,
-                        maxLines = 2,
-                    )
-                }
-            }
-        },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         floatingActionButton = {
             FloatingActionButton(
                 onClick = { onOpenNewTab(groups.getOrNull(activeGroupIndex)?.id) },
@@ -565,37 +538,6 @@ private fun PagerIndicator(
     }
 }
 
-
-/**
- * テキストを最大 [maxLines] 行に収め、収まらない場合は中央を省略して先頭と末尾を表示する。
- * 省略記号には "…" を使用する。
- */
-@Composable
-private fun MiddleEllipsisText(
-    text: String,
-    maxLines: Int,
-    modifier: Modifier = Modifier,
-) {
-    var displayText by remember(text) { mutableStateOf(text) }
-
-    Text(
-        text = displayText,
-        maxLines = maxLines,
-        overflow = TextOverflow.Ellipsis,
-        onTextLayout = { result ->
-            if (result.hasVisualOverflow && displayText == text) {
-                val lastLine = minOf(maxLines - 1, result.lineCount - 1)
-                val visibleCharEnd = result.getLineEnd(lastLine, visibleEnd = false)
-                if (visibleCharEnd > 2 && visibleCharEnd < text.length) {
-                    val half = visibleCharEnd / 2
-                    val tailLen = visibleCharEnd - half - 1
-                    displayText = "${text.take(half)}…${text.takeLast(tailLen)}"
-                }
-            }
-        },
-        modifier = modifier,
-    )
-}
 
 @Composable
 @Preview
