@@ -103,6 +103,29 @@ fun createGeckoSessionDelegateBundle(
                     onReject = { callback.reject() },
                 )
             }
+
+            // getUserMedia のデバイス選択。デフォルト実装は reject するため、
+            // 未実装だと Android パーミッションを許可してもマイク・カメラが拒否される。
+            override fun onMediaPermissionRequest(
+                session: GeckoSession,
+                uri: String,
+                video: Array<out GeckoSession.PermissionDelegate.MediaSource>?,
+                audio: Array<out GeckoSession.PermissionDelegate.MediaSource>?,
+                callback: GeckoSession.PermissionDelegate.MediaCallback,
+            ) {
+                Log.d(
+                    "BrowserTabPermission",
+                    "onMediaPermissionRequest: uri=$uri, " +
+                        "video=${video?.map { it.name }}, audio=${audio?.map { it.name }}"
+                )
+                val videoSource = video?.firstOrNull()
+                val audioSource = audio?.firstOrNull()
+                if (videoSource == null && audioSource == null) {
+                    callback.reject()
+                } else {
+                    callback.grant(videoSource, audioSource)
+                }
+            }
         },
         navigationDelegate = object : GeckoSession.NavigationDelegate {
             override fun onCanGoBack(session: GeckoSession, value: Boolean) {
