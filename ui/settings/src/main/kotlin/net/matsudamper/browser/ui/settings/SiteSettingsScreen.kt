@@ -72,36 +72,46 @@ fun SiteSettingsScreen(
 
             Spacer(Modifier.height(12.dp))
 
-            SettingSection(title = "マイク") {
-                Column(Modifier.selectableGroup()) {
-                    SettingsRadioOption(
-                        label = "確認する",
-                        selected = uiState.microphonePermission == SitePermissionState.SITE_PERMISSION_ASK,
-                        onClick = {
-                            uiState.callbacks.setMicrophonePermission(
-                                SitePermissionState.SITE_PERMISSION_ASK,
-                            )
-                        },
-                    )
-                    SettingsRadioOption(
-                        label = "許可",
-                        selected = uiState.microphonePermission == SitePermissionState.SITE_PERMISSION_ALLOW,
-                        onClick = {
-                            uiState.callbacks.setMicrophonePermission(
-                                SitePermissionState.SITE_PERMISSION_ALLOW,
-                            )
-                        },
-                    )
-                    SettingsRadioOption(
-                        label = "ブロック",
-                        selected = uiState.microphonePermission == SitePermissionState.SITE_PERMISSION_DENY,
-                        onClick = {
-                            uiState.callbacks.setMicrophonePermission(
-                                SitePermissionState.SITE_PERMISSION_DENY,
-                            )
-                        },
-                    )
+            // 権限は一度でも要求された項目だけ表示する
+            if (uiState.microphonePermission != null) {
+                SettingSection(title = "マイク") {
+                    Column(Modifier.selectableGroup()) {
+                        SettingsRadioOption(
+                            label = "確認する",
+                            selected = uiState.microphonePermission == SitePermissionState.SITE_PERMISSION_ASK,
+                            onClick = {
+                                uiState.callbacks.setMicrophonePermission(
+                                    SitePermissionState.SITE_PERMISSION_ASK,
+                                )
+                            },
+                        )
+                        SettingsRadioOption(
+                            label = "許可",
+                            selected = uiState.microphonePermission == SitePermissionState.SITE_PERMISSION_ALLOW,
+                            onClick = {
+                                uiState.callbacks.setMicrophonePermission(
+                                    SitePermissionState.SITE_PERMISSION_ALLOW,
+                                )
+                            },
+                        )
+                        SettingsRadioOption(
+                            label = "ブロック",
+                            selected = uiState.microphonePermission == SitePermissionState.SITE_PERMISSION_DENY,
+                            onClick = {
+                                uiState.callbacks.setMicrophonePermission(
+                                    SitePermissionState.SITE_PERMISSION_DENY,
+                                )
+                            },
+                        )
+                    }
                 }
+            } else {
+                Text(
+                    text = "このサイトが要求した権限はありません",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 4.dp),
+                )
             }
 
             Spacer(Modifier.padding(bottom = paddingValues.calculateBottomPadding()))
@@ -120,6 +130,23 @@ private fun SiteSettingsScreenPreview() {
                 },
                 host = "www.example.com",
                 microphonePermission = SitePermissionState.SITE_PERMISSION_ASK,
+            ),
+            onBack = {},
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun SiteSettingsScreenNoRequestedPermissionPreview() {
+    MaterialTheme {
+        SiteSettingsScreen(
+            uiState = SiteSettingsScreenUiState(
+                callbacks = object : SiteSettingsScreenUiState.Callbacks {
+                    override fun setMicrophonePermission(state: SitePermissionState) = Unit
+                },
+                host = "www.example.com",
+                microphonePermission = null,
             ),
             onBack = {},
         )

@@ -30,6 +30,40 @@ class SiteSettingsRepository(context: Context) {
             .distinctUntilChanged()
     }
 
+    /**
+     * 指定ホストのマイク権限の状態を監視する。
+     * サイトから一度も要求されていない場合は null を返す
+     */
+    fun requestedMicrophonePermission(host: String): Flow<SitePermissionState?> {
+        return dataStore.data
+            .map { settings ->
+                val permissions = settings.hostPermissionsMap[host] ?: return@map null
+                // microphoneRequested 追加前に保存された ALLOW/DENY も要求済みとして扱う
+                if (permissions.microphoneRequested ||
+                    permissions.microphone != SitePermissionState.SITE_PERMISSION_ASK
+                ) {
+                    permissions.microphone
+                } else {
+                    null
+                }
+            }
+            .distinctUntilChanged()
+    }
+
+    /** 指定ホストがマイク権限を要求したことを記録する */
+    suspend fun markMicrophonePermissionRequested(host: String) {
+        dataStore.updateData { current ->
+            val permissions = current.hostPermissionsMap[host] ?: SitePermissionSettings.getDefaultInstance()
+            if (permissions.microphoneRequested) return@updateData current
+            current.toBuilder()
+                .putHostPermissions(
+                    host,
+                    permissions.toBuilder().setMicrophoneRequested(true).build(),
+                )
+                .build()
+        }
+    }
+
     /** 指定ホストの現在のマイク権限の状態を取得する */
     suspend fun getMicrophonePermission(host: String): SitePermissionState {
         return microphonePermission(host).first()
