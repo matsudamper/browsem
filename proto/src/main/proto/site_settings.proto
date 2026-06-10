@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+option java_package = "net.matsudamper.browser.data";
+option java_multiple_files = true;
+
+// サイトごとの権限の状態
+enum SitePermissionState {
+  // 未設定。要求時にユーザーへ確認する
+  SITE_PERMISSION_ASK = 0;
+  SITE_PERMISSION_ALLOW = 1;
+  SITE_PERMISSION_DENY = 2;
+}
+
+// 1サイト（ホスト）分の権限設定
+message SitePermissionSettings {
+  SitePermissionState microphone = 1;
+}
+
+// サイトごとの設定全体。key はホスト名
+message SiteSettings {
+  map<string, SitePermissionSettings> host_permissions = 1;
+}

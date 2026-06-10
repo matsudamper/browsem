@@ -62,6 +62,7 @@ internal fun ToolbarMenu(
     showAddToHomeScreen: Boolean = true,
     showHome: Boolean = true,
     onOpenInBrowser: (() -> Unit)? = null,
+    onOpenSiteSettings: (() -> Unit)? = null,
 ) {
     DropdownMenu(
         expanded = visibleMenu,
@@ -208,6 +209,27 @@ internal fun ToolbarMenu(
                     text = "更新",
                     style = MaterialTheme.typography.labelSmall,
                 )
+            }
+            if (onOpenSiteSettings != null) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    IconButton(
+                        modifier = Modifier
+                            .testTag(BrowserToolbarMenuTestTags.SiteSettingsButton.testTag),
+                        onClick = {
+                            onDismissRequest()
+                            onOpenSiteSettings()
+                        },
+                    ) {
+                        Icon(
+                            painter = painterResource(ResourcesR.drawable.ic_settings_24dp),
+                            contentDescription = null,
+                        )
+                    }
+                    Text(
+                        text = "サイトの設定",
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                }
             }
         }
         HorizontalDivider()
@@ -395,4 +417,5 @@ sealed interface BrowserToolbarMenuTestTags {
     object ZoomPercentButton : BrowserToolbarMenuTestTags { override val id = "zoom_percent_button" }
     object RefreshButton : BrowserToolbarMenuTestTags { override val id = "refresh_button" }
     object FindInPageButton : BrowserToolbarMenuTestTags { override val id = "find_in_page_button" }
+    object SiteSettingsButton : BrowserToolbarMenuTestTags { override val id = "site_settings_button" }
 }

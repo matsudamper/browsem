@@ -14,6 +14,10 @@ sealed interface AppDestination : NavKey, java.io.Serializable {
     @Serializable
     data object Settings : AppDestination, java.io.Serializable
 
+    /** サイトごとの設定画面。host は対象サイトのホスト名 */
+    @Serializable
+    data class SiteSettings(val host: String) : AppDestination, java.io.Serializable
+
     @Serializable
     data object Extensions : AppDestination, java.io.Serializable
 

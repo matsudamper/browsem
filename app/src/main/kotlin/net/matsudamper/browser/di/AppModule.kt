@@ -9,6 +9,7 @@ import net.matsudamper.browser.ThemeColorWebExtension
 import net.matsudamper.browser.ViewportScaleWebExtension
 import net.matsudamper.browser.data.BackupRepository
 import net.matsudamper.browser.data.SettingsRepository
+import net.matsudamper.browser.data.SiteSettingsRepository
 import net.matsudamper.browser.data.TabGroupRepository
 import net.matsudamper.browser.data.TabGroupRepositoryImpl
 import net.matsudamper.browser.data.TabRepository
@@ -27,6 +28,7 @@ import org.mozilla.geckoview.GeckoRuntimeSettings
 val dataModule = module {
     single { BackupRepository(androidContext()) }
     single { SettingsRepository(androidContext()) }
+    single { SiteSettingsRepository(androidContext()) }
     single { TabRepository(androidContext()) }
     single<TabGroupRepository> { TabGroupRepositoryImpl(androidContext()) }
     single { HistoryRepository(androidContext()) }

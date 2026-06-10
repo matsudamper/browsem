@@ -36,6 +36,12 @@ interface BrowserSessionStateCallbacks {
         onGrant: () -> Unit,
         onReject: () -> Unit,
     )
+    fun onMediaPermissionRequest(
+        uri: String,
+        hasVideo: Boolean,
+        hasAudio: Boolean,
+        onResult: (grantVideo: Boolean, grantAudio: Boolean) -> Unit,
+    )
 }
 
 /** タブ内ナビゲーション履歴の項目 */
@@ -122,9 +128,23 @@ fun createGeckoSessionDelegateBundle(
                 val audioSource = audio?.firstOrNull()
                 if (videoSource == null && audioSource == null) {
                     callback.reject()
-                } else {
-                    callback.grant(videoSource, audioSource)
+                    return
                 }
+                // マイクの可否はサイトごとの設定に基づいて UI 層で判断する
+                callbacks.onMediaPermissionRequest(
+                    uri = uri,
+                    hasVideo = videoSource != null,
+                    hasAudio = audioSource != null,
+                    onResult = { grantVideo, grantAudio ->
+                        val grantedVideo = videoSource.takeIf { grantVideo }
+                        val grantedAudio = audioSource.takeIf { grantAudio }
+                        if (grantedVideo == null && grantedAudio == null) {
+                            callback.reject()
+                        } else {
+                            callback.grant(grantedVideo, grantedAudio)
+                        }
+                    },
+                )
             }
         },
         navigationDelegate = object : GeckoSession.NavigationDelegate {
@@ -381,6 +401,20 @@ internal class BrowserTabSessionDelegateHost(
                     cb.onAndroidPermissionsRequest(permissions, onGrant, onReject)
                 } else {
                     onReject()
+                }
+            }
+
+            override fun onMediaPermissionRequest(
+                uri: String,
+                hasVideo: Boolean,
+                hasAudio: Boolean,
+                onResult: (grantVideo: Boolean, grantAudio: Boolean) -> Unit,
+            ) {
+                val cb = currentCallbacks()
+                if (cb != null) {
+                    cb.onMediaPermissionRequest(uri, hasVideo, hasAudio, onResult)
+                } else {
+                    onResult(false, false)
                 }
             }
         },
