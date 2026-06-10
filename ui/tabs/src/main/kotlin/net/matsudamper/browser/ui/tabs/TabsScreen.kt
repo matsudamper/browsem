@@ -126,7 +126,7 @@ fun TabsScreen(
             val result = snackbarHostState.showSnackbar(
                 message = "「${pendingClosedTab.title}」を閉じました",
                 actionLabel = "戻す",
-                duration = SnackbarDuration.Short,
+                duration = SnackbarDuration.Long,
             )
             when (result) {
                 SnackbarResult.ActionPerformed -> callbacks.onUndoCloseTab()
