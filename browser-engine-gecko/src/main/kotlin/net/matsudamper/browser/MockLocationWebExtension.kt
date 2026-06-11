@@ -32,6 +32,10 @@ class MockLocationWebExtension {
     // セッションごとの接続ポート。iframe を含む各フレームから個別に接続されるため複数保持する
     private val sessionPorts = ConcurrentHashMap<GeckoSession, MutableSet<WebExtension.Port>>()
 
+    // セッションごとのトップレベルページ URL プロバイダ。
+    // iframe からの要求をトップレベルサイトの設定で制御するために使う
+    private val sessionTopUrlProviders = ConcurrentHashMap<GeckoSession, () -> String?>()
+
     // デリゲートを設定済みのセッションを追跡（二重設定を防ぐ）
     private val attachedSessions: MutableSet<GeckoSession> =
         Collections.newSetFromMap(ConcurrentHashMap())
@@ -55,7 +59,8 @@ class MockLocationWebExtension {
             )
     }
 
-    fun registerSession(session: GeckoSession) {
+    fun registerSession(session: GeckoSession, topUrlProvider: () -> String?) {
+        sessionTopUrlProviders[session] = topUrlProvider
         attachedSessions.add(session)
         extension?.also { ext ->
             attachSessionDelegate(session, ext)
@@ -65,6 +70,7 @@ class MockLocationWebExtension {
     fun unregisterSession(session: GeckoSession) {
         attachedSessions.remove(session)
         sessionPorts.remove(session)
+        sessionTopUrlProviders.remove(session)
         extension?.let { ext ->
             session.webExtensionController.setMessageDelegate(ext, null, NATIVE_APP_ID)
         }
@@ -73,12 +79,14 @@ class MockLocationWebExtension {
     /** 位置情報設定を更新し、接続済みの全セッションへ各ホストに応じたモードを通知する */
     fun updateConfig(config: GeolocationConfig) {
         currentConfig = config
-        sessionPorts.values.flatten().forEach { port ->
-            val message = buildConfigMessage(portHost(port), action = "update")
-            try {
-                port.postMessage(message)
-            } catch (e: Exception) {
-                Log.w(TAG, "updateConfig: ポートへの送信に失敗", e)
+        sessionPorts.forEach { (session, ports) ->
+            ports.forEach { port ->
+                val message = buildConfigMessage(resolveHost(session, port), action = "update")
+                try {
+                    port.postMessage(message)
+                } catch (e: Exception) {
+                    Log.w(TAG, "updateConfig: ポートへの送信に失敗", e)
+                }
             }
         }
     }
@@ -86,6 +94,19 @@ class MockLocationWebExtension {
     /** 接続元ページの URL からホスト名を取り出す */
     private fun portHost(port: WebExtension.Port): String? {
         return runCatching { URI(port.sender.url) }.getOrNull()?.host
+    }
+
+    /**
+     * ポートに適用するホストを返す。
+     * 標準ブラウザの位置情報許可と同様にトップレベルサイト基準で制御するため、
+     * iframe からの接続にはトップレベルページのホストを使う。
+     */
+    private fun resolveHost(session: GeckoSession, port: WebExtension.Port): String? {
+        val senderHost = portHost(port)
+        if (port.sender.isTopLevel) return senderHost
+        val topUrl = sessionTopUrlProviders[session]?.invoke()
+        val topHost = topUrl?.let { runCatching { URI(it) }.getOrNull()?.host }
+        return topHost ?: senderHost
     }
 
     /** ホストに応じた設定メッセージを構築する */
@@ -121,7 +142,8 @@ class MockLocationWebExtension {
                             val json = message as? JSONObject ?: return
                             when (json.optString("action")) {
                                 "getConfig" -> {
-                                    val response = buildConfigMessage(portHost(port), action = "config")
+                                    val response =
+                                        buildConfigMessage(resolveHost(session, port), action = "config")
                                     try {
                                         port.postMessage(response)
                                     } catch (e: Exception) {
@@ -131,7 +153,7 @@ class MockLocationWebExtension {
                                 // ページが位置情報を要求したことの通知。
                                 // 「サイトの設定」画面に位置情報の項目を表示するために記録する
                                 "geolocationRequested" -> {
-                                    val host = portHost(port) ?: return
+                                    val host = resolveHost(session, port) ?: return
                                     onGeolocationRequested?.invoke(host)
                                 }
                             }

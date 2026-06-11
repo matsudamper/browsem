@@ -492,8 +492,9 @@ internal fun GeckoBrowserTab(
     }
 
     val mockLocationWebExtension: MockLocationWebExtension = koinInject()
-    DisposableEffect(session, mockLocationWebExtension) {
-        mockLocationWebExtension.registerSession(session)
+    DisposableEffect(session, state, mockLocationWebExtension) {
+        // iframe からの位置情報要求をトップレベルサイトの設定で制御するため、現在ページ URL を渡す
+        mockLocationWebExtension.registerSession(session) { state.currentPageUrl }
         onDispose {
             mockLocationWebExtension.unregisterSession(session)
         }

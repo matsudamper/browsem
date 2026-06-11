@@ -1215,8 +1215,10 @@ internal class BrowserTabScreenState(
         val completed = AtomicBoolean(false)
         val job = coroutineScope.launch {
             // モック/拒否はコンテンツスクリプトが処理するため、Gecko 本体の位置情報は
-            // サイトごとの設定が「実際の位置情報」の場合のみ許可する
-            val host = uri?.let { extractSiteHost(it) } ?: extractSiteHost(currentPageUrl)
+            // サイトごとの設定が「実際の位置情報」の場合のみ許可する。
+            // 許可は標準ブラウザと同様にトップレベルサイト基準のため、iframe からの
+            // 要求（uri が iframe のオリジン）も表示中ページのホストで判定する
+            val host = extractSiteHost(currentPageUrl) ?: uri?.let { extractSiteHost(it) }
             val allow = host != null &&
                 runCatching { siteSettingsRepository.getGeolocationState(host) }.getOrNull() ==
                 SiteGeolocationState.SITE_GEOLOCATION_REAL
