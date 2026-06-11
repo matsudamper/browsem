@@ -412,6 +412,7 @@ internal fun SettingSection(
     content: @Composable () -> Unit,
 ) {
     Surface(
+        modifier = Modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.large,
         color = MaterialTheme.colorScheme.surfaceContainer,
     ) {

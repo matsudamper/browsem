@@ -1,6 +1,8 @@
 package net.matsudamper.browser
 
+import app.cash.paparazzi.DeviceConfig
 import app.cash.paparazzi.Paparazzi
+import com.android.resources.ScreenOrientation
 import org.junit.Rule
 import org.junit.Test
 import org.junit.experimental.categories.Category
@@ -26,6 +28,24 @@ class PaparazziComposablePreviewTest {
                     previewName.contains(filter, ignoreCase = true)
             }
             .forEach { preview ->
+                // @Preview の widthDp/heightDp 指定をデバイス設定に反映する
+                val baseConfig = DeviceConfig.NEXUS_5
+                val pixelsPerDp = baseConfig.density.dpiValue / 160
+                val widthDp = preview.previewInfo.widthDp
+                val heightDp = preview.previewInfo.heightDp
+                val screenWidth = if (widthDp > 0) widthDp * pixelsPerDp else baseConfig.screenWidth
+                val screenHeight = if (heightDp > 0) heightDp * pixelsPerDp else baseConfig.screenHeight
+                paparazzi.unsafeUpdateConfig(
+                    deviceConfig = baseConfig.copy(
+                        screenWidth = screenWidth,
+                        screenHeight = screenHeight,
+                        orientation = if (screenWidth > screenHeight) {
+                            ScreenOrientation.LANDSCAPE
+                        } else {
+                            ScreenOrientation.PORTRAIT
+                        },
+                    ),
+                )
                 paparazzi.snapshot { preview() }
             }
     }
