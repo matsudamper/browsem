@@ -22,7 +22,6 @@ import net.matsudamper.browser.ui.settings.SettingsScreenUiState
 
 internal class SettingsScreenViewModel(
     private val settingsRepository: SettingsRepository,
-    private val mockLocationWebExtension: MockLocationWebExtension,
 ) : ViewModel() {
 
     val eventHandler = Channel<(Event) -> Unit>(Channel.UNLIMITED)
@@ -68,12 +67,6 @@ internal class SettingsScreenViewModel(
 
         override fun setEnableWebSuggestions(enabled: Boolean) {
             viewModelScope.launch { settingsRepository.setEnableWebSuggestions(enabled) }
-        }
-
-        override fun setMockLocationEnabled(enabled: Boolean) {
-            viewModelScope.launch {
-                settingsRepository.setMockLocationEnabled(enabled)
-            }
         }
 
         override fun setMockLocationInput(input: String) {
@@ -132,28 +125,15 @@ internal class SettingsScreenViewModel(
                             backupConfirmDialog = confirmDialog,
                         )
                     }
-                    // 拡張機能にも最新設定を通知する
-                    // 座標が未保存（0,0）の場合はデフォルト値（皇居）を使用し、
-                    // UI表示と拡張機能への返却値を一致させる
-                    val (resolvedLat, resolvedLng) = resolveCoordinates(
-                        settings.mockLocationLatitude,
-                        settings.mockLocationLongitude,
-                    )
-                    mockLocationWebExtension.updateConfig(
-                        MockLocationWebExtension.MockLocationConfig(
-                            enabled = settings.mockLocationEnabled,
-                            latitude = resolvedLat,
-                            longitude = resolvedLng,
-                        )
-                    )
+                    // 拡張機能への反映は BrowserViewModel が設定の Flow を監視して行う
                 }
             }
             // 入力欄が変化したら UiState を再構築する
             viewModelScope.launch {
                 mockLocationInputFlow.collectLatest { input ->
-                    val current = uiStateFlow.value ?: return@collectLatest
-                    uiStateFlow.update {
-                        current.copy(
+                    // update のラムダ内で最新値を参照し、他のコレクタの更新を上書きしない
+                    uiStateFlow.update { current ->
+                        current?.copy(
                             mockLocationInput = input,
                             mockLocationInputError = validateMockLocationInput(input),
                         )
@@ -227,7 +207,6 @@ private fun BrowserSettings.toUiState(
         translationProvider = translationProvider,
         enableThirdPartyCa = enableThirdPartyCa,
         enableWebSuggestions = resolvedEnableWebSuggestions(),
-        mockLocationEnabled = mockLocationEnabled,
         mockLocationInput = mockLocationInput,
         mockLocationInputError = validateMockLocationInput(mockLocationInput),
         backupConfirmDialog = backupConfirmDialog,

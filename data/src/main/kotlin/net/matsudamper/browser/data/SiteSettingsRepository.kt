@@ -80,6 +80,75 @@ class SiteSettingsRepository(context: Context) {
                 .build()
         }
     }
+
+    /** 指定ホストの位置情報の扱いを監視する。未設定の場合は MOCK を返す */
+    fun geolocationState(host: String): Flow<SiteGeolocationState> {
+        return dataStore.data
+            .map { settings ->
+                settings.hostPermissionsMap[host]?.geolocation
+                    ?: SiteGeolocationState.SITE_GEOLOCATION_MOCK
+            }
+            .distinctUntilChanged()
+    }
+
+    /** 指定ホストの現在の位置情報の扱いを取得する */
+    suspend fun getGeolocationState(host: String): SiteGeolocationState {
+        return geolocationState(host).first()
+    }
+
+    /** 全ホストの位置情報の扱いを監視する。key はホスト名 */
+    fun geolocationStates(): Flow<Map<String, SiteGeolocationState>> {
+        return dataStore.data
+            .map { settings ->
+                settings.hostPermissionsMap.mapValues { (_, permissions) -> permissions.geolocation }
+            }
+            .distinctUntilChanged()
+    }
+
+    /**
+     * 指定ホストの位置情報の扱いを監視する。
+     * サイトから一度も要求されていない場合は null を返す
+     */
+    fun requestedGeolocationState(host: String): Flow<SiteGeolocationState?> {
+        return dataStore.data
+            .map { settings ->
+                val permissions = settings.hostPermissionsMap[host] ?: return@map null
+                if (permissions.geolocationRequested ||
+                    permissions.geolocation != SiteGeolocationState.SITE_GEOLOCATION_MOCK
+                ) {
+                    permissions.geolocation
+                } else {
+                    null
+                }
+            }
+            .distinctUntilChanged()
+    }
+
+    /** 指定ホストが位置情報を要求したことを記録する */
+    suspend fun markGeolocationRequested(host: String) {
+        dataStore.updateData { current ->
+            val permissions = current.hostPermissionsMap[host] ?: SitePermissionSettings.getDefaultInstance()
+            if (permissions.geolocationRequested) return@updateData current
+            current.toBuilder()
+                .putHostPermissions(
+                    host,
+                    permissions.toBuilder().setGeolocationRequested(true).build(),
+                )
+                .build()
+        }
+    }
+
+    suspend fun setGeolocationState(host: String, state: SiteGeolocationState) {
+        dataStore.updateData { current ->
+            val permissions = (current.hostPermissionsMap[host] ?: SitePermissionSettings.getDefaultInstance())
+                .toBuilder()
+                .setGeolocation(state)
+                .build()
+            current.toBuilder()
+                .putHostPermissions(host, permissions)
+                .build()
+        }
+    }
 }
 
 /** URL からサイト設定のキーとなるホスト名を取り出す。取得できない場合は null */

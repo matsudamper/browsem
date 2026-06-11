@@ -22,6 +22,7 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -30,12 +31,15 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Snackbar
+import androidx.compose.material3.SnackbarDefaults
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -55,6 +59,7 @@ import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -124,7 +129,7 @@ fun TabsScreen(
     LaunchedEffect(pendingClosedTab) {
         if (pendingClosedTab != null) {
             val result = snackbarHostState.showSnackbar(
-                message = "「${pendingClosedTab.title}」を閉じました",
+                message = pendingClosedTab.title,
                 actionLabel = "戻す",
                 duration = SnackbarDuration.Long,
             )
@@ -289,7 +294,30 @@ private fun TabsScreenLoadedContent(
         modifier = modifier
             .fillMaxSize(),
         contentWindowInsets = WindowInsets.safeDrawing,
-        snackbarHost = { SnackbarHost(snackbarHostState) },
+        snackbarHost = {
+            SnackbarHost(snackbarHostState) { snackbarData ->
+                Snackbar(
+                    action = {
+                        snackbarData.visuals.actionLabel?.let { label ->
+                            TextButton(
+                                onClick = { snackbarData.performAction() },
+                                colors = ButtonDefaults.textButtonColors(
+                                    contentColor = SnackbarDefaults.actionContentColor,
+                                ),
+                            ) {
+                                Text(label)
+                            }
+                        }
+                    },
+                ) {
+                    Text(
+                        text = snackbarData.visuals.message,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+        },
         floatingActionButton = {
             FloatingActionButton(
                 onClick = { onOpenNewTab(groups.getOrNull(activeGroupIndex)?.id) },

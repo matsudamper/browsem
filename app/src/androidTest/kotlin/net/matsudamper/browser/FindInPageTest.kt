@@ -74,6 +74,10 @@ class FindInPageTest {
             composeRule.waitForIdle()
             composeRule.waitForIdle()
 
+            // 戻る操作前の URL を記録し、失敗時に「戻る操作でページが戻った」のか
+            // 「戻る操作前から別の読み込み（復元タブのホームページ等）に上書きされていた」のかを
+            // 切り分けられるようにする
+            val urlBeforeBack = composeRule.currentPageUrlFromUi()
             urlRetained = runCatching {
                 pressSystemBack()
                 waitForFindInPageHidden()
@@ -82,9 +86,12 @@ class FindInPageTest {
             }.getOrDefault(false)
 
             lastDiagnostics = "attempt=$attempt/$maxAttempts " +
+                "urlBeforeBack=\"$urlBeforeBack\" " +
                 "urlInput=\"${composeRule.currentUrlBarText()}\" " +
                 "currentUrlText=\"${composeRule.currentUrlActionsText()}\" " +
                 "focused=${composeRule.isUrlBarFocused()}"
+            // 最終的に成功したリトライでも、潜在的な flaky の発生頻度を CI ログから追えるよう毎試行出力する
+            println("find-in-page-back urlRetained=$urlRetained $lastDiagnostics")
 
             if (urlRetained) break
         }

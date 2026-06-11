@@ -31,6 +31,7 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import net.matsudamper.browser.data.SiteGeolocationState
 import net.matsudamper.browser.data.SitePermissionState
 import net.matsudamper.browser.resources.R as ResourcesR
 
@@ -94,6 +95,40 @@ fun SiteSettingsScreen(
             Spacer(Modifier.height(12.dp))
 
             // 権限は一度でも要求された項目だけ表示する
+            if (uiState.geolocationState != null) {
+                SettingSection(title = "位置情報") {
+                    Column(Modifier.selectableGroup()) {
+                        SettingsRadioOption(
+                            label = "モック位置情報",
+                            selected = uiState.geolocationState == SiteGeolocationState.SITE_GEOLOCATION_MOCK,
+                            onClick = {
+                                uiState.callbacks.setGeolocationState(
+                                    SiteGeolocationState.SITE_GEOLOCATION_MOCK,
+                                )
+                            },
+                        )
+                        SettingsRadioOption(
+                            label = "実際の位置情報",
+                            selected = uiState.geolocationState == SiteGeolocationState.SITE_GEOLOCATION_REAL,
+                            onClick = {
+                                uiState.callbacks.setGeolocationState(
+                                    SiteGeolocationState.SITE_GEOLOCATION_REAL,
+                                )
+                            },
+                        )
+                        SettingsRadioOption(
+                            label = "ブロック",
+                            selected = uiState.geolocationState == SiteGeolocationState.SITE_GEOLOCATION_DENY,
+                            onClick = {
+                                uiState.callbacks.setGeolocationState(
+                                    SiteGeolocationState.SITE_GEOLOCATION_DENY,
+                                )
+                            },
+                        )
+                    }
+                }
+                Spacer(Modifier.height(12.dp))
+            }
             if (uiState.microphonePermission != null) {
                 SettingSection(title = "マイク") {
                     Column(Modifier.selectableGroup()) {
@@ -126,7 +161,8 @@ fun SiteSettingsScreen(
                         )
                     }
                 }
-            } else {
+            }
+            if (uiState.geolocationState == null && uiState.microphonePermission == null) {
                 Text(
                     text = "このサイトが要求した権限はありません",
                     style = MaterialTheme.typography.bodyMedium,
@@ -195,14 +231,13 @@ fun SiteSettingsScreen(
     }
 }
 
-private fun previewCallbacks(): SiteSettingsScreenUiState.Callbacks {
-    return object : SiteSettingsScreenUiState.Callbacks {
-        override fun setMicrophonePermission(state: SitePermissionState) = Unit
-        override fun requestClearData(type: SiteSettingsScreenUiState.ClearDataType) = Unit
-        override fun confirmClearData() = Unit
-        override fun dismissClearDataConfirm() = Unit
-        override fun consumeClearDataResultMessage() = Unit
-    }
+private val previewCallbacks = object : SiteSettingsScreenUiState.Callbacks {
+    override fun setMicrophonePermission(state: SitePermissionState) = Unit
+    override fun setGeolocationState(state: SiteGeolocationState) = Unit
+    override fun requestClearData(type: SiteSettingsScreenUiState.ClearDataType) = Unit
+    override fun confirmClearData() = Unit
+    override fun dismissClearDataConfirm() = Unit
+    override fun consumeClearDataResultMessage() = Unit
 }
 
 @Preview(showBackground = true)
@@ -211,9 +246,28 @@ private fun SiteSettingsScreenPreview() {
     MaterialTheme {
         SiteSettingsScreen(
             uiState = SiteSettingsScreenUiState(
-                callbacks = previewCallbacks(),
+                callbacks = previewCallbacks,
                 host = "www.example.com",
                 microphonePermission = SitePermissionState.SITE_PERMISSION_ASK,
+                geolocationState = SiteGeolocationState.SITE_GEOLOCATION_MOCK,
+                clearDataConfirmDialog = null,
+                clearDataResultMessage = null,
+            ),
+            onBack = {},
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun SiteSettingsScreenGeolocationOnlyPreview() {
+    MaterialTheme {
+        SiteSettingsScreen(
+            uiState = SiteSettingsScreenUiState(
+                callbacks = previewCallbacks,
+                host = "www.example.com",
+                microphonePermission = null,
+                geolocationState = SiteGeolocationState.SITE_GEOLOCATION_DENY,
                 clearDataConfirmDialog = null,
                 clearDataResultMessage = null,
             ),
@@ -228,9 +282,10 @@ private fun SiteSettingsScreenNoRequestedPermissionPreview() {
     MaterialTheme {
         SiteSettingsScreen(
             uiState = SiteSettingsScreenUiState(
-                callbacks = previewCallbacks(),
+                callbacks = previewCallbacks,
                 host = "www.example.com",
                 microphonePermission = null,
+                geolocationState = null,
                 clearDataConfirmDialog = null,
                 clearDataResultMessage = null,
             ),
@@ -245,9 +300,10 @@ private fun SiteSettingsScreenClearCookieConfirmPreview() {
     MaterialTheme {
         SiteSettingsScreen(
             uiState = SiteSettingsScreenUiState(
-                callbacks = previewCallbacks(),
+                callbacks = previewCallbacks,
                 host = "www.example.com",
                 microphonePermission = null,
+                geolocationState = null,
                 clearDataConfirmDialog = SiteSettingsScreenUiState.ClearDataType.Cookie,
                 clearDataResultMessage = null,
             ),

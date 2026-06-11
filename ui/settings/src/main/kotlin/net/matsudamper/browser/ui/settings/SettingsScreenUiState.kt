@@ -17,7 +17,6 @@ data class SettingsScreenUiState(
     val translationProvider: TranslationProvider,
     val enableThirdPartyCa: Boolean,
     val enableWebSuggestions: Boolean,
-    val mockLocationEnabled: Boolean,
     val mockLocationInput: String,
     val mockLocationInputError: String?,
     val backupConfirmDialog: BackupConfirmType?,
@@ -33,7 +32,6 @@ data class SettingsScreenUiState(
         fun setTranslationProvider(provider: TranslationProvider)
         fun setEnableThirdPartyCa(enabled: Boolean)
         fun setEnableWebSuggestions(enabled: Boolean)
-        fun setMockLocationEnabled(enabled: Boolean)
         fun setMockLocationInput(input: String)
         fun openMockLocationOnMap()
         /** バックアップのエクスポートを要求する（確認ダイアログを表示） */

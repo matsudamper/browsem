@@ -1,5 +1,6 @@
 package net.matsudamper.browser
 
+import android.Manifest
 import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.BackHandler
@@ -392,9 +393,8 @@ private fun BrowserAppContent(
                     }
 
                     AppDestination.Settings -> navEntry(key) {
-                        val mockLocationWebExtension: MockLocationWebExtension = koinInject()
                         val settingsViewModel = composeViewModel(initializer = {
-                            SettingsScreenViewModel(settingsRepository, mockLocationWebExtension)
+                            SettingsScreenViewModel(settingsRepository)
                         })
                         val settingsUiState by settingsViewModel.uiState.collectAsState()
                         LaunchedEffect(settingsViewModel) {
@@ -444,6 +444,26 @@ private fun BrowserAppContent(
                                 geckoRuntime = geckoRuntime,
                             )
                         })
+                        // 「実際の位置情報」選択時に OS の位置情報権限を要求する
+                        val locationPermissionLauncher = rememberLauncherForActivityResult(
+                            ActivityResultContracts.RequestMultiplePermissions(),
+                        ) { results ->
+                            siteSettingsViewModel.onLocationPermissionResult(results.values.any { it })
+                        }
+                        LaunchedEffect(siteSettingsViewModel) {
+                            siteSettingsViewModel.eventHandler.receiveAsFlow().collect { handler ->
+                                handler(object : SiteSettingsScreenViewModel.Event {
+                                    override fun onRequestLocationPermission() {
+                                        locationPermissionLauncher.launch(
+                                            arrayOf(
+                                                Manifest.permission.ACCESS_FINE_LOCATION,
+                                                Manifest.permission.ACCESS_COARSE_LOCATION,
+                                            ),
+                                        )
+                                    }
+                                })
+                            }
+                        }
                         val siteSettingsUiState by siteSettingsViewModel.uiState.collectAsState()
                         SiteSettingsScreen(
                             uiState = siteSettingsUiState,

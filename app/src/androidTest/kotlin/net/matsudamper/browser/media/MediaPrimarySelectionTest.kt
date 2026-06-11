@@ -68,7 +68,9 @@ class MediaPrimarySelectionTest {
                 state.title == EXPECTED_FIRST_TITLE && state.positionMs >= MIN_FIRST_TRACK_POSITION_MS
             }
                 ?.also { assertEquals(EXPECTED_FIRST_TITLE, it.title) }
-                ?: throw AssertionError("1曲目のpositionを取得できない")
+                ?: throw AssertionError(
+                    "1曲目のpositionを取得できない (current=${MediaSessionBridge.playbackState.value})",
+                )
 
         val secondTrackState =
             waitUntil(timeoutMs = TRACK_SWITCH_TIMEOUT_MS) { state ->
@@ -152,6 +154,12 @@ class MediaPrimarySelectionTest {
                 return
             }
         }
+        // 再生未開始のまま進むと後続の position 待ちがタイムアウトするため、
+        // 失敗時の原因切り分け用に最終状態を残す
+        println(
+            "media-primary-selection: タップ後も再生が開始されない " +
+                "state=${MediaSessionBridge.playbackState.value}",
+        )
     }
 
     /**

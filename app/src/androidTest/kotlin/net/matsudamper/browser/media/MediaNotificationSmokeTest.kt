@@ -3,6 +3,7 @@ package net.matsudamper.browser.media
 import android.content.Intent
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.util.Log
 import androidx.test.ext.junit.rules.ActivityScenarioRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -73,19 +74,17 @@ class MediaNotificationSmokeTest {
         val displayWidth = uiDevice.displayWidth
         val displayHeight = uiDevice.displayHeight
         Log.d(TAG, "ページオープン完了: package=${uiDevice.currentPackageName}, " +
-            "画面サイズ=${displayWidth}x${displayHeight}, ${PAGE_READY_DELAY_MS}ms待機開始")
-        Thread.sleep(PAGE_READY_DELAY_MS)
-        Log.d(TAG, "待機完了: package=${uiDevice.currentPackageName}")
+            "画面サイズ=${displayWidth}x${displayHeight}")
 
         // ユーザー操作で再生を開始する（自動再生制限の影響を避ける）。
-        val tapX = displayWidth / 2
-        val tapY = displayHeight / 2
-        repeat(PLAYBACK_TAP_RETRY_COUNT) { index ->
-            Log.d(TAG, "タップ試行${index + 1}/${PLAYBACK_TAP_RETRY_COUNT}: 座標=($tapX, $tapY)")
-            uiDevice.click(tapX, tapY)
-            Thread.sleep(PLAYBACK_TAP_INTERVAL_MS)
-            Log.d(TAG, "タップ試行${index + 1}完了: package=${uiDevice.currentPackageName}")
-        }
+        // 固定時間の sleep だとページロードが遅い環境でタップが空振りしたまま通知確認へ進んで
+        // flaky になるため、タップ後に MediaSessionBridge の isPlaying をポーリングし、
+        // 実際に再生が始まるまでタップを繰り返す。
+        val playbackStarted = startPlaybackByTapping(uiDevice, displayWidth / 2, displayHeight / 2)
+        Log.d(
+            TAG,
+            "再生開始確認: started=$playbackStarted state=${MediaSessionBridge.playbackState.value}",
+        )
 
         uiDevice.openNotification()
         val found = uiDevice.wait(Until.hasObject(By.text(EXPECTED_TITLE)), NOTIFICATION_CONTROL_TIMEOUT_MS)
@@ -103,6 +102,35 @@ class MediaNotificationSmokeTest {
     // ================================================================
     // ヘルパーメソッド
     // ================================================================
+
+    /**
+     * 画面中央をタップして動画再生を開始し、MediaSessionBridge の isPlaying が
+     * true になるまで待つ。再生が確認できたら true を返す。
+     *
+     * ページロード完了前のタップは空振りするため、試行ごとにタップし直す。
+     * 再生が始まらないまま試行上限に達した場合も false を返して通知確認へ進み、
+     * 失敗時は直前にログ出力した再生状態から原因（再生未開始 or 通知未表示）を特定できるようにする。
+     */
+    private fun startPlaybackByTapping(uiDevice: UiDevice, tapX: Int, tapY: Int): Boolean {
+        repeat(PLAYBACK_TAP_RETRY_COUNT) { index ->
+            Log.d(TAG, "タップ試行${index + 1}/${PLAYBACK_TAP_RETRY_COUNT}: 座標=($tapX, $tapY)")
+            uiDevice.click(tapX, tapY)
+            val deadline = SystemClock.elapsedRealtime() + PLAYBACK_START_CONFIRM_TIMEOUT_MS
+            while (SystemClock.elapsedRealtime() < deadline) {
+                if (MediaSessionBridge.playbackState.value.isPlaying) {
+                    Log.d(TAG, "タップ試行${index + 1}で再生開始を確認")
+                    return true
+                }
+                Thread.sleep(POLL_INTERVAL_MS)
+            }
+            Log.d(
+                TAG,
+                "タップ試行${index + 1}完了: 再生未開始 package=${uiDevice.currentPackageName} " +
+                    "state=${MediaSessionBridge.playbackState.value}",
+            )
+        }
+        return MediaSessionBridge.playbackState.value.isPlaying
+    }
 
     private fun openMediaPage(mediaPageUri: String) {
         activityRule.scenario.onActivity { currentActivity ->
@@ -135,9 +163,10 @@ class MediaNotificationSmokeTest {
     companion object {
         private const val TAG = "MediaNotificationSmoke"
         private const val TEST_TIMEOUT_MS = 180_000L
-        private const val PAGE_READY_DELAY_MS = 3_000L
-        private const val PLAYBACK_TAP_RETRY_COUNT = 3
-        private const val PLAYBACK_TAP_INTERVAL_MS = 1_500L
+        // ページロード待ちを兼ねるため、タップ試行は多め・確認間隔は短めに設定する
+        private const val PLAYBACK_TAP_RETRY_COUNT = 10
+        private const val PLAYBACK_START_CONFIRM_TIMEOUT_MS = 2_500L
+        private const val POLL_INTERVAL_MS = 100L
         private const val NOTIFICATION_CONTROL_TIMEOUT_MS = 15_000L
         private const val LOCAL_MEDIA_ASSET_DIR = "test-media"
         private const val LOCAL_MEDIA_DIR_NAME = "test-media"

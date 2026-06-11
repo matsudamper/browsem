@@ -1,6 +1,7 @@
 package net.matsudamper.browser.ui.settings
 
 import androidx.compose.runtime.Stable
+import net.matsudamper.browser.data.SiteGeolocationState
 import net.matsudamper.browser.data.SitePermissionState
 
 @Stable
@@ -9,6 +10,8 @@ data class SiteSettingsScreenUiState(
     val host: String,
     /** マイク権限の状態。サイトから一度も要求されていない場合は null で、項目を表示しない */
     val microphonePermission: SitePermissionState?,
+    /** 位置情報の扱い。サイトから一度も要求されていない場合は null で、項目を表示しない */
+    val geolocationState: SiteGeolocationState?,
     /** 削除確認ダイアログの対象。null の場合はダイアログを表示しない */
     val clearDataConfirmDialog: ClearDataType?,
     /** 削除完了スナックバーのメッセージ。表示後に consumeClearDataResultMessage で消費する */
@@ -21,6 +24,7 @@ data class SiteSettingsScreenUiState(
 
     interface Callbacks {
         fun setMicrophonePermission(state: SitePermissionState)
+        fun setGeolocationState(state: SiteGeolocationState)
         fun requestClearData(type: ClearDataType)
         fun confirmClearData()
         fun dismissClearDataConfirm()
