@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
@@ -18,6 +19,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.ripple
@@ -29,7 +31,9 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import net.matsudamper.browser.ui.common.BrowserTheme
 import net.matsudamper.browser.resources.R as ResourcesR
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -68,6 +72,70 @@ internal fun ToolbarMenu(
         expanded = visibleMenu,
         onDismissRequest = { onDismissRequest() }
     ) {
+        ToolbarMenuContent(
+            onDismissRequest = onDismissRequest,
+            onRefresh = onRefresh,
+            onSuperRefresh = onSuperRefresh,
+            onHome = onHome,
+            onForward = onForward,
+            canGoForward = canGoForward,
+            onBack = onBack,
+            canGoBack = canGoBack,
+            onLongPressHistory = onLongPressHistory,
+            isPcMode = isPcMode,
+            onPcModeToggle = onPcModeToggle,
+            showInstallExtensionItem = showInstallExtensionItem,
+            onInstallExtension = onInstallExtension,
+            onTranslatePage = onTranslatePage,
+            onShare = onShare,
+            onFindInPage = onFindInPage,
+            onOpenSettings = onOpenSettings,
+            onAddToHomeScreen = onAddToHomeScreen,
+            pageZoomPercent = pageZoomPercent,
+            onPageZoomIn = onPageZoomIn,
+            onPageZoomOut = onPageZoomOut,
+            onResetPageZoom = onResetPageZoom,
+            showOpenSettings = showOpenSettings,
+            showAddToHomeScreen = showAddToHomeScreen,
+            showHome = showHome,
+            onOpenInBrowser = onOpenInBrowser,
+            onOpenSiteSettings = onOpenSiteSettings,
+        )
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun ToolbarMenuContent(
+    onDismissRequest: () -> Unit,
+    onRefresh: () -> Unit,
+    onSuperRefresh: () -> Unit,
+    onHome: () -> Unit,
+    onForward: () -> Unit,
+    canGoForward: Boolean,
+    onBack: () -> Unit,
+    canGoBack: Boolean,
+    onLongPressHistory: () -> Unit,
+    isPcMode: Boolean,
+    onPcModeToggle: () -> Unit,
+    showInstallExtensionItem: Boolean,
+    onInstallExtension: () -> Unit,
+    onTranslatePage: () -> Unit,
+    onShare: () -> Unit,
+    onFindInPage: () -> Unit,
+    onOpenSettings: () -> Unit,
+    onAddToHomeScreen: () -> Unit,
+    pageZoomPercent: Int,
+    onPageZoomIn: () -> Unit,
+    onPageZoomOut: () -> Unit,
+    onResetPageZoom: () -> Unit,
+    showOpenSettings: Boolean,
+    showAddToHomeScreen: Boolean,
+    showHome: Boolean,
+    onOpenInBrowser: (() -> Unit)?,
+    onOpenSiteSettings: (() -> Unit)?,
+) {
+    Column {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -203,6 +271,8 @@ internal fun ToolbarMenu(
                 if (showHome) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         IconButton(
+                            modifier = Modifier
+                                .testTag(BrowserToolbarMenuTestTags.HomeButton.testTag),
                             onClick = {
                                 onDismissRequest()
                                 onHome()
@@ -419,6 +489,45 @@ internal fun ToolbarMenu(
     }
 }
 
+@Preview(name = "ToolbarMenuLight")
+@Preview(name = "ToolbarMenuDark", uiMode = android.content.res.Configuration.UI_MODE_NIGHT_YES)
+@Composable
+private fun PreviewToolbarMenuContent() {
+    BrowserTheme(themeMode = net.matsudamper.browser.data.ThemeMode.THEME_SYSTEM) {
+        Surface(modifier = Modifier.width(280.dp)) {
+            ToolbarMenuContent(
+                onDismissRequest = {},
+                onRefresh = {},
+                onSuperRefresh = {},
+                onHome = {},
+                onForward = {},
+                canGoForward = true,
+                onBack = {},
+                canGoBack = true,
+                onLongPressHistory = {},
+                isPcMode = false,
+                onPcModeToggle = {},
+                showInstallExtensionItem = true,
+                onInstallExtension = {},
+                onTranslatePage = {},
+                onShare = {},
+                onFindInPage = {},
+                onOpenSettings = {},
+                onAddToHomeScreen = {},
+                pageZoomPercent = 100,
+                onPageZoomIn = {},
+                onPageZoomOut = {},
+                onResetPageZoom = {},
+                showOpenSettings = true,
+                showAddToHomeScreen = true,
+                showHome = true,
+                onOpenInBrowser = null,
+                onOpenSiteSettings = {},
+            )
+        }
+    }
+}
+
 sealed interface BrowserToolbarMenuTestTags {
     val id: String
     val testTag get() = "${BrowserToolbarMenuTestTags::class.java.name}#$id"
@@ -428,4 +537,5 @@ sealed interface BrowserToolbarMenuTestTags {
     object RefreshButton : BrowserToolbarMenuTestTags { override val id = "refresh_button" }
     object FindInPageButton : BrowserToolbarMenuTestTags { override val id = "find_in_page_button" }
     object SiteSettingsButton : BrowserToolbarMenuTestTags { override val id = "site_settings_button" }
+    object HomeButton : BrowserToolbarMenuTestTags { override val id = "home_button" }
 }
