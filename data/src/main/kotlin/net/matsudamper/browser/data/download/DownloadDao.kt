@@ -30,6 +30,10 @@ interface DownloadDao {
     @Query("UPDATE download SET status = 'CANCELLED' WHERE workerId = :workerId AND status NOT IN ('SUCCEEDED', 'FAILED', 'CANCELLED')")
     suspend fun cancelIfActive(workerId: String)
 
+    /** 指定ワーカーの現在のステータスを取得する。レコードが無い場合は null */
+    @Query("SELECT status FROM download WHERE workerId = :workerId")
+    suspend fun getStatus(workerId: String): String?
+
     @Query(
         "UPDATE download SET fileName = :fileName, status = 'RUNNING', " +
             "progress = :progress, totalRead = :totalRead, contentLength = :contentLength " +
@@ -43,9 +47,10 @@ interface DownloadDao {
         contentLength: Long,
     )
 
+    /** キャンセル済みレコードを完了で上書きしない（キャンセルとWorker完了の競合対策） */
     @Query(
         "UPDATE download SET fileName = :fileName, fileUri = :fileUri, status = 'SUCCEEDED' " +
-            "WHERE workerId = :workerId",
+            "WHERE workerId = :workerId AND status != 'CANCELLED'",
     )
     suspend fun updateCompleted(workerId: String, fileName: String, fileUri: String)
 

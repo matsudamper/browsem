@@ -2,6 +2,7 @@ package net.matsudamper.browser.screen.downloads
 
 import android.app.Application
 import android.app.DownloadManager
+import android.app.NotificationManager
 import android.content.Intent
 import android.provider.MediaStore
 import android.provider.Settings
@@ -11,7 +12,6 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.core.net.toUri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
@@ -20,7 +20,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import net.matsudamper.browser.GeckoDownloadManager
@@ -156,16 +155,20 @@ internal class DownloadManagementScreenViewModel(
     }
 
     private fun cancelDownload(id: UUID) {
+        // suspend を挟むと viewModelScope の破棄でキャンセル要求自体が消えるため、即時に発行する
+        workManager.cancelWorkById(id)
+        // Worker 起動前に GeckoDownloadManager が直接表示した通知は誰も消さないため、
+        // 同じ導出式（workId の hashCode）で通知 ID を求めて明示的に消す
+        val notificationId = id.hashCode() and 0x7fffffff
+        getApplication<Application>()
+            .getSystemService(NotificationManager::class.java)
+            ?.cancel(notificationId)
         viewModelScope.launch {
-            // キャンセル前にWorkerの状態を確認する
-            val workInfo = workManager.getWorkInfoByIdFlow(id).first()
-            workManager.cancelWorkById(id)
-            // WorkerがRUNNING状態の場合はdoWork()のCancellationExceptionハンドラがDBを更新するため直接更新しない
-            // ENQUEUED（未起動）またはWorkerがWorkManagerに存在しない（prune済み等）場合は
-            // doWork()が呼ばれないためDBを直接CANCELLED状態に更新する
-            if (workInfo == null || workInfo.state != WorkInfo.State.RUNNING) {
-                downloadRepository.updateCancelled(id.toString())
-            }
+            // Worker の CancellationException ハンドラに依存せず無条件で CANCELLED に更新する。
+            // SUCCEEDED/FAILED の上書きは DAO 側のガードで防がれる。
+            // WorkManager の割り込みが届かない場合でも、Worker が進捗更新時に
+            // この CANCELLED 状態を検知して自力で停止する
+            downloadRepository.updateCancelled(id.toString())
         }
     }
 

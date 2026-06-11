@@ -120,6 +120,15 @@ class DownloadRepository(context: Context) {
         dao.cancelIfActive(workerId)
     }
 
+    /**
+     * 指定したワーカーのレコードがキャンセル済みかどうかを返す。
+     * WorkManager の割り込みが取りこぼされた場合でも Worker が自力で停止できるよう、
+     * Worker の進捗更新時にポーリングして確認するために使用する
+     */
+    suspend fun isCancelled(workerId: String): Boolean {
+        return dao.getStatus(workerId) == DownloadRecordStatus.CANCELLED.name
+    }
+
     suspend fun get(workerId: UUID): DownloadEntity {
         return dao.get(workerId = workerId.toString())
     }
