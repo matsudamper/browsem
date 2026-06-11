@@ -271,6 +271,7 @@ private fun CustomTabScreen(
         onOpenSettings = {},
         // カスタムタブは設定画面のナビゲーションスタックを持たないため非表示
         onOpenSiteSettings = null,
+        onOpenDownloads = null,
         onOpenTabs = {},
         enableTabUi = false,
         showInstallExtensionItem = false,

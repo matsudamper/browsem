@@ -115,6 +115,7 @@ internal fun BrowserToolBar(
     onHorizontalDrag: (Float) -> Unit = {},
     onHorizontalDragEnd: () -> Unit = {},
     onOpenSiteSettings: (() -> Unit)? = null,
+    onOpenDownloads: (() -> Unit)? = null,
 ) {
     var visibleMenu by remember { mutableStateOf(false) }
     BrowserToolbar(
@@ -179,6 +180,7 @@ internal fun BrowserToolBar(
                 onPageZoomOut = onPageZoomOut,
                 onResetPageZoom = onResetPageZoom,
                 onOpenSiteSettings = onOpenSiteSettings,
+                onOpenDownloads = onOpenDownloads,
             )
         }
     )
