@@ -6,8 +6,15 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import java.security.cert.X509Certificate
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
+
+/** タブの現在の接続のセキュリティ情報 (TLS) */
+data class TabSecurityInfo(
+    val isSecure: Boolean,
+    val certificate: X509Certificate?,
+)
 
 @Stable
 class BrowserTab(
@@ -79,6 +86,9 @@ class BrowserTab(
 
     // ページのfavicon（ホーム追加時のアイコンに使用、永続化は不要）
     var faviconBitmap: Bitmap? by mutableStateOf(null)
+
+    // 現在の接続のセキュリティ情報。サイトの設定画面での TLS 証明書確認に使用する（永続化は不要）
+    var securityInfo: TabSecurityInfo? by mutableStateOf(null)
 
     // スクロール位置（永続化は不要）。BrowserTabScreenState がタブ切替で再生成されても
     // GeckoSession と同じ寿命を持つここで保持することで、復元タブのスクロール位置を維持する。
