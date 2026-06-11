@@ -5,16 +5,21 @@ import android.app.DownloadManager
 import android.content.Intent
 import android.provider.MediaStore
 import android.provider.Settings
+import android.util.Size
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.core.net.toUri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -39,6 +44,12 @@ internal class DownloadManagementScreenViewModel(
     /** resumeDownload から最新のレコードを参照するためのキャッシュ */
     private var currentRecords: List<DownloadRecord> = emptyList()
 
+    /** 読み込み済みサムネイル。サムネイル非対応のファイルは null を保持して再読み込みを防ぐ */
+    private val thumbnailFlow = MutableStateFlow<Map<String, ImageBitmap?>>(emptyMap())
+
+    /** サムネイル読み込み要求済みの fileUri */
+    private val requestedThumbnailUris = mutableSetOf<String>()
+
     val uiState: StateFlow<DownloadManagementScreenUiState> = MutableStateFlow(
         DownloadManagementScreenUiState(
             downloads = emptyList(),
@@ -46,18 +57,45 @@ internal class DownloadManagementScreenViewModel(
         ),
     ).also { uiStateFlow ->
         viewModelScope.launch {
-            downloadRepository.observeDownloads().collectLatest { records ->
-                currentRecords = records
-                val items = records.map { record -> record.toDownloadItem() }
-                uiStateFlow.update {
-                    DownloadManagementScreenUiState(
-                        downloads = items,
-                        callbacks = callbacks,
-                    )
+            combine(
+                downloadRepository.observeDownloads(),
+                thumbnailFlow,
+            ) { records, thumbnails -> records to thumbnails }
+                .collectLatest { (records, thumbnails) ->
+                    currentRecords = records
+                    records.forEach { record ->
+                        if (record.status == DownloadRecordStatus.SUCCEEDED) {
+                            record.fileUri?.let { requestThumbnail(it) }
+                        }
+                    }
+                    val items = records.map { record -> record.toDownloadItem(thumbnails) }
+                    uiStateFlow.update {
+                        DownloadManagementScreenUiState(
+                            downloads = items,
+                            callbacks = callbacks,
+                        )
+                    }
                 }
-            }
         }
     }.asStateFlow()
+
+    /**
+     * ダウンロード完了ファイルのサムネイルを非同期で読み込む。
+     * MediaStore がサムネイルを生成できないファイル (zip 等) は null として記録する。
+     */
+    private fun requestThumbnail(fileUri: String) {
+        if (!requestedThumbnailUris.add(fileUri)) return
+        viewModelScope.launch(Dispatchers.IO) {
+            val thumbnail = runCatching {
+                getApplication<Application>().contentResolver.loadThumbnail(
+                    fileUri.toUri(),
+                    Size(THUMBNAIL_SIZE_PX, THUMBNAIL_SIZE_PX),
+                    null,
+                )
+            }.getOrNull()?.asImageBitmap()
+            thumbnailFlow.update { it + (fileUri to thumbnail) }
+        }
+    }
 
     private fun buildCallbacks() = DownloadManagementScreenUiState.Callbacks(
         onCancel = { id -> cancelDownload(id) },
@@ -67,12 +105,17 @@ internal class DownloadManagementScreenViewModel(
         onOpenOriginPage = { url -> eventHandler.trySend { it.navigateToUrl(url) } },
     )
 
-    private fun DownloadRecord.toDownloadItem(): DownloadManagementScreenUiState.DownloadItem {
+    private fun DownloadRecord.toDownloadItem(
+        thumbnails: Map<String, ImageBitmap?>,
+    ): DownloadManagementScreenUiState.DownloadItem {
         val uiStatus = when (status) {
             DownloadRecordStatus.SUCCEEDED -> {
                 val uri = fileUri
                 if (uri != null) {
-                    DownloadManagementScreenUiState.DownloadStatus.Completed(uri)
+                    DownloadManagementScreenUiState.DownloadStatus.Completed(
+                        fileUri = uri,
+                        thumbnail = thumbnails[uri],
+                    )
                 } else {
                     DownloadManagementScreenUiState.DownloadStatus.Failed(canResume = false)
                 }
@@ -202,5 +245,10 @@ internal class DownloadManagementScreenViewModel(
     interface Event {
         /** ダウンロード開始時のページURLを新しいタブで開く */
         fun navigateToUrl(url: String)
+    }
+
+    companion object {
+        /** loadThumbnail に渡すサムネイルの最大サイズ (px) */
+        private const val THUMBNAIL_SIZE_PX = 256
     }
 }

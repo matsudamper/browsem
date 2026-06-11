@@ -1,6 +1,7 @@
 package net.matsudamper.browser.ui.downloads
 
 import androidx.compose.runtime.Stable
+import androidx.compose.ui.graphics.ImageBitmap
 import java.util.UUID
 
 @Stable
@@ -17,7 +18,14 @@ data class DownloadManagementScreenUiState(
             val isIndeterminate: Boolean,
         ) : DownloadStatus
 
-        data class Completed(val fileUri: String) : DownloadStatus
+        /**
+         * ダウンロード完了。
+         * [thumbnail] はサムネイルを生成できるファイル (画像・動画など) の場合のみ非 null。
+         */
+        data class Completed(
+            val fileUri: String,
+            val thumbnail: ImageBitmap?,
+        ) : DownloadStatus
 
         /**
          * ダウンロード失敗。
