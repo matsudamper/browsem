@@ -417,7 +417,8 @@ internal fun SettingSection(
     }
 }
 
-@Preview(showBackground = true)
+// 設定項目が縦に長いため、全体が見えるように高さを広げて Preview する
+@Preview(showBackground = true, heightDp = 2400)
 @Composable
 private fun SettingsScreenPreview() {
     MaterialTheme {
