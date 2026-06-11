@@ -1,5 +1,7 @@
 package net.matsudamper.browser.ui.downloads
 
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,6 +14,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -22,7 +26,10 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
@@ -89,6 +96,7 @@ fun DownloadManagementScreen(
                         onCancel = { uiState.callbacks.onCancel(item.id) },
                         onOpenFile = { fileUri -> uiState.callbacks.onOpenFile(fileUri) },
                         onResume = { uiState.callbacks.onResume(item.id) },
+                        onOpenOriginPage = { url -> uiState.callbacks.onOpenOriginPage(url) },
                     )
                 }
             }
@@ -96,118 +104,140 @@ fun DownloadManagementScreen(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun DownloadItemRow(
     item: DownloadManagementScreenUiState.DownloadItem,
     onCancel: () -> Unit,
     onOpenFile: (String) -> Unit,
     onResume: () -> Unit,
+    onOpenOriginPage: (url: String) -> Unit,
 ) {
     val dateFormat = remember { SimpleDateFormat("yyyy/MM/dd HH:mm", Locale.getDefault()) }
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
+    var menuExpanded by remember { mutableStateOf(false) }
+    Box {
+        DropdownMenu(
+            expanded = menuExpanded,
+            onDismissRequest = { menuExpanded = false },
         ) {
-            Text(
-                text = item.fileName,
-                style = MaterialTheme.typography.bodyLarge,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(end = 8.dp),
+            DropdownMenuItem(
+                text = { Text("開始ページを開く") },
+                enabled = item.originPageUrl != null,
+                onClick = {
+                    menuExpanded = false
+                    item.originPageUrl?.let { onOpenOriginPage(it) }
+                },
             )
+        }
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .combinedClickable(
+                    onLongClick = { menuExpanded = true },
+                    onClick = {},
+                )
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = item.fileName,
+                    style = MaterialTheme.typography.bodyLarge,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(end = 8.dp),
+                )
+                when (val status = item.status) {
+                    is DownloadManagementScreenUiState.DownloadStatus.InProgress -> {
+                        TextButton(onClick = onCancel) {
+                            Text("キャンセル")
+                        }
+                    }
+
+                    is DownloadManagementScreenUiState.DownloadStatus.Completed -> {
+                        TextButton(onClick = { onOpenFile(status.fileUri) }) {
+                            Text("開く")
+                        }
+                    }
+
+                    is DownloadManagementScreenUiState.DownloadStatus.Failed -> {
+                        if (status.canResume) {
+                            TextButton(onClick = onResume) {
+                                Text("再開")
+                            }
+                        } else {
+                            Text(
+                                text = "失敗",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                        }
+                    }
+
+                    is DownloadManagementScreenUiState.DownloadStatus.Cancelled -> {
+                        Text(
+                            text = "キャンセル",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
             when (val status = item.status) {
                 is DownloadManagementScreenUiState.DownloadStatus.InProgress -> {
-                    TextButton(onClick = onCancel) {
-                        Text("キャンセル")
+                    val sizeText = buildSizeText(status.totalRead, status.contentLength)
+                    Text(
+                        text = sizeText,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    if (status.isIndeterminate) {
+                        LinearProgressIndicator(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 4.dp),
+                        )
+                    } else {
+                        LinearProgressIndicator(
+                            progress = { status.progress / 100f },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 4.dp),
+                        )
                     }
                 }
 
                 is DownloadManagementScreenUiState.DownloadStatus.Completed -> {
-                    TextButton(onClick = { onOpenFile(status.fileUri) }) {
-                        Text("開く")
-                    }
+                    Text(
+                        text = "完了",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
 
                 is DownloadManagementScreenUiState.DownloadStatus.Failed -> {
-                    if (status.canResume) {
-                        TextButton(onClick = onResume) {
-                            Text("再開")
-                        }
-                    } else {
+                    if (!status.canResume) {
                         Text(
-                            text = "失敗",
-                            style = MaterialTheme.typography.bodyMedium,
+                            text = "再試行するには再度ダウンロードしてください。",
+                            style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.error,
                         )
                     }
                 }
 
-                is DownloadManagementScreenUiState.DownloadStatus.Cancelled -> {
-                    Text(
-                        text = "キャンセル",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+                is DownloadManagementScreenUiState.DownloadStatus.Cancelled -> Unit
             }
+            Text(
+                text = dateFormat.format(Date(item.enqueuedAt)),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
-        when (val status = item.status) {
-            is DownloadManagementScreenUiState.DownloadStatus.InProgress -> {
-                val sizeText = buildSizeText(status.totalRead, status.contentLength)
-                Text(
-                    text = sizeText,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                if (status.isIndeterminate) {
-                    LinearProgressIndicator(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 4.dp),
-                    )
-                } else {
-                    LinearProgressIndicator(
-                        progress = { status.progress / 100f },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 4.dp),
-                    )
-                }
-            }
-
-            is DownloadManagementScreenUiState.DownloadStatus.Completed -> {
-                Text(
-                    text = "完了",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-
-            is DownloadManagementScreenUiState.DownloadStatus.Failed -> {
-                if (!status.canResume) {
-                    Text(
-                        text = "再試行するには再度ダウンロードしてください。",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                }
-            }
-
-            is DownloadManagementScreenUiState.DownloadStatus.Cancelled -> Unit
-        }
-        Text(
-            text = dateFormat.format(Date(item.enqueuedAt)),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
     }
 }
 
@@ -235,10 +265,12 @@ private fun PreviewFailedCanResume() {
                 fileName = "example.zip",
                 status = DownloadManagementScreenUiState.DownloadStatus.Failed(canResume = true),
                 enqueuedAt = 0L,
+                originPageUrl = "https://example.com/page",
             ),
             onCancel = {},
             onOpenFile = {},
             onResume = {},
+            onOpenOriginPage = {},
         )
     }
 }
@@ -253,10 +285,12 @@ private fun PreviewFailedCannotResume() {
                 fileName = "example.zip",
                 status = DownloadManagementScreenUiState.DownloadStatus.Failed(canResume = false),
                 enqueuedAt = 0L,
+                originPageUrl = null,
             ),
             onCancel = {},
             onOpenFile = {},
             onResume = {},
+            onOpenOriginPage = {},
         )
     }
 }

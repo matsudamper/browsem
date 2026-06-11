@@ -535,6 +535,24 @@ private fun BrowserAppContent(
                             DownloadManagementScreenViewModel(context.applicationContext as android.app.Application)
                         }
                         val downloadsUiState by downloadsViewModel.uiState.collectAsState()
+                        LaunchedEffect(downloadsViewModel) {
+                            downloadsViewModel.eventHandler.receiveAsFlow().collect {
+                                it(object : DownloadManagementScreenViewModel.Event {
+                                    override fun navigateToUrl(url: String) {
+                                        scope.launch {
+                                            val tabId = UUID.randomUUID().toString()
+                                            withContext(Dispatchers.Main) {
+                                                browserTabController.createAndAppendTab(
+                                                    tabId = tabId,
+                                                    initialUrl = url,
+                                                )
+                                                selectTab(tabId, null)
+                                            }
+                                        }
+                                    }
+                                })
+                            }
+                        }
                         DownloadManagementScreen(
                             uiState = downloadsUiState,
                             onBack = { backStack.removeLastOrNull() },
