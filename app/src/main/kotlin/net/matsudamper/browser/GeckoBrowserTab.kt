@@ -98,7 +98,7 @@ internal fun GeckoBrowserTab(
     onOpenSiteSettings: ((currentUrl: String) -> Unit)?,
     onOpenTabs: () -> Unit,
     onOpenNewSessionRequest: (String) -> GeckoSession?,
-    onOpenNewTabRequest: (String) -> Unit,
+    onOpenNewTabRequest: (url: String, referrerUrl: String?) -> Unit,
     modifier: Modifier = Modifier,
     onRequestDownloadNotificationPermission: suspend () -> Unit = {},
     enableTabUi: Boolean = true,
@@ -591,7 +591,7 @@ internal fun GeckoBrowserTab(
                             URLEncoder.encode(text, "UTF-8"),
                         )
                         if (enableTabUi) {
-                            currentOnOpenNewTabRequest(url)
+                            currentOnOpenNewTabRequest(url, null)
                         } else {
                             state.onUrlSubmit(url)
                         }
@@ -605,7 +605,7 @@ internal fun GeckoBrowserTab(
                             "https://$text"
                         }
                         if (enableTabUi) {
-                            currentOnOpenNewTabRequest(url)
+                            currentOnOpenNewTabRequest(url, null)
                         } else {
                             state.onUrlSubmit(url)
                         }

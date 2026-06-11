@@ -344,6 +344,24 @@ internal class BrowserTabScreenState(
         session.loadUri(resolved)
     }
 
+    /**
+     * 現在のページを referrer に付けて URL を読み込む。
+     * コンテキストメニューの「開く」「画像を開く」から使用し、
+     * ホットリンク保護のあるサーバーで 403 にならないようにする。
+     */
+    fun openUrlWithReferrer(url: String) {
+        val referrerUrl = currentPageUrl
+        urlInput = url
+        maybeResetToolbarColor(currentPageUrl, url)
+        currentPageUrl = url
+        clearPageLoadError()
+        session.load(
+            GeckoSession.Loader()
+                .uri(url)
+                .referrer(referrerUrl),
+        )
+    }
+
     fun onHome() {
         urlInput = homepageUrl
         maybeResetToolbarColor(currentPageUrl, homepageUrl)

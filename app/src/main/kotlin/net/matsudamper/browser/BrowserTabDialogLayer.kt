@@ -51,18 +51,19 @@ internal fun BrowserTabDialogLayer(
     state: BrowserTabScreenState,
     dialogState: PromptDialogState,
     enableTabUi: Boolean,
-    onOpenNewTabRequest: (String) -> Unit,
+    onOpenNewTabRequest: (url: String, referrerUrl: String?) -> Unit,
 ) {
     state.contextMenuState?.let { menu ->
         ContextMenuDialog(
             menu = menu,
             enableTabUi = enableTabUi,
+            // ホットリンク保護のあるサーバーで 403 にならないよう、元ページを referrer に付ける
             onOpenNewTab = { url ->
-                onOpenNewTabRequest(url)
+                onOpenNewTabRequest(url, state.currentPageUrl)
                 state.dismissContextMenu()
             },
             onOpenUrl = { url ->
-                state.onUrlSubmit(url)
+                state.openUrlWithReferrer(url)
                 state.dismissContextMenu()
             },
             onCopyLink = { url -> state.copyLinkUrl(url) },
@@ -386,7 +387,7 @@ private fun ContextMenuDialog(
     }
     val bodyText = when (menu) {
         is BrowserTabScreenState.ContextMenuState.Link -> menu.url
-        is BrowserTabScreenState.ContextMenuState.Image -> "この画像をダウンロードしますか？"
+        is BrowserTabScreenState.ContextMenuState.Image -> menu.srcUrl
         is BrowserTabScreenState.ContextMenuState.LinkWithImage -> menu.url
     }
     AlertDialog(
@@ -414,9 +415,13 @@ private fun ContextMenuDialog(
                         )
                     }
                     is BrowserTabScreenState.ContextMenuState.Image -> {
-                        TextButton(onClick = { onDownloadImage(menu.srcUrl) }) {
-                            Text(text = "ダウンロード")
-                        }
+                        ImageActionButtons(
+                            srcUrl = menu.srcUrl,
+                            enableTabUi = enableTabUi,
+                            onOpenNewTab = onOpenNewTab,
+                            onOpenUrl = onOpenUrl,
+                            onDownloadImage = onDownloadImage,
+                        )
                     }
                     is BrowserTabScreenState.ContextMenuState.LinkWithImage -> {
                         LinkActionButtons(
@@ -426,6 +431,15 @@ private fun ContextMenuDialog(
                             onOpenUrl = onOpenUrl,
                             onCopyLink = onCopyLink,
                         )
+                        if (enableTabUi) {
+                            TextButton(onClick = { onOpenNewTab(menu.imageSrcUrl) }) {
+                                Text(text = "画像を新しいタブで開く")
+                            }
+                        } else {
+                            TextButton(onClick = { onOpenUrl(menu.imageSrcUrl) }) {
+                                Text(text = "画像を開く")
+                            }
+                        }
                         TextButton(onClick = { onDownloadImage(menu.imageSrcUrl) }) {
                             Text(text = "画像をダウンロード")
                         }
@@ -437,6 +451,30 @@ private fun ContextMenuDialog(
             }
         },
     )
+}
+
+@Composable
+private fun ImageActionButtons(
+    srcUrl: String,
+    enableTabUi: Boolean,
+    onOpenNewTab: (String) -> Unit,
+    onOpenUrl: (String) -> Unit,
+    onDownloadImage: (String) -> Unit,
+) {
+    Column {
+        if (enableTabUi) {
+            TextButton(onClick = { onOpenNewTab(srcUrl) }) {
+                Text(text = "新しいタブで開く")
+            }
+        } else {
+            TextButton(onClick = { onOpenUrl(srcUrl) }) {
+                Text(text = "開く")
+            }
+        }
+        TextButton(onClick = { onDownloadImage(srcUrl) }) {
+            Text(text = "ダウンロード")
+        }
+    }
 }
 
 @Composable
