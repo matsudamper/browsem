@@ -29,11 +29,11 @@ internal class SiteSettingsScreenViewModel(
         SiteSettingsScreenUiState(
             callbacks = callbacks,
             host = host,
-            microphonePermission = SitePermissionState.SITE_PERMISSION_ASK,
+            microphonePermission = null,
         ),
     ).also { uiStateFlow ->
         viewModelScope.launch {
-            siteSettingsRepository.microphonePermission(host).collectLatest { permission ->
+            siteSettingsRepository.requestedMicrophonePermission(host).collectLatest { permission ->
                 uiStateFlow.update { it.copy(microphonePermission = permission) }
             }
         }

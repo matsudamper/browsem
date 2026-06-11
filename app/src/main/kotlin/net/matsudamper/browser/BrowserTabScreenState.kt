@@ -232,6 +232,8 @@ internal class BrowserTabScreenState(
      * 許可/ブロックの選択をサイト設定として永続化する。
      */
     private suspend fun resolveMicrophonePermission(host: String): Boolean {
+        // 要求があったことを記録し、「サイトの設定」画面にマイクの項目を表示できるようにする
+        siteSettingsRepository.markMicrophonePermissionRequested(host)
         when (siteSettingsRepository.getMicrophonePermission(host)) {
             SitePermissionState.SITE_PERMISSION_ALLOW -> return true
             SitePermissionState.SITE_PERMISSION_DENY -> return false
