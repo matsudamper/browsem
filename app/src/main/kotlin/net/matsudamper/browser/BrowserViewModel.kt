@@ -126,7 +126,6 @@ internal class BrowserViewModel(
                     val resolvedLng = if (lat == 0.0 && lng == 0.0) MockLocationWebExtension.DEFAULT_LONGITUDE else lng
                     mockLocationWebExtension.updateConfig(
                         MockLocationWebExtension.GeolocationConfig(
-                            forceMock = settings.mockLocationEnabled,
                             latitude = resolvedLat,
                             longitude = resolvedLng,
                             siteModes = geolocationStates.mapValues { (_, state) -> state.toGeolocationMode() },

@@ -21,7 +21,6 @@ class MockLocationWebExtension {
 
     // 現在の位置情報設定
     @Volatile private var currentConfig: GeolocationConfig = GeolocationConfig(
-        forceMock = false,
         latitude = DEFAULT_LATITUDE,
         longitude = DEFAULT_LONGITUDE,
         siteModes = emptyMap(),
@@ -162,17 +161,14 @@ class MockLocationWebExtension {
 
     /**
      * 位置情報設定全体。
-     * [forceMock] はアプリ設定の「モック位置情報を使用する」で、有効な場合は
-     * サイトごとの設定に関わらず全サイトへモック座標を返す。
+     * サイトごとの設定が無いホストにはモック座標を返す（デフォルト）。
      */
     data class GeolocationConfig(
-        val forceMock: Boolean,
         val latitude: Double,
         val longitude: Double,
         val siteModes: Map<String, GeolocationMode>,
     ) {
         fun resolveMode(host: String?): GeolocationMode {
-            if (forceMock) return GeolocationMode.MOCK
             return siteModes[host] ?: GeolocationMode.MOCK
         }
     }

@@ -37,7 +37,8 @@ message BrowserSettings {
   TranslationProvider translation_provider = 9;
   bool enable_third_party_ca = 10;
   optional bool enable_web_suggestions = 11;
-  bool mock_location_enabled = 12;
+  // 廃止: モックの有効/無効はサイトごとの設定 (site_settings.proto) へ移行した
+  bool mock_location_enabled = 12 [deprecated = true];
   double mock_location_latitude = 13;
   double mock_location_longitude = 14;
 }

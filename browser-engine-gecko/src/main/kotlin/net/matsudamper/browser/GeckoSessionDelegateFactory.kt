@@ -95,7 +95,9 @@ fun createGeckoSessionDelegateBundle(
                             if (allow) {
                                 GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW
                             } else {
-                                GeckoSession.PermissionDelegate.ContentPermission.VALUE_DENY
+                                // DENY は Gecko に永続化され、後で「実際の位置情報」へ変更しても
+                                // このデリゲートが呼ばれなくなるため、永続化されない PROMPT で拒否する
+                                GeckoSession.PermissionDelegate.ContentPermission.VALUE_PROMPT
                             },
                         )
                     }

@@ -69,12 +69,6 @@ internal class SettingsScreenViewModel(
             viewModelScope.launch { settingsRepository.setEnableWebSuggestions(enabled) }
         }
 
-        override fun setMockLocationEnabled(enabled: Boolean) {
-            viewModelScope.launch {
-                settingsRepository.setMockLocationEnabled(enabled)
-            }
-        }
-
         override fun setMockLocationInput(input: String) {
             mockLocationInputFlow.value = input
             val parsed = parseMockLocationInput(input) ?: return
@@ -213,7 +207,6 @@ private fun BrowserSettings.toUiState(
         translationProvider = translationProvider,
         enableThirdPartyCa = enableThirdPartyCa,
         enableWebSuggestions = resolvedEnableWebSuggestions(),
-        mockLocationEnabled = mockLocationEnabled,
         mockLocationInput = mockLocationInput,
         mockLocationInputError = validateMockLocationInput(mockLocationInput),
         backupConfirmDialog = backupConfirmDialog,
