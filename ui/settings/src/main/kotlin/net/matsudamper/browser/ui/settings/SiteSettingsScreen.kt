@@ -340,6 +340,46 @@ private fun SiteSettingsScreenGeolocationOnlyPreview() {
     }
 }
 
+/** セクション内のコンテンツが短い場合でもコンテナが画面幅いっぱいに広がることを確認する */
+@Preview(showBackground = true)
+@Composable
+private fun SiteSettingsScreenShortContentPreview() {
+    MaterialTheme {
+        SiteSettingsScreen(
+            uiState = SiteSettingsScreenUiState(
+                callbacks = previewCallbacks,
+                host = "a.test",
+                microphonePermission = null,
+                geolocationState = null,
+                tlsCertificate = SiteSettingsScreenUiState.TlsCertificate.Insecure,
+                clearDataConfirmDialog = null,
+                clearDataResultMessage = null,
+            ),
+            onBack = {},
+        )
+    }
+}
+
+/** 横向きでもコンテナが画面幅いっぱいに広がることを確認する */
+@Preview(showBackground = true, widthDp = 800, heightDp = 360)
+@Composable
+private fun SiteSettingsScreenLandscapePreview() {
+    MaterialTheme {
+        SiteSettingsScreen(
+            uiState = SiteSettingsScreenUiState(
+                callbacks = previewCallbacks,
+                host = "a.test",
+                microphonePermission = null,
+                geolocationState = null,
+                tlsCertificate = SiteSettingsScreenUiState.TlsCertificate.Insecure,
+                clearDataConfirmDialog = null,
+                clearDataResultMessage = null,
+            ),
+            onBack = {},
+        )
+    }
+}
+
 @Preview(showBackground = true)
 @Composable
 private fun SiteSettingsScreenNoRequestedPermissionPreview() {
