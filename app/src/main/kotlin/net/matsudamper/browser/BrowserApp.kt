@@ -343,6 +343,11 @@ private fun BrowserAppContent(
                                     onInstallExtensionRequest = onInstallExtensionRequest,
                                     onRequestDownloadNotificationPermission = onRequestDownloadNotificationPermission,
                                     onOpenSettings = { backStack.add(AppDestination.Settings) },
+                                    onOpenDownloads = {
+                                        if (backStack.none { it is AppDestination.Downloads }) {
+                                            backStack.add(AppDestination.Downloads)
+                                        }
+                                    },
                                     onOpenSiteSettings = { currentUrl ->
                                         val host = extractSiteHost(currentUrl)
                                         if (host != null) {
@@ -435,7 +440,6 @@ private fun BrowserAppContent(
                                 uiState = uiState,
                                 onOpenExtensions = { backStack.add(AppDestination.Extensions) },
                                 onOpenHistory = { backStack.add(AppDestination.History) },
-                                onOpenDownloads = { backStack.add(AppDestination.Downloads) },
                                 onBack = { backStack.removeLastOrNull() },
                             )
                         }

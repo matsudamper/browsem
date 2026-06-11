@@ -52,7 +52,6 @@ fun SettingsScreen(
     uiState: SettingsScreenUiState,
     onOpenExtensions: () -> Unit,
     onOpenHistory: () -> Unit,
-    onOpenDownloads: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -310,17 +309,6 @@ fun SettingsScreen(
 
             Spacer(Modifier.height(betweenPadding))
 
-            SettingSection(title = "ダウンロード") {
-                TextButton(
-                    onClick = onOpenDownloads,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text("ダウンロード管理")
-                }
-            }
-
-            Spacer(Modifier.height(betweenPadding))
-
             SettingSection(title = "バックアップ") {
                 Column {
                     Text(
@@ -465,7 +453,6 @@ private fun SettingsScreenPreview() {
             ),
             onOpenExtensions = {},
             onOpenHistory = {},
-            onOpenDownloads = {},
             onBack = {},
         )
     }

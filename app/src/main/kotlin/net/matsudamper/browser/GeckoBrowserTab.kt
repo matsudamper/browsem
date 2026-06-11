@@ -96,6 +96,7 @@ internal fun GeckoBrowserTab(
     onInstallExtensionRequest: (String) -> Unit,
     onOpenSettings: () -> Unit,
     onOpenSiteSettings: ((currentUrl: String) -> Unit)?,
+    onOpenDownloads: (() -> Unit)?,
     onOpenTabs: () -> Unit,
     onOpenNewSessionRequest: (String) -> GeckoSession?,
     onOpenNewTabRequest: (url: String, referrerUrl: String?) -> Unit,
@@ -786,6 +787,7 @@ internal fun GeckoBrowserTab(
                     onOpenSiteSettings = onOpenSiteSettings?.let { callback ->
                         { callback(state.currentPageUrl) }
                     },
+                    onOpenDownloads = onOpenDownloads,
                     onShare = state::sharePage,
                     tabCount = tabCount,
                     showTabActions = enableTabUi,
