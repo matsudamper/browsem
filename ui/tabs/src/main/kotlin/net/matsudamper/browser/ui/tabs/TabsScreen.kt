@@ -22,8 +22,6 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.ui.res.painterResource
-import net.matsudamper.browser.resources.R
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -555,15 +553,6 @@ private fun SnackbarContent(
                 ) {
                     Text(label)
                 }
-            }
-        },
-        dismissAction = {
-            IconButton(onClick = { snackbarData.dismiss() }) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_close_24dp),
-                    contentDescription = "閉じる",
-                    tint = SnackbarDefaults.actionContentColor,
-                )
             }
         },
     ) {
