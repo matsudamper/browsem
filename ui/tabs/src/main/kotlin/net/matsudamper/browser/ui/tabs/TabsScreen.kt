@@ -21,6 +21,7 @@ import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -32,18 +33,23 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Snackbar
+import androidx.compose.material3.SnackbarData
 import androidx.compose.material3.SnackbarDefaults
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -296,25 +302,24 @@ private fun TabsScreenLoadedContent(
         contentWindowInsets = WindowInsets.safeDrawing,
         snackbarHost = {
             SnackbarHost(snackbarHostState) { snackbarData ->
-                Snackbar(
-                    action = {
-                        snackbarData.visuals.actionLabel?.let { label ->
-                            TextButton(
-                                onClick = { snackbarData.performAction() },
-                                colors = ButtonDefaults.textButtonColors(
-                                    contentColor = SnackbarDefaults.actionContentColor,
-                                ),
-                            ) {
-                                Text(label)
+                // スワイプで Snackbar を dismiss できるようにする
+                key(snackbarData) {
+                    val dismissState = rememberSwipeToDismissBoxState(
+                        confirmValueChange = { value ->
+                            if (value != SwipeToDismissBoxValue.Settled) {
+                                snackbarData.dismiss()
+                                true
+                            } else {
+                                false
                             }
-                        }
-                    },
-                ) {
-                    Text(
-                        text = snackbarData.visuals.message,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
+                        },
                     )
+                    SwipeToDismissBox(
+                        state = dismissState,
+                        backgroundContent = {},
+                    ) {
+                        SnackbarContent(snackbarData = snackbarData)
+                    }
                 }
             }
         },
@@ -529,6 +534,44 @@ private fun TabGroupMenu(
         }
     }
 
+}
+
+/** タブを閉じたときに表示する Snackbar の本体 */
+@Composable
+private fun SnackbarContent(
+    snackbarData: SnackbarData,
+    modifier: Modifier = Modifier,
+) {
+    Snackbar(
+        modifier = modifier,
+        action = {
+            snackbarData.visuals.actionLabel?.let { label ->
+                TextButton(
+                    onClick = { snackbarData.performAction() },
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = SnackbarDefaults.actionContentColor,
+                    ),
+                ) {
+                    Text(label)
+                }
+            }
+        },
+        dismissAction = {
+            IconButton(onClick = { snackbarData.dismiss() }) {
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = "閉じる",
+                    tint = SnackbarDefaults.actionContentColor,
+                )
+            }
+        },
+    ) {
+        Text(
+            text = snackbarData.visuals.message,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
 }
 
 /**
