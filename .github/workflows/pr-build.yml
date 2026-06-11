@@ -48,8 +48,10 @@ jobs:
         env:
           BRANCH_NAME: ${{ github.head_ref }}
           REPOSITORY: ${{ github.repository }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          SHORT_SHA="${GITHUB_SHA:0:7}"
+          # GITHUB_SHA はマージコミットのため、PR 上のコミットと一致する head の SHA を使う
+          SHORT_SHA="${HEAD_SHA:0:7}"
           SAFE_REPO="${REPOSITORY##*/}"
           SAFE_BRANCH="${BRANCH_NAME//\//-}"
           APK_NAME="app-${SAFE_REPO}-${SAFE_BRANCH}-${SHORT_SHA}.apk"
@@ -64,7 +66,7 @@ jobs:
         with:
           name: ${{ env.APK_NAME }}
           path: ${{ env.APK_PATH }}
-          compression-level: 9
+          archive: false
 
       - name: Upload APK to S3
         id: upload_s3
@@ -112,10 +114,11 @@ jobs:
             | Storage | Download Link | QR Code |
             | :--- | :--- | :--- |
             | 🐙 GitHub Artifacts | [Download](${{ steps.upload_apk.outputs.artifact-url }}) | [View](${{ steps.github_qr_artifact.outputs.artifact-url }}) |
-            ${{ steps.upload_s3.outputs.url && format('| ☁️ S3 | [Download]({0}) | [View]({1}) |', steps.upload_s3.outputs.url, steps.s3_qr_artifact.outputs.artifact-url) || '' }}
+            ${{ steps.upload_s3.outputs.url && format('| ☁️ S3 | [Download]({0}) | [View]({1}) |', steps.upload_s3.outputs.url, steps.s3_qr_artifact.outputs.artifact-url) || format('| ☁️ S3 | ⚠️ アップロード失敗 ([run]({0}/{1}/actions/runs/{2})) | - |', github.server_url, github.repository, github.run_id) }}
 
             ---
             *Artifact Name: `${{ env.APK_NAME }}`*
+            *Commit: [`${{ github.event.pull_request.head.sha }}`](${{ github.server_url }}/${{ github.repository }}/commit/${{ github.event.pull_request.head.sha }})*
 
       - name: Run Android Lint
         run: ./gradlew :app:lintDebug
