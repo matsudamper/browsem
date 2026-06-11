@@ -13,15 +13,21 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import mozilla.components.lib.publicsuffixlist.PublicSuffixList
 import net.matsudamper.browser.TabSecurityInfo
+import net.matsudamper.browser.awaitGecko
 import net.matsudamper.browser.data.SiteGeolocationState
 import net.matsudamper.browser.data.SitePermissionState
 import net.matsudamper.browser.data.SiteSettingsRepository
 import net.matsudamper.browser.ui.settings.SiteSettingsScreenUiState
+import org.mozilla.geckoview.GeckoRuntime
+import org.mozilla.geckoview.StorageController
 
 internal class SiteSettingsScreenViewModel(
     private val host: String,
     private val siteSettingsRepository: SiteSettingsRepository,
+    private val geckoRuntime: GeckoRuntime,
+    private val publicSuffixList: PublicSuffixList,
     securityInfo: TabSecurityInfo?,
 ) : ViewModel() {
 
@@ -40,6 +46,26 @@ internal class SiteSettingsScreenViewModel(
             viewModelScope.launch {
                 siteSettingsRepository.setMicrophonePermission(host, state)
             }
+        }
+
+        override fun requestClearData(type: SiteSettingsScreenUiState.ClearDataType) {
+            uiStateFlow.update { it.copy(clearDataConfirmDialog = type) }
+        }
+
+        override fun confirmClearData() {
+            val type = uiStateFlow.value.clearDataConfirmDialog ?: return
+            uiStateFlow.update { it.copy(clearDataConfirmDialog = null) }
+            viewModelScope.launch {
+                clearData(type)
+            }
+        }
+
+        override fun dismissClearDataConfirm() {
+            uiStateFlow.update { it.copy(clearDataConfirmDialog = null) }
+        }
+
+        override fun consumeClearDataResultMessage() {
+            uiStateFlow.update { it.copy(clearDataResultMessage = null) }
         }
 
         override fun setGeolocationState(state: SiteGeolocationState) {
@@ -69,15 +95,19 @@ internal class SiteSettingsScreenViewModel(
         }
     }
 
-    val uiState: StateFlow<SiteSettingsScreenUiState> = MutableStateFlow(
+    private val uiStateFlow: MutableStateFlow<SiteSettingsScreenUiState> = MutableStateFlow(
         SiteSettingsScreenUiState(
             callbacks = callbacks,
             host = host,
             microphonePermission = null,
             geolocationState = null,
             tlsCertificate = createTlsCertificateUiState(securityInfo),
+            clearDataConfirmDialog = null,
+            clearDataResultMessage = null,
         ),
-    ).also { uiStateFlow ->
+    )
+
+    val uiState: StateFlow<SiteSettingsScreenUiState> = uiStateFlow.also {
         viewModelScope.launch {
             siteSettingsRepository.requestedMicrophonePermission(host).collectLatest { permission ->
                 uiStateFlow.update { it.copy(microphonePermission = permission) }
@@ -117,5 +147,31 @@ internal class SiteSettingsScreenViewModel(
     private fun sha256Fingerprint(certificate: X509Certificate): String {
         val digest = MessageDigest.getInstance("SHA-256").digest(certificate.encoded)
         return digest.joinToString(":") { "%02X".format(it) }
+    }
+
+    private suspend fun clearData(type: SiteSettingsScreenUiState.ClearDataType) {
+        val flags = when (type) {
+            // ログイン状態は親ドメインの Cookie や localStorage にも保持されるため、
+            // Cookie だけでなく DOM ストレージ・認証セッションも併せて削除する
+            SiteSettingsScreenUiState.ClearDataType.Cookie ->
+                StorageController.ClearFlags.COOKIES or
+                    StorageController.ClearFlags.DOM_STORAGES or
+                    StorageController.ClearFlags.AUTH_SESSIONS
+            SiteSettingsScreenUiState.ClearDataType.Cache -> StorageController.ClearFlags.ALL_CACHES
+        }
+        val targetName = when (type) {
+            SiteSettingsScreenUiState.ClearDataType.Cookie -> "Cookieとサイトデータ"
+            SiteSettingsScreenUiState.ClearDataType.Cache -> "キャッシュ"
+        }
+        val message = runCatching {
+            // Cookie は Domain=.example.com のように基底ドメインへ設定されることが多く、
+            // ホスト単位の削除では消えないため eTLD+1 単位で削除する
+            val baseDomain = publicSuffixList.getPublicSuffixPlusOne(host).await() ?: host
+            geckoRuntime.storageController.clearDataFromBaseDomain(baseDomain, flags).awaitGecko()
+        }.fold(
+            onSuccess = { "${targetName}を削除しました" },
+            onFailure = { "${targetName}の削除に失敗しました" },
+        )
+        uiStateFlow.update { it.copy(clearDataResultMessage = message) }
     }
 }

@@ -4,20 +4,29 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.painterResource
@@ -38,6 +47,17 @@ fun SiteSettingsScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val snackbarHostState = remember { SnackbarHostState() }
+    val currentCallbacks by rememberUpdatedState(uiState.callbacks)
+    val clearDataResultMessage = uiState.clearDataResultMessage
+
+    LaunchedEffect(clearDataResultMessage) {
+        if (clearDataResultMessage != null) {
+            snackbarHostState.showSnackbar(clearDataResultMessage)
+            currentCallbacks.consumeClearDataResultMessage()
+        }
+    }
+
     Scaffold(
         modifier = modifier,
         topBar = {
@@ -53,6 +73,7 @@ fun SiteSettingsScreen(
                 },
             )
         },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { paddingValues ->
         Column(
             modifier = Modifier
@@ -177,8 +198,70 @@ fun SiteSettingsScreen(
                 )
             }
 
+            Spacer(Modifier.height(12.dp))
+
+            SettingSection(title = "データの削除") {
+                TextButton(
+                    onClick = {
+                        uiState.callbacks.requestClearData(
+                            SiteSettingsScreenUiState.ClearDataType.Cookie,
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(
+                        text = "Cookieとサイトデータを削除",
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+                TextButton(
+                    onClick = {
+                        uiState.callbacks.requestClearData(
+                            SiteSettingsScreenUiState.ClearDataType.Cache,
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(
+                        text = "キャッシュを削除",
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            }
+
             Spacer(Modifier.padding(bottom = paddingValues.calculateBottomPadding()))
         }
+    }
+
+    // 削除操作の確認ダイアログ（画面の上に重ねて表示する）
+    val confirmDialog = uiState.clearDataConfirmDialog
+    if (confirmDialog != null) {
+        val targetName = when (confirmDialog) {
+            SiteSettingsScreenUiState.ClearDataType.Cookie -> "Cookieとサイトデータ"
+            SiteSettingsScreenUiState.ClearDataType.Cache -> "キャッシュ"
+        }
+        val description = when (confirmDialog) {
+            SiteSettingsScreenUiState.ClearDataType.Cookie ->
+                "「${uiState.host}」のCookieとサイトデータを削除しますか？" +
+                    "このサイトからログアウトされます。この操作は取り消せません。"
+            SiteSettingsScreenUiState.ClearDataType.Cache ->
+                "「${uiState.host}」のキャッシュを削除しますか？この操作は取り消せません。"
+        }
+        AlertDialog(
+            onDismissRequest = uiState.callbacks::dismissClearDataConfirm,
+            title = { Text("${targetName}を削除") },
+            text = { Text(description) },
+            confirmButton = {
+                TextButton(onClick = uiState.callbacks::confirmClearData) {
+                    Text("削除", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = uiState.callbacks::dismissClearDataConfirm) {
+                    Text("キャンセル")
+                }
+            },
+        )
     }
 }
 
@@ -206,6 +289,10 @@ private fun CertificateInfoRow(
 private val previewCallbacks = object : SiteSettingsScreenUiState.Callbacks {
     override fun setMicrophonePermission(state: SitePermissionState) = Unit
     override fun setGeolocationState(state: SiteGeolocationState) = Unit
+    override fun requestClearData(type: SiteSettingsScreenUiState.ClearDataType) = Unit
+    override fun confirmClearData() = Unit
+    override fun dismissClearDataConfirm() = Unit
+    override fun consumeClearDataResultMessage() = Unit
 }
 
 @Preview(showBackground = true)
@@ -226,6 +313,8 @@ private fun SiteSettingsScreenPreview() {
                     sha256Fingerprint = "AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99:" +
                         "AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99",
                 ),
+                clearDataConfirmDialog = null,
+                clearDataResultMessage = null,
             ),
             onBack = {},
         )
@@ -243,6 +332,8 @@ private fun SiteSettingsScreenGeolocationOnlyPreview() {
                 microphonePermission = null,
                 geolocationState = SiteGeolocationState.SITE_GEOLOCATION_DENY,
                 tlsCertificate = SiteSettingsScreenUiState.TlsCertificate.Insecure,
+                clearDataConfirmDialog = null,
+                clearDataResultMessage = null,
             ),
             onBack = {},
         )
@@ -260,6 +351,27 @@ private fun SiteSettingsScreenNoRequestedPermissionPreview() {
                 microphonePermission = null,
                 geolocationState = null,
                 tlsCertificate = null,
+                clearDataConfirmDialog = null,
+                clearDataResultMessage = null,
+            ),
+            onBack = {},
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun SiteSettingsScreenClearCookieConfirmPreview() {
+    MaterialTheme {
+        SiteSettingsScreen(
+            uiState = SiteSettingsScreenUiState(
+                callbacks = previewCallbacks,
+                host = "www.example.com",
+                microphonePermission = null,
+                geolocationState = null,
+                tlsCertificate = null,
+                clearDataConfirmDialog = SiteSettingsScreenUiState.ClearDataType.Cookie,
+                clearDataResultMessage = null,
             ),
             onBack = {},
         )
