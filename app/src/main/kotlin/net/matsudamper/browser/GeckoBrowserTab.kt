@@ -11,6 +11,7 @@ import android.view.Menu
 import android.view.MenuItem
 import android.view.View
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -621,13 +622,18 @@ internal fun GeckoBrowserTab(
         }
     }
 
-    // Back handlers
-    // 優先度は後に登録したものが高くなるため、最も優先度の高い showFindInPage を最後に置く
-    BackHandler(enabled = state.canGoBack && !state.isUrlInputFocused) {
-        state.onGoBack()
+    // Back handler (when 分岐で優先度を制御: showFindInPage > isUrlInputFocused > canGoBack > webAppMode)
+    // webAppMode かつ canGoBack=false 時は Activity を終了せずタスクをバックグラウンドへ移動して
+    // セッション（ブラウザ履歴・入力状態）を保持する
+    val activity = LocalActivity.current
+    BackHandler(enabled = state.showFindInPage || state.isUrlInputFocused || state.canGoBack || webAppMode) {
+        when {
+            state.showFindInPage -> state.closeFindInPage()
+            state.isUrlInputFocused -> closeUrlInput(true)
+            state.canGoBack -> state.onGoBack()
+            webAppMode -> activity?.moveTaskToBack(true)
+        }
     }
-    BackHandler(enabled = state.isUrlInputFocused) { closeUrlInput(true) }
-    BackHandler(enabled = state.showFindInPage) { state.closeFindInPage() }
 
     // IME visibility tracking:
     // URLバーにフォーカスした直後はIMEがまだ非表示のことがあるため、
