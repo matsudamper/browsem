@@ -191,6 +191,7 @@ class BrowserTabController(
         restoredPreviewImage: ByteArray = byteArrayOf(),
         restoredThemeColor: Int? = null,
         openerTabId: String? = null,
+        initialReferrerUrl: String? = null,
     ): BrowserTab {
         if (!isSinglePage && restoreState != RestoreState.COMPLETED) {
             Log.w(TAG, "タブ復元完了前に createAndAppendTab が呼ばれました (状態: $restoreState)")
@@ -210,6 +211,7 @@ class BrowserTabController(
                 insertIndex = insertIndex,
             )
             tab.pendingSessionState = restoredSessionState?.takeIf { it.isNotBlank() }
+            tab.pendingReferrerUrl = initialReferrerUrl?.takeIf { it.isNotBlank() }
             val shouldSelect = selectedTabId == null
             val nextSelectedTabId = if (shouldSelect) tab.tabId else selectedTabId
             publishRuntimeState(nextSelectedTabId)

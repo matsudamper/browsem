@@ -28,6 +28,7 @@ import net.matsudamper.browser.ui.common.BrowserTheme
 import net.matsudamper.browser.ui.browser.WebAppScreen
 import org.koin.android.ext.android.inject
 import org.mozilla.geckoview.GeckoRuntime
+import org.mozilla.geckoview.GeckoSession
 import java.util.concurrent.CancellationException
 
 /**
@@ -135,8 +136,14 @@ class WebAppActivity : ComponentActivity() {
                         // onLoadRequest で TARGET_WINDOW_NEW を現在タブへ畳み込むため、
                         // ここへ到達することは想定しない。GeckoView 契約上 null を返して安全に拒否する。
                         onOpenNewSessionRequest = { null },
-                        onOpenNewTabRequest = { uri ->
-                            browserTab.session.loadUri(uri)
+                        onOpenNewTabRequest = { uri, referrerUrl ->
+                            if (referrerUrl != null) {
+                                browserTab.session.load(
+                                    GeckoSession.Loader().uri(uri).referrer(referrerUrl),
+                                )
+                            } else {
+                                browserTab.session.loadUri(uri)
+                            }
                         },
                         onHistoryRecord = webAppUiState.callbacks::onHistoryRecord,
                         onHistoryTitleUpdate = webAppUiState.callbacks::onHistoryTitleUpdate,
