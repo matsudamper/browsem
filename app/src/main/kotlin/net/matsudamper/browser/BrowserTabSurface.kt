@@ -49,7 +49,6 @@ import net.matsudamper.browser.ui.browser.UrlBarSuggestionsUiState
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.GeckoView
-import org.mozilla.geckoview.PanZoomController
 
 @Composable
 internal fun BrowserContentHost(
@@ -69,6 +68,10 @@ internal fun BrowserContentHost(
             factory = { context ->
                 GeckoSwipeRefreshLayout(context).also { swipeRefreshLayout ->
                     var swipeRefreshScrollEnabled = false
+                    // ピンチ等のマルチタッチジェスチャー中は PTR を発動させないための
+                    // ジェスチャー単位のフラグ。ACTION_DOWN の非同期判定結果が
+                    // ACTION_POINTER_DOWN より後に届いても上書きされないようにする。
+                    var gestureHadMultiTouch = false
                     val gecko = GeckoView(context).also { geckoView ->
                         geckoView.id = id
                         geckoView.isNestedScrollingEnabled = true
@@ -84,19 +87,22 @@ internal fun BrowserContentHost(
                             when (event.actionMasked) {
                                 MotionEvent.ACTION_DOWN -> {
                                     swipeRefreshScrollEnabled = false
+                                    gestureHadMultiTouch = false
                                     (view as GeckoView).onTouchEventForDetailResult(event).then { detail ->
-                                        if (detail != null) {
-                                            val handledResult = detail.handledResult()
-                                            val isUnhandled = handledResult == PanZoomController.INPUT_RESULT_UNHANDLED
-                                            val isHandled = handledResult == PanZoomController.INPUT_RESULT_HANDLED
-                                            swipeRefreshScrollEnabled = isHandled || isUnhandled
+                                        if (detail != null && !gestureHadMultiTouch) {
+                                            swipeRefreshScrollEnabled = canTriggerPullToRefresh(
+                                                handledResult = detail.handledResult(),
+                                                scrollableDirections = detail.scrollableDirections(),
+                                                overscrollDirections = detail.overscrollDirections(),
+                                            )
                                         }
                                         GeckoResult.fromValue<Void>(null)
                                     }
                                     true
                                 }
                                 MotionEvent.ACTION_POINTER_DOWN -> {
-                                    state.hadPinchGesture = true
+                                    gestureHadMultiTouch = true
+                                    swipeRefreshScrollEnabled = false
                                     false
                                 }
                                 else -> false
@@ -114,7 +120,6 @@ internal fun BrowserContentHost(
                     swipeRefreshLayout.setOnChildScrollUpCallback { _, _ ->
                         !swipeRefreshScrollEnabled || state.scrollY > 0
                             || state.visualViewportScale > 1.05f
-                            || state.hadPinchGesture
                     }
                     swipeRefreshLayout.setOnRefreshListener {
                         state.isRefreshing = true
