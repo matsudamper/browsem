@@ -318,10 +318,6 @@ internal class BrowserTabScreenState(
 
     // --- Scroll / Refresh state ---
     var visualViewportScale by mutableFloatStateOf(1f)
-    // ピンチジェスチャー検出フラグ。JS管理のズーム（Xの画像ビューアー等）では
-    // visualViewport.scaleが1.0のままなので、ピンチ操作自体を記録して
-    // 後続のパンジェスチャーでPullToRefreshが誤発動しないようにする。
-    var hadPinchGesture by mutableStateOf(false)
     var isRefreshing by mutableStateOf(false)
     // BrowserTab.scrollY に委譲することで、タブ切替で State が再生成されても
     // スクロール位置を保持し、復元タブでの PullToRefresh 誤発動を防ぐ。
@@ -929,8 +925,10 @@ internal class BrowserTabScreenState(
             return
         }
         if (url.startsWith("javascript:")) return
-        hadPinchGesture = false
-        visualViewportScale = 1f
+        // visualViewportScale はここではリセットしない。SPA の pushState 遷移
+        // （X のタブ内遷移等）ではピンチズームが維持されたまま onLocationChange が
+        // 発火するため、リセットすると拡大中なのに PullToRefresh が許可されてしまう。
+        // フルページロードでは onPageStart でリセットされる。
         if (pageLoadError?.failingUrl != url) {
             clearPageLoadError()
         }
@@ -1045,7 +1043,6 @@ internal class BrowserTabScreenState(
 
     override fun onPageStart(url: String) {
         clearPageLoadError()
-        hadPinchGesture = false
         visualViewportScale = 1f
         // previewCaptureReady は false に戻さない。
         // GeckoView は新ページの描画が始まるまで古いページを表示し続けるため、
