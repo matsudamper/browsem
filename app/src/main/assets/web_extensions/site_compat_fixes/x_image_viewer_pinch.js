@@ -6,16 +6,18 @@
 // - https://bugzilla.mozilla.org/show_bug.cgi?id=2007555
 //
 // Gecko では X のビューアーの二本指ジェスチャーがサイト JS で正しく
-// 処理されず、マルチタッチを preventDefault して APZ の横取りを防ぐ
-// だけでは直らないことを実機で確認済み。そのためビューアー内の
-// ピンチ操作は本スクリプトがイベントを横取りし、自前の CSS transform で
-// ズーム・パンを行い、X 自身の (Gecko 上で壊れている) ジェスチャー処理
-// には渡さない。
+// 処理されないため、ビューアー内のピンチ操作は本スクリプトがイベントを
+// 横取りし、自前の CSS transform でズーム・パンを行う。
 //
-// 動作ルール:
-// - 倍率 1 のときのシングルタッチは素通し。X のスワイプ・ダブルタップ・
+// 設計ルール (v2 でビューアーが操作不能になった反省を反映):
+// - ズーム対象は「ピンチ中点の真下の要素スタック」から解決する。
+//   解決できなければ一切介入しない (誤った要素への transform で
+//   見た目が変わらないままイベントだけ消費する状態を作らない)
+// - X (React) の再レンダリングで inline style が巻き戻されるため、
+//   ズーム中は毎フレーム transform を再適用する
+// - 対象画像が DOM から外れたら即座に状態を捨てて素通しに戻す
+// - 倍率 1 のシングルタッチは常に素通しで、X のスワイプ・ダブルタップ・
 //   閉じる操作はそのまま動く
-// - 2 本指ピンチと、ズーム中 (倍率 > 1) のシングルタッチ (パン) は消費する
 // - touch イベントは preventDefault して APZ にコンテンツ消費を伝え、
 //   ジェスチャーの横取り (touchcancel) を防ぐ。pointer イベントは
 //   stopImmediatePropagation で X 側のハンドラーから隠す
@@ -34,6 +36,7 @@
   let scale = 1;
   let tx = 0;
   let ty = 0;
+  let rafId = 0;
   let lastPathname = location.pathname;
 
   // ---- 進行中ジェスチャー ----
@@ -45,22 +48,38 @@
   function isViewerContext(target) {
     if (VIEWER_PATH.test(location.pathname)) return true;
     const modal = target instanceof Element ? target.closest('[aria-modal="true"]') : null;
-    return modal !== null && modal.querySelector('img[src*="twimg.com"]') !== null;
+    return modal !== null;
   }
 
-  // 表示中のビューアー画像 (カルーセル内で画面中央に最も近いもの) を探す
-  function findViewerImage(target) {
-    const modal = target instanceof Element ? target.closest('[aria-modal="true"]') : null;
-    const root = modal || document;
-    const cx = window.innerWidth / 2;
-    const cy = window.innerHeight / 2;
+  function isZoomableImage(el) {
+    if (!(el instanceof HTMLImageElement)) return false;
+    const src = el.currentSrc || el.src || "";
+    if (!src.includes("twimg.com")) return false;
+    const rect = el.getBoundingClientRect();
+    return rect.width >= 64 && rect.height >= 64;
+  }
+
+  // ピンチ中点の真下にあるビューアー画像を解決する。
+  // elementsFromPoint は重なり順 (手前→奥) で返るため、オーバーレイの
+  // 背後でも実際に表示されている画像を背景のタイムライン等より先に
+  // 見つけられる
+  function resolvePinchTarget(mx, my) {
+    const stack = document.elementsFromPoint(mx, my);
+    for (const el of stack) {
+      if (isZoomableImage(el)) return el;
+    }
+    // 中点が画像の外 (レターボックス部分) の場合は、最前面要素の属する
+    // モーダル内で中点に最も近い画像へフォールバックする
+    const top = stack.length > 0 ? stack[0] : null;
+    const modal = top instanceof Element ? top.closest('[aria-modal="true"]') : null;
+    if (!modal) return null;
     let best = null;
     let bestDist = Infinity;
-    for (const candidate of root.querySelectorAll('img[src*="twimg.com"]')) {
+    for (const candidate of modal.querySelectorAll("img")) {
+      if (!isZoomableImage(candidate)) continue;
       const rect = candidate.getBoundingClientRect();
-      if (rect.width < 64 || rect.height < 64) continue; // アイコン類を除外
-      const dx = (rect.left + rect.right) / 2 - cx;
-      const dy = (rect.top + rect.bottom) / 2 - cy;
+      const dx = (rect.left + rect.right) / 2 - mx;
+      const dy = (rect.top + rect.bottom) / 2 - my;
       const dist = dx * dx + dy * dy;
       if (dist < bestDist) {
         bestDist = dist;
@@ -84,7 +103,29 @@
     img.style.transform = "translate(" + tx + "px," + ty + "px) scale(" + scale + ")";
   }
 
+  // X (React) の再レンダリングが inline style を巻き戻すことがあるため、
+  // ズームが解除されるまで毎フレーム transform を再適用し続ける
+  function ensureTransformLoop() {
+    if (rafId) return;
+    rafId = requestAnimationFrame(function tick() {
+      rafId = 0;
+      if (!img) return;
+      if (!img.isConnected) {
+        resetZoom();
+        return;
+      }
+      applyTransform();
+      if (scale > 1.001 || pinching || panning) {
+        rafId = requestAnimationFrame(tick);
+      }
+    });
+  }
+
   function resetZoom() {
+    if (rafId) {
+      cancelAnimationFrame(rafId);
+      rafId = 0;
+    }
     if (img) {
       img.style.transform = "";
       img.style.transformOrigin = "";
@@ -96,6 +137,13 @@
     pinching = false;
     panning = false;
     prev = null;
+  }
+
+  function resetIfNavigated() {
+    if (location.pathname !== lastPathname) {
+      lastPathname = location.pathname;
+      resetZoom();
+    }
   }
 
   // 軸ごとにパン量を制限する。ビューポートに収まる軸は中央固定、
@@ -149,6 +197,7 @@
       scale = newScale;
       clampTranslate();
       applyTransform();
+      ensureTransformLoop();
     }
     prev = { d: d, mx: mx, my: my };
   }
@@ -159,6 +208,7 @@
     prev = { x: point.x, y: point.y };
     clampTranslate();
     applyTransform();
+    ensureTransformLoop();
   }
 
   function swallow(event) {
@@ -166,10 +216,7 @@
   }
 
   function onPointerDown(event) {
-    if (location.pathname !== lastPathname) {
-      lastPathname = location.pathname;
-      resetZoom();
-    }
+    resetIfNavigated();
     if (!isViewerContext(event.target)) {
       if (img) resetZoom();
       pointers.clear();
@@ -177,9 +224,15 @@
     }
     pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
     if (pointers.size === 2) {
+      const [p0, p1] = firstTwoPoints();
+      const mx = (p0.x + p1.x) / 2;
+      const my = (p0.y + p1.y) / 2;
       if (!img || !img.isConnected) {
-        const found = findViewerImage(event.target);
-        if (!found) return;
+        const found = resolvePinchTarget(mx, my);
+        if (!found) {
+          // 対象を解決できないピンチには介入しない (素通し)
+          return;
+        }
         img = found;
       }
       setTouchActionNone(event.target);
@@ -198,7 +251,8 @@
   function onPointerMove(event) {
     if (!pointers.has(event.pointerId)) return;
     pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
-    if (img && !img.isConnected) {
+    if (!pinching && !panning) return;
+    if (!img || !img.isConnected) {
       resetZoom();
       return;
     }
@@ -249,10 +303,5 @@
   window.addEventListener("pointercancel", onPointerUp, captureOptions);
   window.addEventListener("touchstart", onTouchStartOrMove, captureOptions);
   window.addEventListener("touchmove", onTouchStartOrMove, captureOptions);
-  window.addEventListener("popstate", function () {
-    if (location.pathname !== lastPathname) {
-      lastPathname = location.pathname;
-      resetZoom();
-    }
-  });
+  window.addEventListener("popstate", resetIfNavigated);
 })();
