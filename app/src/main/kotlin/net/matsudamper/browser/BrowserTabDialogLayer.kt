@@ -51,18 +51,19 @@ internal fun BrowserTabDialogLayer(
     state: BrowserTabScreenState,
     dialogState: PromptDialogState,
     enableTabUi: Boolean,
-    onOpenNewTabRequest: (String) -> Unit,
+    onOpenNewTabRequest: (url: String, referrerUrl: String?) -> Unit,
 ) {
     state.contextMenuState?.let { menu ->
         ContextMenuDialog(
             menu = menu,
             enableTabUi = enableTabUi,
+            // ホットリンク保護のあるサーバーで 403 にならないよう、元ページを referrer に付ける
             onOpenNewTab = { url ->
-                onOpenNewTabRequest(url)
+                onOpenNewTabRequest(url, state.currentPageUrl)
                 state.dismissContextMenu()
             },
             onOpenUrl = { url ->
-                state.onUrlSubmit(url)
+                state.openUrlWithReferrer(url)
                 state.dismissContextMenu()
             },
             onCopyLink = { url -> state.copyLinkUrl(url) },

@@ -364,7 +364,7 @@ private fun BrowserAppContent(
                                         selectTab(newTab.tabId, key)
                                         newTab.session
                                     },
-                                    onOpenNewTabRequest = { uri ->
+                                    onOpenNewTabRequest = { uri, referrerUrl ->
                                         scope.launch {
                                             val tabId = UUID.randomUUID().toString()
                                             assignTabToOpenerGroup(tabId, key.tabId)
@@ -372,6 +372,7 @@ private fun BrowserAppContent(
                                                 tabId = tabId,
                                                 initialUrl = uri,
                                                 openerTabId = key.tabId,
+                                                initialReferrerUrl = referrerUrl,
                                             )
                                             selectTab(newTab.tabId, key)
                                         }
