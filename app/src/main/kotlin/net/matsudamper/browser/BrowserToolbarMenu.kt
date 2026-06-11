@@ -145,7 +145,7 @@ private fun ToolbarMenuContent(
                 .padding(horizontal = 8.dp, vertical = 4.dp),
             horizontalArrangement = Arrangement.SpaceEvenly,
         ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
                 // 短押しで戻る、長押しでタブ履歴BottomSheetを表示
                 androidx.compose.foundation.layout.Box(
                     modifier = Modifier
@@ -186,7 +186,7 @@ private fun ToolbarMenuContent(
                     style = MaterialTheme.typography.labelSmall,
                 )
             }
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
                 // 短押しで進む、長押しでタブ履歴BottomSheetを表示
                 androidx.compose.foundation.layout.Box(
                     modifier = Modifier
@@ -227,7 +227,7 @@ private fun ToolbarMenuContent(
                     style = MaterialTheme.typography.labelSmall,
                 )
             }
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
                 // 短押しで通常更新、長押しでキャッシュをバイパスしてスーパーリフレッシュ
                 androidx.compose.foundation.layout.Box(
                     modifier = Modifier
@@ -272,7 +272,7 @@ private fun ToolbarMenuContent(
                 horizontalArrangement = Arrangement.SpaceEvenly,
             ) {
                 if (showHome) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
                         IconButton(
                             modifier = Modifier
                                 .testTag(BrowserToolbarMenuTestTags.HomeButton.testTag),
@@ -293,7 +293,7 @@ private fun ToolbarMenuContent(
                     }
                 }
                 if (onOpenDownloads != null) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
                         IconButton(
                             modifier = Modifier
                                 .testTag(BrowserToolbarMenuTestTags.DownloadsButton.testTag),
@@ -314,7 +314,7 @@ private fun ToolbarMenuContent(
                     }
                 }
                 if (onOpenSiteSettings != null) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
                         IconButton(
                             modifier = Modifier
                                 .testTag(BrowserToolbarMenuTestTags.SiteSettingsButton.testTag),
