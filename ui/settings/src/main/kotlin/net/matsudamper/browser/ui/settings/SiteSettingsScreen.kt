@@ -183,7 +183,7 @@ fun SiteSettingsScreen(
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text(
-                        text = "Cookieを削除",
+                        text = "Cookieとサイトデータを削除",
                         color = MaterialTheme.colorScheme.error,
                     )
                 }
@@ -210,13 +210,20 @@ fun SiteSettingsScreen(
     val confirmDialog = uiState.clearDataConfirmDialog
     if (confirmDialog != null) {
         val targetName = when (confirmDialog) {
-            SiteSettingsScreenUiState.ClearDataType.Cookie -> "Cookie"
+            SiteSettingsScreenUiState.ClearDataType.Cookie -> "Cookieとサイトデータ"
             SiteSettingsScreenUiState.ClearDataType.Cache -> "キャッシュ"
+        }
+        val description = when (confirmDialog) {
+            SiteSettingsScreenUiState.ClearDataType.Cookie ->
+                "「${uiState.host}」のCookieとサイトデータを削除しますか？" +
+                    "このサイトからログアウトされます。この操作は取り消せません。"
+            SiteSettingsScreenUiState.ClearDataType.Cache ->
+                "「${uiState.host}」のキャッシュを削除しますか？この操作は取り消せません。"
         }
         AlertDialog(
             onDismissRequest = uiState.callbacks::dismissClearDataConfirm,
             title = { Text("${targetName}を削除") },
-            text = { Text("「${uiState.host}」の${targetName}を削除しますか？この操作は取り消せません。") },
+            text = { Text(description) },
             confirmButton = {
                 TextButton(onClick = uiState.callbacks::confirmClearData) {
                     Text("削除", color = MaterialTheme.colorScheme.error)

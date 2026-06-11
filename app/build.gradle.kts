@@ -137,6 +137,7 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.navigation3)
     implementation(libs.androidx.browser)
     implementation(libs.mozilla.geckoview)
+    implementation(libs.mozilla.publicsuffixlist)
     implementation(libs.mlkit.translate)
     implementation(libs.mlkit.language.id)
     implementation(libs.kotlinx.coroutines.play.services)

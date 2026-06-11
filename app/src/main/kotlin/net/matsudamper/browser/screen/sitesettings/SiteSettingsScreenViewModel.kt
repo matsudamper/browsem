@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import mozilla.components.lib.publicsuffixlist.PublicSuffixList
 import net.matsudamper.browser.awaitGecko
 import net.matsudamper.browser.data.SiteGeolocationState
 import net.matsudamper.browser.data.SitePermissionState
@@ -21,6 +22,7 @@ internal class SiteSettingsScreenViewModel(
     private val host: String,
     private val siteSettingsRepository: SiteSettingsRepository,
     private val geckoRuntime: GeckoRuntime,
+    private val publicSuffixList: PublicSuffixList,
 ) : ViewModel() {
 
     val eventHandler = Channel<(Event) -> Unit>(Channel.UNLIMITED)
@@ -113,15 +115,23 @@ internal class SiteSettingsScreenViewModel(
 
     private suspend fun clearData(type: SiteSettingsScreenUiState.ClearDataType) {
         val flags = when (type) {
-            SiteSettingsScreenUiState.ClearDataType.Cookie -> StorageController.ClearFlags.COOKIES
+            // ログイン状態は親ドメインの Cookie や localStorage にも保持されるため、
+            // Cookie だけでなく DOM ストレージ・認証セッションも併せて削除する
+            SiteSettingsScreenUiState.ClearDataType.Cookie ->
+                StorageController.ClearFlags.COOKIES or
+                    StorageController.ClearFlags.DOM_STORAGES or
+                    StorageController.ClearFlags.AUTH_SESSIONS
             SiteSettingsScreenUiState.ClearDataType.Cache -> StorageController.ClearFlags.ALL_CACHES
         }
         val targetName = when (type) {
-            SiteSettingsScreenUiState.ClearDataType.Cookie -> "Cookie"
+            SiteSettingsScreenUiState.ClearDataType.Cookie -> "Cookieとサイトデータ"
             SiteSettingsScreenUiState.ClearDataType.Cache -> "キャッシュ"
         }
         val message = runCatching {
-            geckoRuntime.storageController.clearDataFromHost(host, flags).awaitGecko()
+            // Cookie は Domain=.example.com のように基底ドメインへ設定されることが多く、
+            // ホスト単位の削除では消えないため eTLD+1 単位で削除する
+            val baseDomain = publicSuffixList.getPublicSuffixPlusOne(host).await() ?: host
+            geckoRuntime.storageController.clearDataFromBaseDomain(baseDomain, flags).awaitGecko()
         }.fold(
             onSuccess = { "${targetName}を削除しました" },
             onFailure = { "${targetName}の削除に失敗しました" },
