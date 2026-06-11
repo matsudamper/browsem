@@ -89,9 +89,12 @@ class BrowserTab(
     // 未オープンタブのセッション復元情報を保持
     internal var pendingSessionState: String? by mutableStateOf(null)
 
-    // onNewSession 経由で作成されたタブの初回ロード URL を保持。
-    // GeckoView が session.open() を実行するため restoreSession では isOpen==true になるが、
-    // GeckoView が target URL に自動遷移しないケースに備えて明示的に loadUri を呼ぶ。
+    // onNewSession 経由で作成されたタブの初回ナビゲーション完了までの目印。
+    // 初回読み込みは GeckoView が session.open() 後に opener (window.open 元) の
+    // コンテキスト付きで自動実行するため、アプリ側から loadUri してはいけない
+    // (referrer / opener 連携が失われ Google Pay などのポップアップ決済が壊れる)。
+    // restoreSession が自動読み込みを currentUrl の loadUri で上書きしないための
+    // ガードとして使い、実 URL への onLocationChange 発火でクリアされる。
     internal var pendingInitialUrl: String? by mutableStateOf(null)
 
     private val sessionDelegateHost = BrowserTabSessionDelegateHost(this)

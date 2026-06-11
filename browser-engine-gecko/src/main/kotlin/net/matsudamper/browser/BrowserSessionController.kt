@@ -50,15 +50,17 @@ class BrowserSessionLifecycleController(
      */
     fun restoreSession(tab: BrowserTab) {
         if (tab.session.isOpen) {
-            val url = tab.pendingInitialUrl
-            if (url != null) {
-                tab.pendingInitialUrl = null
-                tab.session.loadUri(url)
-            }
+            // onNewSession 経由のタブ (pendingInitialUrl != null) であっても、ここで
+            // loadUri してはいけない。GeckoView が opener (window.open 元ページ) の
+            // コンテキスト付きで自動読み込みするため、アプリ側から loadUri すると
+            // その読み込みを上書きして referrer / opener 連携が失われ、
+            // Google Pay などのポップアップ決済が「販売者に戻れない」エラーになる。
             tab.session.setActive(true)
             markActiveForExtensions(tab.session)
             return
         }
+        // onNewSession 経由のタブは GeckoView 自身が open して初回読み込みを行うため、
+        // ここで open / loadUri せず待つ
         if (tab.pendingInitialUrl != null) {
             return
         }

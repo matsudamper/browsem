@@ -94,6 +94,10 @@ private fun resolveHttpSchemeAction(
     uri: String,
     parsedUri: Uri,
 ): ExternalAppNavigationAction {
+    // 決済・認証ポップアップのホストは外部アプリへ飛ばすとフローが中断されるため常にブラウザで処理する
+    if (isBrowserPinnedHost(parsedUri.host)) {
+        return ExternalAppNavigationAction.AllowInBrowser
+    }
     val packageManager = context.packageManager
     val intent = Intent(Intent.ACTION_VIEW, parsedUri).apply {
         addCategory(Intent.CATEGORY_BROWSABLE)
@@ -165,6 +169,28 @@ private fun buildExternalIntent(
 
 private const val INTENT_SCHEME = "intent"
 private const val EXTRA_BROWSER_FALLBACK_URL = "browser_fallback_url"
+
+/**
+ * App Links 判定をスキップして常にブラウザ内で処理するホストかどうかを判定する。
+ *
+ * Google Pay はサイト上のボタンを押すと pay.google.com のポップアップを開いて決済するが、
+ * このホストは端末上では Google Wallet アプリの App Links として解決されるため、
+ * 外部アプリ起動扱いにすると決済ポップアップが読み込まれず決済がエラーになる。
+ * 同様にポップアップ内のサインインで使われる accounts.google.com もブラウザ内で処理する。
+ */
+internal fun isBrowserPinnedHost(host: String?): Boolean {
+    val normalized = host?.lowercase(Locale.US) ?: return false
+    return browserPinnedHosts.any { pinned ->
+        normalized == pinned || normalized.endsWith(".$pinned")
+    }
+}
+
+private val browserPinnedHosts = setOf(
+    "pay.google.com",
+    "pay.sandbox.google.com",
+    "payments.google.com",
+    "accounts.google.com",
+)
 
 private val browserHandledSchemes = setOf(
     "about",
