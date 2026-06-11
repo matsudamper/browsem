@@ -14,6 +14,9 @@ enum SitePermissionState {
 // 1サイト（ホスト）分の権限設定
 message SitePermissionSettings {
   SitePermissionState microphone = 1;
+  // このサイトがマイク権限を要求したことがあるか。
+  // 一度も要求されていない権限は「サイトの設定」画面に表示しない
+  bool microphone_requested = 2;
 }
 
 // サイトごとの設定全体。key はホスト名
