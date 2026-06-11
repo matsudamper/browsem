@@ -2,6 +2,10 @@ package net.matsudamper.browser.screen.sitesettings
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import java.security.MessageDigest
+import java.security.cert.X509Certificate
+import java.text.SimpleDateFormat
+import java.util.Locale
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -10,6 +14,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import mozilla.components.lib.publicsuffixlist.PublicSuffixList
+import net.matsudamper.browser.TabSecurityInfo
 import net.matsudamper.browser.awaitGecko
 import net.matsudamper.browser.data.SiteGeolocationState
 import net.matsudamper.browser.data.SitePermissionState
@@ -23,6 +28,7 @@ internal class SiteSettingsScreenViewModel(
     private val siteSettingsRepository: SiteSettingsRepository,
     private val geckoRuntime: GeckoRuntime,
     private val publicSuffixList: PublicSuffixList,
+    securityInfo: TabSecurityInfo?,
 ) : ViewModel() {
 
     val eventHandler = Channel<(Event) -> Unit>(Channel.UNLIMITED)
@@ -95,6 +101,7 @@ internal class SiteSettingsScreenViewModel(
             host = host,
             microphonePermission = null,
             geolocationState = null,
+            tlsCertificate = createTlsCertificateUiState(securityInfo),
             clearDataConfirmDialog = null,
             clearDataResultMessage = null,
         ),
@@ -112,6 +119,35 @@ internal class SiteSettingsScreenViewModel(
             }
         }
     }.asStateFlow()
+
+    private fun createTlsCertificateUiState(
+        securityInfo: TabSecurityInfo?,
+    ): SiteSettingsScreenUiState.TlsCertificate? {
+        securityInfo ?: return null
+        val certificate = securityInfo.certificate
+        if (!securityInfo.isSecure || certificate == null) {
+            return SiteSettingsScreenUiState.TlsCertificate.Insecure
+        }
+        val dateFormat = SimpleDateFormat("yyyy/MM/dd HH:mm", Locale.getDefault())
+        return SiteSettingsScreenUiState.TlsCertificate.Available(
+            subjectCommonName = extractCommonName(certificate.subjectX500Principal.name),
+            issuer = extractCommonName(certificate.issuerX500Principal.name),
+            validFrom = dateFormat.format(certificate.notBefore),
+            validUntil = dateFormat.format(certificate.notAfter),
+            sha256Fingerprint = sha256Fingerprint(certificate),
+        )
+    }
+
+    /** DN から CN を抽出する。CN が無い場合は DN 全体を返す */
+    private fun extractCommonName(distinguishedName: String): String {
+        return Regex("""CN=([^,]+)""").find(distinguishedName)?.groupValues?.get(1)
+            ?: distinguishedName
+    }
+
+    private fun sha256Fingerprint(certificate: X509Certificate): String {
+        val digest = MessageDigest.getInstance("SHA-256").digest(certificate.encoded)
+        return digest.joinToString(":") { "%02X".format(it) }
+    }
 
     private suspend fun clearData(type: SiteSettingsScreenUiState.ClearDataType) {
         val flags = when (type) {

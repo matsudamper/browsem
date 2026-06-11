@@ -346,7 +346,12 @@ private fun BrowserAppContent(
                                     onOpenSiteSettings = { currentUrl ->
                                         val host = extractSiteHost(currentUrl)
                                         if (host != null) {
-                                            backStack.add(AppDestination.SiteSettings(host))
+                                            backStack.add(
+                                                AppDestination.SiteSettings(
+                                                    host = host,
+                                                    tabId = key.tabId,
+                                                ),
+                                            )
                                         }
                                     },
                                     onOpenTabs = { backStack.add(AppDestination.Tabs) },
@@ -446,6 +451,10 @@ private fun BrowserAppContent(
                                 siteSettingsRepository = siteSettingsRepository,
                                 geckoRuntime = geckoRuntime,
                                 publicSuffixList = publicSuffixList,
+                                // 開いた元のタブの現在の接続から TLS 証明書情報を取得する
+                                securityInfo = key.tabId
+                                    ?.let { browserTabController.findTab(it) }
+                                    ?.securityInfo,
                             )
                         })
                         // 「実際の位置情報」選択時に OS の位置情報権限を要求する

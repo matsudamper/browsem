@@ -261,11 +261,23 @@ fun createGeckoSessionDelegateBundle(
             }
 
             override fun onPageStart(session: GeckoSession, url: String) {
+                // 新しいページでは前ページの証明書情報を持ち越さない
+                browserTab.securityInfo = null
                 callbacks.onPageStart(url)
             }
 
             override fun onPageStop(session: GeckoSession, success: Boolean) {
                 callbacks.onPageStop(success)
+            }
+
+            override fun onSecurityChange(
+                session: GeckoSession,
+                securityInfo: GeckoSession.ProgressDelegate.SecurityInformation,
+            ) {
+                browserTab.securityInfo = TabSecurityInfo(
+                    isSecure = securityInfo.isSecure,
+                    certificate = securityInfo.certificate,
+                )
             }
         },
         translationsDelegate = object : TranslationsController.SessionTranslation.Delegate {

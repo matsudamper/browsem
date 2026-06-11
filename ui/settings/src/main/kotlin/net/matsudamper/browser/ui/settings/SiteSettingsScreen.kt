@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -93,6 +94,32 @@ fun SiteSettingsScreen(
             )
 
             Spacer(Modifier.height(12.dp))
+
+            if (uiState.tlsCertificate != null) {
+                SettingSection(title = "TLS証明書") {
+                    when (val certificate = uiState.tlsCertificate) {
+                        is SiteSettingsScreenUiState.TlsCertificate.Available -> {
+                            CertificateInfoRow(label = "発行先", value = certificate.subjectCommonName)
+                            CertificateInfoRow(label = "発行者", value = certificate.issuer)
+                            CertificateInfoRow(label = "有効期間の開始", value = certificate.validFrom)
+                            CertificateInfoRow(label = "有効期間の終了", value = certificate.validUntil)
+                            CertificateInfoRow(
+                                label = "SHA-256 フィンガープリント",
+                                value = certificate.sha256Fingerprint,
+                            )
+                        }
+
+                        SiteSettingsScreenUiState.TlsCertificate.Insecure -> {
+                            Text(
+                                text = "この接続は保護されていません",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                        }
+                    }
+                }
+                Spacer(Modifier.height(12.dp))
+            }
 
             // 権限は一度でも要求された項目だけ表示する
             if (uiState.geolocationState != null) {
@@ -238,6 +265,27 @@ fun SiteSettingsScreen(
     }
 }
 
+/** 証明書のラベルと値の1行分を表示する */
+@Composable
+private fun CertificateInfoRow(
+    label: String,
+    value: String,
+) {
+    Column(Modifier.padding(vertical = 4.dp)) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        SelectionContainer {
+            Text(
+                text = value,
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
+    }
+}
+
 private val previewCallbacks = object : SiteSettingsScreenUiState.Callbacks {
     override fun setMicrophonePermission(state: SitePermissionState) = Unit
     override fun setGeolocationState(state: SiteGeolocationState) = Unit
@@ -257,6 +305,14 @@ private fun SiteSettingsScreenPreview() {
                 host = "www.example.com",
                 microphonePermission = SitePermissionState.SITE_PERMISSION_ASK,
                 geolocationState = SiteGeolocationState.SITE_GEOLOCATION_MOCK,
+                tlsCertificate = SiteSettingsScreenUiState.TlsCertificate.Available(
+                    subjectCommonName = "www.example.com",
+                    issuer = "Example CA",
+                    validFrom = "2026/01/01 00:00",
+                    validUntil = "2027/01/01 00:00",
+                    sha256Fingerprint = "AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99:" +
+                        "AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99",
+                ),
                 clearDataConfirmDialog = null,
                 clearDataResultMessage = null,
             ),
@@ -275,6 +331,47 @@ private fun SiteSettingsScreenGeolocationOnlyPreview() {
                 host = "www.example.com",
                 microphonePermission = null,
                 geolocationState = SiteGeolocationState.SITE_GEOLOCATION_DENY,
+                tlsCertificate = SiteSettingsScreenUiState.TlsCertificate.Insecure,
+                clearDataConfirmDialog = null,
+                clearDataResultMessage = null,
+            ),
+            onBack = {},
+        )
+    }
+}
+
+/** セクション内のコンテンツが短い場合でもコンテナが画面幅いっぱいに広がることを確認する */
+@Preview(showBackground = true)
+@Composable
+private fun SiteSettingsScreenShortContentPreview() {
+    MaterialTheme {
+        SiteSettingsScreen(
+            uiState = SiteSettingsScreenUiState(
+                callbacks = previewCallbacks,
+                host = "a.test",
+                microphonePermission = null,
+                geolocationState = null,
+                tlsCertificate = SiteSettingsScreenUiState.TlsCertificate.Insecure,
+                clearDataConfirmDialog = null,
+                clearDataResultMessage = null,
+            ),
+            onBack = {},
+        )
+    }
+}
+
+/** 横向きでもコンテナが画面幅いっぱいに広がることを確認する */
+@Preview(showBackground = true, widthDp = 800, heightDp = 360)
+@Composable
+private fun SiteSettingsScreenLandscapePreview() {
+    MaterialTheme {
+        SiteSettingsScreen(
+            uiState = SiteSettingsScreenUiState(
+                callbacks = previewCallbacks,
+                host = "a.test",
+                microphonePermission = null,
+                geolocationState = null,
+                tlsCertificate = SiteSettingsScreenUiState.TlsCertificate.Insecure,
                 clearDataConfirmDialog = null,
                 clearDataResultMessage = null,
             ),
@@ -293,6 +390,7 @@ private fun SiteSettingsScreenNoRequestedPermissionPreview() {
                 host = "www.example.com",
                 microphonePermission = null,
                 geolocationState = null,
+                tlsCertificate = null,
                 clearDataConfirmDialog = null,
                 clearDataResultMessage = null,
             ),
@@ -311,6 +409,7 @@ private fun SiteSettingsScreenClearCookieConfirmPreview() {
                 host = "www.example.com",
                 microphonePermission = null,
                 geolocationState = null,
+                tlsCertificate = null,
                 clearDataConfirmDialog = SiteSettingsScreenUiState.ClearDataType.Cookie,
                 clearDataResultMessage = null,
             ),
