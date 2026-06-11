@@ -79,7 +79,19 @@ class BrowserSessionLifecycleController(
                 return
             }
         }
-        tab.session.loadUri(tab.currentUrl.ifBlank { "about:blank" })
+        val referrerUrl = tab.pendingReferrerUrl
+        tab.pendingReferrerUrl = null
+        if (referrerUrl != null) {
+            // コンテキストメニューの「新しいタブで開く」由来のタブは元ページを referrer に
+            // 付けて読み込む。ホットリンク保護のあるサーバーで 403 にならないようにするため
+            tab.session.load(
+                GeckoSession.Loader()
+                    .uri(tab.currentUrl.ifBlank { "about:blank" })
+                    .referrer(referrerUrl),
+            )
+        } else {
+            tab.session.loadUri(tab.currentUrl.ifBlank { "about:blank" })
+        }
         tab.session.setActive(true)
         markActiveForExtensions(tab.session)
     }

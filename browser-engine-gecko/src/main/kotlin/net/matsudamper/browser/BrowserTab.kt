@@ -107,6 +107,11 @@ class BrowserTab(
     // ガードとして使い、実 URL への onLocationChange 発火でクリアされる。
     internal var pendingInitialUrl: String? by mutableStateOf(null)
 
+    // 初回読み込み時に referrer として送信する URL。コンテキストメニューの
+    // 「新しいタブで開く」で、ホットリンク保護のあるサーバーが 403 を返さないように
+    // 元ページの URL を引き継ぐために使用する。初回読み込みで消費される。
+    internal var pendingReferrerUrl: String? = null
+
     private val sessionDelegateHost = BrowserTabSessionDelegateHost(this)
 
     internal fun bindSessionDelegates() {
