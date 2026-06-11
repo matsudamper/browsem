@@ -10,6 +10,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -32,6 +33,8 @@ internal class DownloadManagementScreenViewModel(
     private val downloadRepository = DownloadRepository(application)
     private val geckoDownloadManager = GeckoDownloadManager(application, downloadRepository)
     private val callbacks = buildCallbacks()
+
+    val eventHandler = Channel<(Event) -> Unit>(Channel.UNLIMITED)
 
     /** resumeDownload から最新のレコードを参照するためのキャッシュ */
     private var currentRecords: List<DownloadRecord> = emptyList()
@@ -61,6 +64,7 @@ internal class DownloadManagementScreenViewModel(
         onOpenFile = { fileUri -> openFile(fileUri) },
         onOpenDownloadsFolder = { openDownloadsFolder() },
         onResume = { id -> resumeDownload(id) },
+        onOpenOriginPage = { url -> eventHandler.trySend { it.navigateToUrl(url) } },
     )
 
     private fun DownloadRecord.toDownloadItem(): DownloadManagementScreenUiState.DownloadItem {
@@ -104,6 +108,7 @@ internal class DownloadManagementScreenViewModel(
             },
             status = uiStatus,
             enqueuedAt = enqueuedAt,
+            originPageUrl = referrerUrl.ifBlank { null },
         )
     }
 
@@ -192,5 +197,10 @@ internal class DownloadManagementScreenViewModel(
             flags = Intent.FLAG_ACTIVITY_NEW_TASK
         }
         runCatching { app.startActivity(intent) }
+    }
+
+    interface Event {
+        /** ダウンロード開始時のページURLを新しいタブで開く */
+        fun navigateToUrl(url: String)
     }
 }
