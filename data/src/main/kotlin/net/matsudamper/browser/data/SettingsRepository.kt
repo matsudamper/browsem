@@ -102,14 +102,6 @@ class SettingsRepository(context: Context) {
         }
     }
 
-    suspend fun setMockLocationEnabled(enabled: Boolean) {
-        dataStore.updateData { current ->
-            current.toBuilder()
-                .setMockLocationEnabled(enabled)
-                .build()
-        }
-    }
-
     suspend fun setMockLocationCoordinates(latitude: Double, longitude: Double) {
         dataStore.updateData { current ->
             current.toBuilder()

@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
@@ -22,6 +23,8 @@ import kotlinx.coroutines.withContext
 import net.matsudamper.browser.data.ResolvedBrowserSettings
 import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.MockLocationWebExtension
+import net.matsudamper.browser.data.SiteGeolocationState
+import net.matsudamper.browser.data.SiteSettingsRepository
 import net.matsudamper.browser.data.TabGroupRepository
 import net.matsudamper.browser.data.TabRepository
 import net.matsudamper.browser.data.ThemeMode
@@ -64,6 +67,7 @@ internal class BrowserViewModel(
     private val tabRepository: TabRepository,
     private val tabGroupRepository: TabGroupRepository,
     private val mockLocationWebExtension: MockLocationWebExtension,
+    private val siteSettingsRepository: SiteSettingsRepository,
 ) : ViewModel() {
     val browserTabController = BrowserTabController(
         tabRepository = tabRepository,
@@ -108,21 +112,31 @@ internal class BrowserViewModel(
                     runtime.settings.setEnterpriseRootsEnabled(enableThirdPartyCa)
                 }
         }
-        // アプリ起動時にモック位置情報設定を拡張機能へ反映する。
+        // アプリ起動時に位置情報設定（モック座標・サイトごとの扱い）を拡張機能へ反映する。
         // 設定画面を開かなくても前回セッションの設定が即座に有効になる。
         viewModelScope.launch {
-            settingsRepository.settings.collectLatest { settings ->
-                val lat = settings.mockLocationLatitude
-                val lng = settings.mockLocationLongitude
-                val resolvedLat = if (lat == 0.0 && lng == 0.0) MockLocationWebExtension.DEFAULT_LATITUDE else lat
-                val resolvedLng = if (lat == 0.0 && lng == 0.0) MockLocationWebExtension.DEFAULT_LONGITUDE else lng
-                mockLocationWebExtension.updateConfig(
-                    MockLocationWebExtension.MockLocationConfig(
-                        enabled = settings.mockLocationEnabled,
-                        latitude = resolvedLat,
-                        longitude = resolvedLng,
+            combine(
+                settingsRepository.settings,
+                siteSettingsRepository.geolocationStates(),
+            ) { settings, geolocationStates -> settings to geolocationStates }
+                .collectLatest { (settings, geolocationStates) ->
+                    val lat = settings.mockLocationLatitude
+                    val lng = settings.mockLocationLongitude
+                    val resolvedLat = if (lat == 0.0 && lng == 0.0) MockLocationWebExtension.DEFAULT_LATITUDE else lat
+                    val resolvedLng = if (lat == 0.0 && lng == 0.0) MockLocationWebExtension.DEFAULT_LONGITUDE else lng
+                    mockLocationWebExtension.updateConfig(
+                        MockLocationWebExtension.GeolocationConfig(
+                            latitude = resolvedLat,
+                            longitude = resolvedLng,
+                            siteModes = geolocationStates.mapValues { (_, state) -> state.toGeolocationMode() },
+                        )
                     )
-                )
+                }
+        }
+        // ページが位置情報を要求したら記録し、「サイトの設定」画面に位置情報の項目を表示できるようにする
+        mockLocationWebExtension.onGeolocationRequested = { host ->
+            viewModelScope.launch {
+                siteSettingsRepository.markGeolocationRequested(host)
             }
         }
         // ViewModel 生成時にタブ復元を開始する。
@@ -278,3 +292,12 @@ private fun ResolvedBrowserSettings.toLogicSettings(): BrowserLogicSettings = Br
     translationProvider = translationProvider,
     enableThirdPartyCa = enableThirdPartyCa,
 )
+
+/** サイトごとの位置情報設定を拡張機能のモードへ変換する */
+private fun SiteGeolocationState.toGeolocationMode(): MockLocationWebExtension.GeolocationMode {
+    return when (this) {
+        SiteGeolocationState.SITE_GEOLOCATION_DENY -> MockLocationWebExtension.GeolocationMode.DENY
+        SiteGeolocationState.SITE_GEOLOCATION_REAL -> MockLocationWebExtension.GeolocationMode.REAL
+        else -> MockLocationWebExtension.GeolocationMode.MOCK
+    }
+}

@@ -13,12 +13,19 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.CAMERA" />
     <!--
+        サイトごとの設定で「実際の位置情報」を選択した場合のみ実行時に要求する。
+    -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <!--
         マイク・カメラはDiscord等のWebRTCで使用するが、これらのハードウェアが
         ないデバイスでもブラウザとして動作するため required="false" を指定する。
     -->
     <uses-feature android:name="android.hardware.microphone" android:required="false" />
     <uses-feature android:name="android.hardware.camera.any" android:required="false" />
     <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
+    <uses-feature android:name="android.hardware.location" android:required="false" />
+    <uses-feature android:name="android.hardware.location.gps" android:required="false" />
 
     <!--
         Android 11 (API 30) 以降のパッケージ可視性制限に対応するため、
