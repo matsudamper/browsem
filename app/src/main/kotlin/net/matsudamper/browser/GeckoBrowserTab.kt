@@ -96,6 +96,7 @@ internal fun GeckoBrowserTab(
     onInstallExtensionRequest: (String) -> Unit,
     onOpenSettings: () -> Unit,
     onOpenSiteSettings: ((currentUrl: String) -> Unit)?,
+    onOpenDownloads: (() -> Unit)?,
     onOpenTabs: () -> Unit,
     onOpenNewSessionRequest: (String) -> GeckoSession?,
     onOpenNewTabRequest: (url: String, referrerUrl: String?) -> Unit,
@@ -492,8 +493,9 @@ internal fun GeckoBrowserTab(
     }
 
     val mockLocationWebExtension: MockLocationWebExtension = koinInject()
-    DisposableEffect(session, mockLocationWebExtension) {
-        mockLocationWebExtension.registerSession(session)
+    DisposableEffect(session, state, mockLocationWebExtension) {
+        // iframe からの位置情報要求をトップレベルサイトの設定で制御するため、現在ページ URL を渡す
+        mockLocationWebExtension.registerSession(session) { state.currentPageUrl }
         onDispose {
             mockLocationWebExtension.unregisterSession(session)
         }
@@ -556,6 +558,34 @@ internal fun GeckoBrowserTab(
                 session.mediaSessionDelegate = null
             }
         }
+    }
+
+    // 新規タブの初回ロードは GeckoView のサイズ確定後に実行する。
+    // setSession 直後の未確定 viewport でロードすると、画像単体表示 (ImageDocument) の
+    // shrink-to-fit スケールが誤計算され、画像が小さく低解像度で表示されるため。
+    // geckoView は AndroidView factory で後から確定するので key にして再起動させる。
+    LaunchedEffect(session, browserTab, geckoView) {
+        val gv = geckoView ?: return@LaunchedEffect
+        if (!browserSessionLifecycleController.hasPendingInitialLoad(browserTab)) {
+            return@LaunchedEffect
+        }
+        val startTimeMs = SystemClock.elapsedRealtime()
+        fun scheduleInitialLoad() {
+            gv.postOnAnimation {
+                if (!browserSessionLifecycleController.hasPendingInitialLoad(browserTab)) {
+                    return@postOnAnimation
+                }
+                val elapsed = SystemClock.elapsedRealtime() - startTimeMs
+                // サイズ未確定の間は次フレームへ持ち越す。レイアウトが進まない異常系で
+                // 白画面のままにならないよう STABLE_TIMEOUT_MS 経過後は強制ロードする
+                if ((gv.width == 0 || gv.height == 0) && elapsed < STABLE_TIMEOUT_MS) {
+                    scheduleInitialLoad()
+                    return@postOnAnimation
+                }
+                browserSessionLifecycleController.performInitialLoadIfPending(browserTab)
+            }
+        }
+        scheduleInitialLoad()
     }
 
     // テキスト選択メニューにカスタムアクション（検索/開く）を追加
@@ -758,6 +788,7 @@ internal fun GeckoBrowserTab(
                     onOpenSiteSettings = onOpenSiteSettings?.let { callback ->
                         { callback(state.currentPageUrl) }
                     },
+                    onOpenDownloads = onOpenDownloads,
                     onShare = state::sharePage,
                     tabCount = tabCount,
                     showTabActions = enableTabUi,
