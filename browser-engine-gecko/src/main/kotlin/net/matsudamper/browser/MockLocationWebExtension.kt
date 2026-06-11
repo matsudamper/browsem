@@ -86,8 +86,7 @@ class MockLocationWebExtension {
 
     /** 接続元ページの URL からホスト名を取り出す */
     private fun portHost(port: WebExtension.Port): String? {
-        val url = port.sender.url ?: return null
-        return runCatching { URI(url) }.getOrNull()?.host
+        return runCatching { URI(port.sender.url) }.getOrNull()?.host
     }
 
     /** ホストに応じた設定メッセージを構築する */

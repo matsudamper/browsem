@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import net.matsudamper.browser.MockLocationWebExtension
 import net.matsudamper.browser.data.BrowserSettings
 import net.matsudamper.browser.data.HomepageType
 import net.matsudamper.browser.data.SearchProvider
