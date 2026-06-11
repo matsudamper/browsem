@@ -96,6 +96,7 @@ UIに関連した実装はPaparazziで差分を取って作業するのが良い
 2. `./gradlew detekt` でlintを確認
 3. `./gradlew test` でユニットテスト通過を確認
 4. UI 変更を含む場合は `@Preview` を追加/更新し、Paparazzi スナップショットを撮影
+  - コミットしない。PRに貼り付ける  
 
 ## Claude への運用ルール
 
