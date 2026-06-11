@@ -54,6 +54,12 @@
     try { error(cloneInto({ code: 1, message: 'User denied Geolocation' }, pageWin)); } catch (_) {}
   }
 
+  // 元の geolocation が存在しない環境でのエラーを通知する
+  function notifyUnsupported(error) {
+    if (!error) return;
+    try { error(cloneInto({ code: 2, message: 'Geolocation not supported' }, pageWin)); } catch (_) {}
+  }
+
   // ページが位置情報を要求したことをネイティブへ通知する（ページごとに一度だけ）
   function notifyRequested() {
     if (requestNotified) return;
@@ -75,8 +81,8 @@
       notifyDenied(error);
     } else if (origGeo) {
       origGeo.getCurrentPosition(success, error, options);
-    } else if (error) {
-      try { error(cloneInto({ code: 1, message: 'Geolocation not supported' }, pageWin)); } catch (_) {}
+    } else {
+      notifyUnsupported(error);
     }
   }
 
@@ -110,9 +116,12 @@
     } else if (mode === 'deny') {
       activeWatches.set(id, { success: success, error: error, options: options, realId: undefined, pending: false });
       notifyDenied(error);
-    } else {
-      const realId = origGeo ? origGeo.watchPosition(success, error, options) : undefined;
+    } else if (origGeo) {
+      const realId = origGeo.watchPosition(success, error, options);
       activeWatches.set(id, { success: success, error: error, options: options, realId: realId, pending: false });
+    } else {
+      activeWatches.set(id, { success: success, error: error, options: options, realId: undefined, pending: false });
+      notifyUnsupported(error);
     }
     return id;
   }, pageWin);
@@ -140,7 +149,8 @@
   port.onMessage.addListener(function (msg) {
     if (msg.action !== 'config' && msg.action !== 'update') return;
 
-    const prevMode = geoConfig ? geoConfig.mode : null;
+    const prevConfig = geoConfig;
+    const prevMode = prevConfig ? prevConfig.mode : null;
     geoConfig = msg;
     configLoaded = true;
     const mode = currentMode();
@@ -161,6 +171,19 @@
         notifyDenied(entry.error);
       } else if (origGeo) {
         entry.realId = origGeo.watchPosition(entry.success, entry.error, entry.options);
+      } else {
+        notifyUnsupported(entry.error);
+      }
+    }
+
+    // update 時: モックのまま座標のみ変わった場合、アクティブなモックウォッチへ新座標を配信する
+    if (
+      msg.action === 'update' && prevConfig !== null && prevMode === mode && mode === 'mock' &&
+      (prevConfig.latitude !== msg.latitude || prevConfig.longitude !== msg.longitude)
+    ) {
+      for (const [, entry] of activeWatches) {
+        if (entry.pending || entry.realId !== undefined) continue;
+        try { entry.success(buildPosition(geoConfig.latitude, geoConfig.longitude)); } catch (_) {}
       }
     }
 
@@ -180,6 +203,8 @@
         } else if (entry.realId === undefined && origGeo) {
           // モック/拒否ウォッチを実 origGeo ウォッチへ切り替え
           entry.realId = origGeo.watchPosition(entry.success, entry.error, entry.options);
+        } else if (entry.realId === undefined) {
+          notifyUnsupported(entry.error);
         }
       }
     }

@@ -131,9 +131,9 @@ internal class SettingsScreenViewModel(
             // 入力欄が変化したら UiState を再構築する
             viewModelScope.launch {
                 mockLocationInputFlow.collectLatest { input ->
-                    val current = uiStateFlow.value ?: return@collectLatest
-                    uiStateFlow.update {
-                        current.copy(
+                    // update のラムダ内で最新値を参照し、他のコレクタの更新を上書きしない
+                    uiStateFlow.update { current ->
+                        current?.copy(
                             mockLocationInput = input,
                             mockLocationInputError = validateMockLocationInput(input),
                         )

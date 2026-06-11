@@ -26,6 +26,9 @@ internal class SiteSettingsScreenViewModel(
         fun onRequestLocationPermission()
     }
 
+    // 権限要求の多重発行を防ぐ in-flight フラグ
+    private var isLocationPermissionRequestInFlight = false
+
     private val callbacks = object : SiteSettingsScreenUiState.Callbacks {
         override fun setMicrophonePermission(state: SitePermissionState) {
             viewModelScope.launch {
@@ -37,6 +40,8 @@ internal class SiteSettingsScreenViewModel(
             // 実際の位置情報は OS の位置情報権限が必要なため、ここでは保存せず権限要求を行い、
             // 許可された場合のみ onLocationPermissionResult で保存する
             if (state == SiteGeolocationState.SITE_GEOLOCATION_REAL) {
+                if (isLocationPermissionRequestInFlight) return
+                isLocationPermissionRequestInFlight = true
                 eventHandler.trySend { it.onRequestLocationPermission() }
                 return
             }
@@ -48,6 +53,7 @@ internal class SiteSettingsScreenViewModel(
 
     /** OS の位置情報権限要求の結果。許可された場合のみ「実際の位置情報」を保存する */
     fun onLocationPermissionResult(granted: Boolean) {
+        isLocationPermissionRequestInFlight = false
         if (!granted) return
         viewModelScope.launch {
             siteSettingsRepository.setGeolocationState(
