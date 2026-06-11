@@ -76,4 +76,79 @@
   } catch (_e) {
     // wrappedJSObject / exportFunction が使えない場合は touch-action の緩和のみ
   }
+
+  // --- ビューアーのメイン画像を原寸 (name=orig) に差し替える ---
+  // X は画面サイズ向けの縮小版 (name=small/medium/large) を表示するため、
+  // ズームしてもぼやけたままになる。原寸版へ差し替えることで、ネイティブ
+  // ズーム時に Gecko が原寸ファイルから再ラスタライズし鮮明に見える。
+  const NAME_PARAM = /([?&]name=)[^&]+/;
+
+  function toOrigUrl(src) {
+    if (!src.includes("pbs.twimg.com/media/")) return null;
+    if (/[?&]name=orig(&|$)/.test(src)) return null;
+    if (NAME_PARAM.test(src)) {
+      return src.replace(NAME_PARAM, "$1orig");
+    }
+    return src + (src.includes("?") ? "&" : "?") + "name=orig";
+  }
+
+  function upgradeViewerImages() {
+    if (!isViewerOpen()) return;
+    for (const img of document.querySelectorAll('img[src*="pbs.twimg.com/media/"]')) {
+      const rect = img.getBoundingClientRect();
+      // ビューアーのメイン画像のみ対象 (タイムラインのサムネイル等は除外)
+      if (rect.width < window.innerWidth * 0.5 && rect.height < window.innerHeight * 0.5) {
+        continue;
+      }
+      const origUrl = toOrigUrl(img.currentSrc || img.src);
+      if (origUrl === null) continue;
+      // 読み込み完了後に差し替えて、低解像度版の表示が消える瞬間を作らない
+      const loader = new Image();
+      loader.addEventListener("load", function () {
+        if (img.isConnected) {
+          img.removeAttribute("srcset");
+          img.src = origUrl;
+        }
+      });
+      loader.src = origUrl;
+    }
+  }
+
+  // カルーセル移動や React の再レンダリングで src が戻されるため、
+  // ビューアー表示中は DOM 変化を監視して再適用する
+  let upgradeScheduled = false;
+  const observer = new MutationObserver(function () {
+    if (upgradeScheduled) return;
+    upgradeScheduled = true;
+    requestAnimationFrame(function () {
+      upgradeScheduled = false;
+      upgradeViewerImages();
+    });
+  });
+  let observing = false;
+
+  function syncImageUpgrade() {
+    if (isViewerOpen()) {
+      upgradeViewerImages();
+      if (!observing && document.body) {
+        observer.observe(document.body, {
+          childList: true,
+          subtree: true,
+          attributes: true,
+          attributeFilter: ["src"],
+        });
+        observing = true;
+      }
+    } else if (observing) {
+      observer.disconnect();
+      observing = false;
+    }
+  }
+
+  window.addEventListener("pointerdown", syncImageUpgrade, {
+    capture: true,
+    passive: true,
+  });
+  window.addEventListener("popstate", syncImageUpgrade);
+  syncImageUpgrade();
 })();
