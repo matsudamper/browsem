@@ -6,6 +6,7 @@ import net.matsudamper.browser.DownloadWorker
 import net.matsudamper.browser.FindInPageWebExtension
 import net.matsudamper.browser.GeckoDownloadManager
 import net.matsudamper.browser.MockLocationWebExtension
+import net.matsudamper.browser.SiteCompatFixesWebExtension
 import net.matsudamper.browser.ThemeColorWebExtension
 import net.matsudamper.browser.ViewportScaleWebExtension
 import net.matsudamper.browser.data.BackupRepository
@@ -48,7 +49,11 @@ val appModule = module {
                 // この設定がないと AdGuard などのコンテンツブロッカーが機能しない。
                 .extensionsProcessEnabled(true)
                 .build()
-        )
+        ).also { runtime ->
+            // サイト互換性修正はどの画面からブラウズしても必要なため、
+            // 機能単位の lazy な single ではなく runtime 生成と同時にインストールする
+            SiteCompatFixesWebExtension().install(runtime)
+        }
     }
     // 拡張機能はプロセスに1つの GeckoRuntime に対してインストールするため single で管理
     single { ThemeColorWebExtension().also { it.install(get()) } }
