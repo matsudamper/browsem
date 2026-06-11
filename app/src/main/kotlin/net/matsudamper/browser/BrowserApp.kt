@@ -50,6 +50,7 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import mozilla.components.lib.publicsuffixlist.PublicSuffixList
 import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.SiteSettingsRepository
 import net.matsudamper.browser.data.TabGroupId
@@ -82,6 +83,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.work.WorkManager
 import net.matsudamper.browser.data.BackupRepository
 import org.koin.compose.koinInject
+import org.mozilla.geckoview.GeckoRuntime
 
 @Composable
 internal fun BrowserApp(
@@ -435,10 +437,14 @@ private fun BrowserAppContent(
 
                     is AppDestination.SiteSettings -> navEntry(key) {
                         val siteSettingsRepository: SiteSettingsRepository = koinInject()
+                        val geckoRuntime: GeckoRuntime = koinInject()
+                        val publicSuffixList: PublicSuffixList = koinInject()
                         val siteSettingsViewModel = composeViewModel(initializer = {
                             SiteSettingsScreenViewModel(
                                 host = key.host,
                                 siteSettingsRepository = siteSettingsRepository,
+                                geckoRuntime = geckoRuntime,
+                                publicSuffixList = publicSuffixList,
                             )
                         })
                         // 「実際の位置情報」選択時に OS の位置情報権限を要求する
