@@ -8,7 +8,9 @@ import org.mozilla.geckoview.GeckoRuntime
  * コンテンツスクリプト群をインストールする (Firefox の webcompat interventions 相当)。
  *
  * 現在の修正対象:
- * - X (x.com / twitter.com) 画像ビューアーのピンチズーム (Bugzilla 2007555)
+ * - X (x.com / twitter.com) 画像ビューアーのピンチズーム
+ *   - https://github.com/webcompat/web-bugs/issues/196790
+ *   - https://bugzilla.mozilla.org/show_bug.cgi?id=2007555
  *
  * セッションごとの登録やネイティブメッセージングは不要なため、
  * GeckoRuntime 生成時に一度インストールするだけでよい。

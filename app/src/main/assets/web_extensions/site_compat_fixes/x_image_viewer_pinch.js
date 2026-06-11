@@ -1,11 +1,18 @@
 // X (x.com / twitter.com) の画像・動画ビューアーで二本指ピンチズームが
-// ほとんど効かない問題の修正 (Bugzilla 2007555 / webcompat#196790)。
+// ほとんど効かない問題の修正。
+//
+// 上流バグ (Firefox for Android 本体でも未修正):
+// - https://github.com/webcompat/web-bugs/issues/196790
+// - https://bugzilla.mozilla.org/show_bug.cgi?id=2007555
 //
 // Gecko の APZ は、touch-action がピンチズームを許可していなくても
 // 二本指ジェスチャーを横取りし、コンテンツへのイベント配送を
-// 止めてしまう (Bugzilla 1648491 / 1663731 と同系列)。このため X 自身の
-// JS ピンチズーム実装にはジェスチャー序盤のわずかな移動しか届かず、
+// 止めてしまう。このため X 自身の JS ピンチズーム実装には
+// ジェスチャー序盤のわずかな移動しか届かず、
 // 「数 px しか拡大しない」「移動量が 1/10 になる」症状になる。
+// 同系列の既知バグ:
+// - https://bugzilla.mozilla.org/show_bug.cgi?id=1648491 (flightradar24)
+// - https://bugzilla.mozilla.org/show_bug.cgi?id=1663731 (OpenLayers)
 //
 // コンテンツ側がマルチタッチの touchstart / touchmove を preventDefault
 // すると APZ はジェスチャーから手を引き、以降のイベントが全量コンテンツへ
