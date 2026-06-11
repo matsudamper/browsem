@@ -511,6 +511,15 @@ internal fun GeckoBrowserTab(
         }
     }
 
+    // DOM ダンプ (タブメニューの不具合調査用) のセッション登録
+    val domDumpWebExtension: DomDumpWebExtension = koinInject()
+    DisposableEffect(session, domDumpWebExtension) {
+        domDumpWebExtension.registerSession(session)
+        onDispose {
+            domDumpWebExtension.unregisterSession(session)
+        }
+    }
+
     // FindInPageWebExtension のセッション登録
     DisposableEffect(session, state, findInPageWebExtension) {
         findInPageWebExtension.registerSession(session) { current, total, error ->
@@ -786,6 +795,7 @@ internal fun GeckoBrowserTab(
                         { callback(state.currentPageUrl) }
                     },
                     onOpenDownloads = onOpenDownloads,
+                    onDumpDom = state::dumpPageDom,
                     onShare = state::sharePage,
                     tabCount = tabCount,
                     showTabActions = enableTabUi,

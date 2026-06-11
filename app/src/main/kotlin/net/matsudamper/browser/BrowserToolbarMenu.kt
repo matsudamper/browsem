@@ -68,6 +68,7 @@ internal fun ToolbarMenu(
     onOpenInBrowser: (() -> Unit)? = null,
     onOpenSiteSettings: (() -> Unit)? = null,
     onOpenDownloads: (() -> Unit)? = null,
+    onDumpDom: (() -> Unit)? = null,
 ) {
     DropdownMenu(
         expanded = visibleMenu,
@@ -102,6 +103,7 @@ internal fun ToolbarMenu(
             onOpenInBrowser = onOpenInBrowser,
             onOpenSiteSettings = onOpenSiteSettings,
             onOpenDownloads = onOpenDownloads,
+            onDumpDom = onDumpDom,
         )
     }
 }
@@ -137,6 +139,7 @@ private fun ToolbarMenuContent(
     onOpenInBrowser: (() -> Unit)?,
     onOpenSiteSettings: (() -> Unit)?,
     onOpenDownloads: (() -> Unit)?,
+    onDumpDom: (() -> Unit)?,
 ) {
     Column {
         Row(
@@ -493,6 +496,24 @@ private fun ToolbarMenuContent(
                 },
             )
         }
+        onDumpDom?.let { dumpDom ->
+            // ページのレンダリング済み DOM をダウンロードへ保存する (不具合調査用)
+            DropdownMenuItem(
+                text = {
+                    Text(text = "DOMをダンプ")
+                },
+                leadingIcon = {
+                    Icon(
+                        painter = painterResource(id = ResourcesR.drawable.ic_article_24dp),
+                        contentDescription = null,
+                    )
+                },
+                onClick = {
+                    onDismissRequest()
+                    dumpDom()
+                },
+            )
+        }
         if (showOpenSettings) {
             DropdownMenuItem(
                 text = {
@@ -548,6 +569,7 @@ private fun PreviewToolbarMenuContent() {
                 onOpenInBrowser = null,
                 onOpenSiteSettings = {},
                 onOpenDownloads = {},
+                onDumpDom = {},
             )
         }
     }

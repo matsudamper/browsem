@@ -1,10 +1,12 @@
 package net.matsudamper.browser
 
 import android.Manifest
+import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.provider.MediaStore
 import android.util.Log
 import android.widget.Toast
 import androidx.compose.runtime.Composable
@@ -27,6 +29,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.net.URL
 import net.matsudamper.browser.data.SiteGeolocationState
 import net.matsudamper.browser.data.SitePermissionState
@@ -73,6 +76,7 @@ internal fun rememberBrowserTabScreenState(
     val coroutineScope = rememberCoroutineScope()
     val geckoDownloadManager: GeckoDownloadManager = koinInject()
     val findInPageWebExtension: FindInPageWebExtension = koinInject()
+    val domDumpWebExtension: DomDumpWebExtension = koinInject()
     val siteSettingsRepository: SiteSettingsRepository = koinInject()
     val state = remember(browserTab) {
         BrowserTabScreenState(
@@ -83,6 +87,7 @@ internal fun rememberBrowserTabScreenState(
             coroutineScope = coroutineScope,
             geckoDownloadManager = geckoDownloadManager,
             findInPageWebExtension = findInPageWebExtension,
+            domDumpWebExtension = domDumpWebExtension,
             siteSettingsRepository = siteSettingsRepository,
             context = context,
             onHistoryRecord = onHistoryRecord,
@@ -107,6 +112,7 @@ internal class BrowserTabScreenState(
     private val coroutineScope: CoroutineScope,
     private val geckoDownloadManager: GeckoDownloadManager,
     internal val findInPageWebExtension: FindInPageWebExtension,
+    private val domDumpWebExtension: DomDumpWebExtension,
     private val siteSettingsRepository: SiteSettingsRepository,
     private val context: Context,
     private val onRequestDownloadNotificationPermission: suspend () -> Unit = {},
@@ -817,6 +823,61 @@ internal class BrowserTabScreenState(
     fun copyCurrentPageUrl() {
         if (currentPageUrl.isBlank()) return
         copyUrlToClipboard(currentPageUrl)
+    }
+
+    /**
+     * 現在のページのレンダリング済み DOM をダウンロードフォルダへ保存する。
+     * サイト固有の不具合調査で実際の DOM 構造を確認するために使用する。
+     */
+    fun dumpPageDom() {
+        domDumpWebExtension.requestDump(session) { result ->
+            result.fold(
+                onSuccess = { html ->
+                    coroutineScope.launch {
+                        val fileName = withContext(Dispatchers.IO) {
+                            saveDomDumpToDownloads(html)
+                        }
+                        val text = if (fileName != null) {
+                            "ダウンロードに保存しました: $fileName"
+                        } else {
+                            "DOMダンプの保存に失敗しました"
+                        }
+                        Toast.makeText(context, text, Toast.LENGTH_LONG).show()
+                    }
+                },
+                onFailure = { error ->
+                    Toast.makeText(
+                        context,
+                        "DOMダンプに失敗しました: ${error.message}",
+                        Toast.LENGTH_LONG,
+                    ).show()
+                },
+            )
+        }
+    }
+
+    private fun saveDomDumpToDownloads(html: String): String? {
+        val host = extractSiteHost(currentPageUrl) ?: "page"
+        val fileName = "dom_dump_${host}_${System.currentTimeMillis()}.html"
+        return try {
+            val resolver = context.contentResolver
+            val values = ContentValues().apply {
+                put(MediaStore.Downloads.DISPLAY_NAME, fileName)
+                put(MediaStore.Downloads.MIME_TYPE, "text/html")
+                put(MediaStore.Downloads.IS_PENDING, 1)
+            }
+            val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+                ?: return null
+            val stream = resolver.openOutputStream(uri) ?: return null
+            stream.use { it.write(html.toByteArray()) }
+            values.clear()
+            values.put(MediaStore.Downloads.IS_PENDING, 0)
+            resolver.update(uri, values, null, null)
+            fileName
+        } catch (e: java.io.IOException) {
+            Log.e(TAG, "DOMダンプの保存に失敗", e)
+            null
+        }
     }
 
     fun copyLinkUrl(url: String) {

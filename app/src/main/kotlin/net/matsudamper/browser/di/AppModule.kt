@@ -2,6 +2,7 @@ package net.matsudamper.browser.di
 
 import mozilla.components.lib.publicsuffixlist.PublicSuffixList
 import net.matsudamper.browser.BrowserViewModel
+import net.matsudamper.browser.DomDumpWebExtension
 import net.matsudamper.browser.DownloadWorker
 import net.matsudamper.browser.FindInPageWebExtension
 import net.matsudamper.browser.GeckoDownloadManager
@@ -61,6 +62,7 @@ val appModule = module {
     single { FindInPageWebExtension().also { it.install(get()) } }
     single { MockLocationWebExtension().also { it.install(get()) } }
     single { ViewportScaleWebExtension().also { it.install(get()) } }
+    single { DomDumpWebExtension().also { it.install(get()) } }
     // eTLD+1 (基底ドメイン) の算出に使用する Public Suffix List。初回ロードを共有するため single
     single { PublicSuffixList(androidContext()) }
     factory { GeckoDownloadManager(androidContext(), get()) }
