@@ -79,6 +79,27 @@ class BrowserSessionLifecycleController(
                 return
             }
         }
+        // 初回ロードは GeckoView の Surface サイズ確定後まで遅延する。
+        // 未確定 viewport でロードすると ImageDocument (画像単体表示) の
+        // shrink-to-fit スケールが誤計算され、画像が小さく低解像度で表示されるため。
+        // performInitialLoadIfPending がサイズ確定検知後に呼ばれてロードを実行する。
+        tab.pendingInitialLoad = true
+        tab.session.setActive(true)
+        markActiveForExtensions(tab.session)
+    }
+
+    /** restoreSession で遅延された初回ロードが未実行かどうかを返す */
+    fun hasPendingInitialLoad(tab: BrowserTab): Boolean = tab.pendingInitialLoad
+
+    /**
+     * restoreSession で遅延された初回ロードを実行する。
+     * GeckoView のサイズ確定後（width/height > 0）に app 層から呼ばれることを想定。
+     */
+    fun performInitialLoadIfPending(tab: BrowserTab) {
+        if (!tab.pendingInitialLoad) return
+        // サイズ確定待ちの間にタブが閉じられた場合は何もしない
+        if (!tab.session.isOpen) return
+        tab.pendingInitialLoad = false
         val referrerUrl = tab.pendingReferrerUrl
         tab.pendingReferrerUrl = null
         if (referrerUrl != null) {
@@ -92,8 +113,6 @@ class BrowserSessionLifecycleController(
         } else {
             tab.session.loadUri(tab.currentUrl.ifBlank { "about:blank" })
         }
-        tab.session.setActive(true)
-        markActiveForExtensions(tab.session)
     }
 
     /**
