@@ -156,25 +156,6 @@ internal fun ToolbarMenu(
                     style = MaterialTheme.typography.labelSmall,
                 )
             }
-            if (showHome) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    IconButton(
-                        onClick = {
-                            onDismissRequest()
-                            onHome()
-                        }
-                    ) {
-                        Icon(
-                            painter = painterResource(ResourcesR.drawable.ic_home_24dp),
-                            contentDescription = null,
-                        )
-                    }
-                    Text(
-                        text = "ホーム",
-                        style = MaterialTheme.typography.labelSmall,
-                    )
-                }
-            }
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 // 短押しで通常更新、長押しでキャッシュをバイパスしてスーパーリフレッシュ
                 androidx.compose.foundation.layout.Box(
@@ -210,25 +191,54 @@ internal fun ToolbarMenu(
                     style = MaterialTheme.typography.labelSmall,
                 )
             }
-            if (onOpenSiteSettings != null) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    IconButton(
-                        modifier = Modifier
-                            .testTag(BrowserToolbarMenuTestTags.SiteSettingsButton.testTag),
-                        onClick = {
-                            onDismissRequest()
-                            onOpenSiteSettings()
-                        },
-                    ) {
-                        Icon(
-                            painter = painterResource(ResourcesR.drawable.ic_settings_24dp),
-                            contentDescription = null,
+        }
+        // 二段目: ホームとサイトの設定を中央寄せで表示
+        if (showHome || onOpenSiteSettings != null) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(24.dp, Alignment.CenterHorizontally),
+            ) {
+                if (showHome) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        IconButton(
+                            onClick = {
+                                onDismissRequest()
+                                onHome()
+                            }
+                        ) {
+                            Icon(
+                                painter = painterResource(ResourcesR.drawable.ic_home_24dp),
+                                contentDescription = null,
+                            )
+                        }
+                        Text(
+                            text = "ホーム",
+                            style = MaterialTheme.typography.labelSmall,
                         )
                     }
-                    Text(
-                        text = "サイトの設定",
-                        style = MaterialTheme.typography.labelSmall,
-                    )
+                }
+                if (onOpenSiteSettings != null) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        IconButton(
+                            modifier = Modifier
+                                .testTag(BrowserToolbarMenuTestTags.SiteSettingsButton.testTag),
+                            onClick = {
+                                onDismissRequest()
+                                onOpenSiteSettings()
+                            },
+                        ) {
+                            Icon(
+                                painter = painterResource(ResourcesR.drawable.ic_settings_24dp),
+                                contentDescription = null,
+                            )
+                        }
+                        Text(
+                            text = "サイトの設定",
+                            style = MaterialTheme.typography.labelSmall,
+                        )
+                    }
                 }
             }
         }
