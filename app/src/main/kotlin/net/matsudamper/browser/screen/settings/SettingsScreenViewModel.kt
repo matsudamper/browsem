@@ -10,7 +10,6 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import net.matsudamper.browser.MockLocationWebExtension
 import net.matsudamper.browser.data.BrowserSettings
 import net.matsudamper.browser.data.HomepageType
 import net.matsudamper.browser.data.SearchProvider
@@ -22,7 +21,6 @@ import net.matsudamper.browser.ui.settings.SettingsScreenUiState
 
 internal class SettingsScreenViewModel(
     private val settingsRepository: SettingsRepository,
-    private val mockLocationWebExtension: MockLocationWebExtension,
 ) : ViewModel() {
 
     val eventHandler = Channel<(Event) -> Unit>(Channel.UNLIMITED)
@@ -132,20 +130,7 @@ internal class SettingsScreenViewModel(
                             backupConfirmDialog = confirmDialog,
                         )
                     }
-                    // 拡張機能にも最新設定を通知する
-                    // 座標が未保存（0,0）の場合はデフォルト値（皇居）を使用し、
-                    // UI表示と拡張機能への返却値を一致させる
-                    val (resolvedLat, resolvedLng) = resolveCoordinates(
-                        settings.mockLocationLatitude,
-                        settings.mockLocationLongitude,
-                    )
-                    mockLocationWebExtension.updateConfig(
-                        MockLocationWebExtension.MockLocationConfig(
-                            enabled = settings.mockLocationEnabled,
-                            latitude = resolvedLat,
-                            longitude = resolvedLng,
-                        )
-                    )
+                    // 拡張機能への反映は BrowserViewModel が設定の Flow を監視して行う
                 }
             }
             // 入力欄が変化したら UiState を再構築する

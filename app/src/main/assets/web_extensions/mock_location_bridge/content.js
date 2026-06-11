@@ -1,14 +1,18 @@
-// navigator.geolocation をモック位置情報で上書きするコンテンツスクリプト
+// navigator.geolocation をサイトごとの設定（mock/deny/real）に応じて差し替えるコンテンツスクリプト
 // document_start で実行され、ページのスクリプトより先に geolocation を差し替える。
 (function () {
   'use strict';
 
-  // ページコンテキストの navigator.geolocation を保持（モック無効時のフォールバック用）
+  // ページコンテキストの navigator.geolocation を保持（real モード時のフォールバック用）
   const pageWin = window.wrappedJSObject;
   const origGeo = pageWin.navigator.geolocation;
 
   let configLoaded = false;
-  let mockConfig = null;
+  // ネイティブから受信した設定。{ mode: 'mock'|'deny'|'real', latitude, longitude }
+  let geoConfig = null;
+
+  // ページが位置情報を要求したことをネイティブへ一度だけ通知するためのフラグ
+  let requestNotified = false;
 
   // 設定が届く前にページから呼ばれた getCurrentPosition を一時保留するキュー
   let pendingCurrentCalls = [];
@@ -17,10 +21,14 @@
   // key: クライアントに返す合成watchID（常に正の整数）
   // value: { success, error, options, realId: number|undefined, pending: boolean }
   //   pending=true  : config 未到着のため未処理
-  //   realId 定義済み: origGeo に転送中（モック無効時）
-  //   realId 未定義 : モックウォッチ（origGeo 未使用）
+  //   realId 定義済み: origGeo に転送中（real モード時）
+  //   realId 未定義 : モック/拒否ウォッチ（origGeo 未使用）
   const activeWatches = new Map();
   let nextWatchId = 1;
+
+  function currentMode() {
+    return geoConfig ? geoConfig.mode : 'mock';
+  }
 
   function buildPosition(lat, lng) {
     return cloneInto(
@@ -40,15 +48,31 @@
     );
   }
 
+  // PERMISSION_DENIED(code: 1) のエラーを通知する
+  function notifyDenied(error) {
+    if (!error) return;
+    try { error(cloneInto({ code: 1, message: 'User denied Geolocation' }, pageWin)); } catch (_) {}
+  }
+
+  // ページが位置情報を要求したことをネイティブへ通知する（ページごとに一度だけ）
+  function notifyRequested() {
+    if (requestNotified) return;
+    requestNotified = true;
+    try { port.postMessage({ action: 'geolocationRequested' }); } catch (_) {}
+  }
+
   function handleGetCurrentPosition(success, error, options) {
-    if (mockConfig && mockConfig.enabled) {
+    const mode = currentMode();
+    if (mode === 'mock') {
       try {
-        success(buildPosition(mockConfig.latitude, mockConfig.longitude));
+        success(buildPosition(geoConfig.latitude, geoConfig.longitude));
       } catch (e) {
         if (error) {
           try { error(cloneInto({ code: 2, message: 'mock error' }, pageWin)); } catch (_) {}
         }
       }
+    } else if (mode === 'deny') {
+      notifyDenied(error);
     } else if (origGeo) {
       origGeo.getCurrentPosition(success, error, options);
     } else if (error) {
@@ -60,6 +84,7 @@
   const mockGeo = cloneInto({}, pageWin);
 
   mockGeo.getCurrentPosition = exportFunction(function (success, error, options) {
+    notifyRequested();
     if (!configLoaded) {
       pendingCurrentCalls.push({ success: success, error: error, options: options });
       return;
@@ -68,7 +93,8 @@
   }, pageWin);
 
   mockGeo.watchPosition = exportFunction(function (success, error, options) {
-    // 常に合成IDを返すことでモック有効/無効切り替え時にウォッチを追跡可能にする
+    notifyRequested();
+    // 常に合成IDを返すことでモード切り替え時にウォッチを追跡可能にする
     const id = nextWatchId++;
 
     if (!configLoaded) {
@@ -77,9 +103,13 @@
       return id;
     }
 
-    if (mockConfig && mockConfig.enabled) {
+    const mode = currentMode();
+    if (mode === 'mock') {
       activeWatches.set(id, { success: success, error: error, options: options, realId: undefined, pending: false });
-      try { success(buildPosition(mockConfig.latitude, mockConfig.longitude)); } catch (_) {}
+      try { success(buildPosition(geoConfig.latitude, geoConfig.longitude)); } catch (_) {}
+    } else if (mode === 'deny') {
+      activeWatches.set(id, { success: success, error: error, options: options, realId: undefined, pending: false });
+      notifyDenied(error);
     } else {
       const realId = origGeo ? origGeo.watchPosition(success, error, options) : undefined;
       activeWatches.set(id, { success: success, error: error, options: options, realId: realId, pending: false });
@@ -110,9 +140,10 @@
   port.onMessage.addListener(function (msg) {
     if (msg.action !== 'config' && msg.action !== 'update') return;
 
-    const wasEnabled = mockConfig ? mockConfig.enabled : null;
-    mockConfig = msg;
+    const prevMode = geoConfig ? geoConfig.mode : null;
+    geoConfig = msg;
     configLoaded = true;
+    const mode = currentMode();
 
     // 設定待ちの getCurrentPosition を処理
     const currCalls = pendingCurrentCalls.splice(0);
@@ -124,32 +155,31 @@
     for (const [, entry] of activeWatches) {
       if (!entry.pending) continue;
       entry.pending = false;
-      if (mockConfig.enabled) {
-        try { entry.success(buildPosition(mockConfig.latitude, mockConfig.longitude)); } catch (_) {}
+      if (mode === 'mock') {
+        try { entry.success(buildPosition(geoConfig.latitude, geoConfig.longitude)); } catch (_) {}
+      } else if (mode === 'deny') {
+        notifyDenied(entry.error);
       } else if (origGeo) {
         entry.realId = origGeo.watchPosition(entry.success, entry.error, entry.options);
       }
     }
 
-    // update 時: モック有効/無効の切り替えによるアクティブウォッチの移行
-    if (msg.action === 'update') {
-      if (mockConfig.enabled && wasEnabled === false) {
-        // 無効→有効: 既存の origGeo ウォッチをキャンセルしてモック座標を配信
-        for (const [, entry] of activeWatches) {
-          if (entry.pending) continue;
-          if (entry.realId !== undefined && origGeo) {
-            origGeo.clearWatch(entry.realId);
-            entry.realId = undefined;
-          }
-          try { entry.success(buildPosition(mockConfig.latitude, mockConfig.longitude)); } catch (_) {}
+    // update 時: モード切り替えによるアクティブウォッチの移行
+    if (msg.action === 'update' && prevMode !== null && prevMode !== mode) {
+      for (const [, entry] of activeWatches) {
+        if (entry.pending) continue;
+        // real から離れる場合は origGeo ウォッチをキャンセルする
+        if (mode !== 'real' && entry.realId !== undefined && origGeo) {
+          origGeo.clearWatch(entry.realId);
+          entry.realId = undefined;
         }
-      } else if (!mockConfig.enabled && wasEnabled === true) {
-        // 有効→無効: モックウォッチを実 origGeo ウォッチへ切り替え
-        for (const [, entry] of activeWatches) {
-          if (entry.pending || entry.realId !== undefined) continue;
-          if (origGeo) {
-            entry.realId = origGeo.watchPosition(entry.success, entry.error, entry.options);
-          }
+        if (mode === 'mock') {
+          try { entry.success(buildPosition(geoConfig.latitude, geoConfig.longitude)); } catch (_) {}
+        } else if (mode === 'deny') {
+          notifyDenied(entry.error);
+        } else if (entry.realId === undefined && origGeo) {
+          // モック/拒否ウォッチを実 origGeo ウォッチへ切り替え
+          entry.realId = origGeo.watchPosition(entry.success, entry.error, entry.options);
         }
       }
     }
@@ -157,6 +187,6 @@
 
   port.onDisconnect.addListener(function () {
     configLoaded = false;
-    mockConfig = null;
+    geoConfig = null;
   });
 })();

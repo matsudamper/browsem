@@ -56,6 +56,6 @@ val appModule = module {
     single { MockLocationWebExtension().also { it.install(get()) } }
     single { ViewportScaleWebExtension().also { it.install(get()) } }
     factory { GeckoDownloadManager(androidContext(), get()) }
-    viewModel { BrowserViewModel(get(), get(), get(), get(), get(), get(), get()) }
+    viewModel { BrowserViewModel(get(), get(), get(), get(), get(), get(), get(), get()) }
     worker { DownloadWorker(get(), get(), get()) }
 }

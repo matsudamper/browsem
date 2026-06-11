@@ -81,6 +81,14 @@ fun createGeckoSessionDelegateBundle(
                         GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW
                     )
                 }
+                if (perm.permission == GeckoSession.PermissionDelegate.PERMISSION_GEOLOCATION) {
+                    // 位置情報はコンテンツスクリプトがサイトごとの設定（モック/拒否）で処理するため、
+                    // Gecko 本体の位置情報は拒否する
+                    Log.d("BrowserTabPermission", "geolocation permission denied")
+                    return GeckoResult.fromValue(
+                        GeckoSession.PermissionDelegate.ContentPermission.VALUE_DENY
+                    )
+                }
                 if (perm.permission == GeckoSession.PermissionDelegate.PERMISSION_DESKTOP_NOTIFICATION) {
                     Log.d("BrowserTabPermission", "desktop notification denied")
                     return GeckoResult.fromValue(

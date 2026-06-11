@@ -391,9 +391,8 @@ private fun BrowserAppContent(
                     }
 
                     AppDestination.Settings -> navEntry(key) {
-                        val mockLocationWebExtension: MockLocationWebExtension = koinInject()
                         val settingsViewModel = composeViewModel(initializer = {
-                            SettingsScreenViewModel(settingsRepository, mockLocationWebExtension)
+                            SettingsScreenViewModel(settingsRepository)
                         })
                         val settingsUiState by settingsViewModel.uiState.collectAsState()
                         LaunchedEffect(settingsViewModel) {
