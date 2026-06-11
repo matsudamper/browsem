@@ -37,4 +37,5 @@ dependencies {
     api(project(":browser-core"))
     implementation(project(":data"))
     testImplementation(libs.junit4)
+    testImplementation(libs.mockk)
 }

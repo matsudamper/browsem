@@ -34,6 +34,8 @@ data class DownloadManagementScreenUiState(
         val fileName: String,
         val status: DownloadStatus,
         val enqueuedAt: Long,
+        /** ダウンロード開始時に表示していたページのURL。不明な場合は null */
+        val originPageUrl: String?,
     )
 
     @Stable
@@ -43,5 +45,7 @@ data class DownloadManagementScreenUiState(
         val onOpenDownloadsFolder: () -> Unit,
         /** 失敗したダウンロードを再開する */
         val onResume: (UUID) -> Unit,
+        /** ダウンロード開始時のページを新しいタブで開く */
+        val onOpenOriginPage: (url: String) -> Unit,
     )
 }
