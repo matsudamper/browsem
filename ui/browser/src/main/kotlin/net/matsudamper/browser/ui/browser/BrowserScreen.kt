@@ -64,10 +64,17 @@ fun BrowserScreen(
         // NavDisplay の遷移アニメーション中に BrowserScreen が残っている間に
         // selectedTab=null で再コンポーズされてもホームページタブを作らないようにする。
         if (selectedTab == null && !browserTabController.wasTabClosed(tabId)) {
-            browserTabController.getOrCreateTab(
-                tabId = tabId,
-                homepageUrl = homepageUrl,
-            )
+            // プロセス死後の savedInstanceState 復元時は BrowserScreen が compose される時点で
+            // タブ復元がまだ完了していない。復元完了前に getOrCreateTab を呼ぶと、空の registry に
+            // ホームページタブが sortOrder=0 で永続化されてしまう。
+            // 復元完了を待ってから存在確認し、それでも存在しない場合のみ作成する。
+            browserTabController.restoreComplete.await()
+            if (browserTabController.findTab(tabId) == null && !browserTabController.wasTabClosed(tabId)) {
+                browserTabController.getOrCreateTab(
+                    tabId = tabId,
+                    homepageUrl = homepageUrl,
+                )
+            }
         }
     }
     if (selectedTab == null) {
