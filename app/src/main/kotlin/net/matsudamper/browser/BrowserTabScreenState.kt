@@ -272,9 +272,10 @@ internal class BrowserTabScreenState(
 
     var renderReady by mutableStateOf(false)
 
-    // プレビュー画像が未取得の状態でページロードが完了した際にインクリメントされるカウンター。
-    // GeckoBrowserTab がこの値を監視してキャプチャをトリガーする。
-    var captureOnPageLoadRequestCount by mutableIntStateOf(0)
+    // ページの初回描画・ロード完了の度にインクリメントされるカウンター。
+    // GeckoBrowserTab がこの値を監視してプレビューキャプチャをトリガーする。
+    // ドメイン遷移後も古いプレビューが残らないよう、プレビュー取得済みでも毎回更新する。
+    var capturePreviewRequestCount by mutableIntStateOf(0)
         private set
 
     // プレビューキャプチャの可否を表すフラグ。
@@ -1027,6 +1028,10 @@ internal class BrowserTabScreenState(
     override fun onPreviewCaptureReady() {
         renderReady = true
         previewCaptureReady = true
+        // 新ページの初回描画 (onFirstContentfulPaint) 時点でキャプチャを更新する。
+        // ロード完了 (onPageStop) まで待つと、ロードの長いページでタブ切替した際に
+        // 前のページ（別ドメイン）のプレビューが表示され続けるため。
+        capturePreviewRequestCount++
     }
 
     override fun onExternalResponse(response: WebResponse) {
@@ -1058,10 +1063,10 @@ internal class BrowserTabScreenState(
         // ページロード完了時点でキャプチャを許可する。これがないと previewCaptureReady が
         // false のまま戻らず、以降のタブのキャプチャが全て拒否される。
         previewCaptureReady = true
-        // プレビュー画像がまだない場合はページロード完了時にキャプチャをリクエストする
-        if (browserTab.previewBitmap == null || browserTab.previewBitmap!!.isEmpty()) {
-            captureOnPageLoadRequestCount++
-        }
+        // ページロード完了時に毎回キャプチャをリクエストする。
+        // 「プレビュー未取得時のみ」に絞ると、別ドメインへ遷移しても古いプレビューが
+        // 残り続けるため、取得済みでも常に最新の表示内容で上書きする。
+        capturePreviewRequestCount++
         if (success) {
             fetchFavicon(currentPageUrl)
             // ページ遷移後もズームを維持する
