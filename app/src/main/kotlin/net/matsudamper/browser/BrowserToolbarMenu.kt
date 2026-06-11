@@ -263,13 +263,13 @@ private fun ToolbarMenuContent(
                 )
             }
         }
-        // 二段目: ホーム・ダウンロード・サイトの設定を中央寄せで表示
+        // 二段目: ホーム・ダウンロード・サイトの設定を一段目と同じ間隔で表示
         if (showHome || onOpenDownloads != null || onOpenSiteSettings != null) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 8.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(24.dp, Alignment.CenterHorizontally),
+                horizontalArrangement = Arrangement.SpaceEvenly,
             ) {
                 if (showHome) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
