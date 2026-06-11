@@ -52,7 +52,6 @@ fun SettingsScreen(
     uiState: SettingsScreenUiState,
     onOpenExtensions: () -> Unit,
     onOpenHistory: () -> Unit,
-    onOpenDownloads: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -310,17 +309,6 @@ fun SettingsScreen(
 
             Spacer(Modifier.height(betweenPadding))
 
-            SettingSection(title = "ダウンロード") {
-                TextButton(
-                    onClick = onOpenDownloads,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text("ダウンロード管理")
-                }
-            }
-
-            Spacer(Modifier.height(betweenPadding))
-
             SettingSection(title = "バックアップ") {
                 Column {
                     Text(
@@ -429,7 +417,8 @@ internal fun SettingSection(
     }
 }
 
-@Preview(showBackground = true)
+// 設定項目が縦に長いため、全体が見えるように高さを広げて Preview する
+@Preview(showBackground = true, heightDp = 2400)
 @Composable
 private fun SettingsScreenPreview() {
     MaterialTheme {
@@ -465,7 +454,6 @@ private fun SettingsScreenPreview() {
             ),
             onOpenExtensions = {},
             onOpenHistory = {},
-            onOpenDownloads = {},
             onBack = {},
         )
     }

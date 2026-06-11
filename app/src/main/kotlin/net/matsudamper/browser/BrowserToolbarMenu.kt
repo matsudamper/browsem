@@ -67,6 +67,7 @@ internal fun ToolbarMenu(
     showHome: Boolean = true,
     onOpenInBrowser: (() -> Unit)? = null,
     onOpenSiteSettings: (() -> Unit)? = null,
+    onOpenDownloads: (() -> Unit)? = null,
 ) {
     DropdownMenu(
         expanded = visibleMenu,
@@ -100,6 +101,7 @@ internal fun ToolbarMenu(
             showHome = showHome,
             onOpenInBrowser = onOpenInBrowser,
             onOpenSiteSettings = onOpenSiteSettings,
+            onOpenDownloads = onOpenDownloads,
         )
     }
 }
@@ -134,6 +136,7 @@ private fun ToolbarMenuContent(
     showHome: Boolean,
     onOpenInBrowser: (() -> Unit)?,
     onOpenSiteSettings: (() -> Unit)?,
+    onOpenDownloads: (() -> Unit)?,
 ) {
     Column {
         Row(
@@ -260,8 +263,8 @@ private fun ToolbarMenuContent(
                 )
             }
         }
-        // 二段目: ホームとサイトの設定を中央寄せで表示
-        if (showHome || onOpenSiteSettings != null) {
+        // 二段目: ホーム・ダウンロード・サイトの設定を中央寄せで表示
+        if (showHome || onOpenDownloads != null || onOpenSiteSettings != null) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -285,6 +288,27 @@ private fun ToolbarMenuContent(
                         }
                         Text(
                             text = "ホーム",
+                            style = MaterialTheme.typography.labelSmall,
+                        )
+                    }
+                }
+                if (onOpenDownloads != null) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        IconButton(
+                            modifier = Modifier
+                                .testTag(BrowserToolbarMenuTestTags.DownloadsButton.testTag),
+                            onClick = {
+                                onDismissRequest()
+                                onOpenDownloads()
+                            },
+                        ) {
+                            Icon(
+                                painter = painterResource(ResourcesR.drawable.ic_download_24dp),
+                                contentDescription = null,
+                            )
+                        }
+                        Text(
+                            text = "ダウンロード",
                             style = MaterialTheme.typography.labelSmall,
                         )
                     }
@@ -523,6 +547,7 @@ private fun PreviewToolbarMenuContent() {
                 showHome = true,
                 onOpenInBrowser = null,
                 onOpenSiteSettings = {},
+                onOpenDownloads = {},
             )
         }
     }
@@ -537,5 +562,6 @@ sealed interface BrowserToolbarMenuTestTags {
     object RefreshButton : BrowserToolbarMenuTestTags { override val id = "refresh_button" }
     object FindInPageButton : BrowserToolbarMenuTestTags { override val id = "find_in_page_button" }
     object SiteSettingsButton : BrowserToolbarMenuTestTags { override val id = "site_settings_button" }
+    object DownloadsButton : BrowserToolbarMenuTestTags { override val id = "downloads_button" }
     object HomeButton : BrowserToolbarMenuTestTags { override val id = "home_button" }
 }

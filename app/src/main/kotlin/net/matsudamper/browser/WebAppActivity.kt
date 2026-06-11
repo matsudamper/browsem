@@ -128,6 +128,7 @@ class WebAppActivity : ComponentActivity() {
                         onOpenSettings = {},
                         // ウェブアプリモードは設定画面のナビゲーションスタックを持たないため非表示
                         onOpenSiteSettings = null,
+                        onOpenDownloads = null,
                         onOpenTabs = {},
                         enableTabUi = false,
                         showInstallExtensionItem = false,
