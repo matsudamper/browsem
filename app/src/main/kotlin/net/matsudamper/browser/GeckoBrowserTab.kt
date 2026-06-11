@@ -241,9 +241,9 @@ internal fun GeckoBrowserTab(
         geckoView?.requestFocus()
     }
 
-    // プレビュー画像未取得時にページロードが完了したらキャプチャを実行する
+    // ページの初回描画・ロード完了の度にプレビューキャプチャを実行する
     LaunchedEffect(state) {
-        snapshotFlow { state.captureOnPageLoadRequestCount }
+        snapshotFlow { state.capturePreviewRequestCount }
             .collectLatest { count ->
                 if (count == 0) return@collectLatest
                 /**
