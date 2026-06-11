@@ -48,8 +48,10 @@ jobs:
         env:
           BRANCH_NAME: ${{ github.head_ref }}
           REPOSITORY: ${{ github.repository }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          SHORT_SHA="${GITHUB_SHA:0:7}"
+          # GITHUB_SHA はマージコミットのため、PR 上のコミットと一致する head の SHA を使う
+          SHORT_SHA="${HEAD_SHA:0:7}"
           SAFE_REPO="${REPOSITORY##*/}"
           SAFE_BRANCH="${BRANCH_NAME//\//-}"
           APK_NAME="app-${SAFE_REPO}-${SAFE_BRANCH}-${SHORT_SHA}.apk"
@@ -116,6 +118,7 @@ jobs:
 
             ---
             *Artifact Name: `${{ env.APK_NAME }}`*
+            *Commit: [`${{ github.event.pull_request.head.sha }}`](${{ github.server_url }}/${{ github.repository }}/commit/${{ github.event.pull_request.head.sha }})*
 
       - name: Run Android Lint
         run: ./gradlew :app:lintDebug
