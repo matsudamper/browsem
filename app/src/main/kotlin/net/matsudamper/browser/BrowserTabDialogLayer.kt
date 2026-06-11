@@ -434,6 +434,10 @@ private fun ContextMenuDialog(
                             TextButton(onClick = { onOpenNewTab(menu.imageSrcUrl) }) {
                                 Text(text = "画像を新しいタブで開く")
                             }
+                        } else {
+                            TextButton(onClick = { onOpenUrl(menu.imageSrcUrl) }) {
+                                Text(text = "画像を開く")
+                            }
                         }
                         TextButton(onClick = { onDownloadImage(menu.imageSrcUrl) }) {
                             Text(text = "画像をダウンロード")
