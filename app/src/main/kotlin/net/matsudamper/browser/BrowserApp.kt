@@ -81,6 +81,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.work.WorkManager
 import net.matsudamper.browser.data.BackupRepository
 import org.koin.compose.koinInject
+import org.mozilla.geckoview.GeckoRuntime
 
 @Composable
 internal fun BrowserApp(
@@ -435,10 +436,12 @@ private fun BrowserAppContent(
 
                     is AppDestination.SiteSettings -> navEntry(key) {
                         val siteSettingsRepository: SiteSettingsRepository = koinInject()
+                        val geckoRuntime: GeckoRuntime = koinInject()
                         val siteSettingsViewModel = composeViewModel(initializer = {
                             SiteSettingsScreenViewModel(
                                 host = key.host,
                                 siteSettingsRepository = siteSettingsRepository,
+                                geckoRuntime = geckoRuntime,
                             )
                         })
                         val siteSettingsUiState by siteSettingsViewModel.uiState.collectAsState()
