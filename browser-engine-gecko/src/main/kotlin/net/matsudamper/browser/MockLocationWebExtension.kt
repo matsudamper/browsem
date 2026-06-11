@@ -29,8 +29,8 @@ class MockLocationWebExtension {
     /** ページが位置情報を要求した際にホスト名を通知するコールバック */
     @Volatile var onGeolocationRequested: ((host: String) -> Unit)? = null
 
-    // セッションごとの接続ポート
-    private val sessionPorts = ConcurrentHashMap<GeckoSession, WebExtension.Port>()
+    // セッションごとの接続ポート。iframe を含む各フレームから個別に接続されるため複数保持する
+    private val sessionPorts = ConcurrentHashMap<GeckoSession, MutableSet<WebExtension.Port>>()
 
     // デリゲートを設定済みのセッションを追跡（二重設定を防ぐ）
     private val attachedSessions: MutableSet<GeckoSession> =
@@ -73,7 +73,7 @@ class MockLocationWebExtension {
     /** 位置情報設定を更新し、接続済みの全セッションへ各ホストに応じたモードを通知する */
     fun updateConfig(config: GeolocationConfig) {
         currentConfig = config
-        sessionPorts.values.forEach { port ->
+        sessionPorts.values.flatten().forEach { port ->
             val message = buildConfigMessage(portHost(port), action = "update")
             try {
                 port.postMessage(message)
@@ -112,9 +112,9 @@ class MockLocationWebExtension {
 
                 override fun onConnect(port: WebExtension.Port) {
                     Log.d(TAG, "onConnect: ポート接続")
-                    sessionPorts[session] = port
-                    // ナビゲーション/リロード時に新しいポートが先に sessionPorts に書き込まれた後で
-                    // 古いポートの onDisconnect が発火する場合があるため、自分のポートのみ削除する。
+                    sessionPorts
+                        .getOrPut(session) { Collections.newSetFromMap(ConcurrentHashMap()) }
+                        .add(port)
                     val connectedPort = port
                     port.setDelegate(object : WebExtension.PortDelegate {
                         override fun onPortMessage(message: Any, port: WebExtension.Port) {
@@ -139,7 +139,7 @@ class MockLocationWebExtension {
 
                         override fun onDisconnect(port: WebExtension.Port) {
                             Log.d(TAG, "onDisconnect: ポート切断")
-                            sessionPorts.remove(session, connectedPort)
+                            sessionPorts[session]?.remove(connectedPort)
                         }
                     })
                 }
