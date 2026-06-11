@@ -87,6 +87,15 @@ fun SiteSettingsScreen(
                             },
                         )
                         SettingsRadioOption(
+                            label = "実際の位置情報",
+                            selected = uiState.geolocationState == SiteGeolocationState.SITE_GEOLOCATION_REAL,
+                            onClick = {
+                                uiState.callbacks.setGeolocationState(
+                                    SiteGeolocationState.SITE_GEOLOCATION_REAL,
+                                )
+                            },
+                        )
+                        SettingsRadioOption(
                             label = "ブロック",
                             selected = uiState.geolocationState == SiteGeolocationState.SITE_GEOLOCATION_DENY,
                             onClick = {

@@ -2,6 +2,7 @@ package net.matsudamper.browser.screen.sitesettings
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -18,6 +19,13 @@ internal class SiteSettingsScreenViewModel(
     private val siteSettingsRepository: SiteSettingsRepository,
 ) : ViewModel() {
 
+    val eventHandler = Channel<(Event) -> Unit>(Channel.UNLIMITED)
+
+    interface Event {
+        /** OS の位置情報権限を要求する。結果は onLocationPermissionResult で受け取る */
+        fun onRequestLocationPermission()
+    }
+
     private val callbacks = object : SiteSettingsScreenUiState.Callbacks {
         override fun setMicrophonePermission(state: SitePermissionState) {
             viewModelScope.launch {
@@ -26,9 +34,26 @@ internal class SiteSettingsScreenViewModel(
         }
 
         override fun setGeolocationState(state: SiteGeolocationState) {
+            // 実際の位置情報は OS の位置情報権限が必要なため、ここでは保存せず権限要求を行い、
+            // 許可された場合のみ onLocationPermissionResult で保存する
+            if (state == SiteGeolocationState.SITE_GEOLOCATION_REAL) {
+                eventHandler.trySend { it.onRequestLocationPermission() }
+                return
+            }
             viewModelScope.launch {
                 siteSettingsRepository.setGeolocationState(host, state)
             }
+        }
+    }
+
+    /** OS の位置情報権限要求の結果。許可された場合のみ「実際の位置情報」を保存する */
+    fun onLocationPermissionResult(granted: Boolean) {
+        if (!granted) return
+        viewModelScope.launch {
+            siteSettingsRepository.setGeolocationState(
+                host = host,
+                state = SiteGeolocationState.SITE_GEOLOCATION_REAL,
+            )
         }
     }
 

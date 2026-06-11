@@ -81,6 +81,21 @@ class SiteSettingsRepository(context: Context) {
         }
     }
 
+    /** 指定ホストの位置情報の扱いを監視する。未設定の場合は MOCK を返す */
+    fun geolocationState(host: String): Flow<SiteGeolocationState> {
+        return dataStore.data
+            .map { settings ->
+                settings.hostPermissionsMap[host]?.geolocation
+                    ?: SiteGeolocationState.SITE_GEOLOCATION_MOCK
+            }
+            .distinctUntilChanged()
+    }
+
+    /** 指定ホストの現在の位置情報の扱いを取得する */
+    suspend fun getGeolocationState(host: String): SiteGeolocationState {
+        return geolocationState(host).first()
+    }
+
     /** 全ホストの位置情報の扱いを監視する。key はホスト名 */
     fun geolocationStates(): Flow<Map<String, SiteGeolocationState>> {
         return dataStore.data

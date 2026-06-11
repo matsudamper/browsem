@@ -298,6 +298,7 @@ private fun ResolvedBrowserSettings.toLogicSettings(): BrowserLogicSettings = Br
 private fun SiteGeolocationState.toGeolocationMode(): MockLocationWebExtension.GeolocationMode {
     return when (this) {
         SiteGeolocationState.SITE_GEOLOCATION_DENY -> MockLocationWebExtension.GeolocationMode.DENY
+        SiteGeolocationState.SITE_GEOLOCATION_REAL -> MockLocationWebExtension.GeolocationMode.REAL
         else -> MockLocationWebExtension.GeolocationMode.MOCK
     }
 }

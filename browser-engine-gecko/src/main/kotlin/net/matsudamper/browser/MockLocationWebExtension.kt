@@ -156,6 +156,9 @@ class MockLocationWebExtension {
         MOCK("mock"),
         // 位置情報の取得を拒否する
         DENY("deny"),
+
+        // 実際の位置情報を返す（Gecko 本体の geolocation へ委譲）
+        REAL("real"),
     }
 
     /**

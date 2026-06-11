@@ -17,6 +17,8 @@ enum SiteGeolocationState {
   SITE_GEOLOCATION_MOCK = 0;
   // 位置情報の取得を拒否する
   SITE_GEOLOCATION_DENY = 1;
+  // 実際の位置情報を返す。OS の位置情報権限が必要
+  SITE_GEOLOCATION_REAL = 2;
 }
 
 // 1サイト（ホスト）分の権限設定

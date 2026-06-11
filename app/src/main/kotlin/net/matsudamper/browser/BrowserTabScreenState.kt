@@ -27,6 +27,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import java.net.URL
+import net.matsudamper.browser.data.SiteGeolocationState
 import net.matsudamper.browser.data.SitePermissionState
 import net.matsudamper.browser.data.SiteSettingsRepository
 import net.matsudamper.browser.data.TranslationProvider
@@ -1184,6 +1185,21 @@ internal class BrowserTabScreenState(
             val host = extractSiteHost(uri) ?: extractSiteHost(currentPageUrl)
             val grantAudio = host != null && resolveMicrophonePermission(host)
             onResult(hasVideo, grantAudio)
+        }
+    }
+
+    override fun onGeolocationPermissionRequest(
+        uri: String?,
+        onResult: (allow: Boolean) -> Unit,
+    ) {
+        coroutineScope.launch {
+            // モック/拒否はコンテンツスクリプトが処理するため、Gecko 本体の位置情報は
+            // サイトごとの設定が「実際の位置情報」の場合のみ許可する
+            val host = uri?.let { extractSiteHost(it) } ?: extractSiteHost(currentPageUrl)
+            val allow = host != null &&
+                siteSettingsRepository.getGeolocationState(host) ==
+                SiteGeolocationState.SITE_GEOLOCATION_REAL
+            onResult(allow)
         }
     }
 

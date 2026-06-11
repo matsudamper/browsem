@@ -42,6 +42,10 @@ interface BrowserSessionStateCallbacks {
         hasAudio: Boolean,
         onResult: (grantVideo: Boolean, grantAudio: Boolean) -> Unit,
     )
+    fun onGeolocationPermissionRequest(
+        uri: String?,
+        onResult: (allow: Boolean) -> Unit,
+    )
 }
 
 /** タブ内ナビゲーション履歴の項目 */
@@ -82,12 +86,20 @@ fun createGeckoSessionDelegateBundle(
                     )
                 }
                 if (perm.permission == GeckoSession.PermissionDelegate.PERMISSION_GEOLOCATION) {
-                    // 位置情報はコンテンツスクリプトがサイトごとの設定（モック/拒否）で処理するため、
-                    // Gecko 本体の位置情報は拒否する
-                    Log.d("BrowserTabPermission", "geolocation permission denied")
-                    return GeckoResult.fromValue(
-                        GeckoSession.PermissionDelegate.ContentPermission.VALUE_DENY
-                    )
+                    // モック/拒否はコンテンツスクリプトが処理する。Gecko 本体の位置情報へ
+                    // 到達するのは「実際の位置情報」設定時のみ許可する
+                    Log.d("BrowserTabPermission", "geolocation permission delegated to site settings")
+                    val result = GeckoResult<Int>()
+                    callbacks.onGeolocationPermissionRequest(perm.uri) { allow ->
+                        result.complete(
+                            if (allow) {
+                                GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW
+                            } else {
+                                GeckoSession.PermissionDelegate.ContentPermission.VALUE_DENY
+                            },
+                        )
+                    }
+                    return result
                 }
                 if (perm.permission == GeckoSession.PermissionDelegate.PERMISSION_DESKTOP_NOTIFICATION) {
                     Log.d("BrowserTabPermission", "desktop notification denied")
@@ -423,6 +435,18 @@ internal class BrowserTabSessionDelegateHost(
                     cb.onMediaPermissionRequest(uri, hasVideo, hasAudio, onResult)
                 } else {
                     onResult(false, false)
+                }
+            }
+
+            override fun onGeolocationPermissionRequest(
+                uri: String?,
+                onResult: (allow: Boolean) -> Unit,
+            ) {
+                val cb = currentCallbacks()
+                if (cb != null) {
+                    cb.onGeolocationPermissionRequest(uri, onResult)
+                } else {
+                    onResult(false)
                 }
             }
         },
