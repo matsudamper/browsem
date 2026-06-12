@@ -403,7 +403,8 @@ private fun ContextMenuDialog(
         // ボタンを縦に並べたいので confirm は空にして dismissButton スロットに集約する
         confirmButton = {},
         dismissButton = {
-            Column {
+            // 片手で持っていても押しやすいように全幅にし、テキストを中央寄せにする
+            Column(modifier = Modifier.fillMaxWidth()) {
                 when (menu) {
                     is BrowserTabScreenState.ContextMenuState.Link -> {
                         LinkActionButtons(
@@ -432,20 +433,32 @@ private fun ContextMenuDialog(
                             onCopyLink = onCopyLink,
                         )
                         if (enableTabUi) {
-                            TextButton(onClick = { onOpenNewTab(menu.imageSrcUrl) }) {
+                            TextButton(
+                                modifier = Modifier.fillMaxWidth(),
+                                onClick = { onOpenNewTab(menu.imageSrcUrl) },
+                            ) {
                                 Text(text = "画像を新しいタブで開く")
                             }
                         } else {
-                            TextButton(onClick = { onOpenUrl(menu.imageSrcUrl) }) {
+                            TextButton(
+                                modifier = Modifier.fillMaxWidth(),
+                                onClick = { onOpenUrl(menu.imageSrcUrl) },
+                            ) {
                                 Text(text = "画像を開く")
                             }
                         }
-                        TextButton(onClick = { onDownloadImage(menu.imageSrcUrl) }) {
+                        TextButton(
+                            modifier = Modifier.fillMaxWidth(),
+                            onClick = { onDownloadImage(menu.imageSrcUrl) },
+                        ) {
                             Text(text = "画像をダウンロード")
                         }
                     }
                 }
-                TextButton(onClick = onDismiss) {
+                TextButton(
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = onDismiss,
+                ) {
                     Text(text = "キャンセル")
                 }
             }
@@ -461,17 +474,26 @@ private fun ImageActionButtons(
     onOpenUrl: (String) -> Unit,
     onDownloadImage: (String) -> Unit,
 ) {
-    Column {
+    Column(modifier = Modifier.fillMaxWidth()) {
         if (enableTabUi) {
-            TextButton(onClick = { onOpenNewTab(srcUrl) }) {
+            TextButton(
+                modifier = Modifier.fillMaxWidth(),
+                onClick = { onOpenNewTab(srcUrl) },
+            ) {
                 Text(text = "新しいタブで開く")
             }
         } else {
-            TextButton(onClick = { onOpenUrl(srcUrl) }) {
+            TextButton(
+                modifier = Modifier.fillMaxWidth(),
+                onClick = { onOpenUrl(srcUrl) },
+            ) {
                 Text(text = "開く")
             }
         }
-        TextButton(onClick = { onDownloadImage(srcUrl) }) {
+        TextButton(
+            modifier = Modifier.fillMaxWidth(),
+            onClick = { onDownloadImage(srcUrl) },
+        ) {
             Text(text = "ダウンロード")
         }
     }
@@ -485,17 +507,26 @@ private fun LinkActionButtons(
     onOpenUrl: (String) -> Unit,
     onCopyLink: (String) -> Unit,
 ) {
-    Column {
+    Column(modifier = Modifier.fillMaxWidth()) {
         if (enableTabUi) {
-            TextButton(onClick = { onOpenNewTab(url) }) {
+            TextButton(
+                modifier = Modifier.fillMaxWidth(),
+                onClick = { onOpenNewTab(url) },
+            ) {
                 Text(text = "新しいタブで開く")
             }
         } else {
-            TextButton(onClick = { onOpenUrl(url) }) {
+            TextButton(
+                modifier = Modifier.fillMaxWidth(),
+                onClick = { onOpenUrl(url) },
+            ) {
                 Text(text = "開く")
             }
         }
-        TextButton(onClick = { onCopyLink(url) }) {
+        TextButton(
+            modifier = Modifier.fillMaxWidth(),
+            onClick = { onCopyLink(url) },
+        ) {
             Text(text = "URLをコピー")
         }
     }
@@ -867,6 +898,25 @@ private fun flattenChoices(
         } else {
             listOf(choice)
         }
+    }
+}
+
+@Preview(name = "ContextMenuDialog")
+@Composable
+private fun PreviewContextMenuDialog() {
+    BrowserTheme(themeMode = net.matsudamper.browser.data.ThemeMode.THEME_SYSTEM) {
+        ContextMenuDialog(
+            menu = BrowserTabScreenState.ContextMenuState.LinkWithImage(
+                url = "https://example.com/very/long/link/path/page.html",
+                imageSrcUrl = "https://example.com/image.png",
+            ),
+            enableTabUi = true,
+            onOpenNewTab = {},
+            onOpenUrl = {},
+            onCopyLink = {},
+            onDownloadImage = {},
+            onDismiss = {},
+        )
     }
 }
 
