@@ -379,39 +379,44 @@ private fun CurrentPageUrlListItem(
     onCopyCurrentUrl: () -> Unit,
     onRestoreCurrentUrl: () -> Unit,
 ) {
-    ListItem(
-        headlineContent = {
-            Text(text = "今のURL")
-        },
-        supportingContent = {
-            Column(
-                modifier = Modifier.padding(top = 4.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag(BrowserTabSurfaceTestTags.CurrentUrlActions.testTag),
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                text = "今のURL",
+                style = MaterialTheme.typography.bodyLarge,
+            )
+            androidx.compose.runtime.CompositionLocalProvider(
+                LocalContentColor provides MaterialTheme.colorScheme.onSurfaceVariant,
             ) {
                 Text(
                     text = currentPageUrl,
+                    style = MaterialTheme.typography.bodyMedium,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.testTag(BrowserTabSurfaceTestTags.CurrentUrlText.testTag),
                 )
-                Column {
-                    CurrentPageUrlActionRow(
-                        text = "URLバーに戻す",
-                        iconPainter = painterResource(R.drawable.ic_arrow_upward),
-                        onClick = onRestoreCurrentUrl,
-                        modifier = Modifier.testTag(BrowserTabSurfaceTestTags.RestoreUrlButton.testTag),
-                    )
-                    CurrentPageUrlActionRow(
-                        text = "コピー",
-                        iconPainter = painterResource(R.drawable.ic_content_copy),
-                        onClick = onCopyCurrentUrl,
-                        modifier = Modifier.testTag(BrowserTabSurfaceTestTags.CopyButton.testTag),
-                    )
-                }
             }
-        },
-        modifier = Modifier.testTag(BrowserTabSurfaceTestTags.CurrentUrlActions.testTag),
-    )
+        }
+        CurrentPageUrlActionRow(
+            text = "URLバーに戻す",
+            iconPainter = painterResource(R.drawable.ic_arrow_upward),
+            onClick = onRestoreCurrentUrl,
+            modifier = Modifier.testTag(BrowserTabSurfaceTestTags.RestoreUrlButton.testTag),
+        )
+        CurrentPageUrlActionRow(
+            text = "コピー",
+            iconPainter = painterResource(R.drawable.ic_content_copy),
+            onClick = onCopyCurrentUrl,
+            modifier = Modifier.testTag(BrowserTabSurfaceTestTags.CopyButton.testTag),
+        )
+    }
 }
 
 @Composable
@@ -425,7 +430,7 @@ private fun CurrentPageUrlActionRow(
         modifier = modifier
             .fillMaxWidth()
             .clickable { onClick() }
-            .padding(vertical = 12.dp),
+            .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
