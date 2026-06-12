@@ -404,21 +404,19 @@ internal fun BrowserToolbar(
                     color = toolbarColors.urlBarBackgroundColor,
                     shape = CircleShape,
                 ) {
-                    Row(
-                        modifier = Modifier
-                            .padding(
-                                end = 4.dp,
-                            ),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        val urlFocusRequester = remember { FocusRequester() }
-                        Box(
-                            modifier = Modifier.weight(1f),
+                    val urlFocusRequester = remember { FocusRequester() }
+                    Box {
+                        Row(
+                            modifier = Modifier
+                                .padding(
+                                    end = 4.dp,
+                                ),
+                            verticalAlignment = Alignment.CenterVertically,
                         ) {
                             UrlTextInput(
                                 modifier = Modifier
                                     .testTag(BrowserToolbarTestTags.Url(urlInputState.value).testTag)
-                                    .fillMaxWidth(),
+                                    .weight(1f),
                                 enableSuggest = urlInputState.enableSuggest,
                                 paddingValues = PaddingValues(
                                     start = 8.dp,
@@ -433,40 +431,42 @@ internal fun BrowserToolbar(
                                 textColor = LocalContentColor.current,
                                 focusRequester = urlFocusRequester,
                             )
-                            if (!isFocused) {
-                                // 非フォーカス時はテキストフィールドへのタッチを横取りし、
-                                // タップでフォーカス（従来動作）、長押しでURLコピーを行う
-                                Box(
-                                    modifier = Modifier
-                                        .matchParentSize()
-                                        .testTag(BrowserToolbarTestTags.UrlLongPressOverlay.testTag)
-                                        .combinedClickable(
-                                            interactionSource = remember { MutableInteractionSource() },
-                                            indication = null,
-                                            onClick = { urlFocusRequester.requestFocus() },
-                                            onLongClick = urlInputState.onLongPress,
-                                        ),
-                                )
+
+                            if (isFocused) {
+                                CompositionLocalProvider(
+                                    LocalMinimumInteractiveComponentSize provides 0.dp
+                                ) {
+                                    Icon(
+                                        modifier = Modifier
+                                            .fillMaxHeight()
+                                            .aspectRatio(1f)
+                                            .clickable(
+                                                indication = ripple(),
+                                                interactionSource = remember { MutableInteractionSource() },
+                                                onClick = { urlInputState.onValueChange("") }
+                                            ),
+                                        painter = painterResource(ResourcesR.drawable.close_24dp),
+                                        contentDescription = "クリア",
+                                    )
+                                }
                             }
                         }
 
-                        if (isFocused) {
-                            CompositionLocalProvider(
-                                LocalMinimumInteractiveComponentSize provides 0.dp
-                            ) {
-                                Icon(
-                                    modifier = Modifier
-                                        .fillMaxHeight()
-                                        .aspectRatio(1f)
-                                        .clickable(
-                                            indication = ripple(),
-                                            interactionSource = remember { MutableInteractionSource() },
-                                            onClick = { urlInputState.onValueChange("") }
-                                        ),
-                                    painter = painterResource(ResourcesR.drawable.close_24dp),
-                                    contentDescription = "クリア",
-                                )
-                            }
+                        if (!isFocused) {
+                            // 非フォーカス時はURLバー(ピル形状)全体へのタッチを横取りし、
+                            // タップでフォーカス（従来動作）、長押しでURLコピーを行う。
+                            // Surface が shape でクリップするため、タッチ範囲もピル形状の範囲になる。
+                            Box(
+                                modifier = Modifier
+                                    .matchParentSize()
+                                    .testTag(BrowserToolbarTestTags.UrlLongPressOverlay.testTag)
+                                    .combinedClickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null,
+                                        onClick = { urlFocusRequester.requestFocus() },
+                                        onLongClick = urlInputState.onLongPress,
+                                    ),
+                            )
                         }
                     }
                 }
