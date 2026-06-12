@@ -325,6 +325,7 @@ private fun BrowserAppContent(
                                         onValueChange = {},
                                         onSubmit = {},
                                         onFocusChanged = {},
+                                        onLongPress = {},
                                         enableSuggest = false,
                                         scrollEnabled = false,
                                     ),

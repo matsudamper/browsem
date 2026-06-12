@@ -749,6 +749,8 @@ internal fun GeckoBrowserTab(
                         state.onUrlSubmit(rawInput)
                         closeUrlInput(false)
                     },
+                    // 非フォーカス時のURL部分長押しで現在のページURLをコピー
+                    onLongPressUrl = state::copyCurrentPageUrl,
                     isFocused = state.isUrlInputFocused,
                     onFocusChanged = { hasFocus ->
                         if (hasFocus) {

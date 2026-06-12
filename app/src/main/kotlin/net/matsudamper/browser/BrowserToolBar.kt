@@ -50,6 +50,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.IntrinsicMeasurable
@@ -84,6 +85,7 @@ internal fun BrowserToolBar(
     value: String,
     onValueChange: (String) -> Unit,
     onSubmit: (String) -> Unit,
+    onLongPressUrl: () -> Unit,
     isFocused: Boolean,
     onFocusChanged: (Boolean) -> Unit,
     showInstallExtensionItem: Boolean,
@@ -148,6 +150,7 @@ internal fun BrowserToolBar(
             onValueChange = onValueChange,
             onSubmit = onSubmit,
             onFocusChanged = onFocusChanged,
+            onLongPress = onLongPressUrl,
             enableSuggest = true,
             scrollEnabled = isFocused,
         ),
@@ -224,6 +227,7 @@ data class UrlInputState(
     val onValueChange: (String) -> Unit,
     val onSubmit: (String) -> Unit,
     val onFocusChanged: (Boolean) -> Unit,
+    val onLongPress: () -> Unit,
     val value: String,
 )
 
@@ -407,23 +411,44 @@ internal fun BrowserToolbar(
                             ),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        UrlTextInput(
-                            modifier = Modifier
-                                .testTag(BrowserToolbarTestTags.Url(urlInputState.value).testTag)
-                                .weight(1f),
-                            enableSuggest = urlInputState.enableSuggest,
-                            paddingValues = PaddingValues(
-                                start = 8.dp,
-                                top = 4.dp,
-                                bottom = 4.dp
-                            ),
-                            scrollEnabled = isFocused,
-                            value = urlInputState.value,
-                            onValueChange = urlInputState.onValueChange,
-                            onSubmit = urlInputState.onSubmit,
-                            onFocusChanged = urlInputState.onFocusChanged,
-                            textColor = LocalContentColor.current,
-                        )
+                        val urlFocusRequester = remember { FocusRequester() }
+                        Box(
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            UrlTextInput(
+                                modifier = Modifier
+                                    .testTag(BrowserToolbarTestTags.Url(urlInputState.value).testTag)
+                                    .fillMaxWidth(),
+                                enableSuggest = urlInputState.enableSuggest,
+                                paddingValues = PaddingValues(
+                                    start = 8.dp,
+                                    top = 4.dp,
+                                    bottom = 4.dp
+                                ),
+                                scrollEnabled = isFocused,
+                                value = urlInputState.value,
+                                onValueChange = urlInputState.onValueChange,
+                                onSubmit = urlInputState.onSubmit,
+                                onFocusChanged = urlInputState.onFocusChanged,
+                                textColor = LocalContentColor.current,
+                                focusRequester = urlFocusRequester,
+                            )
+                            if (!isFocused) {
+                                // 非フォーカス時はテキストフィールドへのタッチを横取りし、
+                                // タップでフォーカス（従来動作）、長押しでURLコピーを行う
+                                Box(
+                                    modifier = Modifier
+                                        .matchParentSize()
+                                        .testTag(BrowserToolbarTestTags.UrlLongPressOverlay.testTag)
+                                        .combinedClickable(
+                                            interactionSource = remember { MutableInteractionSource() },
+                                            indication = null,
+                                            onClick = { urlFocusRequester.requestFocus() },
+                                            onLongClick = urlInputState.onLongPress,
+                                        ),
+                                )
+                            }
+                        }
 
                         if (isFocused) {
                             CompositionLocalProvider(
@@ -593,6 +618,10 @@ sealed class BrowserToolbarTestTags(val id: String) {
         id = "url#$value",
     )
 
+    object UrlLongPressOverlay : BrowserToolbarTestTags(
+        id = "url_long_press_overlay",
+    )
+
     object Toolbar : BrowserToolbarTestTags(
         id = "toolbar",
     )
@@ -621,6 +650,7 @@ private fun Preview() {
                     value = "https://google.com",
                     onValueChange = {},
                     onSubmit = {},
+                    onLongPressUrl = {},
                     isFocused = isFocused,
                     onFocusChanged = {},
                     showInstallExtensionItem = true,
@@ -664,6 +694,7 @@ private fun PreviewTabCountVariants() {
                     value = "https://google.com",
                     onValueChange = {},
                     onSubmit = {},
+                    onLongPressUrl = {},
                     isFocused = false,
                     onFocusChanged = {},
                     showInstallExtensionItem = true,
@@ -706,6 +737,7 @@ private fun PreviewWideToolbar() {
                 value = "https://google.com",
                 onValueChange = {},
                 onSubmit = {},
+                onLongPressUrl = {},
                 isFocused = false,
                 onFocusChanged = {},
                 showInstallExtensionItem = true,
