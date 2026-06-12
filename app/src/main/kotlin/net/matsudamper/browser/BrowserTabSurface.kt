@@ -18,11 +18,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
@@ -39,13 +41,17 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import net.matsudamper.browser.ui.browser.UrlBarSuggestionsUiState
+import net.matsudamper.browser.ui.common.BrowserTheme
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.GeckoView
@@ -373,39 +379,87 @@ private fun CurrentPageUrlListItem(
     onCopyCurrentUrl: () -> Unit,
     onRestoreCurrentUrl: () -> Unit,
 ) {
-    ListItem(
-        headlineContent = {
-            Text(text = "今のURL")
-        },
-        supportingContent = {
-            Column(
-                modifier = Modifier.padding(top = 4.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag(BrowserTabSurfaceTestTags.CurrentUrlActions.testTag),
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                text = "今のURL",
+                style = MaterialTheme.typography.bodyLarge,
+            )
+            androidx.compose.runtime.CompositionLocalProvider(
+                LocalContentColor provides MaterialTheme.colorScheme.onSurfaceVariant,
             ) {
                 Text(
                     text = currentPageUrl,
+                    style = MaterialTheme.typography.bodyMedium,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.testTag(BrowserTabSurfaceTestTags.CurrentUrlText.testTag),
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TextButton(
-                        onClick = onCopyCurrentUrl,
-                        modifier = Modifier.testTag(BrowserTabSurfaceTestTags.CopyButton.testTag),
-                    ) {
-                        Text("コピー")
-                    }
-                    TextButton(
-                        onClick = onRestoreCurrentUrl,
-                        modifier = Modifier.testTag(BrowserTabSurfaceTestTags.RestoreUrlButton.testTag),
-                    ) {
-                        Text("URLバーに戻す")
-                    }
-                }
             }
-        },
-        modifier = Modifier.testTag(BrowserTabSurfaceTestTags.CurrentUrlActions.testTag),
-    )
+        }
+        CurrentPageUrlActionRow(
+            text = "URLバーに戻す",
+            iconPainter = painterResource(R.drawable.ic_arrow_upward),
+            onClick = onRestoreCurrentUrl,
+            modifier = Modifier.testTag(BrowserTabSurfaceTestTags.RestoreUrlButton.testTag),
+        )
+        CurrentPageUrlActionRow(
+            text = "コピー",
+            iconPainter = painterResource(R.drawable.ic_content_copy),
+            onClick = onCopyCurrentUrl,
+            modifier = Modifier.testTag(BrowserTabSurfaceTestTags.CopyButton.testTag),
+        )
+    }
+}
+
+@Composable
+private fun CurrentPageUrlActionRow(
+    text: String,
+    iconPainter: Painter,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = text,
+            color = MaterialTheme.colorScheme.primary,
+            style = MaterialTheme.typography.labelLarge,
+            modifier = Modifier.weight(1f),
+        )
+        Icon(
+            painter = iconPainter,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(20.dp),
+        )
+    }
+}
+
+@Preview(name = "今のURL操作")
+@Composable
+private fun PreviewCurrentPageUrlListItem() {
+    BrowserTheme(themeMode = net.matsudamper.browser.data.ThemeMode.THEME_SYSTEM) {
+        Surface {
+            CurrentPageUrlListItem(
+                currentPageUrl = "https://example.com/very/long/path?query=value",
+                onCopyCurrentUrl = {},
+                onRestoreCurrentUrl = {},
+            )
+        }
+    }
 }
 
 @Composable
