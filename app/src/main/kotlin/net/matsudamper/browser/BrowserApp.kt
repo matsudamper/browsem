@@ -602,6 +602,13 @@ private fun BrowserAppContent(
                                             navController.replaceCurrentBrowserTab(nextSelectedTabId)
                                         }
                                     }
+
+                                    override fun selectTab(tabId: String) {
+                                        // タブ閉鎖の保留・取り消しに伴う選択切替。
+                                        // タブ一覧は開いたまま、戻り先の Browser だけ切り替える
+                                        browserTabController.selectTab(tabId)
+                                        navController.replaceCurrentBrowserTab(tabId)
+                                    }
                                 })
                             }
                         }
