@@ -255,67 +255,63 @@ private fun ToolbarMenuContent(
                 MenuColumnLabel(text = "更新")
             }
         }
-        // 二段目: ホーム・ダウンロード・サイトの設定を一段目と同じ間隔で表示
-        if (showHome || onOpenDownloads != null || onOpenSiteSettings != null) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-            ) {
-                if (showHome) {
-                    Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                        IconButton(
-                            modifier = Modifier
-                                .testTag(BrowserToolbarMenuTestTags.HomeButton.testTag),
-                            onClick = {
-                                onDismissRequest()
-                                onHome()
-                            }
-                        ) {
-                            Icon(
-                                painter = painterResource(ResourcesR.drawable.ic_home_24dp),
-                                contentDescription = null,
-                            )
+        // 二段目: ホーム・共有・サイトの設定を一段目と同じ間隔で表示
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+        ) {
+            if (showHome) {
+                Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                    IconButton(
+                        modifier = Modifier
+                            .testTag(BrowserToolbarMenuTestTags.HomeButton.testTag),
+                        onClick = {
+                            onDismissRequest()
+                            onHome()
                         }
-                        MenuColumnLabel(text = "ホーム")
+                    ) {
+                        Icon(
+                            painter = painterResource(ResourcesR.drawable.ic_home_24dp),
+                            contentDescription = null,
+                        )
                     }
+                    MenuColumnLabel(text = "ホーム")
                 }
-                if (onOpenDownloads != null) {
-                    Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                        IconButton(
-                            modifier = Modifier
-                                .testTag(BrowserToolbarMenuTestTags.DownloadsButton.testTag),
-                            onClick = {
-                                onDismissRequest()
-                                onOpenDownloads()
-                            },
-                        ) {
-                            Icon(
-                                painter = painterResource(ResourcesR.drawable.ic_download_24dp),
-                                contentDescription = null,
-                            )
-                        }
-                        MenuColumnLabel(text = "ダウンロード")
-                    }
+            }
+            Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                IconButton(
+                    modifier = Modifier
+                        .testTag(BrowserToolbarMenuTestTags.ShareButton.testTag),
+                    onClick = {
+                        onDismissRequest()
+                        onShare()
+                    },
+                ) {
+                    Icon(
+                        painter = painterResource(ResourcesR.drawable.ic_share_24dp),
+                        contentDescription = null,
+                    )
                 }
-                if (onOpenSiteSettings != null) {
-                    Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                        IconButton(
-                            modifier = Modifier
-                                .testTag(BrowserToolbarMenuTestTags.SiteSettingsButton.testTag),
-                            onClick = {
-                                onDismissRequest()
-                                onOpenSiteSettings()
-                            },
-                        ) {
-                            Icon(
-                                painter = painterResource(ResourcesR.drawable.ic_settings_24dp),
-                                contentDescription = null,
-                            )
-                        }
-                        MenuColumnLabel(text = "サイトの設定")
+                MenuColumnLabel(text = "共有")
+            }
+            if (onOpenSiteSettings != null) {
+                Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                    IconButton(
+                        modifier = Modifier
+                            .testTag(BrowserToolbarMenuTestTags.SiteSettingsButton.testTag),
+                        onClick = {
+                            onDismissRequest()
+                            onOpenSiteSettings()
+                        },
+                    ) {
+                        Icon(
+                            painter = painterResource(ResourcesR.drawable.ic_settings_24dp),
+                            contentDescription = null,
+                        )
                     }
+                    MenuColumnLabel(text = "サイトの設定")
                 }
             }
         }
@@ -427,21 +423,24 @@ private fun ToolbarMenuContent(
                 onTranslatePage()
             },
         )
-        DropdownMenuItem(
-            text = {
-                Text(text = "共有")
-            },
-            leadingIcon = {
-                Icon(
-                    painter = painterResource(id = ResourcesR.drawable.ic_share_24dp),
-                    contentDescription = null,
-                )
-            },
-            onClick = {
-                onDismissRequest()
-                onShare()
-            },
-        )
+        onOpenDownloads?.let { openDownloads ->
+            DropdownMenuItem(
+                modifier = Modifier.testTag(BrowserToolbarMenuTestTags.DownloadsButton.testTag),
+                text = {
+                    Text(text = "ダウンロード")
+                },
+                leadingIcon = {
+                    Icon(
+                        painter = painterResource(id = ResourcesR.drawable.ic_download_24dp),
+                        contentDescription = null,
+                    )
+                },
+                onClick = {
+                    onDismissRequest()
+                    openDownloads()
+                },
+            )
+        }
         if (showAddToHomeScreen) {
             DropdownMenuItem(
                 text = {
@@ -565,5 +564,6 @@ sealed interface BrowserToolbarMenuTestTags {
     object FindInPageButton : BrowserToolbarMenuTestTags { override val id = "find_in_page_button" }
     object SiteSettingsButton : BrowserToolbarMenuTestTags { override val id = "site_settings_button" }
     object DownloadsButton : BrowserToolbarMenuTestTags { override val id = "downloads_button" }
+    object ShareButton : BrowserToolbarMenuTestTags { override val id = "share_button" }
     object HomeButton : BrowserToolbarMenuTestTags { override val id = "home_button" }
 }
