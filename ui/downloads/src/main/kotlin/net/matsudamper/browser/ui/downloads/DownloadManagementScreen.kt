@@ -104,6 +104,7 @@ fun DownloadManagementScreen(
                     DownloadItemRow(
                         item = item,
                         onCancel = { uiState.callbacks.onCancel(item.id) },
+                        onPause = { uiState.callbacks.onPause(item.id) },
                         onOpenFile = { fileUri -> uiState.callbacks.onOpenFile(fileUri) },
                         onResume = { uiState.callbacks.onResume(item.id) },
                         onOpenOriginPage = { url -> uiState.callbacks.onOpenOriginPage(url) },
@@ -119,6 +120,7 @@ fun DownloadManagementScreen(
 private fun DownloadItemRow(
     item: DownloadManagementScreenUiState.DownloadItem,
     onCancel: () -> Unit,
+    onPause: () -> Unit,
     onOpenFile: (String) -> Unit,
     onResume: () -> Unit,
     onOpenOriginPage: (url: String) -> Unit,
@@ -180,8 +182,24 @@ private fun DownloadItemRow(
                     )
                     when (val status = item.status) {
                         is DownloadManagementScreenUiState.DownloadStatus.InProgress -> {
-                            TextButton(onClick = onCancel) {
-                                Text("キャンセル")
+                            Row {
+                                TextButton(onClick = onPause) {
+                                    Text("一時停止")
+                                }
+                                TextButton(onClick = onCancel) {
+                                    Text("キャンセル")
+                                }
+                            }
+                        }
+
+                        is DownloadManagementScreenUiState.DownloadStatus.Paused -> {
+                            Row {
+                                TextButton(onClick = onResume) {
+                                    Text("再開")
+                                }
+                                TextButton(onClick = onCancel) {
+                                    Text("キャンセル")
+                                }
                             }
                         }
 
@@ -238,6 +256,21 @@ private fun DownloadItemRow(
                         }
                     }
 
+                    is DownloadManagementScreenUiState.DownloadStatus.Paused -> {
+                        val sizeText = buildSizeText(status.totalRead, status.contentLength)
+                        Text(
+                            text = "一時停止中 $sizeText",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        LinearProgressIndicator(
+                            progress = { status.progress / 100f },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 4.dp),
+                        )
+                    }
+
                     is DownloadManagementScreenUiState.DownloadStatus.Completed -> {
                         Text(
                             text = "完了",
@@ -282,6 +315,57 @@ private fun formatBytes(bytes: Long): String = when {
     else -> "$bytes B"
 }
 
+@Preview(name = "ダウンロード中")
+@Composable
+private fun PreviewInProgress() {
+    MaterialTheme {
+        DownloadItemRow(
+            item = DownloadManagementScreenUiState.DownloadItem(
+                id = UUID.randomUUID(),
+                fileName = "example.zip",
+                status = DownloadManagementScreenUiState.DownloadStatus.InProgress(
+                    progress = 40,
+                    totalRead = 40L * 1024 * 1024,
+                    contentLength = 100L * 1024 * 1024,
+                    isIndeterminate = false,
+                ),
+                enqueuedAt = 0L,
+                originPageUrl = "https://example.com/page",
+            ),
+            onCancel = {},
+            onPause = {},
+            onOpenFile = {},
+            onResume = {},
+            onOpenOriginPage = {},
+        )
+    }
+}
+
+@Preview(name = "一時停止中")
+@Composable
+private fun PreviewPaused() {
+    MaterialTheme {
+        DownloadItemRow(
+            item = DownloadManagementScreenUiState.DownloadItem(
+                id = UUID.randomUUID(),
+                fileName = "example.zip",
+                status = DownloadManagementScreenUiState.DownloadStatus.Paused(
+                    progress = 40,
+                    totalRead = 40L * 1024 * 1024,
+                    contentLength = 100L * 1024 * 1024,
+                ),
+                enqueuedAt = 0L,
+                originPageUrl = "https://example.com/page",
+            ),
+            onCancel = {},
+            onPause = {},
+            onOpenFile = {},
+            onResume = {},
+            onOpenOriginPage = {},
+        )
+    }
+}
+
 @Preview(name = "失敗・再開可能")
 @Composable
 private fun PreviewFailedCanResume() {
@@ -295,6 +379,7 @@ private fun PreviewFailedCanResume() {
                 originPageUrl = "https://example.com/page",
             ),
             onCancel = {},
+            onPause = {},
             onOpenFile = {},
             onResume = {},
             onOpenOriginPage = {},
@@ -326,6 +411,7 @@ private fun PreviewCompletedWithThumbnail() {
                 originPageUrl = "https://example.com/page",
             ),
             onCancel = {},
+            onPause = {},
             onOpenFile = {},
             onResume = {},
             onOpenOriginPage = {},
@@ -349,6 +435,7 @@ private fun PreviewCompletedWithoutThumbnail() {
                 originPageUrl = null,
             ),
             onCancel = {},
+            onPause = {},
             onOpenFile = {},
             onResume = {},
             onOpenOriginPage = {},
@@ -369,6 +456,7 @@ private fun PreviewFailedCannotResume() {
                 originPageUrl = null,
             ),
             onCancel = {},
+            onPause = {},
             onOpenFile = {},
             onResume = {},
             onOpenOriginPage = {},

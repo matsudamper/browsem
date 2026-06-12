@@ -5,7 +5,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import java.util.UUID
 
-enum class DownloadRecordStatus { ENQUEUED, RUNNING, SUCCEEDED, FAILED, CANCELLED }
+enum class DownloadRecordStatus { ENQUEUED, RUNNING, SUCCEEDED, FAILED, CANCELLED, PAUSED }
 
 data class DownloadRecord(
     val workerId: UUID,
@@ -18,7 +18,7 @@ data class DownloadRecord(
     val contentLength: Long,
     val enqueuedAt: Long,
     val referrerUrl: String,
-    /** 失敗時に保存した部分ファイルURI。非nullの場合は再開可能 */
+    /** 失敗・一時停止時に保存した部分ファイルURI。非nullの場合は再開可能 */
     val partialFileUri: String?,
 )
 
@@ -120,6 +120,36 @@ class DownloadRepository(context: Context) {
         dao.cancelIfActive(workerId)
     }
 
+    /** ENQUEUED/RUNNING のときのみ一時停止状態に更新する */
+    suspend fun updatePaused(workerId: String) {
+        dao.pauseIfActive(workerId)
+    }
+
+    /** 指定したワーカーのレコードが一時停止済みかどうかを返す */
+    suspend fun isPaused(workerId: String): Boolean {
+        return dao.getStatus(workerId) == DownloadRecordStatus.PAUSED.name
+    }
+
+    /**
+     * 一時停止時に部分ファイルURIを保存する。
+     * 再開可能なPAUSEDレコードとして記録する
+     */
+    suspend fun updatePausedPartial(
+        workerId: String,
+        partialFileUri: String,
+        fileName: String,
+        totalRead: Long,
+        contentLength: Long,
+    ) {
+        dao.updatePausedPartial(
+            workerId = workerId,
+            partialFileUri = partialFileUri,
+            fileName = fileName,
+            totalRead = totalRead,
+            contentLength = contentLength,
+        )
+    }
+
     /**
      * 指定したワーカーのレコードがキャンセル済みかどうかを返す。
      * WorkManager の割り込みが取りこぼされた場合でも Worker が自力で停止できるよう、
@@ -127,6 +157,18 @@ class DownloadRepository(context: Context) {
      */
     suspend fun isCancelled(workerId: String): Boolean {
         return dao.getStatus(workerId) == DownloadRecordStatus.CANCELLED.name
+    }
+
+    /**
+     * 指定したワーカーのレコードがキャンセルまたは一時停止済みかどうかを返す。
+     * WorkManager の割り込みが取りこぼされた場合でも Worker が自力で停止できるよう、
+     * Worker の進捗更新時にポーリングして確認するために使用する
+     */
+    suspend fun isStopRequested(workerId: String): Boolean {
+        return dao.getStatus(workerId) in listOf(
+            DownloadRecordStatus.CANCELLED.name,
+            DownloadRecordStatus.PAUSED.name,
+        )
     }
 
     suspend fun get(workerId: UUID): DownloadEntity {

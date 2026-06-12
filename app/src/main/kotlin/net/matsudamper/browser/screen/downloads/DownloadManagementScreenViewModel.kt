@@ -98,6 +98,7 @@ internal class DownloadManagementScreenViewModel(
 
     private fun buildCallbacks() = DownloadManagementScreenUiState.Callbacks(
         onCancel = { id -> cancelDownload(id) },
+        onPause = { id -> pauseDownload(id) },
         onOpenFile = { fileUri -> openFile(fileUri) },
         onOpenDownloadsFolder = { openDownloadsFolder() },
         onResume = { id -> resumeDownload(id) },
@@ -141,6 +142,13 @@ internal class DownloadManagementScreenViewModel(
                 )
             }
             DownloadRecordStatus.CANCELLED -> DownloadManagementScreenUiState.DownloadStatus.Cancelled
+            DownloadRecordStatus.PAUSED -> {
+                DownloadManagementScreenUiState.DownloadStatus.Paused(
+                    progress = progress,
+                    totalRead = totalRead,
+                    contentLength = contentLength,
+                )
+            }
         }
         return DownloadManagementScreenUiState.DownloadItem(
             id = workerId,
@@ -155,6 +163,10 @@ internal class DownloadManagementScreenViewModel(
     }
 
     private fun cancelDownload(id: UUID) {
+        // 一時停止中のレコードは Worker が存在しないため、残った部分ファイルをここで削除する
+        val pausedPartialFileUri = currentRecords
+            .find { it.workerId == id && it.status == DownloadRecordStatus.PAUSED }
+            ?.partialFileUri
         // suspend を挟むと viewModelScope の破棄でキャンセル要求自体が消えるため、即時に発行する
         workManager.cancelWorkById(id)
         // Worker 起動前に GeckoDownloadManager が直接表示した通知は誰も消さないため、
@@ -169,17 +181,44 @@ internal class DownloadManagementScreenViewModel(
             // WorkManager の割り込みが届かない場合でも、Worker が進捗更新時に
             // この CANCELLED 状態を検知して自力で停止する
             downloadRepository.updateCancelled(id.toString())
+            pausedPartialFileUri?.let { uri ->
+                runCatching {
+                    getApplication<Application>().contentResolver.delete(uri.toUri(), null, null)
+                }
+            }
         }
     }
 
     /**
-     * 失敗したダウンロードを再開する。
+     * 実行中のダウンロードを一時停止する。
+     * 先に DB を PAUSED に更新してから WorkManager に割り込みを発行することで、
+     * Worker の CancellationException ハンドラが一時停止を検知して部分ファイルを保持する
+     */
+    private fun pauseDownload(id: UUID) {
+        viewModelScope.launch {
+            downloadRepository.updatePaused(id.toString())
+            workManager.cancelWorkById(id)
+            // Worker 起動前に GeckoDownloadManager が直接表示した通知は誰も消さないため、
+            // 同じ導出式（workId の hashCode）で通知 ID を求めて明示的に消す
+            val notificationId = id.hashCode() and 0x7fffffff
+            getApplication<Application>()
+                .getSystemService(NotificationManager::class.java)
+                ?.cancel(notificationId)
+        }
+    }
+
+    /**
+     * 失敗または一時停止したダウンロードを再開する。
      * 部分ファイルが残っている場合はRangeリクエストで再開し、
      * そうでない場合は同じURLを再度エンキューする。
      */
     private fun resumeDownload(id: UUID) {
         val record = currentRecords.find { it.workerId == id } ?: return
-        if (record.status != DownloadRecordStatus.FAILED) return
+        if (record.status != DownloadRecordStatus.FAILED &&
+            record.status != DownloadRecordStatus.PAUSED
+        ) {
+            return
+        }
 
         val partialFileUri = record.partialFileUri
         if (partialFileUri != null) {

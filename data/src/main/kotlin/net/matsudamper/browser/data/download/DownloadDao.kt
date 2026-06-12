@@ -30,6 +30,10 @@ interface DownloadDao {
     @Query("UPDATE download SET status = 'CANCELLED' WHERE workerId = :workerId AND status NOT IN ('SUCCEEDED', 'FAILED', 'CANCELLED')")
     suspend fun cancelIfActive(workerId: String)
 
+    /** 実行中（ENQUEUED/RUNNING）のときのみ一時停止する。完了・失敗・キャンセル済みの上書きを防ぐ */
+    @Query("UPDATE download SET status = 'PAUSED' WHERE workerId = :workerId AND status IN ('ENQUEUED', 'RUNNING')")
+    suspend fun pauseIfActive(workerId: String)
+
     /** 指定ワーカーの現在のステータスを取得する。レコードが無い場合は null */
     @Query("SELECT status FROM download WHERE workerId = :workerId")
     suspend fun getStatus(workerId: String): String?
@@ -70,6 +74,23 @@ interface DownloadDao {
             "WHERE workerId = :workerId AND status = 'RUNNING'",
     )
     suspend fun updatePartialFailed(
+        workerId: String,
+        partialFileUri: String,
+        fileName: String,
+        totalRead: Long,
+        contentLength: Long,
+    )
+
+    /**
+     * 一時停止時に部分ファイルURIを保存する。
+     * 再開可能なダウンロードとしてPAUSEDステータスで記録する
+     */
+    @Query(
+        "UPDATE download SET partialFileUri = :partialFileUri, " +
+            "fileName = :fileName, totalRead = :totalRead, contentLength = :contentLength " +
+            "WHERE workerId = :workerId AND status = 'PAUSED'",
+    )
+    suspend fun updatePausedPartial(
         workerId: String,
         partialFileUri: String,
         fileName: String,
