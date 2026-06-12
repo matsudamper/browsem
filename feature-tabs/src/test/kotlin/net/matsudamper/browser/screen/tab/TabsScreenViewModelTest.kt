@@ -457,20 +457,14 @@ class TabsScreenViewModelTest {
     }
 
     /**
-     * 再現シナリオ（外部リンクで開いたタブが別グループに表示される問題）:
-     * 1. グループが2つある（グループA=index0、グループB=index1）
-     * 2. グループAのタブを選択した状態でタブ一覧を開く（ViewModel 生成、activeGroupIndex = 0）
-     * 3. 外部リンクで新規タブが作成され、グループBにプリ割り当てされ、selectedTabId が更新される
-     *    （AppNavigation の処理を模倣: assignTabToGroup → createAndAppendTab → selectTab）
-     * 4. タブ画面を再度開いたとき activeGroupIndex が 1（グループB）に更新されるべき
-     *
-     * バグ: init の復元コルーチンは selectedTabId を一度だけ読み取るため、
-     *       ViewModel 存続中に selectedTabId が変わっても activeGroupIndex が追従しない。
-     *       Navigation 3 で ViewModel が再利用されると、古い activeGroupIndex のまま
-     *       一番左のグループが表示される。
+     * 仕様: タブ一覧の表示グループはユーザー操作と初期復元でのみ変わる。
+     * ViewModel 存続中（=タブ一覧表示中）に selectedTabId が変わっても、
+     * activeGroupIndex は追従しない。
+     * タブ一覧から離れると ViewModel は破棄されるため、再入時は初期復元で
+     * 選択タブのグループが表示される。
      */
     @Test
-    fun activeGroupIndex_updatesWhenSelectedTabChanges_afterInitialization() = runTest(testDispatcher) {
+    fun activeGroupIndex_doesNotFollowSelectedTabChange_whileScreenShown() = runTest(testDispatcher) {
         val tabStore = FakeTabStore()
         val repo = FakeTabGroupRepository()
 
@@ -492,15 +486,15 @@ class TabsScreenViewModelTest {
             viewModel.activeGroupIndexFromUiState(),
         )
 
-        // 外部リンクで新しいタブをグループBに追加・選択する（ViewModel存続中に発生）
+        // 表示中に裏でグループBのタブが追加・選択される
         tabStore.addTab("tab-external")
         tabStore.setSelectedTabId("tab-external")
         repo.assignTabToGroup("tab-external", groupB.id)
         advanceUntilIdle()
 
         assertEquals(
-            "外部リンクで開いたタブ（グループB=index1）に activeGroupIndex が更新されるべき",
-            1,
+            "表示中は選択タブが変わっても activeGroupIndex は変わらないべき",
+            0,
             viewModel.activeGroupIndexFromUiState(),
         )
     }
@@ -588,6 +582,206 @@ class TabsScreenViewModelTest {
             1,
             viewModel.activeGroupIndexFromUiState(),
         )
+    }
+
+    // -----------------------------------------------------------------------
+    // タブ閉鎖時の選択切替と表示グループ維持のテスト
+    // -----------------------------------------------------------------------
+
+    /** eventHandler 経由のイベントを記録する Fake */
+    private class RecordingEvent : TabsScreenViewModel.Event {
+        val closedTabIds = mutableListOf<String>()
+        val selectedTabIds = mutableListOf<String>()
+
+        override fun closeTab(tabId: String) {
+            closedTabIds += tabId
+        }
+
+        override fun selectTab(tabId: String) {
+            selectedTabIds += tabId
+        }
+    }
+
+    /** eventHandler に溜まったイベントをすべて recorder へ流す */
+    private fun TabsScreenViewModel.drainEvents(recorder: RecordingEvent) {
+        while (true) {
+            val action = eventHandler.tryReceive().getOrNull() ?: break
+            action(recorder)
+        }
+    }
+
+    /**
+     * 仕様: 選択中タブを閉じたら、確定（Snackbar 消滅）を待たずにその時点で
+     * 次のタブへ選択を切り替える。確定時には選択タブが変わらないため、
+     * 別グループを表示していても表示グループが勝手に戻らない。
+     *
+     * 再現シナリオ（元バグ）:
+     * 1. グループA のアクティブタブを閉じる（保留開始）
+     * 2. グループB（index=1）へ表示を切り替える
+     * 3. Snackbar 消滅で確定 → 旧実装では選択タブがグループA のタブへ変わり、
+     *    同期処理が表示をグループA へ戻していた
+     */
+    @Test
+    fun closingSelectedTab_switchesSelectionImmediately_andGroupStaysAfterConfirm() = runTest(testDispatcher) {
+        val tabStore = FakeTabStore()
+        val repo = FakeTabGroupRepository()
+        val recorder = RecordingEvent()
+
+        val groupA = TabGroupData(TabGroupId("gA"), "グループA")
+        val groupB = TabGroupData(TabGroupId("gB"), "グループB")
+        repo.setGroups(listOf(groupA, groupB))
+
+        tabStore.addTab("tab-a1")
+        tabStore.addTab("tab-a2")
+        tabStore.addTab("tab-b")
+        tabStore.setSelectedTabId("tab-a1")
+        repo.assignTabToGroup("tab-a1", groupA.id)
+        repo.assignTabToGroup("tab-a2", groupA.id)
+        repo.assignTabToGroup("tab-b", groupB.id)
+
+        val viewModel = buildViewModel(tabStore, repo, this)
+        advanceUntilIdle()
+        assertEquals("初期表示は選択タブのグループA", 0, viewModel.activeGroupIndexFromUiState())
+
+        // 選択中タブを閉じる → この時点で次のタブ（同グループの tab-a2）へ選択切替
+        viewModel.uiState.value.callbacks.onCloseTab("tab-a1")
+        viewModel.drainEvents(recorder)
+        assertEquals("閉じた時点で次タブへの選択切替イベントが発行されるべき", listOf("tab-a2"), recorder.selectedTabIds)
+        assertTrue("保留中は closeTab イベントは発行されない", recorder.closedTabIds.isEmpty())
+        tabStore.setSelectedTabId("tab-a2")
+        advanceUntilIdle()
+
+        // グループBへ表示を切り替える
+        viewModel.uiState.value.callbacks.onGroupSelected(1)
+        advanceUntilIdle()
+        assertEquals(1, viewModel.activeGroupIndexFromUiState())
+
+        // Snackbar 消滅で確定 → 選択タブは変わらず、表示グループも動かない
+        viewModel.uiState.value.callbacks.onConfirmCloseTab()
+        viewModel.drainEvents(recorder)
+        assertEquals("確定で closeTab イベントが発行されるべき", listOf("tab-a1"), recorder.closedTabIds)
+        tabStore.removeTab("tab-a1")
+        advanceUntilIdle()
+
+        assertEquals(
+            "確定後も表示はグループB（index=1）に留まるべき",
+            1,
+            viewModel.activeGroupIndexFromUiState(),
+        )
+    }
+
+    /**
+     * 仕様: グループ最後のタブを閉じてグループが空になっても、表示はそのグループに留まる。
+     * 次の選択タブは他グループから選ばれるが、表示グループは追従しない。
+     */
+    @Test
+    fun closingLastTabInGroup_keepsEmptyGroupDisplayed() = runTest(testDispatcher) {
+        val tabStore = FakeTabStore()
+        val repo = FakeTabGroupRepository()
+        val recorder = RecordingEvent()
+
+        val groupA = TabGroupData(TabGroupId("gA"), "グループA")
+        val groupB = TabGroupData(TabGroupId("gB"), "グループB")
+        repo.setGroups(listOf(groupA, groupB))
+
+        tabStore.addTab("tab-a")
+        tabStore.addTab("tab-b")
+        tabStore.setSelectedTabId("tab-a")
+        repo.assignTabToGroup("tab-a", groupA.id)
+        repo.assignTabToGroup("tab-b", groupB.id)
+
+        val viewModel = buildViewModel(tabStore, repo, this)
+        advanceUntilIdle()
+        assertEquals(0, viewModel.activeGroupIndexFromUiState())
+
+        // グループA 最後のタブを閉じる → 選択は他グループの tab-b へ切り替わる
+        viewModel.uiState.value.callbacks.onCloseTab("tab-a")
+        viewModel.drainEvents(recorder)
+        assertEquals(listOf("tab-b"), recorder.selectedTabIds)
+        tabStore.setSelectedTabId("tab-b")
+        advanceUntilIdle()
+
+        assertEquals(
+            "選択が他グループへ移っても表示は空になるグループA に留まるべき",
+            0,
+            viewModel.activeGroupIndexFromUiState(),
+        )
+
+        // 確定後も同様
+        viewModel.uiState.value.callbacks.onConfirmCloseTab()
+        viewModel.drainEvents(recorder)
+        tabStore.removeTab("tab-a")
+        advanceUntilIdle()
+        assertEquals("空グループの表示が維持されるべき", 0, viewModel.activeGroupIndexFromUiState())
+    }
+
+    /**
+     * 仕様: 「戻す」を押したらタブを復元し、選択も元のタブへ戻す。
+     */
+    @Test
+    fun undoCloseTab_restoresSelectionToOriginalTab() = runTest(testDispatcher) {
+        val tabStore = FakeTabStore()
+        val repo = FakeTabGroupRepository()
+        val recorder = RecordingEvent()
+
+        val group = TabGroupData(TabGroupId("g1"), "グループ1")
+        repo.setGroups(listOf(group))
+
+        tabStore.addTab("tab-1")
+        tabStore.addTab("tab-2")
+        tabStore.setSelectedTabId("tab-1")
+        repo.assignTabToGroup("tab-1", group.id)
+        repo.assignTabToGroup("tab-2", group.id)
+
+        val viewModel = buildViewModel(tabStore, repo, this)
+        advanceUntilIdle()
+
+        viewModel.uiState.value.callbacks.onCloseTab("tab-1")
+        viewModel.drainEvents(recorder)
+        assertEquals(listOf("tab-2"), recorder.selectedTabIds)
+        tabStore.setSelectedTabId("tab-2")
+        advanceUntilIdle()
+
+        // 「戻す」→ 元のタブへ選択を戻すイベントが発行される
+        viewModel.uiState.value.callbacks.onUndoCloseTab()
+        viewModel.drainEvents(recorder)
+        assertEquals(
+            "Undo で元のタブへの選択切替イベントが発行されるべき",
+            listOf("tab-2", "tab-1"),
+            recorder.selectedTabIds,
+        )
+        assertTrue("Undo では closeTab イベントは発行されない", recorder.closedTabIds.isEmpty())
+    }
+
+    /**
+     * 選択していないタブを閉じた場合は選択切替イベントを発行しないこと。
+     */
+    @Test
+    fun closingUnselectedTab_doesNotSwitchSelection() = runTest(testDispatcher) {
+        val tabStore = FakeTabStore()
+        val repo = FakeTabGroupRepository()
+        val recorder = RecordingEvent()
+
+        val group = TabGroupData(TabGroupId("g1"), "グループ1")
+        repo.setGroups(listOf(group))
+
+        tabStore.addTab("tab-1")
+        tabStore.addTab("tab-2")
+        tabStore.setSelectedTabId("tab-1")
+        repo.assignTabToGroup("tab-1", group.id)
+        repo.assignTabToGroup("tab-2", group.id)
+
+        val viewModel = buildViewModel(tabStore, repo, this)
+        advanceUntilIdle()
+
+        viewModel.uiState.value.callbacks.onCloseTab("tab-2")
+        viewModel.drainEvents(recorder)
+        assertTrue("非選択タブの閉鎖では選択切替イベントは発行されない", recorder.selectedTabIds.isEmpty())
+
+        // Undo しても選択切替イベントは発行されない
+        viewModel.uiState.value.callbacks.onUndoCloseTab()
+        viewModel.drainEvents(recorder)
+        assertTrue(recorder.selectedTabIds.isEmpty())
     }
 
     /**
