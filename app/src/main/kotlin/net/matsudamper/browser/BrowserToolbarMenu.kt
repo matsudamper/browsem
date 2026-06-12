@@ -30,6 +30,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -181,10 +182,7 @@ private fun ToolbarMenuContent(
                         )
                     }
                 }
-                Text(
-                    text = "戻る",
-                    style = MaterialTheme.typography.labelSmall,
-                )
+                MenuColumnLabel(text = "戻る")
             }
             Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
                 // 短押しで進む、長押しでタブ履歴BottomSheetを表示
@@ -222,10 +220,7 @@ private fun ToolbarMenuContent(
                         )
                     }
                 }
-                Text(
-                    text = "進む",
-                    style = MaterialTheme.typography.labelSmall,
-                )
+                MenuColumnLabel(text = "進む")
             }
             Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
                 // 短押しで通常更新、長押しでキャッシュをバイパスしてスーパーリフレッシュ
@@ -257,10 +252,7 @@ private fun ToolbarMenuContent(
                         )
                     }
                 }
-                Text(
-                    text = "更新",
-                    style = MaterialTheme.typography.labelSmall,
-                )
+                MenuColumnLabel(text = "更新")
             }
         }
         // 二段目: ホーム・ダウンロード・サイトの設定を一段目と同じ間隔で表示
@@ -286,10 +278,7 @@ private fun ToolbarMenuContent(
                                 contentDescription = null,
                             )
                         }
-                        Text(
-                            text = "ホーム",
-                            style = MaterialTheme.typography.labelSmall,
-                        )
+                        MenuColumnLabel(text = "ホーム")
                     }
                 }
                 if (onOpenDownloads != null) {
@@ -307,10 +296,7 @@ private fun ToolbarMenuContent(
                                 contentDescription = null,
                             )
                         }
-                        Text(
-                            text = "ダウンロード",
-                            style = MaterialTheme.typography.labelSmall,
-                        )
+                        MenuColumnLabel(text = "ダウンロード")
                     }
                 }
                 if (onOpenSiteSettings != null) {
@@ -328,10 +314,7 @@ private fun ToolbarMenuContent(
                                 contentDescription = null,
                             )
                         }
-                        Text(
-                            text = "サイトの設定",
-                            style = MaterialTheme.typography.labelSmall,
-                        )
+                        MenuColumnLabel(text = "サイトの設定")
                     }
                 }
             }
@@ -511,6 +494,25 @@ private fun ToolbarMenuContent(
             )
         }
     }
+}
+
+/**
+ * アイコン下のラベル。weight で隣接する列とラベル同士がくっつかないよう、
+ * 行の高さは変えずに左右へ最小限の余白を確保する
+ */
+@Composable
+private fun MenuColumnLabel(
+    text: String,
+    modifier: Modifier = Modifier,
+) {
+    Text(
+        modifier = modifier.padding(horizontal = 4.dp),
+        text = text,
+        style = MaterialTheme.typography.labelSmall,
+        textAlign = TextAlign.Center,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+    )
 }
 
 @Preview(name = "ToolbarMenuLight")
