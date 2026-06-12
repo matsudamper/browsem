@@ -10,8 +10,11 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import net.matsudamper.browser.data.TabGroupData
+import net.matsudamper.browser.data.TabGroupId
 
 /**
  * タブの移動先グループを選択するダイアログ。
@@ -34,9 +37,11 @@ internal fun MoveTabToGroupDialog(
             Column {
                 groups.forEachIndexed { index, group ->
                     if (index == currentGroupIndex) return@forEachIndexed
+                    // 片手で持っていても押しやすいように全幅・中央寄せにする
                     Text(
                         text = group.name,
                         style = MaterialTheme.typography.bodyLarge,
+                        textAlign = TextAlign.Center,
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable { onGroupSelected(index) }
@@ -47,9 +52,27 @@ internal fun MoveTabToGroupDialog(
         },
         confirmButton = {},
         dismissButton = {
-            TextButton(onClick = onDismiss) {
+            TextButton(
+                modifier = Modifier.fillMaxWidth(),
+                onClick = onDismiss,
+            ) {
                 Text("キャンセル")
             }
         },
+    )
+}
+
+@Composable
+@Preview
+private fun PreviewMoveTabToGroupDialog() {
+    MoveTabToGroupDialog(
+        groups = listOf(
+            TabGroupData(TabGroupId("g1"), "デフォルト"),
+            TabGroupData(TabGroupId("g2"), "開発"),
+            TabGroupData(TabGroupId("g3"), "調べ物"),
+        ),
+        currentGroupIndex = 0,
+        onGroupSelected = {},
+        onDismiss = {},
     )
 }
