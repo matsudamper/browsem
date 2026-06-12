@@ -102,24 +102,30 @@ internal class DownloadWorker(
             // CancellationException を投げて DB 更新・ファイル削除がスキップされるため、
             // NonCancellable で囲んで確実に実行する
             withContext(NonCancellable) {
+                val workerId = id.toString()
                 val savedUri = partialResultUri
-                if (repository.isPaused(id.toString())) {
+                if (repository.isPaused(workerId)) {
                     if (savedUri != null && partialResultTotalRead > 0 && !usedPendingBody) {
                         // 一時停止: 部分ファイルを保持して再開（HTTP Range）に備える
                         repository.updatePausedPartial(
-                            workerId = id.toString(),
+                            workerId = workerId,
                             partialFileUri = savedUri.toString(),
                             fileName = partialResultFileName,
                             totalRead = partialResultTotalRead,
                             contentLength = partialResultContentLength,
                         )
+                        // isPaused 判定→保存の間に CANCELLED へ遷移すると updatePausedPartial が
+                        // no-op になり部分ファイルが孤立するため、再確認して削除する
+                        if (repository.isCancelled(workerId)) {
+                            context.contentResolver.delete(savedUri, null, null)
+                        }
                     } else {
                         // 部分ファイルが再開に使えない場合は削除する。
                         // PAUSED 状態は維持され、再開時は URL を再取得してダウンロードし直す
                         savedUri?.let { context.contentResolver.delete(it, null, null) }
                     }
                 } else {
-                    repository.updateCancelled(id.toString())
+                    repository.updateCancelled(workerId)
                     // キャンセル時は部分ファイルを削除する
                     savedUri?.let { context.contentResolver.delete(it, null, null) }
                 }
