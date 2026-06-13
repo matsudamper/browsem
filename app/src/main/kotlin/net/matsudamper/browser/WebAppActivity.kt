@@ -11,12 +11,23 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import kotlinx.coroutines.CompletableDeferred
+import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.flow.receiveAsFlow
+import mozilla.components.lib.publicsuffixlist.PublicSuffixList
 import net.matsudamper.browser.data.SettingsRepository
+import net.matsudamper.browser.data.SiteSettingsRepository
+import net.matsudamper.browser.data.extractSiteHost
+import net.matsudamper.browser.screen.sitesettings.SiteSettingsScreenViewModel
+import net.matsudamper.browser.ui.settings.SiteSettingsScreen
 import net.matsudamper.browser.data.TabRepository
 import net.matsudamper.browser.data.history.HistoryRepository
 import net.matsudamper.browser.data.resolvedHomepageUrl
@@ -44,6 +55,8 @@ class WebAppActivity : ComponentActivity() {
     private val tabRepository: TabRepository by inject()
     private val historyRepository: HistoryRepository by inject()
     private val webSuggestionRepository: WebSuggestionRepository by inject()
+    private val siteSettingsRepository: SiteSettingsRepository by inject()
+    private val publicSuffixList: PublicSuffixList by inject()
 
     private var pendingDownloadNotificationPermissionDeferred: CompletableDeferred<Unit>? = null
 
@@ -90,6 +103,9 @@ class WebAppActivity : ComponentActivity() {
                     browserTabController = browserTabController,
                     uiState = uiState,
                 ) { modifier, browserTab, webAppUiState ->
+                    // ウェブアプリモードはナビゲーションスタックを持たないため、サイト設定は
+                    // 現在のタブの上にオーバーレイ表示する。null の間は非表示。
+                    var siteSettingsHost by remember { mutableStateOf<String?>(null) }
                     // Recents (最近のアプリ) のサムネイル左上に表示されるアイコンとラベルを
                     // ページのタイトル / favicon に追従させる。setTaskDescription が呼ばれない
                     // 場合はアプリの label / icon (ic_firefox_like) にフォールバックするため、
@@ -123,8 +139,10 @@ class WebAppActivity : ComponentActivity() {
                         onInstallExtensionRequest = {},
                         onRequestDownloadNotificationPermission = { requestDownloadNotificationPermission() },
                         onOpenSettings = {},
-                        // ウェブアプリモードは設定画面のナビゲーションスタックを持たないため非表示
-                        onOpenSiteSettings = null,
+                        // ウェブアプリモードでも現在表示中サイトの設定はオーバーレイで開けるようにする
+                        onOpenSiteSettings = { url ->
+                            siteSettingsHost = extractSiteHost(url)
+                        },
                         onOpenDownloads = null,
                         onOpenTabs = {},
                         enableTabUi = false,
@@ -148,6 +166,48 @@ class WebAppActivity : ComponentActivity() {
                         urlBarSuggestions = webAppUiState.urlBarSuggestions,
                         onUrlInputChanged = webAppUiState.callbacks::onUrlInputChanged,
                     )
+
+                    val host = siteSettingsHost
+                    if (host != null) {
+                        // バックボタンでサイト設定を閉じ、ブラウザ履歴の遡上に先んじる
+                        BackHandler { siteSettingsHost = null }
+                        val siteSettingsViewModel = viewModel(
+                            key = host,
+                            initializer = {
+                                SiteSettingsScreenViewModel(
+                                    host = host,
+                                    siteSettingsRepository = siteSettingsRepository,
+                                    geckoRuntime = runtime,
+                                    publicSuffixList = publicSuffixList,
+                                    securityInfo = browserTab.securityInfo,
+                                )
+                            },
+                        )
+                        val locationPermissionLauncher = rememberLauncherForActivityResult(
+                            ActivityResultContracts.RequestMultiplePermissions(),
+                        ) { results ->
+                            siteSettingsViewModel.onLocationPermissionResult(results.values.any { it })
+                        }
+                        LaunchedEffect(siteSettingsViewModel) {
+                            siteSettingsViewModel.eventHandler.receiveAsFlow().collect { handler ->
+                                handler(object : SiteSettingsScreenViewModel.Event {
+                                    override fun onRequestLocationPermission() {
+                                        locationPermissionLauncher.launch(
+                                            arrayOf(
+                                                Manifest.permission.ACCESS_FINE_LOCATION,
+                                                Manifest.permission.ACCESS_COARSE_LOCATION,
+                                            ),
+                                        )
+                                    }
+                                })
+                            }
+                        }
+                        val siteSettingsUiState by siteSettingsViewModel.uiState.collectAsState()
+                        SiteSettingsScreen(
+                            uiState = siteSettingsUiState,
+                            onBack = { siteSettingsHost = null },
+                        )
+                    }
                 }
             }
         }
