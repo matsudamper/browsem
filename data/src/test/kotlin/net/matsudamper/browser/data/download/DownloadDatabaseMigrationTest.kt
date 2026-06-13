@@ -37,18 +37,18 @@ class DownloadDatabaseMigrationTest {
             close()
         }
 
-        val db = helper.runMigrationsAndValidate(TEST_DB, 2, true, *DownloadDatabase.ALL_MIGRATIONS)
-
-        db.query(
-            "SELECT workerId, referrerUrl, partialFileUri FROM download WHERE workerId = 'w1'",
-        ).use { cursor ->
-            assertTrue(cursor.moveToFirst())
-            assertEquals("w1", cursor.getString(0))
-            // referrerUrl は NOT NULL DEFAULT '' のため空文字
-            assertEquals("", cursor.getString(1))
-            // partialFileUri は nullable のため NULL
-            assertTrue(cursor.isNull(2))
-            assertNull(cursor.getString(2))
+        helper.runMigrationsAndValidate(TEST_DB, 2, true, *DownloadDatabase.ALL_MIGRATIONS).use { db ->
+            db.query(
+                "SELECT workerId, referrerUrl, partialFileUri FROM download WHERE workerId = 'w1'",
+            ).use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertEquals("w1", cursor.getString(0))
+                // referrerUrl は NOT NULL DEFAULT '' のため空文字
+                assertEquals("", cursor.getString(1))
+                // partialFileUri は nullable のため NULL
+                assertTrue(cursor.isNull(2))
+                assertNull(cursor.getString(2))
+            }
         }
     }
 
@@ -69,21 +69,21 @@ class DownloadDatabaseMigrationTest {
             close()
         }
 
-        val db = helper.runMigrationsAndValidate(TEST_DB, 4, true, *DownloadDatabase.ALL_MIGRATIONS)
-
-        db.query(
-            "SELECT workerId, currentWorkerId FROM download WHERE workerId = 'w2'",
-        ).use { cursor ->
-            assertTrue(cursor.moveToFirst())
-            assertEquals("w2", cursor.getString(0))
-            // currentWorkerId は workerId と同値でバックフィルされる
-            assertEquals("w2", cursor.getString(1))
-        }
-        // currentWorkerId にインデックスが作成されている
-        db.query(
-            "SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'index_download_currentWorkerId'",
-        ).use { cursor ->
-            assertTrue(cursor.moveToFirst())
+        helper.runMigrationsAndValidate(TEST_DB, 4, true, *DownloadDatabase.ALL_MIGRATIONS).use { db ->
+            db.query(
+                "SELECT workerId, currentWorkerId FROM download WHERE workerId = 'w2'",
+            ).use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertEquals("w2", cursor.getString(0))
+                // currentWorkerId は workerId と同値でバックフィルされる
+                assertEquals("w2", cursor.getString(1))
+            }
+            // currentWorkerId にインデックスが作成されている
+            db.query(
+                "SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'index_download_currentWorkerId'",
+            ).use { cursor ->
+                assertTrue(cursor.moveToFirst())
+            }
         }
     }
 
