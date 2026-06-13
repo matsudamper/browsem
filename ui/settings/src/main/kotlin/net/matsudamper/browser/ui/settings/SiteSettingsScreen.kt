@@ -121,81 +121,89 @@ fun SiteSettingsScreen(
                 Spacer(Modifier.height(12.dp))
             }
 
-            // 権限は一度でも要求された項目だけ表示する
-            if (uiState.geolocationState != null) {
-                SettingSection(title = "位置情報") {
-                    Column(Modifier.selectableGroup()) {
-                        SettingsRadioOption(
-                            label = "モック位置情報",
-                            selected = uiState.geolocationState == SiteGeolocationState.SITE_GEOLOCATION_MOCK,
-                            onClick = {
-                                uiState.callbacks.setGeolocationState(
-                                    SiteGeolocationState.SITE_GEOLOCATION_MOCK,
+            // 権限は証明書・データ削除と同じく1つのコンテナにまとめ、
+            // 要求が無い場合もタイトル付きセクション内に空メッセージを表示して見た目を揃える
+            SettingSection(title = "サイトが要求した権限") {
+                val hasGeolocation = uiState.geolocationState != null
+                val hasMicrophone = uiState.microphonePermission != null
+                if (!hasGeolocation && !hasMicrophone) {
+                    Text(
+                        text = "このサイトが要求した権限はありません",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                } else {
+                    // 一度でも要求された権限だけをサブ項目として表示する
+                    if (hasGeolocation) {
+                        PermissionGroup(title = "位置情報") {
+                            Column(Modifier.selectableGroup()) {
+                                SettingsRadioOption(
+                                    label = "モック位置情報",
+                                    selected = uiState.geolocationState == SiteGeolocationState.SITE_GEOLOCATION_MOCK,
+                                    onClick = {
+                                        uiState.callbacks.setGeolocationState(
+                                            SiteGeolocationState.SITE_GEOLOCATION_MOCK,
+                                        )
+                                    },
                                 )
-                            },
-                        )
-                        SettingsRadioOption(
-                            label = "実際の位置情報",
-                            selected = uiState.geolocationState == SiteGeolocationState.SITE_GEOLOCATION_REAL,
-                            onClick = {
-                                uiState.callbacks.setGeolocationState(
-                                    SiteGeolocationState.SITE_GEOLOCATION_REAL,
+                                SettingsRadioOption(
+                                    label = "実際の位置情報",
+                                    selected = uiState.geolocationState == SiteGeolocationState.SITE_GEOLOCATION_REAL,
+                                    onClick = {
+                                        uiState.callbacks.setGeolocationState(
+                                            SiteGeolocationState.SITE_GEOLOCATION_REAL,
+                                        )
+                                    },
                                 )
-                            },
-                        )
-                        SettingsRadioOption(
-                            label = "ブロック",
-                            selected = uiState.geolocationState == SiteGeolocationState.SITE_GEOLOCATION_DENY,
-                            onClick = {
-                                uiState.callbacks.setGeolocationState(
-                                    SiteGeolocationState.SITE_GEOLOCATION_DENY,
+                                SettingsRadioOption(
+                                    label = "ブロック",
+                                    selected = uiState.geolocationState == SiteGeolocationState.SITE_GEOLOCATION_DENY,
+                                    onClick = {
+                                        uiState.callbacks.setGeolocationState(
+                                            SiteGeolocationState.SITE_GEOLOCATION_DENY,
+                                        )
+                                    },
                                 )
-                            },
-                        )
+                            }
+                        }
+                    }
+                    if (hasMicrophone) {
+                        if (hasGeolocation) {
+                            Spacer(Modifier.height(12.dp))
+                        }
+                        PermissionGroup(title = "マイク") {
+                            Column(Modifier.selectableGroup()) {
+                                SettingsRadioOption(
+                                    label = "確認する",
+                                    selected = uiState.microphonePermission == SitePermissionState.SITE_PERMISSION_ASK,
+                                    onClick = {
+                                        uiState.callbacks.setMicrophonePermission(
+                                            SitePermissionState.SITE_PERMISSION_ASK,
+                                        )
+                                    },
+                                )
+                                SettingsRadioOption(
+                                    label = "許可",
+                                    selected = uiState.microphonePermission == SitePermissionState.SITE_PERMISSION_ALLOW,
+                                    onClick = {
+                                        uiState.callbacks.setMicrophonePermission(
+                                            SitePermissionState.SITE_PERMISSION_ALLOW,
+                                        )
+                                    },
+                                )
+                                SettingsRadioOption(
+                                    label = "ブロック",
+                                    selected = uiState.microphonePermission == SitePermissionState.SITE_PERMISSION_DENY,
+                                    onClick = {
+                                        uiState.callbacks.setMicrophonePermission(
+                                            SitePermissionState.SITE_PERMISSION_DENY,
+                                        )
+                                    },
+                                )
+                            }
+                        }
                     }
                 }
-                Spacer(Modifier.height(12.dp))
-            }
-            if (uiState.microphonePermission != null) {
-                SettingSection(title = "マイク") {
-                    Column(Modifier.selectableGroup()) {
-                        SettingsRadioOption(
-                            label = "確認する",
-                            selected = uiState.microphonePermission == SitePermissionState.SITE_PERMISSION_ASK,
-                            onClick = {
-                                uiState.callbacks.setMicrophonePermission(
-                                    SitePermissionState.SITE_PERMISSION_ASK,
-                                )
-                            },
-                        )
-                        SettingsRadioOption(
-                            label = "許可",
-                            selected = uiState.microphonePermission == SitePermissionState.SITE_PERMISSION_ALLOW,
-                            onClick = {
-                                uiState.callbacks.setMicrophonePermission(
-                                    SitePermissionState.SITE_PERMISSION_ALLOW,
-                                )
-                            },
-                        )
-                        SettingsRadioOption(
-                            label = "ブロック",
-                            selected = uiState.microphonePermission == SitePermissionState.SITE_PERMISSION_DENY,
-                            onClick = {
-                                uiState.callbacks.setMicrophonePermission(
-                                    SitePermissionState.SITE_PERMISSION_DENY,
-                                )
-                            },
-                        )
-                    }
-                }
-            }
-            if (uiState.geolocationState == null && uiState.microphonePermission == null) {
-                Text(
-                    text = "このサイトが要求した権限はありません",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 4.dp),
-                )
             }
 
             Spacer(Modifier.height(12.dp))
@@ -265,6 +273,21 @@ fun SiteSettingsScreen(
     }
 }
 
+/** 権限セクション内の個別の権限（位置情報・マイクなど）をサブタイトル付きで表示する */
+@Composable
+private fun PermissionGroup(
+    title: String,
+    content: @Composable () -> Unit,
+) {
+    Column {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleMedium,
+        )
+        content()
+    }
+}
+
 /** 証明書のラベルと値の1行分を表示する */
 @Composable
 private fun CertificateInfoRow(
@@ -295,7 +318,8 @@ private val previewCallbacks = object : SiteSettingsScreenUiState.Callbacks {
     override fun consumeClearDataResultMessage() = Unit
 }
 
-@Preview(showBackground = true)
+// 証明書・位置情報・マイク・データ削除をすべて含むため、見切れないよう縦を広げて Preview する
+@Preview(showBackground = true, heightDp = 1100)
 @Composable
 private fun SiteSettingsScreenPreview() {
     MaterialTheme {
