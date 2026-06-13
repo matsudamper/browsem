@@ -10,7 +10,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 @Database(
     entities = [TabStateEntity::class, TabGroupEntity::class],
     version = TabDatabase.SCHEMA_VERSION,
-    exportSchema = false,
+    exportSchema = true,
 )
 abstract class TabDatabase : RoomDatabase() {
     abstract fun tabDao(): TabDao
@@ -40,6 +40,9 @@ abstract class TabDatabase : RoomDatabase() {
             }
         }
 
+        /** 全マイグレーション。getInstance とマイグレーションテストで共用する */
+        internal val ALL_MIGRATIONS: Array<Migration> = arrayOf(MIGRATION_1_2, MIGRATION_2_3)
+
         fun getInstance(context: Context): TabDatabase {
             // closeInstance() 後の fast-path で閉じた DB を返さないよう isOpen を確認する
             instance?.takeIf { it.isOpen }?.let { return it }
@@ -49,7 +52,7 @@ abstract class TabDatabase : RoomDatabase() {
                     TabDatabase::class.java,
                     "tab.db",
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                    .addMigrations(*ALL_MIGRATIONS)
                     .build().also { instance = it }
             }
         }
