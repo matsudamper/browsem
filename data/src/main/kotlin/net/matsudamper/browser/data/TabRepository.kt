@@ -13,6 +13,38 @@ class TabRepository(context: Context) {
     private val dao = db.tabDao()
     private val thumbnailDir = File(context.cacheDir, "tab_thumbnails").apply { mkdirs() }
 
+    // sessionState は GeckoView のセッション状態(履歴・フォーム・スクロール等)を直列化した
+    // 実質 blob で、ヘビーに使われたタブでは Android の CursorWindow 上限(約2MB)を超え、
+    // tab_state の取得時に SQLiteBlobTooBigException でクラッシュする原因になっていた。
+    // そのため DB には保持せず、tabId をファイル名としてファイルへ保存する。
+    // 履歴等を含む永続データなので、消えうる cacheDir ではなく filesDir に置く。
+    private val sessionStateDir = File(context.filesDir, "tab_session_states").apply { mkdirs() }
+
+    private fun sessionStateFile(tabId: String) = File(sessionStateDir, tabId)
+
+    /** sessionState をファイルへ保存する。空の場合はファイルを削除する */
+    private fun writeSessionState(tabId: String, sessionState: String) {
+        val file = sessionStateFile(tabId)
+        if (sessionState.isBlank()) {
+            file.delete()
+            return
+        }
+        if (!sessionStateDir.exists()) {
+            sessionStateDir.mkdirs()
+        }
+        file.writeText(sessionState)
+    }
+
+    /** 指定タブの sessionState をファイルから読み出す。無ければ空文字。 */
+    private fun readSessionState(tabId: String): String {
+        val file = sessionStateFile(tabId)
+        return if (file.exists()) file.readText() else ""
+    }
+
+    private fun deleteSessionStateFile(tabId: String) {
+        sessionStateFile(tabId).delete()
+    }
+
     fun observeTabs(): Flow<PersistedTabStateContainer> {
         return dao.observeAllTabs().map { entities ->
             entities.toPersistedTabStateContainer()
@@ -38,7 +70,6 @@ class TabRepository(context: Context) {
                 TabStateEntity(
                     tabId = tab.tabId,
                     url = tab.url,
-                    sessionState = tab.sessionState,
                     title = tab.title,
                     openerTabId = tab.openerTabId,
                     themeColor = tab.themeColor,
@@ -58,6 +89,8 @@ class TabRepository(context: Context) {
                 dao.setSelectedTab(tab.tabId)
             }
         }
+        // sessionState はファイルへ保存する（DB トランザクション外で I/O を行う）
+        writeSessionState(tab.tabId, tab.sessionState)
     }
 
     suspend fun updateUrl(tabId: String, url: String) {
@@ -69,7 +102,8 @@ class TabRepository(context: Context) {
     }
 
     suspend fun updateSessionState(tabId: String, sessionState: String) {
-        dao.updateSessionState(tabId, sessionState)
+        // sessionState は DB ではなくファイルに保存する
+        writeSessionState(tabId, sessionState)
     }
 
     suspend fun updateThemeColor(tabId: String, themeColor: Int?) {
@@ -114,6 +148,7 @@ class TabRepository(context: Context) {
             reorderVisibleTabs()
         }
         deleteTabThumbnail(tabId)
+        deleteSessionStateFile(tabId)
     }
 
     /** サムネイル画像をキャッシュファイルに保存する */
@@ -170,7 +205,7 @@ class TabRepository(context: Context) {
 
     private fun TabStateEntity.toPersistedTabState() = PersistedTabState(
         url = url,
-        sessionState = sessionState,
+        sessionState = readSessionState(tabId),
         title = title,
         tabId = tabId,
         openerTabId = openerTabId,
@@ -193,9 +228,10 @@ data class PersistedTabState(
 )
 
 private fun TabStateEntity.isPlaceholderForPreAssignment(): Boolean {
+    // グループ先行割り当てのプレースホルダ行は全フィールドが空。
+    // 実タブは必ず非空の url を持つため、これで一意に識別できる。
     return url.isBlank() &&
         title.isBlank() &&
-        sessionState.isBlank() &&
         openerTabId.isBlank() &&
         themeColor == null
 }

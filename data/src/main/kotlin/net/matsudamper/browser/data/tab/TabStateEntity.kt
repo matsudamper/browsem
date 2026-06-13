@@ -7,7 +7,6 @@ import androidx.room.PrimaryKey
 data class TabStateEntity(
     @PrimaryKey val tabId: String,
     val url: String,
-    val sessionState: String,
     val title: String,
     val openerTabId: String,
     val themeColor: Int?,
