@@ -57,6 +57,9 @@ class BrowserTabController(
         onTabStateChanged = ::onTabStateChanged,
     )
     private val _tabStoreState = MutableStateFlow(TabStoreState())
+
+    /** Undo 待ちで一覧から切り離したタブ。確定までセッションは破棄せず保持する */
+    private var detachedTab: DetachedTab? = null
     private var repositoryObservationStarted = false
     private var restoreState = RestoreState.NOT_STARTED
     // タブ復元完了を他のコルーチンから待機するためのシグナル（isSinglePage=true の場合は即完了）
@@ -296,22 +299,57 @@ class BrowserTabController(
     }
 
     override fun closeTab(tabId: String): String? {
-        val nextSelectedTabId = TabSelectionPolicy.resolveNextSelectedTab(
-            closingTabId = tabId,
-            state = _tabStoreState.value,
-        )
+        val result = closeTabWithUndo(tabId, nextSelectedTabId = null)
+        confirmClosedTab()
+        return result
+    }
+
+    override fun closeTabWithUndo(tabId: String, nextSelectedTabId: String?): String? {
+        // 同時に保持できる Undo 待ちタブは1つだけなので、前のタブがあれば破棄を確定する
+        confirmClosedTab()
+        val resolvedNextSelectedTabId = nextSelectedTabId
+            ?: TabSelectionPolicy.resolveNextSelectedTab(
+                closingTabId = tabId,
+                state = _tabStoreState.value,
+            )
+        val index = tabs.indexOfFirst { it.tabId == tabId }
         val removed = tabRegistry.remove(tabId)
         if (removed == null) {
             return selectedTabId
         }
-        disposeTab(removed, "タブが閉じられました: $tabId")
+        // タブ数の表示が遅れないよう一覧・永続化からは即時に削除するが、
+        // Undo で履歴ごと復元できるようセッションは破棄せず保持する
+        detachedTab = DetachedTab(tab = removed, index = index)
         closedTabIds.add(tabId)
-        publishRuntimeState(nextSelectedTabId)
-        persistenceCoordinator.persistClosedTab(tabId, nextSelectedTabId)
+        publishRuntimeState(resolvedNextSelectedTabId)
+        persistenceCoordinator.persistClosedTab(tabId, resolvedNextSelectedTabId)
         return selectedTabId
     }
 
+    override fun undoCloseTab(): String? {
+        val detached = detachedTab ?: return null
+        detachedTab = null
+        closedTabIds.remove(detached.tab.tabId)
+        tabRegistry.insert(tab = detached.tab, insertIndex = detached.index)
+        publishRuntimeState()
+        persistenceCoordinator.persistCreatedTab(
+            tab = detached.tab,
+            insertIndex = detached.index,
+            selected = false,
+        )
+        // closeTab の永続化でサムネイルが削除されているため保存し直す
+        persistenceCoordinator.persistPreviewBitmap(detached.tab.tabId, detached.tab.previewBitmap)
+        return detached.tab.tabId
+    }
+
+    override fun confirmClosedTab() {
+        val detached = detachedTab ?: return
+        detachedTab = null
+        disposeTab(detached.tab, "タブ閉鎖が確定しました: ${detached.tab.tabId}")
+    }
+
     fun close() {
+        confirmClosedTab()
         tabRegistry.values().forEach { tab ->
             disposeTab(tab, "BrowserTabController が終了しました")
         }
@@ -423,6 +461,12 @@ class BrowserTabController(
             }
         }
     }
+
+    private data class DetachedTab(
+        val tab: BrowserTab,
+        /** 復元時に元の位置へ戻すための、閉じる前のタブ一覧上のインデックス */
+        val index: Int,
+    )
 
     private data class RestoredTabs(
         val tabs: List<RestoredTab>,

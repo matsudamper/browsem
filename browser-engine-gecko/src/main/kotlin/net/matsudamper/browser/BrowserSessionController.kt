@@ -29,6 +29,18 @@ class BrowserSessionController internal constructor(
         return browserTabController.closeTab(tabId)
     }
 
+    override fun closeTabWithUndo(tabId: String, nextSelectedTabId: String?): String? {
+        return browserTabController.closeTabWithUndo(tabId, nextSelectedTabId)
+    }
+
+    override fun undoCloseTab(): String? {
+        return browserTabController.undoCloseTab()
+    }
+
+    override fun confirmClosedTab() {
+        browserTabController.confirmClosedTab()
+    }
+
     fun close() {
         browserTabController.close()
     }
