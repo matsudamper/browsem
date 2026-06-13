@@ -9,8 +9,6 @@ android {
 
     defaultConfig {
         minSdk = 30
-
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     compileOptions {
@@ -18,30 +16,18 @@ android {
         targetCompatibility = JavaVersion.VERSION_21
     }
 
-    // Room がエクスポートしたスキーマ JSON を androidTest のアセットに含め、
+    // Room がエクスポートしたスキーマ JSON を Robolectric 単体テストのアセットに含め、
     // MigrationTestHelper から読めるようにする (Room 公式のマイグレーションテスト手順)
     sourceSets {
-        named("androidTest") {
+        named("test") {
             assets.srcDir("$projectDir/schemas")
         }
     }
 
     testOptions {
-        managedDevices {
-            localDevices {
-                maybeCreate("pixel6Api34").apply {
-                    device = "Pixel 6"
-                    apiLevel = 34
-                    systemImageSource = "aosp-atd"
-                    require64Bit = true
-                    testedAbi = "x86_64"
-                }
-            }
-            groups {
-                maybeCreate("gmd").apply {
-                    targetDevices.add(localDevices["pixel6Api34"])
-                }
-            }
+        unitTests {
+            // Robolectric から merge 済みアセット (スキーマ JSON) を参照できるようにする
+            isIncludeAndroidResources = true
         }
     }
 }
@@ -65,6 +51,6 @@ dependencies {
     ksp(libs.androidx.room.compiler)
     testImplementation(libs.junit4)
     testImplementation(libs.robolectric)
-    androidTestImplementation(libs.androidx.room.testing)
-    androidTestImplementation(libs.androidx.test.ext.junit)
+    testImplementation(libs.androidx.room.testing)
+    testImplementation(libs.androidx.test.ext.junit)
 }

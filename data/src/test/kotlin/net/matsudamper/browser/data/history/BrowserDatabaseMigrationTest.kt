@@ -1,13 +1,13 @@
 package net.matsudamper.browser.data.history
 
 import androidx.room.testing.MigrationTestHelper
-import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
 
 /**
  * BrowserDatabase のマイグレーションテスト。
@@ -15,7 +15,7 @@ import org.junit.runner.RunWith
  * Room 公式手順に従い、エクスポート済みスキーマ JSON と [MigrationTestHelper] を使って
  * マイグレーション後のスキーマ検証とデータ保持を確認する。
  */
-@RunWith(AndroidJUnit4::class)
+@RunWith(RobolectricTestRunner::class)
 class BrowserDatabaseMigrationTest {
 
     @get:Rule

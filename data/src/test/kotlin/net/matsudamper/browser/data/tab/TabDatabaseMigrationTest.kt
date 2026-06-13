@@ -1,7 +1,6 @@
 package net.matsudamper.browser.data.tab
 
 import androidx.room.testing.MigrationTestHelper
-import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -9,6 +8,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
 
 /**
  * TabDatabase のマイグレーションテスト。
@@ -17,7 +17,7 @@ import org.junit.runner.RunWith
  * に従い、エクスポート済みスキーマ JSON と [MigrationTestHelper] を使って
  * 各バージョンのスキーマを作成し、マイグレーション後にスキーマ検証とデータ保持を確認する。
  */
-@RunWith(AndroidJUnit4::class)
+@RunWith(RobolectricTestRunner::class)
 class TabDatabaseMigrationTest {
 
     @get:Rule
