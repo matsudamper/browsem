@@ -2,7 +2,6 @@ package net.matsudamper.browser
 
 import android.view.WindowInsets
 import androidx.compose.ui.semantics.SemanticsProperties
-import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.hasAnyDescendant
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -534,11 +533,11 @@ class GmdSmokeTest {
     private fun waitForUrlBarText(expected: String) {
         try {
             composeRule.waitUntil(timeoutMillis = 20_000) {
-                getUrlBarText() == expected
+                composeRule.currentUrlBarText() == expected
             }
         } catch (e: androidx.compose.ui.test.ComposeTimeoutException) {
             throw AssertionError(
-                "URL バー復元待機がタイムアウト: expected=\"$expected\" actual=\"${getUrlBarText()}\"",
+                "URL バー復元待機がタイムアウト: expected=\"$expected\" actual=\"${composeRule.currentUrlBarText()}\"",
                 e,
             )
         }
@@ -550,21 +549,6 @@ class GmdSmokeTest {
      */
     private fun normalizeFileUrl(url: String): String {
         return url.replaceFirst(Regex("^file:/+"), "file:///")
-    }
-
-    /**
-     * 現在の URL バー文字列を返す。
-     */
-    private fun getUrlBarText(): String {
-        return runCatching {
-            val config = composeRule.onNodeWithTag(UrlTextInputTestTags.UrlBar.testTag)
-                .fetchSemanticsNode()
-                .config
-            // 編集モードは EditableText、表示モード(UrlDisplay)は Text セマンティクスを持つ。
-            config.getOrNull(SemanticsProperties.EditableText)?.text
-                ?: config.getOrNull(SemanticsProperties.Text)?.joinToString(separator = "") { it.text }
-                ?: ""
-        }.getOrDefault("")
     }
 
     /**
