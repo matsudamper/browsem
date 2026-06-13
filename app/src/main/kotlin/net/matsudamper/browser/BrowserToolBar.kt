@@ -86,6 +86,7 @@ internal fun BrowserToolBar(
     onSubmit: (String) -> Unit,
     isFocused: Boolean,
     onFocusChanged: (Boolean) -> Unit,
+    onLongClickUrl: () -> Unit,
     showInstallExtensionItem: Boolean,
     onInstallExtension: () -> Unit,
     onOpenSettings: () -> Unit,
@@ -132,6 +133,7 @@ internal fun BrowserToolBar(
             null
         },
         toolbarColor = toolbarColor,
+        onLongClickUrl = onLongClickUrl,
         onOpenTabs = onOpenTabs,
         tabCount = tabCount,
         showTabButton = showTabActions,
@@ -234,6 +236,7 @@ internal fun BrowserToolbar(
     gestureState: BrowserToolBarGestureState?,
     urlInputState: UrlInputState,
     toolbarColor: Color?,
+    onLongClickUrl: () -> Unit,
     updateVisibleMenu: (Boolean) -> Unit,
     onOpenTabs: () -> Unit,
     tabCount: Int?,
@@ -400,32 +403,35 @@ internal fun BrowserToolbar(
                     color = toolbarColors.urlBarBackgroundColor,
                     shape = CircleShape,
                 ) {
-                    Row(
-                        modifier = Modifier
-                            .padding(
-                                end = 4.dp,
-                            ),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        UrlTextInput(
+                    val urlBarPaddingValues = PaddingValues(
+                        start = 8.dp,
+                        top = 4.dp,
+                        bottom = 4.dp,
+                    )
+                    if (isFocused) {
+                        // 編集モード: テキスト入力フィールド + クリアボタン
+                        Row(
                             modifier = Modifier
                                 .testTag(BrowserToolbarTestTags.Url(urlInputState.value).testTag)
-                                .weight(1f),
-                            enableSuggest = urlInputState.enableSuggest,
-                            paddingValues = PaddingValues(
-                                start = 8.dp,
-                                top = 4.dp,
-                                bottom = 4.dp
-                            ),
-                            scrollEnabled = isFocused,
-                            value = urlInputState.value,
-                            onValueChange = urlInputState.onValueChange,
-                            onSubmit = urlInputState.onSubmit,
-                            onFocusChanged = urlInputState.onFocusChanged,
-                            textColor = LocalContentColor.current,
-                        )
+                                .padding(
+                                    end = 4.dp,
+                                ),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            UrlTextInput(
+                                modifier = Modifier
+                                    .weight(1f),
+                                enableSuggest = urlInputState.enableSuggest,
+                                paddingValues = urlBarPaddingValues,
+                                scrollEnabled = true,
+                                value = urlInputState.value,
+                                onValueChange = urlInputState.onValueChange,
+                                onSubmit = urlInputState.onSubmit,
+                                onFocusChanged = urlInputState.onFocusChanged,
+                                textColor = LocalContentColor.current,
+                                requestFocusOnShow = true,
+                            )
 
-                        if (isFocused) {
                             CompositionLocalProvider(
                                 LocalMinimumInteractiveComponentSize provides 0.dp
                             ) {
@@ -443,6 +449,21 @@ internal fun BrowserToolbar(
                                 )
                             }
                         }
+                    } else {
+                        // 表示モード: URL を表示するだけ。タップで編集モードへ、ロングプレスでURLコピー。
+                        // UrlBar の testTag は UrlDisplay 内部で付与するため、ここでは付けない
+                        // （同一ノードに testTag を二重付与すると外側が優先され UrlBar が消えてしまう）。
+                        UrlDisplay(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(end = 4.dp),
+                            value = urlInputState.value,
+                            textColor = LocalContentColor.current,
+                            enableSuggest = urlInputState.enableSuggest,
+                            paddingValues = urlBarPaddingValues,
+                            onClick = { urlInputState.onFocusChanged(true) },
+                            onLongClick = onLongClickUrl,
+                        )
                     }
                 }
 
@@ -623,6 +644,7 @@ private fun Preview() {
                     onSubmit = {},
                     isFocused = isFocused,
                     onFocusChanged = {},
+                    onLongClickUrl = {},
                     showInstallExtensionItem = true,
                     onInstallExtension = {},
                     onOpenSettings = {},
@@ -666,6 +688,7 @@ private fun PreviewTabCountVariants() {
                     onSubmit = {},
                     isFocused = false,
                     onFocusChanged = {},
+                    onLongClickUrl = {},
                     showInstallExtensionItem = true,
                     onInstallExtension = {},
                     onOpenSettings = {},
@@ -708,6 +731,7 @@ private fun PreviewWideToolbar() {
                 onSubmit = {},
                 isFocused = false,
                 onFocusChanged = {},
+                onLongClickUrl = {},
                 showInstallExtensionItem = true,
                 onInstallExtension = {},
                 onOpenSettings = {},
