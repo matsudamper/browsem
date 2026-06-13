@@ -7,7 +7,7 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
-@Database(entities = [DownloadEntity::class], version = 3, exportSchema = false)
+@Database(entities = [DownloadEntity::class], version = 4, exportSchema = false)
 abstract class DownloadDatabase : RoomDatabase() {
 
     abstract fun downloadDao(): DownloadDao
@@ -32,13 +32,22 @@ abstract class DownloadDatabase : RoomDatabase() {
             }
         }
 
+        /** バージョン3→4: currentWorkerId にインデックスを追加し、状態判定・進捗更新クエリを高速化する */
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS index_download_currentWorkerId ON download(currentWorkerId)",
+                )
+            }
+        }
+
         fun getInstance(context: Context): DownloadDatabase {
             return instance ?: synchronized(this) {
                 instance ?: Room.databaseBuilder(
                     context.applicationContext,
                     DownloadDatabase::class.java,
                     "download.db",
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3).build().also { instance = it }
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4).build().also { instance = it }
             }
         }
     }
