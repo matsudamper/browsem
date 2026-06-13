@@ -34,6 +34,15 @@ data class DownloadManagementScreenUiState(
         data class Failed(val canResume: Boolean) : DownloadStatus
 
         data object Cancelled : DownloadStatus
+
+        /**
+         * ダウンロード一時停止中。再開ボタンを表示する。
+         */
+        data class Paused(
+            val progress: Int,
+            val totalRead: Long,
+            val contentLength: Long,
+        ) : DownloadStatus
     }
 
     @Stable
@@ -49,6 +58,8 @@ data class DownloadManagementScreenUiState(
     @Stable
     data class Callbacks(
         val onCancel: (UUID) -> Unit,
+        /** ダウンロード中のアイテムを一時停止する */
+        val onPause: (UUID) -> Unit,
         val onOpenFile: (fileUri: String) -> Unit,
         val onOpenDownloadsFolder: () -> Unit,
         /** 失敗したダウンロードを再開する */
