@@ -43,7 +43,9 @@ class TabRepository(context: Context) {
     /**
      * 指定タブの sessionState を解決する。
      * ファイルがあればそれを返す。無い場合は旧バージョンで DB 列に保存された
-     * sessionState をファイルへ移行してから返す（移行後は DB 列を空にする）。
+     * sessionState をファイルへコピーしてから返す。
+     * ファイル移行が正しく動くと確認できるまでは、安全のため DB 列のデータは消さずに残す。
+     * （DB 列データの削除と移行コードの撤去は別 Issue で対応する）
      */
     private suspend fun resolveSessionState(tabId: String): String {
         val file = sessionStateFile(tabId)
@@ -52,8 +54,8 @@ class TabRepository(context: Context) {
         }
         val fromDb = readSessionStateFromDb(tabId)
         if (fromDb.isNotEmpty()) {
+            // DB のデータはバックアップとして温存し、ファイルへコピーするだけに留める
             writeSessionState(tabId, fromDb)
-            dao.clearSessionState(tabId)
         }
         return fromDb
     }

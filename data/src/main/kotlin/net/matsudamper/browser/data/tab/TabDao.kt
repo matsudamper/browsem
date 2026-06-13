@@ -47,7 +47,8 @@ interface TabDao {
     @Query("UPDATE tab_state SET isSelected = 0")
     suspend fun clearSelectedTab()
 
-    // --- 旧バージョンで tab_state.sessionState に保存されたデータをファイルへ移行するための補助クエリ ---
+    // --- 旧バージョンで tab_state.sessionState に保存されたデータをファイルへコピーするための補助クエリ ---
+    // 移行が正しく動くと確認できるまでは DB 列のデータは消さず、バックアップとして残す。
 
     /** sessionState の文字数を取得する。セルの中身は CursorWindow に載らないため安全 */
     @Query("SELECT length(sessionState) FROM tab_state WHERE tabId = :tabId")
@@ -59,10 +60,6 @@ interface TabDao {
      */
     @Query("SELECT substr(sessionState, :start, :count) FROM tab_state WHERE tabId = :tabId")
     suspend fun getSessionStateChunk(tabId: String, start: Int, count: Int): String?
-
-    /** ファイルへ移行済みの sessionState を DB から空にする */
-    @Query("UPDATE tab_state SET sessionState = '' WHERE tabId = :tabId")
-    suspend fun clearSessionState(tabId: String)
 }
 
 /**
