@@ -118,6 +118,13 @@ class BrowserTab(
     // restoreSession で立ち、performInitialLoadIfPending で消費される。
     internal var pendingInitialLoad: Boolean = false
 
+    // URL バーからの明示的なナビゲーション等で初回ロードの遅延実行をキャンセルする。
+    // Surface サイズ確定後の performInitialLoadIfPending がホームページ URL で
+    // 上書きすることを防ぐ。
+    fun cancelPendingInitialLoad() {
+        pendingInitialLoad = false
+    }
+
     private val sessionDelegateHost = BrowserTabSessionDelegateHost(this)
 
     internal fun bindSessionDelegates() {
