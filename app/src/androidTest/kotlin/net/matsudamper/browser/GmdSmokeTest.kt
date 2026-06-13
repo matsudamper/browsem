@@ -533,11 +533,11 @@ class GmdSmokeTest {
     private fun waitForUrlBarText(expected: String) {
         try {
             composeRule.waitUntil(timeoutMillis = 20_000) {
-                getUrlBarText() == expected
+                composeRule.currentUrlBarText() == expected
             }
         } catch (e: androidx.compose.ui.test.ComposeTimeoutException) {
             throw AssertionError(
-                "URL バー復元待機がタイムアウト: expected=\"$expected\" actual=\"${getUrlBarText()}\"",
+                "URL バー復元待機がタイムアウト: expected=\"$expected\" actual=\"${composeRule.currentUrlBarText()}\"",
                 e,
             )
         }
@@ -549,18 +549,6 @@ class GmdSmokeTest {
      */
     private fun normalizeFileUrl(url: String): String {
         return url.replaceFirst(Regex("^file:/+"), "file:///")
-    }
-
-    /**
-     * 現在の URL バー文字列を返す。
-     */
-    private fun getUrlBarText(): String {
-        return runCatching {
-            composeRule.onNodeWithTag(UrlTextInputTestTags.UrlBar.testTag)
-                .fetchSemanticsNode()
-                .config[SemanticsProperties.EditableText]
-                .text
-        }.getOrDefault("")
     }
 
     /**

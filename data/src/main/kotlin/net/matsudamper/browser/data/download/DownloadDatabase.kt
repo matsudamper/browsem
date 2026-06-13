@@ -7,7 +7,7 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
-@Database(entities = [DownloadEntity::class], version = 4, exportSchema = false)
+@Database(entities = [DownloadEntity::class], version = 4, exportSchema = true)
 abstract class DownloadDatabase : RoomDatabase() {
 
     abstract fun downloadDao(): DownloadDao
@@ -41,13 +41,16 @@ abstract class DownloadDatabase : RoomDatabase() {
             }
         }
 
+        /** 全マイグレーション。getInstance とマイグレーションテストで共用する */
+        internal val ALL_MIGRATIONS: Array<Migration> = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+
         fun getInstance(context: Context): DownloadDatabase {
             return instance ?: synchronized(this) {
                 instance ?: Room.databaseBuilder(
                     context.applicationContext,
                     DownloadDatabase::class.java,
                     "download.db",
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4).build().also { instance = it }
+                ).addMigrations(*ALL_MIGRATIONS).build().also { instance = it }
             }
         }
     }

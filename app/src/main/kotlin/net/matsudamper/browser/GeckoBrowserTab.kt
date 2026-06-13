@@ -779,6 +779,7 @@ internal fun GeckoBrowserTab(
                         }
                         state.isUrlInputFocused = hasFocus
                     },
+                    onLongClickUrl = state::copyCurrentPageUrl,
                     showInstallExtensionItem = showInstallExtensionItem && state.showInstallExtensionItem,
                     onInstallExtension = { onInstallExtensionRequest(state.currentPageUrl) },
                     onOpenSettings = onOpenSettings,
