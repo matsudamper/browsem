@@ -215,7 +215,9 @@ internal fun UrlDisplay(
                     Modifier
                 }
             )
-            .semantics {
+            // 子 BasicText の Text セマンティクスを UrlBar ノードへ集約する。
+            // テストは UrlBar ノードの Text から表示中の URL を読むため必須。
+            .semantics(mergeDescendants = true) {
                 if (enableSuggest) {
                     contentDescription = "Address bar"
                 }

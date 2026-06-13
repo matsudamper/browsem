@@ -451,9 +451,10 @@ internal fun BrowserToolbar(
                         }
                     } else {
                         // 表示モード: URL を表示するだけ。タップで編集モードへ、ロングプレスでURLコピー。
+                        // UrlBar の testTag は UrlDisplay 内部で付与するため、ここでは付けない
+                        // （同一ノードに testTag を二重付与すると外側が優先され UrlBar が消えてしまう）。
                         UrlDisplay(
                             modifier = Modifier
-                                .testTag(BrowserToolbarTestTags.Url(urlInputState.value).testTag)
                                 .fillMaxWidth()
                                 .padding(end = 4.dp),
                             value = urlInputState.value,
