@@ -2,6 +2,7 @@ package net.matsudamper.browser
 
 import android.view.WindowInsets
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.hasAnyDescendant
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -556,10 +557,13 @@ class GmdSmokeTest {
      */
     private fun getUrlBarText(): String {
         return runCatching {
-            composeRule.onNodeWithTag(UrlTextInputTestTags.UrlBar.testTag)
+            val config = composeRule.onNodeWithTag(UrlTextInputTestTags.UrlBar.testTag)
                 .fetchSemanticsNode()
-                .config[SemanticsProperties.EditableText]
-                .text
+                .config
+            // 編集モードは EditableText、表示モード(UrlDisplay)は Text セマンティクスを持つ。
+            config.getOrNull(SemanticsProperties.EditableText)?.text
+                ?: config.getOrNull(SemanticsProperties.Text)?.joinToString(separator = "") { it.text }
+                ?: ""
         }.getOrDefault("")
     }
 

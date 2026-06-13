@@ -307,6 +307,7 @@ private fun BrowserAppContent(
                                     modifier = modifier,
                                     toolbarColor = null,
                                     isFocused = false,
+                                    onLongClickUrl = {},
                                     tabCount = tabCount,
                                     onOpenTabs = {},
                                     toolbarMenu = {},
