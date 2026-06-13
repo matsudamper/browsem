@@ -52,7 +52,6 @@ abstract class TabGroupDao {
             TabStateEntity(
                 tabId = tabId,
                 url = "",
-                sessionState = "",
                 title = "",
                 openerTabId = "",
                 themeColor = null,
@@ -75,7 +74,6 @@ abstract class TabGroupDao {
             TabStateEntity(
                 tabId = tabId,
                 url = "",
-                sessionState = "",
                 title = "",
                 openerTabId = "",
                 themeColor = null,
