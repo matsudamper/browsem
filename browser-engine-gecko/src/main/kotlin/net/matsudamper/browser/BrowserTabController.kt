@@ -295,7 +295,7 @@ class BrowserTabController(
         persistenceCoordinator.persistMoveTab(fromIndex, toIndex)
     }
 
-    fun closeTab(tabId: String): String? {
+    override fun closeTab(tabId: String): String? {
         val nextSelectedTabId = TabSelectionPolicy.resolveNextSelectedTab(
             closingTabId = tabId,
             state = _tabStoreState.value,

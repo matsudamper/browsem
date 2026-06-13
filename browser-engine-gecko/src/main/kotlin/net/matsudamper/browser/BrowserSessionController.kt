@@ -25,6 +25,10 @@ class BrowserSessionController internal constructor(
         browserTabController.moveTab(fromIndex, toIndex)
     }
 
+    override fun closeTab(tabId: String): String? {
+        return browserTabController.closeTab(tabId)
+    }
+
     fun close() {
         browserTabController.close()
     }

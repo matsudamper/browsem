@@ -11,6 +11,7 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
+import net.matsudamper.browser.core.TabSelectionPolicy
 import net.matsudamper.browser.core.TabStore
 import net.matsudamper.browser.core.TabStoreState
 import net.matsudamper.browser.core.TabSummary
@@ -48,6 +49,25 @@ class TabsScreenViewModelTest {
         private val _state = MutableStateFlow(TabStoreState())
         override val tabStoreState: StateFlow<TabStoreState> = _state
 
+        // 記録用
+        val closedTabIds = mutableListOf<String>()
+
+        override fun closeTab(tabId: String): String? {
+            closedTabIds += tabId
+            _state.update { state ->
+                val next = if (state.selectedTabId == tabId) {
+                    TabSelectionPolicy.resolveNextSelectedTab(closingTabId = tabId, state = state)
+                } else {
+                    state.selectedTabId
+                }
+                state.copy(
+                    tabs = state.tabs.filterNot { it.id == tabId },
+                    selectedTabId = next,
+                )
+            }
+            return _state.value.selectedTabId
+        }
+
         override fun moveTab(fromIndex: Int, toIndex: Int) {
             _state.update { state ->
                 val tabs = state.tabs.toMutableList()
@@ -81,6 +101,10 @@ class TabsScreenViewModelTest {
 
         override fun moveTab(fromIndex: Int, toIndex: Int) {
             moveRequests += fromIndex to toIndex
+        }
+
+        override fun closeTab(tabId: String): String? {
+            return _state.value.selectedTabId
         }
 
         fun addTab(id: String, title: String = id) {
@@ -593,8 +617,8 @@ class TabsScreenViewModelTest {
         val closedTabIds = mutableListOf<String>()
         val selectedTabIds = mutableListOf<String>()
 
-        override fun closeTab(tabId: String) {
-            closedTabIds += tabId
+        override fun onTabClosed(closedTabId: String, nextSelectedTabId: String?) {
+            closedTabIds += closedTabId
         }
 
         override fun selectTab(tabId: String) {
@@ -647,7 +671,7 @@ class TabsScreenViewModelTest {
         viewModel.uiState.value.callbacks.onCloseTab("tab-a1")
         viewModel.drainEvents(recorder)
         assertEquals("閉じた時点で次タブへの選択切替イベントが発行されるべき", listOf("tab-a2"), recorder.selectedTabIds)
-        assertTrue("保留中は closeTab イベントは発行されない", recorder.closedTabIds.isEmpty())
+        assertTrue("保留中はタブを閉じない", tabStore.closedTabIds.isEmpty())
         tabStore.setSelectedTabId("tab-a2")
         advanceUntilIdle()
 
@@ -659,8 +683,8 @@ class TabsScreenViewModelTest {
         // Snackbar 消滅で確定 → 選択タブは変わらず、表示グループも動かない
         viewModel.uiState.value.callbacks.onConfirmCloseTab()
         viewModel.drainEvents(recorder)
-        assertEquals("確定で closeTab イベントが発行されるべき", listOf("tab-a1"), recorder.closedTabIds)
-        tabStore.removeTab("tab-a1")
+        assertEquals("確定でタブが閉じられるべき", listOf("tab-a1"), tabStore.closedTabIds)
+        assertEquals("確定で閉鎖後イベントが発行されるべき", listOf("tab-a1"), recorder.closedTabIds)
         advanceUntilIdle()
 
         assertEquals(
@@ -710,7 +734,6 @@ class TabsScreenViewModelTest {
         // 確定後も同様
         viewModel.uiState.value.callbacks.onConfirmCloseTab()
         viewModel.drainEvents(recorder)
-        tabStore.removeTab("tab-a")
         advanceUntilIdle()
         assertEquals("空グループの表示が維持されるべき", 0, viewModel.activeGroupIndexFromUiState())
     }
@@ -750,7 +773,47 @@ class TabsScreenViewModelTest {
             listOf("tab-2", "tab-1"),
             recorder.selectedTabIds,
         )
-        assertTrue("Undo では closeTab イベントは発行されない", recorder.closedTabIds.isEmpty())
+        assertTrue("Undo ではタブは閉じられない", tabStore.closedTabIds.isEmpty())
+    }
+
+    /**
+     * 再現シナリオ（タブを削除してもタブ一覧を開き直すと復元されるバグ）:
+     * 1. タブを閉じて保留状態にする
+     * 2. Snackbar の確定を待たずにタブ一覧画面から離れる
+     *    → onDispose で onConfirmCloseTab が呼ばれるが、その時点では
+     *      eventHandler の消費側（画面の LaunchedEffect）が破棄済みで
+     *      Channel に送ったイベントは処理されない
+     * 3. 期待: イベントが消費されなくてもタブは TabStore から閉じられている
+     *
+     * 旧実装のバグ: 閉鎖自体を eventHandler 経由で行っていたため、画面破棄時の
+     * 確定でイベントが失われ、タブが閉じられないまま残っていた。
+     */
+    @Test
+    fun confirmCloseTab_closesTabInStore_evenWhenEventIsNotConsumed() = runTest(testDispatcher) {
+        val tabStore = FakeTabStore()
+        val repo = FakeTabGroupRepository()
+
+        val group = TabGroupData(TabGroupId("g1"), "グループ1")
+        repo.setGroups(listOf(group))
+
+        tabStore.addTab("tab-1")
+        tabStore.addTab("tab-2")
+        tabStore.setSelectedTabId("tab-2")
+        repo.assignTabToGroup("tab-1", group.id)
+        repo.assignTabToGroup("tab-2", group.id)
+
+        val viewModel = buildViewModel(tabStore, repo, this)
+        advanceUntilIdle()
+
+        // タブを閉じて保留状態にし、画面破棄を想定して eventHandler を消費せずに確定する
+        viewModel.uiState.value.callbacks.onCloseTab("tab-1")
+        viewModel.uiState.value.callbacks.onConfirmCloseTab()
+
+        assertEquals("確定時にタブが TabStore から閉じられるべき", listOf("tab-1"), tabStore.closedTabIds)
+        assertTrue(
+            "閉じたタブは TabStore に残っていないべき",
+            tabStore.tabStoreState.value.tabs.none { it.id == "tab-1" },
+        )
     }
 
     /**

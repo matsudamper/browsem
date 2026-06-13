@@ -43,8 +43,7 @@ class TabsScreenViewModel(
             // 前の保留中タブがあれば確定させる
             val prevPendingId = state.pendingClosedTabId
             if (prevPendingId != null) {
-                eventHandler.trySend { it.closeTab(prevPendingId) }
-                viewModelScope.launch { tabGroupRepository.removeTabFromGroup(prevPendingId) }
+                confirmCloseTab(prevPendingId)
             }
             // 確定前の保留タブを除き、画面が把握している最新のグループ割当を反映した状態で
             // 次の選択タブを決める（同グループ優先の判定を表示と一致させるため）
@@ -106,8 +105,7 @@ class TabsScreenViewModel(
                     pendingClosedTabWasSelected = false,
                 )
             }
-            eventHandler.trySend { it.closeTab(tabId) }
-            viewModelScope.launch { tabGroupRepository.removeTabFromGroup(tabId) }
+            confirmCloseTab(tabId)
         }
 
         override fun onReorderTabs(groupIndex: Int, fromLocalIndex: Int, toLocalIndex: Int) {
@@ -195,8 +193,28 @@ class TabsScreenViewModel(
         }
     }.asStateFlow()
 
+    /**
+     * 保留中のタブ閉鎖を確定する。
+     *
+     * 確定はタブ一覧画面から離れる際 (onDispose) にも呼ばれ、その時点では
+     * eventHandler の消費側 (画面の LaunchedEffect) が既に破棄されていて
+     * Channel に送ったイベントが処理されず失われる。閉鎖イベントが失われると
+     * タブが TabStore に残り、タブ一覧を開き直したときに復元されてしまうため、
+     * 閉鎖自体は Channel を経由せず TabStore へ直接行う。
+     */
+    private fun confirmCloseTab(tabId: String) {
+        val nextSelectedTabId = tabStore.closeTab(tabId)
+        eventHandler.trySend { it.onTabClosed(tabId, nextSelectedTabId) }
+        viewModelScope.launch { tabGroupRepository.removeTabFromGroup(tabId) }
+    }
+
     interface Event {
-        fun closeTab(tabId: String)
+        /**
+         * タブ閉鎖の確定後に呼ばれる。ナビゲーション側の後処理
+         * （表示中 Browser の差し替えや、タブが無くなった場合の新規タブ作成）を行う。
+         * @param nextSelectedTabId 閉鎖後に選択されているタブの ID。タブが残っていない場合は null
+         */
+        fun onTabClosed(closedTabId: String, nextSelectedTabId: String?)
 
         /** タブ一覧を開いたまま、背後の Browser の選択タブだけを切り替える */
         fun selectTab(tabId: String)
