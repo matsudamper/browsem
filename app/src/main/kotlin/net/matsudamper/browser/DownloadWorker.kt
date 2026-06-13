@@ -108,7 +108,7 @@ internal class DownloadWorker(
                     if (savedUri != null && partialResultTotalRead > 0 && !usedPendingBody) {
                         // 一時停止: 部分ファイルを保持して再開（HTTP Range）に備える
                         repository.updatePausedPartial(
-                            workerId = workerId,
+                            currentWorkerId = workerId,
                             partialFileUri = savedUri.toString(),
                             fileName = partialResultFileName,
                             totalRead = partialResultTotalRead,
@@ -137,7 +137,7 @@ internal class DownloadWorker(
             if (savedUri != null && partialResultTotalRead > 0 && !usedPendingBody) {
                 // 部分ファイルが存在する場合は再開可能として保存する
                 repository.updatePartialFailed(
-                    workerId = id.toString(),
+                    currentWorkerId = id.toString(),
                     partialFileUri = savedUri.toString(),
                     fileName = partialResultFileName,
                     totalRead = partialResultTotalRead,
@@ -203,7 +203,7 @@ internal class DownloadWorker(
             openDownloadsIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
-        val fileName = repository.get(id).fileName
+        val fileName = repository.getByCurrentWorkerId(id)?.fileName.orEmpty()
 
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_notify_error)

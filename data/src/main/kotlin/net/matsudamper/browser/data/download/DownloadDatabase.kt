@@ -7,7 +7,7 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
-@Database(entities = [DownloadEntity::class], version = 2, exportSchema = false)
+@Database(entities = [DownloadEntity::class], version = 3, exportSchema = false)
 abstract class DownloadDatabase : RoomDatabase() {
 
     abstract fun downloadDao(): DownloadDao
@@ -24,13 +24,21 @@ abstract class DownloadDatabase : RoomDatabase() {
             }
         }
 
+        /** バージョン2→3: currentWorkerId カラムを追加（既存レコードは workerId と同値で埋める） */
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE download ADD COLUMN currentWorkerId TEXT NOT NULL DEFAULT ''")
+                db.execSQL("UPDATE download SET currentWorkerId = workerId")
+            }
+        }
+
         fun getInstance(context: Context): DownloadDatabase {
             return instance ?: synchronized(this) {
                 instance ?: Room.databaseBuilder(
                     context.applicationContext,
                     DownloadDatabase::class.java,
                     "download.db",
-                ).addMigrations(MIGRATION_1_2).build().also { instance = it }
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3).build().also { instance = it }
             }
         }
     }

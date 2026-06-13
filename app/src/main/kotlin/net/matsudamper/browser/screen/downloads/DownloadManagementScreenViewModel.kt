@@ -163,15 +163,16 @@ internal class DownloadManagementScreenViewModel(
     }
 
     private fun cancelDownload(id: UUID) {
+        val record = currentRecords.find { it.workerId == id } ?: return
+        // WorkManager・通知・DB はいずれも現在のワーカーID（currentWorkerId）で識別する
+        val currentWorkerId = record.currentWorkerId
         // 一時停止中のレコードは Worker が存在しないため、残った部分ファイルをここで削除する
-        val pausedPartialFileUri = currentRecords
-            .find { it.workerId == id && it.status == DownloadRecordStatus.PAUSED }
-            ?.partialFileUri
+        val pausedPartialFileUri = record.partialFileUri.takeIf { record.status == DownloadRecordStatus.PAUSED }
         // suspend を挟むと viewModelScope の破棄でキャンセル要求自体が消えるため、即時に発行する
-        workManager.cancelWorkById(id)
+        workManager.cancelWorkById(currentWorkerId)
         // Worker 起動前に GeckoDownloadManager が直接表示した通知は誰も消さないため、
         // 同じ導出式（workId の hashCode）で通知 ID を求めて明示的に消す
-        val notificationId = id.hashCode() and 0x7fffffff
+        val notificationId = currentWorkerId.hashCode() and 0x7fffffff
         getApplication<Application>()
             .getSystemService(NotificationManager::class.java)
             ?.cancel(notificationId)
@@ -180,7 +181,7 @@ internal class DownloadManagementScreenViewModel(
             // SUCCEEDED/FAILED の上書きは DAO 側のガードで防がれる。
             // WorkManager の割り込みが届かない場合でも、Worker が進捗更新時に
             // この CANCELLED 状態を検知して自力で停止する
-            downloadRepository.updateCancelled(id.toString())
+            downloadRepository.updateCancelled(currentWorkerId.toString())
             pausedPartialFileUri?.let { uri ->
                 runCatching {
                     getApplication<Application>().contentResolver.delete(uri.toUri(), null, null)
@@ -195,12 +196,14 @@ internal class DownloadManagementScreenViewModel(
      * Worker の CancellationException ハンドラが一時停止を検知して部分ファイルを保持する
      */
     private fun pauseDownload(id: UUID) {
+        val record = currentRecords.find { it.workerId == id } ?: return
+        val currentWorkerId = record.currentWorkerId
         viewModelScope.launch {
-            downloadRepository.updatePaused(id.toString())
-            workManager.cancelWorkById(id)
+            downloadRepository.updatePaused(currentWorkerId.toString())
+            workManager.cancelWorkById(currentWorkerId)
             // Worker 起動前に GeckoDownloadManager が直接表示した通知は誰も消さないため、
             // 同じ導出式（workId の hashCode）で通知 ID を求めて明示的に消す
-            val notificationId = id.hashCode() and 0x7fffffff
+            val notificationId = currentWorkerId.hashCode() and 0x7fffffff
             getApplication<Application>()
                 .getSystemService(NotificationManager::class.java)
                 ?.cancel(notificationId)
@@ -209,8 +212,9 @@ internal class DownloadManagementScreenViewModel(
 
     /**
      * 失敗または一時停止したダウンロードを再開する。
-     * 部分ファイルが残っている場合はRangeリクエストで再開し、
-     * そうでない場合は同じURLを再度エンキューする。
+     * 既存レコードを付け替えるため、リスト上の位置とアイテム同一性は維持される。
+     * 部分ファイルが残っている場合はRangeリクエストで続きから、
+     * 無い場合はURLを再取得して最初からダウンロードする。
      */
     private fun resumeDownload(id: UUID) {
         val record = currentRecords.find { it.workerId == id } ?: return
@@ -219,26 +223,12 @@ internal class DownloadManagementScreenViewModel(
         ) {
             return
         }
-
-        val partialFileUri = record.partialFileUri
-        if (partialFileUri != null) {
-            geckoDownloadManager.resumeDownload(
-                oldWorkerId = record.workerId.toString(),
-                url = record.url,
-                referrerUrl = record.referrerUrl,
-                partialFileUri = partialFileUri,
-                totalRead = record.totalRead,
-                coroutineScope = viewModelScope,
-            )
-            return
-        }
-
-        viewModelScope.launch {
-            downloadRepository.deleteById(record.workerId.toString())
-        }
-        geckoDownloadManager.enqueueDownload(
+        geckoDownloadManager.resumeDownload(
+            workerId = record.workerId.toString(),
             url = record.url,
             referrerUrl = record.referrerUrl,
+            partialFileUri = record.partialFileUri,
+            totalRead = record.totalRead,
             coroutineScope = viewModelScope,
         )
     }
