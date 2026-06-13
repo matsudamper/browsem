@@ -52,10 +52,10 @@ interface DownloadDao {
         contentLength: Long,
     )
 
-    /** キャンセル済みレコードを完了で上書きしない（キャンセルとWorker完了の競合対策） */
+    /** キャンセル/一時停止済みレコードを完了で上書きしない（停止要求とWorker完了の競合対策） */
     @Query(
         "UPDATE download SET fileName = :fileName, fileUri = :fileUri, status = 'SUCCEEDED' " +
-            "WHERE currentWorkerId = :currentWorkerId AND status != 'CANCELLED'",
+            "WHERE currentWorkerId = :currentWorkerId AND status NOT IN ('CANCELLED', 'PAUSED')",
     )
     suspend fun updateCompleted(currentWorkerId: String, fileName: String, fileUri: String)
 
