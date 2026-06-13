@@ -318,7 +318,8 @@ private val previewCallbacks = object : SiteSettingsScreenUiState.Callbacks {
     override fun consumeClearDataResultMessage() = Unit
 }
 
-@Preview(showBackground = true)
+// 証明書・位置情報・マイク・データ削除をすべて含むため、見切れないよう縦を広げて Preview する
+@Preview(showBackground = true, heightDp = 1100)
 @Composable
 private fun SiteSettingsScreenPreview() {
     MaterialTheme {
