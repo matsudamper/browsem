@@ -7,15 +7,78 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import net.matsudamper.browser.data.tab.TabDatabase
 import net.matsudamper.browser.data.tab.TabStateEntity
+import net.matsudamper.browser.data.tab.TabStateRow
 
 class TabRepository(context: Context) {
     private val db = TabDatabase.getInstance(context)
     private val dao = db.tabDao()
     private val thumbnailDir = File(context.cacheDir, "tab_thumbnails").apply { mkdirs() }
 
+    // sessionState は GeckoView のセッション状態(履歴・フォーム・スクロール等)を直列化した
+    // 実質 blob で、ヘビーに使われたタブでは Android の CursorWindow 上限(約2MB)を超え、
+    // tab_state の取得時に SQLiteBlobTooBigException でクラッシュする原因になる。
+    // そのため DB には保持せず、tabId をファイル名としてファイルへ保存する。
+    // 履歴等を含む永続データなので、消えうる cacheDir ではなく filesDir に置く。
+    private val sessionStateDir = File(context.filesDir, "tab_session_states").apply { mkdirs() }
+
+    private fun sessionStateFile(tabId: String) = File(sessionStateDir, tabId)
+
+    /** sessionState をファイルへ保存する。空の場合はファイルを削除する */
+    private fun writeSessionState(tabId: String, sessionState: String) {
+        val file = sessionStateFile(tabId)
+        if (sessionState.isBlank()) {
+            file.delete()
+            return
+        }
+        if (!sessionStateDir.exists()) {
+            sessionStateDir.mkdirs()
+        }
+        file.writeText(sessionState)
+    }
+
+    private fun deleteSessionStateFile(tabId: String) {
+        sessionStateFile(tabId).delete()
+    }
+
+    /**
+     * 指定タブの sessionState を解決する。
+     * ファイルがあればそれを返す。無い場合は旧バージョンで DB 列に保存された
+     * sessionState をファイルへ移行してから返す（移行後は DB 列を空にする）。
+     */
+    private suspend fun resolveSessionState(tabId: String): String {
+        val file = sessionStateFile(tabId)
+        if (file.exists()) {
+            return file.readText()
+        }
+        val fromDb = readSessionStateFromDb(tabId)
+        if (fromDb.isNotEmpty()) {
+            writeSessionState(tabId, fromDb)
+            dao.clearSessionState(tabId)
+        }
+        return fromDb
+    }
+
+    /**
+     * 旧バージョンで tab_state.sessionState に保存された文字列を読み出す。
+     * 巨大セルでも CursorWindow 上限(約2MB)を超えないよう substr で分割して読む。
+     */
+    private suspend fun readSessionStateFromDb(tabId: String): String {
+        val length = dao.getSessionStateLength(tabId) ?: return ""
+        if (length <= 0) return ""
+        val builder = StringBuilder(length)
+        var offset = 1 // SQLite の substr は 1 始まり
+        while (offset <= length) {
+            val chunk = dao.getSessionStateChunk(tabId, offset, SESSION_STATE_CHUNK_CHARS)
+            if (chunk.isNullOrEmpty()) break
+            builder.append(chunk)
+            offset += SESSION_STATE_CHUNK_CHARS
+        }
+        return builder.toString()
+    }
+
     fun observeTabs(): Flow<PersistedTabStateContainer> {
-        return dao.observeAllTabs().map { entities ->
-            entities.toPersistedTabStateContainer()
+        return dao.observeAllTabs().map { rows ->
+            rows.toPersistedTabStateContainer()
         }
     }
 
@@ -29,16 +92,17 @@ class TabRepository(context: Context) {
         selected: Boolean,
     ) {
         db.withTransaction {
-            val currentEntities = dao.getAllTabs()
-            val existing = currentEntities.firstOrNull { it.tabId == tab.tabId }
-            val visibleTabs = currentEntities.filterNot(TabStateEntity::isPlaceholderForPreAssignment)
+            val currentRows = dao.getAllTabs()
+            val existing = currentRows.firstOrNull { it.tabId == tab.tabId }
+            val visibleTabs = currentRows.filterNot(TabStateRow::isPlaceholderForPreAssignment)
             val targetIndex = insertIndex.coerceIn(0, visibleTabs.size)
 
             dao.upsertTab(
                 TabStateEntity(
                     tabId = tab.tabId,
                     url = tab.url,
-                    sessionState = tab.sessionState,
+                    // sessionState はファイルへ保存するため DB 列は常に空にする
+                    sessionState = "",
                     title = tab.title,
                     openerTabId = tab.openerTabId,
                     themeColor = tab.themeColor,
@@ -58,6 +122,8 @@ class TabRepository(context: Context) {
                 dao.setSelectedTab(tab.tabId)
             }
         }
+        // sessionState はファイルへ保存する（DB トランザクション外で I/O を行う）
+        writeSessionState(tab.tabId, tab.sessionState)
     }
 
     suspend fun updateUrl(tabId: String, url: String) {
@@ -69,7 +135,8 @@ class TabRepository(context: Context) {
     }
 
     suspend fun updateSessionState(tabId: String, sessionState: String) {
-        dao.updateSessionState(tabId, sessionState)
+        // sessionState は DB ではなくファイルに保存する
+        writeSessionState(tabId, sessionState)
     }
 
     suspend fun updateThemeColor(tabId: String, themeColor: Int?) {
@@ -89,15 +156,15 @@ class TabRepository(context: Context) {
     suspend fun moveTab(fromIndex: Int, toIndex: Int) {
         db.withTransaction {
             val visibleTabs = dao.getAllTabs()
-                .filterNot(TabStateEntity::isPlaceholderForPreAssignment)
+                .filterNot(TabStateRow::isPlaceholderForPreAssignment)
                 .toMutableList()
             if (fromIndex !in visibleTabs.indices || toIndex !in visibleTabs.indices) {
                 return@withTransaction
             }
             visibleTabs.add(toIndex, visibleTabs.removeAt(fromIndex))
-            visibleTabs.forEachIndexed { index, entity ->
-                if (entity.sortOrder != index) {
-                    dao.updateSortOrder(entity.tabId, index)
+            visibleTabs.forEachIndexed { index, row ->
+                if (row.sortOrder != index) {
+                    dao.updateSortOrder(row.tabId, index)
                 }
             }
         }
@@ -114,6 +181,7 @@ class TabRepository(context: Context) {
             reorderVisibleTabs()
         }
         deleteTabThumbnail(tabId)
+        deleteSessionStateFile(tabId)
     }
 
     /** サムネイル画像をキャッシュファイルに保存する */
@@ -140,42 +208,50 @@ class TabRepository(context: Context) {
         targetIndex: Int? = null,
     ) {
         val visibleTabs = dao.getAllTabs()
-            .filterNot(TabStateEntity::isPlaceholderForPreAssignment)
+            .filterNot(TabStateRow::isPlaceholderForPreAssignment)
             .toMutableList()
 
         if (moveTabId != null && targetIndex != null) {
             val currentIndex = visibleTabs.indexOfFirst { it.tabId == moveTabId }
             if (currentIndex >= 0) {
-                val entity = visibleTabs.removeAt(currentIndex)
-                visibleTabs.add(targetIndex.coerceIn(0, visibleTabs.size), entity)
+                val row = visibleTabs.removeAt(currentIndex)
+                visibleTabs.add(targetIndex.coerceIn(0, visibleTabs.size), row)
             }
         }
 
-        visibleTabs.forEachIndexed { index, entity ->
-            if (entity.sortOrder != index) {
-                dao.updateSortOrder(entity.tabId, index)
+        visibleTabs.forEachIndexed { index, row ->
+            if (row.sortOrder != index) {
+                dao.updateSortOrder(row.tabId, index)
             }
         }
     }
 
-    private fun List<TabStateEntity>.toPersistedTabStateContainer(): PersistedTabStateContainer {
-        val visibleEntities = filterNot(TabStateEntity::isPlaceholderForPreAssignment)
-        val selectedTabId = visibleEntities.firstOrNull { it.isSelected == 1 }?.tabId
-            ?: visibleEntities.lastOrNull()?.tabId
+    private suspend fun List<TabStateRow>.toPersistedTabStateContainer(): PersistedTabStateContainer {
+        val visibleRows = filterNot(TabStateRow::isPlaceholderForPreAssignment)
+        val selectedTabId = visibleRows.firstOrNull { it.isSelected == 1 }?.tabId
+            ?: visibleRows.lastOrNull()?.tabId
         return PersistedTabStateContainer(
-            tabs = visibleEntities.map { it.toPersistedTabState() },
+            tabs = visibleRows.map { it.toPersistedTabState() },
             selectedTabId = selectedTabId,
         )
     }
 
-    private fun TabStateEntity.toPersistedTabState() = PersistedTabState(
+    private suspend fun TabStateRow.toPersistedTabState() = PersistedTabState(
         url = url,
-        sessionState = sessionState,
+        sessionState = resolveSessionState(tabId),
         title = title,
         tabId = tabId,
         openerTabId = openerTabId,
         themeColor = themeColor,
     )
+
+    private companion object {
+        /**
+         * 旧 DB から sessionState を分割読みする際の 1 チャンクの文字数。
+         * 最悪 4byte/文字でも約 1MB に収まり、CursorWindow 上限(約2MB)を超えない。
+         */
+        private const val SESSION_STATE_CHUNK_CHARS = 256 * 1024
+    }
 }
 
 data class PersistedTabStateContainer(
@@ -192,10 +268,12 @@ data class PersistedTabState(
     val themeColor: Int? = null,
 )
 
-private fun TabStateEntity.isPlaceholderForPreAssignment(): Boolean {
+private fun TabStateRow.isPlaceholderForPreAssignment(): Boolean {
+    // グループ先行割り当てのプレースホルダ行は全フィールドが空。
+    // sessionState はファイルへ移行したため、ここでは射影に含まれるフィールドのみで判定する。
+    // 実タブは必ず非空の url を持つため、これで一意に識別できる。
     return url.isBlank() &&
         title.isBlank() &&
-        sessionState.isBlank() &&
         openerTabId.isBlank() &&
         themeColor == null
 }

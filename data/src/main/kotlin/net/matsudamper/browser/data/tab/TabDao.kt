@@ -11,14 +11,19 @@ interface TabDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertTab(tab: TabStateEntity)
 
-    @Query("SELECT * FROM tab_state ORDER BY sortOrder ASC")
-    suspend fun getAllTabs(): List<TabStateEntity>
+    // sessionState は CursorWindow 上限(約2MB)を超え得るため一覧取得では読まない。
+    // SELECT * を避け、sessionState 以外のメタデータのみを射影して取得する。
+    @Query(
+        "SELECT tabId, url, title, openerTabId, themeColor, sortOrder, isSelected, groupId " +
+            "FROM tab_state ORDER BY sortOrder ASC",
+    )
+    suspend fun getAllTabs(): List<TabStateRow>
 
-    @Query("SELECT * FROM tab_state ORDER BY sortOrder ASC")
-    fun observeAllTabs(): Flow<List<TabStateEntity>>
-
-    @Query("SELECT * FROM tab_state WHERE tabId = :tabId LIMIT 1")
-    suspend fun getTab(tabId: String): TabStateEntity?
+    @Query(
+        "SELECT tabId, url, title, openerTabId, themeColor, sortOrder, isSelected, groupId " +
+            "FROM tab_state ORDER BY sortOrder ASC",
+    )
+    fun observeAllTabs(): Flow<List<TabStateRow>>
 
     @Query("DELETE FROM tab_state WHERE tabId = :tabId")
     suspend fun deleteTab(tabId: String)
@@ -28,9 +33,6 @@ interface TabDao {
 
     @Query("UPDATE tab_state SET title = :title WHERE tabId = :tabId")
     suspend fun updateTitle(tabId: String, title: String)
-
-    @Query("UPDATE tab_state SET sessionState = :sessionState WHERE tabId = :tabId")
-    suspend fun updateSessionState(tabId: String, sessionState: String)
 
     @Query("UPDATE tab_state SET themeColor = :themeColor WHERE tabId = :tabId")
     suspend fun updateThemeColor(tabId: String, themeColor: Int?)
@@ -44,4 +46,36 @@ interface TabDao {
 
     @Query("UPDATE tab_state SET isSelected = 0")
     suspend fun clearSelectedTab()
+
+    // --- 旧バージョンで tab_state.sessionState に保存されたデータをファイルへ移行するための補助クエリ ---
+
+    /** sessionState の文字数を取得する。セルの中身は CursorWindow に載らないため安全 */
+    @Query("SELECT length(sessionState) FROM tab_state WHERE tabId = :tabId")
+    suspend fun getSessionStateLength(tabId: String): Int?
+
+    /**
+     * sessionState を substr で部分取得する（1始まり）。
+     * 巨大セルでも 1 チャンクずつなら CursorWindow 上限に収まるため、分割して読み出せる。
+     */
+    @Query("SELECT substr(sessionState, :start, :count) FROM tab_state WHERE tabId = :tabId")
+    suspend fun getSessionStateChunk(tabId: String, start: Int, count: Int): String?
+
+    /** ファイルへ移行済みの sessionState を DB から空にする */
+    @Query("UPDATE tab_state SET sessionState = '' WHERE tabId = :tabId")
+    suspend fun clearSessionState(tabId: String)
 }
+
+/**
+ * tab_state からセッション状態(sessionState)を除いたメタデータ射影。
+ * sessionState は肥大化して CursorWindow 上限を超え得るため一覧取得には含めない。
+ */
+data class TabStateRow(
+    val tabId: String,
+    val url: String,
+    val title: String,
+    val openerTabId: String,
+    val themeColor: Int?,
+    val sortOrder: Int,
+    val isSelected: Int,
+    val groupId: String,
+)
