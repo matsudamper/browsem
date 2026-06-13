@@ -7,7 +7,7 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
-@Database(entities = [HistoryEntry::class], version = 2, exportSchema = false)
+@Database(entities = [HistoryEntry::class], version = 2, exportSchema = true)
 abstract class BrowserDatabase : RoomDatabase() {
     abstract fun historyDao(): HistoryDao
 
@@ -22,13 +22,16 @@ abstract class BrowserDatabase : RoomDatabase() {
             }
         }
 
+        /** 全マイグレーション。getInstance とマイグレーションテストで共用する */
+        internal val ALL_MIGRATIONS: Array<Migration> = arrayOf(MIGRATION_1_2)
+
         fun getInstance(context: Context): BrowserDatabase {
             return instance ?: synchronized(this) {
                 instance ?: Room.databaseBuilder(
                     context.applicationContext,
                     BrowserDatabase::class.java,
                     "browser.db",
-                ).addMigrations(MIGRATION_1_2).build().also { instance = it }
+                ).addMigrations(*ALL_MIGRATIONS).build().also { instance = it }
             }
         }
     }
