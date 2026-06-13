@@ -17,7 +17,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.FolderOpen
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -198,33 +197,6 @@ private fun DownloadItemRow(
                             }
                         }
 
-                        is DownloadManagementScreenUiState.DownloadStatus.Pausing -> {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                // 停止処理中: 一時停止アイコンをグレーアウトし周囲を円形インジケーターで囲む
-                                Box(
-                                    modifier = Modifier.size(48.dp),
-                                    contentAlignment = Alignment.Center,
-                                ) {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(28.dp),
-                                        strokeWidth = 2.dp,
-                                    )
-                                    Icon(
-                                        painter = painterResource(R.drawable.ic_pause),
-                                        contentDescription = "一時停止中",
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                            .copy(alpha = 0.38f),
-                                        modifier = Modifier.size(20.dp),
-                                    )
-                                }
-                                DownloadIconButton(
-                                    iconRes = R.drawable.ic_close,
-                                    contentDescription = "キャンセル",
-                                    onClick = onCancel,
-                                )
-                            }
-                        }
-
                         is DownloadManagementScreenUiState.DownloadStatus.Paused -> {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 DownloadIconButton(
@@ -310,21 +282,6 @@ private fun DownloadItemRow(
                         )
                     }
 
-                    is DownloadManagementScreenUiState.DownloadStatus.Pausing -> {
-                        val sizeText = buildSizeText(status.totalRead, status.contentLength)
-                        Text(
-                            text = "一時停止しています… $sizeText",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        LinearProgressIndicator(
-                            progress = { status.progress / 100f },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = 4.dp),
-                        )
-                    }
-
                     is DownloadManagementScreenUiState.DownloadStatus.Completed -> {
                         Text(
                             text = "完了",
@@ -397,31 +354,6 @@ private fun PreviewInProgress() {
                     totalRead = 40L * 1024 * 1024,
                     contentLength = 100L * 1024 * 1024,
                     isIndeterminate = false,
-                ),
-                enqueuedAt = 0L,
-                originPageUrl = "https://example.com/page",
-            ),
-            onCancel = {},
-            onPause = {},
-            onOpenFile = {},
-            onResume = {},
-            onOpenOriginPage = {},
-        )
-    }
-}
-
-@Preview(name = "停止処理中")
-@Composable
-private fun PreviewPausing() {
-    MaterialTheme {
-        DownloadItemRow(
-            item = DownloadManagementScreenUiState.DownloadItem(
-                id = UUID.randomUUID(),
-                fileName = "example.zip",
-                status = DownloadManagementScreenUiState.DownloadStatus.Pausing(
-                    progress = 40,
-                    totalRead = 40L * 1024 * 1024,
-                    contentLength = 100L * 1024 * 1024,
                 ),
                 enqueuedAt = 0L,
                 originPageUrl = "https://example.com/page",

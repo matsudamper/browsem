@@ -20,7 +20,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import net.matsudamper.browser.GeckoDownloadManager
@@ -50,13 +49,6 @@ internal class DownloadManagementScreenViewModel(
     /** サムネイル読み込み要求済みの fileUri */
     private val requestedThumbnailUris = mutableSetOf<String>()
 
-    /**
-     * 一時停止を要求したがワーカーがまだ停止処理中のダウンロードID（安定 workerId）。
-     * DB 上は即座に PAUSED になるが、ワーカーが部分ファイルを保存し終えるまでは
-     * UI 上「停止処理中（グレーアウト + 円形インジケーター）」として表示する。
-     */
-    private val pausingIds = MutableStateFlow<Set<UUID>>(emptySet())
-
     val uiState: StateFlow<DownloadManagementScreenUiState> = MutableStateFlow(
         DownloadManagementScreenUiState(
             downloads = emptyList(),
@@ -67,16 +59,15 @@ internal class DownloadManagementScreenViewModel(
             combine(
                 downloadRepository.observeDownloads(),
                 thumbnailFlow,
-                pausingIds,
-            ) { records, thumbnails, pausing -> Triple(records, thumbnails, pausing) }
-                .collectLatest { (records, thumbnails, pausing) ->
+            ) { records, thumbnails -> records to thumbnails }
+                .collectLatest { (records, thumbnails) ->
                     currentRecords = records
                     records.forEach { record ->
                         if (record.status == DownloadRecordStatus.SUCCEEDED) {
                             record.fileUri?.let { requestThumbnail(it) }
                         }
                     }
-                    val items = records.map { record -> record.toDownloadItem(thumbnails, pausing) }
+                    val items = records.map { record -> record.toDownloadItem(thumbnails) }
                     uiStateFlow.update {
                         DownloadManagementScreenUiState(
                             downloads = items,
@@ -116,7 +107,6 @@ internal class DownloadManagementScreenViewModel(
 
     private fun DownloadRecord.toDownloadItem(
         thumbnails: Map<String, ImageBitmap?>,
-        pausingIds: Set<UUID>,
     ): DownloadManagementScreenUiState.DownloadItem {
         val uiStatus = when (status) {
             DownloadRecordStatus.SUCCEEDED -> {
@@ -153,20 +143,11 @@ internal class DownloadManagementScreenViewModel(
             }
             DownloadRecordStatus.CANCELLED -> DownloadManagementScreenUiState.DownloadStatus.Cancelled
             DownloadRecordStatus.PAUSED -> {
-                if (workerId in pausingIds) {
-                    // ワーカーがまだ停止処理中: グレーアウト + 円形インジケーターを表示する
-                    DownloadManagementScreenUiState.DownloadStatus.Pausing(
-                        progress = progress,
-                        totalRead = totalRead,
-                        contentLength = contentLength,
-                    )
-                } else {
-                    DownloadManagementScreenUiState.DownloadStatus.Paused(
-                        progress = progress,
-                        totalRead = totalRead,
-                        contentLength = contentLength,
-                    )
-                }
+                DownloadManagementScreenUiState.DownloadStatus.Paused(
+                    progress = progress,
+                    totalRead = totalRead,
+                    contentLength = contentLength,
+                )
             }
         }
         return DownloadManagementScreenUiState.DownloadItem(
@@ -187,8 +168,6 @@ internal class DownloadManagementScreenViewModel(
         val currentWorkerId = record.currentWorkerId
         // 一時停止中のレコードは Worker が存在しないため、残った部分ファイルをここで削除する
         val pausedPartialFileUri = record.partialFileUri.takeIf { record.status == DownloadRecordStatus.PAUSED }
-        // 停止処理中にキャンセルされた場合はフラグを解除する
-        pausingIds.update { it - id }
         // suspend を挟むと viewModelScope の破棄でキャンセル要求自体が消えるため、即時に発行する
         workManager.cancelWorkById(currentWorkerId)
         // Worker 起動前に GeckoDownloadManager が直接表示した通知は誰も消さないため、
@@ -219,8 +198,6 @@ internal class DownloadManagementScreenViewModel(
     private fun pauseDownload(id: UUID) {
         val record = currentRecords.find { it.workerId == id } ?: return
         val currentWorkerId = record.currentWorkerId
-        // 停止処理中フラグを立てる（UI 上はグレーアウト + 円形インジケーター）
-        pausingIds.update { it + id }
         viewModelScope.launch {
             downloadRepository.updatePaused(currentWorkerId.toString())
             workManager.cancelWorkById(currentWorkerId)
@@ -230,11 +207,6 @@ internal class DownloadManagementScreenViewModel(
             getApplication<Application>()
                 .getSystemService(NotificationManager::class.java)
                 ?.cancel(notificationId)
-            // ワーカーが実際に停止（部分ファイル保存）し終えるまで待ってからフラグを解除する。
-            // WorkInfo が終端状態になった時点でワーカーの後処理は完了している
-            workManager.getWorkInfoByIdFlow(currentWorkerId)
-                .first { it == null || it.state.isFinished }
-            pausingIds.update { it - id }
         }
     }
 
