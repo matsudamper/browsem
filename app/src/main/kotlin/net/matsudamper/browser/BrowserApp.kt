@@ -587,9 +587,10 @@ private fun BrowserAppContent(
                         LaunchedEffect(tabsViewModel) {
                             tabsViewModel.eventHandler.receiveAsFlow().collect {
                                 it(object : TabsScreenViewModel.Event {
-                                    override fun closeTab(tabId: String) {
-                                        val wasCurrentBrowserTab = navController.getSelectedTab() == tabId
-                                        val nextSelectedTabId = browserTabController.closeTab(tabId)
+                                    override fun onTabClosed(closedTabId: String, nextSelectedTabId: String?) {
+                                        // タブの閉鎖自体は ViewModel が TabStore へ直接行っているため、
+                                        // ここではナビゲーション側の後処理のみを行う
+                                        val wasCurrentBrowserTab = navController.getSelectedTab() == closedTabId
                                         if (nextSelectedTabId == null) {
                                             scope.launch {
                                                 val newTab = viewModel.createTabWithHomepage(
