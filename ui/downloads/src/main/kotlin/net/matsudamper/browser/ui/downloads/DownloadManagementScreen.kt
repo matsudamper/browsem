@@ -17,6 +17,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -42,6 +43,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -182,24 +184,59 @@ private fun DownloadItemRow(
                     )
                     when (val status = item.status) {
                         is DownloadManagementScreenUiState.DownloadStatus.InProgress -> {
-                            Row {
-                                TextButton(onClick = onPause) {
-                                    Text("一時停止")
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                DownloadIconButton(
+                                    iconRes = R.drawable.ic_pause,
+                                    contentDescription = "一時停止",
+                                    onClick = onPause,
+                                )
+                                DownloadIconButton(
+                                    iconRes = R.drawable.ic_close,
+                                    contentDescription = "キャンセル",
+                                    onClick = onCancel,
+                                )
+                            }
+                        }
+
+                        is DownloadManagementScreenUiState.DownloadStatus.Pausing -> {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                // 停止処理中: 一時停止アイコンをグレーアウトし周囲を円形インジケーターで囲む
+                                Box(
+                                    modifier = Modifier.size(48.dp),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(28.dp),
+                                        strokeWidth = 2.dp,
+                                    )
+                                    Icon(
+                                        painter = painterResource(R.drawable.ic_pause),
+                                        contentDescription = "一時停止中",
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                            .copy(alpha = 0.38f),
+                                        modifier = Modifier.size(20.dp),
+                                    )
                                 }
-                                TextButton(onClick = onCancel) {
-                                    Text("キャンセル")
-                                }
+                                DownloadIconButton(
+                                    iconRes = R.drawable.ic_close,
+                                    contentDescription = "キャンセル",
+                                    onClick = onCancel,
+                                )
                             }
                         }
 
                         is DownloadManagementScreenUiState.DownloadStatus.Paused -> {
-                            Row {
-                                TextButton(onClick = onResume) {
-                                    Text("再開")
-                                }
-                                TextButton(onClick = onCancel) {
-                                    Text("キャンセル")
-                                }
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                DownloadIconButton(
+                                    iconRes = R.drawable.ic_play_arrow,
+                                    contentDescription = "再開",
+                                    onClick = onResume,
+                                )
+                                DownloadIconButton(
+                                    iconRes = R.drawable.ic_close,
+                                    contentDescription = "キャンセル",
+                                    onClick = onCancel,
+                                )
                             }
                         }
 
@@ -211,9 +248,11 @@ private fun DownloadItemRow(
 
                         is DownloadManagementScreenUiState.DownloadStatus.Failed -> {
                             if (status.canResume) {
-                                TextButton(onClick = onResume) {
-                                    Text("再開")
-                                }
+                                DownloadIconButton(
+                                    iconRes = R.drawable.ic_play_arrow,
+                                    contentDescription = "再開",
+                                    onClick = onResume,
+                                )
                             } else {
                                 Text(
                                     text = "失敗",
@@ -271,6 +310,21 @@ private fun DownloadItemRow(
                         )
                     }
 
+                    is DownloadManagementScreenUiState.DownloadStatus.Pausing -> {
+                        val sizeText = buildSizeText(status.totalRead, status.contentLength)
+                        Text(
+                            text = "一時停止しています… $sizeText",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        LinearProgressIndicator(
+                            progress = { status.progress / 100f },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 4.dp),
+                        )
+                    }
+
                     is DownloadManagementScreenUiState.DownloadStatus.Completed -> {
                         Text(
                             text = "完了",
@@ -301,6 +355,21 @@ private fun DownloadItemRow(
     }
 }
 
+@Composable
+private fun DownloadIconButton(
+    iconRes: Int,
+    contentDescription: String,
+    onClick: () -> Unit,
+) {
+    IconButton(onClick = onClick) {
+        Icon(
+            painter = painterResource(iconRes),
+            contentDescription = contentDescription,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
 private fun buildSizeText(totalRead: Long, contentLength: Long): String {
     return if (contentLength > 0) {
         "${formatBytes(totalRead)} / ${formatBytes(contentLength)}"
@@ -328,6 +397,31 @@ private fun PreviewInProgress() {
                     totalRead = 40L * 1024 * 1024,
                     contentLength = 100L * 1024 * 1024,
                     isIndeterminate = false,
+                ),
+                enqueuedAt = 0L,
+                originPageUrl = "https://example.com/page",
+            ),
+            onCancel = {},
+            onPause = {},
+            onOpenFile = {},
+            onResume = {},
+            onOpenOriginPage = {},
+        )
+    }
+}
+
+@Preview(name = "停止処理中")
+@Composable
+private fun PreviewPausing() {
+    MaterialTheme {
+        DownloadItemRow(
+            item = DownloadManagementScreenUiState.DownloadItem(
+                id = UUID.randomUUID(),
+                fileName = "example.zip",
+                status = DownloadManagementScreenUiState.DownloadStatus.Pausing(
+                    progress = 40,
+                    totalRead = 40L * 1024 * 1024,
+                    contentLength = 100L * 1024 * 1024,
                 ),
                 enqueuedAt = 0L,
                 originPageUrl = "https://example.com/page",

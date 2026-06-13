@@ -43,6 +43,16 @@ data class DownloadManagementScreenUiState(
             val totalRead: Long,
             val contentLength: Long,
         ) : DownloadStatus
+
+        /**
+         * 一時停止を要求したがワーカーがまだ停止処理中の状態。
+         * 一時停止ボタンはグレーアウトし、周囲に円形のインジケーターを表示する。
+         */
+        data class Pausing(
+            val progress: Int,
+            val totalRead: Long,
+            val contentLength: Long,
+        ) : DownloadStatus
     }
 
     @Stable

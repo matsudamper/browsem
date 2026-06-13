@@ -23,7 +23,8 @@ interface DownloadDao {
     @Query("UPDATE download SET status = :status WHERE workerId = :workerId")
     suspend fun updateStatus(workerId: String, status: String)
 
-    @Query("UPDATE download SET status = 'FAILED' WHERE currentWorkerId = :currentWorkerId")
+    /** 実行中（ENQUEUED/RUNNING）のときのみ失敗にする。PAUSED/CANCELLED の上書きを防ぐ */
+    @Query("UPDATE download SET status = 'FAILED' WHERE currentWorkerId = :currentWorkerId AND status IN ('ENQUEUED', 'RUNNING')")
     suspend fun updateFailed(currentWorkerId: String)
 
     /** SUCCEEDED/FAILED 以外の状態のときのみキャンセルする。完了済みの上書きを防ぐ */
