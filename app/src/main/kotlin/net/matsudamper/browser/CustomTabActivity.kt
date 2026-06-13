@@ -99,23 +99,29 @@ class CustomTabActivity : ComponentActivity() {
                         testTagsAsResourceId = true
                     },
                 ) {
-                    CustomTabScreen(
-                        initialUrl = initialUrl.takeIf { it.isNotBlank() } ?: browserSettings.resolvedHomepageUrl(),
-                        customTabsSessionToken = customTabsSessionToken,
-                        homepageUrl = browserSettings.resolvedHomepageUrl(),
-                        searchTemplate = browserSettings.resolvedSearchTemplate(),
-                        translationProvider = browserSettings.translationProvider,
+                    BrowserAppShell(
                         browserTabController = browserTabController,
                         browserSessionLifecycleController = browserSessionLifecycleController,
-                        settingsRepository = settingsRepository,
-                        historyRepository = historyRepository,
-                        webSuggestionRepository = webSuggestionRepository,
-                        themeColorExtension = themeColorExtension,
-                        mediaWebExtension = mediaWebExtensionInstance,
-                        onClose = ::finish,
-                        onOpenInBrowser = ::openInMainBrowser,
-                        onRequestDownloadNotificationPermission = { requestDownloadNotificationPermission() },
-                    )
+                        runtime = runtime,
+                    ) { _ ->
+                        CustomTabScreen(
+                            initialUrl = initialUrl.takeIf { it.isNotBlank() } ?: browserSettings.resolvedHomepageUrl(),
+                            customTabsSessionToken = customTabsSessionToken,
+                            homepageUrl = browserSettings.resolvedHomepageUrl(),
+                            searchTemplate = browserSettings.resolvedSearchTemplate(),
+                            translationProvider = browserSettings.translationProvider,
+                            browserTabController = browserTabController,
+                            browserSessionLifecycleController = browserSessionLifecycleController,
+                            settingsRepository = settingsRepository,
+                            historyRepository = historyRepository,
+                            webSuggestionRepository = webSuggestionRepository,
+                            themeColorExtension = themeColorExtension,
+                            mediaWebExtension = mediaWebExtensionInstance,
+                            onClose = ::finish,
+                            onOpenInBrowser = ::openInMainBrowser,
+                            onRequestDownloadNotificationPermission = { requestDownloadNotificationPermission() },
+                        )
+                    }
                 }
             }
         }

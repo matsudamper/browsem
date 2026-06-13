@@ -11,32 +11,24 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import kotlinx.coroutines.CompletableDeferred
-import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
-import kotlinx.coroutines.flow.receiveAsFlow
-import mozilla.components.lib.publicsuffixlist.PublicSuffixList
+import androidx.navigation3.runtime.NavKey
 import net.matsudamper.browser.data.SettingsRepository
-import net.matsudamper.browser.data.SiteSettingsRepository
-import net.matsudamper.browser.data.extractSiteHost
-import net.matsudamper.browser.screen.sitesettings.SiteSettingsScreenViewModel
-import net.matsudamper.browser.ui.settings.SiteSettingsScreen
 import net.matsudamper.browser.data.TabRepository
+import net.matsudamper.browser.data.extractSiteHost
 import net.matsudamper.browser.data.history.HistoryRepository
 import net.matsudamper.browser.data.resolvedHomepageUrl
 import net.matsudamper.browser.data.resolvedSearchTemplate
 import net.matsudamper.browser.data.websuggestion.WebSuggestionRepository
 import net.matsudamper.browser.media.MediaWebExtension
+import net.matsudamper.browser.navigation.AppDestination
 import net.matsudamper.browser.screen.browser.WebAppScreenViewModel
-import net.matsudamper.browser.ui.common.BrowserTheme
 import net.matsudamper.browser.ui.browser.WebAppScreen
+import net.matsudamper.browser.ui.common.BrowserTheme
 import org.koin.android.ext.android.inject
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoSession
@@ -55,8 +47,6 @@ class WebAppActivity : ComponentActivity() {
     private val tabRepository: TabRepository by inject()
     private val historyRepository: HistoryRepository by inject()
     private val webSuggestionRepository: WebSuggestionRepository by inject()
-    private val siteSettingsRepository: SiteSettingsRepository by inject()
-    private val publicSuffixList: PublicSuffixList by inject()
 
     private var pendingDownloadNotificationPermissionDeferred: CompletableDeferred<Unit>? = null
 
@@ -98,114 +88,68 @@ class WebAppActivity : ComponentActivity() {
             }
 
             BrowserTheme(themeMode = browserSettings.themeMode) {
-                WebAppScreen(
-                    initialUrl = initialUrl ?: browserSettings.resolvedHomepageUrl(),
+                BrowserAppShell(
                     browserTabController = browserTabController,
-                    uiState = uiState,
-                ) { modifier, browserTab, webAppUiState ->
-                    // ウェブアプリモードはナビゲーションスタックを持たないため、サイト設定は
-                    // 現在のタブの上にオーバーレイ表示する。null の間は非表示。
-                    var siteSettingsHost by remember { mutableStateOf<String?>(null) }
-                    // Recents (最近のアプリ) のサムネイル左上に表示されるアイコンとラベルを
-                    // ページのタイトル / favicon に追従させる。setTaskDescription が呼ばれない
-                    // 場合はアプリの label / icon (ic_firefox_like) にフォールバックするため、
-                    // ホーム追加のアプリピンと同じく "アプリのデフォルトアイコン" に見えてしまう。
-                    val taskTitle = browserTab.title
-                    val taskFavicon = browserTab.faviconBitmap
-                    LaunchedEffect(taskTitle, taskFavicon) {
-                        updateTaskDescription(taskTitle, taskFavicon)
-                    }
-                    // GeckoView が onMetadataChanged で配る favicon は小さい (16x16 程度) ことが
-                    // 多く、また <origin>/favicon.ico を返さないサイト (例: sns.plusmember.jp) では
-                    // BrowserTabScreenState の fetchFavicon が失敗し faviconBitmap が null になる。
-                    // ホーム追加のアプリピンから WebAppActivity を起動すると、その時点では favicon
-                    // の手がかりが無く Recents アイコンがデフォルトアイコンのままになるため、
-                    // ここで HomeScreenIconFetcher を走らせて apple-touch-icon / manifest 由来の
-                    // 高品質アイコンを取得しておく。
-                    val currentUrl = browserTab.currentUrl
-                    LaunchedEffect(currentUrl) {
-                        fetchHighQualityFavicon(browserTab, currentUrl)
-                    }
-                    GeckoBrowserTab(
-                        modifier = modifier,
-                        browserTab = browserTab,
-                        homepageUrl = browserSettings.resolvedHomepageUrl(),
-                        searchTemplate = browserSettings.resolvedSearchTemplate(),
-                        translationProvider = browserSettings.translationProvider,
-                        themeColorExtension = themeColorExtension,
-                        mediaWebExtension = mediaWebExtension,
-                        browserSessionLifecycleController = browserSessionLifecycleController,
-                        tabCount = 1,
-                        onInstallExtensionRequest = {},
-                        onRequestDownloadNotificationPermission = { requestDownloadNotificationPermission() },
-                        onOpenSettings = {},
-                        // ウェブアプリモードでも現在表示中サイトの設定はオーバーレイで開けるようにする
-                        onOpenSiteSettings = { url ->
-                            siteSettingsHost = extractSiteHost(url)
-                        },
-                        onOpenDownloads = null,
-                        onOpenTabs = {},
-                        enableTabUi = false,
-                        showInstallExtensionItem = false,
-                        // ウェブアプリモード: 閉じるボタンなし、カスタムタブ風のツールバー
-                        webAppMode = true,
-                        // onLoadRequest で TARGET_WINDOW_NEW を現在タブへ畳み込むため、
-                        // ここへ到達することは想定しない。GeckoView 契約上 null を返して安全に拒否する。
-                        onOpenNewSessionRequest = { null },
-                        onOpenNewTabRequest = { uri, referrerUrl ->
-                            if (referrerUrl != null) {
-                                browserTab.session.load(
-                                    GeckoSession.Loader().uri(uri).referrer(referrerUrl),
-                                )
-                            } else {
-                                browserTab.session.loadUri(uri)
-                            }
-                        },
-                        onHistoryRecord = webAppUiState.callbacks::onHistoryRecord,
-                        onHistoryTitleUpdate = webAppUiState.callbacks::onHistoryTitleUpdate,
-                        urlBarSuggestions = webAppUiState.urlBarSuggestions,
-                        onUrlInputChanged = webAppUiState.callbacks::onUrlInputChanged,
-                    )
-
-                    val host = siteSettingsHost
-                    if (host != null) {
-                        // バックボタンでサイト設定を閉じ、ブラウザ履歴の遡上に先んじる
-                        BackHandler { siteSettingsHost = null }
-                        val siteSettingsViewModel = viewModel(
-                            key = host,
-                            initializer = {
-                                SiteSettingsScreenViewModel(
-                                    host = host,
-                                    siteSettingsRepository = siteSettingsRepository,
-                                    geckoRuntime = runtime,
-                                    publicSuffixList = publicSuffixList,
-                                    securityInfo = browserTab.securityInfo,
-                                )
+                    browserSessionLifecycleController = browserSessionLifecycleController,
+                    runtime = runtime,
+                ) { outerBackStack ->
+                    WebAppScreen(
+                        initialUrl = initialUrl ?: browserSettings.resolvedHomepageUrl(),
+                        browserTabController = browserTabController,
+                        uiState = uiState,
+                    ) { modifier, browserTab, webAppUiState ->
+                        val taskTitle = browserTab.title
+                        val taskFavicon = browserTab.faviconBitmap
+                        LaunchedEffect(taskTitle, taskFavicon) {
+                            updateTaskDescription(taskTitle, taskFavicon)
+                        }
+                        val currentUrl = browserTab.currentUrl
+                        LaunchedEffect(currentUrl) {
+                            fetchHighQualityFavicon(browserTab, currentUrl)
+                        }
+                        GeckoBrowserTab(
+                            modifier = modifier,
+                            browserTab = browserTab,
+                            homepageUrl = browserSettings.resolvedHomepageUrl(),
+                            searchTemplate = browserSettings.resolvedSearchTemplate(),
+                            translationProvider = browserSettings.translationProvider,
+                            themeColorExtension = themeColorExtension,
+                            mediaWebExtension = mediaWebExtension,
+                            browserSessionLifecycleController = browserSessionLifecycleController,
+                            tabCount = 1,
+                            onInstallExtensionRequest = {},
+                            onRequestDownloadNotificationPermission = { requestDownloadNotificationPermission() },
+                            onOpenSettings = {},
+                            onOpenSiteSettings = { url ->
+                                val host = extractSiteHost(url)
+                                if (host != null) {
+                                    outerBackStack.add(
+                                        AppDestination.SiteSettings(
+                                            host = host,
+                                            tabId = browserTab.tabId,
+                                        ),
+                                    )
+                                }
                             },
-                        )
-                        val locationPermissionLauncher = rememberLauncherForActivityResult(
-                            ActivityResultContracts.RequestMultiplePermissions(),
-                        ) { results ->
-                            siteSettingsViewModel.onLocationPermissionResult(results.values.any { it })
-                        }
-                        LaunchedEffect(siteSettingsViewModel) {
-                            siteSettingsViewModel.eventHandler.receiveAsFlow().collect { handler ->
-                                handler(object : SiteSettingsScreenViewModel.Event {
-                                    override fun onRequestLocationPermission() {
-                                        locationPermissionLauncher.launch(
-                                            arrayOf(
-                                                Manifest.permission.ACCESS_FINE_LOCATION,
-                                                Manifest.permission.ACCESS_COARSE_LOCATION,
-                                            ),
-                                        )
-                                    }
-                                })
-                            }
-                        }
-                        val siteSettingsUiState by siteSettingsViewModel.uiState.collectAsState()
-                        SiteSettingsScreen(
-                            uiState = siteSettingsUiState,
-                            onBack = { siteSettingsHost = null },
+                            onOpenDownloads = null,
+                            onOpenTabs = {},
+                            enableTabUi = false,
+                            showInstallExtensionItem = false,
+                            webAppMode = true,
+                            onOpenNewSessionRequest = { null },
+                            onOpenNewTabRequest = { uri, referrerUrl ->
+                                if (referrerUrl != null) {
+                                    browserTab.session.load(
+                                        GeckoSession.Loader().uri(uri).referrer(referrerUrl),
+                                    )
+                                } else {
+                                    browserTab.session.loadUri(uri)
+                                }
+                            },
+                            onHistoryRecord = webAppUiState.callbacks::onHistoryRecord,
+                            onHistoryTitleUpdate = webAppUiState.callbacks::onHistoryTitleUpdate,
+                            urlBarSuggestions = webAppUiState.urlBarSuggestions,
+                            onUrlInputChanged = webAppUiState.callbacks::onUrlInputChanged,
                         )
                     }
                 }
@@ -221,14 +165,6 @@ class WebAppActivity : ComponentActivity() {
         super.onDestroy()
     }
 
-    /**
-     * Recents に表示するタイトルとアイコンを更新する。
-     * favicon が無い場合はアイコン未指定とし、ランチャー側のデフォルトに任せる。
-     *
-     * 公開 API の TaskDescription.Builder.setIcon は drawable resource id のみ受け付け、
-     * Bitmap を渡すには deprecated コンストラクタを使う必要があるため、ここでは
-     * Bitmap を直接渡す旧コンストラクタを使用する。
-     */
     @Suppress("DEPRECATION")
     private fun updateTaskDescription(title: String, favicon: Bitmap?) {
         val label = title.takeIf { it.isNotBlank() }
@@ -236,16 +172,6 @@ class WebAppActivity : ComponentActivity() {
         setTaskDescription(description)
     }
 
-    /**
-     * HomeScreenIconFetcher を用いてページの高品質アイコンを取得し、BrowserTab に保存する。
-     * GeckoView が提供する 16x16 favicon や、<origin>/favicon.ico が 404 を返すサイトでも
-     * apple-touch-icon や Web App Manifest 由来の大きなアイコンを取得できる。
-     *
-     * ただしセッションが既に favicon を持っている場合は上書きしない。
-     * HomeScreenIconFetcher は Gecko セッション外の HttpURLConnection で取得するため、
-     * 認証ページが未認証リクエストをログイン/ランディングページへリダイレクトすると
-     * 無関係なアイコンを掴む恐れがある。あくまで favicon が無い場合のフォールバックに留める。
-     */
     private suspend fun fetchHighQualityFavicon(browserTab: BrowserTab, pageUrl: String) {
         if (pageUrl.isBlank()) return
         if (browserTab.faviconBitmap != null) return
@@ -256,17 +182,11 @@ class WebAppActivity : ComponentActivity() {
         } catch (_: Exception) {
             null
         } ?: return
-        // fetch 中にセッション側が favicon を設定した場合も上書きしない
         if (browserTab.currentUrl == pageUrl && browserTab.faviconBitmap == null) {
             browserTab.faviconBitmap = fetched
         }
     }
 
-    /**
-     * Intentのデータから安全なURLを取り出す。
-     * ACTION_VIEW かつ http/https スキームの場合のみURLとして採用し、
-     * それ以外は null を返してホームページにフォールバックさせる。
-     */
     private fun resolveInitialUrl(): String? {
         if (intent.action != Intent.ACTION_VIEW) return null
         val data = intent.data ?: return null
@@ -275,10 +195,6 @@ class WebAppActivity : ComponentActivity() {
         return data.toString()
     }
 
-    /**
-     * ダウンロード通知を表示するために POST_NOTIFICATIONS パーミッションを要求し、
-     * ユーザーが GRANT または DENY を選択するまで待機する。
-     */
     private suspend fun requestDownloadNotificationPermission() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
         if (ContextCompat.checkSelfPermission(
@@ -286,7 +202,6 @@ class WebAppActivity : ComponentActivity() {
                 Manifest.permission.POST_NOTIFICATIONS,
             ) == PackageManager.PERMISSION_GRANTED
         ) return
-        // 別のダウンロード通知パーミッション要求が保留中の場合は合流して待機
         val existingDownloadDeferred = pendingDownloadNotificationPermissionDeferred
         if (existingDownloadDeferred != null) {
             existingDownloadDeferred.await()
