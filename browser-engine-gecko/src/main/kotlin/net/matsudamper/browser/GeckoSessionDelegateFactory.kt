@@ -347,6 +347,19 @@ internal class BrowserTabSessionDelegateHost(
 
             override fun onLocationChange(url: String) {
                 if (url.startsWith("javascript:")) return
+                // 遅延初回ロード (performInitialLoadIfPending) が発行した loadUri の
+                // onLocationChange が、明示的ナビゲーション (onUrlSubmit 等) より遅れて
+                // 到着すると URL が上書きされる。フィルタが有効な場合は破棄する。
+                if (browserTab.shouldFilterDeferredLoad) {
+                    val deferredUrl = browserTab.deferredInitialLoadUrl
+                    if (deferredUrl != null &&
+                        url.trimEnd('/') == deferredUrl.trimEnd('/')
+                    ) {
+                        browserTab.shouldFilterDeferredLoad = false
+                        browserTab.deferredInitialLoadUrl = null
+                        return
+                    }
+                }
                 if (!(url == "about:blank" && browserTab.currentUrl != "about:blank")) {
                     browserTab.currentUrl = url
                 }

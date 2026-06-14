@@ -338,6 +338,7 @@ internal class BrowserTabScreenState(
         maybeResetToolbarColor(currentPageUrl, resolved)
         currentPageUrl = resolved
         clearPageLoadError()
+        browserTab.cancelPendingInitialLoad()
         session.loadUri(resolved)
     }
 
@@ -352,6 +353,7 @@ internal class BrowserTabScreenState(
         maybeResetToolbarColor(currentPageUrl, url)
         currentPageUrl = url
         clearPageLoadError()
+        browserTab.cancelPendingInitialLoad()
         session.load(
             GeckoSession.Loader()
                 .uri(url)
@@ -364,6 +366,7 @@ internal class BrowserTabScreenState(
         maybeResetToolbarColor(currentPageUrl, homepageUrl)
         currentPageUrl = homepageUrl
         clearPageLoadError()
+        browserTab.cancelPendingInitialLoad()
         session.loadUri(homepageUrl)
     }
 
