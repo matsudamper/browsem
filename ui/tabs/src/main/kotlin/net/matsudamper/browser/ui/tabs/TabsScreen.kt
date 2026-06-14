@@ -714,7 +714,6 @@ private fun PreviewWithSnackbar() {
             groups = groups,
             activeGroupIndex = 0,
             selectedTabId = "1",
-            groupHasPlayingTab = emptyList(),
             snackbarHostState = remember { SnackbarHostState() },
             onSelectTab = {},
             onCloseTab = {},
