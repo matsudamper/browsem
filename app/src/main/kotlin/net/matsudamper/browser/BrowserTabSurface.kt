@@ -50,6 +50,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import net.matsudamper.browser.data.ThemeMode
 import net.matsudamper.browser.ui.browser.UrlBarSuggestionsUiState
 import net.matsudamper.browser.ui.common.BrowserTheme
 import org.mozilla.geckoview.GeckoResult
@@ -455,7 +456,7 @@ private fun CurrentPageUrlActionRow(
 @Preview(name = "今のURL操作Light")
 @Composable
 private fun PreviewCurrentPageUrlListItemLight() {
-    BrowserTheme(themeMode = net.matsudamper.browser.data.ThemeMode.THEME_LIGHT) {
+    BrowserTheme(themeMode = ThemeMode.THEME_LIGHT) {
         Surface {
             CurrentPageUrlListItem(
                 currentPageUrl = "https://example.com/very/long/path?query=value",
@@ -469,7 +470,7 @@ private fun PreviewCurrentPageUrlListItemLight() {
 @Preview(name = "今のURL操作Dark")
 @Composable
 private fun PreviewCurrentPageUrlListItemDark() {
-    BrowserTheme(themeMode = net.matsudamper.browser.data.ThemeMode.THEME_DARK) {
+    BrowserTheme(themeMode = ThemeMode.THEME_DARK) {
         Surface {
             CurrentPageUrlListItem(
                 currentPageUrl = "https://example.com/very/long/path?query=value",
