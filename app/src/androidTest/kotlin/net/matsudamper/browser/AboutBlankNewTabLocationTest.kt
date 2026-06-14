@@ -22,7 +22,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
-import org.junit.rules.RuleChain
 import org.junit.runner.RunWith
 import java.io.BufferedReader
 import java.io.InputStreamReader
@@ -41,12 +40,8 @@ import kotlin.time.Duration.Companion.seconds
  */
 @RunWith(AndroidJUnit4::class)
 class AboutBlankNewTabLocationTest {
-    val composeRule = createAndroidComposeRule<MainActivity>()
-
     @get:Rule
-    val ruleChain: RuleChain = RuleChain
-        .outerRule(RetryOnKnownFlakyRule())
-        .around(composeRule)
+    val composeRule = createAndroidComposeRule<MainActivity>()
 
     private val userDebug = false
     private var server: LocalHtmlServer? = null
@@ -157,44 +152,30 @@ class AboutBlankNewTabLocationTest {
             composeRule.waitUntil(timeoutMillis = 30_000) {
                 localServer.hasRequest("/$INDEX_FILE_NAME")
             }
-            // index.html の setTimeout(300ms) で target.html が自動で開かれるため、
-            // この時点で URL バーが target.html を表示している場合がある
-            composeRule.waitUntil(timeoutMillis = 30_000) {
-                val url = composeRule.currentPageUrlFromUi()
-                url.contains(INDEX_FILE_NAME) || url.contains(TARGET_FILE_NAME)
-            }
+            composeRule.waitForUrlBarContains(INDEX_FILE_NAME, timeoutMillis = 30_000)
             composeRule.waitForUrlBarNotFocused(timeoutMillis = 30_000)
             val loadedUrl = composeRule.currentUrlBarText()
-            assertTrue("期待URLで開かれていない: $loadedUrl", loadedUrl.contains("127.0.0.1"))
+            assertTrue("index ページが期待URLで開かれていない: $loadedUrl", loadedUrl.contains("127.0.0.1"))
             println("index-url=$loadedUrl")
         }
 
         group("全面リンクをクリックして target=_blank で新しいタブを開く") {
-            var opened = runCatching {
-                composeRule.waitUntil(timeoutMillis = 20_000) {
-                    localServer.hasRequest("/$TARGET_FILE_NAME") &&
-                        composeRule.currentUrlBarText().contains(TARGET_FILE_NAME)
-                }
-                true
-            }.getOrDefault(false)
+            var opened = false
             var lastUrl = composeRule.currentUrlBarText()
-            if (!opened) {
-                dumpUiDiagnostics("after-initial-wait")
-                repeat(3) { attempt ->
-                    if (opened) return@repeat
-                    tapLinkOnGeckoContainer()
-                    opened = runCatching {
-                        composeRule.waitUntil(timeoutMillis = 10_000) {
-                            localServer.hasRequest("/$TARGET_FILE_NAME") &&
-                                composeRule.currentUrlBarText().contains(TARGET_FILE_NAME)
-                        }
-                        true
-                    }.getOrDefault(false)
-                    lastUrl = composeRule.currentUrlBarText()
-                    println("target-open-fallback-attempt=${attempt + 1}, opened=$opened, currentUrl=$lastUrl")
-                    if (!opened) {
-                        dumpUiDiagnostics("fallback-attempt-${attempt + 1}")
+            repeat(3) { attempt ->
+                if (opened) return@repeat
+                tapLinkOnGeckoContainer()
+                opened = runCatching {
+                    composeRule.waitUntil(timeoutMillis = 10_000) {
+                        localServer.hasRequest("/$TARGET_FILE_NAME") &&
+                            composeRule.currentUrlBarText().contains(TARGET_FILE_NAME)
                     }
+                    true
+                }.getOrDefault(false)
+                lastUrl = composeRule.currentUrlBarText()
+                println("target-open-attempt=${attempt + 1}, opened=$opened, currentUrl=$lastUrl")
+                if (!opened) {
+                    dumpUiDiagnostics("attempt-${attempt + 1}")
                 }
             }
             if (!opened) {
