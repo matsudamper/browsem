@@ -204,6 +204,7 @@ internal fun TabCard(
                         bitmap = preview,
                         contentDescription = "Tab preview",
                         contentScale = ContentScale.Crop,
+                        alignment = Alignment.TopCenter,
                         modifier = Modifier.fillMaxSize(),
                     )
                 } else {
