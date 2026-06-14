@@ -1,6 +1,3 @@
-import org.gradle.jvm.toolchain.JavaLanguageVersion
-import org.gradle.jvm.toolchain.JavaToolchainService
-
 plugins {
     alias(libs.plugins.android.application) apply false
     alias(libs.plugins.android.library) apply false
@@ -21,9 +18,9 @@ subprojects {
     }
 
     tasks.withType<Test>().configureEach {
-        val javaToolchainService = project.extensions.getByType<JavaToolchainService>()
+        val javaToolchainService = project.extensions.getByType<org.gradle.jvm.toolchain.JavaToolchainService>()
         javaLauncher.set(javaToolchainService.launcherFor {
-            languageVersion.set(JavaLanguageVersion.of(24))
+            languageVersion.set(org.gradle.jvm.toolchain.JavaLanguageVersion.of(24))
         })
         testLogging {
             events("failed", "skipped")
