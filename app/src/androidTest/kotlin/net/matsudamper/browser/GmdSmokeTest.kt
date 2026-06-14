@@ -533,7 +533,7 @@ class GmdSmokeTest {
     private fun waitForUrlBarText(expected: String) {
         try {
             composeRule.waitUntil(timeoutMillis = 20_000) {
-                composeRule.currentUrlBarText() == expected
+                normalizeFileUrl(composeRule.currentUrlBarText()) == normalizeFileUrl(expected)
             }
         } catch (e: androidx.compose.ui.test.ComposeTimeoutException) {
             throw AssertionError(
