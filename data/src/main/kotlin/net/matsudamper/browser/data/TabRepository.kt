@@ -11,7 +11,24 @@ import net.matsudamper.browser.data.tab.TabStateEntity
 class TabRepository(context: Context) {
     private val db = TabDatabase.getInstance(context)
     private val dao = db.tabDao()
-    private val thumbnailDir = File(context.cacheDir, "tab_thumbnails").apply { mkdirs() }
+    // サムネイルはタブの永続データなので、消えうる cacheDir ではなく filesDir に置く。
+    // 以前は cacheDir に保存していたため、旧ディレクトリからのマイグレーションを行う。
+    private val thumbnailDir = File(context.filesDir, "tab_thumbnails").apply { mkdirs() }
+
+    init {
+        val oldDir = File(context.cacheDir, "tab_thumbnails")
+        if (oldDir.exists()) {
+            oldDir.listFiles()?.forEach { file ->
+                val dest = File(thumbnailDir, file.name)
+                if (!dest.exists()) {
+                    file.renameTo(dest)
+                } else {
+                    file.delete()
+                }
+            }
+            oldDir.delete()
+        }
+    }
 
     // sessionState は GeckoView のセッション状態(履歴・フォーム・スクロール等)を直列化した
     // 実質 blob で、ヘビーに使われたタブでは Android の CursorWindow 上限(約2MB)を超え、
@@ -151,7 +168,7 @@ class TabRepository(context: Context) {
         deleteSessionStateFile(tabId)
     }
 
-    /** サムネイル画像をキャッシュファイルに保存する */
+    /** サムネイル画像をファイルに保存する */
     fun saveTabThumbnail(tabId: String, imageBytes: ByteArray) {
         if (imageBytes.isEmpty()) return
         if (!thumbnailDir.exists()) {
@@ -160,7 +177,7 @@ class TabRepository(context: Context) {
         File(thumbnailDir, "$tabId.webp").writeBytes(imageBytes)
     }
 
-    /** サムネイル画像をキャッシュファイルから読み込む */
+    /** サムネイル画像をファイルから読み込む */
     fun loadTabThumbnail(tabId: String): ByteArray? {
         val file = File(thumbnailDir, "$tabId.webp")
         return if (file.exists()) file.readBytes() else null
