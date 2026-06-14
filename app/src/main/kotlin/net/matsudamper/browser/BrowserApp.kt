@@ -579,6 +579,7 @@ private fun BrowserAppContent(
                             TabsScreenViewModel(
                                 tabStore = browserTabController,
                                 tabGroupRepository = tabGroupRepository,
+                                playingTabIds = mediaWebExtension.playingTabIds,
                             )
                         })
                         val tabsUiState by tabsViewModel.uiState.collectAsState()

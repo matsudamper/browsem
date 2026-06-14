@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
@@ -25,6 +26,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.ui.res.painterResource
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -134,9 +136,19 @@ internal fun TabCard(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = 12.dp, end = 4.dp),
+                    .padding(start = if (tab.isPlaying) 8.dp else 12.dp, end = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                if (tab.isPlaying) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_music_note),
+                        contentDescription = "再生中",
+                        modifier = Modifier
+                            .size(14.dp)
+                            .padding(end = 2.dp),
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                }
                 BasicText(
                     text = tab.title.ifBlank { "Untitled" },
                     maxLines = 2,

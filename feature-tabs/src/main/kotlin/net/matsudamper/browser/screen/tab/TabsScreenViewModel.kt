@@ -25,6 +25,7 @@ import net.matsudamper.browser.ui.tabs.TabsScreenUiState
 class TabsScreenViewModel(
     private val tabStore: TabStore,
     private val tabGroupRepository: TabGroupRepository,
+    private val playingTabIds: StateFlow<Set<String>> = MutableStateFlow(emptySet()),
 ) : ViewModel() {
 
     private val viewModelStateFlow = MutableStateFlow(ViewModelState())
@@ -153,6 +154,7 @@ class TabsScreenViewModel(
             viewModelStateFlow.collectLatest { state ->
                 val groups = state.groups
                 val assignmentMap = state.assignments.associate { it.tabId to it.groupId }
+                val playingIds = state.playingTabIds
                 val groupedTabs = groups.map { group ->
                     state.tabStoreState.tabs
                         .filter { assignmentMap[it.id] == group.id.value }
@@ -161,8 +163,12 @@ class TabsScreenViewModel(
                                 id = tab.id,
                                 title = tab.title,
                                 previewImage = tab.previewBitmapArray?.let { TabPreviewImage(it) },
+                                isPlaying = tab.id in playingIds,
                             )
                         }
+                }
+                val groupHasPlayingTab = groupedTabs.map { tabs ->
+                    tabs.any { it.isPlaying }
                 }
                 val pendingClosedTab = state.pendingClosedTab?.let {
                     TabsScreenUiState.PendingClosedTab(it.tabId, it.title)
@@ -180,6 +186,7 @@ class TabsScreenViewModel(
                                 // グループが空になる場合も含めて有効範囲にクランプする
                                 activeGroupIndex = state.activeGroupIndex.coerceIn(0, (groups.size - 1).coerceAtLeast(0)),
                                 selectedTabId = state.tabStoreState.selectedTabId,
+                                groupHasPlayingTab = groupHasPlayingTab,
                             )
                         },
                     )
@@ -214,6 +221,11 @@ class TabsScreenViewModel(
         viewModelScope.launch {
             tabGroupRepository.observeTabGroupAssignments().collect { assignments ->
                 viewModelStateFlow.update { it.copy(assignments = assignments) }
+            }
+        }
+        viewModelScope.launch {
+            playingTabIds.collect { playingIds ->
+                viewModelStateFlow.update { it.copy(playingTabIds = playingIds) }
             }
         }
         viewModelScope.launch {
@@ -450,6 +462,7 @@ class TabsScreenViewModel(
         val tabStoreState: TabStoreState = TabStoreState(),
         val assignments: List<TabGroupAssignment> = emptyList(),
         val pendingClosedTab: PendingClosedTab? = null,
+        val playingTabIds: Set<String> = emptySet(),
     ) {
         /** ドラッグ中はローカル順序を優先し、DB の更新が遅れても表示が乱れないようにする。 */
         val groups: List<TabGroupData> get() = localGroupOrder ?: dbGroups
