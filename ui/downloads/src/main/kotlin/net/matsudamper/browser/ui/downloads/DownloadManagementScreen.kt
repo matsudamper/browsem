@@ -34,6 +34,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -139,6 +140,7 @@ private fun DownloadItemRow(
     onOpenOriginPage: (url: String) -> Unit,
     loadThumbnail: suspend (fileUri: String) -> ImageBitmap?,
 ) {
+    val currentLoadThumbnail by rememberUpdatedState(loadThumbnail)
     val dateFormat = remember { SimpleDateFormat("yyyy/MM/dd HH:mm", Locale.getDefault()) }
     var menuExpanded by remember { mutableStateOf(false) }
     Box {
@@ -175,7 +177,7 @@ private fun DownloadItemRow(
                 var thumbnail by remember(completedStatus.fileUri) { mutableStateOf<ImageBitmap?>(null) }
                 var loaded by remember(completedStatus.fileUri) { mutableStateOf(false) }
                 LaunchedEffect(completedStatus.fileUri) {
-                    thumbnail = loadThumbnail(completedStatus.fileUri)
+                    thumbnail = currentLoadThumbnail(completedStatus.fileUri)
                     loaded = true
                 }
                 if (thumbnail != null || !loaded) {
