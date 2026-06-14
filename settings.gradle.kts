@@ -8,7 +8,9 @@ pluginManagement {
 }
 
 plugins {
-    id("org.gradle.toolchains.foojay-resolver-convention") version "1.0.0"
+    if (System.getenv("CLAUDE_CODE_REMOTE") != "true") {
+        id("org.gradle.toolchains.foojay-resolver-convention") version "1.0.0"
+    }
 }
 
 dependencyResolutionManagement {
