@@ -26,7 +26,6 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -147,7 +146,12 @@ private fun DownloadItemRow(
                 .fillMaxWidth()
                 .combinedClickable(
                     onLongClick = { menuExpanded = true },
-                    onClick = {},
+                    onClick = {
+                        val status = item.status
+                        if (status is DownloadManagementScreenUiState.DownloadStatus.Completed) {
+                            onOpenFile(status.fileUri)
+                        }
+                    },
                 )
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -212,11 +216,7 @@ private fun DownloadItemRow(
                             }
                         }
 
-                        is DownloadManagementScreenUiState.DownloadStatus.Completed -> {
-                            TextButton(onClick = { onOpenFile(status.fileUri) }) {
-                                Text("開く")
-                            }
-                        }
+                        is DownloadManagementScreenUiState.DownloadStatus.Completed -> Unit
 
                         is DownloadManagementScreenUiState.DownloadStatus.Failed -> {
                             if (status.canResume) {
