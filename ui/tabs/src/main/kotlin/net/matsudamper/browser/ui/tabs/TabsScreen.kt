@@ -300,7 +300,10 @@ private fun TabsScreenLoadedContent(
             .fillMaxSize(),
         contentWindowInsets = WindowInsets.safeDrawing,
         snackbarHost = {
-            SnackbarHost(snackbarHostState) { snackbarData ->
+            SnackbarHost(
+                hostState = snackbarHostState,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+            ) { snackbarData ->
                 // スワイプで Snackbar を dismiss できるようにする
                 key(snackbarData) {
                     val dismissState = rememberSwipeToDismissBoxState(
