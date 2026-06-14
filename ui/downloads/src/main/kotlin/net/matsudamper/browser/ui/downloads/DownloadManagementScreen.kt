@@ -1,7 +1,8 @@
 package net.matsudamper.browser.ui.downloads
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -39,13 +40,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -117,6 +115,7 @@ fun DownloadManagementScreen(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun DownloadItemRow(
     item: DownloadManagementScreenUiState.DownloadItem,
@@ -128,13 +127,10 @@ private fun DownloadItemRow(
 ) {
     val dateFormat = remember { SimpleDateFormat("yyyy/MM/dd HH:mm", Locale.getDefault()) }
     var menuExpanded by remember { mutableStateOf(false) }
-    var menuOffset by remember { mutableStateOf(DpOffset.Zero) }
-    val density = LocalDensity.current
     Box {
         DropdownMenu(
             expanded = menuExpanded,
             onDismissRequest = { menuExpanded = false },
-            offset = menuOffset,
         ) {
             DropdownMenuItem(
                 text = { Text("開始ページを開く") },
@@ -148,22 +144,15 @@ private fun DownloadItemRow(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .pointerInput(Unit) {
-                    detectTapGestures(
-                        onLongPress = { offset ->
-                            with(density) {
-                                menuOffset = DpOffset(offset.x.toDp(), offset.y.toDp())
-                            }
-                            menuExpanded = true
-                        },
-                        onTap = {
-                            val status = item.status
-                            if (status is DownloadManagementScreenUiState.DownloadStatus.Completed) {
-                                onOpenFile(status.fileUri)
-                            }
-                        },
-                    )
-                }
+                .combinedClickable(
+                    onLongClick = { menuExpanded = true },
+                    onClick = {
+                        val status = item.status
+                        if (status is DownloadManagementScreenUiState.DownloadStatus.Completed) {
+                            onOpenFile(status.fileUri)
+                        }
+                    },
+                )
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
