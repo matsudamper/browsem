@@ -125,7 +125,7 @@
       (playbackState !== "paused" && mediaElementPlaying);
     const isActive =
       playbackState === "playing" ||
-      playbackState === "paused" ||
+      (playbackState === "paused" && !!media && hasStarted) ||
       (!!media && (mediaElementPlaying || hasStarted));
 
     return {

@@ -727,6 +727,7 @@ private fun PreviewWithSnackbar() {
             onRenameGroup = { _, _ -> },
             onDeleteGroup = {},
             onToggleDefaultGroup = {},
+            groupHasPlayingTab = emptyList(),
         )
         Snackbar(
             modifier = Modifier
