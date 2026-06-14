@@ -106,4 +106,8 @@ interface DownloadDao {
      */
     @Query("UPDATE download SET currentWorkerId = :newWorkerId, status = 'ENQUEUED' WHERE workerId = :workerId")
     suspend fun updateResumed(workerId: String, newWorkerId: String)
+
+    /** 指定URLに一致するアクティブ（ENQUEUED/RUNNING/SUCCEEDED/PAUSED）なダウンロードを取得する */
+    @Query("SELECT * FROM download WHERE url = :url AND status IN ('ENQUEUED', 'RUNNING', 'SUCCEEDED', 'PAUSED') ORDER BY enqueuedAt DESC")
+    suspend fun findActiveByUrl(url: String): List<DownloadEntity>
 }
