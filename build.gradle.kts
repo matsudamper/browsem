@@ -18,6 +18,10 @@ subprojects {
     }
 
     tasks.withType<Test>().configureEach {
+        val javaToolchainService = project.extensions.getByType<JavaToolchainService>()
+        javaLauncher.set(javaToolchainService.launcherFor {
+            languageVersion.set(JavaLanguageVersion.of(24))
+        })
         testLogging {
             events("failed", "skipped")
             showExceptions = true
