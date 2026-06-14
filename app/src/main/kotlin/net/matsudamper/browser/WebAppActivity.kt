@@ -45,9 +45,6 @@ class WebAppActivity : ComponentActivity() {
     private val historyRepository: HistoryRepository by inject()
     private val webSuggestionRepository: WebSuggestionRepository by inject()
 
-    private lateinit var browserTabController: BrowserTabController
-    private lateinit var browserSessionLifecycleController: BrowserSessionLifecycleController
-
     private var pendingDownloadNotificationPermissionDeferred: CompletableDeferred<Unit>? = null
 
     private val requestDownloadNotificationPermissionLauncher = registerForActivityResult(
@@ -61,17 +58,17 @@ class WebAppActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         runtime.settings.setExtensionsWebAPIEnabled(true)
 
-        // 拡張機能は Koin の single で管理されるため、ここではセッション管理のみ担当する
-        browserTabController = BrowserTabController(
-            tabRepository = tabRepository,
-            tabGroupRepository = null,
-            isSinglePage = true,
-        )
-        browserSessionLifecycleController = BrowserSessionLifecycleController(runtime)
-
         // 外部アプリから任意のURLが渡されないよう、http/https スキームのみ許可する
         val initialUrl = resolveInitialUrl()
         setContent {
+            val browserViewModel = viewModel(initializer = {
+                WebAppBrowserViewModel(
+                    tabRepository = tabRepository,
+                    runtime = runtime,
+                )
+            })
+            val browserTabController = browserViewModel.browserTabController
+            val browserSessionLifecycleController = browserViewModel.browserSessionLifecycleController
             val settings by settingsRepository.settings.collectAsState(initial = null)
             val browserSettings = settings ?: return@setContent
             val webAppScreenViewModel = viewModel(initializer = {
@@ -161,10 +158,6 @@ class WebAppActivity : ComponentActivity() {
             CancellationException("Activity was destroyed before download notification permission completed.")
         )
         pendingDownloadNotificationPermissionDeferred = null
-        // セッションのみ閉じる。拡張機能はプロセススコープで管理されるため解放しない。
-        if (::browserTabController.isInitialized) {
-            browserTabController.close()
-        }
         super.onDestroy()
     }
 
