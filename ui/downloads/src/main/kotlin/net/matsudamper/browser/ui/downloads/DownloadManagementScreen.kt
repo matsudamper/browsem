@@ -26,7 +26,6 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -147,7 +146,12 @@ private fun DownloadItemRow(
                 .fillMaxWidth()
                 .combinedClickable(
                     onLongClick = { menuExpanded = true },
-                    onClick = {},
+                    onClick = {
+                        val status = item.status
+                        if (status is DownloadManagementScreenUiState.DownloadStatus.Completed) {
+                            onOpenFile(status.fileUri)
+                        }
+                    },
                 )
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -175,7 +179,7 @@ private fun DownloadItemRow(
                     Text(
                         text = item.fileName,
                         style = MaterialTheme.typography.bodyLarge,
-                        maxLines = 1,
+                        maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier
                             .weight(1f)
@@ -212,11 +216,7 @@ private fun DownloadItemRow(
                             }
                         }
 
-                        is DownloadManagementScreenUiState.DownloadStatus.Completed -> {
-                            TextButton(onClick = { onOpenFile(status.fileUri) }) {
-                                Text("開く")
-                            }
-                        }
+                        is DownloadManagementScreenUiState.DownloadStatus.Completed -> Unit
 
                         is DownloadManagementScreenUiState.DownloadStatus.Failed -> {
                             if (status.canResume) {
@@ -480,6 +480,30 @@ private fun PreviewFailedCannotResume() {
                 status = DownloadManagementScreenUiState.DownloadStatus.Failed(canResume = false),
                 enqueuedAt = 0L,
                 originPageUrl = null,
+            ),
+            onCancel = {},
+            onPause = {},
+            onOpenFile = {},
+            onResume = {},
+            onOpenOriginPage = {},
+        )
+    }
+}
+
+@Preview(name = "長いファイル名・2行表示")
+@Composable
+private fun PreviewLongFileName() {
+    MaterialTheme {
+        DownloadItemRow(
+            item = DownloadManagementScreenUiState.DownloadItem(
+                id = UUID.randomUUID(),
+                fileName = "very_long_file_name_that_should_wrap_to_two_lines_example_document.pdf",
+                status = DownloadManagementScreenUiState.DownloadStatus.Completed(
+                    fileUri = "content://media/external/downloads/3",
+                    thumbnail = null,
+                ),
+                enqueuedAt = 0L,
+                originPageUrl = "https://example.com/page",
             ),
             onCancel = {},
             onPause = {},

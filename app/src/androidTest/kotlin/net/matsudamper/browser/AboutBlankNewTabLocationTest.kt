@@ -160,31 +160,22 @@ class AboutBlankNewTabLocationTest {
         }
 
         group("全面リンクをクリックして target=_blank で新しいタブを開く") {
-            var opened = runCatching {
-                composeRule.waitUntil(timeoutMillis = 20_000) {
-                    localServer.hasRequest("/$TARGET_FILE_NAME") &&
-                        composeRule.currentUrlBarText().contains(TARGET_FILE_NAME)
-                }
-                true
-            }.getOrDefault(false)
+            var opened = false
             var lastUrl = composeRule.currentUrlBarText()
-            if (!opened) {
-                dumpUiDiagnostics("after-initial-wait")
-                repeat(3) { attempt ->
-                    if (opened) return@repeat
-                    tapLinkOnGeckoContainer()
-                    opened = runCatching {
-                        composeRule.waitUntil(timeoutMillis = 10_000) {
-                            localServer.hasRequest("/$TARGET_FILE_NAME") &&
-                                composeRule.currentUrlBarText().contains(TARGET_FILE_NAME)
-                        }
-                        true
-                    }.getOrDefault(false)
-                    lastUrl = composeRule.currentUrlBarText()
-                    println("target-open-fallback-attempt=${attempt + 1}, opened=$opened, currentUrl=$lastUrl")
-                    if (!opened) {
-                        dumpUiDiagnostics("fallback-attempt-${attempt + 1}")
+            repeat(3) { attempt ->
+                if (opened) return@repeat
+                tapLinkOnGeckoContainer()
+                opened = runCatching {
+                    composeRule.waitUntil(timeoutMillis = 10_000) {
+                        localServer.hasRequest("/$TARGET_FILE_NAME") &&
+                            composeRule.currentUrlBarText().contains(TARGET_FILE_NAME)
                     }
+                    true
+                }.getOrDefault(false)
+                lastUrl = composeRule.currentUrlBarText()
+                println("target-open-attempt=${attempt + 1}, opened=$opened, currentUrl=$lastUrl")
+                if (!opened) {
+                    dumpUiDiagnostics("attempt-${attempt + 1}")
                 }
             }
             if (!opened) {
@@ -304,9 +295,12 @@ class AboutBlankNewTabLocationTest {
      * なり onNodeWithTag が "Expected exactly 1" で失敗する。フォアグラウンド限定 testTag で一意化する。
      */
     private fun tapLinkOnGeckoContainer() {
-        val node = composeRule.onNodeWithTag(
-            GeckoBrowserTabTestTags.GeckoContainer.testTag(isForeground = true),
-        )
+        val tag = GeckoBrowserTabTestTags.GeckoContainer.testTag
+        composeRule.waitUntil(timeoutMillis = 10_000) {
+            composeRule.onAllNodesWithTag(tag).fetchSemanticsNodes().isNotEmpty()
+        }
+        val nodes = composeRule.onAllNodesWithTag(tag)
+        val node = nodes[0]
         node.performTouchInput {
             click()
         }

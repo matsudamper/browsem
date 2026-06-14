@@ -53,12 +53,6 @@ internal class DownloadWorker(
     private var partialResultTotalRead: Long = 0L
     private var partialResultContentLength: Long = -1L
 
-    /**
-     * 元レスポンス（pendingResponse）のボディを直接保存したか。
-     * この場合は URL 再取得での再開が無効データ（ワンタイムURL無効化・ログインページ等）になり得るため、
-     * 失敗時に再開可能として保存しない。
-     */
-    private var usedPendingBody: Boolean = false
 
     override suspend fun doWork(): Result {
         val url = inputData.getString(KEY_URL) ?: return Result.failure()
@@ -105,7 +99,7 @@ internal class DownloadWorker(
                 val workerId = id.toString()
                 val savedUri = partialResultUri
                 if (repository.isPaused(workerId)) {
-                    if (savedUri != null && partialResultTotalRead > 0 && !usedPendingBody) {
+                    if (savedUri != null && partialResultTotalRead > 0) {
                         // 一時停止: 部分ファイルを保持して再開（HTTP Range）に備える
                         repository.updatePausedPartial(
                             currentWorkerId = workerId,
@@ -134,7 +128,7 @@ internal class DownloadWorker(
         } catch (e: Exception) {
             e.printStackTrace()
             val savedUri = partialResultUri
-            if (savedUri != null && partialResultTotalRead > 0 && !usedPendingBody) {
+            if (savedUri != null && partialResultTotalRead > 0) {
                 // 部分ファイルが存在する場合は再開可能として保存する
                 repository.updatePartialFailed(
                     currentWorkerId = id.toString(),
@@ -226,8 +220,6 @@ internal class DownloadWorker(
         // パスワード submit(POST)・ワンタイムURL・セッション依存のダウンロードは
         // URL を GET し直すと 0 バイトになるため、元レスポンスのボディを優先する。
         val pendingResponse = PendingDownloadBodyStore.take(id.toString())
-        // 元レスポンスのボディを使う場合、URL再取得での再開は無効データになり得るため記録する
-        usedPendingBody = pendingResponse != null
         val response: DownloadHttpResponse = pendingResponse?.let { WebResponseDownloadResponse(it) }
             ?: httpClient.fetch(urlString, referrerUrl, 0L)
 

@@ -116,6 +116,10 @@ class BrowserSessionLifecycleController(
         // サイズ確定待ちの間にタブが閉じられた場合は何もしない
         if (!tab.session.isOpen) return
         tab.pendingInitialLoad = false
+        val urlToLoad = tab.currentUrl.ifBlank { "about:blank" }
+        // 遅延ロードの URL を記録。明示的ナビゲーション（cancelPendingInitialLoad）が
+        // 後から発行された場合に、遅延到着する onLocationChange をフィルタするために使う。
+        tab.deferredInitialLoadUrl = urlToLoad
         val referrerUrl = tab.pendingReferrerUrl
         tab.pendingReferrerUrl = null
         if (referrerUrl != null) {
@@ -123,11 +127,11 @@ class BrowserSessionLifecycleController(
             // 付けて読み込む。ホットリンク保護のあるサーバーで 403 にならないようにするため
             tab.session.load(
                 GeckoSession.Loader()
-                    .uri(tab.currentUrl.ifBlank { "about:blank" })
+                    .uri(urlToLoad)
                     .referrer(referrerUrl),
             )
         } else {
-            tab.session.loadUri(tab.currentUrl.ifBlank { "about:blank" })
+            tab.session.loadUri(urlToLoad)
         }
     }
 
