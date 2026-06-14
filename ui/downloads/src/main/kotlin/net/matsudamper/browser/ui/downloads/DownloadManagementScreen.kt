@@ -30,6 +30,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -119,6 +120,7 @@ fun DownloadManagementScreen(
                         onOpenFile = { fileUri -> uiState.callbacks.onOpenFile(fileUri) },
                         onResume = { uiState.callbacks.onResume(item.id) },
                         onOpenOriginPage = { url -> uiState.callbacks.onOpenOriginPage(url) },
+                        loadThumbnail = uiState.callbacks.loadThumbnail,
                     )
                 }
             }
@@ -135,6 +137,7 @@ private fun DownloadItemRow(
     onOpenFile: (String) -> Unit,
     onResume: () -> Unit,
     onOpenOriginPage: (url: String) -> Unit,
+    loadThumbnail: suspend (fileUri: String) -> ImageBitmap?,
 ) {
     val dateFormat = remember { SimpleDateFormat("yyyy/MM/dd HH:mm", Locale.getDefault()) }
     var menuExpanded by remember { mutableStateOf(false) }
@@ -168,22 +171,30 @@ private fun DownloadItemRow(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             val completedStatus = item.status as? DownloadManagementScreenUiState.DownloadStatus.Completed
-            if (completedStatus != null && (completedStatus.thumbnail != null || completedStatus.thumbnailLoading)) {
-                Box(
-                    modifier = Modifier
-                        .padding(end = 12.dp)
-                        .size(48.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(MaterialTheme.colorScheme.surfaceVariant),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    if (completedStatus.thumbnail != null) {
-                        Image(
-                            bitmap = completedStatus.thumbnail,
-                            contentDescription = null,
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier.fillMaxSize(),
-                        )
+            if (completedStatus != null) {
+                var thumbnail by remember(completedStatus.fileUri) { mutableStateOf<ImageBitmap?>(null) }
+                var loaded by remember(completedStatus.fileUri) { mutableStateOf(false) }
+                LaunchedEffect(completedStatus.fileUri) {
+                    thumbnail = loadThumbnail(completedStatus.fileUri)
+                    loaded = true
+                }
+                if (thumbnail != null || !loaded) {
+                    Box(
+                        modifier = Modifier
+                            .padding(end = 12.dp)
+                            .size(48.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        if (thumbnail != null) {
+                            Image(
+                                bitmap = thumbnail!!,
+                                contentDescription = null,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize(),
+                            )
+                        }
                     }
                 }
             }
@@ -382,6 +393,7 @@ private fun PreviewInProgress() {
             onOpenFile = {},
             onResume = {},
             onOpenOriginPage = {},
+            loadThumbnail = { null },
         )
     }
 }
@@ -407,6 +419,7 @@ private fun PreviewPaused() {
             onOpenFile = {},
             onResume = {},
             onOpenOriginPage = {},
+            loadThumbnail = { null },
         )
     }
 }
@@ -428,6 +441,7 @@ private fun PreviewFailedCanResume() {
             onOpenFile = {},
             onResume = {},
             onOpenOriginPage = {},
+            loadThumbnail = { null },
         )
     }
 }
@@ -450,8 +464,6 @@ private fun PreviewCompletedWithThumbnail() {
                 fileName = "photo.png",
                 status = DownloadManagementScreenUiState.DownloadStatus.Completed(
                     fileUri = "content://media/external/downloads/1",
-                    thumbnail = thumbnail,
-                    thumbnailLoading = false,
                 ),
                 enqueuedAt = 0L,
                 originPageUrl = "https://example.com/page",
@@ -461,6 +473,7 @@ private fun PreviewCompletedWithThumbnail() {
             onOpenFile = {},
             onResume = {},
             onOpenOriginPage = {},
+            loadThumbnail = { thumbnail },
         )
     }
 }
@@ -475,8 +488,6 @@ private fun PreviewCompletedWithoutThumbnail() {
                 fileName = "example.zip",
                 status = DownloadManagementScreenUiState.DownloadStatus.Completed(
                     fileUri = "content://media/external/downloads/2",
-                    thumbnail = null,
-                    thumbnailLoading = false,
                 ),
                 enqueuedAt = 0L,
                 originPageUrl = null,
@@ -486,6 +497,7 @@ private fun PreviewCompletedWithoutThumbnail() {
             onOpenFile = {},
             onResume = {},
             onOpenOriginPage = {},
+            loadThumbnail = { null },
         )
     }
 }
@@ -507,6 +519,7 @@ private fun PreviewFailedCannotResume() {
             onOpenFile = {},
             onResume = {},
             onOpenOriginPage = {},
+            loadThumbnail = { null },
         )
     }
 }
@@ -521,8 +534,6 @@ private fun PreviewLongFileName() {
                 fileName = "very_long_file_name_that_should_wrap_to_two_lines_example_document.pdf",
                 status = DownloadManagementScreenUiState.DownloadStatus.Completed(
                     fileUri = "content://media/external/downloads/3",
-                    thumbnail = null,
-                    thumbnailLoading = false,
                 ),
                 enqueuedAt = 0L,
                 originPageUrl = "https://example.com/page",
@@ -532,6 +543,7 @@ private fun PreviewLongFileName() {
             onOpenFile = {},
             onResume = {},
             onOpenOriginPage = {},
+            loadThumbnail = { null },
         )
     }
 }
