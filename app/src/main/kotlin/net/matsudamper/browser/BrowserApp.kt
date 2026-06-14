@@ -263,9 +263,9 @@ internal fun BrowserAppShell(
                 }
 
                 AppDestination.History -> navEntry(key) {
-                    val historyViewModel = remember {
+                    val historyViewModel = composeViewModel(initializer = {
                         HistoryScreenViewModel(historyRepository)
-                    }
+                    })
                     val historyUiState by historyViewModel.uiState.collectAsState()
                     LaunchedEffect(historyViewModel) {
                         historyViewModel.eventHandler.receiveAsFlow().collect {
@@ -288,9 +288,9 @@ internal fun BrowserAppShell(
                 }
 
                 AppDestination.Extensions -> navEntry(key) {
-                    val extensionsViewModel = remember(runtime) {
+                    val extensionsViewModel = composeViewModel(initializer = {
                         ExtensionsScreenViewModel(runtime = runtime)
-                    }
+                    })
                     val extensionsUiState by extensionsViewModel.uiState.collectAsState()
                     LaunchedEffect(extensionsViewModel) {
                         extensionsViewModel.eventHandler.receiveAsFlow().collect {
@@ -315,9 +315,9 @@ internal fun BrowserAppShell(
                 }
 
                 AppDestination.Downloads -> navEntry(key) {
-                    val downloadsViewModel = remember {
+                    val downloadsViewModel = composeViewModel(initializer = {
                         DownloadManagementScreenViewModel(context.applicationContext as Application)
-                    }
+                    })
                     val downloadsUiState by downloadsViewModel.uiState.collectAsState()
                     LaunchedEffect(downloadsViewModel) {
                         downloadsViewModel.eventHandler.receiveAsFlow().collect {
