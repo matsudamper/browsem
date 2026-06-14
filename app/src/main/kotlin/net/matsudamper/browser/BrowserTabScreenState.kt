@@ -716,14 +716,8 @@ internal class BrowserTabScreenState(
     }
 
     // GeckoViewがレンダリングできないレスポンス（ダウンロードリンク等）を受け取った際に呼ばれる
-    // ユーザーに確認ダイアログを表示するため、pendingDownloadResponseに保持する
+    // 重複がある場合は重複ダイアログを直接表示し、なければ通常の確認ダイアログを表示する
     fun downloadFileFromResponse(response: WebResponse) {
-        pendingDownloadResponse = response
-    }
-
-    fun confirmPendingDownload() {
-        val response = pendingDownloadResponse ?: return
-        pendingDownloadResponse = null
         val referrerUrl = currentPageUrl
         coroutineScope.launch {
             val duplicates = geckoDownloadManager.findDuplicateDownloads(response.uri)
@@ -746,8 +740,14 @@ internal class BrowserTabScreenState(
                 )
                 return@launch
             }
-            proceedDownloadFromResponse(response, referrerUrl)
+            pendingDownloadResponse = response
         }
+    }
+
+    fun confirmPendingDownload() {
+        val response = pendingDownloadResponse ?: return
+        pendingDownloadResponse = null
+        proceedDownloadFromResponse(response, currentPageUrl)
     }
 
     private fun proceedDownloadFromResponse(response: WebResponse, referrerUrl: String) {
