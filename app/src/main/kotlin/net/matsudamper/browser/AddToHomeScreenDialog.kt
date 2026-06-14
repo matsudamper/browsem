@@ -10,13 +10,19 @@ import android.widget.Toast
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -42,12 +48,19 @@ internal fun AddToHomeScreenDialog(
     onDismiss: () -> Unit,
 ) {
     val context = LocalContext.current
+    var editedTitle by remember { mutableStateOf(title.ifBlank { url }) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("ホームに追加") },
         text = {
             Column {
-                Text(title.ifBlank { url })
+                OutlinedTextField(
+                    value = editedTitle,
+                    onValueChange = { editedTitle = it },
+                    label = { Text("タイトル") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
                 if (isIconLoading) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
@@ -66,7 +79,7 @@ internal fun AddToHomeScreenDialog(
             Row {
                 TextButton(
                     onClick = {
-                        addShortcutToHome(context, url, title, favicon)
+                        addShortcutToHome(context, url, editedTitle, favicon)
                         onDismiss()
                     },
                     enabled = !isIconLoading,
@@ -75,7 +88,7 @@ internal fun AddToHomeScreenDialog(
                 }
                 TextButton(
                     onClick = {
-                        addWebAppToHome(context, url, title, favicon)
+                        addWebAppToHome(context, url, editedTitle, favicon)
                         onDismiss()
                     },
                     enabled = !isIconLoading,
