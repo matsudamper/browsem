@@ -18,10 +18,6 @@ subprojects {
     }
 
     tasks.withType<Test>().configureEach {
-        val javaToolchainService = project.extensions.getByType<org.gradle.jvm.toolchain.JavaToolchainService>()
-        javaLauncher.set(javaToolchainService.launcherFor {
-            languageVersion.set(org.gradle.jvm.toolchain.JavaLanguageVersion.of(24))
-        })
         testLogging {
             events("failed", "skipped")
             showExceptions = true
