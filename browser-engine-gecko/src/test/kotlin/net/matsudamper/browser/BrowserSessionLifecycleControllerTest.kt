@@ -132,4 +132,62 @@ class BrowserSessionLifecycleControllerTest {
         verify(exactly = 0) { session.loadUri(any<String>()) }
         verify(exactly = 0) { session.load(any()) }
     }
+
+    @Test
+    fun `performInitialLoadIfPending は deferredInitialLoadUrl を記録する`() {
+        val runtime = mockk<GeckoRuntime>(relaxed = true)
+        val session = mockk<GeckoSession>(relaxed = true)
+        every { session.isOpen } returns false
+        val tab = createTab(session)
+        tab.currentUrl = "https://www.google.com"
+        val controller = BrowserSessionLifecycleController(runtime)
+
+        controller.restoreSession(tab)
+        every { session.isOpen } returns true
+        controller.performInitialLoadIfPending(tab)
+
+        assert(tab.deferredInitialLoadUrl == "https://www.google.com")
+    }
+
+    @Test
+    fun `cancelPendingInitialLoad は遅延ロード発行済みのとき shouldFilterDeferredLoad をセットする`() {
+        val runtime = mockk<GeckoRuntime>(relaxed = true)
+        val session = mockk<GeckoSession>(relaxed = true)
+        every { session.isOpen } returns false
+        val tab = createTab(session)
+        tab.currentUrl = "https://www.google.com"
+        val controller = BrowserSessionLifecycleController(runtime)
+
+        controller.restoreSession(tab)
+        every { session.isOpen } returns true
+        // 遅延ロードを先に発行
+        controller.performInitialLoadIfPending(tab)
+        // 明示的ナビゲーションで取り消し
+        tab.cancelPendingInitialLoad()
+
+        assert(tab.shouldFilterDeferredLoad)
+        assert(tab.deferredInitialLoadUrl == "https://www.google.com")
+    }
+
+    @Test
+    fun `cancelPendingInitialLoad が先の場合は shouldFilterDeferredLoad はセットされない`() {
+        val runtime = mockk<GeckoRuntime>(relaxed = true)
+        val session = mockk<GeckoSession>(relaxed = true)
+        every { session.isOpen } returns false
+        val tab = createTab(session)
+        tab.currentUrl = "https://www.google.com"
+        val controller = BrowserSessionLifecycleController(runtime)
+
+        controller.restoreSession(tab)
+        // 明示的ナビゲーションが先
+        tab.cancelPendingInitialLoad()
+
+        assert(!tab.shouldFilterDeferredLoad)
+        assert(tab.deferredInitialLoadUrl == null)
+
+        // performInitialLoadIfPending は pendingInitialLoad=false のため何もしない
+        every { session.isOpen } returns true
+        controller.performInitialLoadIfPending(tab)
+        verify(exactly = 0) { session.loadUri(any<String>()) }
+    }
 }

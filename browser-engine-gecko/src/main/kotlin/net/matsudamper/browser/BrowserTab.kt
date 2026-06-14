@@ -118,6 +118,27 @@ class BrowserTab(
     // restoreSession で立ち、performInitialLoadIfPending で消費される。
     internal var pendingInitialLoad: Boolean = false
 
+    // performInitialLoadIfPending が loadUri した URL。遅延初回ロードの
+    // onLocationChange がユーザーの明示的ナビゲーションより後に到着した場合に
+    // フィルタするための参照値として使う。
+    internal var deferredInitialLoadUrl: String? = null
+
+    // true の場合、deferredInitialLoadUrl に一致する次の onLocationChange を
+    // 破棄する。performInitialLoadIfPending の loadUri が発行済みかつ、その後に
+    // cancelPendingInitialLoad（明示的ナビゲーション）が呼ばれたときにセットされる。
+    internal var shouldFilterDeferredLoad: Boolean = false
+
+    // URL バーからの明示的なナビゲーション等で初回ロードの遅延実行をキャンセルする。
+    // Surface サイズ確定後の performInitialLoadIfPending がホームページ URL で
+    // 上書きすることを防ぐ。すでに loadUri が発行済みの場合は onLocationChange の
+    // フィルタを有効化して、遅延到着する stale イベントが URL を上書きするのを防ぐ。
+    fun cancelPendingInitialLoad() {
+        pendingInitialLoad = false
+        if (deferredInitialLoadUrl != null) {
+            shouldFilterDeferredLoad = true
+        }
+    }
+
     private val sessionDelegateHost = BrowserTabSessionDelegateHost(this)
 
     internal fun bindSessionDelegates() {
