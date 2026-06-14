@@ -175,7 +175,7 @@ private fun DownloadItemRow(
                     Text(
                         text = item.fileName,
                         style = MaterialTheme.typography.bodyLarge,
-                        maxLines = 1,
+                        maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier
                             .weight(1f)
