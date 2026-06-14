@@ -947,8 +947,6 @@ private fun DuplicateDownloadDialog(
                             }
                             append(" は既に存在します")
                         },
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
                     )
                 }
                 Spacer(modifier = Modifier.height(12.dp))
