@@ -98,6 +98,10 @@ android {
     }
 }
 
+kotlin {
+    jvmToolchain(24)
+}
+
 tasks.withType<Test>().configureEach {
     val hasPaparazziTask = gradle.startParameter.taskNames.any {
         it.lowercase().contains("paparazzi")

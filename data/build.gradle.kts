@@ -27,6 +27,10 @@ android {
     }
 }
 
+kotlin {
+    jvmToolchain(24)
+}
+
 ksp {
     // マイグレーション検証用にスキーマ JSON をエクスポートする
     arg("room.schemaLocation", "$projectDir/schemas")

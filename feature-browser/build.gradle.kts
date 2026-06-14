@@ -15,6 +15,10 @@ android {
     }
 }
 
+kotlin {
+    jvmToolchain(24)
+}
+
 dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.ktx)
     implementation(project(":browser-engine-gecko"))

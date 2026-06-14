@@ -10,13 +10,6 @@ plugins {
 }
 
 subprojects {
-    pluginManager.withPlugin("org.jetbrains.kotlin.android") {
-        the<org.jetbrains.kotlin.gradle.dsl.KotlinAndroidProjectExtension>().jvmToolchain(24)
-    }
-    pluginManager.withPlugin("org.jetbrains.kotlin.jvm") {
-        the<org.jetbrains.kotlin.gradle.dsl.KotlinJvmProjectExtension>().jvmToolchain(24)
-    }
-
     tasks.withType<Test>().configureEach {
         testLogging {
             events("failed", "skipped")
