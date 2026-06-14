@@ -28,6 +28,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import java.net.URL
+import net.matsudamper.browser.data.download.DownloadRecordStatus
 import net.matsudamper.browser.data.SiteGeolocationState
 import net.matsudamper.browser.data.SitePermissionState
 import net.matsudamper.browser.data.SiteSettingsRepository
@@ -267,6 +268,24 @@ internal class BrowserTabScreenState(
     // --- ファイルダウンロード確認ダイアログ用state ---
     var pendingDownloadResponse by mutableStateOf<WebResponse?>(null)
     var pendingExternalAppLaunch by mutableStateOf<PendingExternalAppLaunch?>(null)
+
+    // --- ダウンロード重複確認ダイアログ用state ---
+    var duplicateDownloadState by mutableStateOf<DuplicateDownloadState?>(null)
+        private set
+
+    @Stable
+    class DuplicateDownloadState(
+        val url: String,
+        val existingDownloads: List<DuplicateDownloadEntry>,
+        internal val onConfirm: () -> Unit,
+        internal val onDismiss: () -> Unit = {},
+    )
+
+    data class DuplicateDownloadEntry(
+        val fileName: String,
+        val status: DownloadRecordStatus,
+        val fileUri: String?,
+    )
     // 外部アプリ確認ダイアログでキャンセルされた場合、次回のロードリクエストで外部アプリチェックをスキップする
     private var skipExternalAppCheckForNextLoad = false
 
@@ -662,12 +681,32 @@ internal class BrowserTabScreenState(
 
     fun downloadImage(imageUrl: String) {
         dismissContextMenu()
-        // suspend 前に referrerUrl を確定させる（許可ダイアログ中にページ遷移しても影響を受けないため）
         val referrerUrl = currentPageUrl
         coroutineScope.launch {
-            // ダウンロード進捗を通知で表示するためにパーミッションを要求し、ユーザーの応答を待つ
+            val duplicates = geckoDownloadManager.findDuplicateDownloads(imageUrl)
+            if (duplicates.isNotEmpty()) {
+                duplicateDownloadState = DuplicateDownloadState(
+                    url = imageUrl,
+                    existingDownloads = duplicates.map { record ->
+                        DuplicateDownloadEntry(
+                            fileName = record.fileName,
+                            status = record.status,
+                            fileUri = record.fileUri,
+                        )
+                    },
+                    onConfirm = {
+                        proceedDownloadImage(imageUrl, referrerUrl)
+                    },
+                )
+                return@launch
+            }
+            proceedDownloadImage(imageUrl, referrerUrl)
+        }
+    }
+
+    private fun proceedDownloadImage(imageUrl: String, referrerUrl: String) {
+        coroutineScope.launch {
             onRequestDownloadNotificationPermission()
-            // WorkManagerにエンキューして通知で進捗表示
             geckoDownloadManager.enqueueDownload(
                 url = imageUrl,
                 referrerUrl = referrerUrl,
@@ -677,21 +716,44 @@ internal class BrowserTabScreenState(
     }
 
     // GeckoViewがレンダリングできないレスポンス（ダウンロードリンク等）を受け取った際に呼ばれる
-    // ユーザーに確認ダイアログを表示するため、pendingDownloadResponseに保持する
+    // 重複がある場合は重複ダイアログを直接表示し、なければ通常の確認ダイアログを表示する
     fun downloadFileFromResponse(response: WebResponse) {
-        pendingDownloadResponse = response
+        val referrerUrl = currentPageUrl
+        coroutineScope.launch {
+            val duplicates = geckoDownloadManager.findDuplicateDownloads(response.uri)
+            if (duplicates.isNotEmpty()) {
+                duplicateDownloadState = DuplicateDownloadState(
+                    url = response.uri,
+                    existingDownloads = duplicates.map { record ->
+                        DuplicateDownloadEntry(
+                            fileName = record.fileName,
+                            status = record.status,
+                            fileUri = record.fileUri,
+                        )
+                    },
+                    onConfirm = {
+                        proceedDownloadFromResponse(response, referrerUrl)
+                    },
+                    onDismiss = {
+                        response.body?.close()
+                    },
+                )
+                return@launch
+            }
+            pendingDownloadResponse = response
+        }
     }
 
     fun confirmPendingDownload() {
         val response = pendingDownloadResponse ?: return
         pendingDownloadResponse = null
-        // body はクローズせず、Worker がボディ（実データ）を直接保存できるよう response ごと引き渡す。
-        // パスワード submit(POST)・ワンタイムURL のダウンロードを 0 バイトにしないため。
-        val referrerUrl = currentPageUrl
+        proceedDownloadFromResponse(response, currentPageUrl)
+    }
+
+    private fun proceedDownloadFromResponse(response: WebResponse, referrerUrl: String) {
         coroutineScope.launch {
             var enqueued = false
             try {
-                // ダウンロード進捗を通知で表示するためにパーミッションを要求し、ユーザーの応答を待つ
                 onRequestDownloadNotificationPermission()
                 geckoDownloadManager.enqueueDownloadFromResponse(
                     response = response,
@@ -700,7 +762,6 @@ internal class BrowserTabScreenState(
                 )
                 enqueued = true
             } finally {
-                // 権限待ち中などにキャンセルされ、エンキューに到達しなかった場合はボディを閉じてリークを防ぐ
                 if (!enqueued) {
                     response.body?.close()
                 }
@@ -711,6 +772,18 @@ internal class BrowserTabScreenState(
     fun dismissPendingDownload() {
         pendingDownloadResponse?.body?.close()
         pendingDownloadResponse = null
+    }
+
+    fun confirmDuplicateDownload() {
+        val state = duplicateDownloadState ?: return
+        duplicateDownloadState = null
+        state.onConfirm()
+    }
+
+    fun dismissDuplicateDownload() {
+        val state = duplicateDownloadState ?: return
+        duplicateDownloadState = null
+        state.onDismiss()
     }
 
     fun confirmPendingExternalAppLaunch() {
