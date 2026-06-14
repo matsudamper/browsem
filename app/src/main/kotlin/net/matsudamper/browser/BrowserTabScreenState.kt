@@ -28,6 +28,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import java.net.URL
+import net.matsudamper.browser.data.download.DownloadRecordStatus
 import net.matsudamper.browser.data.SiteGeolocationState
 import net.matsudamper.browser.data.SitePermissionState
 import net.matsudamper.browser.data.SiteSettingsRepository
@@ -277,11 +278,12 @@ internal class BrowserTabScreenState(
         val url: String,
         val existingDownloads: List<DuplicateDownloadEntry>,
         internal val onConfirm: () -> Unit,
+        internal val onDismiss: () -> Unit = {},
     )
 
     data class DuplicateDownloadEntry(
         val fileName: String,
-        val status: net.matsudamper.browser.data.download.DownloadRecordStatus,
+        val status: DownloadRecordStatus,
         val fileUri: String?,
     )
     // 外部アプリ確認ダイアログでキャンセルされた場合、次回のロードリクエストで外部アプリチェックをスキップする
@@ -738,6 +740,9 @@ internal class BrowserTabScreenState(
                     onConfirm = {
                         proceedDownloadFromResponse(response, referrerUrl)
                     },
+                    onDismiss = {
+                        response.body?.close()
+                    },
                 )
                 return@launch
             }
@@ -776,7 +781,9 @@ internal class BrowserTabScreenState(
     }
 
     fun dismissDuplicateDownload() {
+        val state = duplicateDownloadState ?: return
         duplicateDownloadState = null
+        state.onDismiss()
     }
 
     fun confirmPendingExternalAppLaunch() {

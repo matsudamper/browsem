@@ -50,6 +50,7 @@ import androidx.core.graphics.toColorInt
 import java.util.Calendar
 import java.util.Locale
 import java.util.TimeZone
+import net.matsudamper.browser.data.ThemeMode
 import net.matsudamper.browser.data.download.DownloadRecordStatus
 import net.matsudamper.browser.ui.common.BrowserTheme
 import org.mozilla.geckoview.GeckoSession
@@ -982,7 +983,7 @@ private fun flattenChoices(
 @Preview(name = "DuplicateDownloadDialog")
 @Composable
 private fun PreviewDuplicateDownloadDialog() {
-    BrowserTheme(themeMode = net.matsudamper.browser.data.ThemeMode.THEME_SYSTEM) {
+    BrowserTheme(themeMode = ThemeMode.THEME_SYSTEM) {
         DuplicateDownloadDialog(
             state = BrowserTabScreenState.DuplicateDownloadState(
                 url = "https://example.com/file.zip",
@@ -1010,7 +1011,7 @@ private fun PreviewDuplicateDownloadDialog() {
 @Preview(name = "ContextMenuDialog")
 @Composable
 private fun PreviewContextMenuDialog() {
-    BrowserTheme(themeMode = net.matsudamper.browser.data.ThemeMode.THEME_SYSTEM) {
+    BrowserTheme(themeMode = ThemeMode.THEME_SYSTEM) {
         ContextMenuDialog(
             menu = BrowserTabScreenState.ContextMenuState.LinkWithImage(
                 url = "https://example.com/very/long/link/path/page.html",
@@ -1029,7 +1030,7 @@ private fun PreviewContextMenuDialog() {
 @Preview(name = "DateInputDialog")
 @Composable
 private fun PreviewDateInputDialog() {
-    BrowserTheme(themeMode = net.matsudamper.browser.data.ThemeMode.THEME_SYSTEM) {
+    BrowserTheme(themeMode = ThemeMode.THEME_SYSTEM) {
         DateInputDialog(
             defaultValue = "2024-06-15",
             onConfirm = {},
@@ -1041,7 +1042,7 @@ private fun PreviewDateInputDialog() {
 @Preview(name = "TimeInputDialog")
 @Composable
 private fun PreviewTimeInputDialog() {
-    BrowserTheme(themeMode = net.matsudamper.browser.data.ThemeMode.THEME_SYSTEM) {
+    BrowserTheme(themeMode = ThemeMode.THEME_SYSTEM) {
         TimeInputDialog(
             defaultValue = "14:30",
             onConfirm = {},
