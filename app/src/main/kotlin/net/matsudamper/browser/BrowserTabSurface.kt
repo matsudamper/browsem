@@ -50,6 +50,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import net.matsudamper.browser.data.ThemeMode
 import net.matsudamper.browser.ui.browser.UrlBarSuggestionsUiState
 import net.matsudamper.browser.ui.common.BrowserTheme
 import org.mozilla.geckoview.GeckoResult
@@ -204,22 +205,26 @@ internal fun BrowserTabOverlayLayer(
                 currentPageUrl = state.currentPageUrl,
             )
         ) {
-            UrlSuggestionList(
-                currentPageUrl = state.currentPageUrl,
-                historySuggestions = urlBarSuggestions.historySuggestions,
-                webSuggestions = urlBarSuggestions.webSuggestions,
-                isLoadingWebSuggestions = urlBarSuggestions.isLoadingWebSuggestions,
-                onHistorySuggestionClick = onHistorySuggestionClick,
-                onWebSuggestionClick = onWebSuggestionClick,
-                onCopyCurrentUrl = state::copyCurrentPageUrl,
-                onRestoreCurrentUrl = state::restoreCurrentPageUrlToInput,
-                clipboardUrl = clipboardUrl,
-                onClipboardUrlClick = onClipboardUrlClick,
+            Surface(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(MaterialTheme.colorScheme.surface)
                     .testTag(BrowserTabSurfaceTestTags.UrlSuggestionList.testTag),
-            )
+                color = MaterialTheme.colorScheme.surface,
+            ) {
+                UrlSuggestionList(
+                    currentPageUrl = state.currentPageUrl,
+                    historySuggestions = urlBarSuggestions.historySuggestions,
+                    webSuggestions = urlBarSuggestions.webSuggestions,
+                    isLoadingWebSuggestions = urlBarSuggestions.isLoadingWebSuggestions,
+                    onHistorySuggestionClick = onHistorySuggestionClick,
+                    onWebSuggestionClick = onWebSuggestionClick,
+                    onCopyCurrentUrl = state::copyCurrentPageUrl,
+                    onRestoreCurrentUrl = state::restoreCurrentPageUrlToInput,
+                    clipboardUrl = clipboardUrl,
+                    onClipboardUrlClick = onClipboardUrlClick,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
         }
     }
 }
@@ -448,10 +453,24 @@ private fun CurrentPageUrlActionRow(
     }
 }
 
-@Preview(name = "今のURL操作")
+@Preview(name = "今のURL操作Light")
 @Composable
-private fun PreviewCurrentPageUrlListItem() {
-    BrowserTheme(themeMode = net.matsudamper.browser.data.ThemeMode.THEME_SYSTEM) {
+private fun PreviewCurrentPageUrlListItemLight() {
+    BrowserTheme(themeMode = ThemeMode.THEME_LIGHT) {
+        Surface {
+            CurrentPageUrlListItem(
+                currentPageUrl = "https://example.com/very/long/path?query=value",
+                onCopyCurrentUrl = {},
+                onRestoreCurrentUrl = {},
+            )
+        }
+    }
+}
+
+@Preview(name = "今のURL操作Dark")
+@Composable
+private fun PreviewCurrentPageUrlListItemDark() {
+    BrowserTheme(themeMode = ThemeMode.THEME_DARK) {
         Surface {
             CurrentPageUrlListItem(
                 currentPageUrl = "https://example.com/very/long/path?query=value",
