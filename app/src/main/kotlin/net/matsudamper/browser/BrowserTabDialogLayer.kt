@@ -60,7 +60,7 @@ internal fun BrowserTabDialogLayer(
     dialogState: PromptDialogState,
     enableTabUi: Boolean,
     onOpenNewTabRequest: (url: String, referrerUrl: String?) -> Unit,
-    onOpenDownloads: (() -> Unit)? = null,
+    onOpenFile: ((String) -> Unit)? = null,
 ) {
     state.contextMenuState?.let { menu ->
         ContextMenuDialog(
@@ -135,7 +135,7 @@ internal fun BrowserTabDialogLayer(
             state = duplicateState,
             onConfirm = state::confirmDuplicateDownload,
             onDismiss = state::dismissDuplicateDownload,
-            onOpenDownloads = onOpenDownloads,
+            onOpenFile = onOpenFile,
         )
     }
 
@@ -912,7 +912,7 @@ private fun DuplicateDownloadDialog(
     state: BrowserTabScreenState.DuplicateDownloadState,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
-    onOpenDownloads: (() -> Unit)?,
+    onOpenFile: ((String) -> Unit)?,
 ) {
     val linkColor = MaterialTheme.colorScheme.primary
     AlertDialog(
@@ -920,47 +920,38 @@ private fun DuplicateDownloadDialog(
         title = { Text("ダウンロードの重複") },
         text = {
             Column {
-                Text(
-                    text = buildAnnotatedString {
-                        append("このURLは既に")
-                        if (onOpenDownloads != null) {
-                            withLink(
-                                LinkAnnotation.Clickable("downloads") {
-                                    onDismiss()
-                                    onOpenDownloads()
-                                },
-                            ) {
-                                withStyle(
-                                    SpanStyle(
-                                        color = linkColor,
-                                        textDecoration = TextDecoration.Underline,
-                                    ),
-                                ) {
-                                    append("ダウンロード一覧")
-                                }
-                            }
-                        } else {
-                            append("ダウンロード一覧")
-                        }
-                        append("に存在します。続行しますか？")
-                    },
-                )
-                Spacer(modifier = Modifier.height(12.dp))
                 state.existingDownloads.forEach { entry ->
-                    val statusText = when (entry.status) {
-                        DownloadRecordStatus.ENQUEUED -> "待機中"
-                        DownloadRecordStatus.RUNNING -> "ダウンロード中"
-                        DownloadRecordStatus.SUCCEEDED -> "完了"
-                        DownloadRecordStatus.PAUSED -> "一時停止中"
-                        else -> ""
-                    }
                     val displayName = entry.fileName.ifEmpty { "（ファイル名未取得）" }
+                    val fileUri = entry.fileUri
                     Text(
-                        text = "・$displayName ($statusText)",
+                        text = buildAnnotatedString {
+                            if (onOpenFile != null && fileUri != null) {
+                                withLink(
+                                    LinkAnnotation.Clickable("open_file") {
+                                        onDismiss()
+                                        onOpenFile(fileUri)
+                                    },
+                                ) {
+                                    withStyle(
+                                        SpanStyle(
+                                            color = linkColor,
+                                            textDecoration = TextDecoration.Underline,
+                                        ),
+                                    ) {
+                                        append(displayName)
+                                    }
+                                }
+                            } else {
+                                append(displayName)
+                            }
+                            append(" は既に存在します")
+                        },
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
+                Spacer(modifier = Modifier.height(12.dp))
+                Text("続行しますか？")
             }
         },
         confirmButton = {
@@ -999,17 +990,19 @@ private fun PreviewDuplicateDownloadDialog() {
                     BrowserTabScreenState.DuplicateDownloadEntry(
                         fileName = "file.zip",
                         status = DownloadRecordStatus.SUCCEEDED,
+                        fileUri = "content://media/external/downloads/123",
                     ),
                     BrowserTabScreenState.DuplicateDownloadEntry(
                         fileName = "file.zip",
                         status = DownloadRecordStatus.RUNNING,
+                        fileUri = null,
                     ),
                 ),
                 onConfirm = {},
             ),
             onConfirm = {},
             onDismiss = {},
-            onOpenDownloads = {},
+            onOpenFile = {},
         )
     }
 }

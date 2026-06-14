@@ -282,6 +282,7 @@ internal class BrowserTabScreenState(
     data class DuplicateDownloadEntry(
         val fileName: String,
         val status: net.matsudamper.browser.data.download.DownloadRecordStatus,
+        val fileUri: String?,
     )
     // 外部アプリ確認ダイアログでキャンセルされた場合、次回のロードリクエストで外部アプリチェックをスキップする
     private var skipExternalAppCheckForNextLoad = false
@@ -688,6 +689,7 @@ internal class BrowserTabScreenState(
                         DuplicateDownloadEntry(
                             fileName = record.fileName,
                             status = record.status,
+                            fileUri = record.fileUri,
                         )
                     },
                     onConfirm = {
@@ -730,6 +732,7 @@ internal class BrowserTabScreenState(
                         DuplicateDownloadEntry(
                             fileName = record.fileName,
                             status = record.status,
+                            fileUri = record.fileUri,
                         )
                     },
                     onConfirm = {

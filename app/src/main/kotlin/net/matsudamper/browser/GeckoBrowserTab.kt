@@ -10,6 +10,7 @@ import android.view.ActionMode
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
+import androidx.core.net.toUri
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.background
@@ -897,7 +898,15 @@ internal fun GeckoBrowserTab(
             dialogState = dialogState,
             enableTabUi = enableTabUi,
             onOpenNewTabRequest = currentOnOpenNewTabRequest,
-            onOpenDownloads = onOpenDownloads,
+            onOpenFile = { fileUri ->
+                val uri = fileUri.toUri()
+                val mimeType = context.contentResolver.getType(uri) ?: "*/*"
+                val intent = Intent(Intent.ACTION_VIEW).apply {
+                    setDataAndType(uri, mimeType)
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION
+                }
+                runCatching { context.startActivity(intent) }
+            },
         )
     }
 
