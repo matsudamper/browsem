@@ -487,7 +487,7 @@ internal fun GeckoBrowserTab(
     }
 
     DisposableEffect(session, mediaWebExtension) {
-        mediaWebExtension.registerSession(session)
+        mediaWebExtension.registerSession(session, browserTab.tabId)
         onDispose {
             mediaWebExtension.unregisterSession(session)
         }
