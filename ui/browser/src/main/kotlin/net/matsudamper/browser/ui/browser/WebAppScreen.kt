@@ -4,7 +4,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
@@ -24,21 +23,15 @@ fun WebAppScreen(
         uiState: BrowserScreenUiState,
     ) -> Unit,
 ) {
+    // Activity再生成（フォルダブル開閉等）時はViewModelのcontrollerに既存タブが残っているため再利用する。
+    // タブの破棄はViewModelの onCleared() で行う。
     val browserTab by produceState<BrowserTab?>(
         initialValue = null,
         key1 = browserTabController,
         key2 = initialUrl,
     ) {
-        value = null
-        value = browserTabController.createAndAppendTab(initialUrl = initialUrl)
-    }
-    DisposableEffect(browserTabController, browserTab?.tabId) {
-        val tabId = browserTab?.tabId
-        onDispose {
-            if (tabId != null) {
-                browserTabController.closeTab(tabId)
-            }
-        }
+        value = browserTabController.tabs.firstOrNull()
+            ?: browserTabController.createAndAppendTab(initialUrl = initialUrl)
     }
 
     val activeTab = browserTab
