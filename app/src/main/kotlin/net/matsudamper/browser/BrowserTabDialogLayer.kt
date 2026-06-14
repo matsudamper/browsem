@@ -19,6 +19,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
@@ -36,13 +37,21 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.LinkAnnotation
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withLink
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.toColorInt
 import java.util.Calendar
 import java.util.Locale
 import java.util.TimeZone
+import net.matsudamper.browser.data.ThemeMode
+import net.matsudamper.browser.data.download.DownloadRecordStatus
 import net.matsudamper.browser.ui.common.BrowserTheme
 import org.mozilla.geckoview.GeckoSession
 
@@ -52,6 +61,7 @@ internal fun BrowserTabDialogLayer(
     dialogState: PromptDialogState,
     enableTabUi: Boolean,
     onOpenNewTabRequest: (url: String, referrerUrl: String?) -> Unit,
+    onOpenFile: ((String) -> Unit)? = null,
 ) {
     state.contextMenuState?.let { menu ->
         ContextMenuDialog(
@@ -118,6 +128,15 @@ internal fun BrowserTabDialogLayer(
                     Text("キャンセル")
                 }
             },
+        )
+    }
+
+    state.duplicateDownloadState?.let { duplicateState ->
+        DuplicateDownloadDialog(
+            state = duplicateState,
+            onConfirm = state::confirmDuplicateDownload,
+            onDismiss = state::dismissDuplicateDownload,
+            onOpenFile = onOpenFile,
         )
     }
 
@@ -889,6 +908,64 @@ private fun ChoicePromptDialog(
     )
 }
 
+@Composable
+private fun DuplicateDownloadDialog(
+    state: BrowserTabScreenState.DuplicateDownloadState,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+    onOpenFile: ((String) -> Unit)?,
+) {
+    val linkColor = MaterialTheme.colorScheme.primary
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("ダウンロードの重複") },
+        text = {
+            Column {
+                state.existingDownloads.forEach { entry ->
+                    val displayName = entry.fileName.ifEmpty { "（ファイル名未取得）" }
+                    val fileUri = entry.fileUri
+                    Text(
+                        text = buildAnnotatedString {
+                            if (onOpenFile != null && fileUri != null) {
+                                withLink(
+                                    LinkAnnotation.Clickable("open_file") {
+                                        onDismiss()
+                                        onOpenFile(fileUri)
+                                    },
+                                ) {
+                                    withStyle(
+                                        SpanStyle(
+                                            color = linkColor,
+                                            textDecoration = TextDecoration.Underline,
+                                        ),
+                                    ) {
+                                        append(displayName)
+                                    }
+                                }
+                            } else {
+                                append(displayName)
+                            }
+                            append(" は既に存在します")
+                        },
+                    )
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+                Text("続行しますか？")
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text("ダウンロード")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("キャンセル")
+            }
+        },
+    )
+}
+
 private fun flattenChoices(
     choices: Array<GeckoSession.PromptDelegate.ChoicePrompt.Choice>,
 ): List<GeckoSession.PromptDelegate.ChoicePrompt.Choice> {
@@ -901,10 +978,38 @@ private fun flattenChoices(
     }
 }
 
+@Preview(name = "DuplicateDownloadDialog")
+@Composable
+private fun PreviewDuplicateDownloadDialog() {
+    BrowserTheme(themeMode = ThemeMode.THEME_SYSTEM) {
+        DuplicateDownloadDialog(
+            state = BrowserTabScreenState.DuplicateDownloadState(
+                url = "https://example.com/file.zip",
+                existingDownloads = listOf(
+                    BrowserTabScreenState.DuplicateDownloadEntry(
+                        fileName = "file.zip",
+                        status = DownloadRecordStatus.SUCCEEDED,
+                        fileUri = "content://media/external/downloads/123",
+                    ),
+                    BrowserTabScreenState.DuplicateDownloadEntry(
+                        fileName = "file.zip",
+                        status = DownloadRecordStatus.RUNNING,
+                        fileUri = null,
+                    ),
+                ),
+                onConfirm = {},
+            ),
+            onConfirm = {},
+            onDismiss = {},
+            onOpenFile = {},
+        )
+    }
+}
+
 @Preview(name = "ContextMenuDialog")
 @Composable
 private fun PreviewContextMenuDialog() {
-    BrowserTheme(themeMode = net.matsudamper.browser.data.ThemeMode.THEME_SYSTEM) {
+    BrowserTheme(themeMode = ThemeMode.THEME_SYSTEM) {
         ContextMenuDialog(
             menu = BrowserTabScreenState.ContextMenuState.LinkWithImage(
                 url = "https://example.com/very/long/link/path/page.html",
@@ -923,7 +1028,7 @@ private fun PreviewContextMenuDialog() {
 @Preview(name = "DateInputDialog")
 @Composable
 private fun PreviewDateInputDialog() {
-    BrowserTheme(themeMode = net.matsudamper.browser.data.ThemeMode.THEME_SYSTEM) {
+    BrowserTheme(themeMode = ThemeMode.THEME_SYSTEM) {
         DateInputDialog(
             defaultValue = "2024-06-15",
             onConfirm = {},
@@ -935,7 +1040,7 @@ private fun PreviewDateInputDialog() {
 @Preview(name = "TimeInputDialog")
 @Composable
 private fun PreviewTimeInputDialog() {
-    BrowserTheme(themeMode = net.matsudamper.browser.data.ThemeMode.THEME_SYSTEM) {
+    BrowserTheme(themeMode = ThemeMode.THEME_SYSTEM) {
         TimeInputDialog(
             defaultValue = "14:30",
             onConfirm = {},

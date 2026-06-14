@@ -6,6 +6,7 @@ import java.util.UUID
 
 @Stable
 data class DownloadManagementScreenUiState(
+    val isLoading: Boolean,
     val downloads: List<DownloadItem>,
     val callbacks: Callbacks,
 ) {
