@@ -2,6 +2,7 @@ package net.matsudamper.browser.ui.downloads
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -166,17 +167,25 @@ private fun DownloadItemRow(
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            val thumbnail = (item.status as? DownloadManagementScreenUiState.DownloadStatus.Completed)?.thumbnail
-            if (thumbnail != null) {
-                Image(
-                    bitmap = thumbnail,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
+            val completedStatus = item.status as? DownloadManagementScreenUiState.DownloadStatus.Completed
+            if (completedStatus != null && (completedStatus.thumbnail != null || completedStatus.thumbnailLoading)) {
+                Box(
                     modifier = Modifier
                         .padding(end = 12.dp)
                         .size(48.dp)
-                        .clip(RoundedCornerShape(8.dp)),
-                )
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (completedStatus.thumbnail != null) {
+                        Image(
+                            bitmap = completedStatus.thumbnail,
+                            contentDescription = null,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    }
+                }
             }
             Column(
                 modifier = Modifier.weight(1f),
@@ -442,6 +451,7 @@ private fun PreviewCompletedWithThumbnail() {
                 status = DownloadManagementScreenUiState.DownloadStatus.Completed(
                     fileUri = "content://media/external/downloads/1",
                     thumbnail = thumbnail,
+                    thumbnailLoading = false,
                 ),
                 enqueuedAt = 0L,
                 originPageUrl = "https://example.com/page",
@@ -466,6 +476,7 @@ private fun PreviewCompletedWithoutThumbnail() {
                 status = DownloadManagementScreenUiState.DownloadStatus.Completed(
                     fileUri = "content://media/external/downloads/2",
                     thumbnail = null,
+                    thumbnailLoading = false,
                 ),
                 enqueuedAt = 0L,
                 originPageUrl = null,
@@ -511,6 +522,7 @@ private fun PreviewLongFileName() {
                 status = DownloadManagementScreenUiState.DownloadStatus.Completed(
                     fileUri = "content://media/external/downloads/3",
                     thumbnail = null,
+                    thumbnailLoading = false,
                 ),
                 enqueuedAt = 0L,
                 originPageUrl = "https://example.com/page",

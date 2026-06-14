@@ -22,10 +22,12 @@ data class DownloadManagementScreenUiState(
         /**
          * ダウンロード完了。
          * [thumbnail] はサムネイルを生成できるファイル (画像・動画など) の場合のみ非 null。
+         * [thumbnailLoading] はサムネイル読み込み中の場合に true。
          */
         data class Completed(
             val fileUri: String,
             val thumbnail: ImageBitmap?,
+            val thumbnailLoading: Boolean,
         ) : DownloadStatus
 
         /**

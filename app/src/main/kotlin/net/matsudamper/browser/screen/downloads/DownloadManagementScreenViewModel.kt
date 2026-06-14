@@ -117,6 +117,7 @@ internal class DownloadManagementScreenViewModel(
                     DownloadManagementScreenUiState.DownloadStatus.Completed(
                         fileUri = uri,
                         thumbnail = thumbnails[uri],
+                        thumbnailLoading = uri !in thumbnails,
                     )
                 } else {
                     DownloadManagementScreenUiState.DownloadStatus.Failed(canResume = false)
