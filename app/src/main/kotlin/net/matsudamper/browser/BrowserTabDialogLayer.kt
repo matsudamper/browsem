@@ -19,6 +19,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
@@ -36,13 +37,20 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.LinkAnnotation
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withLink
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.toColorInt
 import java.util.Calendar
 import java.util.Locale
 import java.util.TimeZone
+import net.matsudamper.browser.data.download.DownloadRecordStatus
 import net.matsudamper.browser.ui.common.BrowserTheme
 import org.mozilla.geckoview.GeckoSession
 
@@ -52,6 +60,7 @@ internal fun BrowserTabDialogLayer(
     dialogState: PromptDialogState,
     enableTabUi: Boolean,
     onOpenNewTabRequest: (url: String, referrerUrl: String?) -> Unit,
+    onOpenDownloads: (() -> Unit)? = null,
 ) {
     state.contextMenuState?.let { menu ->
         ContextMenuDialog(
@@ -118,6 +127,15 @@ internal fun BrowserTabDialogLayer(
                     Text("キャンセル")
                 }
             },
+        )
+    }
+
+    state.duplicateDownloadState?.let { duplicateState ->
+        DuplicateDownloadDialog(
+            state = duplicateState,
+            onConfirm = state::confirmDuplicateDownload,
+            onDismiss = state::dismissDuplicateDownload,
+            onOpenDownloads = onOpenDownloads,
         )
     }
 
@@ -889,6 +907,75 @@ private fun ChoicePromptDialog(
     )
 }
 
+@Composable
+private fun DuplicateDownloadDialog(
+    state: BrowserTabScreenState.DuplicateDownloadState,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+    onOpenDownloads: (() -> Unit)?,
+) {
+    val linkColor = MaterialTheme.colorScheme.primary
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("ダウンロードの重複") },
+        text = {
+            Column {
+                Text(
+                    text = buildAnnotatedString {
+                        append("このURLは既に")
+                        if (onOpenDownloads != null) {
+                            withLink(
+                                LinkAnnotation.Clickable("downloads") {
+                                    onDismiss()
+                                    onOpenDownloads()
+                                },
+                            ) {
+                                withStyle(
+                                    SpanStyle(
+                                        color = linkColor,
+                                        textDecoration = TextDecoration.Underline,
+                                    ),
+                                ) {
+                                    append("ダウンロード一覧")
+                                }
+                            }
+                        } else {
+                            append("ダウンロード一覧")
+                        }
+                        append("に存在します。続行しますか？")
+                    },
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                state.existingDownloads.forEach { entry ->
+                    val statusText = when (entry.status) {
+                        DownloadRecordStatus.ENQUEUED -> "待機中"
+                        DownloadRecordStatus.RUNNING -> "ダウンロード中"
+                        DownloadRecordStatus.SUCCEEDED -> "完了"
+                        DownloadRecordStatus.PAUSED -> "一時停止中"
+                        else -> ""
+                    }
+                    val displayName = entry.fileName.ifEmpty { "（ファイル名未取得）" }
+                    Text(
+                        text = "・$displayName ($statusText)",
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text("ダウンロード")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("キャンセル")
+            }
+        },
+    )
+}
+
 private fun flattenChoices(
     choices: Array<GeckoSession.PromptDelegate.ChoicePrompt.Choice>,
 ): List<GeckoSession.PromptDelegate.ChoicePrompt.Choice> {
@@ -898,6 +985,32 @@ private fun flattenChoices(
         } else {
             listOf(choice)
         }
+    }
+}
+
+@Preview(name = "DuplicateDownloadDialog")
+@Composable
+private fun PreviewDuplicateDownloadDialog() {
+    BrowserTheme(themeMode = net.matsudamper.browser.data.ThemeMode.THEME_SYSTEM) {
+        DuplicateDownloadDialog(
+            state = BrowserTabScreenState.DuplicateDownloadState(
+                url = "https://example.com/file.zip",
+                existingDownloads = listOf(
+                    BrowserTabScreenState.DuplicateDownloadEntry(
+                        fileName = "file.zip",
+                        status = DownloadRecordStatus.SUCCEEDED,
+                    ),
+                    BrowserTabScreenState.DuplicateDownloadEntry(
+                        fileName = "file.zip",
+                        status = DownloadRecordStatus.RUNNING,
+                    ),
+                ),
+                onConfirm = {},
+            ),
+            onConfirm = {},
+            onDismiss = {},
+            onOpenDownloads = {},
+        )
     }
 }
 

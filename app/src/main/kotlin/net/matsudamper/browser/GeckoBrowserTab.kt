@@ -897,6 +897,7 @@ internal fun GeckoBrowserTab(
             dialogState = dialogState,
             enableTabUi = enableTabUi,
             onOpenNewTabRequest = currentOnOpenNewTabRequest,
+            onOpenDownloads = onOpenDownloads,
         )
     }
 
