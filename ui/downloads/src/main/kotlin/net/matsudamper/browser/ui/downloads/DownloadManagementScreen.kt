@@ -500,3 +500,27 @@ private fun PreviewFailedCannotResume() {
         )
     }
 }
+
+@Preview(name = "長いファイル名・2行表示")
+@Composable
+private fun PreviewLongFileName() {
+    MaterialTheme {
+        DownloadItemRow(
+            item = DownloadManagementScreenUiState.DownloadItem(
+                id = UUID.randomUUID(),
+                fileName = "very_long_file_name_that_should_wrap_to_two_lines_example_document.pdf",
+                status = DownloadManagementScreenUiState.DownloadStatus.Completed(
+                    fileUri = "content://media/external/downloads/3",
+                    thumbnail = null,
+                ),
+                enqueuedAt = 0L,
+                originPageUrl = "https://example.com/page",
+            ),
+            onCancel = {},
+            onPause = {},
+            onOpenFile = {},
+            onResume = {},
+            onOpenOriginPage = {},
+        )
+    }
+}
