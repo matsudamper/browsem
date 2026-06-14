@@ -19,6 +19,9 @@ internal class GeckoDownloadManager(
     private val context: Context,
     private val downloadRepository: DownloadRepository,
 ) {
+    /** 指定URLに一致するアクティブなダウンロードを取得する */
+    suspend fun findDuplicateDownloads(url: String) = downloadRepository.findActiveByUrl(url)
+
     /**
      * URLをWorkManagerで非同期ダウンロードするようエンキューする。
      * Workerが起動する前にENQUEUEDレコードをRoomに挿入し、UIに即時反映させる。

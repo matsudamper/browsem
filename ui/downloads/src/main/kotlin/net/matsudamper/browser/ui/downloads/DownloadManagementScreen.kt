@@ -2,6 +2,7 @@ package net.matsudamper.browser.ui.downloads
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -22,15 +23,18 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -81,7 +85,16 @@ fun DownloadManagementScreen(
             )
         },
     ) { paddingValues ->
-        if (uiState.downloads.isEmpty()) {
+        if (uiState.isLoading) {
+            Box(
+                modifier = Modifier
+                    .padding(paddingValues)
+                    .fillMaxSize(),
+                contentAlignment = Alignment.Center,
+            ) {
+                CircularProgressIndicator()
+            }
+        } else if (uiState.downloads.isEmpty()) {
             Box(
                 modifier = Modifier
                     .padding(paddingValues)
@@ -108,6 +121,7 @@ fun DownloadManagementScreen(
                         onOpenFile = { fileUri -> uiState.callbacks.onOpenFile(fileUri) },
                         onResume = { uiState.callbacks.onResume(item.id) },
                         onOpenOriginPage = { url -> uiState.callbacks.onOpenOriginPage(url) },
+                        loadThumbnail = uiState.callbacks.loadThumbnail,
                     )
                 }
             }
@@ -124,7 +138,9 @@ private fun DownloadItemRow(
     onOpenFile: (String) -> Unit,
     onResume: () -> Unit,
     onOpenOriginPage: (url: String) -> Unit,
+    loadThumbnail: suspend (fileUri: String) -> ImageBitmap?,
 ) {
+    val currentLoadThumbnail by rememberUpdatedState(loadThumbnail)
     val dateFormat = remember { SimpleDateFormat("yyyy/MM/dd HH:mm", Locale.getDefault()) }
     var menuExpanded by remember { mutableStateOf(false) }
     Box {
@@ -156,17 +172,33 @@ private fun DownloadItemRow(
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            val thumbnail = (item.status as? DownloadManagementScreenUiState.DownloadStatus.Completed)?.thumbnail
-            if (thumbnail != null) {
-                Image(
-                    bitmap = thumbnail,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .padding(end = 12.dp)
-                        .size(48.dp)
-                        .clip(RoundedCornerShape(8.dp)),
-                )
+            val completedStatus = item.status as? DownloadManagementScreenUiState.DownloadStatus.Completed
+            if (completedStatus != null) {
+                var thumbnail by remember(completedStatus.fileUri) { mutableStateOf<ImageBitmap?>(null) }
+                var loaded by remember(completedStatus.fileUri) { mutableStateOf(false) }
+                LaunchedEffect(completedStatus.fileUri) {
+                    thumbnail = currentLoadThumbnail(completedStatus.fileUri)
+                    loaded = true
+                }
+                if (thumbnail != null || !loaded) {
+                    Box(
+                        modifier = Modifier
+                            .padding(end = 12.dp)
+                            .size(48.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        if (thumbnail != null) {
+                            Image(
+                                bitmap = thumbnail!!,
+                                contentDescription = null,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize(),
+                            )
+                        }
+                    }
+                }
             }
             Column(
                 modifier = Modifier.weight(1f),
@@ -363,6 +395,7 @@ private fun PreviewInProgress() {
             onOpenFile = {},
             onResume = {},
             onOpenOriginPage = {},
+            loadThumbnail = { null },
         )
     }
 }
@@ -388,6 +421,7 @@ private fun PreviewPaused() {
             onOpenFile = {},
             onResume = {},
             onOpenOriginPage = {},
+            loadThumbnail = { null },
         )
     }
 }
@@ -409,6 +443,7 @@ private fun PreviewFailedCanResume() {
             onOpenFile = {},
             onResume = {},
             onOpenOriginPage = {},
+            loadThumbnail = { null },
         )
     }
 }
@@ -431,7 +466,6 @@ private fun PreviewCompletedWithThumbnail() {
                 fileName = "photo.png",
                 status = DownloadManagementScreenUiState.DownloadStatus.Completed(
                     fileUri = "content://media/external/downloads/1",
-                    thumbnail = thumbnail,
                 ),
                 enqueuedAt = 0L,
                 originPageUrl = "https://example.com/page",
@@ -441,6 +475,7 @@ private fun PreviewCompletedWithThumbnail() {
             onOpenFile = {},
             onResume = {},
             onOpenOriginPage = {},
+            loadThumbnail = { thumbnail },
         )
     }
 }
@@ -455,7 +490,6 @@ private fun PreviewCompletedWithoutThumbnail() {
                 fileName = "example.zip",
                 status = DownloadManagementScreenUiState.DownloadStatus.Completed(
                     fileUri = "content://media/external/downloads/2",
-                    thumbnail = null,
                 ),
                 enqueuedAt = 0L,
                 originPageUrl = null,
@@ -465,6 +499,7 @@ private fun PreviewCompletedWithoutThumbnail() {
             onOpenFile = {},
             onResume = {},
             onOpenOriginPage = {},
+            loadThumbnail = { null },
         )
     }
 }
@@ -486,6 +521,7 @@ private fun PreviewFailedCannotResume() {
             onOpenFile = {},
             onResume = {},
             onOpenOriginPage = {},
+            loadThumbnail = { null },
         )
     }
 }
@@ -500,7 +536,6 @@ private fun PreviewLongFileName() {
                 fileName = "very_long_file_name_that_should_wrap_to_two_lines_example_document.pdf",
                 status = DownloadManagementScreenUiState.DownloadStatus.Completed(
                     fileUri = "content://media/external/downloads/3",
-                    thumbnail = null,
                 ),
                 enqueuedAt = 0L,
                 originPageUrl = "https://example.com/page",
@@ -510,6 +545,7 @@ private fun PreviewLongFileName() {
             onOpenFile = {},
             onResume = {},
             onOpenOriginPage = {},
+            loadThumbnail = { null },
         )
     }
 }

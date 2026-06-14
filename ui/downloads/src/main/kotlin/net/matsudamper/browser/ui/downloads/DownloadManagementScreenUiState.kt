@@ -6,6 +6,7 @@ import java.util.UUID
 
 @Stable
 data class DownloadManagementScreenUiState(
+    val isLoading: Boolean,
     val downloads: List<DownloadItem>,
     val callbacks: Callbacks,
 ) {
@@ -20,11 +21,9 @@ data class DownloadManagementScreenUiState(
 
         /**
          * ダウンロード完了。
-         * [thumbnail] はサムネイルを生成できるファイル (画像・動画など) の場合のみ非 null。
          */
         data class Completed(
             val fileUri: String,
-            val thumbnail: ImageBitmap?,
         ) : DownloadStatus
 
         /**
@@ -66,5 +65,7 @@ data class DownloadManagementScreenUiState(
         val onResume: (UUID) -> Unit,
         /** ダウンロード開始時のページを新しいタブで開く */
         val onOpenOriginPage: (url: String) -> Unit,
+        /** ファイル URI からサムネイルを読み込む。サムネイル非対応の場合は null を返す */
+        val loadThumbnail: suspend (fileUri: String) -> ImageBitmap?,
     )
 }

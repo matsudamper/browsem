@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -22,6 +23,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.ui.res.painterResource
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -75,6 +77,7 @@ internal fun GroupTabBar(
     activeGroupIndex: Int,
     pagerState: PagerState,
     highlightedDropTargetIndex: Int?,
+    groupHasPlayingTab: List<Boolean>,
     onGroupSelected: (Int) -> Unit,
     onReorderGroups: (fromIndex: Int, toIndex: Int) -> Unit,
     onAddGroup: () -> Unit,
@@ -135,6 +138,7 @@ internal fun GroupTabBar(
                     label = group.name,
                     selectionFraction = selectionFraction,
                     isDropTarget = isDropTarget,
+                    isPlaying = groupHasPlayingTab.getOrElse(index) { false },
                     onClick = { onGroupSelected(index) },
                     modifier = Modifier
                         .testTag(TabsScreenTestTags.TabGroupTopButton(index).testTag)
@@ -158,11 +162,13 @@ internal fun GroupTabBar(
         // ドラッグ中のオーバーレイ表示
         if (dragDropState.isDragging) {
             val draggedGroup = groups.firstOrNull { it.id.value == dragDropState.draggedItemKey }
+            val draggedIndex = groups.indexOfFirst { it.id.value == dragDropState.draggedItemKey }
             if (draggedGroup != null) {
                 GroupBookmarkTab(
                     label = draggedGroup.name,
                     selectionFraction = 1f, // 持ち上がった状態なので選択扱いでエレベーションを高くする
                     isDropTarget = false,
+                    isPlaying = groupHasPlayingTab.getOrElse(draggedIndex) { false },
                     onClick = {},
                     modifier = Modifier
                         .offset { dragDropState.draggedItemOffset }
@@ -267,6 +273,7 @@ private fun GroupBookmarkTab(
     isDropTarget: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    isPlaying: Boolean = false,
 ) {
     val selectedColor = MaterialTheme.colorScheme.primaryContainer
     val unselectedColor = MaterialTheme.colorScheme.surfaceVariant
@@ -314,13 +321,25 @@ private fun GroupBookmarkTab(
                 .padding(horizontal = 12.dp),
             contentAlignment = Alignment.Center,
         ) {
-            Text(
-                text = label,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                style = MaterialTheme.typography.labelMedium,
-                color = if (isDropTarget) selectedTextColor else lerp(unselectedTextColor, selectedTextColor, fraction),
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (isPlaying) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_music_note),
+                        contentDescription = "再生中",
+                        modifier = Modifier.size(14.dp),
+                        tint = if (isDropTarget) selectedTextColor else lerp(unselectedTextColor, selectedTextColor, fraction),
+                    )
+                }
+                Text(
+                    text = label,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = if (isDropTarget) selectedTextColor else lerp(unselectedTextColor, selectedTextColor, fraction),
+                )
+            }
         }
     }
 }

@@ -34,6 +34,7 @@ data class TabsScreenUiState(
             val groups: List<TabGroupData>,
             val activeGroupIndex: Int,
             val selectedTabId: String?,
+            val groupHasPlayingTab: List<Boolean> = emptyList(),
         ) : LoadingState
     }
 }
@@ -42,6 +43,7 @@ data class TabsScreenTabData(
     val id: String,
     val title: String,
     val previewImage: TabPreviewImage?,
+    val isPlaying: Boolean = false,
 )
 
 // ByteArray を contentEquals で比較するラッパー。

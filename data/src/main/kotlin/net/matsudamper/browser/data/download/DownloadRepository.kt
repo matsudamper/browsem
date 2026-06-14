@@ -178,6 +178,11 @@ class DownloadRepository(context: Context) {
         return dao.getByCurrentWorkerId(currentWorkerId = currentWorkerId.toString())
     }
 
+    /** 指定URLに一致するアクティブ（実行中・完了・一時停止中）なダウンロードを取得する */
+    suspend fun findActiveByUrl(url: String): List<DownloadRecord> {
+        return dao.findActiveByUrl(url).map { it.toRecord() }
+    }
+
     /**
      * 再開時に既存レコードを新しいワーカーIDへ付け替えてENQUEUEDに戻す。
      * レコードを削除・再作成しないため、リスト上の位置とUIのアイテム同一性が維持される
