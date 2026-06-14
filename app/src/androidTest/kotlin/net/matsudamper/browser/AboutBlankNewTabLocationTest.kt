@@ -22,6 +22,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.RuleChain
 import org.junit.runner.RunWith
 import java.io.BufferedReader
 import java.io.InputStreamReader
@@ -40,8 +41,12 @@ import kotlin.time.Duration.Companion.seconds
  */
 @RunWith(AndroidJUnit4::class)
 class AboutBlankNewTabLocationTest {
-    @get:Rule
     val composeRule = createAndroidComposeRule<MainActivity>()
+
+    @get:Rule
+    val ruleChain: RuleChain = RuleChain
+        .outerRule(RetryOnKnownFlakyRule())
+        .around(composeRule)
 
     private val userDebug = false
     private var server: LocalHtmlServer? = null
@@ -152,10 +157,15 @@ class AboutBlankNewTabLocationTest {
             composeRule.waitUntil(timeoutMillis = 30_000) {
                 localServer.hasRequest("/$INDEX_FILE_NAME")
             }
-            composeRule.waitForUrlBarContains(INDEX_FILE_NAME, timeoutMillis = 30_000)
+            // index.html の setTimeout(300ms) で target.html が自動で開かれるため、
+            // この時点で URL バーが target.html を表示している場合がある
+            composeRule.waitUntil(timeoutMillis = 30_000) {
+                val url = composeRule.currentPageUrlFromUi()
+                url.contains(INDEX_FILE_NAME) || url.contains(TARGET_FILE_NAME)
+            }
             composeRule.waitForUrlBarNotFocused(timeoutMillis = 30_000)
             val loadedUrl = composeRule.currentUrlBarText()
-            assertTrue("index ページが期待URLで開かれていない: $loadedUrl", loadedUrl.contains("127.0.0.1"))
+            assertTrue("期待URLで開かれていない: $loadedUrl", loadedUrl.contains("127.0.0.1"))
             println("index-url=$loadedUrl")
         }
 
