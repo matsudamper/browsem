@@ -1,6 +1,8 @@
 package net.matsudamper.browser
 
 import android.Manifest
+import android.app.Application
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.BackHandler
@@ -199,7 +201,7 @@ internal fun BrowserAppShell(
                                     )
                                     try {
                                         context.startActivity(intent)
-                                    } catch (_: android.content.ActivityNotFoundException) {
+                                    } catch (_: ActivityNotFoundException) {
                                     }
                                 }
 
@@ -314,7 +316,7 @@ internal fun BrowserAppShell(
 
                 AppDestination.Downloads -> navEntry(key) {
                     val downloadsViewModel = remember {
-                        DownloadManagementScreenViewModel(context.applicationContext as android.app.Application)
+                        DownloadManagementScreenViewModel(context.applicationContext as Application)
                     }
                     val downloadsUiState by downloadsViewModel.uiState.collectAsState()
                     LaunchedEffect(downloadsViewModel) {
@@ -441,6 +443,7 @@ internal class OuterNavActions(private val backStack: MutableList<NavKey>) {
     }
 }
 
+@Stable
 internal class SelectTabRef {
     var selectTab: ((String, BrowserNavDestination.Browser?) -> Unit)? = null
 }
