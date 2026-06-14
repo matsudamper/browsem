@@ -177,7 +177,7 @@ private fun ToolbarMenuContent(
                             tint = if (canGoBack) {
                                 LocalContentColor.current
                             } else {
-                                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                                LocalContentColor.current.copy(alpha = 0.38f)
                             },
                         )
                     }
@@ -215,7 +215,7 @@ private fun ToolbarMenuContent(
                             tint = if (canGoForward) {
                                 LocalContentColor.current
                             } else {
-                                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                                LocalContentColor.current.copy(alpha = 0.38f)
                             },
                         )
                     }

@@ -340,7 +340,7 @@ internal fun BrowserToolbar(
                             tint = if (canGoBack) {
                                 LocalContentColor.current
                             } else {
-                                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                                LocalContentColor.current.copy(alpha = 0.38f)
                             },
                         )
                     }
@@ -367,7 +367,7 @@ internal fun BrowserToolbar(
                             tint = if (canGoForward) {
                                 LocalContentColor.current
                             } else {
-                                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                                LocalContentColor.current.copy(alpha = 0.38f)
                             },
                         )
                     }
@@ -757,6 +757,54 @@ private fun PreviewWideToolbar() {
                 onLongPressHistory = {},
                 onTranslatePage = {},
             )
+        }
+    }
+}
+
+// テーマカラーが黒/白のサイトで戻る/進むが disable のとき、
+// disable アイコンの色がシステムテーマではなくツールバーのコンテンツカラー(メニュー等と同じ色)に
+// 基づいて決まることを確認するプレビュー。戻る=有効・進む=無効で有効/無効のコントラストを見る。
+@Preview(name = "DisabledOnThemeColorLight", widthDp = 600)
+@Preview(name = "DisabledOnThemeColorDark", widthDp = 600, uiMode = android.content.res.Configuration.UI_MODE_NIGHT_YES)
+@Composable
+private fun PreviewDisabledOnThemeColor() {
+    BrowserTheme(themeMode = net.matsudamper.browser.data.ThemeMode.THEME_SYSTEM) {
+        Column {
+            for (toolbarColor in listOf(Color.Black, Color.White)) {
+                BrowserToolBar(
+                    value = "https://google.com",
+                    onValueChange = {},
+                    onSubmit = {},
+                    isFocused = false,
+                    onFocusChanged = {},
+                    onLongClickUrl = {},
+                    showInstallExtensionItem = true,
+                    onInstallExtension = {},
+                    onOpenSettings = {},
+                    onShare = {},
+                    tabCount = 2,
+                    onOpenTabs = {},
+                    isPcMode = false,
+                    onPcModeToggle = {},
+                    onFindInPage = {},
+                    onAddToHomeScreen = {},
+                    pageZoomPercent = 100,
+                    onPageZoomIn = {},
+                    onPageZoomOut = {},
+                    onResetPageZoom = {},
+                    toolbarColor = toolbarColor,
+                    onRefresh = {},
+                    onSuperRefresh = {},
+                    onHome = {},
+                    onForward = {},
+                    canGoForward = false,
+                    onBack = {},
+                    canGoBack = true,
+                    onLongPressHistory = {},
+                    onTranslatePage = {},
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+            }
         }
     }
 }
