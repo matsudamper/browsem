@@ -295,11 +295,12 @@ class AboutBlankNewTabLocationTest {
      * なり onNodeWithTag が "Expected exactly 1" で失敗する。フォアグラウンド限定 testTag で一意化する。
      */
     private fun tapLinkOnGeckoContainer() {
-        val tag = GeckoBrowserTabTestTags.GeckoContainer.testTag(isForeground = true)
+        val tag = GeckoBrowserTabTestTags.GeckoContainer.testTag
         composeRule.waitUntil(timeoutMillis = 10_000) {
             composeRule.onAllNodesWithTag(tag).fetchSemanticsNodes().isNotEmpty()
         }
-        val node = composeRule.onNodeWithTag(tag)
+        val nodes = composeRule.onAllNodesWithTag(tag)
+        val node = nodes[0]
         node.performTouchInput {
             click()
         }
