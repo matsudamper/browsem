@@ -67,7 +67,9 @@
       updateMetadata('Track 2');
       updatePlaybackState();
       track2.currentTime = 0;
-      track2.play().catch(() => {});
+      track2.play().then(() => {
+        track2.muted = false;
+      }).catch(() => {});
     }
 
     tracks.forEach((video) => {
@@ -101,7 +103,9 @@
       activeTrack = track1;
       updateMetadata('Track 1');
       updatePlaybackState();
-      track1.play().catch((error) => {
+      track1.play().then(() => {
+        track1.muted = false;
+      }).catch((error) => {
         status.textContent = `play blocked: ${error?.name ?? 'unknown'}`;
       });
     }
