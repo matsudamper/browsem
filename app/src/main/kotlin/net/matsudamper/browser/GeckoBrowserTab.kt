@@ -401,64 +401,40 @@ internal fun GeckoBrowserTab(
                     // GeckoView から detach しておけば、surface 再作成時の自動レンダリングを
                     // 抑止できる。
                     //
-                    // capture preview は release 前に start する。capturePixels() は非同期
-                    // GeckoResult を返すため release 直後に走るキャプチャ完了率は低下するが、
-                    // ハング回避を優先する。
+                    // メディア再生中も releaseSession + INVISIBLE は必ず実行する。session を
+                    // detach せずに Surface が破壊されると compositor が不整合に陥り、復帰時に
+                    // 画面が単色のまま操作不能になる (x.com 等で再現)。setActive(false) のみ
+                    // スキップすることでバックグラウンドでのオーディオ再生は維持される。
                     //
                     // WAITING_STABLE 中（前回 resume の安定待ちが完了する前に再度 pause した
                     // 場合）も releaseSession を行いたいので ACTIVE と同じ扱いにする。
-                    if (surfaceResumeState != SurfaceResumeState.RELEASED &&
-                        !mediaWebExtension.shouldKeepSessionAttached(session)
-                    ) {
+                    if (surfaceResumeState != SurfaceResumeState.RELEASED) {
                         val target = geckoView
                         if (target == null) {
-                            // geckoView が更新されないまま ON_PAUSE が来ると release できず、
-                            // 復帰時に session 付きで surface が再作成され BLAST reject が起きる。
-                            // ここで検知できれば再現条件を絞り込めるため明示的に警告を残す。
                             Log.w(
                                 TAG_SURFACE_RESUME,
                                 "ON_PAUSE: geckoView=null のため releaseSession 不可。" +
                                     " 復帰時にハングする可能性あり session=${session.logKey()}",
                             )
                         } else {
+                            val mediaKeep = mediaWebExtension.shouldKeepSessionAttached(session)
                             Log.d(
                                 TAG_SURFACE_RESUME,
-                                "ON_PAUSE: releaseSession + INVISIBLE 実行 gv.size=${target.width}x${target.height}",
+                                "ON_PAUSE: releaseSession + INVISIBLE 実行 gv.size=${target.width}x${target.height}" +
+                                    " mediaKeep=$mediaKeep",
                             )
-                            session.setActive(false)
-                            // best-effort capture（非同期 GeckoResult、release 後に失敗する可能性あり）。
+                            if (!mediaKeep) {
+                                session.setActive(false)
+                            }
                             state.captureTabPreview(target)
-                            // surface 再作成時の自動 compositor resume を防ぐため即 detach。
                             target.releaseSession()
-                            // releaseSession だけでは Mozilla 側に古い surface 参照が残るらしく、
-                            // 復帰時の setSession 直後に GPU プロセスが kill される事象が観測された。
-                            // SurfaceView を INVISIBLE にすると内部 Surface を破棄するため、
-                            // 復帰時の setSession を完全な新規 attach として扱わせる。
                             target.visibility = View.INVISIBLE
                             surfaceResumeState = SurfaceResumeState.RELEASED
                         }
-                    } else {
-                        Log.d(
-                            TAG_SURFACE_RESUME,
-                            "ON_PAUSE skipped: state=$surfaceResumeState" +
-                                " mediaKeep=${mediaWebExtension.shouldKeepSessionAttached(session)}",
-                        )
                     }
                 }
                 Lifecycle.Event.ON_STOP -> {
                     session.flushSessionState()
-                    // non-media の場合は ON_PAUSE で release 済み。
-                    // media の場合は session 維持のため capture のみ実行（従来どおり）。
-                    // TODO: media 再生継続中の session は release しないため、surface 再作成時の
-                    //       SyncResumeResizeCompositor ハング経路を踏むリスクが残る。実機で
-                    //       再現を確認したら、audio を殺さない形で compositor 再構築する手段
-                    //       （releaseSession しても MediaSession 経由で音は継続する可能性が高い）
-                    //       を検討する。
-                    geckoView?.also { target ->
-                        if (mediaWebExtension.shouldKeepSessionAttached(session)) {
-                            state.captureTabPreview(target)
-                        }
-                    }
                 }
                 Lifecycle.Event.ON_START -> {
                     geckoView?.also(::restoreSurfaceIfNeeded)
