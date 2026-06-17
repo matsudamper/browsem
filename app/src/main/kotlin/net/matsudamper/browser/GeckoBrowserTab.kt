@@ -280,64 +280,33 @@ internal fun GeckoBrowserTab(
     // 強制 attach する fallback も用意。待機中は coverUntilFirstPaint で覆い隠す。
     //
     // local function は前方参照不可なので attach → schedule → restore の順で定義する。
-    // ON_PAUSE で setActive(false) を呼んだかを追跡。
-    // メディア再生中はスキップされるため、resume 時の処理を分岐させる。
-    // リカバリー用 Runnable の参照もここで保持する。
+    // リカバリー用 Runnable の参照を保持する。
     val surfaceResumeRef = remember(session) {
         object {
             var pendingRecoveryRunnable: Runnable? = null
-            var sessionDeactivatedDuringPause = false
         }
     }
 
     fun attachSessionAfterStableSize(gecko: GeckoView) {
         surfaceResumeRef.pendingRecoveryRunnable?.let { gecko.removeCallbacks(it) }
-        val wasDeactivated = surfaceResumeRef.sessionDeactivatedDuringPause
         gecko.setSession(session)
-        if (wasDeactivated) {
-            session.setActive(true)
-            surfaceResumeRef.sessionDeactivatedDuringPause = false
-        }
+        session.setActive(true)
         surfaceResumeState = SurfaceResumeState.ACTIVE
-        if (!wasDeactivated) {
-            // メディアセッション: ON_PAUSE で setActive(false) をスキップしたため
-            // ページに visibilitychange("hidden") が発火していない。
-            // setSession 完了後に setActive を toggle して visibility 状態を
-            // 更新し、x.com 等が hidden 状態のままフリーズする問題を回避する。
-            // setSession 直後ではなく遅延して実行することで compositor の
-            // Surface 接続が安定してから toggle する。
-            val recoveryRunnable = Runnable {
-                if (surfaceResumeState != SurfaceResumeState.ACTIVE) return@Runnable
-                Log.d(
+        // compositor 障害時のフォールバック: 一定時間経っても描画が始まらなければ
+        // stop + reload で強制リカバリー。
+        val recoveryRunnable = Runnable {
+            if (!state.renderReady && surfaceResumeState == SurfaceResumeState.ACTIVE) {
+                Log.w(
                     TAG_SURFACE_RESUME,
-                    "メディアセッション復帰: visibility toggle 実行 session=${session.logKey()}",
+                    "renderReady が復帰後 ${RENDER_RECOVERY_TIMEOUT_MS}ms 経過しても false" +
+                        " → stop + reload を試行 session=${session.logKey()}",
                 )
-                session.setActive(false)
-                gecko.postDelayed({
-                    if (surfaceResumeState == SurfaceResumeState.ACTIVE) {
-                        session.setActive(true)
-                    }
-                }, VISIBILITY_TOGGLE_INTERVAL_MS)
+                session.stop()
+                session.reload()
             }
-            surfaceResumeRef.pendingRecoveryRunnable = recoveryRunnable
-            gecko.postDelayed(recoveryRunnable, VISIBILITY_TOGGLE_DELAY_MS)
-        } else {
-            // 非メディアセッション: setActive(false/true) 経由で visibility が
-            // 正しく遷移するため、compositor が描画を開始しない場合のみリカバリー
-            val recoveryRunnable = Runnable {
-                if (!state.renderReady && surfaceResumeState == SurfaceResumeState.ACTIVE) {
-                    Log.w(
-                        TAG_SURFACE_RESUME,
-                        "renderReady が復帰後 ${RENDER_RECOVERY_TIMEOUT_MS}ms 経過しても false" +
-                            " → stop + reload を試行 session=${session.logKey()}",
-                    )
-                    session.stop()
-                    session.reload()
-                }
-            }
-            surfaceResumeRef.pendingRecoveryRunnable = recoveryRunnable
-            gecko.postDelayed(recoveryRunnable, RENDER_RECOVERY_TIMEOUT_MS)
         }
+        surfaceResumeRef.pendingRecoveryRunnable = recoveryRunnable
+        gecko.postDelayed(recoveryRunnable, RENDER_RECOVERY_TIMEOUT_MS)
     }
 
     fun scheduleStableSizeAttach(
@@ -443,22 +412,14 @@ internal fun GeckoBrowserTab(
                 TAG_SURFACE_RESUME,
                 "lifecycle event=$event state=$surfaceResumeState gv=${gv != null}" +
                     " gv.size=${gv?.width ?: -1}x${gv?.height ?: -1}" +
-                    " session=${session.logKey()} sessionOpen=${session.isOpen}" +
-                    " mediaKeep=${mediaWebExtension.shouldKeepSessionAttached(session)}",
+                    " session=${session.logKey()} sessionOpen=${session.isOpen}",
             )
             when (event) {
                 Lifecycle.Event.ON_PAUSE -> {
-                    // ON_STOP まで待つと surface 破棄→再作成時に GeckoView 内部の
-                    // SurfaceHolder.Callback が Gecko compositor を自動 resume-resize させ、
-                    // IME 由来の stale サイズで frame 産出 → BLAST reject → GPU プロセス kill
-                    // というハングが発生する。ON_PAUSE 時点で releaseSession して session を
-                    // GeckoView から detach しておけば、surface 再作成時の自動レンダリングを
-                    // 抑止できる。
-                    //
-                    // メディア再生中も releaseSession + INVISIBLE は必ず実行する。session を
-                    // detach せずに Surface が破壊されると compositor が不整合に陥り、復帰時に
-                    // 画面が単色のまま操作不能になる (x.com 等で再現)。setActive(false) のみ
-                    // スキップすることでバックグラウンドでのオーディオ再生は維持される。
+                    // ON_PAUSE で setActive(false) + releaseSession + INVISIBLE を実行する。
+                    // setActive(false) はコンテンツプロセスに hidden 通知を送り、復帰時の
+                    // setActive(true) で新しいビューポートサイズでの再レンダリングを保証する。
+                    // フォルダブルデバイスで画面サイズが変わった場合にも対応できる。
                     //
                     // WAITING_STABLE 中（前回 resume の安定待ちが完了する前に再度 pause した
                     // 場合）も releaseSession を行いたいので ACTIVE と同じ扱いにする。
@@ -473,25 +434,15 @@ internal fun GeckoBrowserTab(
                                     " 復帰時にハングする可能性あり session=${session.logKey()}",
                             )
                         } else {
-                            val mediaKeep = mediaWebExtension.shouldKeepSessionAttached(session)
                             Log.d(
                                 TAG_SURFACE_RESUME,
-                                "ON_PAUSE: releaseSession + INVISIBLE 実行 gv.size=${target.width}x${target.height}" +
-                                    " mediaKeep=$mediaKeep",
+                                "ON_PAUSE: setActive(false) + releaseSession + INVISIBLE 実行" +
+                                    " gv.size=${target.width}x${target.height}",
                             )
-                            if (!mediaKeep) {
-                                session.setActive(false)
-                                surfaceResumeRef.sessionDeactivatedDuringPause = true
-                            } else {
-                                surfaceResumeRef.sessionDeactivatedDuringPause = false
-                            }
+                            session.setActive(false)
                             state.captureTabPreview(target)
                             target.releaseSession()
                             target.visibility = View.INVISIBLE
-                            // Surface 破棄に合わせて renderReady を落とし、復帰時に
-                            // Compose オーバーレイ (プレビュー画像 or ローディング) で
-                            // GeckoView を覆う。coverUntilFirstPaint だけでは compositor
-                            // 障害時に永久に残るため、Compose 側でも保護する。
                             state.renderReady = false
                             surfaceResumeState = SurfaceResumeState.RELEASED
                         }
@@ -1091,17 +1042,6 @@ private const val STABLE_TIMEOUT_MS = 1000L
  */
 private const val RENDER_RECOVERY_TIMEOUT_MS = 3000L
 
-/**
- * メディアセッション復帰時、setSession 完了後に visibility toggle を開始するまでの遅延。
- * compositor が新しい Surface に接続して安定するのを待つ。
- */
-private const val VISIBILITY_TOGGLE_DELAY_MS = 500L
-
-/**
- * visibility toggle で setActive(false) → setActive(true) の間隔。
- * ページの visibilitychange ハンドラが処理するのに十分な時間を確保する。
- */
-private const val VISIBILITY_TOGGLE_INTERVAL_MS = 100L
 
 private fun GeckoSession.logKey(): String = Integer.toHexString(System.identityHashCode(this))
 
