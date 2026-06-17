@@ -120,13 +120,14 @@
         : 0;
     const hasStarted = !!media && (STARTED_MEDIA.has(media) || positionMs > 0);
     const mediaElementPlaying = !!media && !media.paused && !media.ended;
+    const mediaMuted = !!media && (media.muted || media.volume === 0);
     const isPlaying =
-      playbackState === "playing" ||
-      (playbackState !== "paused" && mediaElementPlaying);
+      (!mediaMuted && playbackState === "playing") ||
+      (playbackState !== "paused" && mediaElementPlaying && !mediaMuted);
     const isActive =
-      playbackState === "playing" ||
-      playbackState === "paused" ||
-      (!!media && (mediaElementPlaying || hasStarted));
+      (playbackState === "playing" && !mediaMuted) ||
+      (playbackState === "paused" && !!media && hasStarted && !mediaMuted) ||
+      (!!media && (mediaElementPlaying || hasStarted) && !mediaMuted);
 
     return {
       url: location.href,
@@ -199,6 +200,7 @@
       "ended",
       "timeupdate",
       "ratechange",
+      "volumechange",
       "seeking",
       "seeked",
       "emptied",

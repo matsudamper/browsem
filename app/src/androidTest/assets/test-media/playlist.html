@@ -14,10 +14,10 @@
 <body>
   <h1>Media Playlist Test</h1>
   <div id="status">idle (tap anywhere to start)</div>
-  <video id="track1" preload="metadata" playsinline controls muted data-title="Track 1">
+  <video id="track1" preload="metadata" playsinline controls data-title="Track 1">
     <source src="./test.webm" type="video/webm" />
   </video>
-  <video id="track2" preload="metadata" playsinline controls muted data-title="Track 2">
+  <video id="track2" preload="metadata" playsinline controls data-title="Track 2">
     <source src="./test.webm" type="video/webm" />
   </video>
 
@@ -95,10 +95,12 @@
     }, { once: true });
 
     function startPlaylist() {
-      if (activeTrack) return;
-      track1.playbackRate = TRACK1_PLAYBACK_RATE;
-      track1.currentTime = TRACK1_START_POSITION_SECONDS;
-      activeTrack = track1;
+      if (activeTrack && !activeTrack.paused) return;
+      if (!activeTrack) {
+        track1.playbackRate = TRACK1_PLAYBACK_RATE;
+        track1.currentTime = TRACK1_START_POSITION_SECONDS;
+        activeTrack = track1;
+      }
       updateMetadata('Track 1');
       updatePlaybackState();
       track1.play().catch((error) => {
