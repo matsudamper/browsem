@@ -281,26 +281,39 @@ internal fun GeckoBrowserTab(
     //
     // local function は前方参照不可なので attach → schedule → restore の順で定義する。
     var pendingRecoveryRunnable: Runnable? = null
+    // ON_PAUSE で setActive(false) を呼んだかを追跡。
+    // メディア再生中はスキップされるため、resume 時の処理を分岐させる。
+    var sessionDeactivatedDuringPause = false
 
     fun attachSessionAfterStableSize(gecko: GeckoView) {
         pendingRecoveryRunnable?.let { gecko.removeCallbacks(it) }
-        // メディア再生中に setActive(false) をスキップしてバックグラウンドに入った場合、
-        // session が active のまま releaseSession されている。このまま setSession すると
-        // compositor が古い active 状態を引き継いで新しい Surface に接続できず描画が
-        // 開始しない場合がある。setSession 前に必ず inactive に落とし、setSession 後に
-        // active へ戻すことで compositor を clean restart させる。
-        session.setActive(false)
+        // releaseSession() で session は GeckoView から detach 済み。
+        // setSession() で新しい Surface に再接続する。
+        //
+        // ON_PAUSE で setActive(false) を呼んだ場合（非メディアセッション）:
+        //   setSession → setActive(true) で compositor を再起動する。
+        //
+        // メディア再生中で setActive(false) をスキップした場合:
+        //   session は active のまま。setSession のみで compositor が新 Surface に
+        //   再接続される。ここで setActive(false) を挟むとコンテンツプロセスが
+        //   中断されフリーズする場合がある (x.com 等で再現)。
         gecko.setSession(session)
-        session.setActive(true)
+        if (sessionDeactivatedDuringPause) {
+            session.setActive(true)
+            sessionDeactivatedDuringPause = false
+        }
         surfaceResumeState = SurfaceResumeState.ACTIVE
-        // compositor 障害時のフォールバック: 一定時間経っても描画が始まらなければ reload
+        // compositor 障害時のフォールバック: 一定時間経っても描画が始まらなければ
+        // stop + reload で強制リカバリー。単純な reload() ではコンテンツプロセスが
+        // フリーズしている場合に効かないことがあるため stop() で一度中断する。
         val recoveryRunnable = Runnable {
             if (!state.renderReady && surfaceResumeState == SurfaceResumeState.ACTIVE) {
                 Log.w(
                     TAG_SURFACE_RESUME,
                     "renderReady が復帰後 ${RENDER_RECOVERY_TIMEOUT_MS}ms 経過しても false" +
-                        " → reload を試行 session=${session.logKey()}",
+                        " → stop + reload を試行 session=${session.logKey()}",
                 )
+                session.stop()
                 session.reload()
             }
         }
@@ -449,6 +462,9 @@ internal fun GeckoBrowserTab(
                             )
                             if (!mediaKeep) {
                                 session.setActive(false)
+                                sessionDeactivatedDuringPause = true
+                            } else {
+                                sessionDeactivatedDuringPause = false
                             }
                             state.captureTabPreview(target)
                             target.releaseSession()
