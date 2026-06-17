@@ -281,9 +281,26 @@ internal fun GeckoBrowserTab(
     //
     // local function は前方参照不可なので attach → schedule → restore の順で定義する。
     fun attachSessionAfterStableSize(gecko: GeckoView) {
+        // メディア再生中に setActive(false) をスキップしてバックグラウンドに入った場合、
+        // session が active のまま releaseSession されている。このまま setSession すると
+        // compositor が古い active 状態を引き継いで新しい Surface に接続できず描画が
+        // 開始しない場合がある。setSession 前に必ず inactive に落とし、setSession 後に
+        // active へ戻すことで compositor を clean restart させる。
+        session.setActive(false)
         gecko.setSession(session)
         session.setActive(true)
         surfaceResumeState = SurfaceResumeState.ACTIVE
+        // compositor 障害時のフォールバック: 一定時間経っても描画が始まらなければ reload
+        gecko.postDelayed({
+            if (!state.renderReady && surfaceResumeState == SurfaceResumeState.ACTIVE) {
+                Log.w(
+                    TAG_SURFACE_RESUME,
+                    "renderReady が復帰後 ${RENDER_RECOVERY_TIMEOUT_MS}ms 経過しても false" +
+                        " → reload を試行 session=${session.logKey()}",
+                )
+                session.reload()
+            }
+        }, RENDER_RECOVERY_TIMEOUT_MS)
     }
 
     fun scheduleStableSizeAttach(
@@ -429,6 +446,11 @@ internal fun GeckoBrowserTab(
                             state.captureTabPreview(target)
                             target.releaseSession()
                             target.visibility = View.INVISIBLE
+                            // Surface 破棄に合わせて renderReady を落とし、復帰時に
+                            // Compose オーバーレイ (プレビュー画像 or ローディング) で
+                            // GeckoView を覆う。coverUntilFirstPaint だけでは compositor
+                            // 障害時に永久に残るため、Compose 側でも保護する。
+                            state.renderReady = false
                             surfaceResumeState = SurfaceResumeState.RELEASED
                         }
                     }
@@ -1017,6 +1039,11 @@ private const val STABLE_FRAMES_THRESHOLD = 3
  * setSession する。Web 入力欄の表示遅延と GPU kill 防止のトレードオフ。
  */
 private const val STABLE_TIMEOUT_MS = 1000L
+
+/**
+ * 復帰後に renderReady が true にならない場合にリロードを試みるまでの猶予。
+ */
+private const val RENDER_RECOVERY_TIMEOUT_MS = 3000L
 
 private fun GeckoSession.logKey(): String = Integer.toHexString(System.identityHashCode(this))
 
