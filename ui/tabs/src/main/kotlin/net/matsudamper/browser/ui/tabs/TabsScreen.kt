@@ -714,7 +714,6 @@ private fun PreviewWithSnackbar() {
             groups = groups,
             activeGroupIndex = 0,
             selectedTabId = "1",
-            groupHasPlayingTab = emptyList(),
             snackbarHostState = remember { SnackbarHostState() },
             onSelectTab = {},
             onCloseTab = {},
@@ -728,6 +727,7 @@ private fun PreviewWithSnackbar() {
             onRenameGroup = { _, _ -> },
             onDeleteGroup = {},
             onToggleDefaultGroup = {},
+            groupHasPlayingTab = emptyList(),
         )
         Snackbar(
             modifier = Modifier
