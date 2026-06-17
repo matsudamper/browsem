@@ -292,38 +292,52 @@ internal fun GeckoBrowserTab(
 
     fun attachSessionAfterStableSize(gecko: GeckoView) {
         surfaceResumeRef.pendingRecoveryRunnable?.let { gecko.removeCallbacks(it) }
-        // releaseSession() で session は GeckoView から detach 済み。
-        // setSession() で新しい Surface に再接続する。
-        //
-        // ON_PAUSE で setActive(false) を呼んだ場合（非メディアセッション）:
-        //   setSession → setActive(true) で compositor を再起動する。
-        //
-        // メディア再生中で setActive(false) をスキップした場合:
-        //   session は active のまま。setSession のみで compositor が新 Surface に
-        //   再接続される。ここで setActive(false) を挟むとコンテンツプロセスが
-        //   中断されフリーズする場合がある (x.com 等で再現)。
+        val wasDeactivated = surfaceResumeRef.sessionDeactivatedDuringPause
         gecko.setSession(session)
-        if (surfaceResumeRef.sessionDeactivatedDuringPause) {
+        if (wasDeactivated) {
             session.setActive(true)
             surfaceResumeRef.sessionDeactivatedDuringPause = false
         }
         surfaceResumeState = SurfaceResumeState.ACTIVE
-        // compositor 障害時のフォールバック: 一定時間経っても描画が始まらなければ
-        // stop + reload で強制リカバリー。単純な reload() ではコンテンツプロセスが
-        // フリーズしている場合に効かないことがあるため stop() で一度中断する。
-        val recoveryRunnable = Runnable {
-            if (!state.renderReady && surfaceResumeState == SurfaceResumeState.ACTIVE) {
-                Log.w(
+        if (!wasDeactivated) {
+            // メディアセッション: ON_PAUSE で setActive(false) をスキップしたため
+            // ページに visibilitychange("hidden") が発火していない。
+            // setSession 完了後に setActive を toggle して visibility 状態を
+            // 更新し、x.com 等が hidden 状態のままフリーズする問題を回避する。
+            // setSession 直後ではなく遅延して実行することで compositor の
+            // Surface 接続が安定してから toggle する。
+            val recoveryRunnable = Runnable {
+                if (surfaceResumeState != SurfaceResumeState.ACTIVE) return@Runnable
+                Log.d(
                     TAG_SURFACE_RESUME,
-                    "renderReady が復帰後 ${RENDER_RECOVERY_TIMEOUT_MS}ms 経過しても false" +
-                        " → stop + reload を試行 session=${session.logKey()}",
+                    "メディアセッション復帰: visibility toggle 実行 session=${session.logKey()}",
                 )
-                session.stop()
-                session.reload()
+                session.setActive(false)
+                gecko.postDelayed({
+                    if (surfaceResumeState == SurfaceResumeState.ACTIVE) {
+                        session.setActive(true)
+                    }
+                }, VISIBILITY_TOGGLE_INTERVAL_MS)
             }
+            surfaceResumeRef.pendingRecoveryRunnable = recoveryRunnable
+            gecko.postDelayed(recoveryRunnable, VISIBILITY_TOGGLE_DELAY_MS)
+        } else {
+            // 非メディアセッション: setActive(false/true) 経由で visibility が
+            // 正しく遷移するため、compositor が描画を開始しない場合のみリカバリー
+            val recoveryRunnable = Runnable {
+                if (!state.renderReady && surfaceResumeState == SurfaceResumeState.ACTIVE) {
+                    Log.w(
+                        TAG_SURFACE_RESUME,
+                        "renderReady が復帰後 ${RENDER_RECOVERY_TIMEOUT_MS}ms 経過しても false" +
+                            " → stop + reload を試行 session=${session.logKey()}",
+                    )
+                    session.stop()
+                    session.reload()
+                }
+            }
+            surfaceResumeRef.pendingRecoveryRunnable = recoveryRunnable
+            gecko.postDelayed(recoveryRunnable, RENDER_RECOVERY_TIMEOUT_MS)
         }
-        surfaceResumeRef.pendingRecoveryRunnable = recoveryRunnable
-        gecko.postDelayed(recoveryRunnable, RENDER_RECOVERY_TIMEOUT_MS)
     }
 
     fun scheduleStableSizeAttach(
@@ -1076,6 +1090,18 @@ private const val STABLE_TIMEOUT_MS = 1000L
  * 復帰後に renderReady が true にならない場合にリロードを試みるまでの猶予。
  */
 private const val RENDER_RECOVERY_TIMEOUT_MS = 3000L
+
+/**
+ * メディアセッション復帰時、setSession 完了後に visibility toggle を開始するまでの遅延。
+ * compositor が新しい Surface に接続して安定するのを待つ。
+ */
+private const val VISIBILITY_TOGGLE_DELAY_MS = 500L
+
+/**
+ * visibility toggle で setActive(false) → setActive(true) の間隔。
+ * ページの visibilitychange ハンドラが処理するのに十分な時間を確保する。
+ */
+private const val VISIBILITY_TOGGLE_INTERVAL_MS = 100L
 
 private fun GeckoSession.logKey(): String = Integer.toHexString(System.identityHashCode(this))
 
