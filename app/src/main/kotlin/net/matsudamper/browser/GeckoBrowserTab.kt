@@ -280,13 +280,18 @@ internal fun GeckoBrowserTab(
     // 強制 attach する fallback も用意。待機中は coverUntilFirstPaint で覆い隠す。
     //
     // local function は前方参照不可なので attach → schedule → restore の順で定義する。
-    var pendingRecoveryRunnable: Runnable? = null
     // ON_PAUSE で setActive(false) を呼んだかを追跡。
     // メディア再生中はスキップされるため、resume 時の処理を分岐させる。
-    var sessionDeactivatedDuringPause = false
+    // リカバリー用 Runnable の参照もここで保持する。
+    val surfaceResumeRef = remember(session) {
+        object {
+            var pendingRecoveryRunnable: Runnable? = null
+            var sessionDeactivatedDuringPause = false
+        }
+    }
 
     fun attachSessionAfterStableSize(gecko: GeckoView) {
-        pendingRecoveryRunnable?.let { gecko.removeCallbacks(it) }
+        surfaceResumeRef.pendingRecoveryRunnable?.let { gecko.removeCallbacks(it) }
         // releaseSession() で session は GeckoView から detach 済み。
         // setSession() で新しい Surface に再接続する。
         //
@@ -298,9 +303,9 @@ internal fun GeckoBrowserTab(
         //   再接続される。ここで setActive(false) を挟むとコンテンツプロセスが
         //   中断されフリーズする場合がある (x.com 等で再現)。
         gecko.setSession(session)
-        if (sessionDeactivatedDuringPause) {
+        if (surfaceResumeRef.sessionDeactivatedDuringPause) {
             session.setActive(true)
-            sessionDeactivatedDuringPause = false
+            surfaceResumeRef.sessionDeactivatedDuringPause = false
         }
         surfaceResumeState = SurfaceResumeState.ACTIVE
         // compositor 障害時のフォールバック: 一定時間経っても描画が始まらなければ
@@ -317,7 +322,7 @@ internal fun GeckoBrowserTab(
                 session.reload()
             }
         }
-        pendingRecoveryRunnable = recoveryRunnable
+        surfaceResumeRef.pendingRecoveryRunnable = recoveryRunnable
         gecko.postDelayed(recoveryRunnable, RENDER_RECOVERY_TIMEOUT_MS)
     }
 
@@ -444,8 +449,8 @@ internal fun GeckoBrowserTab(
                     // WAITING_STABLE 中（前回 resume の安定待ちが完了する前に再度 pause した
                     // 場合）も releaseSession を行いたいので ACTIVE と同じ扱いにする。
                     if (surfaceResumeState != SurfaceResumeState.RELEASED) {
-                        pendingRecoveryRunnable?.let { geckoView?.removeCallbacks(it) }
-                        pendingRecoveryRunnable = null
+                        surfaceResumeRef.pendingRecoveryRunnable?.let { geckoView?.removeCallbacks(it) }
+                        surfaceResumeRef.pendingRecoveryRunnable = null
                         val target = geckoView
                         if (target == null) {
                             Log.w(
@@ -462,9 +467,9 @@ internal fun GeckoBrowserTab(
                             )
                             if (!mediaKeep) {
                                 session.setActive(false)
-                                sessionDeactivatedDuringPause = true
+                                surfaceResumeRef.sessionDeactivatedDuringPause = true
                             } else {
-                                sessionDeactivatedDuringPause = false
+                                surfaceResumeRef.sessionDeactivatedDuringPause = false
                             }
                             state.captureTabPreview(target)
                             target.releaseSession()
@@ -493,8 +498,8 @@ internal fun GeckoBrowserTab(
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
-            pendingRecoveryRunnable?.let { geckoView?.removeCallbacks(it) }
-            pendingRecoveryRunnable = null
+            surfaceResumeRef.pendingRecoveryRunnable?.let { geckoView?.removeCallbacks(it) }
+            surfaceResumeRef.pendingRecoveryRunnable = null
         }
     }
 
