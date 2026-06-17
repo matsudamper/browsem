@@ -280,7 +280,10 @@ internal fun GeckoBrowserTab(
     // 強制 attach する fallback も用意。待機中は coverUntilFirstPaint で覆い隠す。
     //
     // local function は前方参照不可なので attach → schedule → restore の順で定義する。
+    var pendingRecoveryRunnable: Runnable? = null
+
     fun attachSessionAfterStableSize(gecko: GeckoView) {
+        pendingRecoveryRunnable?.let { gecko.removeCallbacks(it) }
         // メディア再生中に setActive(false) をスキップしてバックグラウンドに入った場合、
         // session が active のまま releaseSession されている。このまま setSession すると
         // compositor が古い active 状態を引き継いで新しい Surface に接続できず描画が
@@ -291,7 +294,7 @@ internal fun GeckoBrowserTab(
         session.setActive(true)
         surfaceResumeState = SurfaceResumeState.ACTIVE
         // compositor 障害時のフォールバック: 一定時間経っても描画が始まらなければ reload
-        gecko.postDelayed({
+        val recoveryRunnable = Runnable {
             if (!state.renderReady && surfaceResumeState == SurfaceResumeState.ACTIVE) {
                 Log.w(
                     TAG_SURFACE_RESUME,
@@ -300,7 +303,9 @@ internal fun GeckoBrowserTab(
                 )
                 session.reload()
             }
-        }, RENDER_RECOVERY_TIMEOUT_MS)
+        }
+        pendingRecoveryRunnable = recoveryRunnable
+        gecko.postDelayed(recoveryRunnable, RENDER_RECOVERY_TIMEOUT_MS)
     }
 
     fun scheduleStableSizeAttach(
@@ -426,6 +431,8 @@ internal fun GeckoBrowserTab(
                     // WAITING_STABLE 中（前回 resume の安定待ちが完了する前に再度 pause した
                     // 場合）も releaseSession を行いたいので ACTIVE と同じ扱いにする。
                     if (surfaceResumeState != SurfaceResumeState.RELEASED) {
+                        pendingRecoveryRunnable?.let { geckoView?.removeCallbacks(it) }
+                        pendingRecoveryRunnable = null
                         val target = geckoView
                         if (target == null) {
                             Log.w(
@@ -468,7 +475,11 @@ internal fun GeckoBrowserTab(
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            pendingRecoveryRunnable?.let { geckoView?.removeCallbacks(it) }
+            pendingRecoveryRunnable = null
+        }
     }
 
     // theme-color WebExtensionのコールバック登録
