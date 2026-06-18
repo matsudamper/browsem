@@ -1,6 +1,8 @@
 package net.matsudamper.browser
 
 import android.app.Activity
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -10,6 +12,7 @@ import android.view.ActionMode
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
+import android.widget.Toast
 import androidx.core.net.toUri
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalActivity
@@ -760,8 +763,8 @@ internal fun GeckoBrowserTab(
                                 state.urlInput = ""
                             }
                             // クリップボードからURLを読み取り、現在のページと異なる場合に表示
-                            val clipManager = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE)
-                                as android.content.ClipboardManager
+                            val clipManager = context.getSystemService(Context.CLIPBOARD_SERVICE)
+                                as ClipboardManager
                             val clipped = clipManager.primaryClip?.getItemAt(0)
                                 ?.coerceToText(context)?.toString()?.trim()
                             clipboardUrl = if (
@@ -927,7 +930,7 @@ internal fun GeckoBrowserTab(
     // 描画デバッグダイアログ
     renderRecoveryDebugInfo?.let { debugInfo ->
         val clipboardManager = context.getSystemService(Context.CLIPBOARD_SERVICE)
-            as android.content.ClipboardManager
+            as ClipboardManager
         AlertDialog(
             onDismissRequest = { renderRecoveryDebugInfo = null },
             title = { Text("描画デバッグ") },
@@ -946,15 +949,15 @@ internal fun GeckoBrowserTab(
             dismissButton = {
                 Row {
                     TextButton(onClick = {
-                        val clip = android.content.ClipData.newPlainText(
+                        val clip = ClipData.newPlainText(
                             "RenderRecoveryDebugInfo",
                             debugInfo.toDebugString(),
                         )
                         clipboardManager.setPrimaryClip(clip)
-                        android.widget.Toast.makeText(
+                        Toast.makeText(
                             context,
                             "デバッグ情報をコピーしました",
-                            android.widget.Toast.LENGTH_SHORT,
+                            Toast.LENGTH_SHORT,
                         ).show()
                     }) {
                         Text("デバッグ情報をコピー")
