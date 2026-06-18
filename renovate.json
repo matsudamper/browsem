@@ -5,9 +5,9 @@
   ],
   "packageRules": [
     {
-      "matchPackagePrefixes": [
-        "org.mozilla.components",
-        "org.mozilla.geckoview"
+      "matchPackageNames": [
+        "org.mozilla.components:**",
+        "org.mozilla.geckoview:**"
       ],
       "automerge": true
     }
