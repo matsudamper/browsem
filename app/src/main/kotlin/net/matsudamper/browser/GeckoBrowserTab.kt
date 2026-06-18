@@ -18,6 +18,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
@@ -31,10 +32,12 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.TextButton
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContract
 import androidx.activity.result.contract.ActivityResultContracts
@@ -191,6 +194,8 @@ internal fun GeckoBrowserTab(
     // Surface と Session の復元状態を一元管理する state machine。
     // ON_START / ON_RESUME が重複発火しても state=ACTIVE なら即 no-op にする。
     var surfaceResumeState by remember(session) { mutableStateOf(SurfaceResumeState.ACTIVE) }
+    // コンテンツ描画が検出されなかった場合のリカバリーダイアログ
+    var renderRecoveryDebugInfo by remember { mutableStateOf<RenderRecoveryDebugInfo?>(null) }
     val resumeCoverColor = MaterialTheme.colorScheme.surface.toArgb()
 
     // ファイルピッカー（単一ファイル選択）Google Photos を含むピッカーを表示するため ACTION_GET_CONTENT を使用
@@ -298,17 +303,31 @@ internal fun GeckoBrowserTab(
         // インクリメントされるため、コンテンツプロセスが実際に新しい描画を行ったかを
         // 正確に検出できる。
         val captureCountAtAttach = state.capturePreviewRequestCount
+        val attachTimeMs = SystemClock.elapsedRealtime()
         val recoveryRunnable = Runnable {
             if (surfaceResumeState == SurfaceResumeState.ACTIVE &&
                 state.capturePreviewRequestCount == captureCountAtAttach
             ) {
+                val gv = geckoView
+                val debugInfo = RenderRecoveryDebugInfo(
+                    sessionKey = session.logKey(),
+                    sessionOpen = session.isOpen,
+                    renderReady = state.renderReady,
+                    captureCountAtAttach = captureCountAtAttach,
+                    captureCountNow = state.capturePreviewRequestCount,
+                    surfaceResumeState = surfaceResumeState.name,
+                    geckoViewSize = "${gv?.width ?: -1}x${gv?.height ?: -1}",
+                    geckoViewVisibility = gv?.visibility ?: -1,
+                    currentUrl = state.currentPageUrl,
+                    elapsedSinceAttachMs = SystemClock.elapsedRealtime() - attachTimeMs,
+                    mediaKeep = mediaWebExtension.shouldKeepSessionAttached(session),
+                )
                 Log.w(
                     TAG_SURFACE_RESUME,
                     "コンテンツ描画が復帰後 ${RENDER_RECOVERY_TIMEOUT_MS}ms 経過しても検出されず" +
-                        " → stop + reload を試行 session=${session.logKey()}",
+                        " session=${session.logKey()} debugInfo=$debugInfo",
                 )
-                session.stop()
-                session.reload()
+                renderRecoveryDebugInfo = debugInfo
             }
         }
         surfaceResumeRef.pendingRecoveryRunnable = recoveryRunnable
@@ -922,6 +941,49 @@ internal fun GeckoBrowserTab(
         )
     }
 
+    // 描画復帰失敗リカバリーダイアログ
+    renderRecoveryDebugInfo?.let { debugInfo ->
+        val clipboardManager = context.getSystemService(Context.CLIPBOARD_SERVICE)
+            as android.content.ClipboardManager
+        AlertDialog(
+            onDismissRequest = { renderRecoveryDebugInfo = null },
+            title = { Text("描画復帰に失敗") },
+            text = {
+                Text("バックグラウンドからの復帰後、ページの描画が再開されませんでした。リロードすると復帰する場合があります。")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    renderRecoveryDebugInfo = null
+                    session.stop()
+                    session.reload()
+                }) {
+                    Text("リロード")
+                }
+            },
+            dismissButton = {
+                Row {
+                    TextButton(onClick = {
+                        val clip = android.content.ClipData.newPlainText(
+                            "RenderRecoveryDebugInfo",
+                            debugInfo.toDebugString(),
+                        )
+                        clipboardManager.setPrimaryClip(clip)
+                        android.widget.Toast.makeText(
+                            context,
+                            "デバッグ情報をコピーしました",
+                            android.widget.Toast.LENGTH_SHORT,
+                        ).show()
+                    }) {
+                        Text("デバッグ情報をコピー")
+                    }
+                    TextButton(onClick = { renderRecoveryDebugInfo = null }) {
+                        Text("閉じる")
+                    }
+                }
+            },
+        )
+    }
+
     // タブ履歴BottomSheet
     if (showTabHistorySheet) {
         TabHistoryBottomSheet(
@@ -1048,6 +1110,34 @@ private const val STABLE_TIMEOUT_MS = 1000L
  */
 private const val RENDER_RECOVERY_TIMEOUT_MS = 3000L
 
+
+private data class RenderRecoveryDebugInfo(
+    val sessionKey: String,
+    val sessionOpen: Boolean,
+    val renderReady: Boolean,
+    val captureCountAtAttach: Int,
+    val captureCountNow: Int,
+    val surfaceResumeState: String,
+    val geckoViewSize: String,
+    val geckoViewVisibility: Int,
+    val currentUrl: String,
+    val elapsedSinceAttachMs: Long,
+    val mediaKeep: Boolean,
+) {
+    fun toDebugString(): String = buildString {
+        appendLine("sessionKey=$sessionKey")
+        appendLine("sessionOpen=$sessionOpen")
+        appendLine("renderReady=$renderReady")
+        appendLine("captureCountAtAttach=$captureCountAtAttach")
+        appendLine("captureCountNow=$captureCountNow")
+        appendLine("surfaceResumeState=$surfaceResumeState")
+        appendLine("geckoViewSize=$geckoViewSize")
+        appendLine("geckoViewVisibility=$geckoViewVisibility")
+        appendLine("currentUrl=$currentUrl")
+        appendLine("elapsedSinceAttachMs=$elapsedSinceAttachMs")
+        appendLine("mediaKeep=$mediaKeep")
+    }
+}
 
 private fun GeckoSession.logKey(): String = Integer.toHexString(System.identityHashCode(this))
 
