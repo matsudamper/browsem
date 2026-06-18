@@ -86,6 +86,7 @@ jobs:
         with:
           name: apk-qr-code-github
           path: qrcode-github.png
+          archive: false
 
       - name: Generate and Upload S3 QR code
         if: steps.upload_s3.outputs.url != ''
@@ -100,6 +101,7 @@ jobs:
         with:
           name: apk-qr-code-s3
           path: qrcode-s3.png
+          archive: false
 
       - name: Comment APK download URLs
         uses: marocchino/sticky-pull-request-comment@0ea0beb66eb9baf113663a64ec522f60e49231c0 # v3.0.4
