@@ -69,6 +69,7 @@ internal fun ToolbarMenu(
     onOpenInBrowser: (() -> Unit)? = null,
     onOpenSiteSettings: (() -> Unit)? = null,
     onOpenDownloads: (() -> Unit)? = null,
+    onShowRenderDebug: (() -> Unit)? = null,
 ) {
     DropdownMenu(
         expanded = visibleMenu,
@@ -103,6 +104,7 @@ internal fun ToolbarMenu(
             onOpenInBrowser = onOpenInBrowser,
             onOpenSiteSettings = onOpenSiteSettings,
             onOpenDownloads = onOpenDownloads,
+            onShowRenderDebug = onShowRenderDebug,
         )
     }
 }
@@ -138,6 +140,7 @@ private fun ToolbarMenuContent(
     onOpenInBrowser: (() -> Unit)?,
     onOpenSiteSettings: (() -> Unit)?,
     onOpenDownloads: (() -> Unit)?,
+    onShowRenderDebug: (() -> Unit)?,
 ) {
     Column {
         Row(
@@ -475,6 +478,21 @@ private fun ToolbarMenuContent(
                 },
             )
         }
+        onShowRenderDebug?.let { showRenderDebug ->
+            DropdownMenuItem(
+                text = { Text(text = "描画デバッグ") },
+                leadingIcon = {
+                    Icon(
+                        painter = painterResource(id = ResourcesR.drawable.ic_article_24dp),
+                        contentDescription = null,
+                    )
+                },
+                onClick = {
+                    onDismissRequest()
+                    showRenderDebug()
+                },
+            )
+        }
         if (showOpenSettings) {
             DropdownMenuItem(
                 text = {
@@ -549,6 +567,7 @@ private fun PreviewToolbarMenuContent() {
                 onOpenInBrowser = null,
                 onOpenSiteSettings = {},
                 onOpenDownloads = {},
+                onShowRenderDebug = {},
             )
         }
     }

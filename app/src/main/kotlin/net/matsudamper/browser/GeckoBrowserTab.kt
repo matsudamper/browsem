@@ -51,6 +51,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -285,53 +286,36 @@ internal fun GeckoBrowserTab(
     // 強制 attach する fallback も用意。待機中は coverUntilFirstPaint で覆い隠す。
     //
     // local function は前方参照不可なので attach → schedule → restore の順で定義する。
-    // リカバリー用 Runnable の参照を保持する。
-    val surfaceResumeRef = remember(session) {
-        object {
-            var pendingRecoveryRunnable: Runnable? = null
-        }
+    // ライフサイクルのタイミングとカウンタをデバッグ情報用に記録する。
+    var lastPauseMs by remember { mutableLongStateOf(0L) }
+    var lastResumeMs by remember { mutableLongStateOf(0L) }
+    var captureCountAtResume by remember { mutableIntStateOf(0) }
+
+    fun collectRenderDebugInfo(): RenderRecoveryDebugInfo {
+        val gv = geckoView
+        val now = SystemClock.elapsedRealtime()
+        return RenderRecoveryDebugInfo(
+            sessionKey = session.logKey(),
+            sessionOpen = session.isOpen,
+            renderReady = state.renderReady,
+            captureCountAtResume = captureCountAtResume,
+            captureCountNow = state.capturePreviewRequestCount,
+            surfaceResumeState = surfaceResumeState.name,
+            geckoViewSize = "${gv?.width ?: -1}x${gv?.height ?: -1}",
+            geckoViewVisibility = gv?.visibility ?: -1,
+            currentUrl = state.currentPageUrl,
+            msSinceLastPause = if (lastPauseMs > 0) now - lastPauseMs else -1,
+            msSinceLastResume = if (lastResumeMs > 0) now - lastResumeMs else -1,
+            mediaKeep = mediaWebExtension.shouldKeepSessionAttached(session),
+        )
     }
 
     fun attachSessionAfterStableSize(gecko: GeckoView) {
-        surfaceResumeRef.pendingRecoveryRunnable?.let { gecko.removeCallbacks(it) }
         gecko.setSession(session)
         session.setActive(true)
         surfaceResumeState = SurfaceResumeState.ACTIVE
-        // onFirstComposite はキャッシュ済みの古いフレームでも発火し renderReady を
-        // true にしてしまうため、renderReady ではリカバリーの要否を判定できない。
-        // capturePreviewRequestCount は onFirstContentfulPaint と onPageStop でのみ
-        // インクリメントされるため、コンテンツプロセスが実際に新しい描画を行ったかを
-        // 正確に検出できる。
-        val captureCountAtAttach = state.capturePreviewRequestCount
-        val attachTimeMs = SystemClock.elapsedRealtime()
-        val recoveryRunnable = Runnable {
-            if (surfaceResumeState == SurfaceResumeState.ACTIVE &&
-                state.capturePreviewRequestCount == captureCountAtAttach
-            ) {
-                val gv = geckoView
-                val debugInfo = RenderRecoveryDebugInfo(
-                    sessionKey = session.logKey(),
-                    sessionOpen = session.isOpen,
-                    renderReady = state.renderReady,
-                    captureCountAtAttach = captureCountAtAttach,
-                    captureCountNow = state.capturePreviewRequestCount,
-                    surfaceResumeState = surfaceResumeState.name,
-                    geckoViewSize = "${gv?.width ?: -1}x${gv?.height ?: -1}",
-                    geckoViewVisibility = gv?.visibility ?: -1,
-                    currentUrl = state.currentPageUrl,
-                    elapsedSinceAttachMs = SystemClock.elapsedRealtime() - attachTimeMs,
-                    mediaKeep = mediaWebExtension.shouldKeepSessionAttached(session),
-                )
-                Log.w(
-                    TAG_SURFACE_RESUME,
-                    "コンテンツ描画が復帰後 ${RENDER_RECOVERY_TIMEOUT_MS}ms 経過しても検出されず" +
-                        " session=${session.logKey()} debugInfo=$debugInfo",
-                )
-                renderRecoveryDebugInfo = debugInfo
-            }
-        }
-        surfaceResumeRef.pendingRecoveryRunnable = recoveryRunnable
-        gecko.postDelayed(recoveryRunnable, RENDER_RECOVERY_TIMEOUT_MS)
+        captureCountAtResume = state.capturePreviewRequestCount
+        lastResumeMs = SystemClock.elapsedRealtime()
     }
 
     fun scheduleStableSizeAttach(
@@ -449,8 +433,7 @@ internal fun GeckoBrowserTab(
                     // WAITING_STABLE 中（前回 resume の安定待ちが完了する前に再度 pause した
                     // 場合）も releaseSession を行いたいので ACTIVE と同じ扱いにする。
                     if (surfaceResumeState != SurfaceResumeState.RELEASED) {
-                        surfaceResumeRef.pendingRecoveryRunnable?.let { geckoView?.removeCallbacks(it) }
-                        surfaceResumeRef.pendingRecoveryRunnable = null
+                        lastPauseMs = SystemClock.elapsedRealtime()
                         val target = geckoView
                         if (target == null) {
                             Log.w(
@@ -488,8 +471,6 @@ internal fun GeckoBrowserTab(
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
-            surfaceResumeRef.pendingRecoveryRunnable?.let { geckoView?.removeCallbacks(it) }
-            surfaceResumeRef.pendingRecoveryRunnable = null
         }
     }
 
@@ -760,6 +741,7 @@ internal fun GeckoBrowserTab(
                     onResetPageZoom = state::resetPageZoom,
                     // ウェブアプリモードでは閉じるボタンを非表示にする
                     showCloseButton = customTabMode,
+                    onShowRenderDebug = { renderRecoveryDebugInfo = collectRenderDebugInfo() },
                 )
             } else {
                 BrowserToolBar(
@@ -845,6 +827,7 @@ internal fun GeckoBrowserTab(
                         onToolbarDragEnd()
                     },
                     onAddToHomeScreen = state::requestAddToHomeScreen,
+                    onShowRenderDebug = { renderRecoveryDebugInfo = collectRenderDebugInfo() },
                 )
             }
             // 翻訳元・翻訳先の選択肢：検出済み言語＋英語＋日本語（重複除去）
@@ -941,15 +924,15 @@ internal fun GeckoBrowserTab(
         )
     }
 
-    // 描画復帰失敗リカバリーダイアログ
+    // 描画デバッグダイアログ
     renderRecoveryDebugInfo?.let { debugInfo ->
         val clipboardManager = context.getSystemService(Context.CLIPBOARD_SERVICE)
             as android.content.ClipboardManager
         AlertDialog(
             onDismissRequest = { renderRecoveryDebugInfo = null },
-            title = { Text("描画復帰に失敗") },
+            title = { Text("描画デバッグ") },
             text = {
-                Text("バックグラウンドからの復帰後、ページの描画が再開されませんでした。リロードすると復帰する場合があります。")
+                Text("現在の描画状態を確認できます。リロードでページを再読み込みします。")
             },
             confirmButton = {
                 TextButton(onClick = {
@@ -1105,36 +1088,32 @@ private const val STABLE_FRAMES_THRESHOLD = 3
  */
 private const val STABLE_TIMEOUT_MS = 1000L
 
-/**
- * 復帰後に renderReady が true にならない場合にリロードを試みるまでの猶予。
- */
-private const val RENDER_RECOVERY_TIMEOUT_MS = 3000L
-
-
 private data class RenderRecoveryDebugInfo(
     val sessionKey: String,
     val sessionOpen: Boolean,
     val renderReady: Boolean,
-    val captureCountAtAttach: Int,
+    val captureCountAtResume: Int,
     val captureCountNow: Int,
     val surfaceResumeState: String,
     val geckoViewSize: String,
     val geckoViewVisibility: Int,
     val currentUrl: String,
-    val elapsedSinceAttachMs: Long,
+    val msSinceLastPause: Long,
+    val msSinceLastResume: Long,
     val mediaKeep: Boolean,
 ) {
     fun toDebugString(): String = buildString {
         appendLine("sessionKey=$sessionKey")
         appendLine("sessionOpen=$sessionOpen")
         appendLine("renderReady=$renderReady")
-        appendLine("captureCountAtAttach=$captureCountAtAttach")
+        appendLine("captureCountAtResume=$captureCountAtResume")
         appendLine("captureCountNow=$captureCountNow")
         appendLine("surfaceResumeState=$surfaceResumeState")
         appendLine("geckoViewSize=$geckoViewSize")
         appendLine("geckoViewVisibility=$geckoViewVisibility")
         appendLine("currentUrl=$currentUrl")
-        appendLine("elapsedSinceAttachMs=$elapsedSinceAttachMs")
+        appendLine("msSinceLastPause=$msSinceLastPause")
+        appendLine("msSinceLastResume=$msSinceLastResume")
         appendLine("mediaKeep=$mediaKeep")
     }
 }
