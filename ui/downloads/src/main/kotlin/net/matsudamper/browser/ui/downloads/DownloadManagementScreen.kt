@@ -1,9 +1,13 @@
 package net.matsudamper.browser.ui.downloads
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.PressInteraction
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,6 +18,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -43,12 +48,14 @@ import androidx.compose.ui.graphics.Canvas
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Paint
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -60,7 +67,10 @@ fun DownloadManagementScreen(
     uiState: DownloadManagementScreenUiState,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    highlightItemId: UUID? = null,
+    onHighlightComplete: () -> Unit = {},
 ) {
+    val listState = rememberLazyListState()
     Scaffold(
         modifier = modifier,
         topBar = {
@@ -105,7 +115,15 @@ fun DownloadManagementScreen(
                 Text("ダウンロード履歴はありません。")
             }
         } else {
+            var activeHighlightId by remember { mutableStateOf(highlightItemId) }
+            LaunchedEffect(highlightItemId, uiState.downloads) {
+                val targetId = highlightItemId ?: return@LaunchedEffect
+                val index = uiState.downloads.indexOfFirst { it.id == targetId }
+                if (index < 0) return@LaunchedEffect
+                listState.animateScrollToItem(index)
+            }
             LazyColumn(
+                state = listState,
                 modifier = Modifier
                     .padding(paddingValues)
                     .fillMaxSize(),
@@ -122,6 +140,11 @@ fun DownloadManagementScreen(
                         onResume = { uiState.callbacks.onResume(item.id) },
                         onOpenOriginPage = { url -> uiState.callbacks.onOpenOriginPage(url) },
                         loadThumbnail = uiState.callbacks.loadThumbnail,
+                        isHighlighted = item.id == activeHighlightId,
+                        onHighlightFinished = {
+                            activeHighlightId = null
+                            onHighlightComplete()
+                        },
                     )
                 }
             }
@@ -139,10 +162,30 @@ private fun DownloadItemRow(
     onResume: () -> Unit,
     onOpenOriginPage: (url: String) -> Unit,
     loadThumbnail: suspend (fileUri: String) -> ImageBitmap?,
+    isHighlighted: Boolean = false,
+    onHighlightFinished: () -> Unit = {},
 ) {
     val currentLoadThumbnail by rememberUpdatedState(loadThumbnail)
+    val currentOnHighlightFinished by rememberUpdatedState(onHighlightFinished)
     val dateFormat = remember { SimpleDateFormat("yyyy/MM/dd HH:mm", Locale.getDefault()) }
     var menuExpanded by remember { mutableStateOf(false) }
+    val highlightAlpha = remember { Animatable(0f) }
+    val interactionSource = remember { MutableInteractionSource() }
+    val highlightColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+
+    LaunchedEffect(isHighlighted) {
+        if (!isHighlighted) return@LaunchedEffect
+        delay(200)
+        repeat(2) {
+            val press = PressInteraction.Press(Offset.Zero)
+            interactionSource.emit(press)
+            highlightAlpha.animateTo(1f, tween(200))
+            interactionSource.emit(PressInteraction.Release(press))
+            highlightAlpha.animateTo(0f, tween(200))
+            if (it == 0) delay(100)
+        }
+        currentOnHighlightFinished()
+    }
     Box {
         DropdownMenu(
             expanded = menuExpanded,
@@ -160,7 +203,10 @@ private fun DownloadItemRow(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .background(highlightColor.copy(alpha = highlightColor.alpha * highlightAlpha.value))
                 .combinedClickable(
+                    interactionSource = interactionSource,
+                    indication = androidx.compose.material3.ripple(),
                     onLongClick = { menuExpanded = true },
                     onClick = {
                         val status = item.status

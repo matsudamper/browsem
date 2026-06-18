@@ -50,7 +50,7 @@ class MainActivity : ComponentActivity() {
     private var webExtensionWarmUpRetryCount = 0
     private var lastProcessedDeepLinkUrl: String? = null
     private val createNewTabChannel = Channel<NewTabRequest>(Channel.UNLIMITED)
-    private val openDownloadsChannel = Channel<Unit>(Channel.CONFLATED)
+    private val openDownloadsChannel = Channel<String?>(Channel.CONFLATED)
 
     // リコンポーズのたびに新しい Flow が生成されチャネルがキャンセルされるのを防ぐため、
     // Composable の外でプロパティとして保持する
@@ -134,7 +134,7 @@ class MainActivity : ComponentActivity() {
         // savedInstanceState != null (OS によるプロセスキル後の復元) の場合でも
         // ダウンロード通知タップでダウンロード画面へ遷移させるため。
         if (intent.action == DownloadWorker.ACTION_OPEN_DOWNLOADS) {
-            openDownloadsChannel.trySend(Unit)
+            openDownloadsChannel.trySend(intent.getStringExtra(DownloadWorker.EXTRA_WORKER_ID))
         } else {
             val url = intent.dataString
             // 設定変更（画面回転等）後の再起動では直前に処理した URL を復元し、
@@ -197,7 +197,7 @@ class MainActivity : ComponentActivity() {
             return
         }
         if (intent.action == DownloadWorker.ACTION_OPEN_DOWNLOADS) {
-            openDownloadsChannel.trySend(Unit)
+            openDownloadsChannel.trySend(intent.getStringExtra(DownloadWorker.EXTRA_WORKER_ID))
             return
         }
         val url = intent.dataString

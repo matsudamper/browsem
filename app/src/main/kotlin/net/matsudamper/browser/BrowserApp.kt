@@ -23,8 +23,10 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -89,7 +91,7 @@ import org.mozilla.geckoview.GeckoRuntime
 internal fun BrowserApp(
     viewModel: BrowserViewModel,
     newTabUrlFlow: Flow<NewTabRequest>,
-    openDownloadsFlow: Flow<Unit>,
+    openDownloadsFlow: Flow<String?>,
     onInstallExtensionRequest: (String) -> Unit,
     onRequestDownloadNotificationPermission: suspend () -> Unit,
 ) {
@@ -119,7 +121,7 @@ private fun BrowserAppContent(
     uiState: BrowserAppUiState,
     viewModel: BrowserViewModel,
     newTabUrlFlow: Flow<NewTabRequest>,
-    openDownloadsFlow: Flow<Unit>,
+    openDownloadsFlow: Flow<String?>,
     onInstallExtensionRequest: (String) -> Unit,
     onRequestDownloadNotificationPermission: suspend () -> Unit,
 ) {
@@ -164,8 +166,10 @@ private fun BrowserAppContent(
     }
 
     // 通知タップ時にダウンロード管理画面を開く
+    var downloadHighlightWorkerId by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(openDownloadsFlow) {
-        openDownloadsFlow.onEach {
+        openDownloadsFlow.onEach { workerId ->
+            downloadHighlightWorkerId = workerId
             if (backStack.none { it is AppDestination.Downloads }) {
                 backStack.add(AppDestination.Downloads)
             }
@@ -568,9 +572,14 @@ private fun BrowserAppContent(
                                 })
                             }
                         }
+                        val highlightId = downloadHighlightWorkerId?.let {
+                            runCatching { UUID.fromString(it) }.getOrNull()
+                        }
                         DownloadManagementScreen(
                             uiState = downloadsUiState,
                             onBack = { backStack.removeLastOrNull() },
+                            highlightItemId = highlightId,
+                            onHighlightComplete = { downloadHighlightWorkerId = null },
                         )
                     }
 

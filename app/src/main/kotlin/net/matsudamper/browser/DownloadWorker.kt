@@ -47,6 +47,9 @@ internal class DownloadWorker(
     /** ストリームコピー・切断検出を担うコアロジック */
     private val engine = DownloadEngine()
 
+    /** 通知タップ時に対象アイテムをハイライトするための安定したworkerID */
+    private var stableWorkerId: String = ""
+
     /** 失敗時に保存した部分ファイルURI（doWork終了後にcatchブロックで参照） */
     private var partialResultUri: Uri? = null
     private var partialResultFileName: String = ""
@@ -61,6 +64,8 @@ internal class DownloadWorker(
         val notificationId = inputData.getInt(KEY_NOTIFICATION_ID, NOTIFICATION_ID)
         // 再開モード: 部分ファイルURI
         val partialFileUriString = inputData.getString(KEY_PARTIAL_FILE_URI)
+        // 再開時でも安定したworkerIdを取得する（初回ダウンロードではid.toString()と同じ）
+        stableWorkerId = inputData.getString(KEY_STABLE_WORKER_ID) ?: id.toString()
 
 
         val enqueuedAt = System.currentTimeMillis()
@@ -69,7 +74,7 @@ internal class DownloadWorker(
         val guessedFileName = URLUtil.guessFileName(url, null, null)
 
         ensureNotificationChannel(context)
-        setForeground(createForegroundInfo(notificationId, 0, true, context.getString(R.string.download_notification_starting), 0L, -1L))
+        setForeground(createForegroundInfo(notificationId, 0, true, context.getString(R.string.download_notification_starting), 0L, -1L, stableWorkerId))
 
         repository.insertDownload(workerId = id.toString(), url = url, referrerUrl = referrerUrl, enqueuedAt = enqueuedAt)
 
@@ -89,7 +94,7 @@ internal class DownloadWorker(
                 downloadFile(url, referrerUrl, notificationId, repository)
             }
             repository.updateCompleted(id.toString(), fileName, fileUri.toString())
-            postCompletionNotification(fileName)
+            postCompletionNotification(fileName, stableWorkerId)
             Result.success()
         } catch (e: CancellationException) {
             // Job キャンセル済みのコルーチン上では Room の suspend クエリが即座に
@@ -158,12 +163,13 @@ internal class DownloadWorker(
         }
     }
 
-    private fun postCompletionNotification(fileName: String) {
+    private fun postCompletionNotification(fileName: String, stableWorkerId: String) {
         // 負のhashCodeによる通知ID衝突を防ぐため、非負の値に変換する
         val positiveHash = id.hashCode() and 0x7fffffff
         val openDownloadsIntent = Intent(context, MainActivity::class.java).apply {
             action = ACTION_OPEN_DOWNLOADS
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_NEW_TASK
+            putExtra(EXTRA_WORKER_ID, stableWorkerId)
         }
         val pendingIntent = PendingIntent.getActivity(
             context,
@@ -182,7 +188,7 @@ internal class DownloadWorker(
         notificationManager.notify(NOTIFICATION_ID_COMPLETE_BASE + positiveHash, notification)
     }
 
-    private suspend fun postFailureNotification() {
+    private suspend fun postFailureNotification(stableWorkerId: String) {
         // フォアグラウンド通知と異なるIDを使う。
         // フォアグラウンド通知と同じIDを使うと、WorkManager がフォアグラウンドサービス停止時に
         // stopForeground(STOP_FOREGROUND_REMOVE) で同IDの通知を削除してしまうため。
@@ -190,6 +196,7 @@ internal class DownloadWorker(
         val openDownloadsIntent = Intent(context, MainActivity::class.java).apply {
             action = ACTION_OPEN_DOWNLOADS
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_NEW_TASK
+            putExtra(EXTRA_WORKER_ID, stableWorkerId)
         }
         val pendingIntent = PendingIntent.getActivity(
             context,
@@ -235,7 +242,7 @@ internal class DownloadWorker(
             val fileName = URLUtil.guessFileName(urlString, response.header("Content-Disposition"), mimeType)
                 .ifBlank { "download-${System.currentTimeMillis()}" }
 
-            setForeground(createForegroundInfo(notificationId, 0, contentLength <= 0, fileName, 0L, contentLength))
+            setForeground(createForegroundInfo(notificationId, 0, contentLength <= 0, fileName, 0L, contentLength, stableWorkerId))
             repository.updateProgress(id.toString(), fileName, 0, 0L, contentLength)
 
             val resolver = context.contentResolver
@@ -271,7 +278,7 @@ internal class DownloadWorker(
                         throwIfCancelledOnRecord()
                         val progress = if (contentLength > 0) (totalRead * 100 / contentLength).toInt() else 0
                         repository.updateProgress(id.toString(), fileName, progress, totalRead, contentLength)
-                        setForeground(createForegroundInfo(notificationId, progress, contentLength <= 0, fileName, totalRead, contentLength))
+                        setForeground(createForegroundInfo(notificationId, progress, contentLength <= 0, fileName, totalRead, contentLength, stableWorkerId))
                         lastUpdateTime = now
                     }
                 }
@@ -342,7 +349,7 @@ internal class DownloadWorker(
             val fileName = URLUtil.guessFileName(urlString, response.header("Content-Disposition"), mimeType)
                 .ifBlank { "download-${System.currentTimeMillis()}" }
 
-            setForeground(createForegroundInfo(notificationId, if (contentLength > 0) (rangeStart * 100 / contentLength).toInt() else 0, contentLength <= 0, fileName, rangeStart, contentLength))
+            setForeground(createForegroundInfo(notificationId, if (contentLength > 0) (rangeStart * 100 / contentLength).toInt() else 0, contentLength <= 0, fileName, rangeStart, contentLength, stableWorkerId))
 
             // 部分ファイルへの追記用に IS_PENDING を確認・維持する
             val pendingValues = ContentValues().apply { put(MediaStore.Downloads.IS_PENDING, 1) }
@@ -370,7 +377,7 @@ internal class DownloadWorker(
                         throwIfCancelledOnRecord()
                         val progress = if (contentLength > 0) (totalRead * 100 / contentLength).toInt() else 0
                         repository.updateProgress(id.toString(), fileName, progress, totalRead, contentLength)
-                        setForeground(createForegroundInfo(notificationId, progress, contentLength <= 0, fileName, totalRead, contentLength))
+                        setForeground(createForegroundInfo(notificationId, progress, contentLength <= 0, fileName, totalRead, contentLength, stableWorkerId))
                         lastUpdateTime = now
                     }
                 }
@@ -392,16 +399,18 @@ internal class DownloadWorker(
         title: String,
         totalRead: Long,
         contentLength: Long,
+        stableWorkerId: String,
     ): ForegroundInfo {
         val sizeText = buildSizeText(totalRead, contentLength)
         // タップ時にダウンロード管理画面を開くPendingIntent
         val openDownloadsIntent = Intent(context, MainActivity::class.java).apply {
             action = ACTION_OPEN_DOWNLOADS
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_NEW_TASK
+            putExtra(EXTRA_WORKER_ID, stableWorkerId)
         }
         val pendingIntent = PendingIntent.getActivity(
             context,
-            0,
+            notificationId,
             openDownloadsIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
@@ -443,6 +452,12 @@ internal class DownloadWorker(
 
         /** ダウンロード管理画面を開くためのActionキー */
         const val ACTION_OPEN_DOWNLOADS = "net.matsudamper.browser.ACTION_OPEN_DOWNLOADS"
+
+        /** 通知タップ時にハイライト対象のダウンロードを特定するためのExtra */
+        const val EXTRA_WORKER_ID = "net.matsudamper.browser.EXTRA_WORKER_ID"
+
+        /** 再開時にも安定した workerId を Worker 内で参照するための InputData キー */
+        const val KEY_STABLE_WORKER_ID = "stable_worker_id"
 
         /**
          * バイト数を適切な単位（B/KB/MB）の文字列に変換する。
