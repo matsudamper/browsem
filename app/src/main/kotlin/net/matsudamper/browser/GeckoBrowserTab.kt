@@ -292,13 +292,19 @@ internal fun GeckoBrowserTab(
         gecko.setSession(session)
         session.setActive(true)
         surfaceResumeState = SurfaceResumeState.ACTIVE
-        // compositor 障害時のフォールバック: 一定時間経っても描画が始まらなければ
-        // stop + reload で強制リカバリー。
+        // onFirstComposite はキャッシュ済みの古いフレームでも発火し renderReady を
+        // true にしてしまうため、renderReady ではリカバリーの要否を判定できない。
+        // capturePreviewRequestCount は onFirstContentfulPaint と onPageStop でのみ
+        // インクリメントされるため、コンテンツプロセスが実際に新しい描画を行ったかを
+        // 正確に検出できる。
+        val captureCountAtAttach = state.capturePreviewRequestCount
         val recoveryRunnable = Runnable {
-            if (!state.renderReady && surfaceResumeState == SurfaceResumeState.ACTIVE) {
+            if (surfaceResumeState == SurfaceResumeState.ACTIVE &&
+                state.capturePreviewRequestCount == captureCountAtAttach
+            ) {
                 Log.w(
                     TAG_SURFACE_RESUME,
-                    "renderReady が復帰後 ${RENDER_RECOVERY_TIMEOUT_MS}ms 経過しても false" +
+                    "コンテンツ描画が復帰後 ${RENDER_RECOVERY_TIMEOUT_MS}ms 経過しても検出されず" +
                         " → stop + reload を試行 session=${session.logKey()}",
                 )
                 session.stop()
