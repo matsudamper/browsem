@@ -314,6 +314,14 @@ internal fun GeckoBrowserTab(
     }
 
     fun attachSessionAfterStableSize(gecko: GeckoView) {
+        if (!session.isOpen) {
+            val url = state.currentPageUrl
+            Log.w(
+                TAG_SURFACE_RESUME,
+                "attachSessionAfterStableSize: session closed, re-opening session=${session.logKey()} url=$url",
+            )
+            browserSessionLifecycleController.restoreSession(browserTab)
+        }
         gecko.setSession(session)
         session.setActive(true)
         surfaceResumeState = SurfaceResumeState.ACTIVE
@@ -940,8 +948,14 @@ internal fun GeckoBrowserTab(
             confirmButton = {
                 TextButton(onClick = {
                     renderRecoveryDebugInfo = null
-                    session.stop()
-                    session.reload()
+                    if (!session.isOpen) {
+                        browserSessionLifecycleController.restoreSession(browserTab)
+                        val url = state.currentPageUrl.ifBlank { "about:blank" }
+                        session.loadUri(url)
+                    } else {
+                        session.stop()
+                        session.reload()
+                    }
                 }) {
                     Text("リロード")
                 }
