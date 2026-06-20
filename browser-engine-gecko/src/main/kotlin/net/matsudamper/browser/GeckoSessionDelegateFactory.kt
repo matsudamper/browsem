@@ -46,6 +46,7 @@ interface BrowserSessionStateCallbacks {
         uri: String?,
         onResult: (allow: Boolean) -> Unit,
     )
+    fun onFullScreen(fullScreen: Boolean)
 }
 
 /** タブ内ナビゲーション履歴の項目 */
@@ -251,6 +252,10 @@ fun createGeckoSessionDelegateBundle(
             override fun onWebAppManifest(session: GeckoSession, manifest: JSONObject) {
                 callbacks.onWebAppManifest(manifest)
             }
+
+            override fun onFullScreen(session: GeckoSession, fullScreen: Boolean) {
+                callbacks.onFullScreen(fullScreen)
+            }
         },
         progressDelegate = object : GeckoSession.ProgressDelegate {
             override fun onSessionStateChange(
@@ -328,6 +333,7 @@ internal class BrowserTabSessionDelegateHost(
     // UI未接続中に届いた manifest を失わないようにキャッシュする。
     // onPageStart でクリアし、attachUi 時にリプレイする。
     private var cachedWebAppManifest: JSONObject? = null
+    private var cachedFullScreen: Boolean = false
 
     private val delegateBundle = createGeckoSessionDelegateBundle(
         callbacks = object : BrowserSessionStateCallbacks {
@@ -476,6 +482,11 @@ internal class BrowserTabSessionDelegateHost(
                     onResult(false)
                 }
             }
+
+            override fun onFullScreen(fullScreen: Boolean) {
+                synchronized(lock) { cachedFullScreen = fullScreen }
+                currentCallbacks()?.onFullScreen(fullScreen)
+            }
         },
         browserTab = browserTab,
         onOpenNewSessionRequest = { uri ->
@@ -526,6 +537,7 @@ internal class BrowserTabSessionDelegateHost(
         val historyItems: List<HistoryStateItem>
         val historyCurrentIndex: Int
         val webAppManifest: JSONObject?
+        val fullScreen: Boolean
         synchronized(lock) {
             this.callbacks = callbacks
             this.onOpenNewSessionRequest = onOpenNewSessionRequest
@@ -535,6 +547,7 @@ internal class BrowserTabSessionDelegateHost(
             historyItems = cachedHistoryItems
             historyCurrentIndex = cachedHistoryCurrentIndex
             webAppManifest = cachedWebAppManifest
+            fullScreen = cachedFullScreen
         }
         // GeckoSession はナビゲーション状態が変わらない限り onCanGoBack/onCanGoForward を再発火しないため、
         // キャッシュ済みの値をリプレイして UI 側の状態を同期する
@@ -547,6 +560,9 @@ internal class BrowserTabSessionDelegateHost(
         // UI未接続中に届いた manifest もリプレイして Add to Home で利用できるようにする
         if (webAppManifest != null) {
             callbacks.onWebAppManifest(webAppManifest)
+        }
+        if (fullScreen) {
+            callbacks.onFullScreen(true)
         }
         flushPendingRequests()
     }
