@@ -58,6 +58,20 @@ class BrowserSessionLifecycleController(
     private var activeExtensionSession: GeckoSession? = null
 
     /**
+     * セッションを強制的に閉じて再オープンする。
+     * compositor が壊れて灰色画面になるケースで、reload() では復旧しないため
+     * セッション自体をリセットする必要がある場合に使う。
+     */
+    fun forceReopenSession(tab: BrowserTab) {
+        if (tab.session.isOpen) {
+            tab.session.close()
+        }
+        tab.session.open(geckoRuntime)
+        tab.session.setActive(true)
+        markActiveForExtensions(tab.session)
+    }
+
+    /**
      * タブを前面表示して利用可能にする直前に呼ぶ。
      *
      * 主な利用タイミング:

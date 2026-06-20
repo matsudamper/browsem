@@ -5,6 +5,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
 import android.net.Uri
 import android.os.SystemClock
 import android.util.Log
@@ -73,10 +74,13 @@ import androidx.core.view.WindowCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import kotlin.coroutines.resume
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import net.matsudamper.browser.data.TranslationProvider
 import net.matsudamper.browser.media.GeckoMediaSessionDelegate
 import net.matsudamper.browser.media.MediaWebExtension
@@ -196,6 +200,8 @@ internal fun GeckoBrowserTab(
     var imeWasVisibleDuringUrlFocus by remember { mutableStateOf(false) }
     var urlBarFocusStartedAtMs by remember { mutableLongStateOf(0L) }
     var geckoView: GeckoView? by remember { mutableStateOf(null) }
+    // forceReopenSession 後にすべての DisposableEffect を再実行させるためのカウンタ
+    var sessionResetCount by remember { mutableIntStateOf(0) }
     // Surface と Session の復元状態を一元管理する state machine。
     // ON_START / ON_RESUME が重複発火しても state=ACTIVE なら即 no-op にする。
     var surfaceResumeState by remember(session) { mutableStateOf(SurfaceResumeState.ACTIVE) }
@@ -294,7 +300,8 @@ internal fun GeckoBrowserTab(
     var lastPauseMs by remember { mutableLongStateOf(0L) }
     var lastResumeMs by remember { mutableLongStateOf(0L) }
     var captureCountAtResume by remember { mutableIntStateOf(0) }
-    var pendingReloadAfterSurfaceReset by remember { mutableStateOf(false) }
+    var pendingForceReloadUrl by remember { mutableStateOf<String?>(null) }
+    var freezeCheckNeeded by remember { mutableStateOf(false) }
 
     fun collectRenderDebugInfo(): RenderRecoveryDebugInfo {
         val gv = geckoView
@@ -315,20 +322,35 @@ internal fun GeckoBrowserTab(
         )
     }
 
-    // 描画復帰の自動検知: resume 後に一定時間 renderReady が false のままなら
-    // compositor が起動していないと判断してデバッグダイアログを表示する。
-    // renderReady は onRenderReady (compositor の最初のフレーム) で true になるため、
-    // 正常な復帰では数百ms以内に true になり発火しない。
-    LaunchedEffect(lastResumeMs) {
-        if (lastResumeMs == 0L) return@LaunchedEffect
+    // 描画復帰の自動検知: 長時間バックグラウンド後の復帰時にのみ発動する。
+    // 短いバックグラウンドでは誤検知を避けるためチェックしない。
+    // renderReady は stale フレームで true になることがあるため、
+    // 代わりに GeckoView.capturePixels() でスクリーンが均一色（灰色等）かを判定する。
+    LaunchedEffect(freezeCheckNeeded, lastResumeMs) {
+        if (!freezeCheckNeeded) return@LaunchedEffect
         delay(RENDER_RECOVERY_TIMEOUT_MS)
-        if (!state.renderReady && renderRecoveryDebugInfo == null) {
-            Log.w(
-                TAG_SURFACE_RESUME,
-                "auto-detect: renderReady still false after ${RENDER_RECOVERY_TIMEOUT_MS}ms" +
-                    " session=${session.logKey()} sessionOpen=${session.isOpen}",
-            )
-            renderRecoveryDebugInfo = collectRenderDebugInfo()
+        if (renderRecoveryDebugInfo != null) {
+            freezeCheckNeeded = false
+            return@LaunchedEffect
+        }
+        val gv = geckoView
+        if (gv == null) {
+            freezeCheckNeeded = false
+            return@LaunchedEffect
+        }
+        val bitmap = captureGeckoPixels(gv)
+        freezeCheckNeeded = false
+        if (bitmap != null) {
+            val isUniform = isBitmapUniform(bitmap)
+            bitmap.recycle()
+            if (isUniform) {
+                Log.w(
+                    TAG_SURFACE_RESUME,
+                    "auto-detect: 長時間バックグラウンド後にスクリーンが均一色を検出" +
+                        " session=${session.logKey()} sessionOpen=${session.isOpen}",
+                )
+                renderRecoveryDebugInfo = collectRenderDebugInfo()
+            }
         }
     }
 
@@ -346,10 +368,15 @@ internal fun GeckoBrowserTab(
         surfaceResumeState = SurfaceResumeState.ACTIVE
         captureCountAtResume = state.capturePreviewRequestCount
         lastResumeMs = SystemClock.elapsedRealtime()
-        if (pendingReloadAfterSurfaceReset) {
-            pendingReloadAfterSurfaceReset = false
-            session.stop()
-            session.reload()
+        val reloadUrl = pendingForceReloadUrl
+        if (reloadUrl != null) {
+            pendingForceReloadUrl = null
+            session.loadUri(reloadUrl)
+        }
+        // 長時間バックグラウンドからの復帰時にフリーズ検知をスケジュール
+        val backgroundDurationMs = if (lastPauseMs > 0) SystemClock.elapsedRealtime() - lastPauseMs else 0L
+        if (backgroundDurationMs >= LONG_BACKGROUND_THRESHOLD_MS) {
+            freezeCheckNeeded = true
         }
     }
 
@@ -449,7 +476,7 @@ internal fun GeckoBrowserTab(
         )
     }
 
-    DisposableEffect(lifecycleOwner, session, resumeCoverColor) {
+    DisposableEffect(lifecycleOwner, session, resumeCoverColor, sessionResetCount) {
         val observer = LifecycleEventObserver { _, event ->
             val gv = geckoView
             Log.d(
@@ -510,7 +537,7 @@ internal fun GeckoBrowserTab(
     }
 
     // theme-color WebExtensionのコールバック登録
-    DisposableEffect(session, state, themeColorExtension) {
+    DisposableEffect(session, state, themeColorExtension, sessionResetCount) {
         themeColorExtension.registerSession(session) { color, reportedUrl ->
             if (!isThemeColorForCurrentPage(state.currentPageUrl, reportedUrl)) {
                 return@registerSession
@@ -522,7 +549,7 @@ internal fun GeckoBrowserTab(
         }
     }
 
-    DisposableEffect(session, mediaWebExtension) {
+    DisposableEffect(session, mediaWebExtension, sessionResetCount) {
         mediaWebExtension.registerSession(session, browserTab.tabId)
         onDispose {
             mediaWebExtension.unregisterSession(session)
@@ -530,7 +557,7 @@ internal fun GeckoBrowserTab(
     }
 
     val mockLocationWebExtension: MockLocationWebExtension = koinInject()
-    DisposableEffect(session, state, mockLocationWebExtension) {
+    DisposableEffect(session, state, mockLocationWebExtension, sessionResetCount) {
         // iframe からの位置情報要求をトップレベルサイトの設定で制御するため、現在ページ URL を渡す
         mockLocationWebExtension.registerSession(session) { state.currentPageUrl }
         onDispose {
@@ -539,7 +566,7 @@ internal fun GeckoBrowserTab(
     }
 
     val viewportScaleWebExtension: ViewportScaleWebExtension = koinInject()
-    DisposableEffect(session, state, viewportScaleWebExtension) {
+    DisposableEffect(session, state, viewportScaleWebExtension, sessionResetCount) {
         viewportScaleWebExtension.registerSession(session) { scale ->
             state.visualViewportScale = scale
         }
@@ -549,7 +576,7 @@ internal fun GeckoBrowserTab(
     }
 
     // FindInPageWebExtension のセッション登録
-    DisposableEffect(session, state, findInPageWebExtension) {
+    DisposableEffect(session, state, findInPageWebExtension, sessionResetCount) {
         findInPageWebExtension.registerSession(session) { current, total, error ->
             // 正規表現モードでないときに届いた遅延結果は無視する
             if (!state.findIsRegex) return@registerSession
@@ -562,7 +589,7 @@ internal fun GeckoBrowserTab(
         }
     }
 
-    DisposableEffect(session, state, browserTab, mediaWebExtension) {
+    DisposableEffect(session, state, browserTab, mediaWebExtension, sessionResetCount) {
         browserTab.attachSessionCallbacks(
             callbacks = state,
             onOpenNewSessionRequest = { uri ->
@@ -623,7 +650,7 @@ internal fun GeckoBrowserTab(
     }
 
     // テキスト選択メニューにカスタムアクション（検索/開く）を追加
-    DisposableEffect(session, enableTabUi, searchTemplate) {
+    DisposableEffect(session, enableTabUi, searchTemplate, sessionResetCount) {
         val activity = context as Activity
         val delegate = object : BasicSelectionActionDelegate(activity) {
             override fun onCreateActionMode(mode: ActionMode, menu: Menu): Boolean {
@@ -972,24 +999,23 @@ internal fun GeckoBrowserTab(
             confirmButton = {
                 TextButton(onClick = {
                     renderRecoveryDebugInfo = null
+                    val url = state.currentPageUrl.ifBlank { "about:blank" }
                     val gv = geckoView
                     if (gv != null) {
-                        // Surface を完全リセットして描画パイプラインを再構築する。
-                        // sessionOpen=true でも compositor が壊れて灰色画面になるケースに対応。
+                        // セッションを強制再オープンして壊れた compositor をリセットする
                         session.setActive(false)
                         gv.releaseSession()
                         gv.visibility = View.INVISIBLE
                         state.renderReady = false
                         surfaceResumeState = SurfaceResumeState.RELEASED
-                        pendingReloadAfterSurfaceReset = true
+                        browserSessionLifecycleController.forceReopenSession(browserTab)
+                        sessionResetCount++
+                        pendingForceReloadUrl = url
                         restoreSurfaceIfNeeded(gv)
-                    } else if (!session.isOpen) {
-                        browserSessionLifecycleController.restoreSession(browserTab)
-                        val url = state.currentPageUrl.ifBlank { "about:blank" }
-                        session.loadUri(url)
                     } else {
-                        session.stop()
-                        session.reload()
+                        browserSessionLifecycleController.forceReopenSession(browserTab)
+                        sessionResetCount++
+                        session.loadUri(url)
                     }
                 }) {
                     Text("リロード")
@@ -1141,10 +1167,16 @@ private const val STABLE_FRAMES_THRESHOLD = 3
 private const val STABLE_TIMEOUT_MS = 1000L
 
 /**
- * resume 後 renderReady が false のまま経過した場合にダイアログを表示するまでの時間。
- * 正常な復帰では onRenderReady が数百ms以内に呼ばれるため、5秒で十分な余裕がある。
+ * resume 後にフリーズ検知のピクセルチェックを行うまでの待機時間。
+ * compositor が正常に復帰するための十分な余裕を持たせる。
  */
 private const val RENDER_RECOVERY_TIMEOUT_MS = 5000L
+
+/**
+ * フリーズ検知を行うバックグラウンド滞在時間の閾値。
+ * これより短いバックグラウンドでは誤検知を避けるためチェックしない。
+ */
+private const val LONG_BACKGROUND_THRESHOLD_MS = 30_000L
 
 private data class RenderRecoveryDebugInfo(
     val sessionKey: String,
@@ -1227,6 +1259,38 @@ private class GetMultipleContentsWithMimeTypes : ActivityResultContract<Array<St
             listOfNotNull(intent.data)
         }
     }
+}
+
+private suspend fun captureGeckoPixels(gv: GeckoView): Bitmap? {
+    return try {
+        withTimeoutOrNull(3000L) {
+            suspendCancellableCoroutine { cont ->
+                gv.capturePixels().then({ bitmap ->
+                    cont.resume(bitmap)
+                    GeckoResult<Void>()
+                }, { _ ->
+                    cont.resume(null)
+                    GeckoResult<Void>()
+                })
+            }
+        }
+    } catch (_: Exception) {
+        null
+    }
+}
+
+private fun isBitmapUniform(bitmap: Bitmap): Boolean {
+    val width = bitmap.width
+    val height = bitmap.height
+    if (width == 0 || height == 0) return true
+    val referencePixel = bitmap.getPixel(width / 2, height / 2)
+    val sampleCount = 20
+    for (i in 0 until sampleCount) {
+        val x = (width * (i + 1)) / (sampleCount + 1)
+        val y = (height * (i + 1)) / (sampleCount + 1)
+        if (bitmap.getPixel(x, y) != referencePixel) return false
+    }
+    return true
 }
 
 /** MIME タイプを Intent に適用する共通関数 */
