@@ -301,7 +301,6 @@ internal fun GeckoBrowserTab(
     var lastResumeMs by remember { mutableLongStateOf(0L) }
     var captureCountAtResume by remember { mutableIntStateOf(0) }
     var pendingForceReloadUrl by remember { mutableStateOf<String?>(null) }
-    var freezeCheckNeeded by remember { mutableStateOf(false) }
 
     fun collectRenderDebugInfo(): RenderRecoveryDebugInfo {
         val gv = geckoView
@@ -322,35 +321,33 @@ internal fun GeckoBrowserTab(
         )
     }
 
-    // 描画復帰の自動検知: 長時間バックグラウンド後の復帰時にのみ発動する。
-    // 短いバックグラウンドでは誤検知を避けるためチェックしない。
-    // renderReady は stale フレームで true になることがあるため、
-    // 代わりに GeckoView.capturePixels() でスクリーンが均一色（灰色等）かを判定する。
-    LaunchedEffect(freezeCheckNeeded, lastResumeMs) {
-        if (!freezeCheckNeeded) return@LaunchedEffect
+    // 描画復帰の自動検知: 毎回の resume 後にフリーズを検知する。
+    // 1) surface が復元完了していない（ACTIVE でない）→ 復元処理が詰まっている
+    // 2) GeckoView.capturePixels() でスクリーンが均一色 → compositor が壊れて灰色画面
+    LaunchedEffect(lastResumeMs) {
+        if (lastResumeMs == 0L) return@LaunchedEffect
         delay(RENDER_RECOVERY_TIMEOUT_MS)
-        if (renderRecoveryDebugInfo != null) {
-            freezeCheckNeeded = false
+        if (renderRecoveryDebugInfo != null) return@LaunchedEffect
+        if (surfaceResumeState != SurfaceResumeState.ACTIVE) {
+            Log.w(
+                TAG_SURFACE_RESUME,
+                "auto-detect: surface が復元されていない state=$surfaceResumeState" +
+                    " session=${session.logKey()} sessionOpen=${session.isOpen}",
+            )
+            renderRecoveryDebugInfo = collectRenderDebugInfo()
             return@LaunchedEffect
         }
-        val gv = geckoView
-        if (gv == null) {
-            freezeCheckNeeded = false
-            return@LaunchedEffect
-        }
-        val bitmap = captureGeckoPixels(gv)
-        freezeCheckNeeded = false
-        if (bitmap != null) {
-            val isUniform = isBitmapUniform(bitmap)
-            bitmap.recycle()
-            if (isUniform) {
-                Log.w(
-                    TAG_SURFACE_RESUME,
-                    "auto-detect: 長時間バックグラウンド後にスクリーンが均一色を検出" +
-                        " session=${session.logKey()} sessionOpen=${session.isOpen}",
-                )
-                renderRecoveryDebugInfo = collectRenderDebugInfo()
-            }
+        val gv = geckoView ?: return@LaunchedEffect
+        val bitmap = captureGeckoPixels(gv) ?: return@LaunchedEffect
+        val isUniform = isBitmapUniform(bitmap)
+        bitmap.recycle()
+        if (isUniform) {
+            Log.w(
+                TAG_SURFACE_RESUME,
+                "auto-detect: スクリーンが均一色を検出" +
+                    " session=${session.logKey()} sessionOpen=${session.isOpen}",
+            )
+            renderRecoveryDebugInfo = collectRenderDebugInfo()
         }
     }
 
@@ -372,11 +369,6 @@ internal fun GeckoBrowserTab(
         if (reloadUrl != null) {
             pendingForceReloadUrl = null
             session.loadUri(reloadUrl)
-        }
-        // 長時間バックグラウンドからの復帰時にフリーズ検知をスケジュール
-        val backgroundDurationMs = if (lastPauseMs > 0) SystemClock.elapsedRealtime() - lastPauseMs else 0L
-        if (backgroundDurationMs >= LONG_BACKGROUND_THRESHOLD_MS) {
-            freezeCheckNeeded = true
         }
     }
 
@@ -1171,12 +1163,6 @@ private const val STABLE_TIMEOUT_MS = 1000L
  * compositor が正常に復帰するための十分な余裕を持たせる。
  */
 private const val RENDER_RECOVERY_TIMEOUT_MS = 5000L
-
-/**
- * フリーズ検知を行うバックグラウンド滞在時間の閾値。
- * これより短いバックグラウンドでは誤検知を避けるためチェックしない。
- */
-private const val LONG_BACKGROUND_THRESHOLD_MS = 30_000L
 
 private data class RenderRecoveryDebugInfo(
     val sessionKey: String,
