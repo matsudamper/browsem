@@ -297,10 +297,10 @@ internal fun GeckoBrowserTab(
     //
     // local function は前方参照不可なので attach → schedule → restore の順で定義する。
     // ライフサイクルのタイミングとカウンタをデバッグ情報用に記録する。
-    var lastPauseMs by remember { mutableLongStateOf(0L) }
-    var lastResumeMs by remember { mutableLongStateOf(0L) }
-    var captureCountAtResume by remember { mutableIntStateOf(0) }
-    var pendingForceReloadUrl by remember { mutableStateOf<String?>(null) }
+    var lastPauseMs by remember(session) { mutableLongStateOf(0L) }
+    var lastResumeMs by remember(session) { mutableLongStateOf(0L) }
+    var captureCountAtResume by remember(session) { mutableIntStateOf(0) }
+    var pendingForceReloadUrl by remember(session) { mutableStateOf<String?>(null) }
 
     fun collectRenderDebugInfo(): RenderRecoveryDebugInfo {
         val gv = geckoView
