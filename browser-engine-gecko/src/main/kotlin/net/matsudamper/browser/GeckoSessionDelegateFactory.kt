@@ -561,9 +561,7 @@ internal class BrowserTabSessionDelegateHost(
         if (webAppManifest != null) {
             callbacks.onWebAppManifest(webAppManifest)
         }
-        if (fullScreen) {
-            callbacks.onFullScreen(true)
-        }
+        callbacks.onFullScreen(fullScreen)
         flushPendingRequests()
     }
 
