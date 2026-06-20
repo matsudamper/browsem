@@ -293,6 +293,7 @@ internal fun GeckoBrowserTab(
     var lastPauseMs by remember { mutableLongStateOf(0L) }
     var lastResumeMs by remember { mutableLongStateOf(0L) }
     var captureCountAtResume by remember { mutableIntStateOf(0) }
+    var pendingReloadAfterSurfaceReset by remember { mutableStateOf(false) }
 
     fun collectRenderDebugInfo(): RenderRecoveryDebugInfo {
         val gv = geckoView
@@ -327,6 +328,11 @@ internal fun GeckoBrowserTab(
         surfaceResumeState = SurfaceResumeState.ACTIVE
         captureCountAtResume = state.capturePreviewRequestCount
         lastResumeMs = SystemClock.elapsedRealtime()
+        if (pendingReloadAfterSurfaceReset) {
+            pendingReloadAfterSurfaceReset = false
+            session.stop()
+            session.reload()
+        }
     }
 
     fun scheduleStableSizeAttach(
@@ -948,7 +954,18 @@ internal fun GeckoBrowserTab(
             confirmButton = {
                 TextButton(onClick = {
                     renderRecoveryDebugInfo = null
-                    if (!session.isOpen) {
+                    val gv = geckoView
+                    if (gv != null) {
+                        // Surface を完全リセットして描画パイプラインを再構築する。
+                        // sessionOpen=true でも compositor が壊れて灰色画面になるケースに対応。
+                        session.setActive(false)
+                        gv.releaseSession()
+                        gv.visibility = View.INVISIBLE
+                        state.renderReady = false
+                        surfaceResumeState = SurfaceResumeState.RELEASED
+                        pendingReloadAfterSurfaceReset = true
+                        restoreSurfaceIfNeeded(gv)
+                    } else if (!session.isOpen) {
                         browserSessionLifecycleController.restoreSession(browserTab)
                         val url = state.currentPageUrl.ifBlank { "about:blank" }
                         session.loadUri(url)
