@@ -5,7 +5,6 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
-import android.graphics.Bitmap
 import android.net.Uri
 import android.os.SystemClock
 import android.util.Log
@@ -74,13 +73,11 @@ import androidx.core.view.WindowCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import kotlin.coroutines.resume
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
 import net.matsudamper.browser.data.TranslationProvider
 import net.matsudamper.browser.media.GeckoMediaSessionDelegate
 import net.matsudamper.browser.media.MediaWebExtension
@@ -301,8 +298,10 @@ internal fun GeckoBrowserTab(
     var lastResumeMs by remember(session) { mutableLongStateOf(0L) }
     var captureCountAtResume by remember(session) { mutableIntStateOf(0) }
     var pendingForceReloadUrl by remember(session) { mutableStateOf<String?>(null) }
+    // resume 後に renderReady が true になるまでの時間 (-1 = まだ false)
+    var renderReadyDelayMs by remember(session) { mutableLongStateOf(-1L) }
 
-    fun collectRenderDebugInfo(): RenderRecoveryDebugInfo {
+    fun collectRenderDebugInfo(autoDetectReason: String? = null): RenderRecoveryDebugInfo {
         val gv = geckoView
         val now = SystemClock.elapsedRealtime()
         return RenderRecoveryDebugInfo(
@@ -318,36 +317,41 @@ internal fun GeckoBrowserTab(
             msSinceLastPause = if (lastPauseMs > 0) now - lastPauseMs else -1,
             msSinceLastResume = if (lastResumeMs > 0) now - lastResumeMs else -1,
             mediaKeep = mediaWebExtension.shouldKeepSessionAttached(session),
+            renderReadyDelayMs = renderReadyDelayMs,
+            autoDetectReason = autoDetectReason,
         )
     }
 
-    // 描画復帰の自動検知: 毎回の resume 後にフリーズを検知する。
+    // resume 後に renderReady が true になるタイミングを計測する。
+    // onFirstComposite (= onRenderReady) のタイミングで true になるため、
+    // compositor が正常に起動したかの指標になる。
+    LaunchedEffect(lastResumeMs) {
+        if (lastResumeMs == 0L) return@LaunchedEffect
+        renderReadyDelayMs = -1L
+        snapshotFlow { state.renderReady }.first { it }
+        renderReadyDelayMs = SystemClock.elapsedRealtime() - lastResumeMs
+    }
+
+    // 描画復帰の自動検知: 毎回の resume 後に GeckoView の状態をチェックする。
     // 1) surface が復元完了していない（ACTIVE でない）→ 復元処理が詰まっている
-    // 2) GeckoView.capturePixels() でスクリーンが均一色 → compositor が壊れて灰色画面
+    // 2) renderReady が false のまま → onFirstComposite が発火しておらず compositor が起動していない
     LaunchedEffect(lastResumeMs) {
         if (lastResumeMs == 0L) return@LaunchedEffect
         delay(RENDER_RECOVERY_TIMEOUT_MS)
         if (renderRecoveryDebugInfo != null) return@LaunchedEffect
-        if (surfaceResumeState != SurfaceResumeState.ACTIVE) {
-            Log.w(
-                TAG_SURFACE_RESUME,
-                "auto-detect: surface が復元されていない state=$surfaceResumeState" +
-                    " session=${session.logKey()} sessionOpen=${session.isOpen}",
-            )
-            renderRecoveryDebugInfo = collectRenderDebugInfo()
-            return@LaunchedEffect
+        val reason = when {
+            surfaceResumeState != SurfaceResumeState.ACTIVE ->
+                "surfaceNotRestored(state=$surfaceResumeState)"
+            !state.renderReady ->
+                "renderNotReady(onFirstComposite未発火)"
+            else -> null
         }
-        val gv = geckoView ?: return@LaunchedEffect
-        val bitmap = captureGeckoPixels(gv) ?: return@LaunchedEffect
-        val isUniform = isBitmapUniform(bitmap)
-        bitmap.recycle()
-        if (isUniform) {
+        if (reason != null) {
             Log.w(
                 TAG_SURFACE_RESUME,
-                "auto-detect: スクリーンが均一色を検出" +
-                    " session=${session.logKey()} sessionOpen=${session.isOpen}",
+                "auto-detect: $reason session=${session.logKey()} sessionOpen=${session.isOpen}",
             )
-            renderRecoveryDebugInfo = collectRenderDebugInfo()
+            renderRecoveryDebugInfo = collectRenderDebugInfo(autoDetectReason = reason)
         }
     }
 
@@ -1159,8 +1163,9 @@ private const val STABLE_FRAMES_THRESHOLD = 3
 private const val STABLE_TIMEOUT_MS = 1000L
 
 /**
- * resume 後にフリーズ検知のピクセルチェックを行うまでの待機時間。
- * compositor が正常に復帰するための十分な余裕を持たせる。
+ * resume 後にフリーズ検知チェックを行うまでの待機時間。
+ * onFirstComposite (compositor の最初のフレーム) は正常復帰で数百ms以内に発火するため、
+ * 5秒は十分な余裕がある。
  */
 private const val RENDER_RECOVERY_TIMEOUT_MS = 5000L
 
@@ -1177,11 +1182,14 @@ private data class RenderRecoveryDebugInfo(
     val msSinceLastPause: Long,
     val msSinceLastResume: Long,
     val mediaKeep: Boolean,
+    val renderReadyDelayMs: Long,
+    val autoDetectReason: String?,
 ) {
     fun toDebugString(): String = buildString {
         appendLine("sessionKey=$sessionKey")
         appendLine("sessionOpen=$sessionOpen")
         appendLine("renderReady=$renderReady")
+        appendLine("renderReadyDelayMs=$renderReadyDelayMs")
         appendLine("captureCountAtResume=$captureCountAtResume")
         appendLine("captureCountNow=$captureCountNow")
         appendLine("surfaceResumeState=$surfaceResumeState")
@@ -1191,6 +1199,9 @@ private data class RenderRecoveryDebugInfo(
         appendLine("msSinceLastPause=$msSinceLastPause")
         appendLine("msSinceLastResume=$msSinceLastResume")
         appendLine("mediaKeep=$mediaKeep")
+        if (autoDetectReason != null) {
+            appendLine("autoDetectReason=$autoDetectReason")
+        }
     }
 }
 
@@ -1245,38 +1256,6 @@ private class GetMultipleContentsWithMimeTypes : ActivityResultContract<Array<St
             listOfNotNull(intent.data)
         }
     }
-}
-
-private suspend fun captureGeckoPixels(gv: GeckoView): Bitmap? {
-    return try {
-        withTimeoutOrNull(3000L) {
-            suspendCancellableCoroutine { cont ->
-                gv.capturePixels().then({ bitmap ->
-                    cont.resume(bitmap)
-                    GeckoResult<Void>()
-                }, { _ ->
-                    cont.resume(null)
-                    GeckoResult<Void>()
-                })
-            }
-        }
-    } catch (_: Exception) {
-        null
-    }
-}
-
-private fun isBitmapUniform(bitmap: Bitmap): Boolean {
-    val width = bitmap.width
-    val height = bitmap.height
-    if (width == 0 || height == 0) return true
-    val referencePixel = bitmap.getPixel(width / 2, height / 2)
-    val sampleCount = 20
-    for (i in 0 until sampleCount) {
-        val x = (width * (i + 1)) / (sampleCount + 1)
-        val y = (height * (i + 1)) / (sampleCount + 1)
-        if (bitmap.getPixel(x, y) != referencePixel) return false
-    }
-    return true
 }
 
 /** MIME タイプを Intent に適用する共通関数 */
