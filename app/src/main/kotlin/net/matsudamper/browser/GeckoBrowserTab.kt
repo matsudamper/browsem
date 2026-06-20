@@ -74,6 +74,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.withContext
 import net.matsudamper.browser.data.TranslationProvider
@@ -312,6 +313,23 @@ internal fun GeckoBrowserTab(
             msSinceLastResume = if (lastResumeMs > 0) now - lastResumeMs else -1,
             mediaKeep = mediaWebExtension.shouldKeepSessionAttached(session),
         )
+    }
+
+    // 描画復帰の自動検知: resume 後に一定時間 renderReady が false のままなら
+    // compositor が起動していないと判断してデバッグダイアログを表示する。
+    // renderReady は onRenderReady (compositor の最初のフレーム) で true になるため、
+    // 正常な復帰では数百ms以内に true になり発火しない。
+    LaunchedEffect(lastResumeMs) {
+        if (lastResumeMs == 0L) return@LaunchedEffect
+        delay(RENDER_RECOVERY_TIMEOUT_MS)
+        if (!state.renderReady && renderRecoveryDebugInfo == null) {
+            Log.w(
+                TAG_SURFACE_RESUME,
+                "auto-detect: renderReady still false after ${RENDER_RECOVERY_TIMEOUT_MS}ms" +
+                    " session=${session.logKey()} sessionOpen=${session.isOpen}",
+            )
+            renderRecoveryDebugInfo = collectRenderDebugInfo()
+        }
     }
 
     fun attachSessionAfterStableSize(gecko: GeckoView) {
@@ -1121,6 +1139,12 @@ private const val STABLE_FRAMES_THRESHOLD = 3
  * setSession する。Web 入力欄の表示遅延と GPU kill 防止のトレードオフ。
  */
 private const val STABLE_TIMEOUT_MS = 1000L
+
+/**
+ * resume 後 renderReady が false のまま経過した場合にダイアログを表示するまでの時間。
+ * 正常な復帰では onRenderReady が数百ms以内に呼ばれるため、5秒で十分な余裕がある。
+ */
+private const val RENDER_RECOVERY_TIMEOUT_MS = 5000L
 
 private data class RenderRecoveryDebugInfo(
     val sessionKey: String,
