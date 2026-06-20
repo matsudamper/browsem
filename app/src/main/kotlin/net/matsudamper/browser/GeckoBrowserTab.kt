@@ -885,13 +885,7 @@ internal fun GeckoBrowserTab(
         val id = rememberSaveable { View.generateViewId() }
         Box(
             modifier = Modifier
-                .then(
-                    if (state.isFullScreen) {
-                        Modifier.fillMaxSize()
-                    } else {
-                        Modifier.weight(1f)
-                    }
-                )
+                .weight(1f)
                 .testTag(GeckoBrowserTabTestTags.GeckoContainer.testTag),
         ) {
             BrowserContentHost(
