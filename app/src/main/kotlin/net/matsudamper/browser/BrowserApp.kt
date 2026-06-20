@@ -629,7 +629,10 @@ private fun BrowserAppContent(
                                     if (currentGroupId != null) {
                                         tabGroupRepository.assignTabToGroup(tabId, currentGroupId)
                                     }
-                                    val newTab = viewModel.createTabWithHomepage(tabId = tabId)
+                                    val newTab = viewModel.createTabWithHomepage(
+                                        tabId = tabId,
+                                        insertAfterSelectedTab = false,
+                                    )
                                     selectTab(newTab.tabId, null)
                                 }
                             },

@@ -205,10 +205,12 @@ internal class BrowserViewModel(
 
     suspend fun createTabWithHomepage(
         tabId: String,
+        insertAfterSelectedTab: Boolean = true,
     ): BrowserTab {
         return browserTabController.createAndAppendTab(
             tabId = tabId,
             initialUrl = currentHomepageUrl(),
+            insertAfterSelectedTab = insertAfterSelectedTab,
         )
     }
 
