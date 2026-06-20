@@ -201,7 +201,11 @@ class BrowserTabController(
         }
         return withContext(Dispatchers.Main) {
             val normalizedInitialUrl = initialUrl.ifBlank { "about:blank" }
-            val insertIndex = tabs.size
+            val insertIndex = TabInsertionPolicy.resolveInsertionIndex(
+                tabIds = tabs.map { it.tabId },
+                openerTabId = openerTabId,
+                selectedTabId = selectedTabId,
+            )
             val tab = createRegisteredTab(
                 tabId = tabId,
                 session = GeckoSession(),
