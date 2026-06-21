@@ -777,4 +777,8 @@ sealed interface TabsScreenTestTags {
     class DefaultGroupSwitch(index: Int) : TabsScreenTestTags {
         override val id: String = "default_group_switch_$index"
     }
+
+    class TabItem(index: Int) : TabsScreenTestTags {
+        override val id: String = "tab_item_$index"
+    }
 }

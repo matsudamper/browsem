@@ -15,7 +15,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -36,6 +36,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
@@ -180,10 +181,10 @@ internal fun GroupTabGrid(
             verticalArrangement = Arrangement.spacedBy(TabsLayoutDefaults.gridSpacing),
             horizontalArrangement = Arrangement.spacedBy(TabsLayoutDefaults.gridSpacing),
         ) {
-            items(
+            itemsIndexed(
                 items = tabs,
-                key = { tab -> tab.id },
-            ) { tab ->
+                key = { _, tab -> tab.id },
+            ) { index, tab ->
                 val selected = tab.id == selectedTabId
                 // ドラッグ中のアイテムはグリッド上で非表示（透明）にする
                 val isDraggingThis = dragDropState.draggedItemKey == tab.id
@@ -199,6 +200,7 @@ internal fun GroupTabGrid(
                     modifier = Modifier
                         .fillMaxWidth()
                         .aspectRatio(TabsLayoutDefaults.cardAspectRatio)
+                        .testTag(TabsScreenTestTags.TabItem(index).testTag)
                         .animateItem()
                         .then(if (isDraggingThis) Modifier.alpha(0f) else Modifier),
                 )
