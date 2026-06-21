@@ -289,6 +289,9 @@ internal class BrowserTabScreenState(
     // 外部アプリ確認ダイアログでキャンセルされた場合、次回のロードリクエストで外部アプリチェックをスキップする
     private var skipExternalAppCheckForNextLoad = false
 
+    // --- フルスクリーン状態 ---
+    var isFullScreen by mutableStateOf(false)
+
     var renderReady by mutableStateOf(false)
 
     // ページの初回描画・ロード完了の度にインクリメントされるカウンター。
@@ -1234,6 +1237,14 @@ internal class BrowserTabScreenState(
     ) {
         val lang = translationState?.detectedLanguages?.docLangTag ?: return
         detectedPageLanguage = lang
+    }
+
+    override fun onFullScreen(fullScreen: Boolean) {
+        isFullScreen = fullScreen
+    }
+
+    fun exitFullScreen() {
+        session.exitFullScreen()
     }
 
     override fun onScrollChanged(scrollY: Int) {
