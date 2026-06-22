@@ -5,10 +5,13 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import java.util.UUID
 
-enum class DownloadRecordStatus { ENQUEUED, RUNNING, SUCCEEDED, FAILED, CANCELLED }
+enum class DownloadRecordStatus { ENQUEUED, RUNNING, SUCCEEDED, FAILED, CANCELLED, PAUSED }
 
 data class DownloadRecord(
+    /** レコードの安定ID。再開してもこの値は変わらない */
     val workerId: UUID,
+    /** 現在のWorkManagerワーカーのID。再開のたびに更新される */
+    val currentWorkerId: UUID,
     val url: String,
     val fileName: String,
     val fileUri: String?,
@@ -18,7 +21,7 @@ data class DownloadRecord(
     val contentLength: Long,
     val enqueuedAt: Long,
     val referrerUrl: String,
-    /** 失敗時に保存した部分ファイルURI。非nullの場合は再開可能 */
+    /** 失敗・一時停止時に保存した部分ファイルURI。非nullの場合は再開可能 */
     val partialFileUri: String?,
 )
 
@@ -35,6 +38,7 @@ class DownloadRepository(context: Context) {
         dao.insertIgnoreConflict(
             DownloadEntity(
                 workerId = workerId,
+                currentWorkerId = workerId,
                 url = url,
                 fileName = "",
                 fileUri = null,
@@ -49,37 +53,41 @@ class DownloadRepository(context: Context) {
         )
     }
 
-    /** Worker 開始時に RUNNING 状態に遷移する。ENQUEUED レコードがあれば遷移、なければ新規挿入する */
+    /** Worker 開始時に RUNNING 状態に遷移する。レコードがあれば遷移、なければ新規挿入する */
     suspend fun insertDownload(workerId: String, url: String, referrerUrl: String, enqueuedAt: Long) {
-        // ENQUEUEDレコードがない場合に備えてRUNNINGで新規挿入（競合時は無視）
-        dao.insertIgnoreConflict(
-            DownloadEntity(
-                workerId = workerId,
-                url = url,
-                fileName = "",
-                fileUri = null,
-                status = DownloadRecordStatus.RUNNING.name,
-                progress = 0,
-                totalRead = 0L,
-                contentLength = -1L,
-                enqueuedAt = enqueuedAt,
-                referrerUrl = referrerUrl,
-                partialFileUri = null,
-            ),
-        )
+        // 再開時はエンキュー済みレコードが currentWorkerId で紐付いているため、
+        // 存在しない場合（エンキュー前にWorkerが起動したケース）のみ新規挿入する
+        if (dao.getByCurrentWorkerId(workerId) == null) {
+            dao.insertIgnoreConflict(
+                DownloadEntity(
+                    workerId = workerId,
+                    currentWorkerId = workerId,
+                    url = url,
+                    fileName = "",
+                    fileUri = null,
+                    status = DownloadRecordStatus.RUNNING.name,
+                    progress = 0,
+                    totalRead = 0L,
+                    contentLength = -1L,
+                    enqueuedAt = enqueuedAt,
+                    referrerUrl = referrerUrl,
+                    partialFileUri = null,
+                ),
+            )
+        }
         // ENQUEUEDからRUNNINGへの状態遷移（既にRUNNINGの場合は何もしない）
         dao.updateEnqueuedToRunning(workerId)
     }
 
     suspend fun updateProgress(
-        workerId: String,
+        currentWorkerId: String,
         fileName: String,
         progress: Int,
         totalRead: Long,
         contentLength: Long,
     ) {
         dao.updateProgress(
-            workerId = workerId,
+            currentWorkerId = currentWorkerId,
             fileName = fileName,
             progress = progress,
             totalRead = totalRead,
@@ -87,12 +95,12 @@ class DownloadRepository(context: Context) {
         )
     }
 
-    suspend fun updateCompleted(workerId: String, fileName: String, fileUri: String) {
-        dao.updateCompleted(workerId = workerId, fileName = fileName, fileUri = fileUri)
+    suspend fun updateCompleted(currentWorkerId: String, fileName: String, fileUri: String) {
+        dao.updateCompleted(currentWorkerId = currentWorkerId, fileName = fileName, fileUri = fileUri)
     }
 
-    suspend fun updateFailed(workerId: String) {
-        dao.updateFailed(workerId = workerId)
+    suspend fun updateFailed(currentWorkerId: String) {
+        dao.updateFailed(currentWorkerId = currentWorkerId)
     }
 
     /**
@@ -100,14 +108,14 @@ class DownloadRepository(context: Context) {
      * 再開可能なFAILEDレコードとして記録する
      */
     suspend fun updatePartialFailed(
-        workerId: String,
+        currentWorkerId: String,
         partialFileUri: String,
         fileName: String,
         totalRead: Long,
         contentLength: Long,
     ) {
         dao.updatePartialFailed(
-            workerId = workerId,
+            currentWorkerId = currentWorkerId,
             partialFileUri = partialFileUri,
             fileName = fileName,
             totalRead = totalRead,
@@ -116,17 +124,71 @@ class DownloadRepository(context: Context) {
     }
 
     /** SUCCEEDED/FAILED 以外の状態のときのみキャンセル状態に更新する */
-    suspend fun updateCancelled(workerId: String) {
-        dao.cancelIfActive(workerId)
+    suspend fun updateCancelled(currentWorkerId: String) {
+        dao.cancelIfActive(currentWorkerId)
     }
 
-    suspend fun get(workerId: UUID): DownloadEntity {
-        return dao.get(workerId = workerId.toString())
+    /** ENQUEUED/RUNNING のときのみ一時停止状態に更新する */
+    suspend fun updatePaused(currentWorkerId: String) {
+        dao.pauseIfActive(currentWorkerId)
     }
 
-    /** 指定したワーカーIDのレコードを削除する（再開時に古いレコードを削除するために使用） */
-    suspend fun deleteById(workerId: String) {
-        dao.deleteById(workerId)
+    /** 指定したワーカーのレコードが一時停止済みかどうかを返す */
+    suspend fun isPaused(currentWorkerId: String): Boolean {
+        return dao.getStatus(currentWorkerId) == DownloadRecordStatus.PAUSED.name
+    }
+
+    /**
+     * 一時停止時に部分ファイルURIを保存する。
+     * 再開可能なPAUSEDレコードとして記録する
+     */
+    suspend fun updatePausedPartial(
+        currentWorkerId: String,
+        partialFileUri: String,
+        fileName: String,
+        totalRead: Long,
+        contentLength: Long,
+    ) {
+        dao.updatePausedPartial(
+            currentWorkerId = currentWorkerId,
+            partialFileUri = partialFileUri,
+            fileName = fileName,
+            totalRead = totalRead,
+            contentLength = contentLength,
+        )
+    }
+
+    suspend fun isCancelled(currentWorkerId: String): Boolean {
+        return dao.getStatus(currentWorkerId) == DownloadRecordStatus.CANCELLED.name
+    }
+
+    /**
+     * 指定したワーカーのレコードがキャンセルまたは一時停止済みかどうかを返す。
+     * WorkManager の割り込みが取りこぼされた場合でも Worker が自力で停止できるよう、
+     * Worker の進捗更新時にポーリングして確認するために使用する
+     */
+    suspend fun isStopRequested(currentWorkerId: String): Boolean {
+        return dao.getStatus(currentWorkerId) in listOf(
+            DownloadRecordStatus.CANCELLED.name,
+            DownloadRecordStatus.PAUSED.name,
+        )
+    }
+
+    suspend fun getByCurrentWorkerId(currentWorkerId: UUID): DownloadEntity? {
+        return dao.getByCurrentWorkerId(currentWorkerId = currentWorkerId.toString())
+    }
+
+    /** 指定URLに一致するアクティブ（実行中・完了・一時停止中）なダウンロードを取得する */
+    suspend fun findActiveByUrl(url: String): List<DownloadRecord> {
+        return dao.findActiveByUrl(url).map { it.toRecord() }
+    }
+
+    /**
+     * 再開時に既存レコードを新しいワーカーIDへ付け替えてENQUEUEDに戻す。
+     * レコードを削除・再作成しないため、リスト上の位置とUIのアイテム同一性が維持される
+     */
+    suspend fun updateResumed(workerId: String, newWorkerId: String) {
+        dao.updateResumed(workerId = workerId, newWorkerId = newWorkerId)
     }
 
     private fun DownloadEntity.toRecord(): DownloadRecord {
@@ -137,6 +199,7 @@ class DownloadRepository(context: Context) {
         }
         return DownloadRecord(
             workerId = UUID.fromString(workerId),
+            currentWorkerId = UUID.fromString(currentWorkerId),
             url = url,
             fileName = fileName,
             fileUri = fileUri,

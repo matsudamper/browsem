@@ -17,9 +17,6 @@ interface TabDao {
     @Query("SELECT * FROM tab_state ORDER BY sortOrder ASC")
     fun observeAllTabs(): Flow<List<TabStateEntity>>
 
-    @Query("SELECT * FROM tab_state WHERE tabId = :tabId LIMIT 1")
-    suspend fun getTab(tabId: String): TabStateEntity?
-
     @Query("DELETE FROM tab_state WHERE tabId = :tabId")
     suspend fun deleteTab(tabId: String)
 
@@ -28,9 +25,6 @@ interface TabDao {
 
     @Query("UPDATE tab_state SET title = :title WHERE tabId = :tabId")
     suspend fun updateTitle(tabId: String, title: String)
-
-    @Query("UPDATE tab_state SET sessionState = :sessionState WHERE tabId = :tabId")
-    suspend fun updateSessionState(tabId: String, sessionState: String)
 
     @Query("UPDATE tab_state SET themeColor = :themeColor WHERE tabId = :tabId")
     suspend fun updateThemeColor(tabId: String, themeColor: Int?)

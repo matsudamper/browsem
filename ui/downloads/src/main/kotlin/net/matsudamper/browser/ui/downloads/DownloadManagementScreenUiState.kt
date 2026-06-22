@@ -1,10 +1,12 @@
 package net.matsudamper.browser.ui.downloads
 
 import androidx.compose.runtime.Stable
+import androidx.compose.ui.graphics.ImageBitmap
 import java.util.UUID
 
 @Stable
 data class DownloadManagementScreenUiState(
+    val isLoading: Boolean,
     val downloads: List<DownloadItem>,
     val callbacks: Callbacks,
 ) {
@@ -17,7 +19,12 @@ data class DownloadManagementScreenUiState(
             val isIndeterminate: Boolean,
         ) : DownloadStatus
 
-        data class Completed(val fileUri: String) : DownloadStatus
+        /**
+         * ダウンロード完了。
+         */
+        data class Completed(
+            val fileUri: String,
+        ) : DownloadStatus
 
         /**
          * ダウンロード失敗。
@@ -26,6 +33,15 @@ data class DownloadManagementScreenUiState(
         data class Failed(val canResume: Boolean) : DownloadStatus
 
         data object Cancelled : DownloadStatus
+
+        /**
+         * ダウンロード一時停止中。再開ボタンを表示する。
+         */
+        data class Paused(
+            val progress: Int,
+            val totalRead: Long,
+            val contentLength: Long,
+        ) : DownloadStatus
     }
 
     @Stable
@@ -34,14 +50,22 @@ data class DownloadManagementScreenUiState(
         val fileName: String,
         val status: DownloadStatus,
         val enqueuedAt: Long,
+        /** ダウンロード開始時に表示していたページのURL。不明な場合は null */
+        val originPageUrl: String?,
     )
 
     @Stable
     data class Callbacks(
         val onCancel: (UUID) -> Unit,
+        /** ダウンロード中のアイテムを一時停止する */
+        val onPause: (UUID) -> Unit,
         val onOpenFile: (fileUri: String) -> Unit,
         val onOpenDownloadsFolder: () -> Unit,
         /** 失敗したダウンロードを再開する */
         val onResume: (UUID) -> Unit,
+        /** ダウンロード開始時のページを新しいタブで開く */
+        val onOpenOriginPage: (url: String) -> Unit,
+        /** ファイル URI からサムネイルを読み込む。サムネイル非対応の場合は null を返す */
+        val loadThumbnail: suspend (fileUri: String) -> ImageBitmap?,
     )
 }

@@ -11,6 +11,9 @@ import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.MediaSession
 import org.mozilla.geckoview.WebExtension
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import java.util.Collections
 import java.util.WeakHashMap
 import java.util.concurrent.atomic.AtomicLong
@@ -34,6 +37,10 @@ class MediaWebExtension(
         Collections.synchronizedMap(WeakHashMap<GeckoSession, Long>())
     private val registeredSessions =
         Collections.synchronizedSet(Collections.newSetFromMap(WeakHashMap<GeckoSession, Boolean>()))
+    private val sessionTabIds =
+        Collections.synchronizedMap(WeakHashMap<GeckoSession, String>())
+    private val _playingTabIds = MutableStateFlow<Set<String>>(emptySet())
+    val playingTabIds: StateFlow<Set<String>> = _playingTabIds.asStateFlow()
     private val artworkRequestSerial = AtomicLong(0L)
     private val artworkTargetSizePx by lazy(LazyThreadSafetyMode.NONE) {
         max(
@@ -66,11 +73,14 @@ class MediaWebExtension(
             )
     }
 
-    fun registerSession(session: GeckoSession) {
+    fun registerSession(session: GeckoSession, tabId: String? = null) {
+        if (tabId != null) {
+            sessionTabIds[session] = tabId
+        }
         if (!registeredSessions.add(session)) {
             return
         }
-        Log.d(TAG, "registerSession: session=${session.logKey()}")
+        Log.d(TAG, "registerSession: session=${session.logKey()} tabId=$tabId")
         extension?.also { ext ->
             attachSessionMessageDelegate(session, ext)
         }
@@ -105,6 +115,7 @@ class MediaWebExtension(
         val current = sessionStates[session] ?: SessionPlaybackSnapshot()
         val next = current.copy(features = features)
         sessionStates[session] = next
+        publishPlayingTabIds()
         promoteSessionFromSnapshotIfNeeded(session, next)
         if (activeSession === session) {
             MediaSessionBridge.updateFeatures(features)
@@ -228,6 +239,18 @@ class MediaWebExtension(
         sessionArtworkBitmaps.clear()
         sessionArtworkRequestIds.clear()
         registeredSessions.clear()
+        sessionTabIds.clear()
+        _playingTabIds.value = emptySet()
+    }
+
+    private fun publishPlayingTabIds() {
+        val playing = mutableSetOf<String>()
+        for ((session, snapshot) in sessionStates.toMap()) {
+            if (snapshot.isActive && snapshot.isPlaying) {
+                sessionTabIds[session]?.let { playing.add(it) }
+            }
+        }
+        _playingTabIds.value = playing
     }
 
     private fun attachSessionMessageDelegate(session: GeckoSession, extension: WebExtension) {
@@ -286,6 +309,7 @@ class MediaWebExtension(
                             cancelPendingDeactivation(session)
                         }
                         sessionStates[session] = snapshot
+                        publishPlayingTabIds()
                         promoteSessionFromSnapshotIfNeeded(session, snapshot)
                         if (activeSession === session) {
                             applySnapshot(session, snapshot)
@@ -330,6 +354,7 @@ class MediaWebExtension(
             "updateSessionSnapshot: session=${session.logKey()} next=$next activeSession=${activeSession?.logKey()}",
         )
         sessionStates[session] = next
+        publishPlayingTabIds()
         promoteSessionFromSnapshotIfNeeded(session, next)
         if (activeSession === session) {
             applySnapshot(session, next)
@@ -438,6 +463,7 @@ class MediaWebExtension(
             activeSession = null
             pendingDeactivateSession = null
             pendingDeactivateRunnable = null
+            publishPlayingTabIds()
             MediaSessionBridge.deactivate()
             MediaPlaybackServiceController.stop(context)
         }.also { runnable ->

@@ -22,6 +22,7 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -30,11 +31,24 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Snackbar
+import androidx.compose.material3.SnackbarData
+import androidx.compose.material3.SnackbarDefaults
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -50,6 +64,7 @@ import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -112,6 +127,31 @@ fun TabsScreen(
     onOpenNewTab: (currentGroupId: TabGroupId?) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val snackbarHostState = remember { SnackbarHostState() }
+    val currentCallbacks by rememberUpdatedState(uiState.callbacks)
+    val pendingClosedTab = uiState.pendingClosedTab
+
+    LaunchedEffect(pendingClosedTab) {
+        if (pendingClosedTab != null) {
+            val result = snackbarHostState.showSnackbar(
+                message = pendingClosedTab.title,
+                actionLabel = "戻す",
+                duration = SnackbarDuration.Long,
+            )
+            when (result) {
+                SnackbarResult.ActionPerformed -> currentCallbacks.onUndoCloseTab()
+                SnackbarResult.Dismissed -> currentCallbacks.onConfirmCloseTab()
+            }
+        }
+    }
+
+    // 画面から離れるときに保留中のタブ削除を確定する
+    DisposableEffect(Unit) {
+        onDispose {
+            currentCallbacks.onConfirmCloseTab()
+        }
+    }
+
     when (val loadingState = uiState.loadingState) {
         is TabsScreenUiState.LoadingState.Loading -> {
             Box(
@@ -128,25 +168,26 @@ fun TabsScreen(
                 groups = loadingState.groups,
                 activeGroupIndex = loadingState.activeGroupIndex,
                 selectedTabId = loadingState.selectedTabId,
+                groupHasPlayingTab = loadingState.groupHasPlayingTab,
+                snackbarHostState = snackbarHostState,
                 onSelectTab = onSelectTab,
-                onCloseTab = uiState.callbacks::onCloseTab,
+                onCloseTab = currentCallbacks::onCloseTab,
                 onOpenNewTab = onOpenNewTab,
-                onReorderTabs = uiState.callbacks::onReorderTabs,
-                onReorderGroups = uiState.callbacks::onReorderGroups,
-                onGroupSelected = uiState.callbacks::onGroupSelected,
-                onGroupPageChanged = uiState.callbacks::onGroupPageChanged,
-                onAddGroup = uiState.callbacks::onAddGroup,
+                onReorderTabs = currentCallbacks::onReorderTabs,
+                onReorderGroups = currentCallbacks::onReorderGroups,
+                onGroupSelected = currentCallbacks::onGroupSelected,
+                onGroupPageChanged = currentCallbacks::onGroupPageChanged,
+                onAddGroup = currentCallbacks::onAddGroup,
                 onMoveTabToGroup = { tabId, targetGroupIndex ->
-                    uiState.callbacks.onMoveTabToGroup(tabId, targetGroupIndex)
+                    currentCallbacks.onMoveTabToGroup(tabId, targetGroupIndex)
                 },
-                onRenameGroup = uiState.callbacks::onRenameGroup,
-                onDeleteGroup = uiState.callbacks::onDeleteGroup,
-                onToggleDefaultGroup = uiState.callbacks::onToggleDefaultGroup,
+                onRenameGroup = currentCallbacks::onRenameGroup,
+                onDeleteGroup = currentCallbacks::onDeleteGroup,
+                onToggleDefaultGroup = currentCallbacks::onToggleDefaultGroup,
                 modifier = modifier,
             )
         }
     }
-
 }
 
 
@@ -156,6 +197,8 @@ private fun TabsScreenLoadedContent(
     groups: List<TabGroupData>,
     activeGroupIndex: Int,
     selectedTabId: String?,
+    groupHasPlayingTab: List<Boolean>,
+    snackbarHostState: SnackbarHostState,
     onSelectTab: (String) -> Unit,
     onCloseTab: (String) -> Unit,
     onOpenNewTab: (currentGroupId: TabGroupId?) -> Unit,
@@ -258,6 +301,32 @@ private fun TabsScreenLoadedContent(
         modifier = modifier
             .fillMaxSize(),
         contentWindowInsets = WindowInsets.safeDrawing,
+        snackbarHost = {
+            SnackbarHost(
+                hostState = snackbarHostState,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+            ) { snackbarData ->
+                // スワイプで Snackbar を dismiss できるようにする
+                key(snackbarData) {
+                    val dismissState = rememberSwipeToDismissBoxState(
+                        confirmValueChange = { value ->
+                            if (value != SwipeToDismissBoxValue.Settled) {
+                                snackbarData.dismiss()
+                                true
+                            } else {
+                                false
+                            }
+                        },
+                    )
+                    SwipeToDismissBox(
+                        state = dismissState,
+                        backgroundContent = {},
+                    ) {
+                        SnackbarContent(snackbarData = snackbarData)
+                    }
+                }
+            }
+        },
         floatingActionButton = {
             FloatingActionButton(
                 onClick = { onOpenNewTab(groups.getOrNull(activeGroupIndex)?.id) },
@@ -282,6 +351,7 @@ private fun TabsScreenLoadedContent(
                 activeGroupIndex = activeGroupIndex,
                 pagerState = pagerState,
                 highlightedDropTargetIndex = highlightedGroupIndex,
+                groupHasPlayingTab = groupHasPlayingTab,
                 onGroupSelected = onGroupSelected,
                 onReorderGroups = onReorderGroups,
                 onAddGroup = onAddGroup,
@@ -471,6 +541,35 @@ private fun TabGroupMenu(
 
 }
 
+/** タブを閉じたときに表示する Snackbar の本体 */
+@Composable
+private fun SnackbarContent(
+    snackbarData: SnackbarData,
+    modifier: Modifier = Modifier,
+) {
+    Snackbar(
+        modifier = modifier,
+        action = {
+            snackbarData.visuals.actionLabel?.let { label ->
+                TextButton(
+                    onClick = { snackbarData.performAction() },
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = SnackbarDefaults.actionContentColor,
+                    ),
+                ) {
+                    Text(label)
+                }
+            }
+        },
+    ) {
+        Text(
+            text = snackbarData.visuals.message,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
 /**
  * HorizontalPager のスクロール進捗に連動して動くインジケータ。
  * グループタブバーの直下に表示し、LazyRow の実際のアイテム位置に合わせてスライドするバーを描画する。
@@ -532,6 +631,8 @@ private fun Preview() {
         groups = groups,
         activeGroupIndex = 0,
         selectedTabId = "1",
+        groupHasPlayingTab = emptyList(),
+        snackbarHostState = remember { SnackbarHostState() },
         onSelectTab = {},
         onCloseTab = {},
         onOpenNewTab = {},
@@ -569,6 +670,8 @@ private fun PreviewSingleGroup() {
         groups = groups,
         activeGroupIndex = 0,
         selectedTabId = "1",
+        groupHasPlayingTab = emptyList(),
+        snackbarHostState = remember { SnackbarHostState() },
         onSelectTab = {},
         onCloseTab = {},
         onOpenNewTab = {},
@@ -582,6 +685,72 @@ private fun PreviewSingleGroup() {
         onDeleteGroup = {},
         onToggleDefaultGroup = {},
     )
+}
+
+/** Snackbar が表示されている状態の Preview */
+@Composable
+@Preview
+private fun PreviewWithSnackbar() {
+    val groups = remember {
+        listOf(
+            TabGroupData(TabGroupId("g1"), "デフォルト"),
+            TabGroupData(TabGroupId("g2"), "開発"),
+        )
+    }
+    val groupedTabs = remember {
+        listOf(
+            listOf(
+                TabsScreenTabData(id = "1", title = "Example Domain", previewImage = null),
+                TabsScreenTabData(id = "3", title = "GitHub", previewImage = null),
+            ),
+            listOf(
+                TabsScreenTabData(id = "3", title = "GitHub", previewImage = null),
+            ),
+        )
+    }
+    Box {
+        TabsScreenLoadedContent(
+            groupedTabs = groupedTabs,
+            groups = groups,
+            activeGroupIndex = 0,
+            selectedTabId = "1",
+            snackbarHostState = remember { SnackbarHostState() },
+            onSelectTab = {},
+            onCloseTab = {},
+            onOpenNewTab = {},
+            onReorderTabs = { _, _, _ -> },
+            onReorderGroups = { _, _ -> },
+            onGroupSelected = {},
+            onGroupPageChanged = {},
+            onAddGroup = {},
+            onMoveTabToGroup = { _, _ -> },
+            onRenameGroup = { _, _ -> },
+            onDeleteGroup = {},
+            onToggleDefaultGroup = {},
+            groupHasPlayingTab = emptyList(),
+        )
+        Snackbar(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            action = {
+                TextButton(
+                    onClick = {},
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = SnackbarDefaults.actionContentColor,
+                    ),
+                ) {
+                    Text("戻す")
+                }
+            },
+        ) {
+            Text(
+                text = "Google",
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
 }
 
 sealed interface TabsScreenTestTags {
@@ -607,5 +776,9 @@ sealed interface TabsScreenTestTags {
 
     class DefaultGroupSwitch(index: Int) : TabsScreenTestTags {
         override val id: String = "default_group_switch_$index"
+    }
+
+    class TabItem(index: Int) : TabsScreenTestTags {
+        override val id: String = "tab_item_$index"
     }
 }

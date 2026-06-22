@@ -1,5 +1,6 @@
 package net.matsudamper.browser
 
+import android.Manifest
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
@@ -18,14 +19,21 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import java.net.URL
+import net.matsudamper.browser.data.download.DownloadRecordStatus
+import net.matsudamper.browser.data.SiteGeolocationState
+import net.matsudamper.browser.data.SitePermissionState
+import net.matsudamper.browser.data.SiteSettingsRepository
 import net.matsudamper.browser.data.TranslationProvider
+import net.matsudamper.browser.data.extractSiteHost
 import net.matsudamper.browser.translate.TranslationPriorityLanguage
 import org.json.JSONObject
 import org.koin.compose.koinInject
@@ -60,11 +68,13 @@ internal fun rememberBrowserTabScreenState(
     onHistoryRecord: (suspend (url: String, title: String) -> Long)? = null,
     onHistoryTitleUpdate: (suspend (id: Long, title: String) -> Unit)? = null,
     onRequestDownloadNotificationPermission: suspend () -> Unit = {},
+    onRequestAndroidPermissions: suspend (Array<String>) -> Array<String> = { emptyArray() },
 ): BrowserTabScreenState {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val geckoDownloadManager: GeckoDownloadManager = koinInject()
     val findInPageWebExtension: FindInPageWebExtension = koinInject()
+    val siteSettingsRepository: SiteSettingsRepository = koinInject()
     val state = remember(browserTab) {
         BrowserTabScreenState(
             browserTab = browserTab,
@@ -74,10 +84,12 @@ internal fun rememberBrowserTabScreenState(
             coroutineScope = coroutineScope,
             geckoDownloadManager = geckoDownloadManager,
             findInPageWebExtension = findInPageWebExtension,
+            siteSettingsRepository = siteSettingsRepository,
             context = context,
             onHistoryRecord = onHistoryRecord,
             onHistoryTitleUpdate = onHistoryTitleUpdate,
             onRequestDownloadNotificationPermission = onRequestDownloadNotificationPermission,
+            onRequestAndroidPermissions = onRequestAndroidPermissions,
         )
     }
     state.homepageUrl = homepageUrl
@@ -96,8 +108,10 @@ internal class BrowserTabScreenState(
     private val coroutineScope: CoroutineScope,
     private val geckoDownloadManager: GeckoDownloadManager,
     internal val findInPageWebExtension: FindInPageWebExtension,
+    private val siteSettingsRepository: SiteSettingsRepository,
     private val context: Context,
     private val onRequestDownloadNotificationPermission: suspend () -> Unit = {},
+    private val onRequestAndroidPermissions: suspend (Array<String>) -> Array<String> = { emptyArray() },
     var onHistoryRecord: (suspend (url: String, title: String) -> Long)? = null,
     var onHistoryTitleUpdate: (suspend (id: Long, title: String) -> Unit)? = null,
 ) : BrowserSessionStateCallbacks {
@@ -190,17 +204,100 @@ internal class BrowserTabScreenState(
     // --- プロンプトダイアログ状態（分離済み） ---
     val promptDialogState = PromptDialogState(coroutineScope)
 
+    // --- サイトごとのマイク許可確認ダイアログ状態 ---
+    var microphonePermissionDialog by mutableStateOf<MicrophonePermissionDialogState?>(null)
+        private set
+
+    /**
+     * @param onResult true=許可(永続化), false=ブロック(永続化), null=今回のみ拒否
+     */
+    @Stable
+    class MicrophonePermissionDialogState(
+        val host: String,
+        internal val onResult: (Boolean?) -> Unit,
+    )
+
+    fun confirmMicrophonePermissionDialog(allow: Boolean) {
+        val dialog = microphonePermissionDialog ?: return
+        microphonePermissionDialog = null
+        dialog.onResult(allow)
+    }
+
+    fun dismissMicrophonePermissionDialog() {
+        val dialog = microphonePermissionDialog ?: return
+        microphonePermissionDialog = null
+        dialog.onResult(null)
+    }
+
+    /**
+     * サイトごとのマイク権限を解決する。
+     * 未設定 (ASK) の場合は確認ダイアログを表示してユーザーの応答を待ち、
+     * 許可/ブロックの選択をサイト設定として永続化する。
+     */
+    private suspend fun resolveMicrophonePermission(host: String): Boolean {
+        // 要求があったことを記録し、「サイトの設定」画面にマイクの項目を表示できるようにする
+        siteSettingsRepository.markMicrophonePermissionRequested(host)
+        when (siteSettingsRepository.getMicrophonePermission(host)) {
+            SitePermissionState.SITE_PERMISSION_ALLOW -> return true
+            SitePermissionState.SITE_PERMISSION_DENY -> return false
+            else -> Unit
+        }
+        // 表示中のダイアログが残っている場合は今回のみ拒否として閉じる
+        microphonePermissionDialog?.also { previous ->
+            microphonePermissionDialog = null
+            previous.onResult(null)
+        }
+        val result = CompletableDeferred<Boolean?>()
+        microphonePermissionDialog = MicrophonePermissionDialogState(host) { allow ->
+            result.complete(allow)
+        }
+        val choice = result.await()
+        if (choice != null) {
+            siteSettingsRepository.setMicrophonePermission(
+                host = host,
+                state = if (choice) {
+                    SitePermissionState.SITE_PERMISSION_ALLOW
+                } else {
+                    SitePermissionState.SITE_PERMISSION_DENY
+                },
+            )
+        }
+        return choice == true
+    }
+
     // --- ファイルダウンロード確認ダイアログ用state ---
     var pendingDownloadResponse by mutableStateOf<WebResponse?>(null)
     var pendingExternalAppLaunch by mutableStateOf<PendingExternalAppLaunch?>(null)
+
+    // --- ダウンロード重複確認ダイアログ用state ---
+    var duplicateDownloadState by mutableStateOf<DuplicateDownloadState?>(null)
+        private set
+
+    @Stable
+    class DuplicateDownloadState(
+        val url: String,
+        val existingDownloads: List<DuplicateDownloadEntry>,
+        internal val onConfirm: () -> Unit,
+        internal val onDismiss: () -> Unit = {},
+    )
+
+    data class DuplicateDownloadEntry(
+        val fileName: String,
+        val status: DownloadRecordStatus,
+        val fileUri: String?,
+    )
     // 外部アプリ確認ダイアログでキャンセルされた場合、次回のロードリクエストで外部アプリチェックをスキップする
     private var skipExternalAppCheckForNextLoad = false
 
+    // --- フルスクリーン状態 ---
+    var isFullScreen by mutableStateOf(false)
+
     var renderReady by mutableStateOf(false)
 
-    // プレビュー画像が未取得の状態でページロードが完了した際にインクリメントされるカウンター。
-    // GeckoBrowserTab がこの値を監視してキャプチャをトリガーする。
-    var captureOnPageLoadRequestCount by mutableIntStateOf(0)
+    // ページの初回描画・ロード完了の度にインクリメントされるカウンター。
+    // GeckoBrowserTab がこの値を監視してプレビューキャプチャをトリガーする。
+    // ドメイン遷移後も古いプレビューが残らないよう、プレビュー取得済みでも毎回更新する。
+    var capturePreviewRequestCount by mutableIntStateOf(0)
         private set
 
     // プレビューキャプチャの可否を表すフラグ。
@@ -243,10 +340,6 @@ internal class BrowserTabScreenState(
 
     // --- Scroll / Refresh state ---
     var visualViewportScale by mutableFloatStateOf(1f)
-    // ピンチジェスチャー検出フラグ。JS管理のズーム（Xの画像ビューアー等）では
-    // visualViewport.scaleが1.0のままなので、ピンチ操作自体を記録して
-    // 後続のパンジェスチャーでPullToRefreshが誤発動しないようにする。
-    var hadPinchGesture by mutableStateOf(false)
     var isRefreshing by mutableStateOf(false)
     // BrowserTab.scrollY に委譲することで、タブ切替で State が再生成されても
     // スクロール位置を保持し、復元タブでの PullToRefresh 誤発動を防ぐ。
@@ -267,7 +360,27 @@ internal class BrowserTabScreenState(
         maybeResetToolbarColor(currentPageUrl, resolved)
         currentPageUrl = resolved
         clearPageLoadError()
+        browserTab.cancelPendingInitialLoad()
         session.loadUri(resolved)
+    }
+
+    /**
+     * 現在のページを referrer に付けて URL を読み込む。
+     * コンテキストメニューの「開く」「画像を開く」から使用し、
+     * ホットリンク保護のあるサーバーで 403 にならないようにする。
+     */
+    fun openUrlWithReferrer(url: String) {
+        val referrerUrl = currentPageUrl
+        urlInput = url
+        maybeResetToolbarColor(currentPageUrl, url)
+        currentPageUrl = url
+        clearPageLoadError()
+        browserTab.cancelPendingInitialLoad()
+        session.load(
+            GeckoSession.Loader()
+                .uri(url)
+                .referrer(referrerUrl),
+        )
     }
 
     fun onHome() {
@@ -275,6 +388,7 @@ internal class BrowserTabScreenState(
         maybeResetToolbarColor(currentPageUrl, homepageUrl)
         currentPageUrl = homepageUrl
         clearPageLoadError()
+        browserTab.cancelPendingInitialLoad()
         session.loadUri(homepageUrl)
     }
 
@@ -570,12 +684,32 @@ internal class BrowserTabScreenState(
 
     fun downloadImage(imageUrl: String) {
         dismissContextMenu()
-        // suspend 前に referrerUrl を確定させる（許可ダイアログ中にページ遷移しても影響を受けないため）
         val referrerUrl = currentPageUrl
         coroutineScope.launch {
-            // ダウンロード進捗を通知で表示するためにパーミッションを要求し、ユーザーの応答を待つ
+            val duplicates = geckoDownloadManager.findDuplicateDownloads(imageUrl)
+            if (duplicates.isNotEmpty()) {
+                duplicateDownloadState = DuplicateDownloadState(
+                    url = imageUrl,
+                    existingDownloads = duplicates.map { record ->
+                        DuplicateDownloadEntry(
+                            fileName = record.fileName,
+                            status = record.status,
+                            fileUri = record.fileUri,
+                        )
+                    },
+                    onConfirm = {
+                        proceedDownloadImage(imageUrl, referrerUrl)
+                    },
+                )
+                return@launch
+            }
+            proceedDownloadImage(imageUrl, referrerUrl)
+        }
+    }
+
+    private fun proceedDownloadImage(imageUrl: String, referrerUrl: String) {
+        coroutineScope.launch {
             onRequestDownloadNotificationPermission()
-            // WorkManagerにエンキューして通知で進捗表示
             geckoDownloadManager.enqueueDownload(
                 url = imageUrl,
                 referrerUrl = referrerUrl,
@@ -585,21 +719,44 @@ internal class BrowserTabScreenState(
     }
 
     // GeckoViewがレンダリングできないレスポンス（ダウンロードリンク等）を受け取った際に呼ばれる
-    // ユーザーに確認ダイアログを表示するため、pendingDownloadResponseに保持する
+    // 重複がある場合は重複ダイアログを直接表示し、なければ通常の確認ダイアログを表示する
     fun downloadFileFromResponse(response: WebResponse) {
-        pendingDownloadResponse = response
+        val referrerUrl = currentPageUrl
+        coroutineScope.launch {
+            val duplicates = geckoDownloadManager.findDuplicateDownloads(response.uri)
+            if (duplicates.isNotEmpty()) {
+                duplicateDownloadState = DuplicateDownloadState(
+                    url = response.uri,
+                    existingDownloads = duplicates.map { record ->
+                        DuplicateDownloadEntry(
+                            fileName = record.fileName,
+                            status = record.status,
+                            fileUri = record.fileUri,
+                        )
+                    },
+                    onConfirm = {
+                        proceedDownloadFromResponse(response, referrerUrl)
+                    },
+                    onDismiss = {
+                        response.body?.close()
+                    },
+                )
+                return@launch
+            }
+            pendingDownloadResponse = response
+        }
     }
 
     fun confirmPendingDownload() {
         val response = pendingDownloadResponse ?: return
         pendingDownloadResponse = null
-        // body はクローズせず、Worker がボディ（実データ）を直接保存できるよう response ごと引き渡す。
-        // パスワード submit(POST)・ワンタイムURL のダウンロードを 0 バイトにしないため。
-        val referrerUrl = currentPageUrl
+        proceedDownloadFromResponse(response, currentPageUrl)
+    }
+
+    private fun proceedDownloadFromResponse(response: WebResponse, referrerUrl: String) {
         coroutineScope.launch {
             var enqueued = false
             try {
-                // ダウンロード進捗を通知で表示するためにパーミッションを要求し、ユーザーの応答を待つ
                 onRequestDownloadNotificationPermission()
                 geckoDownloadManager.enqueueDownloadFromResponse(
                     response = response,
@@ -608,7 +765,6 @@ internal class BrowserTabScreenState(
                 )
                 enqueued = true
             } finally {
-                // 権限待ち中などにキャンセルされ、エンキューに到達しなかった場合はボディを閉じてリークを防ぐ
                 if (!enqueued) {
                     response.body?.close()
                 }
@@ -619,6 +775,18 @@ internal class BrowserTabScreenState(
     fun dismissPendingDownload() {
         pendingDownloadResponse?.body?.close()
         pendingDownloadResponse = null
+    }
+
+    fun confirmDuplicateDownload() {
+        val state = duplicateDownloadState ?: return
+        duplicateDownloadState = null
+        state.onConfirm()
+    }
+
+    fun dismissDuplicateDownload() {
+        val state = duplicateDownloadState ?: return
+        duplicateDownloadState = null
+        state.onDismiss()
     }
 
     fun confirmPendingExternalAppLaunch() {
@@ -836,8 +1004,10 @@ internal class BrowserTabScreenState(
             return
         }
         if (url.startsWith("javascript:")) return
-        hadPinchGesture = false
-        visualViewportScale = 1f
+        // visualViewportScale はここではリセットしない。SPA の pushState 遷移
+        // （X のタブ内遷移等）ではピンチズームが維持されたまま onLocationChange が
+        // 発火するため、リセットすると拡大中なのに PullToRefresh が許可されてしまう。
+        // フルページロードでは onPageStart でリセットされる。
         if (pageLoadError?.failingUrl != url) {
             clearPageLoadError()
         }
@@ -937,6 +1107,10 @@ internal class BrowserTabScreenState(
     override fun onPreviewCaptureReady() {
         renderReady = true
         previewCaptureReady = true
+        // 新ページの初回描画 (onFirstContentfulPaint) 時点でキャプチャを更新する。
+        // ロード完了 (onPageStop) まで待つと、ロードの長いページでタブ切替した際に
+        // 前のページ（別ドメイン）のプレビューが表示され続けるため。
+        capturePreviewRequestCount++
     }
 
     override fun onExternalResponse(response: WebResponse) {
@@ -948,7 +1122,6 @@ internal class BrowserTabScreenState(
 
     override fun onPageStart(url: String) {
         clearPageLoadError()
-        hadPinchGesture = false
         visualViewportScale = 1f
         // previewCaptureReady は false に戻さない。
         // GeckoView は新ページの描画が始まるまで古いページを表示し続けるため、
@@ -969,10 +1142,10 @@ internal class BrowserTabScreenState(
         // ページロード完了時点でキャプチャを許可する。これがないと previewCaptureReady が
         // false のまま戻らず、以降のタブのキャプチャが全て拒否される。
         previewCaptureReady = true
-        // プレビュー画像がまだない場合はページロード完了時にキャプチャをリクエストする
-        if (browserTab.previewBitmap == null || browserTab.previewBitmap!!.isEmpty()) {
-            captureOnPageLoadRequestCount++
-        }
+        // ページロード完了時に毎回キャプチャをリクエストする。
+        // 「プレビュー未取得時のみ」に絞ると、別ドメインへ遷移しても古いプレビューが
+        // 残り続けるため、取得済みでも常に最新の表示内容で上書きする。
+        capturePreviewRequestCount++
         if (success) {
             fetchFavicon(currentPageUrl)
             // ページ遷移後もズームを維持する
@@ -1066,8 +1239,88 @@ internal class BrowserTabScreenState(
         detectedPageLanguage = lang
     }
 
+    override fun onFullScreen(fullScreen: Boolean) {
+        isFullScreen = fullScreen
+    }
+
+    fun exitFullScreen() {
+        session.exitFullScreen()
+    }
+
     override fun onScrollChanged(scrollY: Int) {
         this.scrollY = scrollY
+    }
+
+    override fun onAndroidPermissionsRequest(
+        permissions: Array<String>?,
+        onGrant: () -> Unit,
+        onReject: () -> Unit,
+    ) {
+        val perms = permissions ?: run { onReject(); return }
+        coroutineScope.launch {
+            // OS の権限要求の前に、サイトごとのマイク許可を確認する
+            if (Manifest.permission.RECORD_AUDIO in perms) {
+                val host = extractSiteHost(currentPageUrl)
+                if (host == null || !resolveMicrophonePermission(host)) {
+                    onReject()
+                    return@launch
+                }
+            }
+            runCatching {
+                onRequestAndroidPermissions(perms)
+            }.onSuccess { granted ->
+                if (perms.all { it in granted }) onGrant() else onReject()
+            }.onFailure {
+                onReject()
+            }
+        }
+    }
+
+    override fun onMediaPermissionRequest(
+        uri: String,
+        hasVideo: Boolean,
+        hasAudio: Boolean,
+        onResult: (grantVideo: Boolean, grantAudio: Boolean) -> Unit,
+    ) {
+        // マイクを含まない要求（カメラのみ等）は従来通り許可する
+        if (!hasAudio) {
+            onResult(hasVideo, false)
+            return
+        }
+        coroutineScope.launch {
+            // OS 権限が許可済みの場合は onAndroidPermissionsRequest を経由しないため、
+            // ここでもサイトごとのマイク許可を確認する（未設定ならダイアログを表示する）
+            val host = extractSiteHost(uri) ?: extractSiteHost(currentPageUrl)
+            val grantAudio = host != null && resolveMicrophonePermission(host)
+            onResult(hasVideo, grantAudio)
+        }
+    }
+
+    override fun onGeolocationPermissionRequest(
+        uri: String?,
+        onResult: (allow: Boolean) -> Unit,
+    ) {
+        // Gecko の GeckoResult を未解決のまま残さないよう、onResult は必ず一度呼ぶ
+        val completed = AtomicBoolean(false)
+        val job = coroutineScope.launch {
+            // モック/拒否はコンテンツスクリプトが処理するため、Gecko 本体の位置情報は
+            // サイトごとの設定が「実際の位置情報」の場合のみ許可する。
+            // 許可は標準ブラウザと同様にトップレベルサイト基準のため、iframe からの
+            // 要求（uri が iframe のオリジン）も表示中ページのホストで判定する
+            val host = extractSiteHost(currentPageUrl) ?: uri?.let { extractSiteHost(it) }
+            val allow = host != null &&
+                runCatching { siteSettingsRepository.getGeolocationState(host) }.getOrNull() ==
+                SiteGeolocationState.SITE_GEOLOCATION_REAL
+            if (completed.compareAndSet(false, true)) {
+                onResult(allow)
+            }
+        }
+        job.invokeOnCompletion { cause ->
+            // スコープのキャンセル等で onResult まで到達しなかった場合は拒否として完了させる
+            if (cause != null && completed.compareAndSet(false, true)) {
+                onResult(false)
+            }
+        }
     }
 
     private fun maybeResetToolbarColor(fromUrl: String, toUrl: String) {

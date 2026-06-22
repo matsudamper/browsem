@@ -15,6 +15,8 @@ import androidx.work.CoroutineWorker
 import androidx.work.ForegroundInfo
 import androidx.work.WorkerParameters
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 import net.matsudamper.browser.data.download.DownloadRepository
 import net.matsudamper.browser.download.DownloadEngine
 import net.matsudamper.browser.download.DownloadHttpClient
@@ -51,12 +53,6 @@ internal class DownloadWorker(
     private var partialResultTotalRead: Long = 0L
     private var partialResultContentLength: Long = -1L
 
-    /**
-     * 元レスポンス（pendingResponse）のボディを直接保存したか。
-     * この場合は URL 再取得での再開が無効データ（ワンタイムURL無効化・ログインページ等）になり得るため、
-     * 失敗時に再開可能として保存しない。
-     */
-    private var usedPendingBody: Boolean = false
 
     override suspend fun doWork(): Result {
         val url = inputData.getString(KEY_URL) ?: return Result.failure()
@@ -78,6 +74,9 @@ internal class DownloadWorker(
         repository.insertDownload(workerId = id.toString(), url = url, referrerUrl = referrerUrl, enqueuedAt = enqueuedAt)
 
         return try {
+            // エンキュー直後にキャンセルされた場合（WorkManager 登録前のキャンセル等で
+            // 割り込みが届かず Worker が起動してしまったケース）はダウンロードを開始しない
+            throwIfCancelledOnRecord()
             val (fileUri, fileName) = if (partialFileUriString != null) {
                 downloadFileResume(
                     urlString = url,
@@ -93,17 +92,46 @@ internal class DownloadWorker(
             postCompletionNotification(fileName)
             Result.success()
         } catch (e: CancellationException) {
-            repository.updateCancelled(id.toString())
-            // キャンセル時は部分ファイルを削除する
-            partialResultUri?.let { context.contentResolver.delete(it, null, null) }
+            // Job キャンセル済みのコルーチン上では Room の suspend クエリが即座に
+            // CancellationException を投げて DB 更新・ファイル削除がスキップされるため、
+            // NonCancellable で囲んで確実に実行する
+            withContext(NonCancellable) {
+                val workerId = id.toString()
+                val savedUri = partialResultUri
+                if (repository.isPaused(workerId)) {
+                    if (savedUri != null && partialResultTotalRead > 0) {
+                        // 一時停止: 部分ファイルを保持して再開（HTTP Range）に備える
+                        repository.updatePausedPartial(
+                            currentWorkerId = workerId,
+                            partialFileUri = savedUri.toString(),
+                            fileName = partialResultFileName,
+                            totalRead = partialResultTotalRead,
+                            contentLength = partialResultContentLength,
+                        )
+                        // isPaused 判定→保存の間に CANCELLED へ遷移すると updatePausedPartial が
+                        // no-op になり部分ファイルが孤立するため、再確認して削除する
+                        if (repository.isCancelled(workerId)) {
+                            context.contentResolver.delete(savedUri, null, null)
+                        }
+                    } else {
+                        // 部分ファイルが再開に使えない場合は削除する。
+                        // PAUSED 状態は維持され、再開時は URL を再取得してダウンロードし直す
+                        savedUri?.let { context.contentResolver.delete(it, null, null) }
+                    }
+                } else {
+                    repository.updateCancelled(workerId)
+                    // キャンセル時は部分ファイルを削除する
+                    savedUri?.let { context.contentResolver.delete(it, null, null) }
+                }
+            }
             throw e
         } catch (e: Exception) {
             e.printStackTrace()
             val savedUri = partialResultUri
-            if (savedUri != null && partialResultTotalRead > 0 && !usedPendingBody) {
+            if (savedUri != null && partialResultTotalRead > 0) {
                 // 部分ファイルが存在する場合は再開可能として保存する
                 repository.updatePartialFailed(
-                    workerId = id.toString(),
+                    currentWorkerId = id.toString(),
                     partialFileUri = savedUri.toString(),
                     fileName = partialResultFileName,
                     totalRead = partialResultTotalRead,
@@ -115,6 +143,18 @@ internal class DownloadWorker(
                 repository.updateFailed(id.toString())
             }
             Result.failure()
+        }
+    }
+
+    /**
+     * Room のレコードがキャンセル済みなら CancellationException を投げてダウンロードを中断する。
+     * 管理画面のキャンセルは WorkManager の割り込みに依存せず無条件で DB を CANCELLED に
+     * 更新するため、割り込みが届かないケース（WorkManager 登録前のキャンセル等）でも
+     * Worker がこのチェックによって自力で停止できる
+     */
+    private suspend fun throwIfCancelledOnRecord() {
+        if (repository.isStopRequested(id.toString())) {
+            throw CancellationException("ダウンロードがキャンセルまたは一時停止されました")
         }
     }
 
@@ -157,7 +197,7 @@ internal class DownloadWorker(
             openDownloadsIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
-        val fileName = repository.get(id).fileName
+        val fileName = repository.getByCurrentWorkerId(id)?.fileName.orEmpty()
 
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_notify_error)
@@ -180,8 +220,6 @@ internal class DownloadWorker(
         // パスワード submit(POST)・ワンタイムURL・セッション依存のダウンロードは
         // URL を GET し直すと 0 バイトになるため、元レスポンスのボディを優先する。
         val pendingResponse = PendingDownloadBodyStore.take(id.toString())
-        // 元レスポンスのボディを使う場合、URL再取得での再開は無効データになり得るため記録する
-        usedPendingBody = pendingResponse != null
         val response: DownloadHttpResponse = pendingResponse?.let { WebResponseDownloadResponse(it) }
             ?: httpClient.fetch(urlString, referrerUrl, 0L)
 
@@ -228,6 +266,9 @@ internal class DownloadWorker(
                     // 通知・Room更新のみレート制限する
                     val now = System.currentTimeMillis()
                     if (now - lastUpdateTime >= PROGRESS_UPDATE_INTERVAL_MILLIS) {
+                        // WorkManager の割り込みが取りこぼされても確実に停止できるよう、
+                        // DB のキャンセル状態を確認して自力で中断する
+                        throwIfCancelledOnRecord()
                         val progress = if (contentLength > 0) (totalRead * 100 / contentLength).toInt() else 0
                         repository.updateProgress(id.toString(), fileName, progress, totalRead, contentLength)
                         setForeground(createForegroundInfo(notificationId, progress, contentLength <= 0, fileName, totalRead, contentLength))
@@ -324,6 +365,9 @@ internal class DownloadWorker(
                     partialResultTotalRead = totalRead
                     val now = System.currentTimeMillis()
                     if (now - lastUpdateTime >= PROGRESS_UPDATE_INTERVAL_MILLIS) {
+                        // WorkManager の割り込みが取りこぼされても確実に停止できるよう、
+                        // DB のキャンセル状態を確認して自力で中断する
+                        throwIfCancelledOnRecord()
                         val progress = if (contentLength > 0) (totalRead * 100 / contentLength).toInt() else 0
                         repository.updateProgress(id.toString(), fileName, progress, totalRead, contentLength)
                         setForeground(createForegroundInfo(notificationId, progress, contentLength <= 0, fileName, totalRead, contentLength))

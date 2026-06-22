@@ -31,6 +31,22 @@ interface BrowserSessionStateCallbacks {
         request: GeckoSession.NavigationDelegate.LoadRequest,
     ): GeckoResult<AllowOrDeny>?
     fun onHistoryStateChange(items: List<HistoryStateItem>, currentIndex: Int)
+    fun onAndroidPermissionsRequest(
+        permissions: Array<String>?,
+        onGrant: () -> Unit,
+        onReject: () -> Unit,
+    )
+    fun onMediaPermissionRequest(
+        uri: String,
+        hasVideo: Boolean,
+        hasAudio: Boolean,
+        onResult: (grantVideo: Boolean, grantAudio: Boolean) -> Unit,
+    )
+    fun onGeolocationPermissionRequest(
+        uri: String?,
+        onResult: (allow: Boolean) -> Unit,
+    )
+    fun onFullScreen(fullScreen: Boolean)
 }
 
 /** タブ内ナビゲーション履歴の項目 */
@@ -70,6 +86,24 @@ fun createGeckoSessionDelegateBundle(
                         GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW
                     )
                 }
+                if (perm.permission == GeckoSession.PermissionDelegate.PERMISSION_GEOLOCATION) {
+                    // モック/拒否はコンテンツスクリプトが処理する。Gecko 本体の位置情報へ
+                    // 到達するのは「実際の位置情報」設定時のみ許可する
+                    Log.d("BrowserTabPermission", "geolocation permission delegated to site settings")
+                    val result = GeckoResult<Int>()
+                    callbacks.onGeolocationPermissionRequest(perm.uri) { allow ->
+                        result.complete(
+                            if (allow) {
+                                GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW
+                            } else {
+                                // DENY は Gecko に永続化され、後で「実際の位置情報」へ変更しても
+                                // このデリゲートが呼ばれなくなるため、永続化されない PROMPT で拒否する
+                                GeckoSession.PermissionDelegate.ContentPermission.VALUE_PROMPT
+                            },
+                        )
+                    }
+                    return result
+                }
                 if (perm.permission == GeckoSession.PermissionDelegate.PERMISSION_DESKTOP_NOTIFICATION) {
                     Log.d("BrowserTabPermission", "desktop notification denied")
                     return GeckoResult.fromValue(
@@ -79,6 +113,60 @@ fun createGeckoSessionDelegateBundle(
                 Log.d("BrowserTabPermission", "non-notification permission prompted")
                 return GeckoResult.fromValue(
                     GeckoSession.PermissionDelegate.ContentPermission.VALUE_PROMPT
+                )
+            }
+
+            override fun onAndroidPermissionsRequest(
+                session: GeckoSession,
+                permissions: Array<out String>?,
+                callback: GeckoSession.PermissionDelegate.Callback,
+            ) {
+                Log.d(
+                    "BrowserTabPermission",
+                    "onAndroidPermissionsRequest: permissions=${permissions?.toList()}"
+                )
+                @Suppress("UNCHECKED_CAST")
+                callbacks.onAndroidPermissionsRequest(
+                    permissions = permissions as Array<String>?,
+                    onGrant = { callback.grant() },
+                    onReject = { callback.reject() },
+                )
+            }
+
+            // getUserMedia のデバイス選択。デフォルト実装は reject するため、
+            // 未実装だと Android パーミッションを許可してもマイク・カメラが拒否される。
+            override fun onMediaPermissionRequest(
+                session: GeckoSession,
+                uri: String,
+                video: Array<out GeckoSession.PermissionDelegate.MediaSource>?,
+                audio: Array<out GeckoSession.PermissionDelegate.MediaSource>?,
+                callback: GeckoSession.PermissionDelegate.MediaCallback,
+            ) {
+                Log.d(
+                    "BrowserTabPermission",
+                    "onMediaPermissionRequest: uri=$uri, " +
+                        "video=${video?.map { it.name }}, audio=${audio?.map { it.name }}"
+                )
+                val videoSource = video?.firstOrNull()
+                val audioSource = audio?.firstOrNull()
+                if (videoSource == null && audioSource == null) {
+                    callback.reject()
+                    return
+                }
+                // マイクの可否はサイトごとの設定に基づいて UI 層で判断する
+                callbacks.onMediaPermissionRequest(
+                    uri = uri,
+                    hasVideo = videoSource != null,
+                    hasAudio = audioSource != null,
+                    onResult = { grantVideo, grantAudio ->
+                        val grantedVideo = videoSource.takeIf { grantVideo }
+                        val grantedAudio = audioSource.takeIf { grantAudio }
+                        if (grantedVideo == null && grantedAudio == null) {
+                            callback.reject()
+                        } else {
+                            callback.grant(grantedVideo, grantedAudio)
+                        }
+                    },
                 )
             }
         },
@@ -164,6 +252,10 @@ fun createGeckoSessionDelegateBundle(
             override fun onWebAppManifest(session: GeckoSession, manifest: JSONObject) {
                 callbacks.onWebAppManifest(manifest)
             }
+
+            override fun onFullScreen(session: GeckoSession, fullScreen: Boolean) {
+                callbacks.onFullScreen(fullScreen)
+            }
         },
         progressDelegate = object : GeckoSession.ProgressDelegate {
             override fun onSessionStateChange(
@@ -174,11 +266,23 @@ fun createGeckoSessionDelegateBundle(
             }
 
             override fun onPageStart(session: GeckoSession, url: String) {
+                // 新しいページでは前ページの証明書情報を持ち越さない
+                browserTab.securityInfo = null
                 callbacks.onPageStart(url)
             }
 
             override fun onPageStop(session: GeckoSession, success: Boolean) {
                 callbacks.onPageStop(success)
+            }
+
+            override fun onSecurityChange(
+                session: GeckoSession,
+                securityInfo: GeckoSession.ProgressDelegate.SecurityInformation,
+            ) {
+                browserTab.securityInfo = TabSecurityInfo(
+                    isSecure = securityInfo.isSecure,
+                    certificate = securityInfo.certificate,
+                )
             }
         },
         translationsDelegate = object : TranslationsController.SessionTranslation.Delegate {
@@ -229,6 +333,7 @@ internal class BrowserTabSessionDelegateHost(
     // UI未接続中に届いた manifest を失わないようにキャッシュする。
     // onPageStart でクリアし、attachUi 時にリプレイする。
     private var cachedWebAppManifest: JSONObject? = null
+    private var cachedFullScreen: Boolean = false
 
     private val delegateBundle = createGeckoSessionDelegateBundle(
         callbacks = object : BrowserSessionStateCallbacks {
@@ -248,6 +353,19 @@ internal class BrowserTabSessionDelegateHost(
 
             override fun onLocationChange(url: String) {
                 if (url.startsWith("javascript:")) return
+                // 遅延初回ロード (performInitialLoadIfPending) が発行した loadUri の
+                // onLocationChange が、明示的ナビゲーション (onUrlSubmit 等) より遅れて
+                // 到着すると URL が上書きされる。フィルタが有効な場合は破棄する。
+                if (browserTab.shouldFilterDeferredLoad) {
+                    val deferredUrl = browserTab.deferredInitialLoadUrl
+                    if (deferredUrl != null &&
+                        url.trimEnd('/') == deferredUrl.trimEnd('/')
+                    ) {
+                        browserTab.shouldFilterDeferredLoad = false
+                        browserTab.deferredInitialLoadUrl = null
+                        return
+                    }
+                }
                 if (!(url == "about:blank" && browserTab.currentUrl != "about:blank")) {
                     browserTab.currentUrl = url
                 }
@@ -325,6 +443,50 @@ internal class BrowserTabSessionDelegateHost(
             override fun onHistoryStateChange(items: List<HistoryStateItem>, currentIndex: Int) {
                 // bindToSession で設定する historyDelegate 経由で呼ばれるため、ここでは何もしない
             }
+
+            override fun onAndroidPermissionsRequest(
+                permissions: Array<String>?,
+                onGrant: () -> Unit,
+                onReject: () -> Unit,
+            ) {
+                val cb = currentCallbacks()
+                if (cb != null) {
+                    cb.onAndroidPermissionsRequest(permissions, onGrant, onReject)
+                } else {
+                    onReject()
+                }
+            }
+
+            override fun onMediaPermissionRequest(
+                uri: String,
+                hasVideo: Boolean,
+                hasAudio: Boolean,
+                onResult: (grantVideo: Boolean, grantAudio: Boolean) -> Unit,
+            ) {
+                val cb = currentCallbacks()
+                if (cb != null) {
+                    cb.onMediaPermissionRequest(uri, hasVideo, hasAudio, onResult)
+                } else {
+                    onResult(false, false)
+                }
+            }
+
+            override fun onGeolocationPermissionRequest(
+                uri: String?,
+                onResult: (allow: Boolean) -> Unit,
+            ) {
+                val cb = currentCallbacks()
+                if (cb != null) {
+                    cb.onGeolocationPermissionRequest(uri, onResult)
+                } else {
+                    onResult(false)
+                }
+            }
+
+            override fun onFullScreen(fullScreen: Boolean) {
+                synchronized(lock) { cachedFullScreen = fullScreen }
+                currentCallbacks()?.onFullScreen(fullScreen)
+            }
         },
         browserTab = browserTab,
         onOpenNewSessionRequest = { uri ->
@@ -375,6 +537,7 @@ internal class BrowserTabSessionDelegateHost(
         val historyItems: List<HistoryStateItem>
         val historyCurrentIndex: Int
         val webAppManifest: JSONObject?
+        val fullScreen: Boolean
         synchronized(lock) {
             this.callbacks = callbacks
             this.onOpenNewSessionRequest = onOpenNewSessionRequest
@@ -384,6 +547,7 @@ internal class BrowserTabSessionDelegateHost(
             historyItems = cachedHistoryItems
             historyCurrentIndex = cachedHistoryCurrentIndex
             webAppManifest = cachedWebAppManifest
+            fullScreen = cachedFullScreen
         }
         // GeckoSession はナビゲーション状態が変わらない限り onCanGoBack/onCanGoForward を再発火しないため、
         // キャッシュ済みの値をリプレイして UI 側の状態を同期する
@@ -397,6 +561,7 @@ internal class BrowserTabSessionDelegateHost(
         if (webAppManifest != null) {
             callbacks.onWebAppManifest(webAppManifest)
         }
+        callbacks.onFullScreen(fullScreen)
         flushPendingRequests()
     }
 

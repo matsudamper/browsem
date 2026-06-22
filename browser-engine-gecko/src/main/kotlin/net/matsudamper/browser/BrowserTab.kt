@@ -6,8 +6,15 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import java.security.cert.X509Certificate
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
+
+/** タブの現在の接続のセキュリティ情報 (TLS) */
+data class TabSecurityInfo(
+    val isSecure: Boolean,
+    val certificate: X509Certificate?,
+)
 
 @Stable
 class BrowserTab(
@@ -80,6 +87,9 @@ class BrowserTab(
     // ページのfavicon（ホーム追加時のアイコンに使用、永続化は不要）
     var faviconBitmap: Bitmap? by mutableStateOf(null)
 
+    // 現在の接続のセキュリティ情報。サイトの設定画面での TLS 証明書確認に使用する（永続化は不要）
+    var securityInfo: TabSecurityInfo? by mutableStateOf(null)
+
     // スクロール位置（永続化は不要）。BrowserTabScreenState がタブ切替で再生成されても
     // GeckoSession と同じ寿命を持つここで保持することで、復元タブのスクロール位置を維持する。
     // State 側にだけ持つと、復元直後は GeckoSession のスクロール位置が変化せず
@@ -89,10 +99,45 @@ class BrowserTab(
     // 未オープンタブのセッション復元情報を保持
     internal var pendingSessionState: String? by mutableStateOf(null)
 
-    // onNewSession 経由で作成されたタブの初回ロード URL を保持。
-    // GeckoView が session.open() を実行するため restoreSession では isOpen==true になるが、
-    // GeckoView が target URL に自動遷移しないケースに備えて明示的に loadUri を呼ぶ。
+    // onNewSession 経由で作成されたタブの初回ナビゲーション完了までの目印。
+    // 初回読み込みは GeckoView が session.open() 後に opener (window.open 元) の
+    // コンテキスト付きで自動実行するため、アプリ側から loadUri してはいけない
+    // (referrer / opener 連携が失われ Google Pay などのポップアップ決済が壊れる)。
+    // restoreSession が自動読み込みを currentUrl の loadUri で上書きしないための
+    // ガードとして使い、実 URL への onLocationChange 発火でクリアされる。
     internal var pendingInitialUrl: String? by mutableStateOf(null)
+
+    // 初回読み込み時に referrer として送信する URL。コンテキストメニューの
+    // 「新しいタブで開く」で、ホットリンク保護のあるサーバーが 403 を返さないように
+    // 元ページの URL を引き継ぐために使用する。初回読み込みで消費される。
+    internal var pendingReferrerUrl: String? = null
+
+    // 初回ロードを GeckoView の Surface サイズ確定後まで遅延するための目印。
+    // 未確定 viewport でロードすると ImageDocument の shrink-to-fit スケールが
+    // 誤計算され、画像が小さく低解像度で表示されるのを回避する。
+    // restoreSession で立ち、performInitialLoadIfPending で消費される。
+    internal var pendingInitialLoad: Boolean = false
+
+    // performInitialLoadIfPending が loadUri した URL。遅延初回ロードの
+    // onLocationChange がユーザーの明示的ナビゲーションより後に到着した場合に
+    // フィルタするための参照値として使う。
+    internal var deferredInitialLoadUrl: String? = null
+
+    // true の場合、deferredInitialLoadUrl に一致する次の onLocationChange を
+    // 破棄する。performInitialLoadIfPending の loadUri が発行済みかつ、その後に
+    // cancelPendingInitialLoad（明示的ナビゲーション）が呼ばれたときにセットされる。
+    internal var shouldFilterDeferredLoad: Boolean = false
+
+    // URL バーからの明示的なナビゲーション等で初回ロードの遅延実行をキャンセルする。
+    // Surface サイズ確定後の performInitialLoadIfPending がホームページ URL で
+    // 上書きすることを防ぐ。すでに loadUri が発行済みの場合は onLocationChange の
+    // フィルタを有効化して、遅延到着する stale イベントが URL を上書きするのを防ぐ。
+    fun cancelPendingInitialLoad() {
+        pendingInitialLoad = false
+        if (deferredInitialLoadUrl != null) {
+            shouldFilterDeferredLoad = true
+        }
+    }
 
     private val sessionDelegateHost = BrowserTabSessionDelegateHost(this)
 

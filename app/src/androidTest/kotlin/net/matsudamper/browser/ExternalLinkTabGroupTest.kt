@@ -30,7 +30,8 @@ class ExternalLinkTabGroupTest {
         ensureTabsScreen()
 
         // グループを追加する
-        composeRule.waitUntil(timeoutMillis = 2.seconds.inWholeMilliseconds) {
+        // 他の待機と同じ10秒に揃える（2秒では低速なエミュレータで間に合わないことがある）
+        composeRule.waitUntil(timeoutMillis = 10.seconds.inWholeMilliseconds) {
             composeRule.onNode(hasTestTag(TabsScreenTestTags.AddTabGroupButton.testTag))
                 .isDisplayed()
         }

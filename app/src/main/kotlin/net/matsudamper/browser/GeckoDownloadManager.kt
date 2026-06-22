@@ -19,6 +19,9 @@ internal class GeckoDownloadManager(
     private val context: Context,
     private val downloadRepository: DownloadRepository,
 ) {
+    /** 指定URLに一致するアクティブなダウンロードを取得する */
+    suspend fun findDuplicateDownloads(url: String) = downloadRepository.findActiveByUrl(url)
+
     /**
      * URLをWorkManagerで非同期ダウンロードするようエンキューする。
      * Workerが起動する前にENQUEUEDレコードをRoomに挿入し、UIに即時反映させる。
@@ -94,44 +97,42 @@ internal class GeckoDownloadManager(
     }
 
     /**
-     * 失敗したダウンロードを部分ファイルから再開する。
-     * 古いレコードを削除して新しいワーカーをエンキューする。
-     * HTTPサーバーがRangeリクエストをサポートしている場合のみ実際の再開が行われ、
-     * サポートしていない場合は最初からダウンロードし直す。
+     * 失敗・一時停止したダウンロードを再開する。
+     * レコードは削除せず、既存レコードを新しいワーカーIDへ付け替えてENQUEUEDに戻す。
+     * これによりリスト上の位置（enqueuedAt）とUIのアイテム同一性（workerId）が維持され、
+     * 再開時に項目がリスト先頭へ飛んだりちらついたりしない。
+     * 部分ファイルがある場合はHTTP Rangeリクエストで続きから、
+     * 無い場合はURLを再取得して最初からダウンロードする。
      */
     fun resumeDownload(
-        oldWorkerId: String,
+        workerId: String,
         url: String,
         referrerUrl: String,
-        partialFileUri: String,
+        partialFileUri: String?,
         totalRead: Long,
         coroutineScope: CoroutineScope,
     ) {
         DownloadWorker.ensureNotificationChannel(context)
-        val workId = UUID.randomUUID()
-        val notificationId = workId.hashCode() and 0x7fffffff
+        val newWorkId = UUID.randomUUID()
+        val notificationId = newWorkId.hashCode() and 0x7fffffff
+        val inputData = buildMap<String, Any> {
+            put(DownloadWorker.KEY_URL, url)
+            put(DownloadWorker.KEY_REFERRER_URL, referrerUrl)
+            put(DownloadWorker.KEY_NOTIFICATION_ID, notificationId)
+            // 部分ファイルがある場合のみRange再開モードで起動する
+            if (partialFileUri != null) {
+                put(DownloadWorker.KEY_PARTIAL_FILE_URI, partialFileUri)
+                put(DownloadWorker.KEY_RESUME_FROM_BYTES, totalRead)
+            }
+        }
         val workRequest = OneTimeWorkRequestBuilder<DownloadWorker>()
-            .setId(workId)
-            .setInputData(
-                workDataOf(
-                    DownloadWorker.KEY_URL to url,
-                    DownloadWorker.KEY_REFERRER_URL to referrerUrl,
-                    DownloadWorker.KEY_NOTIFICATION_ID to notificationId,
-                    DownloadWorker.KEY_PARTIAL_FILE_URI to partialFileUri,
-                    DownloadWorker.KEY_RESUME_FROM_BYTES to totalRead,
-                )
-            )
+            .setId(newWorkId)
+            .setInputData(workDataOf(*inputData.toList().toTypedArray()))
             .addTag(DownloadWorker.TAG_DOWNLOAD)
             .build()
         coroutineScope.launch {
-            // 古いFAILEDレコードを削除してから新しいENQUEUEDレコードを挿入する
-            downloadRepository.deleteById(oldWorkerId)
-            downloadRepository.insertEnqueued(
-                workerId = workRequest.id.toString(),
-                url = url,
-                referrerUrl = referrerUrl,
-                enqueuedAt = System.currentTimeMillis(),
-            )
+            // 既存レコードを新しいワーカーIDへ付け替えてENQUEUEDに戻す（削除・再作成しない）
+            downloadRepository.updateResumed(workerId = workerId, newWorkerId = newWorkId.toString())
             WorkManager.getInstance(context).enqueue(workRequest)
             val notification = NotificationCompat.Builder(context, DownloadWorker.CHANNEL_ID)
                 .setSmallIcon(android.R.drawable.stat_sys_download)

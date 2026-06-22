@@ -25,6 +25,22 @@ class BrowserSessionController internal constructor(
         browserTabController.moveTab(fromIndex, toIndex)
     }
 
+    override fun closeTab(tabId: String): String? {
+        return browserTabController.closeTab(tabId)
+    }
+
+    override fun closeTabWithUndo(tabId: String, nextSelectedTabId: String?): String? {
+        return browserTabController.closeTabWithUndo(tabId, nextSelectedTabId)
+    }
+
+    override fun undoCloseTab(): String? {
+        return browserTabController.undoCloseTab()
+    }
+
+    override fun confirmClosedTab() {
+        browserTabController.confirmClosedTab()
+    }
+
     fun close() {
         browserTabController.close()
     }
@@ -50,15 +66,17 @@ class BrowserSessionLifecycleController(
      */
     fun restoreSession(tab: BrowserTab) {
         if (tab.session.isOpen) {
-            val url = tab.pendingInitialUrl
-            if (url != null) {
-                tab.pendingInitialUrl = null
-                tab.session.loadUri(url)
-            }
+            // onNewSession 経由のタブ (pendingInitialUrl != null) であっても、ここで
+            // loadUri してはいけない。GeckoView が opener (window.open 元ページ) の
+            // コンテキスト付きで自動読み込みするため、アプリ側から loadUri すると
+            // その読み込みを上書きして referrer / opener 連携が失われ、
+            // Google Pay などのポップアップ決済が「販売者に戻れない」エラーになる。
             tab.session.setActive(true)
             markActiveForExtensions(tab.session)
             return
         }
+        // onNewSession 経由のタブは GeckoView 自身が open して初回読み込みを行うため、
+        // ここで open / loadUri せず待つ
         if (tab.pendingInitialUrl != null) {
             return
         }
@@ -77,9 +95,44 @@ class BrowserSessionLifecycleController(
                 return
             }
         }
-        tab.session.loadUri(tab.currentUrl.ifBlank { "about:blank" })
+        // 初回ロードは GeckoView の Surface サイズ確定後まで遅延する。
+        // 未確定 viewport でロードすると ImageDocument (画像単体表示) の
+        // shrink-to-fit スケールが誤計算され、画像が小さく低解像度で表示されるため。
+        // performInitialLoadIfPending がサイズ確定検知後に呼ばれてロードを実行する。
+        tab.pendingInitialLoad = true
         tab.session.setActive(true)
         markActiveForExtensions(tab.session)
+    }
+
+    /** restoreSession で遅延された初回ロードが未実行かどうかを返す */
+    fun hasPendingInitialLoad(tab: BrowserTab): Boolean = tab.pendingInitialLoad
+
+    /**
+     * restoreSession で遅延された初回ロードを実行する。
+     * GeckoView のサイズ確定後（width/height > 0）に app 層から呼ばれることを想定。
+     */
+    fun performInitialLoadIfPending(tab: BrowserTab) {
+        if (!tab.pendingInitialLoad) return
+        // サイズ確定待ちの間にタブが閉じられた場合は何もしない
+        if (!tab.session.isOpen) return
+        tab.pendingInitialLoad = false
+        val urlToLoad = tab.currentUrl.ifBlank { "about:blank" }
+        // 遅延ロードの URL を記録。明示的ナビゲーション（cancelPendingInitialLoad）が
+        // 後から発行された場合に、遅延到着する onLocationChange をフィルタするために使う。
+        tab.deferredInitialLoadUrl = urlToLoad
+        val referrerUrl = tab.pendingReferrerUrl
+        tab.pendingReferrerUrl = null
+        if (referrerUrl != null) {
+            // コンテキストメニューの「新しいタブで開く」由来のタブは元ページを referrer に
+            // 付けて読み込む。ホットリンク保護のあるサーバーで 403 にならないようにするため
+            tab.session.load(
+                GeckoSession.Loader()
+                    .uri(urlToLoad)
+                    .referrer(referrerUrl),
+            )
+        } else {
+            tab.session.loadUri(urlToLoad)
+        }
     }
 
     /**

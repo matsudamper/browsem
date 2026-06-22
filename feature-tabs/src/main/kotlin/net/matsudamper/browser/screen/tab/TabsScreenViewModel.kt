@@ -7,14 +7,14 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import net.matsudamper.browser.core.TabSelectionPolicy
 import net.matsudamper.browser.core.TabStore
 import net.matsudamper.browser.core.TabStoreState
 import net.matsudamper.browser.data.TabGroupData
+import net.matsudamper.browser.data.TabGroupId
 import net.matsudamper.browser.data.TabGroupRepository
 import net.matsudamper.browser.data.tab.TabGroupAssignment
 import net.matsudamper.browser.ui.tabs.TabPreviewImage
@@ -25,6 +25,7 @@ import net.matsudamper.browser.ui.tabs.TabsScreenUiState
 class TabsScreenViewModel(
     private val tabStore: TabStore,
     private val tabGroupRepository: TabGroupRepository,
+    private val playingTabIds: StateFlow<Set<String>> = MutableStateFlow(emptySet()),
 ) : ViewModel() {
 
     private val viewModelStateFlow = MutableStateFlow(ViewModelState())
@@ -40,9 +41,70 @@ class TabsScreenViewModel(
 
     private val callbacks = object : TabsScreenUiState.Callbacks {
         override fun onCloseTab(tabId: String) {
-            // イベントを先に送信してタブを閉じてから、グループ割り当てを解除する
-            eventHandler.trySend { it.closeTab(tabId) }
-            onTabClosed(tabId)
+            val state = viewModelStateFlow.value
+            // 画面が把握している最新のグループ割当を反映した状態で次の選択タブを決める
+            // （同グループ優先の判定を表示と一致させるため）
+            val storeState = state.tabStoreState.copy(
+                tabGroupAssignments = state.assignments
+                    .filter { it.groupId.isNotEmpty() }
+                    .associate { it.tabId to it.groupId },
+            )
+            val wasSelected = storeState.selectedTabId == tabId
+            val nextTabId = if (wasSelected) {
+                TabSelectionPolicy.resolveNextSelectedTab(
+                    closingTabId = tabId,
+                    state = storeState,
+                )
+            } else {
+                null
+            }
+            val tab = state.tabStoreState.tabs.firstOrNull { it.id == tabId }
+            val title = tab?.title.orEmpty().ifBlank { tabId }
+            val groupId = state.assignments
+                .firstOrNull { it.tabId == tabId }
+                ?.groupId
+                ?.takeIf { it.isNotEmpty() }
+            // タブ数の表示が遅れないよう、確定（Snackbar 消滅）を待たずにこの時点で
+            // 実際に閉じる。「戻す」が押されたら undoCloseTab で復元する
+            val nextSelectedTabId = tabStore.closeTabWithUndo(tabId, nextTabId)
+            eventHandler.trySend { it.onTabClosed(tabId, nextSelectedTabId) }
+            viewModelStateFlow.update {
+                it.copy(
+                    pendingClosedTab = ViewModelState.PendingClosedTab(
+                        tabId = tabId,
+                        title = title,
+                        wasSelected = wasSelected,
+                        groupId = groupId,
+                    ),
+                )
+            }
+        }
+
+        override fun onUndoCloseTab() {
+            val pending = viewModelStateFlow.value.pendingClosedTab
+            viewModelStateFlow.update { it.copy(pendingClosedTab = null) }
+            if (pending == null) return
+            val restoredTabId = tabStore.undoCloseTab() ?: return
+            // 閉鎖の永続化で行ごとグループ割当も消えているため、元のグループへ割り当て直す
+            val groupId = pending.groupId
+            if (groupId != null) {
+                viewModelScope.launch {
+                    tabGroupRepository.assignTabToGroup(restoredTabId, TabGroupId(groupId))
+                }
+            }
+            // 閉じる時点で選択を切り替えていた場合は、選択も元のタブへ戻す
+            if (pending.wasSelected) {
+                eventHandler.trySend { it.selectTab(restoredTabId) }
+            }
+        }
+
+        override fun onConfirmCloseTab() {
+            if (viewModelStateFlow.value.pendingClosedTab == null) return
+            viewModelStateFlow.update { it.copy(pendingClosedTab = null) }
+            // 実際の閉鎖は onCloseTab 時点で完了している。ここでは Undo 用に保持していた
+            // セッションの破棄だけを行う。タブ一覧画面から離れる際 (onDispose) にも呼ばれ、
+            // その時点では eventHandler の消費側が破棄済みのため Channel は経由しない
+            tabStore.confirmClosedTab()
         }
 
         override fun onReorderTabs(groupIndex: Int, fromLocalIndex: Int, toLocalIndex: Int) {
@@ -92,6 +154,7 @@ class TabsScreenViewModel(
             viewModelStateFlow.collectLatest { state ->
                 val groups = state.groups
                 val assignmentMap = state.assignments.associate { it.tabId to it.groupId }
+                val playingIds = state.playingTabIds
                 val groupedTabs = groups.map { group ->
                     state.tabStoreState.tabs
                         .filter { assignmentMap[it.id] == group.id.value }
@@ -100,12 +163,20 @@ class TabsScreenViewModel(
                                 id = tab.id,
                                 title = tab.title,
                                 previewImage = tab.previewBitmapArray?.let { TabPreviewImage(it) },
+                                isPlaying = tab.id in playingIds,
                             )
                         }
+                }
+                val groupHasPlayingTab = groupedTabs.map { tabs ->
+                    tabs.any { it.isPlaying }
+                }
+                val pendingClosedTab = state.pendingClosedTab?.let {
+                    TabsScreenUiState.PendingClosedTab(it.tabId, it.title)
                 }
                 uiStateFlow.update {
                     TabsScreenUiState(
                         callbacks = callbacks,
+                        pendingClosedTab = pendingClosedTab,
                         loadingState = if (state.activeGroupIndex == null) {
                             TabsScreenUiState.LoadingState.Loading
                         } else {
@@ -115,6 +186,7 @@ class TabsScreenViewModel(
                                 // グループが空になる場合も含めて有効範囲にクランプする
                                 activeGroupIndex = state.activeGroupIndex.coerceIn(0, (groups.size - 1).coerceAtLeast(0)),
                                 selectedTabId = state.tabStoreState.selectedTabId,
+                                groupHasPlayingTab = groupHasPlayingTab,
                             )
                         },
                     )
@@ -124,7 +196,15 @@ class TabsScreenViewModel(
     }.asStateFlow()
 
     interface Event {
-        fun closeTab(tabId: String)
+        /**
+         * タブを閉じた直後に呼ばれる。ナビゲーション側の後処理
+         * （表示中 Browser の差し替えや、タブが無くなった場合の新規タブ作成）を行う。
+         * @param nextSelectedTabId 閉鎖後に選択されているタブの ID。タブが残っていない場合は null
+         */
+        fun onTabClosed(closedTabId: String, nextSelectedTabId: String?)
+
+        /** タブ一覧を開いたまま、背後の Browser の選択タブだけを切り替える */
+        fun selectTab(tabId: String)
     }
 
     init {
@@ -141,6 +221,11 @@ class TabsScreenViewModel(
         viewModelScope.launch {
             tabGroupRepository.observeTabGroupAssignments().collect { assignments ->
                 viewModelStateFlow.update { it.copy(assignments = assignments) }
+            }
+        }
+        viewModelScope.launch {
+            playingTabIds.collect { playingIds ->
+                viewModelStateFlow.update { it.copy(playingTabIds = playingIds) }
             }
         }
         viewModelScope.launch {
@@ -179,22 +264,10 @@ class TabsScreenViewModel(
                 val index = if (groupId != null) state.groups.indexOfFirst { it.id.value == groupId } else -1
                 viewModelStateFlow.update { it.copy(activeGroupIndex = if (index >= 0) index else 0) }
             }
-            // 初回復元後、selectedTabId の変化を継続的に監視して activeGroupIndex を同期する。
-            // タブ画面を開いている間にタブが閉じられて選択タブが切り替わった場合などに対応する。
-            tabStore.tabStoreState.map { it.selectedTabId }.distinctUntilChanged().collect { selectedTabId ->
-                if (selectedTabId == null) return@collect
-                val state = viewModelStateFlow.value
-                val groups = state.groups
-                if (groups.isEmpty()) return@collect
-                val assignments = tabGroupRepository.observeTabGroupAssignments().first()
-                val groupId = assignments.find { it.tabId == selectedTabId }?.groupId
-                val index = if (groupId != null) groups.indexOfFirst { it.id.value == groupId } else -1
-                val resolvedIndex = if (index >= 0) index else 0
-                if (state.activeGroupIndex != resolvedIndex) {
-                    programmaticScrollTarget = resolvedIndex
-                    viewModelStateFlow.update { it.copy(activeGroupIndex = resolvedIndex) }
-                }
-            }
+            // 表示グループはユーザー操作（タップ・スワイプ・グループ追加/削除）と上記の初期復元
+            // でのみ変更する。selectedTabId の変化への継続追従はタブ閉鎖確定時などに表示グループが
+            // 勝手に切り替わる原因になるため行わない。タブ一覧から離れると ViewModel は破棄される
+            // （NavController.selectTab がバックスタックを畳む）ので、再入時は初期復元が再実行される。
         }
     }
 
@@ -280,13 +353,6 @@ class TabsScreenViewModel(
 
         viewModelScope.launch {
             tabGroupRepository.reorderGroups(currentGroups.map { it.id.value })
-        }
-    }
-
-    /** タブが閉じられたときにグループ割り当てを解除する */
-    private fun onTabClosed(tabId: String) {
-        viewModelScope.launch {
-            tabGroupRepository.removeTabFromGroup(tabId)
         }
     }
 
@@ -395,8 +461,20 @@ class TabsScreenViewModel(
         val activeGroupIndex: Int? = null,
         val tabStoreState: TabStoreState = TabStoreState(),
         val assignments: List<TabGroupAssignment> = emptyList(),
+        val pendingClosedTab: PendingClosedTab? = null,
+        val playingTabIds: Set<String> = emptySet(),
     ) {
         /** ドラッグ中はローカル順序を優先し、DB の更新が遅れても表示が乱れないようにする。 */
         val groups: List<TabGroupData> get() = localGroupOrder ?: dbGroups
+
+        /** 閉鎖済みで Undo 可能なタブの情報（Snackbar 表示と復元に使用する） */
+        data class PendingClosedTab(
+            val tabId: String,
+            val title: String,
+            /** 閉じる時点で選択中だったか（Undo 時に選択を戻すための記録） */
+            val wasSelected: Boolean,
+            /** 閉じる前に属していたグループ ID（Undo 時に割り当てを復元するための記録） */
+            val groupId: String?,
+        )
     }
 }

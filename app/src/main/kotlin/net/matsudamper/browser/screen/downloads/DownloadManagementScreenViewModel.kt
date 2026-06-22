@@ -2,21 +2,25 @@ package net.matsudamper.browser.screen.downloads
 
 import android.app.Application
 import android.app.DownloadManager
+import android.app.NotificationManager
 import android.content.Intent
 import android.provider.MediaStore
 import android.provider.Settings
+import android.util.Size
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.core.net.toUri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import androidx.work.WorkInfo
 import androidx.work.WorkManager
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import net.matsudamper.browser.GeckoDownloadManager
 import net.matsudamper.browser.data.download.DownloadRecord
 import net.matsudamper.browser.data.download.DownloadRecordStatus
@@ -33,34 +37,52 @@ internal class DownloadManagementScreenViewModel(
     private val geckoDownloadManager = GeckoDownloadManager(application, downloadRepository)
     private val callbacks = buildCallbacks()
 
+    val eventHandler = Channel<(Event) -> Unit>(Channel.UNLIMITED)
+
     /** resumeDownload から最新のレコードを参照するためのキャッシュ */
     private var currentRecords: List<DownloadRecord> = emptyList()
 
     val uiState: StateFlow<DownloadManagementScreenUiState> = MutableStateFlow(
         DownloadManagementScreenUiState(
+            isLoading = true,
             downloads = emptyList(),
             callbacks = callbacks,
         ),
     ).also { uiStateFlow ->
         viewModelScope.launch {
-            downloadRepository.observeDownloads().collectLatest { records ->
-                currentRecords = records
-                val items = records.map { record -> record.toDownloadItem() }
-                uiStateFlow.update {
-                    DownloadManagementScreenUiState(
-                        downloads = items,
-                        callbacks = callbacks,
-                    )
+            downloadRepository.observeDownloads()
+                .collectLatest { records ->
+                    currentRecords = records
+                    val items = records.map { record -> record.toDownloadItem() }
+                    uiStateFlow.update {
+                        DownloadManagementScreenUiState(
+                            isLoading = false,
+                            downloads = items,
+                            callbacks = callbacks,
+                        )
+                    }
                 }
-            }
         }
     }.asStateFlow()
 
     private fun buildCallbacks() = DownloadManagementScreenUiState.Callbacks(
         onCancel = { id -> cancelDownload(id) },
+        onPause = { id -> pauseDownload(id) },
         onOpenFile = { fileUri -> openFile(fileUri) },
         onOpenDownloadsFolder = { openDownloadsFolder() },
         onResume = { id -> resumeDownload(id) },
+        onOpenOriginPage = { url -> eventHandler.trySend { it.navigateToUrl(url) } },
+        loadThumbnail = { fileUri ->
+            withContext(Dispatchers.IO) {
+                runCatching {
+                    getApplication<Application>().contentResolver.loadThumbnail(
+                        fileUri.toUri(),
+                        Size(THUMBNAIL_SIZE_PX, THUMBNAIL_SIZE_PX),
+                        null,
+                    )
+                }.getOrNull()?.asImageBitmap()
+            }
+        },
     )
 
     private fun DownloadRecord.toDownloadItem(): DownloadManagementScreenUiState.DownloadItem {
@@ -68,7 +90,9 @@ internal class DownloadManagementScreenViewModel(
             DownloadRecordStatus.SUCCEEDED -> {
                 val uri = fileUri
                 if (uri != null) {
-                    DownloadManagementScreenUiState.DownloadStatus.Completed(uri)
+                    DownloadManagementScreenUiState.DownloadStatus.Completed(
+                        fileUri = uri,
+                    )
                 } else {
                     DownloadManagementScreenUiState.DownloadStatus.Failed(canResume = false)
                 }
@@ -95,6 +119,13 @@ internal class DownloadManagementScreenViewModel(
                 )
             }
             DownloadRecordStatus.CANCELLED -> DownloadManagementScreenUiState.DownloadStatus.Cancelled
+            DownloadRecordStatus.PAUSED -> {
+                DownloadManagementScreenUiState.DownloadStatus.Paused(
+                    progress = progress,
+                    totalRead = totalRead,
+                    contentLength = contentLength,
+                )
+            }
         }
         return DownloadManagementScreenUiState.DownloadItem(
             id = workerId,
@@ -104,51 +135,77 @@ internal class DownloadManagementScreenViewModel(
             },
             status = uiStatus,
             enqueuedAt = enqueuedAt,
+            originPageUrl = referrerUrl.ifBlank { null },
         )
     }
 
     private fun cancelDownload(id: UUID) {
+        val record = currentRecords.find { it.workerId == id } ?: return
+        // WorkManager・通知・DB はいずれも現在のワーカーID（currentWorkerId）で識別する
+        val currentWorkerId = record.currentWorkerId
+        // 一時停止中のレコードは Worker が存在しないため、残った部分ファイルをここで削除する
+        val pausedPartialFileUri = record.partialFileUri.takeIf { record.status == DownloadRecordStatus.PAUSED }
+        // suspend を挟むと viewModelScope の破棄でキャンセル要求自体が消えるため、即時に発行する
+        workManager.cancelWorkById(currentWorkerId)
+        // Worker 起動前に GeckoDownloadManager が直接表示した通知は誰も消さないため、
+        // 同じ導出式（workId の hashCode）で通知 ID を求めて明示的に消す
+        val notificationId = currentWorkerId.hashCode() and 0x7fffffff
+        getApplication<Application>()
+            .getSystemService(NotificationManager::class.java)
+            ?.cancel(notificationId)
         viewModelScope.launch {
-            // キャンセル前にWorkerの状態を確認する
-            val workInfo = workManager.getWorkInfoByIdFlow(id).first()
-            workManager.cancelWorkById(id)
-            // WorkerがRUNNING状態の場合はdoWork()のCancellationExceptionハンドラがDBを更新するため直接更新しない
-            // ENQUEUED（未起動）またはWorkerがWorkManagerに存在しない（prune済み等）場合は
-            // doWork()が呼ばれないためDBを直接CANCELLED状態に更新する
-            if (workInfo == null || workInfo.state != WorkInfo.State.RUNNING) {
-                downloadRepository.updateCancelled(id.toString())
+            // Worker の CancellationException ハンドラに依存せず無条件で CANCELLED に更新する。
+            // SUCCEEDED/FAILED の上書きは DAO 側のガードで防がれる。
+            // WorkManager の割り込みが届かない場合でも、Worker が進捗更新時に
+            // この CANCELLED 状態を検知して自力で停止する
+            downloadRepository.updateCancelled(currentWorkerId.toString())
+            pausedPartialFileUri?.let { uri ->
+                runCatching {
+                    getApplication<Application>().contentResolver.delete(uri.toUri(), null, null)
+                }
             }
         }
     }
 
     /**
-     * 失敗したダウンロードを再開する。
-     * 部分ファイルが残っている場合はRangeリクエストで再開し、
-     * そうでない場合は同じURLを再度エンキューする。
+     * 実行中のダウンロードを一時停止する。
+     * 先に DB を PAUSED に更新してから WorkManager に割り込みを発行することで、
+     * Worker の CancellationException ハンドラが一時停止を検知して部分ファイルを保持する
+     */
+    private fun pauseDownload(id: UUID) {
+        val record = currentRecords.find { it.workerId == id } ?: return
+        val currentWorkerId = record.currentWorkerId
+        viewModelScope.launch {
+            downloadRepository.updatePaused(currentWorkerId.toString())
+            workManager.cancelWorkById(currentWorkerId)
+            // Worker 起動前に GeckoDownloadManager が直接表示した通知は誰も消さないため、
+            // 同じ導出式（workId の hashCode）で通知 ID を求めて明示的に消す
+            val notificationId = currentWorkerId.hashCode() and 0x7fffffff
+            getApplication<Application>()
+                .getSystemService(NotificationManager::class.java)
+                ?.cancel(notificationId)
+        }
+    }
+
+    /**
+     * 失敗または一時停止したダウンロードを再開する。
+     * 既存レコードを付け替えるため、リスト上の位置とアイテム同一性は維持される。
+     * 部分ファイルが残っている場合はRangeリクエストで続きから、
+     * 無い場合はURLを再取得して最初からダウンロードする。
      */
     private fun resumeDownload(id: UUID) {
         val record = currentRecords.find { it.workerId == id } ?: return
-        if (record.status != DownloadRecordStatus.FAILED) return
-
-        val partialFileUri = record.partialFileUri
-        if (partialFileUri != null) {
-            geckoDownloadManager.resumeDownload(
-                oldWorkerId = record.workerId.toString(),
-                url = record.url,
-                referrerUrl = record.referrerUrl,
-                partialFileUri = partialFileUri,
-                totalRead = record.totalRead,
-                coroutineScope = viewModelScope,
-            )
+        if (record.status != DownloadRecordStatus.FAILED &&
+            record.status != DownloadRecordStatus.PAUSED
+        ) {
             return
         }
-
-        viewModelScope.launch {
-            downloadRepository.deleteById(record.workerId.toString())
-        }
-        geckoDownloadManager.enqueueDownload(
+        geckoDownloadManager.resumeDownload(
+            workerId = record.workerId.toString(),
             url = record.url,
             referrerUrl = record.referrerUrl,
+            partialFileUri = record.partialFileUri,
+            totalRead = record.totalRead,
             coroutineScope = viewModelScope,
         )
     }
@@ -192,5 +249,15 @@ internal class DownloadManagementScreenViewModel(
             flags = Intent.FLAG_ACTIVITY_NEW_TASK
         }
         runCatching { app.startActivity(intent) }
+    }
+
+    interface Event {
+        /** ダウンロード開始時のページURLを新しいタブで開く */
+        fun navigateToUrl(url: String)
+    }
+
+    companion object {
+        /** loadThumbnail に渡すサムネイルの最大サイズ (px) */
+        private const val THUMBNAIL_SIZE_PX = 256
     }
 }

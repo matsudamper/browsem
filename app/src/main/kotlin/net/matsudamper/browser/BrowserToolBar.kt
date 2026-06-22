@@ -86,6 +86,7 @@ internal fun BrowserToolBar(
     onSubmit: (String) -> Unit,
     isFocused: Boolean,
     onFocusChanged: (Boolean) -> Unit,
+    onLongClickUrl: () -> Unit,
     showInstallExtensionItem: Boolean,
     onInstallExtension: () -> Unit,
     onOpenSettings: () -> Unit,
@@ -114,6 +115,8 @@ internal fun BrowserToolBar(
     showTabActions: Boolean = true,
     onHorizontalDrag: (Float) -> Unit = {},
     onHorizontalDragEnd: () -> Unit = {},
+    onOpenSiteSettings: (() -> Unit)? = null,
+    onOpenDownloads: (() -> Unit)? = null,
 ) {
     var visibleMenu by remember { mutableStateOf(false) }
     BrowserToolbar(
@@ -121,15 +124,22 @@ internal fun BrowserToolBar(
             .testTag(BrowserToolbarTestTags.Toolbar.testTag),
         isFocused = isFocused,
         gestureState = if (showTabActions) {
-            BrowserToolBarGestureState(
-                onHorizontalDrag = onHorizontalDrag,
-                onHorizontalDragEnd = onHorizontalDragEnd,
-                onOpenTabs = onOpenTabs
-            )
+            remember {
+                BrowserToolBarGestureState(
+                    onHorizontalDrag = onHorizontalDrag,
+                    onHorizontalDragEnd = onHorizontalDragEnd,
+                    onOpenTabs = onOpenTabs,
+                )
+            }.apply {
+                this.onHorizontalDrag = onHorizontalDrag
+                this.onHorizontalDragEnd = onHorizontalDragEnd
+                this.onOpenTabs = onOpenTabs
+            }
         } else {
             null
         },
         toolbarColor = toolbarColor,
+        onLongClickUrl = onLongClickUrl,
         onOpenTabs = onOpenTabs,
         tabCount = tabCount,
         showTabButton = showTabActions,
@@ -177,6 +187,8 @@ internal fun BrowserToolBar(
                 onPageZoomIn = onPageZoomIn,
                 onPageZoomOut = onPageZoomOut,
                 onResetPageZoom = onResetPageZoom,
+                onOpenSiteSettings = onOpenSiteSettings,
+                onOpenDownloads = onOpenDownloads,
             )
         }
     )
@@ -187,6 +199,11 @@ internal class BrowserToolBarGestureState(
     onHorizontalDragEnd: () -> Unit,
     onOpenTabs: () -> Unit,
 ) {
+    // pointerInput コルーチンはキーが変わらない限り再起動されないため、
+    // コンストラクタでキャプチャした値ではなく var プロパティ経由で最新のコールバックを参照する。
+    var onHorizontalDrag = onHorizontalDrag
+    var onHorizontalDragEnd = onHorizontalDragEnd
+    var onOpenTabs = onOpenTabs
     var isFocused by mutableStateOf(false)
 
     val modifier = Modifier
@@ -196,10 +213,10 @@ internal class BrowserToolBarGestureState(
             if (isFocused) return@pointerInput
             detectHorizontalDragGestures(
                 onHorizontalDrag = { _, dragAmount ->
-                    onHorizontalDrag(dragAmount)
+                    this@BrowserToolBarGestureState.onHorizontalDrag(dragAmount)
                 },
-                onDragEnd = { onHorizontalDragEnd() },
-                onDragCancel = { onHorizontalDragEnd() },
+                onDragEnd = { this@BrowserToolBarGestureState.onHorizontalDragEnd() },
+                onDragCancel = { this@BrowserToolBarGestureState.onHorizontalDragEnd() },
             )
         }
         .pointerInput(isFocused) {
@@ -208,7 +225,7 @@ internal class BrowserToolBarGestureState(
             detectDownSwipe(
                 density = this,
                 onDownSwipe = {
-                    onOpenTabs()
+                    this@BrowserToolBarGestureState.onOpenTabs()
                 }
             )
         }
@@ -230,6 +247,7 @@ internal fun BrowserToolbar(
     gestureState: BrowserToolBarGestureState?,
     urlInputState: UrlInputState,
     toolbarColor: Color?,
+    onLongClickUrl: () -> Unit,
     updateVisibleMenu: (Boolean) -> Unit,
     onOpenTabs: () -> Unit,
     tabCount: Int?,
@@ -333,7 +351,7 @@ internal fun BrowserToolbar(
                             tint = if (canGoBack) {
                                 LocalContentColor.current
                             } else {
-                                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                                LocalContentColor.current.copy(alpha = 0.38f)
                             },
                         )
                     }
@@ -360,7 +378,7 @@ internal fun BrowserToolbar(
                             tint = if (canGoForward) {
                                 LocalContentColor.current
                             } else {
-                                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                                LocalContentColor.current.copy(alpha = 0.38f)
                             },
                         )
                     }
@@ -396,32 +414,35 @@ internal fun BrowserToolbar(
                     color = toolbarColors.urlBarBackgroundColor,
                     shape = CircleShape,
                 ) {
-                    Row(
-                        modifier = Modifier
-                            .padding(
-                                end = 4.dp,
-                            ),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        UrlTextInput(
+                    val urlBarPaddingValues = PaddingValues(
+                        start = 8.dp,
+                        top = 4.dp,
+                        bottom = 4.dp,
+                    )
+                    if (isFocused) {
+                        // 編集モード: テキスト入力フィールド + クリアボタン
+                        Row(
                             modifier = Modifier
                                 .testTag(BrowserToolbarTestTags.Url(urlInputState.value).testTag)
-                                .weight(1f),
-                            enableSuggest = urlInputState.enableSuggest,
-                            paddingValues = PaddingValues(
-                                start = 8.dp,
-                                top = 4.dp,
-                                bottom = 4.dp
-                            ),
-                            scrollEnabled = isFocused,
-                            value = urlInputState.value,
-                            onValueChange = urlInputState.onValueChange,
-                            onSubmit = urlInputState.onSubmit,
-                            onFocusChanged = urlInputState.onFocusChanged,
-                            textColor = LocalContentColor.current,
-                        )
+                                .padding(
+                                    end = 4.dp,
+                                ),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            UrlTextInput(
+                                modifier = Modifier
+                                    .weight(1f),
+                                enableSuggest = urlInputState.enableSuggest,
+                                paddingValues = urlBarPaddingValues,
+                                scrollEnabled = true,
+                                value = urlInputState.value,
+                                onValueChange = urlInputState.onValueChange,
+                                onSubmit = urlInputState.onSubmit,
+                                onFocusChanged = urlInputState.onFocusChanged,
+                                textColor = LocalContentColor.current,
+                                requestFocusOnShow = true,
+                            )
 
-                        if (isFocused) {
                             CompositionLocalProvider(
                                 LocalMinimumInteractiveComponentSize provides 0.dp
                             ) {
@@ -439,6 +460,21 @@ internal fun BrowserToolbar(
                                 )
                             }
                         }
+                    } else {
+                        // 表示モード: URL を表示するだけ。タップで編集モードへ、ロングプレスでURLコピー。
+                        // UrlBar の testTag は UrlDisplay 内部で付与するため、ここでは付けない
+                        // （同一ノードに testTag を二重付与すると外側が優先され UrlBar が消えてしまう）。
+                        UrlDisplay(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(end = 4.dp),
+                            value = urlInputState.value,
+                            textColor = LocalContentColor.current,
+                            enableSuggest = urlInputState.enableSuggest,
+                            paddingValues = urlBarPaddingValues,
+                            onClick = { urlInputState.onFocusChanged(true) },
+                            onLongClick = onLongClickUrl,
+                        )
                     }
                 }
 
@@ -619,6 +655,7 @@ private fun Preview() {
                     onSubmit = {},
                     isFocused = isFocused,
                     onFocusChanged = {},
+                    onLongClickUrl = {},
                     showInstallExtensionItem = true,
                     onInstallExtension = {},
                     onOpenSettings = {},
@@ -662,6 +699,7 @@ private fun PreviewTabCountVariants() {
                     onSubmit = {},
                     isFocused = false,
                     onFocusChanged = {},
+                    onLongClickUrl = {},
                     showInstallExtensionItem = true,
                     onInstallExtension = {},
                     onOpenSettings = {},
@@ -704,6 +742,7 @@ private fun PreviewWideToolbar() {
                 onSubmit = {},
                 isFocused = false,
                 onFocusChanged = {},
+                onLongClickUrl = {},
                 showInstallExtensionItem = true,
                 onInstallExtension = {},
                 onOpenSettings = {},
@@ -729,6 +768,54 @@ private fun PreviewWideToolbar() {
                 onLongPressHistory = {},
                 onTranslatePage = {},
             )
+        }
+    }
+}
+
+// テーマカラーが黒/白のサイトで戻る/進むが disable のとき、
+// disable アイコンの色がシステムテーマではなくツールバーのコンテンツカラー(メニュー等と同じ色)に
+// 基づいて決まることを確認するプレビュー。戻る=有効・進む=無効で有効/無効のコントラストを見る。
+@Preview(name = "DisabledOnThemeColorLight", widthDp = 600)
+@Preview(name = "DisabledOnThemeColorDark", widthDp = 600, uiMode = android.content.res.Configuration.UI_MODE_NIGHT_YES)
+@Composable
+private fun PreviewDisabledOnThemeColor() {
+    BrowserTheme(themeMode = net.matsudamper.browser.data.ThemeMode.THEME_SYSTEM) {
+        Column {
+            for (toolbarColor in listOf(Color.Black, Color.White)) {
+                BrowserToolBar(
+                    value = "https://google.com",
+                    onValueChange = {},
+                    onSubmit = {},
+                    isFocused = false,
+                    onFocusChanged = {},
+                    onLongClickUrl = {},
+                    showInstallExtensionItem = true,
+                    onInstallExtension = {},
+                    onOpenSettings = {},
+                    onShare = {},
+                    tabCount = 2,
+                    onOpenTabs = {},
+                    isPcMode = false,
+                    onPcModeToggle = {},
+                    onFindInPage = {},
+                    onAddToHomeScreen = {},
+                    pageZoomPercent = 100,
+                    onPageZoomIn = {},
+                    onPageZoomOut = {},
+                    onResetPageZoom = {},
+                    toolbarColor = toolbarColor,
+                    onRefresh = {},
+                    onSuperRefresh = {},
+                    onHome = {},
+                    onForward = {},
+                    canGoForward = false,
+                    onBack = {},
+                    canGoBack = true,
+                    onLongPressHistory = {},
+                    onTranslatePage = {},
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+            }
         }
     }
 }

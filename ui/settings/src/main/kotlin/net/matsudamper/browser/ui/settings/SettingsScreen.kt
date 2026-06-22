@@ -52,7 +52,6 @@ fun SettingsScreen(
     uiState: SettingsScreenUiState,
     onOpenExtensions: () -> Unit,
     onOpenHistory: () -> Unit,
-    onOpenDownloads: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -245,33 +244,15 @@ fun SettingsScreen(
 
             SettingSection(title = "位置情報") {
                 Column {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .toggleable(
-                                value = uiState.mockLocationEnabled,
-                                role = Role.Switch,
-                                onValueChange = uiState.callbacks::setMockLocationEnabled,
-                            )
-                            .padding(vertical = 4.dp),
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "モック位置情報を使用する",
-                                style = MaterialTheme.typography.bodyLarge,
-                            )
-                            Text(
-                                text = "Webページへの位置情報要求に実際の位置ではなく指定した座標を返します",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                        Switch(
-                            checked = uiState.mockLocationEnabled,
-                            onCheckedChange = null,
-                        )
-                    }
+                    Text(
+                        text = "モック位置情報の座標",
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                    Text(
+                        text = "サイトごとの設定が「モック位置情報」のサイトへ、実際の位置ではなくこの座標を返します",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                     Spacer(Modifier.height(4.dp))
                     OutlinedTextField(
                         value = uiState.mockLocationInput,
@@ -323,17 +304,6 @@ fun SettingsScreen(
                         checked = uiState.enableThirdPartyCa,
                         onCheckedChange = uiState.callbacks::setEnableThirdPartyCa,
                     )
-                }
-            }
-
-            Spacer(Modifier.height(betweenPadding))
-
-            SettingSection(title = "ダウンロード") {
-                TextButton(
-                    onClick = onOpenDownloads,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text("ダウンロード管理")
                 }
             }
 
@@ -425,11 +395,12 @@ fun SettingsScreen(
 }
 
 @Composable
-private fun SettingSection(
+internal fun SettingSection(
     title: String,
     content: @Composable () -> Unit,
 ) {
     Surface(
+        modifier = Modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.large,
         color = MaterialTheme.colorScheme.surfaceContainer,
     ) {
@@ -446,7 +417,8 @@ private fun SettingSection(
     }
 }
 
-@Preview(showBackground = true)
+// 設定項目が縦に長いため、全体が見えるように高さを広げて Preview する
+@Preview(showBackground = true, heightDp = 2400)
 @Composable
 private fun SettingsScreenPreview() {
     MaterialTheme {
@@ -461,7 +433,6 @@ private fun SettingsScreenPreview() {
                     override fun setTranslationProvider(provider: TranslationProvider) = Unit
                     override fun setEnableThirdPartyCa(enabled: Boolean) = Unit
                     override fun setEnableWebSuggestions(enabled: Boolean) = Unit
-                    override fun setMockLocationEnabled(enabled: Boolean) = Unit
                     override fun setMockLocationInput(input: String) = Unit
                     override fun openMockLocationOnMap() = Unit
                     override fun requestBackupExport() = Unit
@@ -477,21 +448,19 @@ private fun SettingsScreenPreview() {
                 translationProvider = TranslationProvider.TRANSLATION_PROVIDER_GECKO,
                 enableThirdPartyCa = false,
                 enableWebSuggestions = false,
-                mockLocationEnabled = true,
                 mockLocationInput = "35.685175,139.752797",
                 mockLocationInputError = null,
                 backupConfirmDialog = null,
             ),
             onOpenExtensions = {},
             onOpenHistory = {},
-            onOpenDownloads = {},
             onBack = {},
         )
     }
 }
 
 @Composable
-private fun SettingsRadioOption(
+internal fun SettingsRadioOption(
     label: String,
     selected: Boolean,
     onClick: () -> Unit,

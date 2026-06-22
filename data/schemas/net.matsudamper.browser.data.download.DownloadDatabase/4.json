@@ -1,0 +1,106 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 4,
+    "identityHash": "8fd853874532f158b104d8276e89e659",
+    "entities": [
+      {
+        "tableName": "download",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`workerId` TEXT NOT NULL, `currentWorkerId` TEXT NOT NULL, `url` TEXT NOT NULL, `fileName` TEXT NOT NULL, `fileUri` TEXT, `status` TEXT NOT NULL, `progress` INTEGER NOT NULL, `totalRead` INTEGER NOT NULL, `contentLength` INTEGER NOT NULL, `enqueuedAt` INTEGER NOT NULL, `referrerUrl` TEXT NOT NULL, `partialFileUri` TEXT, PRIMARY KEY(`workerId`))",
+        "fields": [
+          {
+            "fieldPath": "workerId",
+            "columnName": "workerId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "currentWorkerId",
+            "columnName": "currentWorkerId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "url",
+            "columnName": "url",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "fileName",
+            "columnName": "fileName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "fileUri",
+            "columnName": "fileUri",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "progress",
+            "columnName": "progress",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "totalRead",
+            "columnName": "totalRead",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "contentLength",
+            "columnName": "contentLength",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "enqueuedAt",
+            "columnName": "enqueuedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "referrerUrl",
+            "columnName": "referrerUrl",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "partialFileUri",
+            "columnName": "partialFileUri",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "workerId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_download_currentWorkerId",
+            "unique": false,
+            "columnNames": [
+              "currentWorkerId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_download_currentWorkerId` ON `${TABLE_NAME}` (`currentWorkerId`)"
+          }
+        ]
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '8fd853874532f158b104d8276e89e659')"
+    ]
+  }
+}

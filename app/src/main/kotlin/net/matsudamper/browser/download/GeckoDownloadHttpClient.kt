@@ -36,7 +36,9 @@ class GeckoDownloadHttpClient(
         val executor = GeckoWebExecutor(geckoRuntime)
         val request = WebRequest.Builder(url)
             .apply {
-                if (referrerUrl.isNotBlank()) addHeader("Referer", referrerUrl)
+                // Referer は forbidden header のため addHeader では Gecko に除去される。
+                // 専用の referrer API を使わないとホットリンク保護のあるサーバーで 403 になる
+                if (referrerUrl.isNotBlank()) referrer(referrerUrl)
                 if (rangeStart > 0) addHeader("Range", "bytes=$rangeStart-")
             }
             .build()

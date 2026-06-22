@@ -1,34 +1,40 @@
 package net.matsudamper.browser
 
-import android.os.Handler
-import android.os.Looper
 import android.util.Log
 import org.json.JSONObject
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.WebExtension
+import java.net.URI
 import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
 
 /**
- * navigator.geolocation をモック位置情報で上書きするビルトイン WebExtension。
+ * navigator.geolocation をサイトごとの設定に応じて差し替えるビルトイン WebExtension。
  * コンテンツスクリプトが connectNative でポートを確立し、
- * ネイティブ側から現在の設定を返す。設定が更新された場合は update メッセージを送信する。
+ * ネイティブ側から接続元ホストに応じたモード（mock/deny/real）を返す。
+ * 設定が更新された場合は update メッセージを送信する。
  */
 class MockLocationWebExtension {
     private var extension: WebExtension? = null
-    private val mainHandler = Handler(Looper.getMainLooper())
 
-    // 現在のモック位置情報設定
-    @Volatile private var currentConfig: MockLocationConfig = MockLocationConfig(
-        enabled = false,
+    // 現在の位置情報設定
+    @Volatile private var currentConfig: GeolocationConfig = GeolocationConfig(
         latitude = DEFAULT_LATITUDE,
         longitude = DEFAULT_LONGITUDE,
+        siteModes = emptyMap(),
     )
 
-    // セッションごとの接続ポート
-    private val sessionPorts = ConcurrentHashMap<GeckoSession, WebExtension.Port>()
+    /** ページが位置情報を要求した際にホスト名を通知するコールバック */
+    @Volatile var onGeolocationRequested: ((host: String) -> Unit)? = null
+
+    // セッションごとの接続ポート。iframe を含む各フレームから個別に接続されるため複数保持する
+    private val sessionPorts = ConcurrentHashMap<GeckoSession, MutableSet<WebExtension.Port>>()
+
+    // セッションごとのトップレベルページ URL プロバイダ。
+    // iframe からの要求をトップレベルサイトの設定で制御するために使う
+    private val sessionTopUrlProviders = ConcurrentHashMap<GeckoSession, () -> String?>()
 
     // デリゲートを設定済みのセッションを追跡（二重設定を防ぐ）
     private val attachedSessions: MutableSet<GeckoSession> =
@@ -53,7 +59,8 @@ class MockLocationWebExtension {
             )
     }
 
-    fun registerSession(session: GeckoSession) {
+    fun registerSession(session: GeckoSession, topUrlProvider: () -> String?) {
+        sessionTopUrlProviders[session] = topUrlProvider
         attachedSessions.add(session)
         extension?.also { ext ->
             attachSessionDelegate(session, ext)
@@ -63,21 +70,53 @@ class MockLocationWebExtension {
     fun unregisterSession(session: GeckoSession) {
         attachedSessions.remove(session)
         sessionPorts.remove(session)
+        sessionTopUrlProviders.remove(session)
         extension?.let { ext ->
             session.webExtensionController.setMessageDelegate(ext, null, NATIVE_APP_ID)
         }
     }
 
-    /** モック位置情報設定を更新し、接続済みの全セッションに通知する */
-    fun updateConfig(config: MockLocationConfig) {
+    /** 位置情報設定を更新し、接続済みの全セッションへ各ホストに応じたモードを通知する */
+    fun updateConfig(config: GeolocationConfig) {
         currentConfig = config
-        val message = config.toJson().apply { put("action", "update") }
-        sessionPorts.values.forEach { port ->
-            try {
-                port.postMessage(message)
-            } catch (e: Exception) {
-                Log.w(TAG, "updateConfig: ポートへの送信に失敗", e)
+        sessionPorts.forEach { (session, ports) ->
+            ports.forEach { port ->
+                val message = buildConfigMessage(resolveHost(session, port), action = "update")
+                try {
+                    port.postMessage(message)
+                } catch (e: Exception) {
+                    Log.w(TAG, "updateConfig: ポートへの送信に失敗", e)
+                }
             }
+        }
+    }
+
+    /** 接続元ページの URL からホスト名を取り出す */
+    private fun portHost(port: WebExtension.Port): String? {
+        return runCatching { URI(port.sender.url) }.getOrNull()?.host
+    }
+
+    /**
+     * ポートに適用するホストを返す。
+     * 標準ブラウザの位置情報許可と同様にトップレベルサイト基準で制御するため、
+     * iframe からの接続にはトップレベルページのホストを使う。
+     */
+    private fun resolveHost(session: GeckoSession, port: WebExtension.Port): String? {
+        val senderHost = portHost(port)
+        if (port.sender.isTopLevel) return senderHost
+        val topUrl = sessionTopUrlProviders[session]?.invoke()
+        val topHost = topUrl?.let { runCatching { URI(it) }.getOrNull()?.host }
+        return topHost ?: senderHost
+    }
+
+    /** ホストに応じた設定メッセージを構築する */
+    private fun buildConfigMessage(host: String?, action: String): JSONObject {
+        val config = currentConfig
+        return JSONObject().apply {
+            put("action", action)
+            put("mode", config.resolveMode(host).jsonValue)
+            put("latitude", config.latitude)
+            put("longitude", config.longitude)
         }
     }
 
@@ -94,26 +133,35 @@ class MockLocationWebExtension {
 
                 override fun onConnect(port: WebExtension.Port) {
                     Log.d(TAG, "onConnect: ポート接続")
-                    sessionPorts[session] = port
-                    // ナビゲーション/リロード時に新しいポートが先に sessionPorts に書き込まれた後で
-                    // 古いポートの onDisconnect が発火する場合があるため、自分のポートのみ削除する。
+                    sessionPorts
+                        .getOrPut(session) { Collections.newSetFromMap(ConcurrentHashMap()) }
+                        .add(port)
                     val connectedPort = port
                     port.setDelegate(object : WebExtension.PortDelegate {
                         override fun onPortMessage(message: Any, port: WebExtension.Port) {
                             val json = message as? JSONObject ?: return
-                            if (json.optString("action") == "getConfig") {
-                                val response = currentConfig.toJson().apply { put("action", "config") }
-                                try {
-                                    port.postMessage(response)
-                                } catch (e: Exception) {
-                                    Log.w(TAG, "getConfig 応答に失敗", e)
+                            when (json.optString("action")) {
+                                "getConfig" -> {
+                                    val response =
+                                        buildConfigMessage(resolveHost(session, port), action = "config")
+                                    try {
+                                        port.postMessage(response)
+                                    } catch (e: Exception) {
+                                        Log.w(TAG, "getConfig 応答に失敗", e)
+                                    }
+                                }
+                                // ページが位置情報を要求したことの通知。
+                                // 「サイトの設定」画面に位置情報の項目を表示するために記録する
+                                "geolocationRequested" -> {
+                                    val host = resolveHost(session, port) ?: return
+                                    onGeolocationRequested?.invoke(host)
                                 }
                             }
                         }
 
                         override fun onDisconnect(port: WebExtension.Port) {
                             Log.d(TAG, "onDisconnect: ポート切断")
-                            sessionPorts.remove(session, connectedPort)
+                            sessionPorts[session]?.remove(connectedPort)
                         }
                     })
                 }
@@ -122,15 +170,28 @@ class MockLocationWebExtension {
         )
     }
 
-    data class MockLocationConfig(
-        val enabled: Boolean,
+    /** サイトごとの位置情報の扱い */
+    enum class GeolocationMode(val jsonValue: String) {
+        // モック座標を返す
+        MOCK("mock"),
+        // 位置情報の取得を拒否する
+        DENY("deny"),
+
+        // 実際の位置情報を返す（Gecko 本体の geolocation へ委譲）
+        REAL("real"),
+    }
+
+    /**
+     * 位置情報設定全体。
+     * サイトごとの設定が無いホストにはモック座標を返す（デフォルト）。
+     */
+    data class GeolocationConfig(
         val latitude: Double,
         val longitude: Double,
+        val siteModes: Map<String, GeolocationMode>,
     ) {
-        fun toJson(): JSONObject = JSONObject().apply {
-            put("enabled", enabled)
-            put("latitude", latitude)
-            put("longitude", longitude)
+        fun resolveMode(host: String?): GeolocationMode {
+            return siteModes[host] ?: GeolocationMode.MOCK
         }
     }
 

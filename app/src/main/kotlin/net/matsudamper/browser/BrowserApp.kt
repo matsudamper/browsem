@@ -1,5 +1,6 @@
 package net.matsudamper.browser
 
+import android.Manifest
 import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.BackHandler
@@ -49,9 +50,12 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import mozilla.components.lib.publicsuffixlist.PublicSuffixList
 import net.matsudamper.browser.data.SettingsRepository
+import net.matsudamper.browser.data.SiteSettingsRepository
 import net.matsudamper.browser.data.TabGroupId
 import net.matsudamper.browser.data.TabGroupRepository
+import net.matsudamper.browser.data.extractSiteHost
 import net.matsudamper.browser.data.history.HistoryRepository
 import net.matsudamper.browser.data.websuggestion.WebSuggestionRepository
 import net.matsudamper.browser.navigation.AppDestination
@@ -62,6 +66,7 @@ import net.matsudamper.browser.screen.history.HistoryScreenViewModel
 import net.matsudamper.browser.screen.downloads.DownloadManagementScreenViewModel
 import net.matsudamper.browser.screen.backup.BackupProgressViewModel
 import net.matsudamper.browser.screen.settings.SettingsScreenViewModel
+import net.matsudamper.browser.screen.sitesettings.SiteSettingsScreenViewModel
 import net.matsudamper.browser.screen.tab.TabsScreenViewModel
 import net.matsudamper.browser.ui.common.BrowserTheme
 import net.matsudamper.browser.ui.browser.BrowserScreen
@@ -71,12 +76,14 @@ import net.matsudamper.browser.ui.history.HistoryScreen
 import net.matsudamper.browser.ui.settings.BackupProgressScreen
 import net.matsudamper.browser.ui.settings.BackupProgressUiState
 import net.matsudamper.browser.ui.settings.SettingsScreen
+import net.matsudamper.browser.ui.settings.SiteSettingsScreen
 import net.matsudamper.browser.ui.tabs.TabsScreen
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.work.WorkManager
 import net.matsudamper.browser.data.BackupRepository
 import org.koin.compose.koinInject
+import org.mozilla.geckoview.GeckoRuntime
 
 @Composable
 internal fun BrowserApp(
@@ -208,6 +215,7 @@ private fun BrowserAppContent(
                 tabId = tabId,
                 initialUrl = request.url,
                 restoredSessionState = request.sessionState,
+                insertAfterSelectedTab = false,
             )
             // selectTab より前に呼ぶことで、外部タブ開封前の selectedTabId を記録できる
             viewModel.registerExternalTab(newTab.tabId)
@@ -300,6 +308,7 @@ private fun BrowserAppContent(
                                     modifier = modifier,
                                     toolbarColor = null,
                                     isFocused = false,
+                                    onLongClickUrl = {},
                                     tabCount = tabCount,
                                     onOpenTabs = {},
                                     toolbarMenu = {},
@@ -336,6 +345,22 @@ private fun BrowserAppContent(
                                     onInstallExtensionRequest = onInstallExtensionRequest,
                                     onRequestDownloadNotificationPermission = onRequestDownloadNotificationPermission,
                                     onOpenSettings = { backStack.add(AppDestination.Settings) },
+                                    onOpenDownloads = {
+                                        if (backStack.none { it is AppDestination.Downloads }) {
+                                            backStack.add(AppDestination.Downloads)
+                                        }
+                                    },
+                                    onOpenSiteSettings = { currentUrl ->
+                                        val host = extractSiteHost(currentUrl)
+                                        if (host != null) {
+                                            backStack.add(
+                                                AppDestination.SiteSettings(
+                                                    host = host,
+                                                    tabId = key.tabId,
+                                                ),
+                                            )
+                                        }
+                                    },
                                     onOpenTabs = { backStack.add(AppDestination.Tabs) },
                                     browserSessionLifecycleController = browserSessionLifecycleController,
                                     onOpenNewSessionRequest = { uri ->
@@ -351,7 +376,7 @@ private fun BrowserAppContent(
                                         selectTab(newTab.tabId, key)
                                         newTab.session
                                     },
-                                    onOpenNewTabRequest = { uri ->
+                                    onOpenNewTabRequest = { uri, referrerUrl ->
                                         scope.launch {
                                             val tabId = UUID.randomUUID().toString()
                                             assignTabToOpenerGroup(tabId, key.tabId)
@@ -359,6 +384,7 @@ private fun BrowserAppContent(
                                                 tabId = tabId,
                                                 initialUrl = uri,
                                                 openerTabId = key.tabId,
+                                                initialReferrerUrl = referrerUrl,
                                             )
                                             selectTab(newTab.tabId, key)
                                         }
@@ -381,9 +407,8 @@ private fun BrowserAppContent(
                     }
 
                     AppDestination.Settings -> navEntry(key) {
-                        val mockLocationWebExtension: MockLocationWebExtension = koinInject()
                         val settingsViewModel = composeViewModel(initializer = {
-                            SettingsScreenViewModel(settingsRepository, mockLocationWebExtension)
+                            SettingsScreenViewModel(settingsRepository)
                         })
                         val settingsUiState by settingsViewModel.uiState.collectAsState()
                         LaunchedEffect(settingsViewModel) {
@@ -417,10 +442,52 @@ private fun BrowserAppContent(
                                 uiState = uiState,
                                 onOpenExtensions = { backStack.add(AppDestination.Extensions) },
                                 onOpenHistory = { backStack.add(AppDestination.History) },
-                                onOpenDownloads = { backStack.add(AppDestination.Downloads) },
                                 onBack = { backStack.removeLastOrNull() },
                             )
                         }
+                    }
+
+                    is AppDestination.SiteSettings -> navEntry(key) {
+                        val siteSettingsRepository: SiteSettingsRepository = koinInject()
+                        val geckoRuntime: GeckoRuntime = koinInject()
+                        val publicSuffixList: PublicSuffixList = koinInject()
+                        val siteSettingsViewModel = composeViewModel(initializer = {
+                            SiteSettingsScreenViewModel(
+                                host = key.host,
+                                siteSettingsRepository = siteSettingsRepository,
+                                geckoRuntime = geckoRuntime,
+                                publicSuffixList = publicSuffixList,
+                                // 開いた元のタブの現在の接続から TLS 証明書情報を取得する
+                                securityInfo = key.tabId
+                                    ?.let { browserTabController.findTab(it) }
+                                    ?.securityInfo,
+                            )
+                        })
+                        // 「実際の位置情報」選択時に OS の位置情報権限を要求する
+                        val locationPermissionLauncher = rememberLauncherForActivityResult(
+                            ActivityResultContracts.RequestMultiplePermissions(),
+                        ) { results ->
+                            siteSettingsViewModel.onLocationPermissionResult(results.values.any { it })
+                        }
+                        LaunchedEffect(siteSettingsViewModel) {
+                            siteSettingsViewModel.eventHandler.receiveAsFlow().collect { handler ->
+                                handler(object : SiteSettingsScreenViewModel.Event {
+                                    override fun onRequestLocationPermission() {
+                                        locationPermissionLauncher.launch(
+                                            arrayOf(
+                                                Manifest.permission.ACCESS_FINE_LOCATION,
+                                                Manifest.permission.ACCESS_COARSE_LOCATION,
+                                            ),
+                                        )
+                                    }
+                                })
+                            }
+                        }
+                        val siteSettingsUiState by siteSettingsViewModel.uiState.collectAsState()
+                        SiteSettingsScreen(
+                            uiState = siteSettingsUiState,
+                            onBack = { backStack.removeLastOrNull() },
+                        )
                     }
 
                     AppDestination.History -> navEntry(key) {
@@ -484,6 +551,24 @@ private fun BrowserAppContent(
                             DownloadManagementScreenViewModel(context.applicationContext as android.app.Application)
                         }
                         val downloadsUiState by downloadsViewModel.uiState.collectAsState()
+                        LaunchedEffect(downloadsViewModel) {
+                            downloadsViewModel.eventHandler.receiveAsFlow().collect {
+                                it(object : DownloadManagementScreenViewModel.Event {
+                                    override fun navigateToUrl(url: String) {
+                                        scope.launch {
+                                            val tabId = UUID.randomUUID().toString()
+                                            withContext(Dispatchers.Main) {
+                                                browserTabController.createAndAppendTab(
+                                                    tabId = tabId,
+                                                    initialUrl = url,
+                                                )
+                                                selectTab(tabId, null)
+                                            }
+                                        }
+                                    }
+                                })
+                            }
+                        }
                         DownloadManagementScreen(
                             uiState = downloadsUiState,
                             onBack = { backStack.removeLastOrNull() },
@@ -495,6 +580,7 @@ private fun BrowserAppContent(
                             TabsScreenViewModel(
                                 tabStore = browserTabController,
                                 tabGroupRepository = tabGroupRepository,
+                                playingTabIds = mediaWebExtension.playingTabIds,
                             )
                         })
                         val tabsUiState by tabsViewModel.uiState.collectAsState()
@@ -504,9 +590,10 @@ private fun BrowserAppContent(
                         LaunchedEffect(tabsViewModel) {
                             tabsViewModel.eventHandler.receiveAsFlow().collect {
                                 it(object : TabsScreenViewModel.Event {
-                                    override fun closeTab(tabId: String) {
-                                        val wasCurrentBrowserTab = navController.getSelectedTab() == tabId
-                                        val nextSelectedTabId = browserTabController.closeTab(tabId)
+                                    override fun onTabClosed(closedTabId: String, nextSelectedTabId: String?) {
+                                        // タブの閉鎖自体は ViewModel が TabStore へ直接行っているため、
+                                        // ここではナビゲーション側の後処理のみを行う
+                                        val wasCurrentBrowserTab = navController.getSelectedTab() == closedTabId
                                         if (nextSelectedTabId == null) {
                                             scope.launch {
                                                 val newTab = viewModel.createTabWithHomepage(
@@ -518,6 +605,13 @@ private fun BrowserAppContent(
                                             // タブ一覧は開いたまま、戻り先の Browser だけ最新の選択タブへ同期する
                                             navController.replaceCurrentBrowserTab(nextSelectedTabId)
                                         }
+                                    }
+
+                                    override fun selectTab(tabId: String) {
+                                        // タブ閉鎖の保留・取り消しに伴う選択切替。
+                                        // タブ一覧は開いたまま、戻り先の Browser だけ切り替える
+                                        browserTabController.selectTab(tabId)
+                                        navController.replaceCurrentBrowserTab(tabId)
                                     }
                                 })
                             }
@@ -536,7 +630,10 @@ private fun BrowserAppContent(
                                     if (currentGroupId != null) {
                                         tabGroupRepository.assignTabToGroup(tabId, currentGroupId)
                                     }
-                                    val newTab = viewModel.createTabWithHomepage(tabId = tabId)
+                                    val newTab = viewModel.createTabWithHomepage(
+                                        tabId = tabId,
+                                        insertAfterSelectedTab = false,
+                                    )
                                     selectTab(newTab.tabId, null)
                                 }
                             },

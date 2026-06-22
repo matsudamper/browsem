@@ -45,6 +45,7 @@ import net.matsudamper.browser.screen.browser.CustomTabScreenViewModel
 import net.matsudamper.browser.ui.common.BrowserTheme
 import org.koin.android.ext.android.inject
 import org.mozilla.geckoview.GeckoRuntime
+import org.mozilla.geckoview.GeckoSession
 import java.util.concurrent.CancellationException
 
 class CustomTabActivity : ComponentActivity() {
@@ -268,6 +269,9 @@ private fun CustomTabScreen(
         onInstallExtensionRequest = {},
         onRequestDownloadNotificationPermission = onRequestDownloadNotificationPermission,
         onOpenSettings = {},
+        // カスタムタブは設定画面のナビゲーションスタックを持たないため非表示
+        onOpenSiteSettings = null,
+        onOpenDownloads = null,
         onOpenTabs = {},
         enableTabUi = false,
         showInstallExtensionItem = false,
@@ -277,8 +281,14 @@ private fun CustomTabScreen(
         // onLoadRequest で TARGET_WINDOW_NEW を現在タブへ畳み込むため、
         // ここへ到達することは想定しない。GeckoView 契約上 null を返して安全に拒否する。
         onOpenNewSessionRequest = { null },
-        onOpenNewTabRequest = { uri ->
-            activeTab.session.loadUri(uri)
+        onOpenNewTabRequest = { uri, referrerUrl ->
+            if (referrerUrl != null) {
+                activeTab.session.load(
+                    GeckoSession.Loader().uri(uri).referrer(referrerUrl),
+                )
+            } else {
+                activeTab.session.loadUri(uri)
+            }
         },
         onCloseTab = onClose,
         onHistoryRecord = uiState.callbacks::onHistoryRecord,

@@ -18,11 +18,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
@@ -39,17 +41,21 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import net.matsudamper.browser.data.ThemeMode
 import net.matsudamper.browser.ui.browser.UrlBarSuggestionsUiState
+import net.matsudamper.browser.ui.common.BrowserTheme
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.GeckoView
-import org.mozilla.geckoview.PanZoomController
 
 @Composable
 internal fun BrowserContentHost(
@@ -69,6 +75,10 @@ internal fun BrowserContentHost(
             factory = { context ->
                 GeckoSwipeRefreshLayout(context).also { swipeRefreshLayout ->
                     var swipeRefreshScrollEnabled = false
+                    // ピンチ等のマルチタッチジェスチャー中は PTR を発動させないための
+                    // ジェスチャー単位のフラグ。ACTION_DOWN の非同期判定結果が
+                    // ACTION_POINTER_DOWN より後に届いても上書きされないようにする。
+                    var gestureHadMultiTouch = false
                     val gecko = GeckoView(context).also { geckoView ->
                         geckoView.id = id
                         geckoView.isNestedScrollingEnabled = true
@@ -84,19 +94,22 @@ internal fun BrowserContentHost(
                             when (event.actionMasked) {
                                 MotionEvent.ACTION_DOWN -> {
                                     swipeRefreshScrollEnabled = false
+                                    gestureHadMultiTouch = false
                                     (view as GeckoView).onTouchEventForDetailResult(event).then { detail ->
-                                        if (detail != null) {
-                                            val handledResult = detail.handledResult()
-                                            val isUnhandled = handledResult == PanZoomController.INPUT_RESULT_UNHANDLED
-                                            val isHandled = handledResult == PanZoomController.INPUT_RESULT_HANDLED
-                                            swipeRefreshScrollEnabled = isHandled || isUnhandled
+                                        if (detail != null && !gestureHadMultiTouch) {
+                                            swipeRefreshScrollEnabled = canTriggerPullToRefresh(
+                                                handledResult = detail.handledResult(),
+                                                scrollableDirections = detail.scrollableDirections(),
+                                                overscrollDirections = detail.overscrollDirections(),
+                                            )
                                         }
                                         GeckoResult.fromValue<Void>(null)
                                     }
                                     true
                                 }
                                 MotionEvent.ACTION_POINTER_DOWN -> {
-                                    state.hadPinchGesture = true
+                                    gestureHadMultiTouch = true
+                                    swipeRefreshScrollEnabled = false
                                     false
                                 }
                                 else -> false
@@ -114,7 +127,6 @@ internal fun BrowserContentHost(
                     swipeRefreshLayout.setOnChildScrollUpCallback { _, _ ->
                         !swipeRefreshScrollEnabled || state.scrollY > 0
                             || state.visualViewportScale > 1.05f
-                            || state.hadPinchGesture
                     }
                     swipeRefreshLayout.setOnRefreshListener {
                         state.isRefreshing = true
@@ -123,6 +135,7 @@ internal fun BrowserContentHost(
                 }
             },
             update = { swipeRefreshLayout ->
+                swipeRefreshLayout.isEnabled = !state.isFullScreen
                 swipeRefreshLayout.isRefreshing = state.isRefreshing
                 val geckoView = swipeRefreshLayout.findViewById<GeckoView>(id)
                 if (!state.isUrlInputFocused && !state.showFindInPage && !geckoView.isFocused) {
@@ -193,22 +206,26 @@ internal fun BrowserTabOverlayLayer(
                 currentPageUrl = state.currentPageUrl,
             )
         ) {
-            UrlSuggestionList(
-                currentPageUrl = state.currentPageUrl,
-                historySuggestions = urlBarSuggestions.historySuggestions,
-                webSuggestions = urlBarSuggestions.webSuggestions,
-                isLoadingWebSuggestions = urlBarSuggestions.isLoadingWebSuggestions,
-                onHistorySuggestionClick = onHistorySuggestionClick,
-                onWebSuggestionClick = onWebSuggestionClick,
-                onCopyCurrentUrl = state::copyCurrentPageUrl,
-                onRestoreCurrentUrl = state::restoreCurrentPageUrlToInput,
-                clipboardUrl = clipboardUrl,
-                onClipboardUrlClick = onClipboardUrlClick,
+            Surface(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(MaterialTheme.colorScheme.surface)
                     .testTag(BrowserTabSurfaceTestTags.UrlSuggestionList.testTag),
-            )
+                color = MaterialTheme.colorScheme.surface,
+            ) {
+                UrlSuggestionList(
+                    currentPageUrl = state.currentPageUrl,
+                    historySuggestions = urlBarSuggestions.historySuggestions,
+                    webSuggestions = urlBarSuggestions.webSuggestions,
+                    isLoadingWebSuggestions = urlBarSuggestions.isLoadingWebSuggestions,
+                    onHistorySuggestionClick = onHistorySuggestionClick,
+                    onWebSuggestionClick = onWebSuggestionClick,
+                    onCopyCurrentUrl = state::copyCurrentPageUrl,
+                    onRestoreCurrentUrl = state::restoreCurrentPageUrlToInput,
+                    clipboardUrl = clipboardUrl,
+                    onClipboardUrlClick = onClipboardUrlClick,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
         }
     }
 }
@@ -368,39 +385,101 @@ private fun CurrentPageUrlListItem(
     onCopyCurrentUrl: () -> Unit,
     onRestoreCurrentUrl: () -> Unit,
 ) {
-    ListItem(
-        headlineContent = {
-            Text(text = "今のURL")
-        },
-        supportingContent = {
-            Column(
-                modifier = Modifier.padding(top = 4.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag(BrowserTabSurfaceTestTags.CurrentUrlActions.testTag),
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                text = "今のURL",
+                style = MaterialTheme.typography.bodyLarge,
+            )
+            androidx.compose.runtime.CompositionLocalProvider(
+                LocalContentColor provides MaterialTheme.colorScheme.onSurfaceVariant,
             ) {
                 Text(
                     text = currentPageUrl,
+                    style = MaterialTheme.typography.bodyMedium,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.testTag(BrowserTabSurfaceTestTags.CurrentUrlText.testTag),
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TextButton(
-                        onClick = onCopyCurrentUrl,
-                        modifier = Modifier.testTag(BrowserTabSurfaceTestTags.CopyButton.testTag),
-                    ) {
-                        Text("コピー")
-                    }
-                    TextButton(
-                        onClick = onRestoreCurrentUrl,
-                        modifier = Modifier.testTag(BrowserTabSurfaceTestTags.RestoreUrlButton.testTag),
-                    ) {
-                        Text("URLバーに戻す")
-                    }
-                }
             }
-        },
-        modifier = Modifier.testTag(BrowserTabSurfaceTestTags.CurrentUrlActions.testTag),
-    )
+        }
+        CurrentPageUrlActionRow(
+            text = "URLバーに戻す",
+            iconPainter = painterResource(R.drawable.ic_arrow_upward),
+            onClick = onRestoreCurrentUrl,
+            modifier = Modifier.testTag(BrowserTabSurfaceTestTags.RestoreUrlButton.testTag),
+        )
+        CurrentPageUrlActionRow(
+            text = "コピー",
+            iconPainter = painterResource(R.drawable.ic_content_copy),
+            onClick = onCopyCurrentUrl,
+            modifier = Modifier.testTag(BrowserTabSurfaceTestTags.CopyButton.testTag),
+        )
+    }
+}
+
+@Composable
+private fun CurrentPageUrlActionRow(
+    text: String,
+    iconPainter: Painter,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = text,
+            color = MaterialTheme.colorScheme.primary,
+            style = MaterialTheme.typography.labelLarge,
+            modifier = Modifier.weight(1f),
+        )
+        Icon(
+            painter = iconPainter,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(20.dp),
+        )
+    }
+}
+
+@Preview(name = "今のURL操作Light")
+@Composable
+private fun PreviewCurrentPageUrlListItemLight() {
+    BrowserTheme(themeMode = ThemeMode.THEME_LIGHT) {
+        Surface {
+            CurrentPageUrlListItem(
+                currentPageUrl = "https://example.com/very/long/path?query=value",
+                onCopyCurrentUrl = {},
+                onRestoreCurrentUrl = {},
+            )
+        }
+    }
+}
+
+@Preview(name = "今のURL操作Dark")
+@Composable
+private fun PreviewCurrentPageUrlListItemDark() {
+    BrowserTheme(themeMode = ThemeMode.THEME_DARK) {
+        Surface {
+            CurrentPageUrlListItem(
+                currentPageUrl = "https://example.com/very/long/path?query=value",
+                onCopyCurrentUrl = {},
+                onRestoreCurrentUrl = {},
+            )
+        }
+    }
 }
 
 @Composable

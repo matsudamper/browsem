@@ -1,0 +1,39 @@
+syntax = "proto3";
+
+option java_package = "net.matsudamper.browser.data";
+option java_multiple_files = true;
+
+// サイトごとの権限の状態
+enum SitePermissionState {
+  // 未設定。要求時にユーザーへ確認する
+  SITE_PERMISSION_ASK = 0;
+  SITE_PERMISSION_ALLOW = 1;
+  SITE_PERMISSION_DENY = 2;
+}
+
+// サイトごとの位置情報の扱い
+enum SiteGeolocationState {
+  // モック位置情報を返す（デフォルト）。OS の位置情報権限は不要
+  SITE_GEOLOCATION_MOCK = 0;
+  // 位置情報の取得を拒否する
+  SITE_GEOLOCATION_DENY = 1;
+  // 実際の位置情報を返す。OS の位置情報権限が必要
+  SITE_GEOLOCATION_REAL = 2;
+}
+
+// 1サイト（ホスト）分の権限設定
+message SitePermissionSettings {
+  SitePermissionState microphone = 1;
+  // このサイトがマイク権限を要求したことがあるか。
+  // 一度も要求されていない権限は「サイトの設定」画面に表示しない
+  bool microphone_requested = 2;
+  SiteGeolocationState geolocation = 3;
+  // このサイトが位置情報を要求したことがあるか。
+  // 一度も要求されていない権限は「サイトの設定」画面に表示しない
+  bool geolocation_requested = 4;
+}
+
+// サイトごとの設定全体。key はホスト名
+message SiteSettings {
+  map<string, SitePermissionSettings> host_permissions = 1;
+}

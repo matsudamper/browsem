@@ -10,7 +10,9 @@ import android.view.ActionMode
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
+import androidx.core.net.toUri
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -35,6 +37,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContract
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
+import android.content.pm.PackageManager
+import kotlinx.coroutines.CompletableDeferred
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -57,6 +63,8 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -90,9 +98,11 @@ internal fun GeckoBrowserTab(
     tabCount: Int?,
     onInstallExtensionRequest: (String) -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenSiteSettings: ((currentUrl: String) -> Unit)?,
+    onOpenDownloads: (() -> Unit)?,
     onOpenTabs: () -> Unit,
     onOpenNewSessionRequest: (String) -> GeckoSession?,
-    onOpenNewTabRequest: (String) -> Unit,
+    onOpenNewTabRequest: (url: String, referrerUrl: String?) -> Unit,
     modifier: Modifier = Modifier,
     onRequestDownloadNotificationPermission: suspend () -> Unit = {},
     enableTabUi: Boolean = true,
@@ -115,6 +125,21 @@ internal fun GeckoBrowserTab(
     var clipboardUrl by remember { mutableStateOf<String?>(null) }
     // タブ履歴BottomSheetの表示状態
     var showTabHistorySheet by remember { mutableStateOf(false) }
+
+    // Androidランタイムパーミッション要求用（マイク・カメラ等）
+    val pendingPermissionsRef = remember {
+        object {
+            var pending: CompletableDeferred<Array<String>>? = null
+        }
+    }
+    val requestPermissionsLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { results ->
+        val granted = results.filterValues { it }.keys.toTypedArray()
+        pendingPermissionsRef.pending?.complete(granted)
+        pendingPermissionsRef.pending = null
+    }
+
     val state = rememberBrowserTabScreenState(
         browserTab = browserTab,
         homepageUrl = homepageUrl,
@@ -123,6 +148,23 @@ internal fun GeckoBrowserTab(
         onHistoryRecord = onHistoryRecord,
         onHistoryTitleUpdate = onHistoryTitleUpdate,
         onRequestDownloadNotificationPermission = onRequestDownloadNotificationPermission,
+        onRequestAndroidPermissions = { permissions ->
+            val alreadyGranted = permissions.filter {
+                ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED
+            }
+            val notGranted = permissions.filter {
+                ContextCompat.checkSelfPermission(context, it) != PackageManager.PERMISSION_GRANTED
+            }
+            if (notGranted.isEmpty()) {
+                alreadyGranted.toTypedArray()
+            } else {
+                val deferred = CompletableDeferred<Array<String>>()
+                pendingPermissionsRef.pending = deferred
+                requestPermissionsLauncher.launch(notGranted.toTypedArray())
+                val newlyGranted = deferred.await()
+                (alreadyGranted + newlyGranted).toTypedArray()
+            }
+        },
     )
 
     // ツールバー色の輝度に応じてステータスバーアイコン色（黒/白）を動的に切り替える
@@ -137,6 +179,21 @@ internal fun GeckoBrowserTab(
             val window = (view.context as Activity).window
             WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars =
                 toolbarColors.isBrightBackground
+        }
+    }
+
+    // フルスクリーン時にシステムバーを非表示にする
+    if (!view.isInEditMode) {
+        DisposableEffect(state.isFullScreen) {
+            if (!state.isFullScreen) return@DisposableEffect onDispose {}
+            val window = (view.context as Activity).window
+            val controller = WindowCompat.getInsetsController(window, view)
+            controller.hide(WindowInsetsCompat.Type.systemBars())
+            controller.systemBarsBehavior =
+                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            onDispose {
+                controller.show(WindowInsetsCompat.Type.systemBars())
+            }
         }
     }
 
@@ -203,9 +260,9 @@ internal fun GeckoBrowserTab(
         geckoView?.requestFocus()
     }
 
-    // プレビュー画像未取得時にページロードが完了したらキャプチャを実行する
+    // ページの初回描画・ロード完了の度にプレビューキャプチャを実行する
     LaunchedEffect(state) {
-        snapshotFlow { state.captureOnPageLoadRequestCount }
+        snapshotFlow { state.capturePreviewRequestCount }
             .collectLatest { count ->
                 if (count == 0) return@collectLatest
                 /**
@@ -447,15 +504,16 @@ internal fun GeckoBrowserTab(
     }
 
     DisposableEffect(session, mediaWebExtension) {
-        mediaWebExtension.registerSession(session)
+        mediaWebExtension.registerSession(session, browserTab.tabId)
         onDispose {
             mediaWebExtension.unregisterSession(session)
         }
     }
 
     val mockLocationWebExtension: MockLocationWebExtension = koinInject()
-    DisposableEffect(session, mockLocationWebExtension) {
-        mockLocationWebExtension.registerSession(session)
+    DisposableEffect(session, state, mockLocationWebExtension) {
+        // iframe からの位置情報要求をトップレベルサイトの設定で制御するため、現在ページ URL を渡す
+        mockLocationWebExtension.registerSession(session) { state.currentPageUrl }
         onDispose {
             mockLocationWebExtension.unregisterSession(session)
         }
@@ -465,9 +523,6 @@ internal fun GeckoBrowserTab(
     DisposableEffect(session, state, viewportScaleWebExtension) {
         viewportScaleWebExtension.registerSession(session) { scale ->
             state.visualViewportScale = scale
-            if (scale <= 1.05f) {
-                state.hadPinchGesture = false
-            }
         }
         onDispose {
             viewportScaleWebExtension.unregisterSession(session)
@@ -520,6 +575,34 @@ internal fun GeckoBrowserTab(
         }
     }
 
+    // 新規タブの初回ロードは GeckoView のサイズ確定後に実行する。
+    // setSession 直後の未確定 viewport でロードすると、画像単体表示 (ImageDocument) の
+    // shrink-to-fit スケールが誤計算され、画像が小さく低解像度で表示されるため。
+    // geckoView は AndroidView factory で後から確定するので key にして再起動させる。
+    LaunchedEffect(session, browserTab, geckoView) {
+        val gv = geckoView ?: return@LaunchedEffect
+        if (!browserSessionLifecycleController.hasPendingInitialLoad(browserTab)) {
+            return@LaunchedEffect
+        }
+        val startTimeMs = SystemClock.elapsedRealtime()
+        fun scheduleInitialLoad() {
+            gv.postOnAnimation {
+                if (!browserSessionLifecycleController.hasPendingInitialLoad(browserTab)) {
+                    return@postOnAnimation
+                }
+                val elapsed = SystemClock.elapsedRealtime() - startTimeMs
+                // サイズ未確定の間は次フレームへ持ち越す。レイアウトが進まない異常系で
+                // 白画面のままにならないよう STABLE_TIMEOUT_MS 経過後は強制ロードする
+                if ((gv.width == 0 || gv.height == 0) && elapsed < STABLE_TIMEOUT_MS) {
+                    scheduleInitialLoad()
+                    return@postOnAnimation
+                }
+                browserSessionLifecycleController.performInitialLoadIfPending(browserTab)
+            }
+        }
+        scheduleInitialLoad()
+    }
+
     // テキスト選択メニューにカスタムアクション（検索/開く）を追加
     DisposableEffect(session, enableTabUi, searchTemplate) {
         val activity = context as Activity
@@ -553,7 +636,7 @@ internal fun GeckoBrowserTab(
                             URLEncoder.encode(text, "UTF-8"),
                         )
                         if (enableTabUi) {
-                            currentOnOpenNewTabRequest(url)
+                            currentOnOpenNewTabRequest(url, null)
                         } else {
                             state.onUrlSubmit(url)
                         }
@@ -567,7 +650,7 @@ internal fun GeckoBrowserTab(
                             "https://$text"
                         }
                         if (enableTabUi) {
-                            currentOnOpenNewTabRequest(url)
+                            currentOnOpenNewTabRequest(url, null)
                         } else {
                             state.onUrlSubmit(url)
                         }
@@ -584,13 +667,19 @@ internal fun GeckoBrowserTab(
         }
     }
 
-    // Back handlers
-    // 優先度は後に登録したものが高くなるため、最も優先度の高い showFindInPage を最後に置く
-    BackHandler(enabled = state.canGoBack && !state.isUrlInputFocused) {
-        state.onGoBack()
+    // Back handler (when 分岐で優先度を制御: showFindInPage > isUrlInputFocused > canGoBack > webAppMode)
+    // webAppMode かつ canGoBack=false 時は Activity を終了せずタスクをバックグラウンドへ移動して
+    // セッション（ブラウザ履歴・入力状態）を保持する
+    val activity = LocalActivity.current
+    BackHandler(enabled = state.isFullScreen || state.showFindInPage || state.isUrlInputFocused || state.canGoBack || webAppMode) {
+        when {
+            state.isFullScreen -> state.exitFullScreen()
+            state.showFindInPage -> state.closeFindInPage()
+            state.isUrlInputFocused -> closeUrlInput(true)
+            state.canGoBack -> state.onGoBack()
+            webAppMode -> activity?.moveTaskToBack(true)
+        }
     }
-    BackHandler(enabled = state.isUrlInputFocused) { closeUrlInput(true) }
-    BackHandler(enabled = state.showFindInPage) { state.closeFindInPage() }
 
     // IME visibility tracking:
     // URLバーにフォーカスした直後はIMEがまだ非表示のことがあるため、
@@ -614,15 +703,23 @@ internal fun GeckoBrowserTab(
     Column(
         modifier = modifier
             .fillMaxSize()
-            // 上部（ステータスバー）は BrowserToolBar の背景色で塗りつぶすため除外する。
-            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal))
-            // ime 表示時に Web 下部入力欄が隠れないよう GeckoView も IME 上に押し上げる。
-            // ただし resume 直後の resize で GPU プロセス kill が起きる経路があるため、
-            // setSession のタイミングを restoreSurfaceIfNeeded 側で「サイズが安定するまで
-            // 待つ」よう制御している。
-            .imePadding()
+            .then(
+                if (state.isFullScreen) {
+                    Modifier
+                } else {
+                    // 上部（ステータスバー）は BrowserToolBar の背景色で塗りつぶすため除外する。
+                    Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal))
+                        // ime 表示時に Web 下部入力欄が隠れないよう GeckoView も IME 上に押し上げる。
+                        // ただし resume 直後の resize で GPU プロセス kill が起きる経路があるため、
+                        // setSession のタイミングを restoreSurfaceIfNeeded 側で「サイズが安定するまで
+                        // 待つ」よう制御している。
+                        .imePadding()
+                }
+            )
     ) {
-        if (state.showFindInPage) {
+        if (state.isFullScreen) {
+            // フルスクリーン時はツールバー・翻訳バー・検索バーを非表示
+        } else if (state.showFindInPage) {
             FindInPageBar(
                 query = state.findQuery,
                 matchCurrent = state.findMatchCurrent,
@@ -709,9 +806,14 @@ internal fun GeckoBrowserTab(
                         }
                         state.isUrlInputFocused = hasFocus
                     },
+                    onLongClickUrl = state::copyCurrentPageUrl,
                     showInstallExtensionItem = showInstallExtensionItem && state.showInstallExtensionItem,
                     onInstallExtension = { onInstallExtensionRequest(state.currentPageUrl) },
                     onOpenSettings = onOpenSettings,
+                    onOpenSiteSettings = onOpenSiteSettings?.let { callback ->
+                        { callback(state.currentPageUrl) }
+                    },
+                    onOpenDownloads = onOpenDownloads,
                     onShare = state::sharePage,
                     tabCount = tabCount,
                     showTabActions = enableTabUi,
@@ -822,6 +924,15 @@ internal fun GeckoBrowserTab(
             dialogState = dialogState,
             enableTabUi = enableTabUi,
             onOpenNewTabRequest = currentOnOpenNewTabRequest,
+            onOpenFile = { fileUri ->
+                val uri = fileUri.toUri()
+                val mimeType = context.contentResolver.getType(uri) ?: "*/*"
+                val intent = Intent(Intent.ACTION_VIEW).apply {
+                    setDataAndType(uri, mimeType)
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION
+                }
+                runCatching { context.startActivity(intent) }
+            },
         )
     }
 
