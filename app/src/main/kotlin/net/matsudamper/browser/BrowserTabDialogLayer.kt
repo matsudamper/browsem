@@ -61,12 +61,14 @@ internal fun BrowserTabDialogLayer(
     dialogState: PromptDialogState,
     enableTabUi: Boolean,
     onOpenNewTabRequest: (url: String, referrerUrl: String?) -> Unit,
+    customTabMode: Boolean = false,
     onOpenFile: ((String) -> Unit)? = null,
 ) {
     state.contextMenuState?.let { menu ->
         ContextMenuDialog(
             menu = menu,
             enableTabUi = enableTabUi,
+            customTabMode = customTabMode,
             // ホットリンク保護のあるサーバーで 403 にならないよう、元ページを referrer に付ける
             onOpenNewTab = { url ->
                 onOpenNewTabRequest(url, state.currentPageUrl)
@@ -393,6 +395,7 @@ internal fun BrowserTabDialogLayer(
 private fun ContextMenuDialog(
     menu: BrowserTabScreenState.ContextMenuState,
     enableTabUi: Boolean,
+    customTabMode: Boolean,
     onOpenNewTab: (String) -> Unit,
     onOpenUrl: (String) -> Unit,
     onCopyLink: (String) -> Unit,
@@ -428,7 +431,7 @@ private fun ContextMenuDialog(
                     is BrowserTabScreenState.ContextMenuState.Link -> {
                         LinkActionButtons(
                             url = menu.url,
-                            enableTabUi = enableTabUi,
+                            showOpenInNewTab = enableTabUi || customTabMode,
                             onOpenNewTab = onOpenNewTab,
                             onOpenUrl = onOpenUrl,
                             onCopyLink = onCopyLink,
@@ -446,7 +449,7 @@ private fun ContextMenuDialog(
                     is BrowserTabScreenState.ContextMenuState.LinkWithImage -> {
                         LinkActionButtons(
                             url = menu.url,
-                            enableTabUi = enableTabUi,
+                            showOpenInNewTab = enableTabUi || customTabMode,
                             onOpenNewTab = onOpenNewTab,
                             onOpenUrl = onOpenUrl,
                             onCopyLink = onCopyLink,
@@ -521,13 +524,13 @@ private fun ImageActionButtons(
 @Composable
 private fun LinkActionButtons(
     url: String,
-    enableTabUi: Boolean,
+    showOpenInNewTab: Boolean,
     onOpenNewTab: (String) -> Unit,
     onOpenUrl: (String) -> Unit,
     onCopyLink: (String) -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
-        if (enableTabUi) {
+        if (showOpenInNewTab) {
             TextButton(
                 modifier = Modifier.fillMaxWidth(),
                 onClick = { onOpenNewTab(url) },
@@ -1016,6 +1019,7 @@ private fun PreviewContextMenuDialog() {
                 imageSrcUrl = "https://example.com/image.png",
             ),
             enableTabUi = true,
+            customTabMode = false,
             onOpenNewTab = {},
             onOpenUrl = {},
             onCopyLink = {},

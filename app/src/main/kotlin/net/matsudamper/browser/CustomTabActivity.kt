@@ -114,6 +114,7 @@ class CustomTabActivity : ComponentActivity() {
                         mediaWebExtension = mediaWebExtensionInstance,
                         onClose = ::finish,
                         onOpenInBrowser = ::openInMainBrowser,
+                        onOpenNewTabInBrowser = ::openNewTabInMainBrowser,
                         onRequestDownloadNotificationPermission = { requestDownloadNotificationPermission() },
                     )
                 }
@@ -168,6 +169,15 @@ class CustomTabActivity : ComponentActivity() {
         }
     }
 
+    private fun openNewTabInMainBrowser(url: String) {
+        startActivity(
+            Intent(this, MainActivity::class.java).apply {
+                action = Intent.ACTION_VIEW
+                data = Uri.parse(url)
+            }
+        )
+    }
+
     private fun startMainBrowser(url: String, sessionState: String) {
         val targetUri = Uri.parse(url)
         startActivity(
@@ -204,6 +214,7 @@ private fun CustomTabScreen(
     mediaWebExtension: MediaWebExtension,
     onClose: () -> Unit,
     onOpenInBrowser: (url: String, tab: BrowserTab) -> Unit,
+    onOpenNewTabInBrowser: (url: String) -> Unit,
     onRequestDownloadNotificationPermission: suspend () -> Unit,
 ) {
     val viewModel = viewModel(initializer = {
@@ -281,14 +292,8 @@ private fun CustomTabScreen(
         // onLoadRequest で TARGET_WINDOW_NEW を現在タブへ畳み込むため、
         // ここへ到達することは想定しない。GeckoView 契約上 null を返して安全に拒否する。
         onOpenNewSessionRequest = { null },
-        onOpenNewTabRequest = { uri, referrerUrl ->
-            if (referrerUrl != null) {
-                activeTab.session.load(
-                    GeckoSession.Loader().uri(uri).referrer(referrerUrl),
-                )
-            } else {
-                activeTab.session.loadUri(uri)
-            }
+        onOpenNewTabRequest = { uri, _ ->
+            onOpenNewTabInBrowser(uri)
         },
         onCloseTab = onClose,
         onHistoryRecord = uiState.callbacks::onHistoryRecord,
