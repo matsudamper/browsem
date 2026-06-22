@@ -219,6 +219,7 @@ private fun BrowserAppContent(
                 tabId = tabId,
                 initialUrl = request.url,
                 restoredSessionState = request.sessionState,
+                insertAfterSelectedTab = false,
             )
             // selectTab より前に呼ぶことで、外部タブ開封前の selectedTabId を記録できる
             viewModel.registerExternalTab(newTab.tabId)
@@ -638,7 +639,10 @@ private fun BrowserAppContent(
                                     if (currentGroupId != null) {
                                         tabGroupRepository.assignTabToGroup(tabId, currentGroupId)
                                     }
-                                    val newTab = viewModel.createTabWithHomepage(tabId = tabId)
+                                    val newTab = viewModel.createTabWithHomepage(
+                                        tabId = tabId,
+                                        insertAfterSelectedTab = false,
+                                    )
                                     selectTab(newTab.tabId, null)
                                 }
                             },

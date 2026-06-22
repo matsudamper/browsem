@@ -186,34 +186,43 @@ private fun TabPreviewPage(
     ) {
         previewHeaderContent(Modifier.fillMaxWidth(), tab, tabCount)
 
-        Box(modifier = Modifier.fillMaxSize()) {
+        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
             val previewBitmap = tab.previewBitmap
-            if (previewBitmap != null && previewBitmap.isNotEmpty()) {
-                val bitmap = remember(previewBitmap) {
+            val bitmap = if (previewBitmap != null && previewBitmap.isNotEmpty()) {
+                remember(previewBitmap) {
                     BitmapFactory.decodeByteArray(previewBitmap, 0, previewBitmap.size)
                 }
-                if (bitmap != null) {
-                    Image(
-                        modifier = Modifier.fillMaxSize(),
-                        bitmap = bitmap.asImageBitmap(),
-                        contentDescription = null,
-                        contentScale = ContentScale.FillWidth,
-                        // URLバーの高さ分ズレるため、画像は下固定にする
-                        alignment = Alignment.BottomCenter,
-                    )
-                    return
-                }
+            } else {
+                null
             }
 
-            Text(
-                modifier = Modifier
-                    .align(Alignment.Center)
-                    .padding(16.dp),
-                text = tab.title.ifBlank { tab.currentUrl },
-                style = MaterialTheme.typography.bodyLarge,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
+            if (bitmap != null) {
+                // 画像がコンテナより短い場合（フォルダブルで画面サイズが変わった場合）は上寄せ、
+                // 同じサイズの場合はURLバーの高さ分のズレに対応するため下寄せ
+                val scaledImageHeight = constraints.maxWidth.toFloat() / bitmap.width * bitmap.height
+                val alignment = if (scaledImageHeight < constraints.maxHeight) {
+                    Alignment.TopCenter
+                } else {
+                    Alignment.BottomCenter
+                }
+                Image(
+                    modifier = Modifier.fillMaxSize(),
+                    bitmap = bitmap.asImageBitmap(),
+                    contentDescription = null,
+                    contentScale = ContentScale.FillWidth,
+                    alignment = alignment,
+                )
+            } else {
+                Text(
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .padding(16.dp),
+                    text = tab.title.ifBlank { tab.currentUrl },
+                    style = MaterialTheme.typography.bodyLarge,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
     }
 }
