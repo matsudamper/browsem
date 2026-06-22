@@ -533,6 +533,7 @@ private fun MainBrowserContent(
                 tabId = tabId,
                 initialUrl = request.url,
                 restoredSessionState = request.sessionState,
+                insertAfterSelectedTab = false,
             )
             viewModel.registerExternalTab(newTab.tabId)
             selectTab(newTab.tabId, null)
@@ -719,6 +720,7 @@ private fun MainBrowserContent(
                         TabsScreenViewModel(
                             tabStore = browserTabController,
                             tabGroupRepository = tabGroupRepository,
+                            playingTabIds = mediaWebExtension.playingTabIds,
                         )
                     })
                     val tabsUiState by tabsViewModel.uiState.collectAsState()
@@ -760,7 +762,10 @@ private fun MainBrowserContent(
                                 if (currentGroupId != null) {
                                     tabGroupRepository.assignTabToGroup(tabId, currentGroupId)
                                 }
-                                val newTab = viewModel.createTabWithHomepage(tabId = tabId)
+                                val newTab = viewModel.createTabWithHomepage(
+                                    tabId = tabId,
+                                    insertAfterSelectedTab = false,
+                                )
                                 selectTab(newTab.tabId, null)
                             }
                         },

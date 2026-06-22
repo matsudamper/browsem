@@ -195,13 +195,18 @@ class BrowserTabController(
         restoredThemeColor: Int? = null,
         openerTabId: String? = null,
         initialReferrerUrl: String? = null,
+        insertAfterSelectedTab: Boolean = true,
     ): BrowserTab {
         if (!isSinglePage && restoreState != RestoreState.COMPLETED) {
             Log.w(TAG, "タブ復元完了前に createAndAppendTab が呼ばれました (状態: $restoreState)")
         }
         return withContext(Dispatchers.Main) {
             val normalizedInitialUrl = initialUrl.ifBlank { "about:blank" }
-            val insertIndex = tabs.size
+            val insertIndex = TabInsertionPolicy.resolveInsertionIndex(
+                tabIds = tabs.map { it.tabId },
+                openerTabId = openerTabId,
+                selectedTabId = if (insertAfterSelectedTab) selectedTabId else null,
+            )
             val tab = createRegisteredTab(
                 tabId = tabId,
                 session = GeckoSession(),

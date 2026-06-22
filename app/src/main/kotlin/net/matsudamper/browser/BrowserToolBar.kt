@@ -124,11 +124,17 @@ internal fun BrowserToolBar(
             .testTag(BrowserToolbarTestTags.Toolbar.testTag),
         isFocused = isFocused,
         gestureState = if (showTabActions) {
-            BrowserToolBarGestureState(
-                onHorizontalDrag = onHorizontalDrag,
-                onHorizontalDragEnd = onHorizontalDragEnd,
-                onOpenTabs = onOpenTabs
-            )
+            remember {
+                BrowserToolBarGestureState(
+                    onHorizontalDrag = onHorizontalDrag,
+                    onHorizontalDragEnd = onHorizontalDragEnd,
+                    onOpenTabs = onOpenTabs,
+                )
+            }.apply {
+                this.onHorizontalDrag = onHorizontalDrag
+                this.onHorizontalDragEnd = onHorizontalDragEnd
+                this.onOpenTabs = onOpenTabs
+            }
         } else {
             null
         },
@@ -193,6 +199,11 @@ internal class BrowserToolBarGestureState(
     onHorizontalDragEnd: () -> Unit,
     onOpenTabs: () -> Unit,
 ) {
+    // pointerInput コルーチンはキーが変わらない限り再起動されないため、
+    // コンストラクタでキャプチャした値ではなく var プロパティ経由で最新のコールバックを参照する。
+    var onHorizontalDrag = onHorizontalDrag
+    var onHorizontalDragEnd = onHorizontalDragEnd
+    var onOpenTabs = onOpenTabs
     var isFocused by mutableStateOf(false)
 
     val modifier = Modifier
@@ -202,10 +213,10 @@ internal class BrowserToolBarGestureState(
             if (isFocused) return@pointerInput
             detectHorizontalDragGestures(
                 onHorizontalDrag = { _, dragAmount ->
-                    onHorizontalDrag(dragAmount)
+                    this@BrowserToolBarGestureState.onHorizontalDrag(dragAmount)
                 },
-                onDragEnd = { onHorizontalDragEnd() },
-                onDragCancel = { onHorizontalDragEnd() },
+                onDragEnd = { this@BrowserToolBarGestureState.onHorizontalDragEnd() },
+                onDragCancel = { this@BrowserToolBarGestureState.onHorizontalDragEnd() },
             )
         }
         .pointerInput(isFocused) {
@@ -214,7 +225,7 @@ internal class BrowserToolBarGestureState(
             detectDownSwipe(
                 density = this,
                 onDownSwipe = {
-                    onOpenTabs()
+                    this@BrowserToolBarGestureState.onOpenTabs()
                 }
             )
         }

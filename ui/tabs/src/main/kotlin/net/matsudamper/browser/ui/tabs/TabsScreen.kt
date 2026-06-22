@@ -168,6 +168,7 @@ fun TabsScreen(
                 groups = loadingState.groups,
                 activeGroupIndex = loadingState.activeGroupIndex,
                 selectedTabId = loadingState.selectedTabId,
+                groupHasPlayingTab = loadingState.groupHasPlayingTab,
                 snackbarHostState = snackbarHostState,
                 onSelectTab = onSelectTab,
                 onCloseTab = currentCallbacks::onCloseTab,
@@ -196,6 +197,7 @@ private fun TabsScreenLoadedContent(
     groups: List<TabGroupData>,
     activeGroupIndex: Int,
     selectedTabId: String?,
+    groupHasPlayingTab: List<Boolean>,
     snackbarHostState: SnackbarHostState,
     onSelectTab: (String) -> Unit,
     onCloseTab: (String) -> Unit,
@@ -300,7 +302,10 @@ private fun TabsScreenLoadedContent(
             .fillMaxSize(),
         contentWindowInsets = WindowInsets.safeDrawing,
         snackbarHost = {
-            SnackbarHost(snackbarHostState) { snackbarData ->
+            SnackbarHost(
+                hostState = snackbarHostState,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+            ) { snackbarData ->
                 // スワイプで Snackbar を dismiss できるようにする
                 key(snackbarData) {
                     val dismissState = rememberSwipeToDismissBoxState(
@@ -346,6 +351,7 @@ private fun TabsScreenLoadedContent(
                 activeGroupIndex = activeGroupIndex,
                 pagerState = pagerState,
                 highlightedDropTargetIndex = highlightedGroupIndex,
+                groupHasPlayingTab = groupHasPlayingTab,
                 onGroupSelected = onGroupSelected,
                 onReorderGroups = onReorderGroups,
                 onAddGroup = onAddGroup,
@@ -625,6 +631,7 @@ private fun Preview() {
         groups = groups,
         activeGroupIndex = 0,
         selectedTabId = "1",
+        groupHasPlayingTab = emptyList(),
         snackbarHostState = remember { SnackbarHostState() },
         onSelectTab = {},
         onCloseTab = {},
@@ -663,6 +670,7 @@ private fun PreviewSingleGroup() {
         groups = groups,
         activeGroupIndex = 0,
         selectedTabId = "1",
+        groupHasPlayingTab = emptyList(),
         snackbarHostState = remember { SnackbarHostState() },
         onSelectTab = {},
         onCloseTab = {},
@@ -679,10 +687,10 @@ private fun PreviewSingleGroup() {
     )
 }
 
-/** Snackbar が表示されている状態（pendingClosedTab が non-null）の Preview */
+/** Snackbar が表示されている状態の Preview */
 @Composable
 @Preview
-private fun PreviewWithPendingClosedTab() {
+private fun PreviewWithSnackbar() {
     val groups = remember {
         listOf(
             TabGroupData(TabGroupId("g1"), "デフォルト"),
@@ -700,36 +708,49 @@ private fun PreviewWithPendingClosedTab() {
             ),
         )
     }
-    TabsScreen(
-        uiState = TabsScreenUiState(
-            callbacks = object : TabsScreenUiState.Callbacks {
-                override fun onCloseTab(tabId: String) {}
-                override fun onUndoCloseTab() {}
-                override fun onConfirmCloseTab() {}
-                override fun onReorderTabs(groupIndex: Int, fromLocalIndex: Int, toLocalIndex: Int) {}
-                override fun onReorderGroups(fromIndex: Int, toIndex: Int) {}
-                override fun onGroupSelected(index: Int) {}
-                override fun onGroupPageChanged(page: Int) {}
-                override fun onAddGroup() {}
-                override fun onMoveTabToGroup(tabId: String, targetGroupIndex: Int) {}
-                override fun onRenameGroup(groupIndex: Int, newName: String) {}
-                override fun onDeleteGroup(groupIndex: Int) {}
-                override fun onToggleDefaultGroup(groupIndex: Int) {}
+    Box {
+        TabsScreenLoadedContent(
+            groupedTabs = groupedTabs,
+            groups = groups,
+            activeGroupIndex = 0,
+            selectedTabId = "1",
+            snackbarHostState = remember { SnackbarHostState() },
+            onSelectTab = {},
+            onCloseTab = {},
+            onOpenNewTab = {},
+            onReorderTabs = { _, _, _ -> },
+            onReorderGroups = { _, _ -> },
+            onGroupSelected = {},
+            onGroupPageChanged = {},
+            onAddGroup = {},
+            onMoveTabToGroup = { _, _ -> },
+            onRenameGroup = { _, _ -> },
+            onDeleteGroup = {},
+            onToggleDefaultGroup = {},
+            groupHasPlayingTab = emptyList(),
+        )
+        Snackbar(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            action = {
+                TextButton(
+                    onClick = {},
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = SnackbarDefaults.actionContentColor,
+                    ),
+                ) {
+                    Text("戻す")
+                }
             },
-            loadingState = TabsScreenUiState.LoadingState.Loaded(
-                groupedTabs = groupedTabs,
-                groups = groups,
-                activeGroupIndex = 0,
-                selectedTabId = "1",
-            ),
-            pendingClosedTab = TabsScreenUiState.PendingClosedTab(
-                tabId = "2",
-                title = "Google",
-            ),
-        ),
-        onSelectTab = {},
-        onOpenNewTab = {},
-    )
+        ) {
+            Text(
+                text = "Google",
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
 }
 
 sealed interface TabsScreenTestTags {
@@ -755,5 +776,9 @@ sealed interface TabsScreenTestTags {
 
     class DefaultGroupSwitch(index: Int) : TabsScreenTestTags {
         override val id: String = "default_group_switch_$index"
+    }
+
+    class TabItem(index: Int) : TabsScreenTestTags {
+        override val id: String = "tab_item_$index"
     }
 }
