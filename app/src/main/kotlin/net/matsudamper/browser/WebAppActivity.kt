@@ -14,14 +14,9 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.core.content.ContextCompat
-import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withTimeoutOrNull
 import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.TabRepository
 import net.matsudamper.browser.data.history.HistoryRepository
@@ -137,7 +132,7 @@ class WebAppActivity : ComponentActivity() {
                         showInstallExtensionItem = false,
                         // ウェブアプリモード: 閉じるボタンなし、カスタムタブ風のツールバー
                         webAppMode = true,
-                        onOpenInBrowser = { url -> openInMainBrowser(url, browserTab) },
+                        onOpenInBrowser = ::openInMainBrowser,
                         // onLoadRequest で TARGET_WINDOW_NEW を現在タブへ畳み込むため、
                         // ここへ到達することは想定しない。GeckoView 契約上 null を返して安全に拒否する。
                         onOpenNewSessionRequest = { null },
@@ -169,27 +164,16 @@ class WebAppActivity : ComponentActivity() {
     }
 
     /**
-     * ウェブアプリの内容を通常ブラウザへ引き継いで開く。
-     * SessionState を引き継ぐことでスクロール位置や履歴を保持する。
+     * 現在のURLを通常ブラウザで開く。
+     * ウェブアプリ側は閉じずにそのまま維持する。
      */
-    private fun openInMainBrowser(url: String, tab: BrowserTab) {
-        lifecycleScope.launch {
-            val sessionState = captureFreshSessionState(tab)
-            val targetUri = Uri.parse(url)
-            startActivity(
-                Intent(this@WebAppActivity, MainActivity::class.java).apply {
-                    action = Intent.ACTION_VIEW
-                    data = targetUri
-                    sessionState.takeIf { it.isNotBlank() }?.let { state ->
-                        putExtra(
-                            CustomTabHandoffStore.EXTRA_HANDOFF_TOKEN,
-                            CustomTabHandoffStore.store(state),
-                        )
-                    }
-                }
-            )
-            finish()
-        }
+    private fun openInMainBrowser(url: String) {
+        startActivity(
+            Intent(this, MainActivity::class.java).apply {
+                action = Intent.ACTION_VIEW
+                data = Uri.parse(url)
+            }
+        )
     }
 
     /**
@@ -269,13 +253,3 @@ class WebAppActivity : ComponentActivity() {
         deferred.await()
     }
 }
-
-private suspend fun captureFreshSessionState(tab: BrowserTab): String {
-    val before = tab.sessionState
-    tab.session.flushSessionState()
-    return withTimeoutOrNull(FLUSH_SESSION_STATE_TIMEOUT_MS) {
-        snapshotFlow { tab.sessionState }.first { it != before }
-    } ?: tab.sessionState
-}
-
-private const val FLUSH_SESSION_STATE_TIMEOUT_MS = 300L
