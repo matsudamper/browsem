@@ -178,7 +178,10 @@ private fun DownloadItemRow(
     val highlightColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
 
     LaunchedEffect(isHighlighted) {
-        if (!isHighlighted) return@LaunchedEffect
+        if (!isHighlighted) {
+            highlightAlpha.snapTo(0f)
+            return@LaunchedEffect
+        }
         delay(200)
         var activePress: PressInteraction.Press? = null
         try {
@@ -193,11 +196,9 @@ private fun DownloadItemRow(
                 if (it == 0) delay(100)
             }
         } finally {
-            activePress?.let { press ->
-                withContext(NonCancellable) {
-                    interactionSource.emit(PressInteraction.Release(press))
-                    highlightAlpha.snapTo(0f)
-                }
+            withContext(NonCancellable) {
+                activePress?.let { interactionSource.emit(PressInteraction.Cancel(it)) }
+                highlightAlpha.snapTo(0f)
             }
         }
         currentOnHighlightFinished()
