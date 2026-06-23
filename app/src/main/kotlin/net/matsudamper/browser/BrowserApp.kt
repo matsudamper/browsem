@@ -23,8 +23,10 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -89,7 +91,7 @@ import org.mozilla.geckoview.GeckoRuntime
 internal fun BrowserApp(
     viewModel: BrowserViewModel,
     newTabUrlFlow: Flow<NewTabRequest>,
-    openDownloadsFlow: Flow<Unit>,
+    openDownloadsFlow: Flow<String?>,
     onInstallExtensionRequest: (String) -> Unit,
     onRequestDownloadNotificationPermission: suspend () -> Unit,
 ) {
@@ -119,7 +121,7 @@ private fun BrowserAppContent(
     uiState: BrowserAppUiState,
     viewModel: BrowserViewModel,
     newTabUrlFlow: Flow<NewTabRequest>,
-    openDownloadsFlow: Flow<Unit>,
+    openDownloadsFlow: Flow<String?>,
     onInstallExtensionRequest: (String) -> Unit,
     onRequestDownloadNotificationPermission: suspend () -> Unit,
 ) {
@@ -164,10 +166,17 @@ private fun BrowserAppContent(
     }
 
     // 通知タップ時にダウンロード管理画面を開く
+    var pendingHighlightWorkerId by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(openDownloadsFlow) {
-        openDownloadsFlow.onEach {
-            if (backStack.none { it is AppDestination.Downloads }) {
+        openDownloadsFlow.onEach { workerId ->
+            pendingHighlightWorkerId = workerId
+            val existingIndex = backStack.indexOfLast { it is AppDestination.Downloads }
+            if (existingIndex < 0) {
                 backStack.add(AppDestination.Downloads)
+            } else if (existingIndex < backStack.lastIndex) {
+                // ダウンロード画面が他の画面の下に埋もれている場合、上の画面を取り除いて前面に出す
+                val removeCount = backStack.lastIndex - existingIndex
+                repeat(removeCount) { backStack.removeLastOrNull() }
             }
         }.launchIn(this)
     }
@@ -551,6 +560,13 @@ private fun BrowserAppContent(
                             DownloadManagementScreenViewModel(context.applicationContext as android.app.Application)
                         }
                         val downloadsUiState by downloadsViewModel.uiState.collectAsState()
+                        var highlightItemId by remember { mutableStateOf<UUID?>(null) }
+                        LaunchedEffect(pendingHighlightWorkerId) {
+                            val workerId = pendingHighlightWorkerId ?: return@LaunchedEffect
+                            val id = runCatching { UUID.fromString(workerId) }.getOrNull() ?: return@LaunchedEffect
+                            pendingHighlightWorkerId = null
+                            downloadsViewModel.requestHighlight(id)
+                        }
                         LaunchedEffect(downloadsViewModel) {
                             downloadsViewModel.eventHandler.receiveAsFlow().collect {
                                 it(object : DownloadManagementScreenViewModel.Event {
@@ -566,12 +582,18 @@ private fun BrowserAppContent(
                                             }
                                         }
                                     }
+
+                                    override fun highlightItem(id: UUID) {
+                                        highlightItemId = id
+                                    }
                                 })
                             }
                         }
                         DownloadManagementScreen(
                             uiState = downloadsUiState,
                             onBack = { backStack.removeLastOrNull() },
+                            highlightItemId = highlightItemId,
+                            onHighlightComplete = { highlightItemId = null },
                         )
                     }
 

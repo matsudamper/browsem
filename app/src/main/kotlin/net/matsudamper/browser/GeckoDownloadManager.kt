@@ -49,6 +49,7 @@ internal class GeckoDownloadManager(
                     DownloadWorker.KEY_URL to url,
                     DownloadWorker.KEY_REFERRER_URL to referrerUrl,
                     DownloadWorker.KEY_NOTIFICATION_ID to notificationId,
+                    DownloadWorker.KEY_STABLE_WORKER_ID to workId.toString(),
                 )
             )
             .addTag(DownloadWorker.TAG_DOWNLOAD)
@@ -119,6 +120,7 @@ internal class GeckoDownloadManager(
             put(DownloadWorker.KEY_URL, url)
             put(DownloadWorker.KEY_REFERRER_URL, referrerUrl)
             put(DownloadWorker.KEY_NOTIFICATION_ID, notificationId)
+            put(DownloadWorker.KEY_STABLE_WORKER_ID, workerId)
             // 部分ファイルがある場合のみRange再開モードで起動する
             if (partialFileUri != null) {
                 put(DownloadWorker.KEY_PARTIAL_FILE_URI, partialFileUri)
