@@ -254,6 +254,13 @@ internal class DownloadManagementScreenViewModel(
     interface Event {
         /** ダウンロード開始時のページURLを新しいタブで開く */
         fun navigateToUrl(url: String)
+
+        /** 指定アイテムへスクロールしてハイライト点滅させる */
+        fun highlightItem(id: UUID)
+    }
+
+    fun requestHighlight(id: UUID) {
+        eventHandler.trySend { it.highlightItem(id) }
     }
 
     companion object {
