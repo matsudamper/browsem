@@ -168,10 +168,13 @@ class WebAppActivity : ComponentActivity() {
      * ウェブアプリ側は閉じずにそのまま維持する。
      */
     private fun openInMainBrowser(url: String) {
+        val uri = Uri.parse(url)
+        val scheme = uri.scheme
+        if (scheme != "http" && scheme != "https") return
         startActivity(
             Intent(this, MainActivity::class.java).apply {
                 action = Intent.ACTION_VIEW
-                data = Uri.parse(url)
+                data = uri
             }
         )
     }
