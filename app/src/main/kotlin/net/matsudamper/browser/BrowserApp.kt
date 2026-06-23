@@ -215,6 +215,7 @@ private fun BrowserAppContent(
                 tabId = tabId,
                 initialUrl = request.url,
                 restoredSessionState = request.sessionState,
+                initialReferrerUrl = request.referrerUrl,
                 insertAfterSelectedTab = false,
             )
             // selectTab より前に呼ぶことで、外部タブ開封前の selectedTabId を記録できる

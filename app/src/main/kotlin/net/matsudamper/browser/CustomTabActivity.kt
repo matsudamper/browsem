@@ -169,13 +169,18 @@ class CustomTabActivity : ComponentActivity() {
         }
     }
 
-    private fun openNewTabInMainBrowser(url: String) {
+    private fun openNewTabInMainBrowser(url: String, referrerUrl: String?) {
         startActivity(
             Intent(this, MainActivity::class.java).apply {
                 action = Intent.ACTION_VIEW
                 data = Uri.parse(url)
+                referrerUrl?.let { putExtra(EXTRA_NEW_TAB_REFERRER_URL, it) }
             }
         )
+    }
+
+    companion object {
+        internal const val EXTRA_NEW_TAB_REFERRER_URL = "extra_new_tab_referrer_url"
     }
 
     private fun startMainBrowser(url: String, sessionState: String) {
@@ -214,7 +219,7 @@ private fun CustomTabScreen(
     mediaWebExtension: MediaWebExtension,
     onClose: () -> Unit,
     onOpenInBrowser: (url: String, tab: BrowserTab) -> Unit,
-    onOpenNewTabInBrowser: (url: String) -> Unit,
+    onOpenNewTabInBrowser: (url: String, referrerUrl: String?) -> Unit,
     onRequestDownloadNotificationPermission: suspend () -> Unit,
 ) {
     val viewModel = viewModel(initializer = {
@@ -292,8 +297,8 @@ private fun CustomTabScreen(
         // onLoadRequest で TARGET_WINDOW_NEW を現在タブへ畳み込むため、
         // ここへ到達することは想定しない。GeckoView 契約上 null を返して安全に拒否する。
         onOpenNewSessionRequest = { null },
-        onOpenNewTabRequest = { uri, _ ->
-            onOpenNewTabInBrowser(uri)
+        onOpenNewTabRequest = { uri, referrerUrl ->
+            onOpenNewTabInBrowser(uri, referrerUrl)
         },
         onCloseTab = onClose,
         onHistoryRecord = uiState.callbacks::onHistoryRecord,
