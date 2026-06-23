@@ -28,7 +28,7 @@ import net.matsudamper.browser.ui.common.BrowserTheme
 import net.matsudamper.browser.ui.browser.WebAppScreen
 import org.koin.android.ext.android.inject
 import org.mozilla.geckoview.GeckoRuntime
-import org.mozilla.geckoview.GeckoSession
+
 import java.util.concurrent.CancellationException
 
 /**
@@ -135,13 +135,7 @@ class WebAppActivity : ComponentActivity() {
                         // ここへ到達することは想定しない。GeckoView 契約上 null を返して安全に拒否する。
                         onOpenNewSessionRequest = { null },
                         onOpenNewTabRequest = { uri, referrerUrl ->
-                            if (referrerUrl != null) {
-                                browserTab.session.load(
-                                    GeckoSession.Loader().uri(uri).referrer(referrerUrl),
-                                )
-                            } else {
-                                browserTab.session.loadUri(uri)
-                            }
+                            openNewTabInMainBrowser(uri, referrerUrl)
                         },
                         onHistoryRecord = webAppUiState.callbacks::onHistoryRecord,
                         onHistoryTitleUpdate = webAppUiState.callbacks::onHistoryTitleUpdate,
@@ -151,6 +145,16 @@ class WebAppActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    private fun openNewTabInMainBrowser(url: String, referrerUrl: String?) {
+        startActivity(
+            Intent(this, MainActivity::class.java).apply {
+                action = Intent.ACTION_VIEW
+                data = android.net.Uri.parse(url)
+                referrerUrl?.let { putExtra(CustomTabActivity.EXTRA_NEW_TAB_REFERRER_URL, it) }
+            }
+        )
     }
 
     override fun onDestroy() {

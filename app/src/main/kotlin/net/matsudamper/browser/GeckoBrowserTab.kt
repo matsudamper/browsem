@@ -923,7 +923,7 @@ internal fun GeckoBrowserTab(
             state = state,
             dialogState = dialogState,
             enableTabUi = enableTabUi,
-            customTabMode = customTabMode,
+            customTabMode = customTabMode || webAppMode,
             onOpenNewTabRequest = currentOnOpenNewTabRequest,
             onOpenFile = { fileUri ->
                 val uri = fileUri.toUri()
