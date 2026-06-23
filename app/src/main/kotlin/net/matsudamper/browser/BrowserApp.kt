@@ -166,10 +166,10 @@ private fun BrowserAppContent(
     }
 
     // 通知タップ時にダウンロード管理画面を開く
-    var downloadHighlightWorkerId by remember { mutableStateOf<String?>(null) }
+    var pendingHighlightWorkerId by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(openDownloadsFlow) {
         openDownloadsFlow.onEach { workerId ->
-            downloadHighlightWorkerId = workerId
+            pendingHighlightWorkerId = workerId
             if (backStack.none { it is AppDestination.Downloads }) {
                 backStack.add(AppDestination.Downloads)
             }
@@ -555,6 +555,13 @@ private fun BrowserAppContent(
                             DownloadManagementScreenViewModel(context.applicationContext as android.app.Application)
                         }
                         val downloadsUiState by downloadsViewModel.uiState.collectAsState()
+                        var highlightItemId by remember { mutableStateOf<UUID?>(null) }
+                        LaunchedEffect(pendingHighlightWorkerId) {
+                            val workerId = pendingHighlightWorkerId ?: return@LaunchedEffect
+                            val id = runCatching { UUID.fromString(workerId) }.getOrNull() ?: return@LaunchedEffect
+                            pendingHighlightWorkerId = null
+                            downloadsViewModel.requestHighlight(id)
+                        }
                         LaunchedEffect(downloadsViewModel) {
                             downloadsViewModel.eventHandler.receiveAsFlow().collect {
                                 it(object : DownloadManagementScreenViewModel.Event {
@@ -570,17 +577,18 @@ private fun BrowserAppContent(
                                             }
                                         }
                                     }
+
+                                    override fun highlightItem(id: UUID) {
+                                        highlightItemId = id
+                                    }
                                 })
                             }
-                        }
-                        val highlightId = downloadHighlightWorkerId?.let {
-                            runCatching { UUID.fromString(it) }.getOrNull()
                         }
                         DownloadManagementScreen(
                             uiState = downloadsUiState,
                             onBack = { backStack.removeLastOrNull() },
-                            highlightItemId = highlightId,
-                            onHighlightComplete = { downloadHighlightWorkerId = null },
+                            highlightItemId = highlightItemId,
+                            onHighlightComplete = { highlightItemId = null },
                         )
                     }
 

@@ -34,6 +34,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -65,10 +66,10 @@ import java.util.UUID
 @Composable
 fun DownloadManagementScreen(
     uiState: DownloadManagementScreenUiState,
+    highlightItemId: UUID?,
     onBack: () -> Unit,
+    onHighlightComplete: () -> Unit,
     modifier: Modifier = Modifier,
-    highlightItemId: UUID? = null,
-    onHighlightComplete: () -> Unit = {},
 ) {
     val listState = rememberLazyListState()
     Scaffold(
@@ -162,8 +163,8 @@ private fun DownloadItemRow(
     onResume: () -> Unit,
     onOpenOriginPage: (url: String) -> Unit,
     loadThumbnail: suspend (fileUri: String) -> ImageBitmap?,
-    isHighlighted: Boolean = false,
-    onHighlightFinished: () -> Unit = {},
+    isHighlighted: Boolean,
+    onHighlightFinished: () -> Unit,
 ) {
     val currentLoadThumbnail by rememberUpdatedState(loadThumbnail)
     val currentOnHighlightFinished by rememberUpdatedState(onHighlightFinished)
@@ -206,7 +207,7 @@ private fun DownloadItemRow(
                 .background(highlightColor.copy(alpha = highlightColor.alpha * highlightAlpha.value))
                 .combinedClickable(
                     interactionSource = interactionSource,
-                    indication = androidx.compose.material3.ripple(),
+                    indication = ripple(),
                     onLongClick = { menuExpanded = true },
                     onClick = {
                         val status = item.status
@@ -442,6 +443,8 @@ private fun PreviewInProgress() {
             onResume = {},
             onOpenOriginPage = {},
             loadThumbnail = { null },
+            isHighlighted = false,
+            onHighlightFinished = {},
         )
     }
 }
@@ -468,6 +471,8 @@ private fun PreviewPaused() {
             onResume = {},
             onOpenOriginPage = {},
             loadThumbnail = { null },
+            isHighlighted = false,
+            onHighlightFinished = {},
         )
     }
 }
@@ -490,6 +495,8 @@ private fun PreviewFailedCanResume() {
             onResume = {},
             onOpenOriginPage = {},
             loadThumbnail = { null },
+            isHighlighted = false,
+            onHighlightFinished = {},
         )
     }
 }
@@ -522,6 +529,8 @@ private fun PreviewCompletedWithThumbnail() {
             onResume = {},
             onOpenOriginPage = {},
             loadThumbnail = { thumbnail },
+            isHighlighted = false,
+            onHighlightFinished = {},
         )
     }
 }
@@ -546,6 +555,8 @@ private fun PreviewCompletedWithoutThumbnail() {
             onResume = {},
             onOpenOriginPage = {},
             loadThumbnail = { null },
+            isHighlighted = false,
+            onHighlightFinished = {},
         )
     }
 }
@@ -568,6 +579,8 @@ private fun PreviewFailedCannotResume() {
             onResume = {},
             onOpenOriginPage = {},
             loadThumbnail = { null },
+            isHighlighted = false,
+            onHighlightFinished = {},
         )
     }
 }
@@ -592,6 +605,8 @@ private fun PreviewLongFileName() {
             onResume = {},
             onOpenOriginPage = {},
             loadThumbnail = { null },
+            isHighlighted = false,
+            onHighlightFinished = {},
         )
     }
 }
