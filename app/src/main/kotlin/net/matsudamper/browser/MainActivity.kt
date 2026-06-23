@@ -141,7 +141,11 @@ class MainActivity : ComponentActivity() {
             // 同じ URL であれば重複タブを作らないようスキップする。
             if (url != null && url != lastProcessedDeepLinkUrl) {
                 val result = createNewTabChannel.trySend(
-                    NewTabRequest(url = url, sessionState = consumeHandoffSessionState(intent)),
+                    NewTabRequest(
+                        url = url,
+                        sessionState = consumeHandoffSessionState(intent),
+                        referrerUrl = intent.getStringExtra(CustomTabActivity.EXTRA_NEW_TAB_REFERRER_URL),
+                    ),
                 )
                 if (result.isFailure) {
                     Log.e("MainActivity", "URL の送信に失敗: $url, reason=${result.exceptionOrNull()}")
@@ -203,7 +207,11 @@ class MainActivity : ComponentActivity() {
         val url = intent.dataString
         if (url != null) {
             val result = createNewTabChannel.trySend(
-                NewTabRequest(url = url, sessionState = consumeHandoffSessionState(intent)),
+                NewTabRequest(
+                    url = url,
+                    sessionState = consumeHandoffSessionState(intent),
+                    referrerUrl = intent.getStringExtra(CustomTabActivity.EXTRA_NEW_TAB_REFERRER_URL),
+                ),
             )
             if (result.isFailure) {
                 Log.e("MainActivity", "URL の送信に失敗: $url, reason=${result.exceptionOrNull()}")
