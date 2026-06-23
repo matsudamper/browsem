@@ -431,7 +431,8 @@ private fun ContextMenuDialog(
                     is BrowserTabScreenState.ContextMenuState.Link -> {
                         LinkActionButtons(
                             url = menu.url,
-                            showOpenInNewTab = enableTabUi || customTabMode,
+                            enableTabUi = enableTabUi,
+                            customTabMode = customTabMode,
                             onOpenNewTab = onOpenNewTab,
                             onOpenUrl = onOpenUrl,
                             onCopyLink = onCopyLink,
@@ -449,7 +450,8 @@ private fun ContextMenuDialog(
                     is BrowserTabScreenState.ContextMenuState.LinkWithImage -> {
                         LinkActionButtons(
                             url = menu.url,
-                            showOpenInNewTab = enableTabUi || customTabMode,
+                            enableTabUi = enableTabUi,
+                            customTabMode = customTabMode,
                             onOpenNewTab = onOpenNewTab,
                             onOpenUrl = onOpenUrl,
                             onCopyLink = onCopyLink,
@@ -524,20 +526,22 @@ private fun ImageActionButtons(
 @Composable
 private fun LinkActionButtons(
     url: String,
-    showOpenInNewTab: Boolean,
+    enableTabUi: Boolean,
+    customTabMode: Boolean,
     onOpenNewTab: (String) -> Unit,
     onOpenUrl: (String) -> Unit,
     onCopyLink: (String) -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
-        if (showOpenInNewTab) {
+        if (enableTabUi || customTabMode) {
             TextButton(
                 modifier = Modifier.fillMaxWidth(),
                 onClick = { onOpenNewTab(url) },
             ) {
                 Text(text = "新しいタブで開く")
             }
-        } else {
+        }
+        if (!enableTabUi) {
             TextButton(
                 modifier = Modifier.fillMaxWidth(),
                 onClick = { onOpenUrl(url) },
