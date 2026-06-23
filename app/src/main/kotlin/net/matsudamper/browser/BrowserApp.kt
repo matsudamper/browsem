@@ -251,6 +251,22 @@ private fun BrowserAppContent(
                 val target = targetState.entries.lastOrNull() ?: return@NavDisplay default
 
                 if (target.contentKey is AppDestination.Browser && initial.contentKey is AppDestination.Browser) {
+                    val targetBrowser = target.contentKey as AppDestination.Browser
+                    val initialBrowser = initial.contentKey as AppDestination.Browser
+                    // 新しいタブを開いた場合（beforeTab が設定されている）は右にスライド
+                    if (targetBrowser.beforeTab != null) {
+                        return@NavDisplay ContentTransform(
+                            targetContentEnter = slideIn { IntOffset(it.width, 0) },
+                            initialContentExit = slideOut { IntOffset(-it.width / 3, 0) },
+                        )
+                    }
+                    // 新しいタブから元のタブに戻る場合は左にスライド
+                    if (initialBrowser.beforeTab?.tabId == targetBrowser.tabId) {
+                        return@NavDisplay ContentTransform(
+                            targetContentEnter = slideIn { IntOffset(-it.width / 3, 0) },
+                            initialContentExit = slideOut { IntOffset(it.width, 0) },
+                        )
+                    }
                     return@NavDisplay ContentTransform(
                         initialContentExit = fadeOut(snap(100)),
                         targetContentEnter = fadeIn(snap(100)),
@@ -800,6 +816,17 @@ private fun <T : NavKey> AnimatedContentTransitionScope<Scene<T>>.popTransition(
             },
             targetContentEnter = EnterTransition.None,
         )
+    }
+
+    // 新しいタブから元のタブに戻る場合は左にスライド
+    if (initial.contentKey is AppDestination.Browser && target.contentKey is AppDestination.Browser) {
+        val initialBrowser = initial.contentKey as AppDestination.Browser
+        if (initialBrowser.beforeTab?.tabId == (target.contentKey as AppDestination.Browser).tabId) {
+            return ContentTransform(
+                targetContentEnter = slideIn { IntOffset(-it.width / 3, 0) },
+                initialContentExit = slideOut { IntOffset(it.width, 0) },
+            )
+        }
     }
 
     if (target.contentKey is AppDestination.Browser) {
