@@ -116,12 +116,13 @@ fun DownloadManagementScreen(
                 Text("ダウンロード履歴はありません。")
             }
         } else {
-            var activeHighlightId by remember { mutableStateOf(highlightItemId) }
+            var activeHighlightId by remember { mutableStateOf<UUID?>(null) }
             LaunchedEffect(highlightItemId, uiState.downloads) {
                 val targetId = highlightItemId ?: return@LaunchedEffect
                 val index = uiState.downloads.indexOfFirst { it.id == targetId }
                 if (index < 0) return@LaunchedEffect
                 listState.animateScrollToItem(index)
+                activeHighlightId = targetId
             }
             LazyColumn(
                 state = listState,
