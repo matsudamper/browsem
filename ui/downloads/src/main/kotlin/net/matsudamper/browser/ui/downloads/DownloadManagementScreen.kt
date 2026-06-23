@@ -56,7 +56,9 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -178,13 +180,25 @@ private fun DownloadItemRow(
     LaunchedEffect(isHighlighted) {
         if (!isHighlighted) return@LaunchedEffect
         delay(200)
-        repeat(2) {
-            val press = PressInteraction.Press(Offset.Zero)
-            interactionSource.emit(press)
-            highlightAlpha.animateTo(1f, tween(200))
-            interactionSource.emit(PressInteraction.Release(press))
-            highlightAlpha.animateTo(0f, tween(200))
-            if (it == 0) delay(100)
+        var activePress: PressInteraction.Press? = null
+        try {
+            repeat(2) {
+                val press = PressInteraction.Press(Offset.Zero)
+                activePress = press
+                interactionSource.emit(press)
+                highlightAlpha.animateTo(1f, tween(200))
+                interactionSource.emit(PressInteraction.Release(press))
+                activePress = null
+                highlightAlpha.animateTo(0f, tween(200))
+                if (it == 0) delay(100)
+            }
+        } finally {
+            activePress?.let { press ->
+                withContext(NonCancellable) {
+                    interactionSource.emit(PressInteraction.Release(press))
+                    highlightAlpha.snapTo(0f)
+                }
+            }
         }
         currentOnHighlightFinished()
     }

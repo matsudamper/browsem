@@ -170,8 +170,13 @@ private fun BrowserAppContent(
     LaunchedEffect(openDownloadsFlow) {
         openDownloadsFlow.onEach { workerId ->
             pendingHighlightWorkerId = workerId
-            if (backStack.none { it is AppDestination.Downloads }) {
+            val existingIndex = backStack.indexOfLast { it is AppDestination.Downloads }
+            if (existingIndex < 0) {
                 backStack.add(AppDestination.Downloads)
+            } else if (existingIndex < backStack.lastIndex) {
+                // ダウンロード画面が他の画面の下に埋もれている場合、上の画面を取り除いて前面に出す
+                val removeCount = backStack.lastIndex - existingIndex
+                repeat(removeCount) { backStack.removeLastOrNull() }
             }
         }.launchIn(this)
     }

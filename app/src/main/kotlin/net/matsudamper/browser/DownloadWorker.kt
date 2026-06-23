@@ -147,6 +147,7 @@ internal class DownloadWorker(
                 savedUri?.let { context.contentResolver.delete(it, null, null) }
                 repository.updateFailed(id.toString())
             }
+            postFailureNotification(stableWorkerId)
             Result.failure()
         }
     }
