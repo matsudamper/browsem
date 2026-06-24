@@ -10,7 +10,12 @@ class AddressRepository(context: Context) {
     suspend fun save(entity: AddressEntity): Long {
         val existing = dao.getById(entity.id)
         return if (existing != null) {
-            dao.update(entity.copy(updatedAt = System.currentTimeMillis()))
+            dao.update(
+                entity.copy(
+                    createdAt = existing.createdAt,
+                    updatedAt = System.currentTimeMillis(),
+                ),
+            )
             entity.id
         } else {
             dao.insert(entity)

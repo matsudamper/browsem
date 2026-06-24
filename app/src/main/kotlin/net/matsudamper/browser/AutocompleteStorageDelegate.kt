@@ -33,7 +33,7 @@ class AutocompleteStorageDelegate(
             try {
                 val entity = address.toEntity()
                 addressRepository.save(entity)
-                Log.d(TAG, "住所を保存しました: ${address.familyName} ${address.givenName}")
+                Log.d(TAG, "住所を保存しました")
             } catch (e: Exception) {
                 Log.w(TAG, "住所の保存に失敗", e)
             }
