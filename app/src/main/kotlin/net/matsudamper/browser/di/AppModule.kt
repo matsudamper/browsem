@@ -20,6 +20,7 @@ import net.matsudamper.browser.data.download.DownloadRepository
 import net.matsudamper.browser.data.history.HistoryRepository
 import net.matsudamper.browser.data.websuggestion.HttpWebSuggestionRepository
 import net.matsudamper.browser.data.websuggestion.WebSuggestionRepository
+import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -45,9 +46,20 @@ val dataModule = module {
 
 val appModule = module {
     single<GeckoRuntime> {
+        val context = androidContext()
+        // GeckoView の住所フォーム自動入力を有効にするための設定ファイルを準備する。
+        // GeckoRuntimeSettings.Builder には loginAutofillEnabled() はあるが
+        // 住所用の公開 API がないため、configFilePath 経由で Gecko 内部プリファレンスを設定する。
+        val geckoConfigFile = File(context.filesDir, "geckoview-config.yaml")
+        context.assets.open("geckoview-config.yaml").use { input ->
+            geckoConfigFile.outputStream().use { output ->
+                input.copyTo(output)
+            }
+        }
         val runtime = GeckoRuntime.create(
-            androidContext(),
+            context,
             GeckoRuntimeSettings.Builder()
+                .configFilePath(geckoConfigFile.absolutePath)
                 .forceUserScalableEnabled(true)
                 // ユーザーインストール拡張機能のバックグラウンドスクリプトを専用プロセスで実行し、
                 // webRequest.onBeforeRequest 等によるリクエストのブロッキングを有効にする。
