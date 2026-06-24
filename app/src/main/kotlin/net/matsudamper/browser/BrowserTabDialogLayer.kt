@@ -50,9 +50,11 @@ import androidx.core.graphics.toColorInt
 import java.util.Calendar
 import java.util.Locale
 import java.util.TimeZone
+import androidx.compose.foundation.layout.padding
 import net.matsudamper.browser.data.ThemeMode
 import net.matsudamper.browser.data.download.DownloadRecordStatus
 import net.matsudamper.browser.ui.common.BrowserTheme
+import org.mozilla.geckoview.Autocomplete
 import org.mozilla.geckoview.GeckoSession
 
 @Composable
@@ -387,6 +389,22 @@ internal fun BrowserTabDialogLayer(
                     Text("キャンセル")
                 }
             },
+        )
+    }
+
+    dialogState.pendingAddressSelectPrompt?.let { prompt ->
+        AddressSelectDialog(
+            options = prompt.options.toList(),
+            onSelect = dialogState::confirmAddressSelect,
+            onDismiss = dialogState::dismissAddressSelect,
+        )
+    }
+
+    dialogState.pendingAddressSaveAddress?.let { address ->
+        AddressSaveDialog(
+            address = address,
+            onSave = dialogState::confirmAddressSave,
+            onDismiss = dialogState::dismissAddressSave,
         )
     }
 }
@@ -971,6 +989,106 @@ private fun DuplicateDownloadDialog(
             }
         },
     )
+}
+
+@Composable
+private fun AddressSelectDialog(
+    options: List<Autocomplete.AddressSelectOption>,
+    onSelect: (Autocomplete.AddressSelectOption) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("住所を選択") },
+        text = {
+            LazyColumn {
+                items(options) { option ->
+                    val address = option.value
+                    val displayText = buildAddressDisplayText(address)
+                    ListItem(
+                        headlineContent = {
+                            Text(
+                                text = "${address.familyName} ${address.givenName}".trim()
+                                    .ifEmpty { address.organization },
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        },
+                        supportingContent = {
+                            Text(
+                                text = displayText,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        },
+                        modifier = Modifier.clickable { onSelect(option) },
+                        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                    )
+                    if (option !== options.last()) {
+                        HorizontalDivider()
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("キャンセル")
+            }
+        },
+    )
+}
+
+@Composable
+private fun AddressSaveDialog(
+    address: Autocomplete.Address,
+    onSave: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val displayText = buildAddressDisplayText(address)
+    val name = "${address.familyName} ${address.givenName}".trim()
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("住所を保存しますか？") },
+        text = {
+            Column {
+                if (name.isNotEmpty()) {
+                    Text(
+                        text = name,
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                }
+                Text(
+                    text = displayText,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onSave) {
+                Text("保存")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("保存しない")
+            }
+        },
+    )
+}
+
+private fun buildAddressDisplayText(address: Autocomplete.Address): String {
+    return buildList {
+        if (address.postalCode.isNotEmpty()) add("〒${address.postalCode}")
+        if (address.addressLevel1.isNotEmpty()) add(address.addressLevel1)
+        if (address.addressLevel2.isNotEmpty()) add(address.addressLevel2)
+        if (address.addressLevel3.isNotEmpty()) add(address.addressLevel3)
+        if (address.streetAddress.isNotEmpty()) add(address.streetAddress)
+        if (address.tel.isNotEmpty()) add(address.tel)
+        if (address.email.isNotEmpty()) add(address.email)
+    }.joinToString(" ")
 }
 
 private fun flattenChoices(

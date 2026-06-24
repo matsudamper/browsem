@@ -8,16 +8,21 @@ import net.matsudamper.browser.GeckoDownloadManager
 import net.matsudamper.browser.MockLocationWebExtension
 import net.matsudamper.browser.ThemeColorWebExtension
 import net.matsudamper.browser.ViewportScaleWebExtension
+import net.matsudamper.browser.AutocompleteStorageDelegate
 import net.matsudamper.browser.data.BackupRepository
 import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.SiteSettingsRepository
 import net.matsudamper.browser.data.TabGroupRepository
 import net.matsudamper.browser.data.TabGroupRepositoryImpl
 import net.matsudamper.browser.data.TabRepository
+import net.matsudamper.browser.data.address.AddressRepository
 import net.matsudamper.browser.data.download.DownloadRepository
 import net.matsudamper.browser.data.history.HistoryRepository
 import net.matsudamper.browser.data.websuggestion.HttpWebSuggestionRepository
 import net.matsudamper.browser.data.websuggestion.WebSuggestionRepository
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import net.matsudamper.browser.media.MediaWebExtension
 import org.koin.android.ext.koin.androidContext
 import org.koin.androidx.workmanager.dsl.worker
@@ -34,12 +39,13 @@ val dataModule = module {
     single<TabGroupRepository> { TabGroupRepositoryImpl(androidContext()) }
     single { HistoryRepository(androidContext()) }
     single { DownloadRepository(androidContext()) }
+    single { AddressRepository(androidContext()) }
     single<WebSuggestionRepository> { HttpWebSuggestionRepository() }
 }
 
 val appModule = module {
     single<GeckoRuntime> {
-        GeckoRuntime.create(
+        val runtime = GeckoRuntime.create(
             androidContext(),
             GeckoRuntimeSettings.Builder()
                 .forceUserScalableEnabled(true)
@@ -49,6 +55,12 @@ val appModule = module {
                 .extensionsProcessEnabled(true)
                 .build()
         )
+        val storageDelegate = AutocompleteStorageDelegate(
+            addressRepository = get(),
+            coroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main),
+        )
+        runtime.autocompleteStorageDelegate = storageDelegate
+        runtime
     }
     // 拡張機能はプロセスに1つの GeckoRuntime に対してインストールするため single で管理
     single { ThemeColorWebExtension().also { it.install(get()) } }
