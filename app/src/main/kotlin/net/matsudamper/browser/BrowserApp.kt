@@ -252,8 +252,10 @@ private fun BrowserAppContent(
 
                 if (target.contentKey is AppDestination.Browser && initial.contentKey is AppDestination.Browser) {
                     val targetBrowser = target.contentKey as AppDestination.Browser
-                    // 新しいタブを開いた場合（beforeTab が設定されている）は右にスライド
-                    if (targetBrowser.beforeTab != null) {
+                    // 遷移元のタブから新しいタブを開いた場合のみ右にスライド。
+                    // beforeTab の存在だけで判定すると、連鎖的にタブを開いた後の
+                    // back() 時にも beforeTab が残っているためスライドが誤って再生される。
+                    if (targetBrowser.beforeTab == initial.contentKey) {
                         return@NavDisplay ContentTransform(
                             targetContentEnter = slideIn { IntOffset(it.width, 0) },
                             initialContentExit = slideOut { IntOffset(-it.width / 3, 0) },
