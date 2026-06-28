@@ -457,6 +457,15 @@ private fun BrowserAppContent(
                                     override fun onNavigateToBackupProgress(isImport: Boolean) {
                                         backStack.add(AppDestination.BackupProgress(isImport))
                                     }
+
+                                    override fun onRestartProcess() {
+                                        android.os.Handler(android.os.Looper.getMainLooper())
+                                            .postDelayed({
+                                                android.os.Process.killProcess(
+                                                    android.os.Process.myPid(),
+                                                )
+                                            }, 300)
+                                    }
                                 })
                             }
                         }
