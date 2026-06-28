@@ -45,6 +45,12 @@ Proto → DataStore/Room → Repository → ViewModel(ViewModelStateFlow) → Ui
 - **プロセスに1つ**。`GeckoRuntime.getDefault(context)` で取得
 - ViewModel・Controller 経由で各タブに配布
 
+### GeckoView の不具合調査
+
+GeckoView に関連する不具合・制限・既知の問題を調査する際は、Mozilla の Bugzilla を参照すること。
+- URL: https://bugzilla.mozilla.org/
+- コンポーネント: `Core :: GeckoView` や `GeckoView :: General` などで検索する
+
 ## Coding Agent
 すべての応答、説明、およびコミットメッセージは日本語で行ってください。
 
