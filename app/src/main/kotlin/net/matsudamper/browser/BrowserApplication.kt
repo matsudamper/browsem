@@ -23,6 +23,7 @@ class BrowserApplication : Application() {
             workManagerFactory()
             modules(dataModule, appModule)
         }
+        MainThreadWatchdog().start()
     }
 
     private fun cleanFilePromptsCache() {
