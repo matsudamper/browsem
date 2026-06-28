@@ -41,4 +41,5 @@ message BrowserSettings {
   bool mock_location_enabled = 12 [deprecated = true];
   double mock_location_latitude = 13;
   double mock_location_longitude = 14;
+  optional bool extensions_process_enabled = 15;
 }

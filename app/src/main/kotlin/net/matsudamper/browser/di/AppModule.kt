@@ -16,9 +16,12 @@ import net.matsudamper.browser.data.TabGroupRepositoryImpl
 import net.matsudamper.browser.data.TabRepository
 import net.matsudamper.browser.data.download.DownloadRepository
 import net.matsudamper.browser.data.history.HistoryRepository
+import net.matsudamper.browser.data.resolvedExtensionsProcessEnabled
 import net.matsudamper.browser.data.websuggestion.HttpWebSuggestionRepository
 import net.matsudamper.browser.data.websuggestion.WebSuggestionRepository
 import net.matsudamper.browser.media.MediaWebExtension
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 import org.koin.android.ext.koin.androidContext
 import org.koin.androidx.workmanager.dsl.worker
 import org.koin.core.module.dsl.viewModel
@@ -39,14 +42,15 @@ val dataModule = module {
 
 val appModule = module {
     single<GeckoRuntime> {
+        val settings = get<SettingsRepository>()
+        val extensionsProcessEnabled = runBlocking {
+            settings.settings.first().resolvedExtensionsProcessEnabled()
+        }
         GeckoRuntime.create(
             androidContext(),
             GeckoRuntimeSettings.Builder()
                 .forceUserScalableEnabled(true)
-                // ユーザーインストール拡張機能のバックグラウンドスクリプトを専用プロセスで実行し、
-                // webRequest.onBeforeRequest 等によるリクエストのブロッキングを有効にする。
-                // この設定がないと AdGuard などのコンテンツブロッカーが機能しない。
-                .extensionsProcessEnabled(true)
+                .extensionsProcessEnabled(extensionsProcessEnabled)
                 .build()
         )
     }

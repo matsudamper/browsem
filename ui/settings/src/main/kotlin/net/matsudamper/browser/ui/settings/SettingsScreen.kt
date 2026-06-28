@@ -341,6 +341,38 @@ fun SettingsScreen(
 
             Spacer(Modifier.height(betweenPadding))
 
+            SettingSection(title = "拡張プロセス") {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .toggleable(
+                            value = uiState.extensionsProcessEnabled,
+                            role = Role.Switch,
+                            onValueChange = uiState.callbacks::setExtensionsProcessEnabled,
+                        )
+                        .padding(vertical = 4.dp),
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "拡張機能を別プロセスで実行",
+                            style = MaterialTheme.typography.bodyLarge,
+                        )
+                        Text(
+                            text = "AdGuard等のコンテンツブロッカーに必要です。無効にするとフリーズが改善する場合があります。変更にはアプリの再起動が必要です",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(
+                        checked = uiState.extensionsProcessEnabled,
+                        onCheckedChange = null,
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(betweenPadding))
+
             SettingSection(title = "拡張機能") {
                 TextButton(
                     onClick = onOpenExtensions,
@@ -365,6 +397,26 @@ fun SettingsScreen(
             Spacer(Modifier.height(8.dp))
             Spacer(Modifier.padding(bottom = paddingValues.calculateBottomPadding()))
         }
+    }
+
+    if (uiState.extensionsProcessRestartDialog) {
+        AlertDialog(
+            onDismissRequest = uiState.callbacks::dismissExtensionsProcessRestartDialog,
+            title = { Text("アプリを再起動しますか？") },
+            text = {
+                Text("拡張プロセスの設定を変更するにはアプリの再起動が必要です。")
+            },
+            confirmButton = {
+                Button(onClick = uiState.callbacks::confirmExtensionsProcessRestart) {
+                    Text("再起動")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = uiState.callbacks::dismissExtensionsProcessRestartDialog) {
+                    Text("キャンセル")
+                }
+            },
+        )
     }
 
     // バックアップ操作の確認ダイアログ（設定画面の上に重ねて表示する）
@@ -433,6 +485,9 @@ private fun SettingsScreenPreview() {
                     override fun setTranslationProvider(provider: TranslationProvider) = Unit
                     override fun setEnableThirdPartyCa(enabled: Boolean) = Unit
                     override fun setEnableWebSuggestions(enabled: Boolean) = Unit
+                    override fun setExtensionsProcessEnabled(enabled: Boolean) = Unit
+                    override fun confirmExtensionsProcessRestart() = Unit
+                    override fun dismissExtensionsProcessRestartDialog() = Unit
                     override fun setMockLocationInput(input: String) = Unit
                     override fun openMockLocationOnMap() = Unit
                     override fun requestBackupExport() = Unit
@@ -448,9 +503,11 @@ private fun SettingsScreenPreview() {
                 translationProvider = TranslationProvider.TRANSLATION_PROVIDER_GECKO,
                 enableThirdPartyCa = false,
                 enableWebSuggestions = false,
+                extensionsProcessEnabled = true,
                 mockLocationInput = "35.685175,139.752797",
                 mockLocationInputError = null,
                 backupConfirmDialog = null,
+                extensionsProcessRestartDialog = false,
             ),
             onOpenExtensions = {},
             onOpenHistory = {},
