@@ -196,7 +196,9 @@ class MainActivity : ComponentActivity() {
         // 最初のフレーム描画後に GeckoRuntime を初期化する。
         // これによりスプラッシュが解除されてからブロッキングの可能性がある処理が走る。
         window.decorView.post {
-            initializeGeckoRuntime()
+            if (!isFinishing && !isDestroyed) {
+                initializeGeckoRuntime()
+            }
         }
     }
 

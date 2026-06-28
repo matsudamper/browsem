@@ -34,6 +34,13 @@ class SettingsRepository(context: Context) {
                         clearEnableWebSuggestions()
                     }
                 }
+                .apply {
+                    if (settings.hasExtensionsProcessEnabled()) {
+                        setExtensionsProcessEnabled(settings.extensionsProcessEnabled)
+                    } else {
+                        clearExtensionsProcessEnabled()
+                    }
+                }
                 .build()
         }
     }
