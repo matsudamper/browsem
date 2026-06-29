@@ -795,17 +795,20 @@ internal class BrowserTabScreenState(
     fun confirmPendingExternalAppLaunch() {
         val request = pendingExternalAppLaunch ?: return
         pendingExternalAppLaunch = null
-        queuedExternalAppLaunch = null
         val result = launchExternalApp(context, request)
         if (result.isSuccess) {
+            queuedExternalAppLaunch = null
             return
         }
 
         val fallbackUrl = request.fallbackUrl
         if (fallbackUrl != null) {
+            queuedExternalAppLaunch = null
             openFallbackUrl(fallbackUrl)
             return
         }
+        promoteQueuedExternalAppLaunch()
+        if (pendingExternalAppLaunch != null) return
         Toast.makeText(context, "対応するアプリを開けませんでした", Toast.LENGTH_SHORT).show()
     }
 
