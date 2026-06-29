@@ -268,6 +268,9 @@ internal class BrowserTabScreenState(
     // --- ファイルダウンロード確認ダイアログ用state ---
     var pendingDownloadResponse by mutableStateOf<WebResponse?>(null)
     var pendingExternalAppLaunch by mutableStateOf<PendingExternalAppLaunch?>(null)
+    // 外部アプリ確認ダイアログ表示中に到着した後続の外部アプリナビゲーション。
+    // ダイアログをキャンセルした場合にこちらを表示する（アプリ起動した場合は破棄する）。
+    private var queuedExternalAppLaunch: PendingExternalAppLaunch? = null
 
     // --- ダウンロード重複確認ダイアログ用state ---
     var duplicateDownloadState by mutableStateOf<DuplicateDownloadState?>(null)
@@ -792,6 +795,7 @@ internal class BrowserTabScreenState(
     fun confirmPendingExternalAppLaunch() {
         val request = pendingExternalAppLaunch ?: return
         pendingExternalAppLaunch = null
+        queuedExternalAppLaunch = null
         val result = launchExternalApp(context, request)
         if (result.isSuccess) {
             return
@@ -807,6 +811,7 @@ internal class BrowserTabScreenState(
 
     fun dismissPendingExternalAppLaunch() {
         pendingExternalAppLaunch = null
+        promoteQueuedExternalAppLaunch()
     }
 
     /**
@@ -819,6 +824,13 @@ internal class BrowserTabScreenState(
         val request = pendingExternalAppLaunch ?: return
         pendingExternalAppLaunch = null
 
+        val queued = queuedExternalAppLaunch
+        queuedExternalAppLaunch = null
+        if (queued != null) {
+            pendingExternalAppLaunch = queued
+            return
+        }
+
         val url = if (request.sourceUri.startsWith("http://") || request.sourceUri.startsWith("https://")) {
             request.sourceUri
         } else {
@@ -828,6 +840,12 @@ internal class BrowserTabScreenState(
             skipExternalAppCheckForNextLoad = true
             openFallbackUrl(url)
         }
+    }
+
+    private fun promoteQueuedExternalAppLaunch() {
+        val queued = queuedExternalAppLaunch ?: return
+        queuedExternalAppLaunch = null
+        pendingExternalAppLaunch = queued
     }
 
     fun restoreCurrentPageUrlToInput() {
@@ -1192,6 +1210,16 @@ internal class BrowserTabScreenState(
         if (skipExternalAppCheckForNextLoad) {
             skipExternalAppCheckForNextLoad = false
             return null
+        }
+        // 外部アプリ確認ダイアログを表示中に後続のナビゲーションが来た場合、
+        // ダイアログを上書きせずキューに入れる。ダイアログをキャンセルした場合に
+        // キューの内容（Play Store 等）を表示し、アプリ起動した場合は破棄する。
+        if (pendingExternalAppLaunch != null) {
+            val externalAction = resolveExternalAppNavigationAction(context, request.uri)
+            if (externalAction is ExternalAppNavigationAction.Launch) {
+                queuedExternalAppLaunch = externalAction.request
+            }
+            return GeckoResult.fromValue(AllowOrDeny.DENY)
         }
         val externalAction = resolveExternalAppNavigationAction(context, request.uri)
         // single-page モードで TARGET_WINDOW_NEW は外部アプリ判定を先に通してから現在タブへ畳み込む
