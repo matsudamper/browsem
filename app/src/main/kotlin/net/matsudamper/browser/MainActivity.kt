@@ -17,10 +17,16 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.RequiresApi
 import androidx.browser.customtabs.CustomTabsSessionToken
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTagsAsResourceId
@@ -45,6 +51,7 @@ class MainActivity : ComponentActivity() {
     private val browserViewModel: BrowserViewModel by viewModel()
     private lateinit var extensionInstaller: WebExtensionInstaller
     private var pendingActivityResult: GeckoResult<Intent>? = null
+    private var geckoInitialized by mutableStateOf(false)
     private var webExtensionWarmUpCompleted = false
     private var webExtensionWarmUpInProgress = false
     private var webExtensionWarmUpRetryCount = 0
@@ -114,31 +121,13 @@ class MainActivity : ComponentActivity() {
         }
         hostsBrowserContent = true
         registerSystemNavigationObserverIfAvailable()
-        extensionInstaller = WebExtensionInstaller(
-            runtime = runtime,
-            onExtensionReady = ::setupDelegatesForExtension,
-        )
 
-        runtime.setActivityDelegate(activityDelegate)
-        runtime.settings.setExtensionsWebAPIEnabled(true)
-        runtime.webExtensionController.setPromptDelegate(extensionInstaller.promptDelegate)
-        runtime.webExtensionController.setAddonManagerDelegate(extensionInstaller.addonManagerDelegate)
-        // 拡張プロセスのクラッシュ閾値超過時に spawning を再有効化するための delegate。
-        // これがないと一度プロセスがダウンすると webRequest 系 API が永続的に死んだままになる。
-        runtime.webExtensionController.setExtensionProcessDelegate(
-            extensionInstaller.extensionProcessDelegate,
-        )
-        warmUpWebExtensionController()
-
-        // ACTION_OPEN_DOWNLOADS は savedInstanceState の有無にかかわらず処理する。
-        // savedInstanceState != null (OS によるプロセスキル後の復元) の場合でも
-        // ダウンロード通知タップでダウンロード画面へ遷移させるため。
+        // GeckoRuntime に依存しない Intent 処理を先に実行する。
+        // チャネルはバッファ付きなので BrowserApp の composition 開始後に消費される。
         if (intent.action == DownloadWorker.ACTION_OPEN_DOWNLOADS) {
             openDownloadsChannel.trySend(intent.getStringExtra(DownloadWorker.EXTRA_WORKER_ID))
         } else {
             val url = intent.dataString
-            // 設定変更（画面回転等）後の再起動では直前に処理した URL を復元し、
-            // 同じ URL であれば重複タブを作らないようスキップする。
             if (url != null && url != lastProcessedDeepLinkUrl) {
                 val result = createNewTabChannel.trySend(
                     NewTabRequest(
@@ -155,43 +144,82 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+        // GeckoRuntime の初期化より先に UI を描画し、スプラッシュ画面でのフリーズを防ぐ。
+        // geckoInitialized が true になるまではローディング表示を出す。
         setContent {
             Box(
                 modifier = Modifier.semantics {
                     testTagsAsResourceId = true
                 },
             ) {
-                BrowserApp(
-                    viewModel = browserViewModel,
-                    newTabUrlFlow = newTabUrlFlow,
-                    openDownloadsFlow = openDownloadsFlow,
-                    onInstallExtensionRequest = { pageUrl ->
-                        extensionInstaller.installFromCurrentPage(pageUrl)
-                    },
-                    onRequestDownloadNotificationPermission = {
-                        requestDownloadNotificationPermission()
-                    },
-                )
-            }
-            extensionInstaller.installPromptState?.let { prompt ->
-                InstallPromptDialog(
-                    prompt = prompt,
-                    resolveInstallPrompt = extensionInstaller::resolveInstallPrompt,
-                )
-            }
-            extensionInstaller.permissionPromptState?.let { prompt ->
-                PermissionPromptDialog(
-                    prompt = prompt,
-                    resolvePermissionPrompt = extensionInstaller::resolvePermissionPrompt,
-                )
-            }
-            extensionInstaller.installFailureMessage?.let { message ->
-                InstallFailureDialog(
-                    message = message,
-                    onDismiss = extensionInstaller::dismissInstallFailure,
-                )
+                if (geckoInitialized) {
+                    BrowserApp(
+                        viewModel = browserViewModel,
+                        newTabUrlFlow = newTabUrlFlow,
+                        openDownloadsFlow = openDownloadsFlow,
+                        onInstallExtensionRequest = { pageUrl ->
+                            extensionInstaller.installFromCurrentPage(pageUrl)
+                        },
+                        onRequestDownloadNotificationPermission = {
+                            requestDownloadNotificationPermission()
+                        },
+                    )
+                    extensionInstaller.installPromptState?.let { prompt ->
+                        InstallPromptDialog(
+                            prompt = prompt,
+                            resolveInstallPrompt = extensionInstaller::resolveInstallPrompt,
+                        )
+                    }
+                    extensionInstaller.permissionPromptState?.let { prompt ->
+                        PermissionPromptDialog(
+                            prompt = prompt,
+                            resolvePermissionPrompt = extensionInstaller::resolvePermissionPrompt,
+                        )
+                    }
+                    extensionInstaller.installFailureMessage?.let { message ->
+                        InstallFailureDialog(
+                            message = message,
+                            onDismiss = extensionInstaller::dismissInstallFailure,
+                        )
+                    }
+                } else {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        CircularProgressIndicator()
+                    }
+                }
             }
         }
+
+        // 最初のフレーム描画後に GeckoRuntime を初期化する。
+        // これによりスプラッシュが解除されてからブロッキングの可能性がある処理が走る。
+        window.decorView.post {
+            if (!isFinishing && !isDestroyed) {
+                initializeGeckoRuntime()
+            }
+        }
+    }
+
+    private fun initializeGeckoRuntime() {
+        extensionInstaller = WebExtensionInstaller(
+            runtime = runtime,
+            onExtensionReady = ::setupDelegatesForExtension,
+        )
+
+        runtime.setActivityDelegate(activityDelegate)
+        runtime.settings.setExtensionsWebAPIEnabled(true)
+        runtime.webExtensionController.setPromptDelegate(extensionInstaller.promptDelegate)
+        runtime.webExtensionController.setAddonManagerDelegate(extensionInstaller.addonManagerDelegate)
+        // 拡張プロセスのクラッシュ閾値超過時に spawning を再有効化するための delegate。
+        // これがないと一度プロセスがダウンすると webRequest 系 API が永続的に死んだままになる。
+        runtime.webExtensionController.setExtensionProcessDelegate(
+            extensionInstaller.extensionProcessDelegate,
+        )
+        warmUpWebExtensionController()
+
+        geckoInitialized = true
     }
 
     override fun onNewIntent(intent: Intent) {
