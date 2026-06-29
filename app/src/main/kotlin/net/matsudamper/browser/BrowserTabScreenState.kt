@@ -174,6 +174,9 @@ internal class BrowserTabScreenState(
     /** 無効な正規表現が入力された場合のエラーメッセージ */
     var findQueryError by mutableStateOf<String?>(null)
 
+    // --- Back gesture state ---
+    var isBackGestureInProgress by mutableStateOf(false)
+
     // --- Context menu state ---
     var contextMenuState by mutableStateOf<ContextMenuState?>(null)
         private set
@@ -1108,6 +1111,7 @@ internal class BrowserTabScreenState(
     }
 
     override fun onContextMenu(element: GeckoSession.ContentDelegate.ContextElement) {
+        if (isBackGestureInProgress) return
         val linkUri = element.linkUri
         val srcUri = element.srcUri
         val isImage = element.type == GeckoSession.ContentDelegate.ContextElement.TYPE_IMAGE
