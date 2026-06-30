@@ -45,6 +45,12 @@ Proto → DataStore/Room → Repository → ViewModel(ViewModelStateFlow) → Ui
 - **プロセスに1つ**。`GeckoRuntime.getDefault(context)` で取得
 - ViewModel・Controller 経由で各タブに配布
 
+### GeckoView の不具合調査
+
+GeckoView に関連する不具合・制限・既知の問題を調査する際は、Mozilla の Bugzilla を参照すること。
+- URL: https://bugzilla.mozilla.org/
+- コンポーネント: `Core :: GeckoView` や `GeckoView :: General` などで検索する
+
 ## Coding Agent
 すべての応答、説明、およびコミットメッセージは日本語で行ってください。
 
@@ -101,8 +107,9 @@ UIに関連した実装はPaparazziで差分を取って作業するのが良い
 
 ## Claude への運用ルール
 
-- 1 コミット = 1 論理的変更を目安にする
+- 1 コミット = 1 論理的変更を厳守する。異なる目的の変更を同じコミットに混ぜない
 - ビルド時にネットワークエラーになった場合は原因を調べなくて良い。作業を完了し、通らなかったエラーを知らせるだけで良い
+- ビルド、テスト、lint 等のタスクを並列実行しない。必ず逐次実行すること
 
 ### PR の自動更新（Claude Web 環境のみ）
 

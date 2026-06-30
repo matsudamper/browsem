@@ -23,10 +23,13 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntOffset
 import androidx.lifecycle.viewmodel.compose.viewModel as composeViewModel
@@ -89,7 +92,7 @@ import org.mozilla.geckoview.GeckoRuntime
 internal fun BrowserApp(
     viewModel: BrowserViewModel,
     newTabUrlFlow: Flow<NewTabRequest>,
-    openDownloadsFlow: Flow<Unit>,
+    openDownloadsFlow: Flow<String?>,
     onInstallExtensionRequest: (String) -> Unit,
     onRequestDownloadNotificationPermission: suspend () -> Unit,
 ) {
@@ -119,7 +122,7 @@ private fun BrowserAppContent(
     uiState: BrowserAppUiState,
     viewModel: BrowserViewModel,
     newTabUrlFlow: Flow<NewTabRequest>,
-    openDownloadsFlow: Flow<Unit>,
+    openDownloadsFlow: Flow<String?>,
     onInstallExtensionRequest: (String) -> Unit,
     onRequestDownloadNotificationPermission: suspend () -> Unit,
 ) {
@@ -164,10 +167,17 @@ private fun BrowserAppContent(
     }
 
     // 通知タップ時にダウンロード管理画面を開く
+    var pendingHighlightWorkerId by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(openDownloadsFlow) {
-        openDownloadsFlow.onEach {
-            if (backStack.none { it is AppDestination.Downloads }) {
+        openDownloadsFlow.onEach { workerId ->
+            pendingHighlightWorkerId = workerId
+            val existingIndex = backStack.indexOfLast { it is AppDestination.Downloads }
+            if (existingIndex < 0) {
                 backStack.add(AppDestination.Downloads)
+            } else if (existingIndex < backStack.lastIndex) {
+                // ダウンロード画面が他の画面の下に埋もれている場合、上の画面を取り除いて前面に出す
+                val removeCount = backStack.lastIndex - existingIndex
+                repeat(removeCount) { backStack.removeLastOrNull() }
             }
         }.launchIn(this)
     }
@@ -215,6 +225,8 @@ private fun BrowserAppContent(
                 tabId = tabId,
                 initialUrl = request.url,
                 restoredSessionState = request.sessionState,
+                initialReferrerUrl = request.referrerUrl,
+                insertAfterSelectedTab = false,
             )
             // selectTab より前に呼ぶことで、外部タブ開封前の selectedTabId を記録できる
             viewModel.registerExternalTab(newTab.tabId)
@@ -240,6 +252,18 @@ private fun BrowserAppContent(
                 val target = targetState.entries.lastOrNull() ?: return@NavDisplay default
 
                 if (target.contentKey is AppDestination.Browser && initial.contentKey is AppDestination.Browser) {
+                    val targetBrowser = target.contentKey as AppDestination.Browser
+                    // 遷移元のタブから新しいタブを開いた場合のみ右にスライド。
+                    // beforeTab の存在だけで判定すると、連鎖的にタブを開いた後の
+                    // back() 時にも beforeTab が残っているためスライドが誤って再生される。
+                    if (targetBrowser.beforeTab == initial.contentKey) {
+                        return@NavDisplay ContentTransform(
+                            targetContentEnter = slideIn { IntOffset(it.width, 0) },
+                            initialContentExit = slideOut { IntOffset(-it.width / 3, 0) },
+                        )
+                    }
+                    // ジェスチャーでのタブ切替は BrowserScreen 側でアニメーションを処理するため、
+                    // NavDisplay 側では即座に切り替える
                     return@NavDisplay ContentTransform(
                         initialContentExit = fadeOut(snap(100)),
                         targetContentEnter = fadeIn(snap(100)),
@@ -305,7 +329,7 @@ private fun BrowserAppContent(
                             previewHeaderContent = { modifier, tab, tabCount ->
                                 BrowserToolbar(
                                     modifier = modifier,
-                                    toolbarColor = null,
+                                    toolbarColor = tab.themeColor?.let { Color(it) },
                                     isFocused = false,
                                     onLongClickUrl = {},
                                     tabCount = tabCount,
@@ -550,6 +574,13 @@ private fun BrowserAppContent(
                             DownloadManagementScreenViewModel(context.applicationContext as android.app.Application)
                         }
                         val downloadsUiState by downloadsViewModel.uiState.collectAsState()
+                        var highlightItemId by remember { mutableStateOf<UUID?>(null) }
+                        LaunchedEffect(pendingHighlightWorkerId) {
+                            val workerId = pendingHighlightWorkerId ?: return@LaunchedEffect
+                            val id = runCatching { UUID.fromString(workerId) }.getOrNull() ?: return@LaunchedEffect
+                            pendingHighlightWorkerId = null
+                            downloadsViewModel.requestHighlight(id)
+                        }
                         LaunchedEffect(downloadsViewModel) {
                             downloadsViewModel.eventHandler.receiveAsFlow().collect {
                                 it(object : DownloadManagementScreenViewModel.Event {
@@ -565,12 +596,18 @@ private fun BrowserAppContent(
                                             }
                                         }
                                     }
+
+                                    override fun highlightItem(id: UUID) {
+                                        highlightItemId = id
+                                    }
                                 })
                             }
                         }
                         DownloadManagementScreen(
                             uiState = downloadsUiState,
                             onBack = { backStack.removeLastOrNull() },
+                            highlightItemId = highlightItemId,
+                            onHighlightComplete = { highlightItemId = null },
                         )
                     }
 
@@ -629,7 +666,10 @@ private fun BrowserAppContent(
                                     if (currentGroupId != null) {
                                         tabGroupRepository.assignTabToGroup(tabId, currentGroupId)
                                     }
-                                    val newTab = viewModel.createTabWithHomepage(tabId = tabId)
+                                    val newTab = viewModel.createTabWithHomepage(
+                                        tabId = tabId,
+                                        insertAfterSelectedTab = false,
+                                    )
                                     selectTab(newTab.tabId, null)
                                 }
                             },

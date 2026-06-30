@@ -11,7 +11,7 @@ import android.view.Menu
 import android.view.MenuItem
 import android.view.View
 import androidx.core.net.toUri
-import androidx.activity.compose.BackHandler
+import androidx.activity.compose.PredictiveBackHandler
 import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -63,6 +63,8 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -177,6 +179,21 @@ internal fun GeckoBrowserTab(
             val window = (view.context as Activity).window
             WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars =
                 toolbarColors.isBrightBackground
+        }
+    }
+
+    // フルスクリーン時にシステムバーを非表示にする
+    if (!view.isInEditMode) {
+        DisposableEffect(state.isFullScreen) {
+            if (!state.isFullScreen) return@DisposableEffect onDispose {}
+            val window = (view.context as Activity).window
+            val controller = WindowCompat.getInsetsController(window, view)
+            controller.hide(WindowInsetsCompat.Type.systemBars())
+            controller.systemBarsBehavior =
+                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            onDispose {
+                controller.show(WindowInsetsCompat.Type.systemBars())
+            }
         }
     }
 
@@ -654,12 +671,19 @@ internal fun GeckoBrowserTab(
     // webAppMode かつ canGoBack=false 時は Activity を終了せずタスクをバックグラウンドへ移動して
     // セッション（ブラウザ履歴・入力状態）を保持する
     val activity = LocalActivity.current
-    BackHandler(enabled = state.showFindInPage || state.isUrlInputFocused || state.canGoBack || webAppMode) {
-        when {
-            state.showFindInPage -> state.closeFindInPage()
-            state.isUrlInputFocused -> closeUrlInput(true)
-            state.canGoBack -> state.onGoBack()
-            webAppMode -> activity?.moveTaskToBack(true)
+    PredictiveBackHandler(enabled = state.isFullScreen || state.showFindInPage || state.isUrlInputFocused || state.canGoBack || webAppMode) { progress ->
+        state.isBackGestureInProgress = true
+        try {
+            progress.collect {}
+            when {
+                state.isFullScreen -> state.exitFullScreen()
+                state.showFindInPage -> state.closeFindInPage()
+                state.isUrlInputFocused -> closeUrlInput(true)
+                state.canGoBack -> state.onGoBack()
+                webAppMode -> activity?.moveTaskToBack(true)
+            }
+        } finally {
+            state.isBackGestureInProgress = false
         }
     }
 
@@ -685,15 +709,23 @@ internal fun GeckoBrowserTab(
     Column(
         modifier = modifier
             .fillMaxSize()
-            // 上部（ステータスバー）は BrowserToolBar の背景色で塗りつぶすため除外する。
-            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal))
-            // ime 表示時に Web 下部入力欄が隠れないよう GeckoView も IME 上に押し上げる。
-            // ただし resume 直後の resize で GPU プロセス kill が起きる経路があるため、
-            // setSession のタイミングを restoreSurfaceIfNeeded 側で「サイズが安定するまで
-            // 待つ」よう制御している。
-            .imePadding()
+            .then(
+                if (state.isFullScreen) {
+                    Modifier
+                } else {
+                    // 上部（ステータスバー）は BrowserToolBar の背景色で塗りつぶすため除外する。
+                    Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal))
+                        // ime 表示時に Web 下部入力欄が隠れないよう GeckoView も IME 上に押し上げる。
+                        // ただし resume 直後の resize で GPU プロセス kill が起きる経路があるため、
+                        // setSession のタイミングを restoreSurfaceIfNeeded 側で「サイズが安定するまで
+                        // 待つ」よう制御している。
+                        .imePadding()
+                }
+            )
     ) {
-        if (state.showFindInPage) {
+        if (state.isFullScreen) {
+            // フルスクリーン時はツールバー・翻訳バー・検索バーを非表示
+        } else if (state.showFindInPage) {
             FindInPageBar(
                 query = state.findQuery,
                 matchCurrent = state.findMatchCurrent,
@@ -897,6 +929,7 @@ internal fun GeckoBrowserTab(
             state = state,
             dialogState = dialogState,
             enableTabUi = enableTabUi,
+            customTabMode = customTabMode || webAppMode,
             onOpenNewTabRequest = currentOnOpenNewTabRequest,
             onOpenFile = { fileUri ->
                 val uri = fileUri.toUri()

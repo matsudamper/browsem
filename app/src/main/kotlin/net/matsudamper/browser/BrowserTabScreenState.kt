@@ -174,6 +174,9 @@ internal class BrowserTabScreenState(
     /** 無効な正規表現が入力された場合のエラーメッセージ */
     var findQueryError by mutableStateOf<String?>(null)
 
+    // --- Back gesture state ---
+    var isBackGestureInProgress by mutableStateOf(false)
+
     // --- Context menu state ---
     var contextMenuState by mutableStateOf<ContextMenuState?>(null)
         private set
@@ -288,6 +291,9 @@ internal class BrowserTabScreenState(
     )
     // 外部アプリ確認ダイアログでキャンセルされた場合、次回のロードリクエストで外部アプリチェックをスキップする
     private var skipExternalAppCheckForNextLoad = false
+
+    // --- フルスクリーン状態 ---
+    var isFullScreen by mutableStateOf(false)
 
     var renderReady by mutableStateOf(false)
 
@@ -1084,6 +1090,7 @@ internal class BrowserTabScreenState(
     }
 
     override fun onContextMenu(element: GeckoSession.ContentDelegate.ContextElement) {
+        if (isBackGestureInProgress) return
         val linkUri = element.linkUri
         val srcUri = element.srcUri
         val isImage = element.type == GeckoSession.ContentDelegate.ContextElement.TYPE_IMAGE
@@ -1234,6 +1241,14 @@ internal class BrowserTabScreenState(
     ) {
         val lang = translationState?.detectedLanguages?.docLangTag ?: return
         detectedPageLanguage = lang
+    }
+
+    override fun onFullScreen(fullScreen: Boolean) {
+        isFullScreen = fullScreen
+    }
+
+    fun exitFullScreen() {
+        session.exitFullScreen()
     }
 
     override fun onScrollChanged(scrollY: Int) {
