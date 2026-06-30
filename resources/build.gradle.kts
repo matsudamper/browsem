@@ -4,7 +4,7 @@ plugins {
 
 android {
     namespace = "net.matsudamper.browser.resources"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         minSdk = 30
