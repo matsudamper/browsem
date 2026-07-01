@@ -970,6 +970,7 @@ internal fun GeckoBrowserTab(
     if (state.showDevTools) {
         DevToolsDialog(
             focusedInput = state.devToolsFocusedInput,
+            onCopyFocusedInputId = state::copyFocusedInputId,
             onRefresh = state::refreshDevToolsFocusedInput,
             onDismiss = state::closeDevTools,
         )

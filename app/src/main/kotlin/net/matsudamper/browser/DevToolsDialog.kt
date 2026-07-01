@@ -1,68 +1,60 @@
 package net.matsudamper.browser
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.dp
 import net.matsudamper.browser.data.ThemeMode
 import net.matsudamper.browser.ui.common.BrowserTheme
 
 /**
  * 開発者ツールのダイアログ。
- * 現在フォーカスされている入力要素の情報（id など）を表示する。
+ * タイトルの下にリストメニューを表示し、項目を押すと対応する値をクリップボードへコピーする。
  *
  * @param focusedInput フォーカス中の入力要素の情報。フォーカスがない場合は null。
+ * @param onCopyFocusedInputId フォーカス中の input の id をコピーする。
  * @param onRefresh 最新のフォーカス情報を再取得する。
  * @param onDismiss ダイアログを閉じる。
  */
 @Composable
 internal fun DevToolsDialog(
     focusedInput: DevToolsWebExtension.FocusedInputInfo?,
+    onCopyFocusedInputId: () -> Unit,
     onRefresh: () -> Unit,
     onDismiss: () -> Unit,
 ) {
+    // フォーカス中の input の id（空文字は「なし」とみなす）
+    val focusedId = focusedInput?.id?.takeIf { it.isNotBlank() }
     AlertDialog(
         modifier = Modifier.testTag(DevToolsDialogTestTags.Dialog.testTag),
         onDismissRequest = onDismiss,
         title = { Text("開発者ツール") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
-                    text = "フォーカス中の input",
-                    style = MaterialTheme.typography.titleSmall,
-                )
-                if (focusedInput == null) {
+            // 現状メニュー項目は「フォーカス中の input id」の 1 件のみ。押すとコピーする。
+            ListItem(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(enabled = focusedId != null, onClick = onCopyFocusedInputId)
+                    .testTag(DevToolsDialogTestTags.FocusedInputId.testTag),
+                colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                headlineContent = { Text("フォーカス中の input id をコピー") },
+                supportingContent = {
                     Text(
-                        modifier = Modifier.testTag(DevToolsDialogTestTags.FocusedInputId.testTag),
-                        text = "フォーカスされている入力要素はありません",
+                        text = focusedId ?: "フォーカスされている入力要素はありません",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                } else {
-                    DevToolsInfoRow(
-                        label = "id",
-                        value = focusedInput.id.ifBlank { "(なし)" },
-                        valueTestTag = DevToolsDialogTestTags.FocusedInputId.testTag,
-                    )
-                    DevToolsInfoRow(label = "tag", value = focusedInput.tagName)
-                    if (focusedInput.type.isNotBlank()) {
-                        DevToolsInfoRow(label = "type", value = focusedInput.type)
-                    }
-                    if (focusedInput.name.isNotBlank()) {
-                        DevToolsInfoRow(label = "name", value = focusedInput.name)
-                    }
-                }
-            }
+                },
+            )
         },
         dismissButton = {
             TextButton(onClick = onRefresh) {
@@ -75,32 +67,6 @@ internal fun DevToolsDialog(
             }
         },
     )
-}
-
-@Composable
-private fun DevToolsInfoRow(
-    label: String,
-    value: String,
-    modifier: Modifier = Modifier,
-    valueTestTag: String? = null,
-) {
-    Row(
-        modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Text(
-            modifier = if (valueTestTag != null) Modifier.testTag(valueTestTag) else Modifier,
-            text = value,
-            style = MaterialTheme.typography.bodyMedium,
-            maxLines = 3,
-            overflow = TextOverflow.Ellipsis,
-        )
-    }
 }
 
 sealed interface DevToolsDialogTestTags {
@@ -122,6 +88,7 @@ private fun PreviewDevToolsDialogFocused() {
                 type = "text",
                 name = "q",
             ),
+            onCopyFocusedInputId = {},
             onRefresh = {},
             onDismiss = {},
         )
@@ -134,6 +101,7 @@ private fun PreviewDevToolsDialogNoFocus() {
     BrowserTheme(themeMode = ThemeMode.THEME_SYSTEM) {
         DevToolsDialog(
             focusedInput = null,
+            onCopyFocusedInputId = {},
             onRefresh = {},
             onDismiss = {},
         )

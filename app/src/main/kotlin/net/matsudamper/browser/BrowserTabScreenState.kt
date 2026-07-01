@@ -607,6 +607,15 @@ internal class BrowserTabScreenState(
         devToolsWebExtension.requestFocusedInput(session)
     }
 
+    /** フォーカス中の input の id をクリップボードにコピーする */
+    fun copyFocusedInputId() {
+        val id = devToolsFocusedInput?.id?.takeIf { it.isNotBlank() } ?: return
+        val clipboard =
+            context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+        clipboard.setPrimaryClip(android.content.ClipData.newPlainText("input id", id))
+        Toast.makeText(context, "id をコピーしました", Toast.LENGTH_SHORT).show()
+    }
+
     fun closeDevTools() {
         showDevTools = false
     }
