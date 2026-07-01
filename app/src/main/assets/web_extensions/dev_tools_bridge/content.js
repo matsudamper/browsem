@@ -7,6 +7,12 @@
   // ネイティブアプリとの双方向ポートを確立する
   const port = browser.runtime.connectNative('devToolsBridge');
 
+  // ポート切断後に postMessage を呼ぶと例外になるため、切断状態を追跡する
+  let disconnected = false;
+  port.onDisconnect.addListener(function () {
+    disconnected = true;
+  });
+
   // input / textarea / contenteditable など、テキスト入力に類する要素のみを対象とする
   function isInputLike(el) {
     if (!el || el === document.body || el === document.documentElement) return false;
@@ -19,6 +25,7 @@
   // 現在フォーカスされている入力要素の情報を送信する。
   // フォーカスが入力要素でない場合は focused=false を送る。
   function report() {
+    if (disconnected) return;
     const el = document.activeElement;
     if (isInputLike(el)) {
       port.postMessage({

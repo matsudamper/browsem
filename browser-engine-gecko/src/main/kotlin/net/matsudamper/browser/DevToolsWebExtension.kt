@@ -128,9 +128,12 @@ class DevToolsWebExtension {
 
                         override fun onDisconnect(port: WebExtension.Port) {
                             Log.d(TAG, "onDisconnect: ポート切断")
-                            sessionPorts.remove(session)
-                            mainHandler.post {
-                                sessionCallbacks[session]?.invoke(null)
+                            // ページ遷移等で新しいポートに差し替わっている場合、
+                            // 古いポートの遅延切断が新しい接続を消さないよう識別チェックする
+                            if (sessionPorts.remove(session, port)) {
+                                mainHandler.post {
+                                    sessionCallbacks[session]?.invoke(null)
+                                }
                             }
                         }
                     })
