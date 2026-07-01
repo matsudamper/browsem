@@ -11,7 +11,7 @@ import android.view.Menu
 import android.view.MenuItem
 import android.view.View
 import androidx.core.net.toUri
-import androidx.activity.compose.BackHandler
+import androidx.activity.compose.PredictiveBackHandler
 import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -671,13 +671,19 @@ internal fun GeckoBrowserTab(
     // webAppMode かつ canGoBack=false 時は Activity を終了せずタスクをバックグラウンドへ移動して
     // セッション（ブラウザ履歴・入力状態）を保持する
     val activity = LocalActivity.current
-    BackHandler(enabled = state.isFullScreen || state.showFindInPage || state.isUrlInputFocused || state.canGoBack || webAppMode) {
-        when {
-            state.isFullScreen -> state.exitFullScreen()
-            state.showFindInPage -> state.closeFindInPage()
-            state.isUrlInputFocused -> closeUrlInput(true)
-            state.canGoBack -> state.onGoBack()
-            webAppMode -> activity?.moveTaskToBack(true)
+    PredictiveBackHandler(enabled = state.isFullScreen || state.showFindInPage || state.isUrlInputFocused || state.canGoBack || webAppMode) { progress ->
+        state.isBackGestureInProgress = true
+        try {
+            progress.collect {}
+            when {
+                state.isFullScreen -> state.exitFullScreen()
+                state.showFindInPage -> state.closeFindInPage()
+                state.isUrlInputFocused -> closeUrlInput(true)
+                state.canGoBack -> state.onGoBack()
+                webAppMode -> activity?.moveTaskToBack(true)
+            }
+        } finally {
+            state.isBackGestureInProgress = false
         }
     }
 
