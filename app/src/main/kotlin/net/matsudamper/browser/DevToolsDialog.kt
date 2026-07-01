@@ -14,6 +14,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import net.matsudamper.browser.data.ThemeMode
 import net.matsudamper.browser.ui.common.BrowserTheme
 
 /**
@@ -113,7 +114,7 @@ sealed interface DevToolsDialogTestTags {
 @Preview(name = "input フォーカスあり")
 @Composable
 private fun PreviewDevToolsDialogFocused() {
-    BrowserTheme(themeMode = net.matsudamper.browser.data.ThemeMode.THEME_SYSTEM) {
+    BrowserTheme(themeMode = ThemeMode.THEME_SYSTEM) {
         DevToolsDialog(
             focusedInput = DevToolsWebExtension.FocusedInputInfo(
                 id = "search-box",
@@ -130,7 +131,7 @@ private fun PreviewDevToolsDialogFocused() {
 @Preview(name = "フォーカスなし")
 @Composable
 private fun PreviewDevToolsDialogNoFocus() {
-    BrowserTheme(themeMode = net.matsudamper.browser.data.ThemeMode.THEME_SYSTEM) {
+    BrowserTheme(themeMode = ThemeMode.THEME_SYSTEM) {
         DevToolsDialog(
             focusedInput = null,
             onRefresh = {},
