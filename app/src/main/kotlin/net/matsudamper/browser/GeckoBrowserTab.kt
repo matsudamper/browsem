@@ -75,6 +75,7 @@ import net.matsudamper.browser.data.TranslationProvider
 import net.matsudamper.browser.media.GeckoMediaSessionDelegate
 import net.matsudamper.browser.media.MediaWebExtension
 import net.matsudamper.browser.FindInPageWebExtension
+import net.matsudamper.browser.TwitterShareWebExtension
 import net.matsudamper.browser.translate.TranslationPriorityLanguage
 import net.matsudamper.browser.ui.common.resolveBrowserToolbarColors
 import net.matsudamper.browser.ui.browser.UrlBarSuggestionsUiState
@@ -540,6 +541,18 @@ internal fun GeckoBrowserTab(
         }
         onDispose {
             findInPageWebExtension.unregisterSession(session)
+        }
+    }
+
+    // TwitterShareWebExtension のセッション登録。
+    // Twitter/X の共有リンク・ボタンのクリックを OS の共有シートに振り替える
+    val twitterShareWebExtension: TwitterShareWebExtension = koinInject()
+    DisposableEffect(session, state, twitterShareWebExtension) {
+        twitterShareWebExtension.registerSession(session) { data ->
+            state.shareText(data.toShareText())
+        }
+        onDispose {
+            twitterShareWebExtension.unregisterSession(session)
         }
     }
 
