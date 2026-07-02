@@ -713,10 +713,14 @@ internal class BrowserTabScreenState(
     }
 
     fun sharePage() {
-        val shareText = "$currentPageTitle\n$currentPageUrl"
+        shareText("$currentPageTitle\n$currentPageUrl")
+    }
+
+    /** 任意のテキストを OS の共有シート（text/plain）で共有する */
+    fun shareText(text: String) {
         val intent = Intent(Intent.ACTION_SEND).apply {
             type = "text/plain"
-            putExtra(Intent.EXTRA_TEXT, shareText)
+            putExtra(Intent.EXTRA_TEXT, text)
         }
         context.startActivity(Intent.createChooser(intent, null))
     }
