@@ -34,6 +34,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -998,6 +999,7 @@ private fun AddressSelectDialog(
     onDismiss: () -> Unit,
 ) {
     AlertDialog(
+        modifier = Modifier.testTag(BrowserTabDialogLayerTestTags.AddressSelectDialog.testTag),
         onDismissRequest = onDismiss,
         title = { Text("住所を選択") },
         text = {
@@ -1049,6 +1051,7 @@ private fun AddressSaveDialog(
     val displayText = buildAddressDisplayText(address)
     val name = "${address.familyName} ${address.givenName}".trim()
     AlertDialog(
+        modifier = Modifier.testTag(BrowserTabDialogLayerTestTags.AddressSaveDialog.testTag),
         onDismissRequest = onDismiss,
         title = { Text("住所を保存しますか？") },
         text = {
@@ -1067,7 +1070,10 @@ private fun AddressSaveDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = onSave) {
+            TextButton(
+                onClick = onSave,
+                modifier = Modifier.testTag(BrowserTabDialogLayerTestTags.AddressSaveConfirmButton.testTag),
+            ) {
                 Text("保存")
             }
         },
@@ -1077,6 +1083,15 @@ private fun AddressSaveDialog(
             }
         },
     )
+}
+
+sealed interface BrowserTabDialogLayerTestTags {
+    val id: String
+    val testTag get() = "${BrowserTabDialogLayerTestTags::class.java.name}#$id"
+
+    object AddressSelectDialog : BrowserTabDialogLayerTestTags { override val id = "address_select_dialog" }
+    object AddressSaveDialog : BrowserTabDialogLayerTestTags { override val id = "address_save_dialog" }
+    object AddressSaveConfirmButton : BrowserTabDialogLayerTestTags { override val id = "address_save_confirm_button" }
 }
 
 private fun buildAddressDisplayText(address: Autocomplete.Address): String {
