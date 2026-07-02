@@ -556,6 +556,17 @@ internal fun GeckoBrowserTab(
         }
     }
 
+    // DevToolsWebExtension のセッション登録（フォーカス中の入力要素情報の通知）
+    DisposableEffect(session, state) {
+        val devToolsWebExtension = state.devToolsWebExtension
+        devToolsWebExtension.registerSession(session) { focusedInput ->
+            state.devToolsFocusedInput = focusedInput
+        }
+        onDispose {
+            devToolsWebExtension.unregisterSession(session)
+        }
+    }
+
     DisposableEffect(session, state, browserTab, mediaWebExtension) {
         browserTab.attachSessionCallbacks(
             callbacks = state,
@@ -833,6 +844,7 @@ internal fun GeckoBrowserTab(
                         { callback(state.currentPageUrl) }
                     },
                     onOpenDownloads = onOpenDownloads,
+                    onOpenDevTools = state::openDevTools,
                     onShare = state::sharePage,
                     tabCount = tabCount,
                     showTabActions = enableTabUi,
@@ -964,6 +976,16 @@ internal fun GeckoBrowserTab(
             favicon = addToHomeScreenState.favicon,
             isIconLoading = addToHomeScreenState.isIconLoading,
             onDismiss = state::dismissAddToHomeScreen,
+        )
+    }
+
+    // 開発者ツールダイアログ
+    if (state.showDevTools) {
+        DevToolsDialog(
+            focusedInput = state.devToolsFocusedInput,
+            onCopyFocusedInputId = state::copyFocusedInputId,
+            onRefresh = state::refreshDevToolsFocusedInput,
+            onDismiss = state::closeDevTools,
         )
     }
 
