@@ -76,7 +76,7 @@ class AddressAutofillPromptTest {
         }.getOrElse { return "logcat取得失敗: $it" }
         return output
             .filter { line ->
-                listOf("autofill", "GeckoConsole", "GeckoViewPrompt", "prompt")
+                listOf("autofill", "GeckoConsole", "GeckoViewPrompt", "prompt", "addr-test")
                     .any { line.contains(it, ignoreCase = true) }
             }
             .takeLast(LOGCAT_TAIL_LINES)
@@ -103,6 +103,14 @@ class AddressAutofillPromptTest {
             GeckoPreferenceController.setGeckoPref(
                 "extensions.formautofill.loglevel",
                 "Debug",
+                GeckoPreferenceController.PREF_BRANCH_USER,
+            )
+        }
+        // テストページの console.log を logcat に出してページ内 JS の進行を確認できるようにする
+        awaitGeckoResult {
+            GeckoPreferenceController.setGeckoPref(
+                "geckoview.console.enabled",
+                true,
                 GeckoPreferenceController.PREF_BRANCH_USER,
             )
         }
@@ -192,6 +200,12 @@ class AddressAutofillPromptTest {
                   <button id="submit-button" type="submit">Submit</button>
                 </form>
                 <script>
+                  function log(message) {
+                    console.log('addr-test: ' + message);
+                  }
+                  window.addEventListener('error', (e) => {
+                    log('js-error: ' + e.message);
+                  });
                   function setValue(id, value) {
                     const el = document.getElementById(id);
                     el.focus();
@@ -204,10 +218,13 @@ class AddressAutofillPromptTest {
                   // 同一タスク内で focus→入力→送信まで行うとリスナー登録前に送信されて
                   // capture が動かないため、検出起動・入力・送信を時間差で分ける。
                   window.addEventListener('load', () => {
+                    log('load');
                     setTimeout(() => {
+                      log('focus');
                       document.getElementById('given-name').focus();
                     }, 2000);
                     setTimeout(() => {
+                      log('fill');
                       setValue('given-name', 'John');
                       setValue('family-name', 'Doe');
                       setValue('organization', 'Example Inc');
@@ -217,10 +234,23 @@ class AddressAutofillPromptTest {
                       setValue('postal-code', '94043');
                       setValue('tel', '+16505551234');
                       setValue('email', 'john.doe@example.com');
+                      log('fill-done value=' + document.getElementById('given-name').value);
                     }, 5000);
                     setTimeout(() => {
-                      document.getElementById('submit-button').click();
+                      log('submit href=' + location.href);
+                      const form = document.getElementById('address-form');
+                      if (form.requestSubmit) {
+                        form.requestSubmit();
+                      } else {
+                        form.submit();
+                      }
+                      log('submit-called');
                     }, 8000);
+                    setTimeout(() => {
+                      // 8 秒時点の送信で遷移しなかった場合のフォールバック
+                      log('fallback-submit still-here href=' + location.href);
+                      document.getElementById('address-form').submit();
+                    }, 12000);
                   });
                 </script>
               </body>
