@@ -2,9 +2,13 @@ package net.matsudamper.browser
 
 import android.os.ParcelFileDescriptor
 import androidx.annotation.OptIn
+import androidx.compose.ui.semantics.SemanticsNode
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.After
@@ -84,12 +88,29 @@ class AddressAutofillPromptTest {
             throw AssertionError(
                 "住所保存ダイアログが表示されない (フォーム送信=$submitted)\n" +
                     "現在URL=${composeRule.currentPageUrlFromUi()}\n" +
-                    "PageLoadError表示=$pageLoadErrorVisible\n" +
+                    "PageLoadError表示=$pageLoadErrorVisible 内容=${pageLoadErrorText()}\n" +
                     "サーバ受信リクエスト=${server.requests}\n" +
                     "--- logcat (formautofill関連) ---\n${collectFormAutofillLogcat()}",
                 e,
             )
         }
+    }
+
+    /**
+     * ページロードエラー画面に表示されているテキストを収集する。失敗時の診断用。
+     */
+    private fun pageLoadErrorText(): String {
+        return runCatching {
+            val node = composeRule
+                .onNodeWithTag(BrowserTabSurfaceTestTags.PageLoadError.testTag, useUnmergedTree = true)
+                .fetchSemanticsNode()
+            collectTexts(node).joinToString(" / ")
+        }.getOrDefault("")
+    }
+
+    private fun collectTexts(node: SemanticsNode): List<String> {
+        val own = node.config.getOrNull(SemanticsProperties.Text)?.map { it.text }.orEmpty()
+        return own + node.children.flatMap { collectTexts(it) }
     }
 
     /**
@@ -147,6 +168,22 @@ class AddressAutofillPromptTest {
             GeckoPreferenceController.setGeckoPref(
                 "devtools.console.stdout.content",
                 true,
+                GeckoPreferenceController.PREF_BRANCH_USER,
+            )
+        }
+        // CI の診断でループバック HTTP サーバへの接続が一切行われずページロードに失敗して
+        // いたため、Local Network Access のブロッキングを無効化する
+        awaitGeckoResult {
+            GeckoPreferenceController.setGeckoPref(
+                "network.lna.enabled",
+                false,
+                GeckoPreferenceController.PREF_BRANCH_USER,
+            )
+        }
+        awaitGeckoResult {
+            GeckoPreferenceController.setGeckoPref(
+                "network.lna.blocking",
+                false,
                 GeckoPreferenceController.PREF_BRANCH_USER,
             )
         }
