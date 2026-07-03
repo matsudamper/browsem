@@ -19,9 +19,10 @@ import org.junit.runner.RunWith
 import org.mozilla.geckoview.ExperimentalGeckoViewApi
 import org.mozilla.geckoview.GeckoPreferenceController
 import org.mozilla.geckoview.GeckoResult
-import java.net.InetAddress
+import java.net.HttpURLConnection
 import java.net.ServerSocket
 import java.net.Socket
+import java.net.URL
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.TimeoutException
 
@@ -59,6 +60,10 @@ class AddressAutofillPromptTest {
         httpServer = server
         val pageUri = "http://127.0.0.1:${server.port}/$ADDRESS_FORM_FILE_NAME"
 
+        // サーバがテストプロセスから到達可能であることを先に確認する。
+        // ここで失敗する場合は Gecko 以前に環境の問題。
+        val selfCheck = selfCheckHttp(pageUri)
+
         applyTestPrefsAndAwaitAddressAutofillEnabled()
 
         composeRule.openUrlFromUrlBar(pageUri)
@@ -90,10 +95,45 @@ class AddressAutofillPromptTest {
                     "現在URL=${composeRule.currentPageUrlFromUi()}\n" +
                     "PageLoadError表示=$pageLoadErrorVisible 内容=${pageLoadErrorText()}\n" +
                     "サーバ受信リクエスト=${server.requests}\n" +
+                    "テストプロセスからの自己接続=$selfCheck\n" +
+                    "関連プレフ=${dumpNetworkPrefs()}\n" +
                     "--- logcat (formautofill関連) ---\n${collectFormAutofillLogcat()}",
                 e,
             )
         }
+    }
+
+    /**
+     * テストプロセス自身からサーバへ HTTP 接続できるか確認する。失敗時の診断用。
+     */
+    private fun selfCheckHttp(url: String): String {
+        return runCatching {
+            val connection = URL(url).openConnection() as HttpURLConnection
+            connection.connectTimeout = 5_000
+            connection.readTimeout = 5_000
+            val code = connection.responseCode
+            connection.disconnect()
+            "HTTP $code"
+        }.getOrElse { "失敗: $it" }
+    }
+
+    /**
+     * ネットワーク関連の Gecko プレフを収集する。失敗時の診断用。
+     */
+    @OptIn(ExperimentalGeckoViewApi::class)
+    private fun dumpNetworkPrefs(): String {
+        val prefs = awaitGeckoResult {
+            GeckoPreferenceController.getGeckoPrefs(
+                listOf(
+                    "dom.security.https_only_mode",
+                    "dom.security.https_first",
+                    "network.proxy.type",
+                    "network.lna.enabled",
+                    "network.lna.blocking",
+                ),
+            )
+        }
+        return prefs.orEmpty().joinToString(", ") { "${it.pref}=${it.value}" }
     }
 
     /**
@@ -336,7 +376,9 @@ class AddressAutofillPromptTest {
     private class LocalHttpServer(
         private val pages: Map<String, String>,
     ) : AutoCloseable {
-        private val serverSocket = ServerSocket(0, BACKLOG, InetAddress.getLoopbackAddress())
+        // 全インターフェースにバインドする (ループバック限定だと Gecko からの接続が
+        // 拒否される事象の切り分けのため)
+        private val serverSocket = ServerSocket(0, BACKLOG)
 
         val port: Int get() = serverSocket.localPort
 
