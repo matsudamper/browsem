@@ -190,27 +190,23 @@ class AddressAutofillPromptTest {
             "MediaBridge",
             "updateActiveElement",
             "Disregarding",
-            "GeckoConsole",
+            "ThemeColor",
             "getSavedFieldNames",
             "updateSavedFieldNames",
         )
         val includes = listOf(
+            " I Gecko ",
+            " E Gecko ",
+            " W Gecko ",
+            "GeckoConsole",
             "addr-test",
-            "submi",
-            "capture",
-            "doorhanger",
-            "prompt",
-            "duplicat",
-            "mergeable",
-            "record",
-            "address",
-            "onPageNavigation",
-            "navigation",
+            "GeckoView:Prompt",
         )
+        // logcat は入力完了後にクリアしているため、先頭側 (送信直後) に重要なログが集まる
         return output
             .filter { line -> excludes.none { line.contains(it) } }
             .filter { line -> includes.any { line.contains(it, ignoreCase = true) } }
-            .takeLast(LOGCAT_TAIL_LINES)
+            .take(LOGCAT_TAIL_LINES)
             .joinToString("\n")
     }
 
