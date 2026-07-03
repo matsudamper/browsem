@@ -1,6 +1,8 @@
 package net.matsudamper.browser
 
+import android.os.ParcelFileDescriptor
 import androidx.annotation.OptIn
+import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -13,6 +15,7 @@ import org.mozilla.geckoview.ExperimentalGeckoViewApi
 import org.mozilla.geckoview.GeckoPreferenceController
 import org.mozilla.geckoview.GeckoResult
 import java.io.File
+import java.util.concurrent.TimeoutException
 
 /**
  * GeckoView の住所フォーム自動入力 (formautofill) が実際に動作することを確認するテスト。
@@ -51,7 +54,7 @@ class AddressAutofillPromptTest {
                     .fetchSemanticsNodes()
                     .isNotEmpty()
             }
-        } catch (e: androidx.compose.ui.test.ComposeTimeoutException) {
+        } catch (e: ComposeTimeoutException) {
             throw AssertionError(
                 "住所保存ダイアログが表示されない (フォーム送信=$submitted)\n" +
                     "--- logcat (formautofill関連) ---\n${collectFormAutofillLogcat()}",
@@ -67,7 +70,7 @@ class AddressAutofillPromptTest {
         val output = runCatching {
             val pfd = InstrumentationRegistry.getInstrumentation().uiAutomation
                 .executeShellCommand("logcat -d")
-            android.os.ParcelFileDescriptor.AutoCloseInputStream(pfd)
+            ParcelFileDescriptor.AutoCloseInputStream(pfd)
                 .bufferedReader()
                 .readLines()
         }.getOrElse { return "logcat取得失敗: $it" }
@@ -132,13 +135,18 @@ class AddressAutofillPromptTest {
      *
      * GeckoResult の生成 (内部の then/map 連鎖) は Handler を持つスレッドで行う必要があり、
      * poll はメインスレッドでは呼べないため、生成と待機でスレッドを分ける。
+     * poll のタイムアウトは呼び出し側のリトライと診断メッセージに委ねるため null を返す。
      */
     private fun <T> awaitGeckoResult(block: () -> GeckoResult<T>): T? {
         var geckoResult: GeckoResult<T>? = null
         InstrumentationRegistry.getInstrumentation().runOnMainSync {
             geckoResult = block()
         }
-        return requireNotNull(geckoResult).poll(PREF_TIMEOUT_MILLIS)
+        return try {
+            requireNotNull(geckoResult).poll(PREF_POLL_TIMEOUT_MILLIS)
+        } catch (@Suppress("SwallowedException") e: TimeoutException) {
+            null
+        }
     }
 
     /**
@@ -227,6 +235,7 @@ class AddressAutofillPromptTest {
         private const val ADDRESS_FORM_FILE_NAME = "address-form.html"
         private const val ADDRESS_FORM_DONE_FILE_NAME = "done.html"
         private const val PREF_TIMEOUT_MILLIS = 30_000L
+        private const val PREF_POLL_TIMEOUT_MILLIS = 5_000L
         private const val LOGCAT_TAIL_LINES = 120
     }
 }
