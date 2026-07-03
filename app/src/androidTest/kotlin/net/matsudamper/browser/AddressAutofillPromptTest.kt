@@ -69,7 +69,9 @@ class AddressAutofillPromptTest {
         composeRule.openUrlFromUrlBar(pageUri)
         composeRule.waitForUrlBarContains(ADDRESS_FORM_FILE_NAME, timeoutMillis = 60_000)
 
-        // 以降の診断ログを入力〜送信〜capture 判定の範囲に絞る
+        // ページ内スクリプトの入力完了 (load+5秒) まで待ってから logcat をクリアし、
+        // 診断ログを送信〜capture 判定の範囲に絞る
+        Thread.sleep(FILL_COMPLETE_WAIT_MILLIS)
         clearLogcat()
 
         // ページは load 後にフォームへ値を投入して自動送信する。
@@ -168,10 +170,10 @@ class AddressAutofillPromptTest {
     }
 
     /**
-     * formautofill 関連の logcat を収集する。失敗時の診断用。
+     * formautofill の capture 判定に関わる logcat を収集する。失敗時の診断用。
      *
-     * console.debug の本文は接頭辞と別行の Gecko タグで出力されるため Gecko タグ行も拾う。
-     * テスト失敗スタックトレースの echo (TestRunner) はノイズなので除外する。
+     * console.debug の本文は接頭辞と別行の Gecko タグで出力されるため、
+     * capture 判定パスのキーワードを含む本文行を狙って拾う。
      */
     private fun collectFormAutofillLogcat(): String {
         val output = runCatching {
@@ -181,12 +183,31 @@ class AddressAutofillPromptTest {
                 .bufferedReader()
                 .readLines()
         }.getOrElse { return "logcat取得失敗: $it" }
+        val excludes = listOf(
+            "TestRunner",
+            "MediaBridge",
+            "updateActiveElement",
+            "Disregarding",
+            "GeckoConsole",
+            "getSavedFieldNames",
+            "updateSavedFieldNames",
+        )
+        val includes = listOf(
+            "addr-test",
+            "submi",
+            "capture",
+            "doorhanger",
+            "prompt",
+            "duplicat",
+            "mergeable",
+            "record",
+            "address",
+            "onPageNavigation",
+            "navigation",
+        )
         return output
-            .filter { line -> !line.contains("TestRunner") }
-            .filter { line ->
-                listOf("autofill", "GeckoConsole", "prompt", "addr-test", "console.", " Gecko ")
-                    .any { line.contains(it, ignoreCase = true) }
-            }
+            .filter { line -> excludes.none { line.contains(it) } }
+            .filter { line -> includes.any { line.contains(it, ignoreCase = true) } }
             .takeLast(LOGCAT_TAIL_LINES)
             .joinToString("\n")
     }
@@ -467,6 +488,7 @@ class AddressAutofillPromptTest {
         private const val ADDRESS_FORM_DONE_FILE_NAME = "done.html"
         private const val PREF_TIMEOUT_MILLIS = 30_000L
         private const val PREF_POLL_TIMEOUT_MILLIS = 5_000L
+        private const val FILL_COMPLETE_WAIT_MILLIS = 6_500L
         private const val LOGCAT_TAIL_LINES = 250
     }
 }
