@@ -21,6 +21,7 @@ import net.matsudamper.browser.data.history.HistoryRepository
 import net.matsudamper.browser.data.websuggestion.HttpWebSuggestionRepository
 import net.matsudamper.browser.data.websuggestion.WebSuggestionRepository
 import android.util.Log
+import androidx.annotation.OptIn
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -29,6 +30,7 @@ import org.koin.android.ext.koin.androidContext
 import org.koin.androidx.workmanager.dsl.worker
 import org.koin.core.module.dsl.viewModel
 import org.koin.dsl.module
+import org.mozilla.geckoview.ExperimentalGeckoViewApi
 import org.mozilla.geckoview.GeckoPreferenceController
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoRuntimeSettings
@@ -57,37 +59,7 @@ val appModule = module {
                 .extensionsProcessEnabled(true)
                 .build()
         )
-        // GeckoView の住所フォーム自動入力を有効にする。
-        // GeckoRuntimeSettings.Builder には loginAutofillEnabled() はあるが住所用の公開 API が
-        // ないため、GeckoPreferenceController で Gecko 内部プリファレンスを設定する。
-        // supported=on はリージョン判定 (detect) を回避して住所機能を常に利用可能にする。
-        GeckoPreferenceController.setGeckoPrefs(
-            listOf(
-                GeckoPreferenceController.SetGeckoPreference.setBoolPref(
-                    "extensions.formautofill.addresses.enabled",
-                    true,
-                    GeckoPreferenceController.PREF_BRANCH_USER,
-                ),
-                GeckoPreferenceController.SetGeckoPreference.setBoolPref(
-                    "extensions.formautofill.addresses.capture.enabled",
-                    true,
-                    GeckoPreferenceController.PREF_BRANCH_USER,
-                ),
-                GeckoPreferenceController.SetGeckoPreference.setStringPref(
-                    "extensions.formautofill.addresses.supported",
-                    "on",
-                    GeckoPreferenceController.PREF_BRANCH_USER,
-                ),
-            ),
-        ).accept(
-            { results ->
-                val failed = results.orEmpty().filterValues { !it }.keys
-                if (failed.isNotEmpty()) {
-                    Log.w("AppModule", "住所自動入力プリファレンスの設定に失敗: $failed")
-                }
-            },
-            { e -> Log.w("AppModule", "住所自動入力プリファレンスの設定に失敗", e) },
-        )
+        enableAddressAutofill()
         val storageDelegate = AutocompleteStorageDelegate(
             addressRepository = get(),
             coroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main),
@@ -106,4 +78,42 @@ val appModule = module {
     factory { GeckoDownloadManager(androidContext(), get()) }
     viewModel { BrowserViewModel(get(), get(), get(), get(), get(), get(), get(), get()) }
     worker { DownloadWorker(get(), get(), get()) }
+}
+
+/**
+ * GeckoView の住所フォーム自動入力を有効にする。
+ *
+ * GeckoRuntimeSettings.Builder には loginAutofillEnabled() はあるが住所用の公開 API が
+ * ないため、GeckoPreferenceController で Gecko 内部プリファレンスを設定する。
+ * supported=on はリージョン判定 (detect) を回避して住所機能を常に利用可能にする。
+ */
+@OptIn(ExperimentalGeckoViewApi::class)
+private fun enableAddressAutofill() {
+    GeckoPreferenceController.setGeckoPrefs(
+        listOf(
+            GeckoPreferenceController.SetGeckoPreference.setBoolPref(
+                "extensions.formautofill.addresses.enabled",
+                true,
+                GeckoPreferenceController.PREF_BRANCH_USER,
+            ),
+            GeckoPreferenceController.SetGeckoPreference.setBoolPref(
+                "extensions.formautofill.addresses.capture.enabled",
+                true,
+                GeckoPreferenceController.PREF_BRANCH_USER,
+            ),
+            GeckoPreferenceController.SetGeckoPreference.setStringPref(
+                "extensions.formautofill.addresses.supported",
+                "on",
+                GeckoPreferenceController.PREF_BRANCH_USER,
+            ),
+        ),
+    ).accept(
+        { results ->
+            val failed = results.orEmpty().filterValues { !it }.keys
+            if (failed.isNotEmpty()) {
+                Log.w("AppModule", "住所自動入力プリファレンスの設定に失敗: $failed")
+            }
+        },
+        { e -> Log.w("AppModule", "住所自動入力プリファレンスの設定に失敗", e) },
+    )
 }
