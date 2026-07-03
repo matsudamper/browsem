@@ -7,6 +7,7 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import org.junit.After
 import org.junit.Assert.fail
 import org.junit.Rule
 import org.junit.Test
@@ -14,24 +15,44 @@ import org.junit.runner.RunWith
 import org.mozilla.geckoview.ExperimentalGeckoViewApi
 import org.mozilla.geckoview.GeckoPreferenceController
 import org.mozilla.geckoview.GeckoResult
-import java.io.File
+import java.net.InetAddress
+import java.net.ServerSocket
+import java.net.Socket
 import java.util.concurrent.TimeoutException
 
 /**
  * GeckoView の住所フォーム自動入力 (formautofill) が実際に動作することを確認するテスト。
  *
- * geckoview-config.yaml で有効化した extensions.formautofill.addresses.capture.enabled により、
+ * AppModule で有効化した extensions.formautofill.addresses.capture.enabled により、
  * 住所フォーム送信時に PromptDelegate.onAddressSave が発火して保存ダイアログが表示されることを検証する。
  * フォームへの値の投入と送信はページ内 JavaScript で行うため、Web コンテンツへの直接操作は行わない。
+ *
+ * file:// ではフォーム送信が行われないことが CI の診断で判明したため、
+ * ループバック HTTP サーバでページを配信する。
  */
 @RunWith(AndroidJUnit4::class)
 class AddressAutofillPromptTest {
     @get:Rule
     val composeRule = createAndroidComposeRule<MainActivity>()
 
+    private var httpServer: LocalHttpServer? = null
+
+    @After
+    fun tearDown() {
+        httpServer?.close()
+        httpServer = null
+    }
+
     @Test
     fun submittingAddressFormShowsAddressSaveDialog() {
-        val pageUri = prepareAddressFormPageUri()
+        val server = LocalHttpServer(
+            pages = mapOf(
+                "/$ADDRESS_FORM_FILE_NAME" to buildAddressFormHtml(),
+                "/$ADDRESS_FORM_DONE_FILE_NAME" to buildDoneHtml(),
+            ),
+        )
+        httpServer = server
+        val pageUri = "http://127.0.0.1:${server.port}/$ADDRESS_FORM_FILE_NAME"
 
         applyTestPrefsAndAwaitAddressAutofillEnabled()
 
@@ -114,6 +135,13 @@ class AddressAutofillPromptTest {
                 GeckoPreferenceController.PREF_BRANCH_USER,
             )
         }
+        awaitGeckoResult {
+            GeckoPreferenceController.setGeckoPref(
+                "devtools.console.stdout.content",
+                true,
+                GeckoPreferenceController.PREF_BRANCH_USER,
+            )
+        }
 
         val deadline = System.currentTimeMillis() + PREF_TIMEOUT_MILLIS
         while (true) {
@@ -158,25 +186,12 @@ class AddressAutofillPromptTest {
     }
 
     /**
-     * 住所フォームのローカルHTMLをキャッシュへ生成し、file URI を返す。
+     * 住所フォームのテストページ。
      *
      * formautofill の対象判定はロケール・地域に依存するため、確実に対象となる US 形式の住所を使う。
      */
-    private fun prepareAddressFormPageUri(): String {
-        val targetContext = InstrumentationRegistry.getInstrumentation().targetContext
-        val destinationDir = File(targetContext.cacheDir, ADDRESS_FORM_DIR_NAME).apply { mkdirs() }
-        File(destinationDir, ADDRESS_FORM_DONE_FILE_NAME).writeText(
-            """
-            <!doctype html>
-            <html lang="en">
-              <head><meta charset="utf-8" /><title>Done</title></head>
-              <body><main>Submitted</main></body>
-            </html>
-            """.trimIndent(),
-        )
-        val destination = File(destinationDir, ADDRESS_FORM_FILE_NAME)
-        destination.writeText(
-            """
+    private fun buildAddressFormHtml(): String {
+        return """
             <!doctype html>
             <html lang="en">
               <head>
@@ -184,7 +199,7 @@ class AddressAutofillPromptTest {
                 <title>Address Form Test</title>
               </head>
               <body>
-                <form id="address-form" method="get" action="$ADDRESS_FORM_DONE_FILE_NAME">
+                <form id="address-form" method="get" action="/$ADDRESS_FORM_DONE_FILE_NAME">
                   <input id="given-name" name="given-name" autocomplete="given-name" />
                   <input id="family-name" name="family-name" autocomplete="family-name" />
                   <input id="organization" name="organization" autocomplete="organization" />
@@ -255,13 +270,90 @@ class AddressAutofillPromptTest {
                 </script>
               </body>
             </html>
-            """.trimIndent(),
-        )
-        return destination.toURI().toString()
+        """.trimIndent()
+    }
+
+    private fun buildDoneHtml(): String {
+        return """
+            <!doctype html>
+            <html lang="en">
+              <head><meta charset="utf-8" /><title>Done</title></head>
+              <body><main>Submitted</main></body>
+            </html>
+        """.trimIndent()
+    }
+
+    /**
+     * テストページ配信用の最小限のループバック HTTP サーバ。
+     *
+     * file:// ではフォーム送信が行われないため、http:// でページを配信する。
+     */
+    private class LocalHttpServer(
+        private val pages: Map<String, String>,
+    ) : AutoCloseable {
+        private val serverSocket = ServerSocket(0, BACKLOG, InetAddress.getLoopbackAddress())
+
+        val port: Int get() = serverSocket.localPort
+
+        init {
+            Thread {
+                while (!serverSocket.isClosed) {
+                    val socket = runCatching { serverSocket.accept() }.getOrNull() ?: break
+                    Thread { handle(socket) }.apply { isDaemon = true }.start()
+                }
+            }.apply { isDaemon = true }.start()
+        }
+
+        private fun handle(socket: Socket) {
+            runCatching {
+                socket.use { s ->
+                    val reader = s.getInputStream().bufferedReader()
+                    val requestLine = reader.readLine() ?: return
+                    // リクエストヘッダは読み捨てる
+                    while (true) {
+                        val line = reader.readLine() ?: break
+                        if (line.isEmpty()) break
+                    }
+                    val path = requestLine.split(" ").getOrNull(1)
+                        ?.substringBefore("?")
+                        ?: "/"
+                    val body = pages[path]
+                    val output = s.getOutputStream()
+                    if (body != null) {
+                        val bytes = body.toByteArray(Charsets.UTF_8)
+                        output.write(
+                            (
+                                "HTTP/1.1 200 OK\r\n" +
+                                    "Content-Type: text/html; charset=utf-8\r\n" +
+                                    "Content-Length: ${bytes.size}\r\n" +
+                                    "Connection: close\r\n\r\n"
+                                ).toByteArray(),
+                        )
+                        output.write(bytes)
+                    } else {
+                        output.write(
+                            (
+                                "HTTP/1.1 404 Not Found\r\n" +
+                                    "Content-Length: 0\r\n" +
+                                    "Connection: close\r\n\r\n"
+                                ).toByteArray(),
+                        )
+                    }
+                    output.flush()
+                }
+            }
+        }
+
+        override fun close() {
+            runCatching { serverSocket.close() }
+        }
+
+        private companion object {
+            private const val BACKLOG = 8
+        }
     }
 
     private companion object {
-        private const val ADDRESS_FORM_DIR_NAME = "test-address-form"
         private const val ADDRESS_FORM_FILE_NAME = "address-form.html"
         private const val ADDRESS_FORM_DONE_FILE_NAME = "done.html"
         private const val PREF_TIMEOUT_MILLIS = 30_000L
