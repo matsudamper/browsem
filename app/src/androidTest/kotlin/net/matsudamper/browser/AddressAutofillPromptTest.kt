@@ -149,8 +149,14 @@ class AddressAutofillPromptTest {
                     el.dispatchEvent(new Event('input', { bubbles: true }));
                     el.dispatchEvent(new Event('change', { bubbles: true }));
                   }
+                  // GeckoView の formautofill は focusin がフィールド検出のトリガーで、
+                  // 検出とフォーム送信リスナー登録は親プロセスとの非同期通信で行われる。
+                  // 同一タスク内で focus→入力→送信まで行うとリスナー登録前に送信されて
+                  // capture が動かないため、検出起動・入力・送信を時間差で分ける。
                   window.addEventListener('load', () => {
-                    // formautofill のフィールド検出が完了するのを待ってから投入・送信する
+                    setTimeout(() => {
+                      document.getElementById('given-name').focus();
+                    }, 2000);
                     setTimeout(() => {
                       setValue('given-name', 'John');
                       setValue('family-name', 'Doe');
@@ -161,8 +167,10 @@ class AddressAutofillPromptTest {
                       setValue('postal-code', '94043');
                       setValue('tel', '+16505551234');
                       setValue('email', 'john.doe@example.com');
+                    }, 5000);
+                    setTimeout(() => {
                       document.getElementById('submit-button').click();
-                    }, 3000);
+                    }, 8000);
                   });
                 </script>
               </body>
