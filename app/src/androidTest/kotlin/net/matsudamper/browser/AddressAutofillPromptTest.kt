@@ -1,5 +1,6 @@
 package net.matsudamper.browser
 
+import androidx.annotation.OptIn
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -8,7 +9,9 @@ import org.junit.Assert.fail
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.mozilla.geckoview.ExperimentalGeckoViewApi
 import org.mozilla.geckoview.GeckoPreferenceController
+import org.mozilla.geckoview.GeckoResult
 import java.io.File
 
 /**
@@ -49,22 +52,27 @@ class AddressAutofillPromptTest {
      * skipProgrammaticCheckForTests は GeckoView 本家の AutocompleteTest と同様に、
      * JavaScript によるプログラム的なフォーム操作を formautofill が無視しないようにする。
      */
+    @OptIn(ExperimentalGeckoViewApi::class)
     private fun applyTestPrefsAndAwaitAddressAutofillEnabled() {
-        GeckoPreferenceController.setGeckoPref(
-            "extensions.formautofill.skipProgrammaticCheckForTests",
-            true,
-            GeckoPreferenceController.PREF_BRANCH_USER,
-        ).poll(PREF_TIMEOUT_MILLIS)
+        awaitGeckoResult {
+            GeckoPreferenceController.setGeckoPref(
+                "extensions.formautofill.skipProgrammaticCheckForTests",
+                true,
+                GeckoPreferenceController.PREF_BRANCH_USER,
+            )
+        }
 
         val deadline = System.currentTimeMillis() + PREF_TIMEOUT_MILLIS
         while (true) {
-            val prefs = GeckoPreferenceController.getGeckoPrefs(
-                listOf(
-                    "extensions.formautofill.addresses.enabled",
-                    "extensions.formautofill.addresses.capture.enabled",
-                    "extensions.formautofill.addresses.supported",
-                ),
-            ).poll(PREF_TIMEOUT_MILLIS)
+            val prefs = awaitGeckoResult {
+                GeckoPreferenceController.getGeckoPrefs(
+                    listOf(
+                        "extensions.formautofill.addresses.enabled",
+                        "extensions.formautofill.addresses.capture.enabled",
+                        "extensions.formautofill.addresses.supported",
+                    ),
+                )
+            }
             val values = prefs.orEmpty().associate { it.pref to it.value }
             val applied = values["extensions.formautofill.addresses.enabled"] == true &&
                 values["extensions.formautofill.addresses.capture.enabled"] == true &&
@@ -75,6 +83,20 @@ class AddressAutofillPromptTest {
             }
             Thread.sleep(500)
         }
+    }
+
+    /**
+     * GeckoResult をメインスレッドで生成し、テストスレッドで完了を待つ。
+     *
+     * GeckoResult の生成 (内部の then/map 連鎖) は Handler を持つスレッドで行う必要があり、
+     * poll はメインスレッドでは呼べないため、生成と待機でスレッドを分ける。
+     */
+    private fun <T> awaitGeckoResult(block: () -> GeckoResult<T>): T? {
+        var geckoResult: GeckoResult<T>? = null
+        InstrumentationRegistry.getInstrumentation().runOnMainSync {
+            geckoResult = block()
+        }
+        return requireNotNull(geckoResult).poll(PREF_TIMEOUT_MILLIS)
     }
 
     /**
