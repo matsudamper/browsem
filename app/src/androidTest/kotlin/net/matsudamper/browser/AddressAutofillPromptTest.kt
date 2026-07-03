@@ -18,6 +18,7 @@ import org.mozilla.geckoview.GeckoResult
 import java.net.InetAddress
 import java.net.ServerSocket
 import java.net.Socket
+import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.TimeoutException
 
 /**
@@ -76,8 +77,15 @@ class AddressAutofillPromptTest {
                     .isNotEmpty()
             }
         } catch (e: ComposeTimeoutException) {
+            val pageLoadErrorVisible = composeRule
+                .onAllNodesWithTag(BrowserTabSurfaceTestTags.PageLoadError.testTag)
+                .fetchSemanticsNodes()
+                .isNotEmpty()
             throw AssertionError(
                 "住所保存ダイアログが表示されない (フォーム送信=$submitted)\n" +
+                    "現在URL=${composeRule.currentPageUrlFromUi()}\n" +
+                    "PageLoadError表示=$pageLoadErrorVisible\n" +
+                    "サーバ受信リクエスト=${server.requests}\n" +
                     "--- logcat (formautofill関連) ---\n${collectFormAutofillLogcat()}",
                 e,
             )
@@ -295,6 +303,9 @@ class AddressAutofillPromptTest {
 
         val port: Int get() = serverSocket.localPort
 
+        /** 受信した HTTP リクエストライン。失敗時の診断用。 */
+        val requests = CopyOnWriteArrayList<String>()
+
         init {
             Thread {
                 while (!serverSocket.isClosed) {
@@ -309,6 +320,7 @@ class AddressAutofillPromptTest {
                 socket.use { s ->
                     val reader = s.getInputStream().bufferedReader()
                     val requestLine = reader.readLine() ?: return
+                    requests.add(requestLine)
                     // リクエストヘッダは読み捨てる
                     while (true) {
                         val line = reader.readLine() ?: break
