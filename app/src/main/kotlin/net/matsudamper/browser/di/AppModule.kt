@@ -20,7 +20,7 @@ import net.matsudamper.browser.data.download.DownloadRepository
 import net.matsudamper.browser.data.history.HistoryRepository
 import net.matsudamper.browser.data.websuggestion.HttpWebSuggestionRepository
 import net.matsudamper.browser.data.websuggestion.WebSuggestionRepository
-import java.io.File
+import android.util.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -29,6 +29,7 @@ import org.koin.android.ext.koin.androidContext
 import org.koin.androidx.workmanager.dsl.worker
 import org.koin.core.module.dsl.viewModel
 import org.koin.dsl.module
+import org.mozilla.geckoview.GeckoPreferenceController
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoRuntimeSettings
 
@@ -46,26 +47,46 @@ val dataModule = module {
 
 val appModule = module {
     single<GeckoRuntime> {
-        val context = androidContext()
-        // GeckoView の住所フォーム自動入力を有効にするための設定ファイルを準備する。
-        // GeckoRuntimeSettings.Builder には loginAutofillEnabled() はあるが
-        // 住所用の公開 API がないため、configFilePath 経由で Gecko 内部プリファレンスを設定する。
-        val geckoConfigFile = File(context.filesDir, "geckoview-config.yaml")
-        context.assets.open("geckoview-config.yaml").use { input ->
-            geckoConfigFile.outputStream().use { output ->
-                input.copyTo(output)
-            }
-        }
         val runtime = GeckoRuntime.create(
-            context,
+            androidContext(),
             GeckoRuntimeSettings.Builder()
-                .configFilePath(geckoConfigFile.absolutePath)
                 .forceUserScalableEnabled(true)
                 // ユーザーインストール拡張機能のバックグラウンドスクリプトを専用プロセスで実行し、
                 // webRequest.onBeforeRequest 等によるリクエストのブロッキングを有効にする。
                 // この設定がないと AdGuard などのコンテンツブロッカーが機能しない。
                 .extensionsProcessEnabled(true)
                 .build()
+        )
+        // GeckoView の住所フォーム自動入力を有効にする。
+        // GeckoRuntimeSettings.Builder には loginAutofillEnabled() はあるが住所用の公開 API が
+        // ないため、GeckoPreferenceController で Gecko 内部プリファレンスを設定する。
+        // supported=on はリージョン判定 (detect) を回避して住所機能を常に利用可能にする。
+        GeckoPreferenceController.setGeckoPrefs(
+            listOf(
+                GeckoPreferenceController.SetGeckoPreference.setBoolPref(
+                    "extensions.formautofill.addresses.enabled",
+                    true,
+                    GeckoPreferenceController.PREF_BRANCH_USER,
+                ),
+                GeckoPreferenceController.SetGeckoPreference.setBoolPref(
+                    "extensions.formautofill.addresses.capture.enabled",
+                    true,
+                    GeckoPreferenceController.PREF_BRANCH_USER,
+                ),
+                GeckoPreferenceController.SetGeckoPreference.setStringPref(
+                    "extensions.formautofill.addresses.supported",
+                    "on",
+                    GeckoPreferenceController.PREF_BRANCH_USER,
+                ),
+            ),
+        ).accept(
+            { results ->
+                val failed = results.orEmpty().filterValues { !it }.keys
+                if (failed.isNotEmpty()) {
+                    Log.w("AppModule", "住所自動入力プリファレンスの設定に失敗: $failed")
+                }
+            },
+            { e -> Log.w("AppModule", "住所自動入力プリファレンスの設定に失敗", e) },
         )
         val storageDelegate = AutocompleteStorageDelegate(
             addressRepository = get(),

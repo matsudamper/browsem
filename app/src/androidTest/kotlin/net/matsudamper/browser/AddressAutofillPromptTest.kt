@@ -4,9 +4,11 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import org.junit.Assert.fail
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.mozilla.geckoview.GeckoPreferenceController
 import java.io.File
 
 /**
@@ -25,6 +27,8 @@ class AddressAutofillPromptTest {
     fun submittingAddressFormShowsAddressSaveDialog() {
         val pageUri = prepareAddressFormPageUri()
 
+        applyTestPrefsAndAwaitAddressAutofillEnabled()
+
         composeRule.openUrlFromUrlBar(pageUri)
         composeRule.waitForUrlBarContains(ADDRESS_FORM_FILE_NAME, timeoutMillis = 60_000)
 
@@ -36,6 +40,40 @@ class AddressAutofillPromptTest {
                 .onAllNodesWithTag(BrowserTabDialogLayerTestTags.AddressSaveDialog.testTag)
                 .fetchSemanticsNodes()
                 .isNotEmpty()
+        }
+    }
+
+    /**
+     * テスト用プリファレンスを設定し、AppModule が設定する住所自動入力プリファレンスの反映を待つ。
+     *
+     * skipProgrammaticCheckForTests は GeckoView 本家の AutocompleteTest と同様に、
+     * JavaScript によるプログラム的なフォーム操作を formautofill が無視しないようにする。
+     */
+    private fun applyTestPrefsAndAwaitAddressAutofillEnabled() {
+        GeckoPreferenceController.setGeckoPref(
+            "extensions.formautofill.skipProgrammaticCheckForTests",
+            true,
+            GeckoPreferenceController.PREF_BRANCH_USER,
+        ).poll(PREF_TIMEOUT_MILLIS)
+
+        val deadline = System.currentTimeMillis() + PREF_TIMEOUT_MILLIS
+        while (true) {
+            val prefs = GeckoPreferenceController.getGeckoPrefs(
+                listOf(
+                    "extensions.formautofill.addresses.enabled",
+                    "extensions.formautofill.addresses.capture.enabled",
+                    "extensions.formautofill.addresses.supported",
+                ),
+            ).poll(PREF_TIMEOUT_MILLIS)
+            val values = prefs.orEmpty().associate { it.pref to it.value }
+            val applied = values["extensions.formautofill.addresses.enabled"] == true &&
+                values["extensions.formautofill.addresses.capture.enabled"] == true &&
+                values["extensions.formautofill.addresses.supported"] == "on"
+            if (applied) return
+            if (System.currentTimeMillis() > deadline) {
+                fail("住所自動入力プリファレンスが適用されていない: $values")
+            }
+            Thread.sleep(500)
         }
     }
 
@@ -116,5 +154,6 @@ class AddressAutofillPromptTest {
         private const val ADDRESS_FORM_DIR_NAME = "test-address-form"
         private const val ADDRESS_FORM_FILE_NAME = "address-form.html"
         private const val ADDRESS_FORM_DONE_FILE_NAME = "done.html"
+        private const val PREF_TIMEOUT_MILLIS = 30_000L
     }
 }
