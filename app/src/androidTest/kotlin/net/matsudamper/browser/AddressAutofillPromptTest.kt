@@ -69,6 +69,9 @@ class AddressAutofillPromptTest {
         composeRule.openUrlFromUrlBar(pageUri)
         composeRule.waitForUrlBarContains(ADDRESS_FORM_FILE_NAME, timeoutMillis = 60_000)
 
+        // 以降の診断ログを入力〜送信〜capture 判定の範囲に絞る
+        clearLogcat()
+
         // ページは load 後にフォームへ値を投入して自動送信する。
         // まずフォーム送信 (done.html への遷移) が行われたことを確認し、
         // 送信自体の失敗と capture 未発火を切り分ける。
@@ -154,7 +157,21 @@ class AddressAutofillPromptTest {
     }
 
     /**
+     * logcat をクリアする。
+     */
+    private fun clearLogcat() {
+        runCatching {
+            val pfd = InstrumentationRegistry.getInstrumentation().uiAutomation
+                .executeShellCommand("logcat -c")
+            ParcelFileDescriptor.AutoCloseInputStream(pfd).use { it.readBytes() }
+        }
+    }
+
+    /**
      * formautofill 関連の logcat を収集する。失敗時の診断用。
+     *
+     * console.debug の本文は接頭辞と別行の Gecko タグで出力されるため Gecko タグ行も拾う。
+     * テスト失敗スタックトレースの echo (TestRunner) はノイズなので除外する。
      */
     private fun collectFormAutofillLogcat(): String {
         val output = runCatching {
@@ -165,8 +182,9 @@ class AddressAutofillPromptTest {
                 .readLines()
         }.getOrElse { return "logcat取得失敗: $it" }
         return output
+            .filter { line -> !line.contains("TestRunner") }
             .filter { line ->
-                listOf("autofill", "GeckoConsole", "GeckoViewPrompt", "prompt", "addr-test")
+                listOf("autofill", "GeckoConsole", "prompt", "addr-test", "console.", " Gecko ")
                     .any { line.contains(it, ignoreCase = true) }
             }
             .takeLast(LOGCAT_TAIL_LINES)
@@ -449,6 +467,6 @@ class AddressAutofillPromptTest {
         private const val ADDRESS_FORM_DONE_FILE_NAME = "done.html"
         private const val PREF_TIMEOUT_MILLIS = 30_000L
         private const val PREF_POLL_TIMEOUT_MILLIS = 5_000L
-        private const val LOGCAT_TAIL_LINES = 120
+        private const val LOGCAT_TAIL_LINES = 250
     }
 }
