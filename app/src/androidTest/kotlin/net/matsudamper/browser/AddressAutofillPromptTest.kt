@@ -36,14 +36,48 @@ class AddressAutofillPromptTest {
         composeRule.waitForUrlBarContains(ADDRESS_FORM_FILE_NAME, timeoutMillis = 60_000)
 
         // ページは load 後にフォームへ値を投入して自動送信する。
+        // まずフォーム送信 (done.html への遷移) が行われたことを確認し、
+        // 送信自体の失敗と capture 未発火を切り分ける。
+        val submitted = runCatching {
+            composeRule.waitForUrlBarContains(ADDRESS_FORM_DONE_FILE_NAME, timeoutMillis = 30_000)
+        }.isSuccess
+
         // 送信を Gecko の formautofill が検出すると onAddressSave プロンプトが発火し、
         // AddressSaveDialog が表示されるはず。
-        composeRule.waitUntil(timeoutMillis = 90_000) {
-            composeRule
-                .onAllNodesWithTag(BrowserTabDialogLayerTestTags.AddressSaveDialog.testTag)
-                .fetchSemanticsNodes()
-                .isNotEmpty()
+        try {
+            composeRule.waitUntil(timeoutMillis = 60_000) {
+                composeRule
+                    .onAllNodesWithTag(BrowserTabDialogLayerTestTags.AddressSaveDialog.testTag)
+                    .fetchSemanticsNodes()
+                    .isNotEmpty()
+            }
+        } catch (e: androidx.compose.ui.test.ComposeTimeoutException) {
+            throw AssertionError(
+                "住所保存ダイアログが表示されない (フォーム送信=$submitted)\n" +
+                    "--- logcat (formautofill関連) ---\n${collectFormAutofillLogcat()}",
+                e,
+            )
         }
+    }
+
+    /**
+     * formautofill 関連の logcat を収集する。失敗時の診断用。
+     */
+    private fun collectFormAutofillLogcat(): String {
+        val output = runCatching {
+            val pfd = InstrumentationRegistry.getInstrumentation().uiAutomation
+                .executeShellCommand("logcat -d")
+            android.os.ParcelFileDescriptor.AutoCloseInputStream(pfd)
+                .bufferedReader()
+                .readLines()
+        }.getOrElse { return "logcat取得失敗: $it" }
+        return output
+            .filter { line ->
+                listOf("autofill", "GeckoConsole", "GeckoViewPrompt", "prompt")
+                    .any { line.contains(it, ignoreCase = true) }
+            }
+            .takeLast(LOGCAT_TAIL_LINES)
+            .joinToString("\n")
     }
 
     /**
@@ -58,6 +92,14 @@ class AddressAutofillPromptTest {
             GeckoPreferenceController.setGeckoPref(
                 "extensions.formautofill.skipProgrammaticCheckForTests",
                 true,
+                GeckoPreferenceController.PREF_BRANCH_USER,
+            )
+        }
+        // 失敗時の診断のため formautofill の Debug ログを logcat (GeckoConsole) に出す
+        awaitGeckoResult {
+            GeckoPreferenceController.setGeckoPref(
+                "extensions.formautofill.loglevel",
+                "Debug",
                 GeckoPreferenceController.PREF_BRANCH_USER,
             )
         }
@@ -185,5 +227,6 @@ class AddressAutofillPromptTest {
         private const val ADDRESS_FORM_FILE_NAME = "address-form.html"
         private const val ADDRESS_FORM_DONE_FILE_NAME = "done.html"
         private const val PREF_TIMEOUT_MILLIS = 30_000L
+        private const val LOGCAT_TAIL_LINES = 120
     }
 }
