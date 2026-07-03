@@ -75,10 +75,12 @@ class AddressAutofillPromptTest {
         clearLogcat()
 
         // ページは load 後にフォームへ値を投入して自動送信する。
-        // まずフォーム送信 (done.html への遷移) が行われたことを確認し、
-        // 送信自体の失敗と capture 未発火を切り分ける。
+        // 送信先は hidden iframe (メインページは遷移しない) のため、
+        // サーバが done.html リクエストを受信したことで送信完了を判定する。
         val submitted = runCatching {
-            composeRule.waitForUrlBarContains(ADDRESS_FORM_DONE_FILE_NAME, timeoutMillis = 30_000)
+            composeRule.waitUntil(timeoutMillis = 30_000) {
+                server.requests.any { it.contains(ADDRESS_FORM_DONE_FILE_NAME) }
+            }
         }.isSuccess
 
         // 送信を Gecko の formautofill が検出すると onAddressSave プロンプトが発火し、
@@ -323,7 +325,9 @@ class AddressAutofillPromptTest {
                 <title>Address Form Test</title>
               </head>
               <body>
-                <form id="address-form" method="get" action="/$ADDRESS_FORM_DONE_FILE_NAME">
+                <!-- メインページを遷移させると doorhanger 表示前にドキュメントが破棄されて
+                     プロンプトが出ないため、hidden iframe へ送信する -->
+                <form id="address-form" method="get" action="/$ADDRESS_FORM_DONE_FILE_NAME" target="result-frame">
                   <input id="given-name" name="given-name" autocomplete="given-name" />
                   <input id="family-name" name="family-name" autocomplete="family-name" />
                   <input id="organization" name="organization" autocomplete="organization" />
@@ -338,6 +342,7 @@ class AddressAutofillPromptTest {
                   <input id="email" name="email" autocomplete="email" />
                   <button id="submit-button" type="submit">Submit</button>
                 </form>
+                <iframe name="result-frame" id="result-frame" style="width:1px;height:1px;border:0"></iframe>
                 <script>
                   function log(message) {
                     console.log('addr-test: ' + message);
