@@ -74,6 +74,7 @@ internal fun rememberBrowserTabScreenState(
     val coroutineScope = rememberCoroutineScope()
     val geckoDownloadManager: GeckoDownloadManager = koinInject()
     val findInPageWebExtension: FindInPageWebExtension = koinInject()
+    val devToolsWebExtension: DevToolsWebExtension = koinInject()
     val siteSettingsRepository: SiteSettingsRepository = koinInject()
     val state = remember(browserTab) {
         BrowserTabScreenState(
@@ -84,6 +85,7 @@ internal fun rememberBrowserTabScreenState(
             coroutineScope = coroutineScope,
             geckoDownloadManager = geckoDownloadManager,
             findInPageWebExtension = findInPageWebExtension,
+            devToolsWebExtension = devToolsWebExtension,
             siteSettingsRepository = siteSettingsRepository,
             context = context,
             onHistoryRecord = onHistoryRecord,
@@ -108,6 +110,7 @@ internal class BrowserTabScreenState(
     private val coroutineScope: CoroutineScope,
     private val geckoDownloadManager: GeckoDownloadManager,
     internal val findInPageWebExtension: FindInPageWebExtension,
+    internal val devToolsWebExtension: DevToolsWebExtension,
     private val siteSettingsRepository: SiteSettingsRepository,
     private val context: Context,
     private val onRequestDownloadNotificationPermission: suspend () -> Unit = {},
@@ -173,6 +176,12 @@ internal class BrowserTabScreenState(
     val findIsRegex: Boolean get() = findInPageState == FindInPageState.Regex
     /** 無効な正規表現が入力された場合のエラーメッセージ */
     var findQueryError by mutableStateOf<String?>(null)
+
+    // --- 開発者ツール state ---
+    var showDevTools by mutableStateOf(false)
+        private set
+    // 現在フォーカスされている入力要素の情報。フォーカスがない場合は null。
+    var devToolsFocusedInput by mutableStateOf<DevToolsWebExtension.FocusedInputInfo?>(null)
 
     // --- Back gesture state ---
     var isBackGestureInProgress by mutableStateOf(false)
@@ -587,6 +596,30 @@ internal class BrowserTabScreenState(
         }
     }
 
+    /** 開発者ツールダイアログを開き、最新のフォーカス情報を問い合わせる */
+    fun openDevTools() {
+        showDevTools = true
+        devToolsWebExtension.requestFocusedInput(session)
+    }
+
+    /** フォーカスされている入力要素の情報を再取得する */
+    fun refreshDevToolsFocusedInput() {
+        devToolsWebExtension.requestFocusedInput(session)
+    }
+
+    /** フォーカス中の input の id をクリップボードにコピーする */
+    fun copyFocusedInputId() {
+        val id = devToolsFocusedInput?.id?.takeIf { it.isNotBlank() } ?: return
+        val clipboard =
+            context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+        clipboard.setPrimaryClip(android.content.ClipData.newPlainText("input id", id))
+        Toast.makeText(context, "id をコピーしました", Toast.LENGTH_SHORT).show()
+    }
+
+    fun closeDevTools() {
+        showDevTools = false
+    }
+
     fun onTranslate(translationProvider: TranslationProvider) {
         when (translationState) {
             TranslationState.Idle -> {
@@ -680,10 +713,14 @@ internal class BrowserTabScreenState(
     }
 
     fun sharePage() {
-        val shareText = "$currentPageTitle\n$currentPageUrl"
+        shareText("$currentPageTitle\n$currentPageUrl")
+    }
+
+    /** 任意のテキストを OS の共有シート（text/plain）で共有する */
+    fun shareText(text: String) {
         val intent = Intent(Intent.ACTION_SEND).apply {
             type = "text/plain"
-            putExtra(Intent.EXTRA_TEXT, shareText)
+            putExtra(Intent.EXTRA_TEXT, text)
         }
         context.startActivity(Intent.createChooser(intent, null))
     }

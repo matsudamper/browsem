@@ -1,5 +1,7 @@
 package net.matsudamper.browser.ui.extensions
 
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,12 +13,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.selection.selectable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -27,9 +30,12 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
@@ -214,6 +220,7 @@ private fun ExtensionsScreenTogglingPreview() {
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun ExtensionRow(
     extension: ExtensionsScreenUiState.ExtensionUiState,
@@ -225,57 +232,68 @@ private fun ExtensionRow(
     onUninstall: () -> Unit,
     onToggle: (Boolean) -> Unit,
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .selectable(
-                selected = false,
-                onClick = onOpenSettings,
-            )
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .padding(end = 12.dp),
+    var menuExpanded by remember { mutableStateOf(false) }
+
+    Box {
+        DropdownMenu(
+            expanded = menuExpanded,
+            onDismissRequest = { menuExpanded = false },
         ) {
-            Text(
-                text = extension.displayName,
-                style = MaterialTheme.typography.titleSmall,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Text(
-                text = "ID: ${extension.id}",
-                style = MaterialTheme.typography.bodySmall,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Text(
-                text = "Version: ${extension.version}",
-                style = MaterialTheme.typography.bodySmall,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+            if (!extension.isBuiltIn) {
+                DropdownMenuItem(
+                    text = { Text(if (isUninstalling) "削除中..." else "アンインストール") },
+                    enabled = uninstallEnabled,
+                    onClick = {
+                        menuExpanded = false
+                        onUninstall()
+                    },
+                )
+            }
         }
-        Spacer(modifier = Modifier.width(8.dp))
-        Switch(
-            checked = extension.isEnabled,
-            onCheckedChange = { onToggle(it) },
-            enabled = toggleEnabled && !isToggling,
-            modifier = Modifier.semantics {
-                contentDescription = "${extension.displayName} の有効/無効"
-            },
-        )
-        Spacer(modifier = Modifier.width(8.dp))
-        TextButton(
-            onClick = onUninstall,
-            enabled = uninstallEnabled && !extension.isBuiltIn,
-            modifier = Modifier.alpha(if (extension.isBuiltIn) 0f else 1f),
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .combinedClickable(
+                    onClick = onOpenSettings,
+                    onLongClick = { menuExpanded = true },
+                )
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(if (isUninstalling) "削除中..." else "アンインストール")
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(end = 12.dp),
+            ) {
+                Text(
+                    text = extension.displayName,
+                    style = MaterialTheme.typography.titleSmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = "ID: ${extension.id}",
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = "Version: ${extension.version}",
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Spacer(modifier = Modifier.width(8.dp))
+            Switch(
+                checked = extension.isEnabled,
+                onCheckedChange = { onToggle(it) },
+                enabled = toggleEnabled && !isToggling,
+                modifier = Modifier.semantics {
+                    contentDescription = "${extension.displayName} の有効/無効"
+                },
+            )
         }
     }
 }
