@@ -6,7 +6,7 @@ plugins {
 
 android {
     namespace = "net.matsudamper.browser.ui.extensions"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         minSdk = 30

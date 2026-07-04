@@ -74,6 +74,7 @@ internal fun rememberBrowserTabScreenState(
     val coroutineScope = rememberCoroutineScope()
     val geckoDownloadManager: GeckoDownloadManager = koinInject()
     val findInPageWebExtension: FindInPageWebExtension = koinInject()
+    val devToolsWebExtension: DevToolsWebExtension = koinInject()
     val siteSettingsRepository: SiteSettingsRepository = koinInject()
     val state = remember(browserTab) {
         BrowserTabScreenState(
@@ -84,6 +85,7 @@ internal fun rememberBrowserTabScreenState(
             coroutineScope = coroutineScope,
             geckoDownloadManager = geckoDownloadManager,
             findInPageWebExtension = findInPageWebExtension,
+            devToolsWebExtension = devToolsWebExtension,
             siteSettingsRepository = siteSettingsRepository,
             context = context,
             onHistoryRecord = onHistoryRecord,
@@ -108,6 +110,7 @@ internal class BrowserTabScreenState(
     private val coroutineScope: CoroutineScope,
     private val geckoDownloadManager: GeckoDownloadManager,
     internal val findInPageWebExtension: FindInPageWebExtension,
+    internal val devToolsWebExtension: DevToolsWebExtension,
     private val siteSettingsRepository: SiteSettingsRepository,
     private val context: Context,
     private val onRequestDownloadNotificationPermission: suspend () -> Unit = {},
@@ -173,6 +176,12 @@ internal class BrowserTabScreenState(
     val findIsRegex: Boolean get() = findInPageState == FindInPageState.Regex
     /** 無効な正規表現が入力された場合のエラーメッセージ */
     var findQueryError by mutableStateOf<String?>(null)
+
+    // --- 開発者ツール state ---
+    var showDevTools by mutableStateOf(false)
+        private set
+    // 現在フォーカスされている入力要素の情報。フォーカスがない場合は null。
+    var devToolsFocusedInput by mutableStateOf<DevToolsWebExtension.FocusedInputInfo?>(null)
 
     // --- Back gesture state ---
     var isBackGestureInProgress by mutableStateOf(false)
@@ -271,6 +280,9 @@ internal class BrowserTabScreenState(
     // --- ファイルダウンロード確認ダイアログ用state ---
     var pendingDownloadResponse by mutableStateOf<WebResponse?>(null)
     var pendingExternalAppLaunch by mutableStateOf<PendingExternalAppLaunch?>(null)
+    // 外部アプリ確認ダイアログ表示中に到着した後続の外部アプリナビゲーション。
+    // ダイアログをキャンセルした場合にこちらを表示する（アプリ起動した場合は破棄する）。
+    private var queuedExternalAppLaunch: PendingExternalAppLaunch? = null
 
     // --- ダウンロード重複確認ダイアログ用state ---
     var duplicateDownloadState by mutableStateOf<DuplicateDownloadState?>(null)
@@ -584,6 +596,30 @@ internal class BrowserTabScreenState(
         }
     }
 
+    /** 開発者ツールダイアログを開き、最新のフォーカス情報を問い合わせる */
+    fun openDevTools() {
+        showDevTools = true
+        devToolsWebExtension.requestFocusedInput(session)
+    }
+
+    /** フォーカスされている入力要素の情報を再取得する */
+    fun refreshDevToolsFocusedInput() {
+        devToolsWebExtension.requestFocusedInput(session)
+    }
+
+    /** フォーカス中の input の id をクリップボードにコピーする */
+    fun copyFocusedInputId() {
+        val id = devToolsFocusedInput?.id?.takeIf { it.isNotBlank() } ?: return
+        val clipboard =
+            context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+        clipboard.setPrimaryClip(android.content.ClipData.newPlainText("input id", id))
+        Toast.makeText(context, "id をコピーしました", Toast.LENGTH_SHORT).show()
+    }
+
+    fun closeDevTools() {
+        showDevTools = false
+    }
+
     fun onTranslate(translationProvider: TranslationProvider) {
         when (translationState) {
             TranslationState.Idle -> {
@@ -677,10 +713,14 @@ internal class BrowserTabScreenState(
     }
 
     fun sharePage() {
-        val shareText = "$currentPageTitle\n$currentPageUrl"
+        shareText("$currentPageTitle\n$currentPageUrl")
+    }
+
+    /** 任意のテキストを OS の共有シート（text/plain）で共有する */
+    fun shareText(text: String) {
         val intent = Intent(Intent.ACTION_SEND).apply {
             type = "text/plain"
-            putExtra(Intent.EXTRA_TEXT, shareText)
+            putExtra(Intent.EXTRA_TEXT, text)
         }
         context.startActivity(Intent.createChooser(intent, null))
     }
@@ -797,19 +837,24 @@ internal class BrowserTabScreenState(
         pendingExternalAppLaunch = null
         val result = launchExternalApp(context, request)
         if (result.isSuccess) {
+            queuedExternalAppLaunch = null
             return
         }
 
         val fallbackUrl = request.fallbackUrl
         if (fallbackUrl != null) {
+            queuedExternalAppLaunch = null
             openFallbackUrl(fallbackUrl)
             return
         }
+        promoteQueuedExternalAppLaunch()
+        if (pendingExternalAppLaunch != null) return
         Toast.makeText(context, "対応するアプリを開けませんでした", Toast.LENGTH_SHORT).show()
     }
 
     fun dismissPendingExternalAppLaunch() {
         pendingExternalAppLaunch = null
+        promoteQueuedExternalAppLaunch()
     }
 
     /**
@@ -822,6 +867,13 @@ internal class BrowserTabScreenState(
         val request = pendingExternalAppLaunch ?: return
         pendingExternalAppLaunch = null
 
+        val queued = queuedExternalAppLaunch
+        queuedExternalAppLaunch = null
+        if (queued != null) {
+            pendingExternalAppLaunch = queued
+            return
+        }
+
         val url = if (request.sourceUri.startsWith("http://") || request.sourceUri.startsWith("https://")) {
             request.sourceUri
         } else {
@@ -831,6 +883,12 @@ internal class BrowserTabScreenState(
             skipExternalAppCheckForNextLoad = true
             openFallbackUrl(url)
         }
+    }
+
+    private fun promoteQueuedExternalAppLaunch() {
+        val queued = queuedExternalAppLaunch ?: return
+        queuedExternalAppLaunch = null
+        pendingExternalAppLaunch = queued
     }
 
     fun restoreCurrentPageUrlToInput() {
@@ -1196,6 +1254,16 @@ internal class BrowserTabScreenState(
         if (skipExternalAppCheckForNextLoad) {
             skipExternalAppCheckForNextLoad = false
             return null
+        }
+        // 外部アプリ確認ダイアログを表示中に後続のナビゲーションが来た場合、
+        // ダイアログを上書きせずキューに入れる。ダイアログをキャンセルした場合に
+        // キューの内容（Play Store 等）を表示し、アプリ起動した場合は破棄する。
+        if (pendingExternalAppLaunch != null) {
+            val externalAction = resolveExternalAppNavigationAction(context, request.uri)
+            if (externalAction is ExternalAppNavigationAction.Launch) {
+                queuedExternalAppLaunch = externalAction.request
+            }
+            return GeckoResult.fromValue(AllowOrDeny.DENY)
         }
         val externalAction = resolveExternalAppNavigationAction(context, request.uri)
         // single-page モードで TARGET_WINDOW_NEW は外部アプリ判定を先に通してから現在タブへ畳み込む
