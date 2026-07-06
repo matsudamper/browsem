@@ -626,6 +626,7 @@ private fun MainBrowserContent(
         entryProvider = { key: NavKey ->
             when (key) {
                 is BrowserNavDestination.Setup -> navEntry(key) {
+                }
 
                 is BrowserNavDestination.Browser -> navEntry(key) {
                     val browserTabsFlow = remember(browserTabController) {
