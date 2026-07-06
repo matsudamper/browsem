@@ -119,6 +119,7 @@ class CustomTabActivity : ComponentActivity() {
                             mediaWebExtension = mediaWebExtensionInstance,
                             onClose = ::finish,
                             onOpenInBrowser = ::openInMainBrowser,
+                            onOpenNewTabInBrowser = ::openNewTabInMainBrowser,
                             onRequestDownloadNotificationPermission = { requestDownloadNotificationPermission() },
                         )
                     }
@@ -174,6 +175,20 @@ class CustomTabActivity : ComponentActivity() {
         }
     }
 
+    private fun openNewTabInMainBrowser(url: String, referrerUrl: String?) {
+        startActivity(
+            Intent(this, MainActivity::class.java).apply {
+                action = Intent.ACTION_VIEW
+                data = Uri.parse(url)
+                referrerUrl?.let { putExtra(EXTRA_NEW_TAB_REFERRER_URL, it) }
+            }
+        )
+    }
+
+    companion object {
+        internal const val EXTRA_NEW_TAB_REFERRER_URL = "extra_new_tab_referrer_url"
+    }
+
     private fun startMainBrowser(url: String, sessionState: String) {
         val targetUri = Uri.parse(url)
         startActivity(
@@ -210,6 +225,7 @@ private fun CustomTabScreen(
     mediaWebExtension: MediaWebExtension,
     onClose: () -> Unit,
     onOpenInBrowser: (url: String, tab: BrowserTab) -> Unit,
+    onOpenNewTabInBrowser: (url: String, referrerUrl: String?) -> Unit,
     onRequestDownloadNotificationPermission: suspend () -> Unit,
 ) {
     val viewModel = viewModel(initializer = {
@@ -288,13 +304,7 @@ private fun CustomTabScreen(
         // ここへ到達することは想定しない。GeckoView 契約上 null を返して安全に拒否する。
         onOpenNewSessionRequest = { null },
         onOpenNewTabRequest = { uri, referrerUrl ->
-            if (referrerUrl != null) {
-                activeTab.session.load(
-                    GeckoSession.Loader().uri(uri).referrer(referrerUrl),
-                )
-            } else {
-                activeTab.session.loadUri(uri)
-            }
+            onOpenNewTabInBrowser(uri, referrerUrl)
         },
         onCloseTab = onClose,
         onHistoryRecord = uiState.callbacks::onHistoryRecord,

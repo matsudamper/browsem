@@ -11,7 +11,7 @@ import android.view.Menu
 import android.view.MenuItem
 import android.view.View
 import androidx.core.net.toUri
-import androidx.activity.compose.BackHandler
+import androidx.activity.compose.PredictiveBackHandler
 import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -75,6 +75,7 @@ import net.matsudamper.browser.data.TranslationProvider
 import net.matsudamper.browser.media.GeckoMediaSessionDelegate
 import net.matsudamper.browser.media.MediaWebExtension
 import net.matsudamper.browser.FindInPageWebExtension
+import net.matsudamper.browser.TwitterShareWebExtension
 import net.matsudamper.browser.translate.TranslationPriorityLanguage
 import net.matsudamper.browser.ui.common.resolveBrowserToolbarColors
 import net.matsudamper.browser.ui.browser.UrlBarSuggestionsUiState
@@ -543,6 +544,29 @@ internal fun GeckoBrowserTab(
         }
     }
 
+    // TwitterShareWebExtension のセッション登録。
+    // Twitter/X の共有リンク・ボタンのクリックを OS の共有シートに振り替える
+    val twitterShareWebExtension: TwitterShareWebExtension = koinInject()
+    DisposableEffect(session, state, twitterShareWebExtension) {
+        twitterShareWebExtension.registerSession(session) { data ->
+            state.shareText(data.toShareText())
+        }
+        onDispose {
+            twitterShareWebExtension.unregisterSession(session)
+        }
+    }
+
+    // DevToolsWebExtension のセッション登録（フォーカス中の入力要素情報の通知）
+    DisposableEffect(session, state) {
+        val devToolsWebExtension = state.devToolsWebExtension
+        devToolsWebExtension.registerSession(session) { focusedInput ->
+            state.devToolsFocusedInput = focusedInput
+        }
+        onDispose {
+            devToolsWebExtension.unregisterSession(session)
+        }
+    }
+
     DisposableEffect(session, state, browserTab, mediaWebExtension) {
         browserTab.attachSessionCallbacks(
             callbacks = state,
@@ -671,13 +695,19 @@ internal fun GeckoBrowserTab(
     // webAppMode かつ canGoBack=false 時は Activity を終了せずタスクをバックグラウンドへ移動して
     // セッション（ブラウザ履歴・入力状態）を保持する
     val activity = LocalActivity.current
-    BackHandler(enabled = state.isFullScreen || state.showFindInPage || state.isUrlInputFocused || state.canGoBack || webAppMode) {
-        when {
-            state.isFullScreen -> state.exitFullScreen()
-            state.showFindInPage -> state.closeFindInPage()
-            state.isUrlInputFocused -> closeUrlInput(true)
-            state.canGoBack -> state.onGoBack()
-            webAppMode -> activity?.moveTaskToBack(true)
+    PredictiveBackHandler(enabled = state.isFullScreen || state.showFindInPage || state.isUrlInputFocused || state.canGoBack || webAppMode) { progress ->
+        state.isBackGestureInProgress = true
+        try {
+            progress.collect {}
+            when {
+                state.isFullScreen -> state.exitFullScreen()
+                state.showFindInPage -> state.closeFindInPage()
+                state.isUrlInputFocused -> closeUrlInput(true)
+                state.canGoBack -> state.onGoBack()
+                webAppMode -> activity?.moveTaskToBack(true)
+            }
+        } finally {
+            state.isBackGestureInProgress = false
         }
     }
 
@@ -814,6 +844,7 @@ internal fun GeckoBrowserTab(
                         { callback(state.currentPageUrl) }
                     },
                     onOpenDownloads = onOpenDownloads,
+                    onOpenDevTools = state::openDevTools,
                     onShare = state::sharePage,
                     tabCount = tabCount,
                     showTabActions = enableTabUi,
@@ -923,6 +954,7 @@ internal fun GeckoBrowserTab(
             state = state,
             dialogState = dialogState,
             enableTabUi = enableTabUi,
+            customTabMode = customTabMode || webAppMode,
             onOpenNewTabRequest = currentOnOpenNewTabRequest,
             onOpenFile = { fileUri ->
                 val uri = fileUri.toUri()
@@ -944,6 +976,16 @@ internal fun GeckoBrowserTab(
             favicon = addToHomeScreenState.favicon,
             isIconLoading = addToHomeScreenState.isIconLoading,
             onDismiss = state::dismissAddToHomeScreen,
+        )
+    }
+
+    // 開発者ツールダイアログ
+    if (state.showDevTools) {
+        DevToolsDialog(
+            focusedInput = state.devToolsFocusedInput,
+            onCopyFocusedInputId = state::copyFocusedInputId,
+            onRefresh = state::refreshDevToolsFocusedInput,
+            onDismiss = state::closeDevTools,
         )
     }
 

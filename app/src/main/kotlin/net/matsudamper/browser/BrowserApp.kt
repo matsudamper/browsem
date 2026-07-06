@@ -27,11 +27,14 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntOffset
 import androidx.lifecycle.viewmodel.compose.viewModel as composeViewModel
@@ -97,7 +100,7 @@ import org.mozilla.geckoview.GeckoRuntime
 internal fun BrowserApp(
     viewModel: BrowserViewModel,
     newTabUrlFlow: Flow<NewTabRequest>,
-    openDownloadsFlow: Flow<Unit>,
+    openDownloadsFlow: Flow<String?>,
     onInstallExtensionRequest: (String) -> Unit,
     onRequestDownloadNotificationPermission: suspend () -> Unit,
 ) {
@@ -119,6 +122,7 @@ internal fun BrowserApp(
                 browserTabController = viewModel.browserTabController,
                 browserSessionLifecycleController = viewModel.browserSessionLifecycleController,
                 runtime = viewModel.runtime,
+                openDownloadsFlow = openDownloadsFlow,
                 onNavigateToUrl = { url ->
                     val tabId = UUID.randomUUID().toString()
                     val newTab = viewModel.browserTabController.createAndAppendTab(
@@ -133,7 +137,6 @@ internal fun BrowserApp(
                     uiState = uiState,
                     viewModel = viewModel,
                     newTabUrlFlow = newTabUrlFlow,
-                    openDownloadsFlow = openDownloadsFlow,
                     onInstallExtensionRequest = onInstallExtensionRequest,
                     onRequestDownloadNotificationPermission = onRequestDownloadNotificationPermission,
                     outerNavActions = outerNavActions,
@@ -159,6 +162,7 @@ internal fun BrowserAppShell(
     browserTabController: BrowserTabController,
     browserSessionLifecycleController: BrowserSessionLifecycleController,
     runtime: GeckoRuntime,
+    openDownloadsFlow: Flow<String?>? = null,
     onNavigateToUrl: (suspend (url: String) -> Unit)? = null,
     rootContent: @Composable (outerBackStack: MutableList<NavKey>) -> Unit,
 ) {
@@ -167,6 +171,23 @@ internal fun BrowserAppShell(
     val historyRepository: HistoryRepository = koinInject()
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+
+    // 通知タップ時にダウンロード管理画面を開く
+    var pendingHighlightWorkerId by remember { mutableStateOf<String?>(null) }
+    if (openDownloadsFlow != null) {
+        LaunchedEffect(openDownloadsFlow) {
+            openDownloadsFlow.onEach { workerId ->
+                pendingHighlightWorkerId = workerId
+                val existingIndex = outerBackStack.indexOfLast { it is AppDestination.Downloads }
+                if (existingIndex < 0) {
+                    outerBackStack.add(AppDestination.Downloads)
+                } else if (existingIndex < outerBackStack.lastIndex) {
+                    val removeCount = outerBackStack.lastIndex - existingIndex
+                    repeat(removeCount) { outerBackStack.removeLastOrNull() }
+                }
+            }.launchIn(this)
+        }
+    }
 
     NavDisplay(
         backStack = outerBackStack,
@@ -319,6 +340,13 @@ internal fun BrowserAppShell(
                         DownloadManagementScreenViewModel(context.applicationContext as Application)
                     })
                     val downloadsUiState by downloadsViewModel.uiState.collectAsState()
+                    var highlightItemId by remember { mutableStateOf<UUID?>(null) }
+                    LaunchedEffect(pendingHighlightWorkerId) {
+                        val workerId = pendingHighlightWorkerId ?: return@LaunchedEffect
+                        val id = runCatching { UUID.fromString(workerId) }.getOrNull() ?: return@LaunchedEffect
+                        pendingHighlightWorkerId = null
+                        downloadsViewModel.requestHighlight(id)
+                    }
                     LaunchedEffect(downloadsViewModel) {
                         downloadsViewModel.eventHandler.receiveAsFlow().collect {
                             it(object : DownloadManagementScreenViewModel.Event {
@@ -330,12 +358,18 @@ internal fun BrowserAppShell(
                                         }
                                     }
                                 }
+
+                                override fun highlightItem(id: UUID) {
+                                    highlightItemId = id
+                                }
                             })
                         }
                     }
                     DownloadManagementScreen(
                         uiState = downloadsUiState,
                         onBack = { outerBackStack.removeLastOrNull() },
+                        highlightItemId = highlightItemId,
+                        onHighlightComplete = { highlightItemId = null },
                     )
                 }
 
@@ -453,7 +487,6 @@ private fun MainBrowserContent(
     uiState: BrowserAppUiState,
     viewModel: BrowserViewModel,
     newTabUrlFlow: Flow<NewTabRequest>,
-    openDownloadsFlow: Flow<Unit>,
     onInstallExtensionRequest: (String) -> Unit,
     onRequestDownloadNotificationPermission: suspend () -> Unit,
     outerNavActions: OuterNavActions,
@@ -495,12 +528,6 @@ private fun MainBrowserContent(
         }
     }
 
-    LaunchedEffect(openDownloadsFlow) {
-        openDownloadsFlow.onEach {
-            outerNavActions.addIfAbsent(AppDestination.Downloads)
-        }.launchIn(this)
-    }
-
     LaunchedEffect(viewModel) {
         viewModel.eventHandler.receiveAsFlow().collect { event ->
             event(object : BrowserViewModel.Event {
@@ -533,6 +560,7 @@ private fun MainBrowserContent(
                 tabId = tabId,
                 initialUrl = request.url,
                 restoredSessionState = request.sessionState,
+                initialReferrerUrl = request.referrerUrl,
                 insertAfterSelectedTab = false,
             )
             viewModel.registerExternalTab(newTab.tabId)
@@ -557,6 +585,18 @@ private fun MainBrowserContent(
             val target = targetState.entries.lastOrNull() ?: return@NavDisplay default
 
             if (target.contentKey is BrowserNavDestination.Browser && initial.contentKey is BrowserNavDestination.Browser) {
+                val targetBrowser = target.contentKey as BrowserNavDestination.Browser
+                // 遷移元のタブから新しいタブを開いた場合のみ右にスライド。
+                // beforeTab の存在だけで判定すると、連鎖的にタブを開いた後の
+                // back() 時にも beforeTab が残っているためスライドが誤って再生される。
+                if (targetBrowser.beforeTab == initial.contentKey) {
+                    return@NavDisplay ContentTransform(
+                        targetContentEnter = slideIn { IntOffset(it.width, 0) },
+                        initialContentExit = slideOut { IntOffset(-it.width / 3, 0) },
+                    )
+                }
+                // ジェスチャーでのタブ切替は BrowserScreen 側でアニメーションを処理するため、
+                // NavDisplay 側では即座に切り替える
                 return@NavDisplay ContentTransform(
                     initialContentExit = fadeOut(snap(100)),
                     targetContentEnter = fadeIn(snap(100)),
@@ -586,7 +626,6 @@ private fun MainBrowserContent(
         entryProvider = { key: NavKey ->
             when (key) {
                 is BrowserNavDestination.Setup -> navEntry(key) {
-                }
 
                 is BrowserNavDestination.Browser -> navEntry(key) {
                     val browserTabsFlow = remember(browserTabController) {
@@ -619,7 +658,7 @@ private fun MainBrowserContent(
                         previewHeaderContent = { modifier, tab, tabCount ->
                             BrowserToolbar(
                                 modifier = modifier,
-                                toolbarColor = null,
+                                toolbarColor = tab.themeColor?.let { Color(it) },
                                 isFocused = false,
                                 onLongClickUrl = {},
                                 tabCount = tabCount,

@@ -69,6 +69,7 @@ internal fun ToolbarMenu(
     onOpenInBrowser: (() -> Unit)? = null,
     onOpenSiteSettings: (() -> Unit)? = null,
     onOpenDownloads: (() -> Unit)? = null,
+    onOpenDevTools: (() -> Unit)? = null,
 ) {
     DropdownMenu(
         expanded = visibleMenu,
@@ -103,6 +104,7 @@ internal fun ToolbarMenu(
             onOpenInBrowser = onOpenInBrowser,
             onOpenSiteSettings = onOpenSiteSettings,
             onOpenDownloads = onOpenDownloads,
+            onOpenDevTools = onOpenDevTools,
         )
     }
 }
@@ -138,6 +140,7 @@ private fun ToolbarMenuContent(
     onOpenInBrowser: (() -> Unit)?,
     onOpenSiteSettings: (() -> Unit)?,
     onOpenDownloads: (() -> Unit)?,
+    onOpenDevTools: (() -> Unit)?,
 ) {
     Column {
         Row(
@@ -475,6 +478,24 @@ private fun ToolbarMenuContent(
                 },
             )
         }
+        onOpenDevTools?.let { openDevTools ->
+            DropdownMenuItem(
+                modifier = Modifier.testTag(BrowserToolbarMenuTestTags.DevToolsButton.testTag),
+                text = {
+                    Text(text = "開発者ツール")
+                },
+                leadingIcon = {
+                    Icon(
+                        painter = painterResource(id = ResourcesR.drawable.ic_code_24dp),
+                        contentDescription = null,
+                    )
+                },
+                onClick = {
+                    onDismissRequest()
+                    openDevTools()
+                },
+            )
+        }
         if (showOpenSettings) {
             DropdownMenuItem(
                 text = {
@@ -549,6 +570,7 @@ private fun PreviewToolbarMenuContent() {
                 onOpenInBrowser = null,
                 onOpenSiteSettings = {},
                 onOpenDownloads = {},
+                onOpenDevTools = {},
             )
         }
     }
@@ -566,4 +588,5 @@ sealed interface BrowserToolbarMenuTestTags {
     object DownloadsButton : BrowserToolbarMenuTestTags { override val id = "downloads_button" }
     object ShareButton : BrowserToolbarMenuTestTags { override val id = "share_button" }
     object HomeButton : BrowserToolbarMenuTestTags { override val id = "home_button" }
+    object DevToolsButton : BrowserToolbarMenuTestTags { override val id = "dev_tools_button" }
 }

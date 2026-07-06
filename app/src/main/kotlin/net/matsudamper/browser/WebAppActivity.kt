@@ -5,18 +5,19 @@ import android.app.ActivityManager
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import kotlinx.coroutines.CompletableDeferred
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation3.runtime.NavKey
+import kotlinx.coroutines.CompletableDeferred
 import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.TabRepository
 import net.matsudamper.browser.data.extractSiteHost
@@ -31,7 +32,7 @@ import net.matsudamper.browser.ui.browser.WebAppScreen
 import net.matsudamper.browser.ui.common.BrowserTheme
 import org.koin.android.ext.android.inject
 import org.mozilla.geckoview.GeckoRuntime
-import org.mozilla.geckoview.GeckoSession
+
 import java.util.concurrent.CancellationException
 
 /**
@@ -136,15 +137,10 @@ class WebAppActivity : ComponentActivity() {
                             enableTabUi = false,
                             showInstallExtensionItem = false,
                             webAppMode = true,
+                            onOpenInBrowser = ::openInMainBrowser,
                             onOpenNewSessionRequest = { null },
                             onOpenNewTabRequest = { uri, referrerUrl ->
-                                if (referrerUrl != null) {
-                                    browserTab.session.load(
-                                        GeckoSession.Loader().uri(uri).referrer(referrerUrl),
-                                    )
-                                } else {
-                                    browserTab.session.loadUri(uri)
-                                }
+                                openNewTabInMainBrowser(uri, referrerUrl)
                             },
                             onHistoryRecord = webAppUiState.callbacks::onHistoryRecord,
                             onHistoryTitleUpdate = webAppUiState.callbacks::onHistoryTitleUpdate,
@@ -157,6 +153,16 @@ class WebAppActivity : ComponentActivity() {
         }
     }
 
+    private fun openNewTabInMainBrowser(url: String, referrerUrl: String?) {
+        startActivity(
+            Intent(this, MainActivity::class.java).apply {
+                action = Intent.ACTION_VIEW
+                data = android.net.Uri.parse(url)
+                referrerUrl?.let { putExtra(CustomTabActivity.EXTRA_NEW_TAB_REFERRER_URL, it) }
+            }
+        )
+    }
+
     override fun onDestroy() {
         pendingDownloadNotificationPermissionDeferred?.cancel(
             CancellationException("Activity was destroyed before download notification permission completed.")
@@ -165,6 +171,22 @@ class WebAppActivity : ComponentActivity() {
         super.onDestroy()
     }
 
+    /**
+     * 現在のURLを通常ブラウザで開く。
+     * ウェブアプリ側は閉じずにそのまま維持する。
+     */
+    private fun openInMainBrowser(url: String) {
+        startActivity(
+            Intent(this, MainActivity::class.java).apply {
+                action = Intent.ACTION_VIEW
+                data = Uri.parse(url)
+            }
+        )
+    }
+
+    /**
+     * Recents に表示するタイトルとアイコンを更新する。
+     */
     @Suppress("DEPRECATION")
     private fun updateTaskDescription(title: String, favicon: Bitmap?) {
         val label = title.takeIf { it.isNotBlank() }

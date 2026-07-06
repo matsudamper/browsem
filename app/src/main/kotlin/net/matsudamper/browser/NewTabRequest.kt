@@ -9,4 +9,5 @@ package net.matsudamper.browser
 internal data class NewTabRequest(
     val url: String,
     val sessionState: String? = null,
+    val referrerUrl: String? = null,
 )
