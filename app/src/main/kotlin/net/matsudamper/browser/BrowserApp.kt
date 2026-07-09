@@ -3,6 +3,9 @@ package net.matsudamper.browser
 import android.Manifest
 import android.content.Intent
 import android.net.Uri
+import android.os.Handler
+import android.os.Looper
+import android.os.Process
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.ContentTransform
@@ -456,6 +459,15 @@ private fun BrowserAppContent(
 
                                     override fun onNavigateToBackupProgress(isImport: Boolean) {
                                         backStack.add(AppDestination.BackupProgress(isImport))
+                                    }
+
+                                    override fun onRestartProcess() {
+                                        Handler(Looper.getMainLooper())
+                                            .postDelayed({
+                                                Process.killProcess(
+                                                    Process.myPid(),
+                                                )
+                                            }, 300)
                                     }
                                 })
                             }

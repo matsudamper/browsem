@@ -34,6 +34,13 @@ class SettingsRepository(context: Context) {
                         clearEnableWebSuggestions()
                     }
                 }
+                .apply {
+                    if (settings.hasExtensionsProcessEnabled()) {
+                        setExtensionsProcessEnabled(settings.extensionsProcessEnabled)
+                    } else {
+                        clearExtensionsProcessEnabled()
+                    }
+                }
                 .build()
         }
     }
@@ -102,6 +109,14 @@ class SettingsRepository(context: Context) {
         }
     }
 
+    suspend fun setExtensionsProcessEnabled(enabled: Boolean) {
+        dataStore.updateData { current ->
+            current.toBuilder()
+                .setExtensionsProcessEnabled(enabled)
+                .build()
+        }
+    }
+
     suspend fun setMockLocationCoordinates(latitude: Double, longitude: Double) {
         dataStore.updateData { current ->
             current.toBuilder()
@@ -138,6 +153,14 @@ fun BrowserSettings.resolvedSearchTemplate(): String = when (searchProvider) {
     SearchProvider.DUCKDUCKGO -> "https://duckduckgo.com/?q=%s"
     SearchProvider.CUSTOM -> customSearchUrl.ifBlank { "https://www.google.com/search?q=%s" }
     else -> "https://www.google.com/search?q=%s"
+}
+
+fun BrowserSettings.resolvedExtensionsProcessEnabled(): Boolean {
+    return if (hasExtensionsProcessEnabled()) {
+        extensionsProcessEnabled
+    } else {
+        true
+    }
 }
 
 fun BrowserSettings.resolvedEnableWebSuggestions(): Boolean {

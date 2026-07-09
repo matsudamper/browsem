@@ -18,6 +18,7 @@ import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.ThemeMode
 import net.matsudamper.browser.data.TranslationProvider
 import net.matsudamper.browser.data.resolvedEnableWebSuggestions
+import net.matsudamper.browser.data.resolvedExtensionsProcessEnabled
 import net.matsudamper.browser.ui.settings.SettingsScreenUiState
 
 internal class SettingsScreenViewModel(
@@ -35,6 +36,10 @@ internal class SettingsScreenViewModel(
     // 確認ダイアログの表示状態
     private val backupConfirmDialogFlow =
         MutableStateFlow<SettingsScreenUiState.BackupConfirmType?>(null)
+
+    // 拡張プロセス設定変更時の再起動確認ダイアログ
+    private val extensionsProcessRestartDialogFlow = MutableStateFlow(false)
+    private var pendingExtensionsProcessEnabled: Boolean? = null
 
     private val callbacks = object : SettingsScreenUiState.Callbacks {
         override fun setHomepageType(type: HomepageType) {
@@ -67,6 +72,26 @@ internal class SettingsScreenViewModel(
 
         override fun setEnableWebSuggestions(enabled: Boolean) {
             viewModelScope.launch { settingsRepository.setEnableWebSuggestions(enabled) }
+        }
+
+        override fun setExtensionsProcessEnabled(enabled: Boolean) {
+            pendingExtensionsProcessEnabled = enabled
+            extensionsProcessRestartDialogFlow.value = true
+        }
+
+        override fun confirmExtensionsProcessRestart() {
+            val enabled = pendingExtensionsProcessEnabled ?: return
+            extensionsProcessRestartDialogFlow.value = false
+            pendingExtensionsProcessEnabled = null
+            viewModelScope.launch {
+                settingsRepository.setExtensionsProcessEnabled(enabled)
+                eventHandler.trySend { it.onRestartProcess() }
+            }
+        }
+
+        override fun dismissExtensionsProcessRestartDialog() {
+            extensionsProcessRestartDialogFlow.value = false
+            pendingExtensionsProcessEnabled = null
         }
 
         override fun setMockLocationInput(input: String) {
@@ -108,8 +133,10 @@ internal class SettingsScreenViewModel(
                 combine(
                     settingsRepository.settings,
                     backupConfirmDialogFlow,
-                ) { settings, confirmDialog -> settings to confirmDialog }
-                    .collectLatest { (settings, confirmDialog) ->
+                    extensionsProcessRestartDialogFlow,
+                ) { settings, confirmDialog, restartDialog ->
+                    Triple(settings, confirmDialog, restartDialog)
+                }.collectLatest { (settings, confirmDialog, restartDialog) ->
                     // 初回だけ入力欄をリポジトリの値で初期化する
                     if (!mockLocationInputInitialized) {
                         mockLocationInputFlow.value = formatMockLocationInput(
@@ -123,6 +150,7 @@ internal class SettingsScreenViewModel(
                             callbacks = callbacks,
                             mockLocationInput = mockLocationInputFlow.value,
                             backupConfirmDialog = confirmDialog,
+                            extensionsProcessRestartDialog = restartDialog,
                         )
                     }
                     // 拡張機能への反映は BrowserViewModel が設定の Flow を監視して行う
@@ -146,6 +174,8 @@ internal class SettingsScreenViewModel(
         fun onOpenMockLocationOnMap()
         /** バックアップ進行画面に遷移する */
         fun onNavigateToBackupProgress(isImport: Boolean)
+        /** 拡張プロセス設定変更のためプロセスを再起動する */
+        fun onRestartProcess()
     }
 }
 
@@ -196,6 +226,7 @@ private fun BrowserSettings.toUiState(
     callbacks: SettingsScreenUiState.Callbacks,
     mockLocationInput: String,
     backupConfirmDialog: SettingsScreenUiState.BackupConfirmType?,
+    extensionsProcessRestartDialog: Boolean,
 ): SettingsScreenUiState {
     return SettingsScreenUiState(
         callbacks = callbacks,
@@ -207,8 +238,10 @@ private fun BrowserSettings.toUiState(
         translationProvider = translationProvider,
         enableThirdPartyCa = enableThirdPartyCa,
         enableWebSuggestions = resolvedEnableWebSuggestions(),
+        extensionsProcessEnabled = resolvedExtensionsProcessEnabled(),
         mockLocationInput = mockLocationInput,
         mockLocationInputError = validateMockLocationInput(mockLocationInput),
         backupConfirmDialog = backupConfirmDialog,
+        extensionsProcessRestartDialog = extensionsProcessRestartDialog,
     )
 }
