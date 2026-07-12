@@ -1035,6 +1035,8 @@ internal class BrowserTabScreenState(
 
     override fun onCanGoBackChanged(value: Boolean) {
         canGoBack = value
+        // BrowserScreen 側で opener タブへの予測型バック可否を判定するため BrowserTab にも反映する
+        browserTab.canGoBack = value
     }
 
     override fun onCanGoForwardChanged(value: Boolean) {

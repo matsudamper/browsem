@@ -329,6 +329,18 @@ private fun BrowserAppContent(
                             onSelectTab = { tabId ->
                                 selectTab(tabId, null)
                             },
+                            onBackToOpenerTab = { tabId ->
+                                // リンクから開いたタブを予測型バックで閉じ、opener タブへ戻る。
+                                // opener が存在すればそれを、なければ closeTab が選んだタブを選択する。
+                                val openerTabId = browserTabController.findTab(tabId)?.openerTabId
+                                val fallbackTabId = browserTabController.closeTab(tabId)
+                                val targetTabId = openerTabId
+                                    ?.takeIf { browserTabController.findTab(it) != null }
+                                    ?: fallbackTabId
+                                if (targetTabId != null) {
+                                    selectTab(targetTabId, null)
+                                }
+                            },
                             previewHeaderContent = { modifier, tab, tabCount ->
                                 BrowserToolbar(
                                     modifier = modifier,

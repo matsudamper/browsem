@@ -2,6 +2,7 @@ package net.matsudamper.browser.ui.browser
 
 import android.graphics.BitmapFactory
 import android.util.Log
+import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
@@ -33,6 +34,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import net.matsudamper.browser.BrowserTab
 import net.matsudamper.browser.BrowserTabController
@@ -45,6 +47,7 @@ fun BrowserScreen(
     uiState: BrowserScreenUiState,
     browserTabController: BrowserTabController,
     onSelectTab: (String) -> Unit,
+    onBackToOpenerTab: (tabId: String) -> Unit,
     previewHeaderContent: @Composable (modifier: Modifier, tab: BrowserTab, tabCount: Int?) -> Unit,
     browserTabContent: @Composable (
         modifier: Modifier,
@@ -110,6 +113,29 @@ fun BrowserScreen(
         val density = LocalDensity.current
         // タブ切替スワイプ閾値：割合と固定距離の短い方を使用（タブレット等の広い画面でも操作しやすくなる）
         val swipeThreshold = minOf(pageWidthPx * 0.3f, with(density) { 120.dp.toPx() })
+
+        // リンクから開いたタブ（opener あり）で、まだページ内を遷移しておらず
+        // (canGoBack=false)、前のタブが opener 本人である場合のみ予測型バックを有効化する。
+        // この状態でのバックは「タブを閉じて opener へ戻る」ため、前のタブへスライドさせる。
+        val backToOpenerEnabled = prevTab != null &&
+            selectedTab.openerTabId != null &&
+            prevTab.tabId == selectedTab.openerTabId &&
+            !selectedTab.canGoBack
+        PredictiveBackHandler(enabled = backToOpenerEnabled) { progress ->
+            try {
+                // ジェスチャーの進捗に合わせて現在タブを右へずらし、左から opener タブを覗かせる
+                progress.collect { backEvent ->
+                    swipeOffset.snapTo(pageWidthPx * backEvent.progress)
+                }
+                // コミット：opener タブを画面いっぱいまでスライドさせてから現在タブを閉じて戻る
+                swipeOffset.animateTo(pageWidthPx)
+                onBackToOpenerTab(selectedTab.tabId)
+            } catch (e: CancellationException) {
+                // キャンセル：元の位置へ戻す（handler のコルーチンは終了するため別スコープで実行）
+                coroutineScope.launch { swipeOffset.animateTo(0f) }
+                throw e
+            }
+        }
 
         // 前のタブのプレビュー画像（右スワイプ時に左から表示）
         prevTab?.let { tab ->

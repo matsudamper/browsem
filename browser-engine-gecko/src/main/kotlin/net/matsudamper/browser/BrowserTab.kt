@@ -84,6 +84,12 @@ class BrowserTab(
             onThemeColorChanged(tabId, value)
         }
 
+    // このタブが現在ページ内で「戻る」履歴を持つか（永続化は不要）。
+    // GeckoBrowserTab がフォアグラウンドのとき onCanGoBackChanged で更新される。
+    // リンクから開いたタブが未遷移(canGoBack=false)かどうかの判定に使用し、
+    // その状態でのみ予測型バックで opener タブへ戻す。
+    var canGoBack: Boolean by mutableStateOf(false)
+
     // ページのfavicon（ホーム追加時のアイコンに使用、永続化は不要）
     var faviconBitmap: Bitmap? by mutableStateOf(null)
 
