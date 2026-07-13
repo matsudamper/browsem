@@ -12,7 +12,6 @@ import android.view.MenuItem
 import android.view.View
 import androidx.core.net.toUri
 import androidx.activity.compose.PredictiveBackHandler
-import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -691,11 +690,11 @@ internal fun GeckoBrowserTab(
         }
     }
 
-    // Back handler (when 分岐で優先度を制御: showFindInPage > isUrlInputFocused > canGoBack > webAppMode)
-    // webAppMode かつ canGoBack=false 時は Activity を終了せずタスクをバックグラウンドへ移動して
-    // セッション（ブラウザ履歴・入力状態）を保持する
-    val activity = LocalActivity.current
-    PredictiveBackHandler(enabled = state.isFullScreen || state.showFindInPage || state.isUrlInputFocused || state.canGoBack || webAppMode) { progress ->
+    // Back handler (when 分岐で優先度を制御: showFindInPage > isUrlInputFocused > canGoBack)
+    // webAppMode で上記いずれにも該当しない（これ以上戻れない）場合はバックを消費しない。
+    // ハンドラを無効化してシステムに委ねることで、メインアプリと同様に予測型バック
+    // （ホーム画面へ縮小していくアニメーション）を発生させ、そのまま Activity を終了させる。
+    PredictiveBackHandler(enabled = state.isFullScreen || state.showFindInPage || state.isUrlInputFocused || state.canGoBack) { progress ->
         state.isBackGestureInProgress = true
         try {
             progress.collect {}
@@ -704,7 +703,6 @@ internal fun GeckoBrowserTab(
                 state.showFindInPage -> state.closeFindInPage()
                 state.isUrlInputFocused -> closeUrlInput(true)
                 state.canGoBack -> state.onGoBack()
-                webAppMode -> activity?.moveTaskToBack(true)
             }
         } finally {
             state.isBackGestureInProgress = false
