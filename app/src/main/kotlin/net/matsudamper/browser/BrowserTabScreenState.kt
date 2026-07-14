@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.os.SystemClock
 import android.util.Log
 import android.widget.Toast
 import androidx.compose.runtime.Composable
@@ -50,6 +51,15 @@ import java.io.ByteArrayOutputStream
 
 
 private const val TAG = "BrowserTabScreenState"
+
+/**
+ * バックジェスチャー終了後もコンテキストメニュー表示を抑制する猶予期間。
+ * ジェスチャー中に発火した長押し検出の onContextMenu が Gecko から遅れて届くため、
+ * フラグ解除直後のイベントをすり抜けさせないために設ける。
+ * 通常の長押し (指を置いてから約 400ms 以上) より短いため、
+ * ジェスチャー直後の正当な長押し操作を誤って抑制することはない。
+ */
+private const val BACK_GESTURE_CONTEXT_MENU_SUPPRESS_MS = 300L
 
 private val PAGE_ZOOM_STEPS = listOf(20, 25, 33, 50, 67, 75, 80, 90, 100, 110, 125, 150, 175, 200)
 
@@ -185,6 +195,19 @@ internal class BrowserTabScreenState(
 
     // --- Back gesture state ---
     var isBackGestureInProgress by mutableStateOf(false)
+        private set
+
+    /** バックジェスチャーが終了 (コミットまたはキャンセル) した時刻 */
+    private var backGestureEndedAtMs = 0L
+
+    fun onBackGestureStarted() {
+        isBackGestureInProgress = true
+    }
+
+    fun onBackGestureEnded() {
+        isBackGestureInProgress = false
+        backGestureEndedAtMs = SystemClock.elapsedRealtime()
+    }
 
     // --- Context menu state ---
     var contextMenuState by mutableStateOf<ContextMenuState?>(null)
@@ -1150,7 +1173,11 @@ internal class BrowserTabScreenState(
     }
 
     override fun onContextMenu(element: GeckoSession.ContentDelegate.ContextElement) {
+        // ジェスチャーバック中の長押し検出によるコンテキストメニュー表示を抑制する。
+        // Gecko からの onContextMenu は非同期に届くため、ジェスチャーをキャンセルして
+        // 指を離した直後に遅れて到着するイベントも猶予期間を設けて抑制する。
         if (isBackGestureInProgress) return
+        if (SystemClock.elapsedRealtime() - backGestureEndedAtMs < BACK_GESTURE_CONTEXT_MENU_SUPPRESS_MS) return
         val linkUri = element.linkUri
         val srcUri = element.srcUri
         val isImage = element.type == GeckoSession.ContentDelegate.ContextElement.TYPE_IMAGE

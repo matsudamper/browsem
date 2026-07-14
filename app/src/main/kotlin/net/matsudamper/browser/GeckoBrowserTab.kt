@@ -695,7 +695,7 @@ internal fun GeckoBrowserTab(
     // ハンドラを無効化してシステムに委ねることで、メインアプリと同様に予測型バック
     // （ホーム画面へ縮小していくアニメーション）を発生させ、そのまま Activity を終了させる。
     PredictiveBackHandler(enabled = state.isFullScreen || state.showFindInPage || state.isUrlInputFocused || state.canGoBack) { progress ->
-        state.isBackGestureInProgress = true
+        state.onBackGestureStarted()
         try {
             progress.collect {}
             when {
@@ -705,7 +705,7 @@ internal fun GeckoBrowserTab(
                 state.canGoBack -> state.onGoBack()
             }
         } finally {
-            state.isBackGestureInProgress = false
+            state.onBackGestureEnded()
         }
     }
 
