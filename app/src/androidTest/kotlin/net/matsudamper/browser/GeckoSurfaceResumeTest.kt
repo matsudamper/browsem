@@ -54,6 +54,44 @@ class GeckoSurfaceResumeTest {
         Log.d(TAG, "復帰後レンダリング確認完了")
     }
 
+    /**
+     * Gemini 等のアシスタントオーバーレイのように、Activity を STOP させず pause だけして
+     * 戻す focus-only 離脱を再現する。STARTED への遷移は ON_PAUSE のみを発火し ON_STOP は
+     * 発火しない。
+     *
+     * IME 非表示の pause では surface を維持する (PAUSED_KEEP_SURFACE) ため、pause 中も
+     * GeckoView のピクセルを取得でき続ける。過去に ON_PAUSE で常に releaseSession +
+     * INVISIBLE していた頃は、この経路で surface が破棄され GeckoView が白画面化していた
+     * (capturePixels も失敗していた)。本テストはそのデグレを検出する。
+     */
+    @Test
+    fun geckoPixelsRemainVisibleWhilePausedWithoutStop() {
+        val pageUri = prepareSurfaceResumePageUri()
+
+        Log.d(TAG, "ページロード開始: $pageUri")
+        composeRule.openUrlFromUrlBar(pageUri)
+        composeRule.waitForUrlBarContains(SURFACE_RESUME_FILE_NAME, timeoutMillis = 60_000)
+        composeRule.waitForUrlBarNotFocused(timeoutMillis = 30_000)
+        waitForGeckoContainer()
+        waitForNonBlackGeckoPixels()
+
+        // STARTED = ON_PAUSE のみ (ON_STOP は発火しない) = アシスタントオーバーレイ相当。
+        Log.d(TAG, "pause (STARTED) へ遷移")
+        composeRule.activityRule.scenario.moveToState(Lifecycle.State.STARTED)
+
+        // pause 中でも surface は維持されているので capturePixels が成功し続ける。
+        Log.d(TAG, "pause 中のピクセル確認開始")
+        waitForNonBlackGeckoPixels()
+        Log.d(TAG, "pause 中のピクセル確認完了")
+
+        // 復帰後も引き続き表示される。
+        Log.d(TAG, "RESUMED へ復帰")
+        composeRule.activityRule.scenario.moveToState(Lifecycle.State.RESUMED)
+        waitForGeckoContainer()
+        waitForNonBlackGeckoPixels()
+        Log.d(TAG, "復帰後レンダリング確認完了")
+    }
+
     private fun waitForGeckoContainer() {
         composeRule.waitUntil(timeoutMillis = 20_000) {
             composeRule.onAllNodesWithTag(GeckoBrowserTabTestTags.GeckoContainer.testTag)
