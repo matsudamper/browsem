@@ -15,7 +15,11 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.mozilla.geckoview.GeckoView
-import java.io.File
+import java.io.BufferedReader
+import java.io.InputStreamReader
+import java.net.InetAddress
+import java.net.ServerSocket
+import java.net.Socket
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
@@ -29,30 +33,32 @@ class GeckoSurfaceResumeTest {
 
     @Test
     fun geckoPixelsRemainVisibleAfterActivityReturnsFromBackground() {
-        val pageUri = prepareSurfaceResumePageUri()
+        LocalFixtureServer().use { server ->
+            val pageUrl = server.pageUrl
 
-        Log.d(TAG, "ページロード開始: $pageUri")
-        composeRule.openUrlFromUrlBar(pageUri)
-        composeRule.waitForUrlBarContains(SURFACE_RESUME_FILE_NAME, timeoutMillis = 60_000)
-        composeRule.waitForUrlBarNotFocused(timeoutMillis = 30_000)
-        waitForGeckoContainer()
-        Log.d(TAG, "初期レンダリング確認開始")
-        waitForFixtureBackgroundGeckoPixels()
-        Log.d(TAG, "初期レンダリング確認完了")
+            Log.d(TAG, "ページロード開始: $pageUrl")
+            composeRule.openUrlFromUrlBar(pageUrl)
+            composeRule.waitForUrlBarContains(SURFACE_RESUME_FILE_NAME, timeoutMillis = 60_000)
+            composeRule.waitForUrlBarNotFocused(timeoutMillis = 30_000)
+            waitForGeckoContainer()
+            Log.d(TAG, "初期レンダリング確認開始")
+            waitForFixtureBackgroundGeckoPixels()
+            Log.d(TAG, "初期レンダリング確認完了")
 
-        Log.d(TAG, "バックグラウンド移行")
-        composeRule.activityRule.scenario.moveToState(Lifecycle.State.CREATED)
-        Log.d(TAG, "フォアグラウンド復帰")
-        composeRule.activityRule.scenario.moveToState(Lifecycle.State.RESUMED)
+            Log.d(TAG, "バックグラウンド移行")
+            composeRule.activityRule.scenario.moveToState(Lifecycle.State.CREATED)
+            Log.d(TAG, "フォアグラウンド復帰")
+            composeRule.activityRule.scenario.moveToState(Lifecycle.State.RESUMED)
 
-        // 復帰直後に URL バーがフォーカスを得ると urlInput が空にクリアされる。
-        // GeckoContainer の復帰を待ってから検証する。waitForUrlBarContains は
-        // フォーカス状態に依存せず現在ページ URL を読む。
-        waitForGeckoContainer()
-        composeRule.waitForUrlBarContains(SURFACE_RESUME_FILE_NAME, timeoutMillis = 60_000)
-        Log.d(TAG, "復帰後レンダリング確認開始")
-        waitForFixtureBackgroundGeckoPixels()
-        Log.d(TAG, "復帰後レンダリング確認完了")
+            // 復帰直後に URL バーがフォーカスを得ると urlInput が空にクリアされる。
+            // GeckoContainer の復帰を待ってから検証する。waitForUrlBarContains は
+            // フォーカス状態に依存せず現在ページ URL を読む。
+            waitForGeckoContainer()
+            composeRule.waitForUrlBarContains(SURFACE_RESUME_FILE_NAME, timeoutMillis = 60_000)
+            Log.d(TAG, "復帰後レンダリング確認開始")
+            waitForFixtureBackgroundGeckoPixels()
+            Log.d(TAG, "復帰後レンダリング確認完了")
+        }
     }
 
     /**
@@ -67,31 +73,33 @@ class GeckoSurfaceResumeTest {
      */
     @Test
     fun geckoPixelsRemainVisibleWhilePausedWithoutStop() {
-        val pageUri = prepareSurfaceResumePageUri()
+        LocalFixtureServer().use { server ->
+            val pageUrl = server.pageUrl
 
-        Log.d(TAG, "ページロード開始: $pageUri")
-        composeRule.openUrlFromUrlBar(pageUri)
-        composeRule.waitForUrlBarContains(SURFACE_RESUME_FILE_NAME, timeoutMillis = 60_000)
-        composeRule.waitForUrlBarNotFocused(timeoutMillis = 30_000)
-        waitForGeckoContainer()
-        waitForFixtureBackgroundGeckoPixels()
+            Log.d(TAG, "ページロード開始: $pageUrl")
+            composeRule.openUrlFromUrlBar(pageUrl)
+            composeRule.waitForUrlBarContains(SURFACE_RESUME_FILE_NAME, timeoutMillis = 60_000)
+            composeRule.waitForUrlBarNotFocused(timeoutMillis = 30_000)
+            waitForGeckoContainer()
+            waitForFixtureBackgroundGeckoPixels()
 
-        // STARTED = ON_PAUSE のみ (ON_STOP は発火しない) = アシスタントオーバーレイ相当。
-        Log.d(TAG, "pause (STARTED) へ遷移")
-        composeRule.activityRule.scenario.moveToState(Lifecycle.State.STARTED)
+            // STARTED = ON_PAUSE のみ (ON_STOP は発火しない) = アシスタントオーバーレイ相当。
+            Log.d(TAG, "pause (STARTED) へ遷移")
+            composeRule.activityRule.scenario.moveToState(Lifecycle.State.STARTED)
 
-        // pause 中でも surface は維持されているので capturePixels が成功し続け、
-        // フィクスチャの背景色が表示され続ける (真っ白な surface では失敗する)。
-        Log.d(TAG, "pause 中のピクセル確認開始")
-        waitForFixtureBackgroundGeckoPixels()
-        Log.d(TAG, "pause 中のピクセル確認完了")
+            // pause 中でも surface は維持されているので capturePixels が成功し続け、
+            // フィクスチャの背景色が表示され続ける (真っ白な surface では失敗する)。
+            Log.d(TAG, "pause 中のピクセル確認開始")
+            waitForFixtureBackgroundGeckoPixels()
+            Log.d(TAG, "pause 中のピクセル確認完了")
 
-        // 復帰後も引き続き表示される。
-        Log.d(TAG, "RESUMED へ復帰")
-        composeRule.activityRule.scenario.moveToState(Lifecycle.State.RESUMED)
-        waitForGeckoContainer()
-        waitForFixtureBackgroundGeckoPixels()
-        Log.d(TAG, "復帰後レンダリング確認完了")
+            // 復帰後も引き続き表示される。
+            Log.d(TAG, "RESUMED へ復帰")
+            composeRule.activityRule.scenario.moveToState(Lifecycle.State.RESUMED)
+            waitForGeckoContainer()
+            waitForFixtureBackgroundGeckoPixels()
+            Log.d(TAG, "復帰後レンダリング確認完了")
+        }
     }
 
     private fun waitForGeckoContainer() {
@@ -210,12 +218,71 @@ class GeckoSurfaceResumeTest {
         return null
     }
 
-    private fun prepareSurfaceResumePageUri(): String {
-        val targetContext = InstrumentationRegistry.getInstrumentation().targetContext
-        val destinationDir = File(targetContext.cacheDir, SURFACE_RESUME_DIR_NAME).apply { mkdirs() }
-        val destination = File(destinationDir, SURFACE_RESUME_FILE_NAME)
-        destination.writeText(
-            """
+    /**
+     * フィクスチャページを配信するローカル HTTP サーバー。
+     *
+     * 以前は cacheDir に書いた HTML を file: URI で開いていたが、URL バーの
+     * buildUrlFromInput は http(s):// 以外を検索/https 付与として扱うため
+     * `https://file:/...` になり OnLoadError の白いエラーページが表示されていた
+     * (旧「非黒」検証はそれでもパスしていた)。実際にフィクスチャを描画させるため、
+     * AboutBlankNewTabLocationTest と同じローカル HTTP 配信方式を使う。
+     */
+    private class LocalFixtureServer : AutoCloseable {
+        private val serverSocket = ServerSocket(0, 50, InetAddress.getByName("127.0.0.1"))
+        private val serverThread = Thread {
+            while (!serverSocket.isClosed) {
+                val socket = runCatching { serverSocket.accept() }.getOrNull() ?: break
+                runCatching {
+                    handleRequest(socket)
+                }.onFailure {
+                    if (!serverSocket.isClosed) {
+                        Log.w(TAG, "local-http error=${it.message}")
+                    }
+                }
+            }
+        }.apply {
+            isDaemon = true
+            start()
+        }
+
+        val pageUrl: String = "http://127.0.0.1:${serverSocket.localPort}/$SURFACE_RESUME_FILE_NAME"
+
+        private fun handleRequest(socket: Socket) {
+            socket.use { client ->
+                val reader = BufferedReader(InputStreamReader(client.getInputStream(), Charsets.US_ASCII))
+                reader.readLine() ?: return
+                while (true) {
+                    val header = reader.readLine() ?: break
+                    if (header.isEmpty()) break
+                }
+                // favicon 等の付随リクエストにも同じ HTML を返して構わない
+                val bodyBytes = FIXTURE_HTML.toByteArray(Charsets.UTF_8)
+                val output = client.getOutputStream()
+                val headers = buildString {
+                    append("HTTP/1.1 200 OK\r\n")
+                    append("Content-Type: text/html; charset=utf-8\r\n")
+                    append("Content-Length: ${bodyBytes.size}\r\n")
+                    append("Connection: close\r\n")
+                    append("\r\n")
+                }
+                output.write(headers.toByteArray(Charsets.US_ASCII))
+                output.write(bodyBytes)
+                output.flush()
+            }
+        }
+
+        override fun close() {
+            runCatching { serverSocket.close() }
+            runCatching { serverThread.join(2_000) }
+        }
+    }
+
+    private companion object {
+        private const val TAG = "GeckoSurfaceResumeTest"
+        private const val SURFACE_RESUME_FILE_NAME = "index.html"
+        private const val SAMPLE_GRID_SIZE = 20
+
+        private val FIXTURE_HTML = """
             <!doctype html>
             <html lang="ja">
               <head>
@@ -242,18 +309,9 @@ class GeckoSurfaceResumeTest {
                 <main>Gecko Surface Resume Test</main>
               </body>
             </html>
-            """.trimIndent(),
-        )
-        return destination.toURI().toString()
-    }
+        """.trimIndent()
 
-    private companion object {
-        private const val TAG = "GeckoSurfaceResumeTest"
-        private const val SURFACE_RESUME_DIR_NAME = "surface-resume"
-        private const val SURFACE_RESUME_FILE_NAME = "index.html"
-        private const val SAMPLE_GRID_SIZE = 20
-
-        // フィクスチャページの背景色 (prepareSurfaceResumePageUri の CSS と一致させること)
+        // フィクスチャページの背景色 (FIXTURE_HTML の CSS と一致させること)
         private const val FIXTURE_BACKGROUND_RED = 61
         private const val FIXTURE_BACKGROUND_GREEN = 220
         private const val FIXTURE_BACKGROUND_BLUE = 132
