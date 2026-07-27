@@ -12,7 +12,6 @@ import android.view.MenuItem
 import android.view.View
 import androidx.core.net.toUri
 import androidx.activity.compose.PredictiveBackHandler
-import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -210,6 +209,9 @@ internal fun GeckoBrowserTab(
     // ON_START / ON_RESUME が重複発火しても state=ACTIVE なら即 no-op にする。
     var surfaceResumeState by remember(session) { mutableStateOf(SurfaceResumeState.ACTIVE) }
     val resumeCoverColor = MaterialTheme.colorScheme.surface.toArgb()
+    // LifecycleEventObserver は DisposableEffect のキーが変わらない限り再生成されないため、
+    // ラムダ内で ON_PAUSE 時点の最新 IME 表示状態を読めるよう rememberUpdatedState で包む。
+    val currentIsImeVisible by rememberUpdatedState(isImeVisible)
 
     // ファイルピッカー（単一ファイル選択）Google Photos を含むピッカーを表示するため ACTION_GET_CONTENT を使用
     val singleFileLauncher = rememberLauncherForActivityResult(
@@ -400,6 +402,27 @@ internal fun GeckoBrowserTab(
         )
     }
 
+    // pause からの復帰処理。
+    // - RELEASED: surface 破棄済みのため再作成を伴う重い復元。
+    // - PAUSED_KEEP_SURFACE: オーバーレイ等の focus-only 離脱から active を保持したまま
+    //   戻ってきたケース。surface も session も生きているので state を ACTIVE に戻すだけ。
+    //   setActive は呼ばない (可視のまま deactivate していないので再 activate も不要。
+    //   呼ぶとコンポジタが一瞬クリアされ単一色フラッシュが出る)。
+    fun resumeFromPauseIfNeeded(gecko: GeckoView) {
+        when (surfaceResumeState) {
+            SurfaceResumeState.RELEASED -> restoreSurfaceIfNeeded(gecko)
+            SurfaceResumeState.PAUSED_KEEP_SURFACE -> {
+                Log.d(
+                    TAG_SURFACE_RESUME,
+                    "resumeFromPauseIfNeeded: PAUSED_KEEP_SURFACE → ACTIVE (active 保持済み)" +
+                        " session=${session.logKey()}",
+                )
+                surfaceResumeState = SurfaceResumeState.ACTIVE
+            }
+            SurfaceResumeState.ACTIVE, SurfaceResumeState.WAITING_STABLE -> Unit
+        }
+    }
+
     DisposableEffect(lifecycleOwner, session, resumeCoverColor) {
         val observer = LifecycleEventObserver { _, event ->
             val gv = geckoView
@@ -419,17 +442,28 @@ internal fun GeckoBrowserTab(
                     // GeckoView から detach しておけば、surface 再作成時の自動レンダリングを
                     // 抑止できる。
                     //
+                    // ただしこのハング経路は .imePadding() による IME 由来の stale サイズが
+                    // 前提のため、IME 非表示の pause (Gemini 等のアシスタントオーバーレイに
+                    // よる focus-only 離脱を含む) では踏まない。この場合に release + INVISIBLE
+                    // すると、Activity が可視のまま (ON_STOP が来ないまま) GeckoView だけが
+                    // 真っ白になるため、surface と active を維持する (PAUSED_KEEP_SURFACE)。
+                    // 完全に不可視になる ON_STOP 側で従来どおり release する。
+                    //
                     // capture preview は release 前に start する。capturePixels() は非同期
                     // GeckoResult を返すため release 直後に走るキャプチャ完了率は低下するが、
                     // ハング回避を優先する。
-                    //
-                    // WAITING_STABLE 中（前回 resume の安定待ちが完了する前に再度 pause した
-                    // 場合）も releaseSession を行いたいので ACTIVE と同じ扱いにする。
-                    if (surfaceResumeState != SurfaceResumeState.RELEASED &&
-                        !mediaWebExtension.shouldKeepSessionAttached(session)
-                    ) {
-                        val target = geckoView
-                        if (target == null) {
+                    val target = geckoView
+                    when {
+                        mediaWebExtension.shouldKeepSessionAttached(session) ||
+                            surfaceResumeState == SurfaceResumeState.RELEASED ||
+                            surfaceResumeState == SurfaceResumeState.PAUSED_KEEP_SURFACE -> {
+                            Log.d(
+                                TAG_SURFACE_RESUME,
+                                "ON_PAUSE skipped: state=$surfaceResumeState" +
+                                    " mediaKeep=${mediaWebExtension.shouldKeepSessionAttached(session)}",
+                            )
+                        }
+                        target == null -> {
                             // geckoView が更新されないまま ON_PAUSE が来ると release できず、
                             // 復帰時に session 付きで surface が再作成され BLAST reject が起きる。
                             // ここで検知できれば再現条件を絞り込めるため明示的に警告を残す。
@@ -438,7 +472,25 @@ internal fun GeckoBrowserTab(
                                 "ON_PAUSE: geckoView=null のため releaseSession 不可。" +
                                     " 復帰時にハングする可能性あり session=${session.logKey()}",
                             )
-                        } else {
+                        }
+                        surfaceResumeState == SurfaceResumeState.ACTIVE && !currentIsImeVisible -> {
+                            // IME 非表示: stale サイズ resize のハング経路を踏まないため
+                            // surface を維持し、オーバーレイ表示中の白画面化を防ぐ。
+                            // view はまだ可視のため setActive(false) もしない (Mozilla の契約上
+                            // deactivate は不可視時のみ。可視中に deactivate→再 activate すると
+                            // コンポジタが一瞬クリアされ単一色フラッシュが出る)。
+                            Log.d(
+                                TAG_SURFACE_RESUME,
+                                "ON_PAUSE: IME 非表示のため surface 維持 (active 保持)" +
+                                    " gv.size=${target.width}x${target.height}",
+                            )
+                            // surface と compositor が生きているうちに capture する。
+                            state.captureTabPreview(target)
+                            surfaceResumeState = SurfaceResumeState.PAUSED_KEEP_SURFACE
+                        }
+                        else -> {
+                            // IME 表示中の ACTIVE、または WAITING_STABLE 中（前回 resume の
+                            // 安定待ちが完了する前に再度 pause した場合）は従来どおり release。
                             Log.d(
                                 TAG_SURFACE_RESUME,
                                 "ON_PAUSE: releaseSession + INVISIBLE 実行 gv.size=${target.width}x${target.height}",
@@ -455,17 +507,11 @@ internal fun GeckoBrowserTab(
                             target.visibility = View.INVISIBLE
                             surfaceResumeState = SurfaceResumeState.RELEASED
                         }
-                    } else {
-                        Log.d(
-                            TAG_SURFACE_RESUME,
-                            "ON_PAUSE skipped: state=$surfaceResumeState" +
-                                " mediaKeep=${mediaWebExtension.shouldKeepSessionAttached(session)}",
-                        )
                     }
                 }
                 Lifecycle.Event.ON_STOP -> {
                     session.flushSessionState()
-                    // non-media の場合は ON_PAUSE で release 済み。
+                    // IME 表示中の pause は ON_PAUSE で release 済み (RELEASED)。
                     // media の場合は session 維持のため capture のみ実行（従来どおり）。
                     // TODO: media 再生継続中の session は release しないため、surface 再作成時の
                     //       SyncResumeResizeCompositor ハング経路を踏むリスクが残る。実機で
@@ -473,16 +519,38 @@ internal fun GeckoBrowserTab(
                     //       （releaseSession しても MediaSession 経由で音は継続する可能性が高い）
                     //       を検討する。
                     geckoView?.also { target ->
-                        if (mediaWebExtension.shouldKeepSessionAttached(session)) {
-                            state.captureTabPreview(target)
+                        when {
+                            mediaWebExtension.shouldKeepSessionAttached(session) -> {
+                                state.captureTabPreview(target)
+                            }
+                            surfaceResumeState == SurfaceResumeState.PAUSED_KEEP_SURFACE -> {
+                                // IME 非表示の pause で surface を維持していたが、ON_STOP に
+                                // 到達した = 完全に不可視化した (ホームボタン等)。ここで release
+                                // せず session を attach したまま停止すると、復帰時に surface が
+                                // session 付きで再作成され自動 resume-resize のハング経路を踏む
+                                // (revert された #398 の STOPPED_KEEP_SURFACE はこれが原因と推測)。
+                                // 従来どおり release して、復帰は実績のある RELEASED →
+                                // fresh attach 経路に合流させる。
+                                Log.d(
+                                    TAG_SURFACE_RESUME,
+                                    "ON_STOP: PAUSED_KEEP_SURFACE → releaseSession + INVISIBLE 実行" +
+                                        " gv.size=${target.width}x${target.height}",
+                                )
+                                // 不可視になったので Mozilla の契約どおり deactivate してよい。
+                                session.setActive(false)
+                                target.releaseSession()
+                                target.visibility = View.INVISIBLE
+                                surfaceResumeState = SurfaceResumeState.RELEASED
+                            }
+                            else -> Unit
                         }
                     }
                 }
                 Lifecycle.Event.ON_START -> {
-                    geckoView?.also(::restoreSurfaceIfNeeded)
+                    geckoView?.also(::resumeFromPauseIfNeeded)
                 }
                 Lifecycle.Event.ON_RESUME -> {
-                    geckoView?.also(::restoreSurfaceIfNeeded)
+                    geckoView?.also(::resumeFromPauseIfNeeded)
                 }
                 else -> Unit
             }
@@ -691,11 +759,11 @@ internal fun GeckoBrowserTab(
         }
     }
 
-    // Back handler (when 分岐で優先度を制御: showFindInPage > isUrlInputFocused > canGoBack > webAppMode)
-    // webAppMode かつ canGoBack=false 時は Activity を終了せずタスクをバックグラウンドへ移動して
-    // セッション（ブラウザ履歴・入力状態）を保持する
-    val activity = LocalActivity.current
-    PredictiveBackHandler(enabled = state.isFullScreen || state.showFindInPage || state.isUrlInputFocused || state.canGoBack || webAppMode) { progress ->
+    // Back handler (when 分岐で優先度を制御: showFindInPage > isUrlInputFocused > canGoBack)
+    // webAppMode で上記いずれにも該当しない（これ以上戻れない）場合はバックを消費しない。
+    // ハンドラを無効化してシステムに委ねることで、メインアプリと同様に予測型バック
+    // （ホーム画面へ縮小していくアニメーション）を発生させ、そのまま Activity を終了させる。
+    PredictiveBackHandler(enabled = state.isFullScreen || state.showFindInPage || state.isUrlInputFocused || state.canGoBack) { progress ->
         state.isBackGestureInProgress = true
         try {
             progress.collect {}
@@ -704,7 +772,6 @@ internal fun GeckoBrowserTab(
                 state.showFindInPage -> state.closeFindInPage()
                 state.isUrlInputFocused -> closeUrlInput(true)
                 state.canGoBack -> state.onGoBack()
-                webAppMode -> activity?.moveTaskToBack(true)
             }
         } finally {
             state.isBackGestureInProgress = false
@@ -1066,15 +1133,23 @@ private fun TabHistoryBottomSheet(
  * Surface/Session 復元の進行状態。
  *
  * - ACTIVE: 前面表示中。復元処理は全て no-op。
- * - RELEASED: ON_PAUSE で releaseSession() 済。ON_START で復元処理が必要。
+ * - RELEASED: ON_PAUSE (IME 表示中) または ON_STOP で releaseSession() 済。
+ *   ON_START で復元処理が必要。
  * - WAITING_STABLE: 復元の preDraw ループ中で gv.height が安定するのを待っている。
  *   IME アニメーション中の resize で GPU プロセスが kill される現象を避けるため、
  *   サイズが連続フレーム同じになるまで setSession を遅延する。
+ * - PAUSED_KEEP_SURFACE: IME 非表示の ON_PAUSE (Gemini 等のアシスタントオーバーレイに
+ *   よる focus-only 離脱を含む)。GeckoView は縮んでおらず復帰時の stale サイズ resize
+ *   ハング経路を踏まないため surface は破棄せず維持する。オーバーレイ中はまだ画面に
+ *   見えているため session も active のまま保持し、白画面化とフラッシュを防ぐ。
+ *   ON_RESUME で ACTIVE に戻るだけの軽い復帰。ON_STOP に到達した (完全に不可視化した)
+ *   場合はそこで release して RELEASED に遷移する。
  */
 private enum class SurfaceResumeState {
     ACTIVE,
     RELEASED,
     WAITING_STABLE,
+    PAUSED_KEEP_SURFACE,
 }
 
 sealed interface GeckoBrowserTabTestTags {

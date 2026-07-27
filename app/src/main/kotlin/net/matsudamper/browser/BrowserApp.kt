@@ -5,6 +5,9 @@ import android.app.Application
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
+import android.os.Handler
+import android.os.Looper
+import android.os.Process
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -228,6 +231,13 @@ internal fun BrowserAppShell(
 
                                 override fun onNavigateToBackupProgress(isImport: Boolean) {
                                     outerBackStack.add(AppDestination.BackupProgress(isImport))
+                                }
+
+                                override fun onRestartProcess() {
+                                    Handler(Looper.getMainLooper())
+                                        .postDelayed({
+                                            Process.killProcess(Process.myPid())
+                                        }, 300)
                                 }
                             })
                         }
@@ -655,6 +665,17 @@ private fun MainBrowserContent(
                         browserTabController = browserTabController,
                         onSelectTab = { tabId ->
                             selectTab(tabId, null)
+                        },
+                        onBackToOpenerTab = { tabId ->
+                            // リンクから開いたタブを予測型バックで閉じ、opener タブへ戻る。
+                            val openerTabId = browserTabController.findTab(tabId)?.openerTabId
+                            val fallbackTabId = browserTabController.closeTab(tabId)
+                            val targetTabId = openerTabId
+                                ?.takeIf { browserTabController.findTab(it) != null }
+                                ?: fallbackTabId
+                            if (targetTabId != null) {
+                                selectTab(targetTabId, null)
+                            }
                         },
                         previewHeaderContent = { modifier, tab, tabCount ->
                             BrowserToolbar(
