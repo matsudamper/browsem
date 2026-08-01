@@ -143,7 +143,7 @@ fun DownloadManagementScreen(
                         onOpenFile = { fileUri -> uiState.callbacks.onOpenFile(fileUri) },
                         onResume = { uiState.callbacks.onResume(item.id) },
                         onOpenOriginPage = { url -> uiState.callbacks.onOpenOriginPage(url) },
-                        loadThumbnail = uiState.callbacks.loadThumbnail,
+                        loadPreview = uiState.callbacks.loadPreview,
                         isHighlighted = item.id == activeHighlightId,
                         onHighlightFinished = {
                             activeHighlightId = null
@@ -165,11 +165,11 @@ private fun DownloadItemRow(
     onOpenFile: (String) -> Unit,
     onResume: () -> Unit,
     onOpenOriginPage: (url: String) -> Unit,
-    loadThumbnail: suspend (fileUri: String) -> ImageBitmap?,
+    loadPreview: suspend (fileUri: String) -> DownloadManagementScreenUiState.Preview?,
     isHighlighted: Boolean,
     onHighlightFinished: () -> Unit,
 ) {
-    val currentLoadThumbnail by rememberUpdatedState(loadThumbnail)
+    val currentLoadPreview by rememberUpdatedState(loadPreview)
     val currentOnHighlightFinished by rememberUpdatedState(onHighlightFinished)
     val dateFormat = remember { SimpleDateFormat("yyyy/MM/dd HH:mm", Locale.getDefault()) }
     var menuExpanded by remember { mutableStateOf(false) }
@@ -237,13 +237,16 @@ private fun DownloadItemRow(
         ) {
             val completedStatus = item.status as? DownloadManagementScreenUiState.DownloadStatus.Completed
             if (completedStatus != null) {
-                var thumbnail by remember(completedStatus.fileUri) { mutableStateOf<ImageBitmap?>(null) }
+                var preview by remember(completedStatus.fileUri) {
+                    mutableStateOf<DownloadManagementScreenUiState.Preview?>(null)
+                }
                 var loaded by remember(completedStatus.fileUri) { mutableStateOf(false) }
                 LaunchedEffect(completedStatus.fileUri) {
-                    thumbnail = currentLoadThumbnail(completedStatus.fileUri)
+                    preview = currentLoadPreview(completedStatus.fileUri)
                     loaded = true
                 }
-                if (thumbnail != null || !loaded) {
+                val currentPreview = preview
+                if (currentPreview != null || !loaded) {
                     Box(
                         modifier = Modifier
                             .padding(end = 12.dp)
@@ -252,11 +255,15 @@ private fun DownloadItemRow(
                             .background(MaterialTheme.colorScheme.surfaceVariant),
                         contentAlignment = Alignment.Center,
                     ) {
-                        if (thumbnail != null) {
+                        if (currentPreview != null) {
                             Image(
-                                bitmap = thumbnail!!,
+                                bitmap = currentPreview.image,
                                 contentDescription = null,
-                                contentScale = ContentScale.Crop,
+                                // サムネイルは領域いっぱいに、アプリアイコンは全体が欠けないように表示する
+                                contentScale = when (currentPreview) {
+                                    is DownloadManagementScreenUiState.Preview.Thumbnail -> ContentScale.Crop
+                                    is DownloadManagementScreenUiState.Preview.AppIcon -> ContentScale.Fit
+                                },
                                 modifier = Modifier.fillMaxSize(),
                             )
                         }
@@ -458,7 +465,7 @@ private fun PreviewInProgress() {
             onOpenFile = {},
             onResume = {},
             onOpenOriginPage = {},
-            loadThumbnail = { null },
+            loadPreview = { null },
             isHighlighted = false,
             onHighlightFinished = {},
         )
@@ -486,7 +493,7 @@ private fun PreviewPaused() {
             onOpenFile = {},
             onResume = {},
             onOpenOriginPage = {},
-            loadThumbnail = { null },
+            loadPreview = { null },
             isHighlighted = false,
             onHighlightFinished = {},
         )
@@ -510,7 +517,7 @@ private fun PreviewFailedCanResume() {
             onOpenFile = {},
             onResume = {},
             onOpenOriginPage = {},
-            loadThumbnail = { null },
+            loadPreview = { null },
             isHighlighted = false,
             onHighlightFinished = {},
         )
@@ -544,7 +551,49 @@ private fun PreviewCompletedWithThumbnail() {
             onOpenFile = {},
             onResume = {},
             onOpenOriginPage = {},
-            loadThumbnail = { thumbnail },
+            loadPreview = { DownloadManagementScreenUiState.Preview.Thumbnail(thumbnail) },
+            isHighlighted = false,
+            onHighlightFinished = {},
+        )
+    }
+}
+
+@Preview(name = "完了・APKアイコンあり")
+@Composable
+private fun PreviewCompletedWithAppIcon() {
+    // APK から取り出したアプリアイコンを模した、余白のある正方形の画像
+    val icon = remember {
+        ImageBitmap(width = 64, height = 64).also { bitmap ->
+            Canvas(bitmap).apply {
+                drawRect(
+                    rect = Rect(0f, 0f, 64f, 64f),
+                    paint = Paint().apply { color = Color(0xFF3DDC84) },
+                )
+                drawCircle(
+                    center = Offset(32f, 32f),
+                    radius = 18f,
+                    paint = Paint().apply { color = Color.White },
+                )
+            }
+        }
+    }
+    MaterialTheme {
+        DownloadItemRow(
+            item = DownloadManagementScreenUiState.DownloadItem(
+                id = UUID.randomUUID(),
+                fileName = "sample-app.apk",
+                status = DownloadManagementScreenUiState.DownloadStatus.Completed(
+                    fileUri = "content://media/external/downloads/4",
+                ),
+                enqueuedAt = 0L,
+                originPageUrl = "https://example.com/page",
+            ),
+            onCancel = {},
+            onPause = {},
+            onOpenFile = {},
+            onResume = {},
+            onOpenOriginPage = {},
+            loadPreview = { DownloadManagementScreenUiState.Preview.AppIcon(icon) },
             isHighlighted = false,
             onHighlightFinished = {},
         )
@@ -570,7 +619,7 @@ private fun PreviewCompletedWithoutThumbnail() {
             onOpenFile = {},
             onResume = {},
             onOpenOriginPage = {},
-            loadThumbnail = { null },
+            loadPreview = { null },
             isHighlighted = false,
             onHighlightFinished = {},
         )
@@ -594,7 +643,7 @@ private fun PreviewFailedCannotResume() {
             onOpenFile = {},
             onResume = {},
             onOpenOriginPage = {},
-            loadThumbnail = { null },
+            loadPreview = { null },
             isHighlighted = false,
             onHighlightFinished = {},
         )
@@ -620,7 +669,7 @@ private fun PreviewLongFileName() {
             onOpenFile = {},
             onResume = {},
             onOpenOriginPage = {},
-            loadThumbnail = { null },
+            loadPreview = { null },
             isHighlighted = false,
             onHighlightFinished = {},
         )

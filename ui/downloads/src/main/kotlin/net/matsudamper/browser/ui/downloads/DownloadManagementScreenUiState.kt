@@ -44,6 +44,21 @@ data class DownloadManagementScreenUiState(
         ) : DownloadStatus
     }
 
+    /**
+     * ダウンロード完了アイテムの左側に表示するプレビュー画像。
+     * 種類によって表示方法（クロップ / 全体表示）が異なる
+     */
+    @Stable
+    sealed interface Preview {
+        val image: ImageBitmap
+
+        /** 画像・動画などのサムネイル。表示領域いっぱいにクロップして表示する */
+        data class Thumbnail(override val image: ImageBitmap) : Preview
+
+        /** APK から取り出したアプリアイコン。全体が収まるように表示する */
+        data class AppIcon(override val image: ImageBitmap) : Preview
+    }
+
     @Stable
     data class DownloadItem(
         val id: UUID,
@@ -65,7 +80,7 @@ data class DownloadManagementScreenUiState(
         val onResume: (UUID) -> Unit,
         /** ダウンロード開始時のページを新しいタブで開く */
         val onOpenOriginPage: (url: String) -> Unit,
-        /** ファイル URI からサムネイルを読み込む。サムネイル非対応の場合は null を返す */
-        val loadThumbnail: suspend (fileUri: String) -> ImageBitmap?,
+        /** ファイル URI からプレビュー画像を読み込む。プレビュー非対応の場合は null を返す */
+        val loadPreview: suspend (fileUri: String) -> Preview?,
     )
 }
