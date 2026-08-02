@@ -1,5 +1,6 @@
 package net.matsudamper.browser.ui.downloads
 
+import androidx.annotation.DrawableRes
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -165,7 +166,7 @@ private fun DownloadItemRow(
     onOpenFile: (String) -> Unit,
     onResume: () -> Unit,
     onOpenOriginPage: (url: String) -> Unit,
-    loadPreview: suspend (fileUri: String) -> DownloadManagementScreenUiState.Preview?,
+    loadPreview: suspend (fileUri: String) -> DownloadManagementScreenUiState.Preview,
     isHighlighted: Boolean,
     onHighlightFinished: () -> Unit,
 ) {
@@ -240,31 +241,47 @@ private fun DownloadItemRow(
                 var preview by remember(completedStatus.fileUri) {
                     mutableStateOf<DownloadManagementScreenUiState.Preview?>(null)
                 }
-                var loaded by remember(completedStatus.fileUri) { mutableStateOf(false) }
                 LaunchedEffect(completedStatus.fileUri) {
                     preview = currentLoadPreview(completedStatus.fileUri)
-                    loaded = true
                 }
-                val currentPreview = preview
-                if (currentPreview != null || !loaded) {
-                    Box(
-                        modifier = Modifier
-                            .padding(end = 12.dp)
-                            .size(48.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(MaterialTheme.colorScheme.surfaceVariant),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        if (currentPreview != null) {
+                // 読み込み中もサイズを確保しておき、確定時にレイアウトがずれないようにする
+                Box(
+                    modifier = Modifier
+                        .padding(end = 12.dp)
+                        .size(48.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    when (val currentPreview = preview) {
+                        null -> Unit
+
+                        // サムネイルは領域いっぱいにクロップする
+                        is DownloadManagementScreenUiState.Preview.Thumbnail -> {
                             Image(
                                 bitmap = currentPreview.image,
                                 contentDescription = null,
-                                // サムネイルは領域いっぱいに、アプリアイコンは全体が欠けないように表示する
-                                contentScale = when (currentPreview) {
-                                    is DownloadManagementScreenUiState.Preview.Thumbnail -> ContentScale.Crop
-                                    is DownloadManagementScreenUiState.Preview.AppIcon -> ContentScale.Fit
-                                },
+                                contentScale = ContentScale.Crop,
                                 modifier = Modifier.fillMaxSize(),
+                            )
+                        }
+
+                        // アプリアイコンは全体が欠けないように収める
+                        is DownloadManagementScreenUiState.Preview.AppIcon -> {
+                            Image(
+                                bitmap = currentPreview.image,
+                                contentDescription = null,
+                                contentScale = ContentScale.Fit,
+                                modifier = Modifier.fillMaxSize(),
+                            )
+                        }
+
+                        is DownloadManagementScreenUiState.Preview.FileType -> {
+                            Icon(
+                                painter = painterResource(currentPreview.fileType.iconRes()),
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(28.dp),
                             )
                         }
                     }
@@ -414,6 +431,18 @@ private fun DownloadItemRow(
     }
 }
 
+/** ファイル種別に対応する Material Symbols のアイコンリソース */
+@DrawableRes
+private fun DownloadManagementScreenUiState.DownloadFileType.iconRes(): Int {
+    return when (this) {
+        DownloadManagementScreenUiState.DownloadFileType.ARCHIVE -> R.drawable.ic_folder_zip
+        DownloadManagementScreenUiState.DownloadFileType.PDF -> R.drawable.ic_picture_as_pdf
+        DownloadManagementScreenUiState.DownloadFileType.VIDEO -> R.drawable.ic_movie
+        DownloadManagementScreenUiState.DownloadFileType.AUDIO -> R.drawable.ic_music_note
+        DownloadManagementScreenUiState.DownloadFileType.UNKNOWN -> R.drawable.ic_folder
+    }
+}
+
 @Composable
 private fun DownloadIconButton(
     iconRes: Int,
@@ -465,7 +494,9 @@ private fun PreviewInProgress() {
             onOpenFile = {},
             onResume = {},
             onOpenOriginPage = {},
-            loadPreview = { null },
+            loadPreview = { DownloadManagementScreenUiState.Preview.FileType(
+                DownloadManagementScreenUiState.DownloadFileType.UNKNOWN,
+            ) },
             isHighlighted = false,
             onHighlightFinished = {},
         )
@@ -493,7 +524,9 @@ private fun PreviewPaused() {
             onOpenFile = {},
             onResume = {},
             onOpenOriginPage = {},
-            loadPreview = { null },
+            loadPreview = { DownloadManagementScreenUiState.Preview.FileType(
+                DownloadManagementScreenUiState.DownloadFileType.UNKNOWN,
+            ) },
             isHighlighted = false,
             onHighlightFinished = {},
         )
@@ -517,7 +550,9 @@ private fun PreviewFailedCanResume() {
             onOpenFile = {},
             onResume = {},
             onOpenOriginPage = {},
-            loadPreview = { null },
+            loadPreview = { DownloadManagementScreenUiState.Preview.FileType(
+                DownloadManagementScreenUiState.DownloadFileType.UNKNOWN,
+            ) },
             isHighlighted = false,
             onHighlightFinished = {},
         )
@@ -600,29 +635,40 @@ private fun PreviewCompletedWithAppIcon() {
     }
 }
 
-@Preview(name = "完了・サムネイルなし")
+@Preview(name = "完了・ファイル種別アイコン")
 @Composable
-private fun PreviewCompletedWithoutThumbnail() {
+private fun PreviewCompletedFileTypeIcons() {
+    val samples = listOf(
+        "archive.tar.gz" to DownloadManagementScreenUiState.DownloadFileType.ARCHIVE,
+        "document.pdf" to DownloadManagementScreenUiState.DownloadFileType.PDF,
+        "movie.mkv" to DownloadManagementScreenUiState.DownloadFileType.VIDEO,
+        "song.flac" to DownloadManagementScreenUiState.DownloadFileType.AUDIO,
+        "unknown.bin" to DownloadManagementScreenUiState.DownloadFileType.UNKNOWN,
+    )
     MaterialTheme {
-        DownloadItemRow(
-            item = DownloadManagementScreenUiState.DownloadItem(
-                id = UUID.randomUUID(),
-                fileName = "example.zip",
-                status = DownloadManagementScreenUiState.DownloadStatus.Completed(
-                    fileUri = "content://media/external/downloads/2",
-                ),
-                enqueuedAt = 0L,
-                originPageUrl = null,
-            ),
-            onCancel = {},
-            onPause = {},
-            onOpenFile = {},
-            onResume = {},
-            onOpenOriginPage = {},
-            loadPreview = { null },
-            isHighlighted = false,
-            onHighlightFinished = {},
-        )
+        Column {
+            samples.forEachIndexed { index, (fileName, fileType) ->
+                DownloadItemRow(
+                    item = DownloadManagementScreenUiState.DownloadItem(
+                        id = UUID.randomUUID(),
+                        fileName = fileName,
+                        status = DownloadManagementScreenUiState.DownloadStatus.Completed(
+                            fileUri = "content://media/external/downloads/$index",
+                        ),
+                        enqueuedAt = 0L,
+                        originPageUrl = null,
+                    ),
+                    onCancel = {},
+                    onPause = {},
+                    onOpenFile = {},
+                    onResume = {},
+                    onOpenOriginPage = {},
+                    loadPreview = { DownloadManagementScreenUiState.Preview.FileType(fileType) },
+                    isHighlighted = false,
+                    onHighlightFinished = {},
+                )
+            }
+        }
     }
 }
 
@@ -643,7 +689,9 @@ private fun PreviewFailedCannotResume() {
             onOpenFile = {},
             onResume = {},
             onOpenOriginPage = {},
-            loadPreview = { null },
+            loadPreview = { DownloadManagementScreenUiState.Preview.FileType(
+                DownloadManagementScreenUiState.DownloadFileType.UNKNOWN,
+            ) },
             isHighlighted = false,
             onHighlightFinished = {},
         )
@@ -669,7 +717,9 @@ private fun PreviewLongFileName() {
             onOpenFile = {},
             onResume = {},
             onOpenOriginPage = {},
-            loadPreview = { null },
+            loadPreview = { DownloadManagementScreenUiState.Preview.FileType(
+                DownloadManagementScreenUiState.DownloadFileType.UNKNOWN,
+            ) },
             isHighlighted = false,
             onHighlightFinished = {},
         )
