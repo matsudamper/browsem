@@ -17,6 +17,11 @@ import androidx.core.net.toUri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.work.WorkManager
+import coil3.ImageLoader
+import coil3.request.ImageRequest
+import coil3.request.SuccessResult
+import coil3.svg.SvgDecoder
+import coil3.toBitmap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -43,6 +48,11 @@ internal class DownloadManagementScreenViewModel(
     private val downloadRepository = DownloadRepository(application)
     private val geckoDownloadManager = GeckoDownloadManager(application, downloadRepository)
     private val callbacks = buildCallbacks()
+
+    /** SVG をラスタライズしてサムネイル化するための ImageLoader */
+    private val svgImageLoader = ImageLoader.Builder(application)
+        .components { add(SvgDecoder.Factory()) }
+        .build()
 
     val eventHandler = Channel<(Event) -> Unit>(Channel.UNLIMITED)
 
@@ -108,8 +118,32 @@ internal class DownloadManagementScreenViewModel(
                     return@withContext DownloadManagementScreenUiState.Preview.AppIcon(it)
                 }
             }
+            // SVG は BitmapFactory ベースの loadThumbnail ではデコードできないため、Coil で個別にラスタライズする
+            if (isSvg(mimeType, fileName)) {
+                loadSvgThumbnail(uri)?.let {
+                    return@withContext DownloadManagementScreenUiState.Preview.Thumbnail(it)
+                }
+            }
             DownloadManagementScreenUiState.Preview.FileType(toDownloadFileType(mimeType, fileName))
         }
+    }
+
+    /** SVG ファイルを Coil でラスタライズし、サムネイル用の ImageBitmap を返す。失敗時は null */
+    private suspend fun loadSvgThumbnail(uri: Uri): ImageBitmap? {
+        val request = ImageRequest.Builder(getApplication())
+            .data(uri)
+            .size(PREVIEW_SIZE_PX, PREVIEW_SIZE_PX)
+            .build()
+        return runCatching {
+            val result = svgImageLoader.execute(request) as? SuccessResult ?: return@runCatching null
+            result.image.toBitmap(PREVIEW_SIZE_PX, PREVIEW_SIZE_PX).asImageBitmap()
+        }.getOrNull()
+    }
+
+    /** MIME タイプまたは拡張子から SVG かどうかを判定する */
+    private fun isSvg(mimeType: String?, fileName: String?): Boolean {
+        if (mimeType.equals(MIME_TYPE_SVG, ignoreCase = true)) return true
+        return fileName?.endsWith(".svg", ignoreCase = true) == true
     }
 
     /**
@@ -398,6 +432,9 @@ internal class DownloadManagementScreenViewModel(
         private const val MIME_TYPE_APK = "application/vnd.android.package-archive"
 
         private const val MIME_TYPE_PDF = "application/pdf"
+
+        /** SVG の MIME タイプ */
+        private const val MIME_TYPE_SVG = "image/svg+xml"
 
         /** 圧縮アーカイブとして扱う MIME タイプ */
         private val ARCHIVE_MIME_TYPES = setOf(
