@@ -90,10 +90,7 @@ fun createGeckoSessionDelegateBundle(
                 }
                 if (perm.permission == GeckoSession.PermissionDelegate.PERMISSION_AUTOPLAY_AUDIBLE) {
                     // 音声付きメディアの勝手な自動再生を防ぐため、サイトごとの設定で判断する。
-                    // Gecko は GeckoView 上の自動再生可否をこのデリゲートの応答（ページ単位）だけで
-                    // 決めており、パーミッションマネージャの保存値は参照しないため DENY を返しても
-                    // 次回以降のページで再びこのデリゲートが呼ばれる。
-                    // また拒否してもユーザー操作による再生はブロックされない。
+                    // 拒否してもユーザー操作による再生はブロックされない。
                     val result = GeckoResult<Int>()
                     callbacks.onAutoplayPermissionRequest(perm.uri) { allow ->
                         Log.d("BrowserTabPermission", "audible autoplay permission allow=$allow")
@@ -101,7 +98,12 @@ fun createGeckoSessionDelegateBundle(
                             if (allow) {
                                 GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW
                             } else {
-                                GeckoSession.PermissionDelegate.ContentPermission.VALUE_DENY
+                                // GeckoView は応答をパーミッションマネージャへ永続化するため、
+                                // DENY だと後でサイト設定を「許可」へ変えてもこのデリゲートが
+                                // 呼ばれなくなる恐れがある。永続化されても「確認する」のままに
+                                // なる PROMPT で拒否する（位置情報と同じ理由）。
+                                // Gecko は ALLOW 以外を拒否として扱うため自動再生はブロックされる
+                                GeckoSession.PermissionDelegate.ContentPermission.VALUE_PROMPT
                             },
                         )
                     }
