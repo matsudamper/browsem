@@ -48,6 +48,12 @@ internal class SiteSettingsScreenViewModel(
             }
         }
 
+        override fun setAutoplayPermission(state: SitePermissionState) {
+            viewModelScope.launch {
+                siteSettingsRepository.setAutoplayPermission(host, state)
+            }
+        }
+
         override fun requestClearData(type: SiteSettingsScreenUiState.ClearDataType) {
             uiStateFlow.update { it.copy(clearDataConfirmDialog = type) }
         }
@@ -101,6 +107,7 @@ internal class SiteSettingsScreenViewModel(
             host = host,
             microphonePermission = null,
             geolocationState = null,
+            autoplayPermission = null,
             tlsCertificate = createTlsCertificateUiState(securityInfo),
             clearDataConfirmDialog = null,
             clearDataResultMessage = null,
@@ -116,6 +123,11 @@ internal class SiteSettingsScreenViewModel(
         viewModelScope.launch {
             siteSettingsRepository.requestedGeolocationState(host).collectLatest { state ->
                 uiStateFlow.update { it.copy(geolocationState = state) }
+            }
+        }
+        viewModelScope.launch {
+            siteSettingsRepository.requestedAutoplayPermission(host).collectLatest { permission ->
+                uiStateFlow.update { it.copy(autoplayPermission = permission) }
             }
         }
     }.asStateFlow()

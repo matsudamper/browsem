@@ -126,7 +126,8 @@ fun SiteSettingsScreen(
             SettingSection(title = "サイトが要求した権限") {
                 val hasGeolocation = uiState.geolocationState != null
                 val hasMicrophone = uiState.microphonePermission != null
-                if (!hasGeolocation && !hasMicrophone) {
+                val hasAutoplay = uiState.autoplayPermission != null
+                if (!hasGeolocation && !hasMicrophone && !hasAutoplay) {
                     Text(
                         text = "このサイトが要求した権限はありません",
                         style = MaterialTheme.typography.bodyMedium,
@@ -196,6 +197,42 @@ fun SiteSettingsScreen(
                                     selected = uiState.microphonePermission == SitePermissionState.SITE_PERMISSION_DENY,
                                     onClick = {
                                         uiState.callbacks.setMicrophonePermission(
+                                            SitePermissionState.SITE_PERMISSION_DENY,
+                                        )
+                                    },
+                                )
+                            }
+                        }
+                    }
+                    if (hasAutoplay) {
+                        if (hasGeolocation || hasMicrophone) {
+                            Spacer(Modifier.height(12.dp))
+                        }
+                        PermissionGroup(title = "音声の自動再生") {
+                            Column(Modifier.selectableGroup()) {
+                                SettingsRadioOption(
+                                    label = "確認する",
+                                    selected = uiState.autoplayPermission == SitePermissionState.SITE_PERMISSION_ASK,
+                                    onClick = {
+                                        uiState.callbacks.setAutoplayPermission(
+                                            SitePermissionState.SITE_PERMISSION_ASK,
+                                        )
+                                    },
+                                )
+                                SettingsRadioOption(
+                                    label = "許可",
+                                    selected = uiState.autoplayPermission == SitePermissionState.SITE_PERMISSION_ALLOW,
+                                    onClick = {
+                                        uiState.callbacks.setAutoplayPermission(
+                                            SitePermissionState.SITE_PERMISSION_ALLOW,
+                                        )
+                                    },
+                                )
+                                SettingsRadioOption(
+                                    label = "ブロック",
+                                    selected = uiState.autoplayPermission == SitePermissionState.SITE_PERMISSION_DENY,
+                                    onClick = {
+                                        uiState.callbacks.setAutoplayPermission(
                                             SitePermissionState.SITE_PERMISSION_DENY,
                                         )
                                     },
@@ -312,14 +349,15 @@ private fun CertificateInfoRow(
 private val previewCallbacks = object : SiteSettingsScreenUiState.Callbacks {
     override fun setMicrophonePermission(state: SitePermissionState) = Unit
     override fun setGeolocationState(state: SiteGeolocationState) = Unit
+    override fun setAutoplayPermission(state: SitePermissionState) = Unit
     override fun requestClearData(type: SiteSettingsScreenUiState.ClearDataType) = Unit
     override fun confirmClearData() = Unit
     override fun dismissClearDataConfirm() = Unit
     override fun consumeClearDataResultMessage() = Unit
 }
 
-// 証明書・位置情報・マイク・データ削除をすべて含むため、見切れないよう縦を広げて Preview する
-@Preview(showBackground = true, heightDp = 1100)
+// 証明書・位置情報・マイク・音声の自動再生・データ削除をすべて含むため、見切れないよう縦を広げて Preview する
+@Preview(showBackground = true, heightDp = 1400)
 @Composable
 private fun SiteSettingsScreenPreview() {
     MaterialTheme {
@@ -329,6 +367,7 @@ private fun SiteSettingsScreenPreview() {
                 host = "www.example.com",
                 microphonePermission = SitePermissionState.SITE_PERMISSION_ASK,
                 geolocationState = SiteGeolocationState.SITE_GEOLOCATION_MOCK,
+                autoplayPermission = SitePermissionState.SITE_PERMISSION_DENY,
                 tlsCertificate = SiteSettingsScreenUiState.TlsCertificate.Available(
                     subjectCommonName = "www.example.com",
                     issuer = "Example CA",
@@ -355,6 +394,28 @@ private fun SiteSettingsScreenGeolocationOnlyPreview() {
                 host = "www.example.com",
                 microphonePermission = null,
                 geolocationState = SiteGeolocationState.SITE_GEOLOCATION_DENY,
+                autoplayPermission = null,
+                tlsCertificate = SiteSettingsScreenUiState.TlsCertificate.Insecure,
+                clearDataConfirmDialog = null,
+                clearDataResultMessage = null,
+            ),
+            onBack = {},
+        )
+    }
+}
+
+/** 音声の自動再生だけが要求された場合の表示を確認する */
+@Preview(showBackground = true)
+@Composable
+private fun SiteSettingsScreenAutoplayOnlyPreview() {
+    MaterialTheme {
+        SiteSettingsScreen(
+            uiState = SiteSettingsScreenUiState(
+                callbacks = previewCallbacks,
+                host = "www.example.com",
+                microphonePermission = null,
+                geolocationState = null,
+                autoplayPermission = SitePermissionState.SITE_PERMISSION_ASK,
                 tlsCertificate = SiteSettingsScreenUiState.TlsCertificate.Insecure,
                 clearDataConfirmDialog = null,
                 clearDataResultMessage = null,
@@ -375,6 +436,7 @@ private fun SiteSettingsScreenShortContentPreview() {
                 host = "a.test",
                 microphonePermission = null,
                 geolocationState = null,
+                autoplayPermission = null,
                 tlsCertificate = SiteSettingsScreenUiState.TlsCertificate.Insecure,
                 clearDataConfirmDialog = null,
                 clearDataResultMessage = null,
@@ -395,6 +457,7 @@ private fun SiteSettingsScreenLandscapePreview() {
                 host = "a.test",
                 microphonePermission = null,
                 geolocationState = null,
+                autoplayPermission = null,
                 tlsCertificate = SiteSettingsScreenUiState.TlsCertificate.Insecure,
                 clearDataConfirmDialog = null,
                 clearDataResultMessage = null,
@@ -414,6 +477,7 @@ private fun SiteSettingsScreenNoRequestedPermissionPreview() {
                 host = "www.example.com",
                 microphonePermission = null,
                 geolocationState = null,
+                autoplayPermission = null,
                 tlsCertificate = null,
                 clearDataConfirmDialog = null,
                 clearDataResultMessage = null,
@@ -433,6 +497,7 @@ private fun SiteSettingsScreenClearCookieConfirmPreview() {
                 host = "www.example.com",
                 microphonePermission = null,
                 geolocationState = null,
+                autoplayPermission = null,
                 tlsCertificate = null,
                 clearDataConfirmDialog = SiteSettingsScreenUiState.ClearDataType.Cookie,
                 clearDataResultMessage = null,

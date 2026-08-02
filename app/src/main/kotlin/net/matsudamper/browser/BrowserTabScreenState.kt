@@ -241,6 +241,67 @@ internal class BrowserTabScreenState(
         dialog.onResult(null)
     }
 
+    // --- サイトごとの自動再生（音声付きメディア）許可確認ダイアログ状態 ---
+    var autoplayPermissionDialog by mutableStateOf<AutoplayPermissionDialogState?>(null)
+        private set
+
+    /**
+     * @param onResult true=許可(永続化), false=ブロック(永続化), null=今回のみ拒否
+     */
+    @Stable
+    class AutoplayPermissionDialogState(
+        val host: String,
+        internal val onResult: (Boolean?) -> Unit,
+    )
+
+    fun confirmAutoplayPermissionDialog(allow: Boolean) {
+        val dialog = autoplayPermissionDialog ?: return
+        autoplayPermissionDialog = null
+        dialog.onResult(allow)
+    }
+
+    fun dismissAutoplayPermissionDialog() {
+        val dialog = autoplayPermissionDialog ?: return
+        autoplayPermissionDialog = null
+        dialog.onResult(null)
+    }
+
+    /**
+     * サイトごとの自動再生（音声付きメディア）の許可を解決する。
+     * 未設定 (ASK) の場合は確認ダイアログを表示してユーザーの応答を待ち、
+     * 許可/ブロックの選択をサイト設定として永続化する。
+     */
+    private suspend fun resolveAutoplayPermission(host: String): Boolean {
+        // 要求があったことを記録し、「サイトの設定」画面に自動再生の項目を表示できるようにする
+        siteSettingsRepository.markAutoplayPermissionRequested(host)
+        when (siteSettingsRepository.getAutoplayPermission(host)) {
+            SitePermissionState.SITE_PERMISSION_ALLOW -> return true
+            SitePermissionState.SITE_PERMISSION_DENY -> return false
+            else -> Unit
+        }
+        // 表示中のダイアログが残っている場合は今回のみ拒否として閉じる
+        autoplayPermissionDialog?.also { previous ->
+            autoplayPermissionDialog = null
+            previous.onResult(null)
+        }
+        val result = CompletableDeferred<Boolean?>()
+        autoplayPermissionDialog = AutoplayPermissionDialogState(host) { allow ->
+            result.complete(allow)
+        }
+        val choice = result.await()
+        if (choice != null) {
+            siteSettingsRepository.setAutoplayPermission(
+                host = host,
+                state = if (choice) {
+                    SitePermissionState.SITE_PERMISSION_ALLOW
+                } else {
+                    SitePermissionState.SITE_PERMISSION_DENY
+                },
+            )
+        }
+        return choice == true
+    }
+
     /**
      * サイトごとのマイク権限を解決する。
      * 未設定 (ASK) の場合は確認ダイアログを表示してユーザーの応答を待ち、
@@ -1385,6 +1446,29 @@ internal class BrowserTabScreenState(
             val allow = host != null &&
                 runCatching { siteSettingsRepository.getGeolocationState(host) }.getOrNull() ==
                 SiteGeolocationState.SITE_GEOLOCATION_REAL
+            if (completed.compareAndSet(false, true)) {
+                onResult(allow)
+            }
+        }
+        job.invokeOnCompletion { cause ->
+            // スコープのキャンセル等で onResult まで到達しなかった場合は拒否として完了させる
+            if (cause != null && completed.compareAndSet(false, true)) {
+                onResult(false)
+            }
+        }
+    }
+
+    override fun onAutoplayPermissionRequest(
+        uri: String?,
+        onResult: (allow: Boolean) -> Unit,
+    ) {
+        // Gecko の GeckoResult を未解決のまま残さないよう、onResult は必ず一度呼ぶ
+        val completed = AtomicBoolean(false)
+        val job = coroutineScope.launch {
+            // 自動再生の許可はトップレベルサイト基準のため、iframe からの要求
+            // （uri が iframe のオリジン）も表示中ページのホストで判定する
+            val host = extractSiteHost(currentPageUrl) ?: uri?.let { extractSiteHost(it) }
+            val allow = host != null && resolveAutoplayPermission(host)
             if (completed.compareAndSet(false, true)) {
                 onResult(allow)
             }

@@ -109,6 +109,17 @@ internal fun BrowserTabDialogLayer(
         )
     }
 
+    // サイトごとの自動再生（音声付きメディア）許可確認ダイアログ。
+    // 選択はサイト設定として永続化され、次回以降は確認せずに適用される。
+    state.autoplayPermissionDialog?.let { dialog ->
+        AutoplayPermissionDialog(
+            host = dialog.host,
+            onAllow = { state.confirmAutoplayPermissionDialog(true) },
+            onBlock = { state.confirmAutoplayPermissionDialog(false) },
+            onDismiss = state::dismissAutoplayPermissionDialog,
+        )
+    }
+
     state.pendingDownloadResponse?.let { response ->
         AlertDialog(
             onDismissRequest = state::dismissPendingDownload,
@@ -389,6 +400,36 @@ internal fun BrowserTabDialogLayer(
             },
         )
     }
+}
+
+@Composable
+private fun AutoplayPermissionDialog(
+    host: String,
+    onAllow: () -> Unit,
+    onBlock: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("音声の自動再生") },
+        text = {
+            Text(
+                "$host が音声付きメディアの自動再生を求めています。" +
+                    "ブロックしても再生ボタンを押せば再生できます。" +
+                    "この設定はメニューの「サイトの設定」から変更できます。",
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = onAllow) {
+                Text("許可")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onBlock) {
+                Text("ブロック")
+            }
+        },
+    )
 }
 
 @Composable
@@ -1009,6 +1050,19 @@ private fun PreviewDuplicateDownloadDialog() {
             onConfirm = {},
             onDismiss = {},
             onOpenFile = {},
+        )
+    }
+}
+
+@Preview(name = "AutoplayPermissionDialog")
+@Composable
+private fun PreviewAutoplayPermissionDialog() {
+    BrowserTheme(themeMode = ThemeMode.THEME_SYSTEM) {
+        AutoplayPermissionDialog(
+            host = "www.example.com",
+            onAllow = {},
+            onBlock = {},
+            onDismiss = {},
         )
     }
 }
