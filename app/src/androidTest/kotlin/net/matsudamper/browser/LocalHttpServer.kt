@@ -65,6 +65,7 @@ internal class LocalHttpServer(rootDir: File) : AutoCloseable {
     }
 
     private fun handleConnection(socket: Socket) {
+        socket.soTimeout = SOCKET_TIMEOUT_MS
         val input = socket.getInputStream().buffered()
         val requestLine = readAsciiLine(input) ?: return
         val headers = mutableListOf<String>()
@@ -86,9 +87,25 @@ internal class LocalHttpServer(rootDir: File) : AutoCloseable {
         val file = resolveFile(target)
         if (file == null) {
             writeStatusOnly(output, "404 Not Found")
-            return
+        } else {
+            writeFile(output, file, rangeHeaderOf(headers), includeBody = method == "GET")
         }
-        writeFile(output, file, rangeHeaderOf(headers), includeBody = method == "GET")
+        finishResponse(socket, input)
+    }
+
+    /**
+     * 応答を書き終えた側から先に close すると、未読データが残っている場合に
+     * RST となり応答が破棄されることがある。書き込み方向だけ閉じ、
+     * 相手が閉じるまで読み捨ててから接続を終える。
+     */
+    private fun finishResponse(socket: Socket, input: InputStream) {
+        runCatching { socket.shutdownOutput() }
+        runCatching {
+            val buffer = ByteArray(COPY_BUFFER_SIZE)
+            while (input.read(buffer) >= 0) {
+                // 読み捨てる
+            }
+        }
     }
 
     /**
@@ -202,6 +219,7 @@ internal class LocalHttpServer(rootDir: File) : AutoCloseable {
         private const val LOOPBACK_HOST = "127.0.0.1"
         private const val BACKLOG = 16
         private const val COPY_BUFFER_SIZE = 16 * 1024
+        private const val SOCKET_TIMEOUT_MS = 10_000
         private const val CRLF = "\r\n"
         private val CONTENT_TYPES = mapOf(
             "html" to "text/html; charset=utf-8",
