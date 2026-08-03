@@ -156,11 +156,11 @@ internal fun BrowserApp(
 // rootContent が本体/App/CustomTab のモード別内容を描画する。
 // ──────────────────────────────────────────────────────────────
 
-@Composable
 /**
  * @param onNavigateToUrl 履歴やダウンロードからURLを開く際のコールバック。
  *   呼び出し側がタブ作成と内側ナビの更新を行う。null の場合は導線を非表示にする。
  */
+@Composable
 internal fun BrowserAppShell(
     browserTabController: BrowserTabController,
     browserSessionLifecycleController: BrowserSessionLifecycleController,
@@ -453,7 +453,7 @@ internal fun BrowserAppShell(
                                 }
 
                                 override fun onRestartApp() {
-                                    android.os.Process.killProcess(android.os.Process.myPid())
+                                    Process.killProcess(Process.myPid())
                                 }
 
                                 override fun onNavigateBack() {
