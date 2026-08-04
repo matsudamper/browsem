@@ -576,6 +576,47 @@ private fun PreviewToolbarMenuContent() {
     }
 }
 
+@Preview(name = "ToolbarMenuWebAppLight")
+@Preview(name = "ToolbarMenuWebAppDark", uiMode = android.content.res.Configuration.UI_MODE_NIGHT_YES)
+@Composable
+private fun PreviewToolbarMenuContentWebApp() {
+    BrowserTheme(themeMode = net.matsudamper.browser.data.ThemeMode.THEME_SYSTEM) {
+        Surface(modifier = Modifier.width(280.dp)) {
+            ToolbarMenuContent(
+                onDismissRequest = {},
+                onRefresh = {},
+                onSuperRefresh = {},
+                onHome = {},
+                onForward = {},
+                canGoForward = true,
+                onBack = {},
+                canGoBack = true,
+                onLongPressHistory = {},
+                isPcMode = false,
+                onPcModeToggle = {},
+                showInstallExtensionItem = false,
+                onInstallExtension = {},
+                onTranslatePage = {},
+                onShare = {},
+                onFindInPage = {},
+                onOpenSettings = {},
+                onAddToHomeScreen = {},
+                pageZoomPercent = 100,
+                onPageZoomIn = {},
+                onPageZoomOut = {},
+                onResetPageZoom = {},
+                showOpenSettings = false,
+                showAddToHomeScreen = false,
+                showHome = false,
+                onOpenInBrowser = {},
+                onOpenSiteSettings = {},
+                onOpenDownloads = null,
+                onOpenDevTools = null,
+            )
+        }
+    }
+}
+
 sealed interface BrowserToolbarMenuTestTags {
     val id: String
     val testTag get() = "${BrowserToolbarMenuTestTags::class.java.name}#$id"

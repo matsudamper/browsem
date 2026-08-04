@@ -29,12 +29,21 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import net.matsudamper.browser.data.SiteGeolocationState
 import net.matsudamper.browser.data.SitePermissionState
 import net.matsudamper.browser.resources.R as ResourcesR
+
+sealed interface SiteSettingsScreenTestTags {
+    val id: String
+
+    val testTag get() = "${SiteSettingsScreenTestTags::class.java.name}#$id"
+
+    object Root : SiteSettingsScreenTestTags { override val id = "root" }
+}
 
 /**
  * サイトごとの設定画面。
@@ -59,7 +68,7 @@ fun SiteSettingsScreen(
     }
 
     Scaffold(
-        modifier = modifier,
+        modifier = modifier.testTag(SiteSettingsScreenTestTags.Root.testTag),
         topBar = {
             TopAppBar(
                 title = { Text("サイトの設定") },
