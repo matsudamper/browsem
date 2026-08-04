@@ -27,6 +27,7 @@ internal class LocalHttpServer(rootDir: File) : AutoCloseable {
     private val root: File = rootDir.canonicalFile
     private val serverSocket = ServerSocket(0, BACKLOG, InetAddress.getByName(LOOPBACK_HOST))
     private val executor = Executors.newCachedThreadPool()
+    private val openSockets = mutableSetOf<Socket>()
 
     @Volatile
     private var closed = false
@@ -45,6 +46,13 @@ internal class LocalHttpServer(rootDir: File) : AutoCloseable {
     override fun close() {
         closed = true
         runCatching { serverSocket.close() }
+        // 応答の書き込みはソケットの soTimeout の対象外で、
+        // クライアントが読み取りを止めるとハンドラがブロックしたまま残る。
+        // shutdownNow() では解除できないため、接続中のソケットを明示的に閉じる。
+        synchronized(openSockets) {
+            openSockets.forEach { runCatching { it.close() } }
+            openSockets.clear()
+        }
         executor.shutdownNow()
     }
 
@@ -55,12 +63,20 @@ internal class LocalHttpServer(rootDir: File) : AutoCloseable {
             } catch (_: IOException) {
                 return
             }
+            synchronized(openSockets) { openSockets.add(socket) }
             // シャットダウン中は RejectedExecutionException になるため握り潰す
             runCatching {
                 executor.execute {
-                    socket.use { runCatching { handleConnection(it) } }
+                    try {
+                        socket.use { runCatching { handleConnection(it) } }
+                    } finally {
+                        synchronized(openSockets) { openSockets.remove(socket) }
+                    }
                 }
-            }.onFailure { runCatching { socket.close() } }
+            }.onFailure {
+                synchronized(openSockets) { openSockets.remove(socket) }
+                runCatching { socket.close() }
+            }
         }
     }
 
@@ -130,21 +146,28 @@ internal class LocalHttpServer(rootDir: File) : AutoCloseable {
      * Range 指定があれば 206、無ければ 200 でファイルを返す。
      * 動画のシーク(playlist.html は currentTime を先頭以外へ移動する)で
      * Range リクエストが飛ぶため、部分応答へ対応する。
+     * 満たせない Range は 416 を返す。
      */
     private fun writeFile(output: OutputStream, file: File, rangeHeader: String?, includeBody: Boolean) {
         val fileLength = file.length()
         val range = parseRange(rangeHeader, fileLength)
-        val start = range?.first ?: 0L
-        val endInclusive = range?.second ?: (fileLength - 1).coerceAtLeast(0L)
+        if (range is RangeResult.Unsatisfiable) {
+            writeRangeNotSatisfiable(output, fileLength)
+            return
+        }
+
+        val satisfiable = range as? RangeResult.Satisfiable
+        val start = satisfiable?.start ?: 0L
+        val endInclusive = satisfiable?.endInclusive ?: (fileLength - 1).coerceAtLeast(0L)
         val contentLength = if (fileLength == 0L) 0L else endInclusive - start + 1
 
-        val status = if (range == null) "200 OK" else "206 Partial Content"
+        val status = if (satisfiable == null) "200 OK" else "206 Partial Content"
         val header = buildString {
             append("HTTP/1.1 ").append(status).append(CRLF)
             append("Content-Type: ").append(contentTypeOf(file)).append(CRLF)
             append("Content-Length: ").append(contentLength).append(CRLF)
             append("Accept-Ranges: bytes").append(CRLF)
-            if (range != null) {
+            if (satisfiable != null) {
                 append("Content-Range: bytes ").append(start).append('-')
                     .append(endInclusive).append('/').append(fileLength).append(CRLF)
             }
@@ -170,6 +193,18 @@ internal class LocalHttpServer(rootDir: File) : AutoCloseable {
         output.flush()
     }
 
+    private fun writeRangeNotSatisfiable(output: OutputStream, fileLength: Long) {
+        val header = buildString {
+            append("HTTP/1.1 416 Range Not Satisfiable").append(CRLF)
+            append("Content-Range: bytes */").append(fileLength).append(CRLF)
+            append("Content-Length: 0").append(CRLF)
+            append("Connection: close").append(CRLF)
+            append(CRLF)
+        }
+        output.write(header.toByteArray(Charsets.ISO_8859_1))
+        output.flush()
+    }
+
     private fun writeStatusOnly(output: OutputStream, status: String) {
         val header = "HTTP/1.1 $status${CRLF}Content-Length: 0${CRLF}Connection: close$CRLF$CRLF"
         output.write(header.toByteArray(Charsets.ISO_8859_1))
@@ -177,24 +212,34 @@ internal class LocalHttpServer(rootDir: File) : AutoCloseable {
     }
 
     /**
-     * `bytes=start-end` 形式のみを解釈する。解釈できない場合は null を返し、全体を返す。
+     * `bytes=start-end` 形式のみを解釈する。
+     * Range 指定なし(全体を返す)と、指定はあるが満たせない(416)を区別して返す。
      */
-    private fun parseRange(rangeHeader: String?, fileLength: Long): Pair<Long, Long>? {
-        if (rangeHeader == null || fileLength <= 0) return null
+    private fun parseRange(rangeHeader: String?, fileLength: Long): RangeResult {
+        if (rangeHeader == null) return RangeResult.None
         val spec = rangeHeader.substringAfter("bytes=", "").substringBefore(',')
-        if (spec.isEmpty() || !spec.contains('-')) return null
-        val startText = spec.substringBefore('-').trim()
-        val endText = spec.substringAfter('-').trim()
-        val start = startText.toLongOrNull()
-        val end = endText.toLongOrNull()
+        if (spec.isEmpty() || !spec.contains('-')) return RangeResult.None
+        if (fileLength <= 0) return RangeResult.Unsatisfiable
+        val start = spec.substringBefore('-').trim().toLongOrNull()
+        val end = spec.substringAfter('-').trim().toLongOrNull()
         return when {
             start != null -> {
-                if (start >= fileLength) return null
-                start to (end ?: (fileLength - 1)).coerceAtMost(fileLength - 1)
+                val endInclusive = (end ?: (fileLength - 1)).coerceAtMost(fileLength - 1)
+                if (start >= fileLength || endInclusive < start) {
+                    RangeResult.Unsatisfiable
+                } else {
+                    RangeResult.Satisfiable(start, endInclusive)
+                }
             }
             // `bytes=-N` は末尾 N バイト
-            end != null -> (fileLength - end).coerceAtLeast(0L) to fileLength - 1
-            else -> null
+            end != null -> {
+                if (end <= 0) {
+                    RangeResult.Unsatisfiable
+                } else {
+                    RangeResult.Satisfiable((fileLength - end).coerceAtLeast(0L), fileLength - 1)
+                }
+            }
+            else -> RangeResult.None
         }
     }
 
@@ -213,6 +258,19 @@ internal class LocalHttpServer(rootDir: File) : AutoCloseable {
             if (value == '\n'.code) return builder.toString().removeSuffix("\r")
             builder.append(value.toChar())
         }
+    }
+
+    /**
+     * Range ヘッダの解釈結果。
+     */
+    private sealed interface RangeResult {
+        /** Range 指定なし。全体を 200 で返す。 */
+        data object None : RangeResult
+
+        /** Range 指定はあるが満たせない。416 を返す。 */
+        data object Unsatisfiable : RangeResult
+
+        data class Satisfiable(val start: Long, val endInclusive: Long) : RangeResult
     }
 
     companion object {
