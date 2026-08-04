@@ -7,6 +7,7 @@ import io.ktor.server.http.content.staticFiles
 import io.ktor.server.plugins.partialcontent.PartialContent
 import io.ktor.server.routing.routing
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import java.io.File
 
 /**
@@ -31,9 +32,22 @@ internal class LocalHttpServer(rootDir: File) : AutoCloseable {
         }
     }.start(wait = false)
 
-    /** ポートは OS 任せのため、bind 完了後に解決された値を使う。 */
+    /**
+     * ポートは OS 任せのため、bind 完了後に解決された値を使う。
+     *
+     * `resolvedConnectors()` は bind 完了まで suspend するため、待ち時間に上限を設ける。
+     * また、この初期化子が例外を投げるとコンストラクタが失敗して呼び出し側が
+     * インスタンスを受け取れず `close()` されないため、その場でエンジンを停止する。
+     */
     private val port: Int = runBlocking {
-        server.engine.resolvedConnectors().first().port
+        runCatching {
+            withTimeout(BIND_TIMEOUT_MS) {
+                server.engine.resolvedConnectors().first().port
+            }
+        }.getOrElse { error ->
+            server.stop(gracePeriodMillis = 0, timeoutMillis = STOP_TIMEOUT_MS)
+            throw error
+        }
     }
 
     /**
@@ -49,5 +63,6 @@ internal class LocalHttpServer(rootDir: File) : AutoCloseable {
         private const val LOOPBACK_HOST = "127.0.0.1"
         private const val ANY_PORT = 0
         private const val STOP_TIMEOUT_MS = 1_000L
+        private const val BIND_TIMEOUT_MS = 10_000L
     }
 }
