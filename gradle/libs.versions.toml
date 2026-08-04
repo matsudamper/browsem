@@ -30,6 +30,7 @@ detekt = "2.0.0-alpha.5"
 composeRules = "0.6.3"
 mockk = "1.14.11"
 robolectric = "4.16.1"
+ktor = "3.5.2"
 
 [libraries]
 androidx-compose-bom = { module = "androidx.compose:compose-bom", version.ref = "composeBom" }
@@ -79,6 +80,8 @@ detekt-compose-rules = { module = "io.nlopez.compose.rules:detekt", version.ref 
 kotlin-gradle-plugin = { module = "org.jetbrains.kotlin:kotlin-gradle-plugin", version.ref = "kotlin" }
 mockk = { module = "io.mockk:mockk", version.ref = "mockk" }
 robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
+ktor-server-cio = { module = "io.ktor:ktor-server-cio", version.ref = "ktor" }
+ktor-server-partial-content = { module = "io.ktor:ktor-server-partial-content", version.ref = "ktor" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
