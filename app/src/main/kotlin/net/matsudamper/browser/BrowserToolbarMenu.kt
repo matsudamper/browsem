@@ -1,5 +1,6 @@
 package net.matsudamper.browser
 
+import android.content.res.Configuration
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -34,6 +35,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import net.matsudamper.browser.data.ThemeMode
 import net.matsudamper.browser.ui.common.BrowserTheme
 import net.matsudamper.browser.resources.R as ResourcesR
 
@@ -536,10 +538,10 @@ private fun MenuColumnLabel(
 }
 
 @Preview(name = "ToolbarMenuLight")
-@Preview(name = "ToolbarMenuDark", uiMode = android.content.res.Configuration.UI_MODE_NIGHT_YES)
+@Preview(name = "ToolbarMenuDark", uiMode = Configuration.UI_MODE_NIGHT_YES)
 @Composable
 private fun PreviewToolbarMenuContent() {
-    BrowserTheme(themeMode = net.matsudamper.browser.data.ThemeMode.THEME_SYSTEM) {
+    BrowserTheme(themeMode = ThemeMode.THEME_SYSTEM) {
         Surface(modifier = Modifier.width(280.dp)) {
             ToolbarMenuContent(
                 onDismissRequest = {},
@@ -577,10 +579,10 @@ private fun PreviewToolbarMenuContent() {
 }
 
 @Preview(name = "ToolbarMenuWebAppLight")
-@Preview(name = "ToolbarMenuWebAppDark", uiMode = android.content.res.Configuration.UI_MODE_NIGHT_YES)
+@Preview(name = "ToolbarMenuWebAppDark", uiMode = Configuration.UI_MODE_NIGHT_YES)
 @Composable
 private fun PreviewToolbarMenuContentWebApp() {
-    BrowserTheme(themeMode = net.matsudamper.browser.data.ThemeMode.THEME_SYSTEM) {
+    BrowserTheme(themeMode = ThemeMode.THEME_SYSTEM) {
         Surface(modifier = Modifier.width(280.dp)) {
             ToolbarMenuContent(
                 onDismissRequest = {},
