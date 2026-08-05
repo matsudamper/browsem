@@ -11,6 +11,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.Until
+import net.matsudamper.browser.LocalHttpServer
 import net.matsudamper.browser.MainActivity
 import org.junit.After
 import org.junit.Assert.assertTrue
@@ -32,6 +33,7 @@ import java.util.concurrent.TimeUnit
 @RunWith(AndroidJUnit4::class)
 class MediaNotificationSmokeTest {
     private lateinit var activity: MainActivity
+    private var localHttpServer: LocalHttpServer? = null
 
     @get:Rule
     val activityRule = ActivityScenarioRule(MainActivity::class.java)
@@ -48,6 +50,8 @@ class MediaNotificationSmokeTest {
 
     @After
     fun tearDown() {
+        localHttpServer?.close()
+        localHttpServer = null
         // GeckoViewのメディア再生中にメインスレッドが応答しない場合でもテストがブロックしないよう、
         // CountDownLatchで最大5秒まで待機する非同期後始末にする。
         val latch = CountDownLatch(1)
@@ -61,12 +65,12 @@ class MediaNotificationSmokeTest {
     }
 
     /**
-     * file:///android_asset/test-media/index.html を開き、
+     * ローカル HTTP サーバーが配信する test-media/index.html を開き、
      * 画面タップで再生開始した後に通知シェードへメディア通知が表示されることを確認する。
      */
     @Test
     fun ローカル動画再生でメディア通知が表示される() {
-        val mediaPageUri = prepareLocalMediaPageUri()
+        val mediaPageUri = startMediaPageServer()
         val uiDevice = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
 
         openMediaPage(mediaPageUri)
@@ -144,7 +148,15 @@ class MediaNotificationSmokeTest {
         }
     }
 
-    private fun prepareLocalMediaPageUri(): String {
+    /**
+     * テスト用メディアページをキャッシュへ展開し、
+     * ループバック HTTP サーバーから配信してその URL を返す。
+     *
+     * メディア通知はビルトイン拡張のコンテンツスクリプトが送る再生状態から生成される。
+     * GeckoView 153 以降は拡張機能が file URL へアクセスできないため、
+     * file URL のままでは再生状態を取得できない(LocalHttpServer 参照)。
+     */
+    private fun startMediaPageServer(): String {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val targetContext = instrumentation.targetContext
         val destinationDir = File(targetContext.cacheDir, LOCAL_MEDIA_DIR_NAME).apply { mkdirs() }
@@ -157,7 +169,9 @@ class MediaNotificationSmokeTest {
                 }
             }
         }
-        return File(destinationDir, LOCAL_MEDIA_INDEX_FILE_NAME).toURI().toString()
+        val server = LocalHttpServer(destinationDir)
+        localHttpServer = server
+        return server.url(LOCAL_MEDIA_INDEX_FILE_NAME)
     }
 
     companion object {

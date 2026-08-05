@@ -13,6 +13,7 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import net.matsudamper.browser.GeckoBrowserTabTestTags
+import net.matsudamper.browser.LocalHttpServer
 import net.matsudamper.browser.MainActivity
 import net.matsudamper.browser.openUrlFromUrlBar
 import net.matsudamper.browser.openUrlViaViewIntent
@@ -40,6 +41,8 @@ class MediaPrimarySelectionTest {
     @get:Rule
     val timeoutRule: Timeout = Timeout.millis(TEST_TIMEOUT_MS)
 
+    private var localHttpServer: LocalHttpServer? = null
+
     @Before
     fun setUp() {
         MediaSessionBridge.deactivate()
@@ -47,6 +50,8 @@ class MediaPrimarySelectionTest {
 
     @After
     fun tearDown() {
+        localHttpServer?.close()
+        localHttpServer = null
         val latch = CountDownLatch(1)
         Handler(Looper.getMainLooper()).post {
             runCatching { MediaSessionBridge.deactivate() }
@@ -56,9 +61,14 @@ class MediaPrimarySelectionTest {
         assertTrue("tearDown がタイムアウトしました", latch.await(5, TimeUnit.SECONDS))
     }
 
+    /**
+     * メディアの再生状態はビルトイン拡張のコンテンツスクリプト経由で取得する。
+     * GeckoView 153 以降は拡張機能が file URL へアクセスできないため、
+     * ページはループバックの HTTP サーバーから配信する(LocalHttpServer 参照)。
+     */
     @Test
     fun 再生中の別media要素へ切り替わった時はpositionが新しい要素に追従する() {
-        val mediaPageUri = prepareLocalMediaPageUri(LOCAL_MEDIA_PLAYLIST_FILE_NAME)
+        val mediaPageUri = startMediaPageServer(LOCAL_MEDIA_PLAYLIST_FILE_NAME)
 
         openMediaPage(mediaPageUri)
         ensureMediaPlaybackStarted()
@@ -103,7 +113,11 @@ class MediaPrimarySelectionTest {
         composeRule.waitForUrlBarNotFocused(timeoutMillis = 30_000)
     }
 
-    private fun prepareLocalMediaPageUri(indexFileName: String): String {
+    /**
+     * テスト用メディアページをキャッシュへ展開し、
+     * ループバック HTTP サーバーから配信してその URL を返す。
+     */
+    private fun startMediaPageServer(indexFileName: String): String {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val targetContext = instrumentation.targetContext
         val destinationDir = File(targetContext.cacheDir, LOCAL_MEDIA_DIR_NAME).apply { mkdirs() }
@@ -116,7 +130,9 @@ class MediaPrimarySelectionTest {
                 }
             }
         }
-        return File(destinationDir, indexFileName).toURI().toString()
+        val server = LocalHttpServer(destinationDir)
+        localHttpServer = server
+        return server.url(indexFileName)
     }
 
     private fun ensureBrowserScreen() {
