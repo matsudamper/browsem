@@ -22,6 +22,7 @@ import coil3.request.ImageRequest
 import coil3.request.SuccessResult
 import coil3.svg.SvgDecoder
 import coil3.toBitmap
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -101,6 +102,17 @@ internal class DownloadManagementScreenViewModel(
     private suspend fun loadPreview(fileUri: String): DownloadManagementScreenUiState.Preview {
         return withContext(Dispatchers.IO) {
             val uri = fileUri.toUri()
+            val mimeType = getMimeType(uri)
+            val fileName = getDisplayName(uri)
+            // SVG は BitmapFactory ベースの loadThumbnail ではデコードできないため、loadThumbnail を試さず Coil で個別にラスタライズする
+            if (isSvg(mimeType, fileName)) {
+                loadSvgThumbnail(uri)?.let {
+                    return@withContext DownloadManagementScreenUiState.Preview.Thumbnail(it)
+                }
+                return@withContext DownloadManagementScreenUiState.Preview.FileType(
+                    toDownloadFileType(mimeType, fileName),
+                )
+            }
             val thumbnail = runCatching {
                 getApplication<Application>().contentResolver.loadThumbnail(
                     uri,
@@ -111,17 +123,9 @@ internal class DownloadManagementScreenViewModel(
             if (thumbnail != null) {
                 return@withContext DownloadManagementScreenUiState.Preview.Thumbnail(thumbnail.asImageBitmap())
             }
-            val mimeType = getMimeType(uri)
-            val fileName = getDisplayName(uri)
             if (isApk(mimeType, fileName)) {
                 loadApkIcon(uri)?.let {
                     return@withContext DownloadManagementScreenUiState.Preview.AppIcon(it)
-                }
-            }
-            // SVG は BitmapFactory ベースの loadThumbnail ではデコードできないため、Coil で個別にラスタライズする
-            if (isSvg(mimeType, fileName)) {
-                loadSvgThumbnail(uri)?.let {
-                    return@withContext DownloadManagementScreenUiState.Preview.Thumbnail(it)
                 }
             }
             DownloadManagementScreenUiState.Preview.FileType(toDownloadFileType(mimeType, fileName))
@@ -134,10 +138,15 @@ internal class DownloadManagementScreenViewModel(
             .data(uri)
             .size(PREVIEW_SIZE_PX, PREVIEW_SIZE_PX)
             .build()
-        return runCatching {
-            val result = svgImageLoader.execute(request) as? SuccessResult ?: return@runCatching null
-            result.image.toBitmap(PREVIEW_SIZE_PX, PREVIEW_SIZE_PX).asImageBitmap()
-        }.getOrNull()
+        return try {
+            val result = svgImageLoader.execute(request) as? SuccessResult ?: return null
+            // toBitmap() は引数省略時デコード結果のサイズをそのまま使うため、縦横比を保った Canvas になる
+            result.image.toBitmap().asImageBitmap()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            null
+        }
     }
 
     /** MIME タイプまたは拡張子から SVG かどうかを判定する */
