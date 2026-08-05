@@ -44,6 +44,34 @@ data class DownloadManagementScreenUiState(
         ) : DownloadStatus
     }
 
+    /**
+     * ダウンロード完了アイテムの左側に表示するプレビュー。
+     * 種類によって表示方法（クロップ / 全体表示 / アイコン描画）が異なる
+     */
+    @Stable
+    sealed interface Preview {
+        /** 画像・動画などのサムネイル。表示領域いっぱいにクロップして表示する */
+        data class Thumbnail(val image: ImageBitmap) : Preview
+
+        /** APK から取り出したアプリアイコン。全体が収まるように表示する */
+        data class AppIcon(val image: ImageBitmap) : Preview
+
+        /** サムネイルを取得できないファイルに MIME タイプから割り当てる汎用アイコン */
+        data class FileType(val fileType: DownloadFileType) : Preview
+    }
+
+    /** MIME タイプから判定したファイル種別。汎用アイコンの出し分けに使う */
+    enum class DownloadFileType {
+        /** zip・gzip・tar などの圧縮アーカイブ */
+        ARCHIVE,
+        PDF,
+        VIDEO,
+        AUDIO,
+
+        /** 上記のいずれにも当てはまらないファイル */
+        UNKNOWN,
+    }
+
     @Stable
     data class DownloadItem(
         val id: UUID,
@@ -65,7 +93,7 @@ data class DownloadManagementScreenUiState(
         val onResume: (UUID) -> Unit,
         /** ダウンロード開始時のページを新しいタブで開く */
         val onOpenOriginPage: (url: String) -> Unit,
-        /** ファイル URI からサムネイルを読み込む。サムネイル非対応の場合は null を返す */
-        val loadThumbnail: suspend (fileUri: String) -> ImageBitmap?,
+        /** ファイル URI からプレビューを読み込む。サムネイルを取得できない場合は汎用アイコンを返す */
+        val loadPreview: suspend (fileUri: String) -> Preview,
     )
 }

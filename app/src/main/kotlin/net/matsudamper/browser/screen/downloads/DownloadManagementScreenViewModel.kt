@@ -4,10 +4,15 @@ import android.app.Application
 import android.app.DownloadManager
 import android.app.NotificationManager
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.net.Uri
+import android.os.Build
 import android.provider.MediaStore
 import android.provider.Settings
 import android.util.Size
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.core.graphics.drawable.toBitmap
 import androidx.core.net.toUri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -26,6 +31,8 @@ import net.matsudamper.browser.data.download.DownloadRecord
 import net.matsudamper.browser.data.download.DownloadRecordStatus
 import net.matsudamper.browser.data.download.DownloadRepository
 import net.matsudamper.browser.ui.downloads.DownloadManagementScreenUiState
+import java.io.File
+import java.util.Locale
 import java.util.UUID
 
 internal class DownloadManagementScreenViewModel(
@@ -72,18 +79,145 @@ internal class DownloadManagementScreenViewModel(
         onOpenDownloadsFolder = { openDownloadsFolder() },
         onResume = { id -> resumeDownload(id) },
         onOpenOriginPage = { url -> eventHandler.trySend { it.navigateToUrl(url) } },
-        loadThumbnail = { fileUri ->
-            withContext(Dispatchers.IO) {
-                runCatching {
-                    getApplication<Application>().contentResolver.loadThumbnail(
-                        fileUri.toUri(),
-                        Size(THUMBNAIL_SIZE_PX, THUMBNAIL_SIZE_PX),
-                        null,
-                    )
-                }.getOrNull()?.asImageBitmap()
-            }
-        },
+        loadPreview = { fileUri -> loadPreview(fileUri) },
     )
+
+    /**
+     * ダウンロード済みファイルのプレビューを読み込む。
+     * MediaStore がサムネイルを生成できる画像・動画・音声はサムネイルを、
+     * APK は PackageManager で取り出したアプリアイコンを返す。
+     * どちらも取得できない場合は MIME タイプから判定した汎用アイコンを返す
+     */
+    private suspend fun loadPreview(fileUri: String): DownloadManagementScreenUiState.Preview {
+        return withContext(Dispatchers.IO) {
+            val uri = fileUri.toUri()
+            val thumbnail = runCatching {
+                getApplication<Application>().contentResolver.loadThumbnail(
+                    uri,
+                    Size(PREVIEW_SIZE_PX, PREVIEW_SIZE_PX),
+                    null,
+                )
+            }.getOrNull()
+            if (thumbnail != null) {
+                return@withContext DownloadManagementScreenUiState.Preview.Thumbnail(thumbnail.asImageBitmap())
+            }
+            val mimeType = getMimeType(uri)
+            val fileName = getDisplayName(uri)
+            if (isApk(mimeType, fileName)) {
+                loadApkIcon(uri)?.let {
+                    return@withContext DownloadManagementScreenUiState.Preview.AppIcon(it)
+                }
+            }
+            DownloadManagementScreenUiState.Preview.FileType(toDownloadFileType(mimeType, fileName))
+        }
+    }
+
+    /**
+     * APK ファイルからアプリアイコンを取り出す。解析に失敗した場合は null を返す。
+     * PackageManager.getPackageArchiveInfo はファイルパスしか受け付けないため、
+     * MediaStore の content:// URI を実ファイルパスに解決してから渡す
+     */
+    private fun loadApkIcon(uri: Uri): ImageBitmap? {
+        val packageManager = getApplication<Application>().packageManager
+        return useFilePath(uri) { path ->
+            val packageInfo = runCatching {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    packageManager.getPackageArchiveInfo(path, PackageManager.PackageInfoFlags.of(0L))
+                } else {
+                    @Suppress("DEPRECATION")
+                    packageManager.getPackageArchiveInfo(path, 0)
+                }
+            }.getOrNull() ?: return@useFilePath null
+            val applicationInfo = packageInfo.applicationInfo ?: return@useFilePath null
+            // アイコンのリソースを APK 自身から解決させるため、参照先パスを設定する
+            applicationInfo.sourceDir = path
+            applicationInfo.publicSourceDir = path
+            runCatching {
+                applicationInfo.loadIcon(packageManager)
+                    .toBitmap(width = PREVIEW_SIZE_PX, height = PREVIEW_SIZE_PX)
+                    .asImageBitmap()
+            }.getOrNull()
+        }
+    }
+
+    /** MIME タイプまたは拡張子から APK かどうかを判定する */
+    private fun isApk(mimeType: String?, fileName: String?): Boolean {
+        if (mimeType.equals(MIME_TYPE_APK, ignoreCase = true)) return true
+        return fileName?.endsWith(".apk", ignoreCase = true) == true
+    }
+
+    /**
+     * MIME タイプ（取得できない場合は拡張子）からファイル種別を判定する。
+     * MediaStore は拡張子を認識できないファイルに application/octet-stream を返すため、
+     * MIME タイプで判定できない場合は拡張子でも判定する
+     */
+    private fun toDownloadFileType(
+        mimeType: String?,
+        fileName: String?,
+    ): DownloadManagementScreenUiState.DownloadFileType {
+        val normalizedMimeType = mimeType?.lowercase(Locale.ROOT)
+        when {
+            normalizedMimeType == null -> Unit
+            normalizedMimeType.startsWith("video/") -> {
+                return DownloadManagementScreenUiState.DownloadFileType.VIDEO
+            }
+            normalizedMimeType.startsWith("audio/") -> {
+                return DownloadManagementScreenUiState.DownloadFileType.AUDIO
+            }
+            normalizedMimeType == MIME_TYPE_PDF -> return DownloadManagementScreenUiState.DownloadFileType.PDF
+            normalizedMimeType in ARCHIVE_MIME_TYPES -> {
+                return DownloadManagementScreenUiState.DownloadFileType.ARCHIVE
+            }
+        }
+        val extension = fileName?.substringAfterLast('.', "")?.lowercase(Locale.ROOT)
+        return when {
+            extension.isNullOrEmpty() -> DownloadManagementScreenUiState.DownloadFileType.UNKNOWN
+            extension in ARCHIVE_EXTENSIONS -> DownloadManagementScreenUiState.DownloadFileType.ARCHIVE
+            extension == "pdf" -> DownloadManagementScreenUiState.DownloadFileType.PDF
+            else -> DownloadManagementScreenUiState.DownloadFileType.UNKNOWN
+        }
+    }
+
+    private fun getMimeType(uri: Uri): String? {
+        return runCatching { getApplication<Application>().contentResolver.getType(uri) }.getOrNull()
+    }
+
+    /**
+     * MediaStore の content:// URI では lastPathSegment が数値IDになるため、
+     * 拡張子を見るには DISPLAY_NAME を取得する必要がある
+     */
+    private fun getDisplayName(uri: Uri): String? {
+        return runCatching {
+            getApplication<Application>().contentResolver
+                .query(uri, arrayOf(MediaStore.MediaColumns.DISPLAY_NAME), null, null, null)
+                ?.use { cursor ->
+                    if (cursor.moveToFirst()) cursor.getString(0) else null
+                }
+        }.getOrNull()
+    }
+
+    /**
+     * content:// URI を、ファイルパスを要求する API へ渡せる形に解決して [block] を呼ぶ。
+     * MediaStore の DATA 列が使える場合はその実パスを、使えない場合は
+     * ファイルディスクリプタ経由の /proc/self/fd パスを渡す。
+     * 後者は [block] の実行中のみ有効なため、[block] 内で読み切る必要がある
+     */
+    private fun <T> useFilePath(uri: Uri, block: (path: String) -> T?): T? {
+        val resolver = getApplication<Application>().contentResolver
+        val dataPath = runCatching {
+            resolver.query(uri, arrayOf(MediaStore.MediaColumns.DATA), null, null, null)?.use { cursor ->
+                if (cursor.moveToFirst()) cursor.getString(0) else null
+            }
+        }.getOrNull()
+        if (dataPath != null && File(dataPath).canRead()) {
+            return runCatching { block(dataPath) }.getOrNull()
+        }
+        return runCatching {
+            resolver.openFileDescriptor(uri, "r")?.use { descriptor ->
+                block("/proc/self/fd/${descriptor.fd}")
+            }
+        }.getOrNull()
+    }
 
     private fun DownloadRecord.toDownloadItem(): DownloadManagementScreenUiState.DownloadItem {
         val uiStatus = when (status) {
@@ -213,16 +347,9 @@ internal class DownloadManagementScreenViewModel(
     private fun openFile(fileUri: String) {
         val app = getApplication<Application>()
         val uri = fileUri.toUri()
-        val mimeType = app.contentResolver.getType(uri) ?: "*/*"
-        // MediaStore の content:// URI では lastPathSegment が数値IDになるため、
-        // DISPLAY_NAME を取得してファイル名による拡張子チェックも行う
-        val displayName = app.contentResolver.query(
-            uri, arrayOf(MediaStore.MediaColumns.DISPLAY_NAME), null, null, null,
-        )?.use { cursor ->
-            if (cursor.moveToFirst()) cursor.getString(0) else null
-        }
-        val isApk = mimeType.equals("application/vnd.android.package-archive", ignoreCase = true) ||
-            (displayName?.endsWith(".apk", ignoreCase = true) == true)
+        val mimeType = getMimeType(uri) ?: "*/*"
+        // MIME タイプが APK でなくても拡張子で判定できるようファイル名も見る
+        val isApk = isApk(mimeType, getDisplayName(uri))
 
         // APKの場合、提供元不明アプリのインストール権限がなければ設定画面へ誘導する
         if (isApk && !app.packageManager.canRequestPackageInstalls()) {
@@ -235,7 +362,7 @@ internal class DownloadManagementScreenViewModel(
         }
 
         // 拡張子でAPKと判定された場合は確実にインストーラーが起動するようMIMEタイプを補正する
-        val effectiveMimeType = if (isApk) "application/vnd.android.package-archive" else mimeType
+        val effectiveMimeType = if (isApk) MIME_TYPE_APK else mimeType
         val intent = Intent(Intent.ACTION_VIEW).apply {
             setDataAndType(uri, effectiveMimeType)
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION
@@ -264,7 +391,39 @@ internal class DownloadManagementScreenViewModel(
     }
 
     companion object {
-        /** loadThumbnail に渡すサムネイルの最大サイズ (px) */
-        private const val THUMBNAIL_SIZE_PX = 256
+        /** サムネイル・アプリアイコンを読み込む際の最大サイズ (px) */
+        private const val PREVIEW_SIZE_PX = 256
+
+        /** APK の MIME タイプ */
+        private const val MIME_TYPE_APK = "application/vnd.android.package-archive"
+
+        private const val MIME_TYPE_PDF = "application/pdf"
+
+        /** 圧縮アーカイブとして扱う MIME タイプ */
+        private val ARCHIVE_MIME_TYPES = setOf(
+            "application/zip",
+            "application/x-zip-compressed",
+            "application/gzip",
+            "application/x-gzip",
+            "application/x-tar",
+            "application/x-compressed-tar",
+            "application/x-bzip",
+            "application/x-bzip2",
+            "application/x-xz",
+            "application/zstd",
+            "application/x-7z-compressed",
+            "application/vnd.rar",
+            "application/x-rar-compressed",
+            "application/x-lzh-compressed",
+            "application/java-archive",
+        )
+
+        /**
+         * 圧縮アーカイブとして扱う拡張子。
+         * MediaStore が application/octet-stream しか返さない場合の判定に使う
+         */
+        private val ARCHIVE_EXTENSIONS = setOf(
+            "zip", "gz", "tgz", "tar", "bz2", "tbz2", "xz", "zst", "7z", "rar", "lzh", "jar",
+        )
     }
 }
