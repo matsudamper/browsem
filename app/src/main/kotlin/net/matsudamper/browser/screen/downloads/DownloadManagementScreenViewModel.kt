@@ -229,13 +229,17 @@ internal class DownloadManagementScreenViewModel(
                         fileUri = uri,
                     )
                 } else {
-                    DownloadManagementScreenUiState.DownloadStatus.Failed(canResume = false)
+                    DownloadManagementScreenUiState.DownloadStatus.Failed(
+                        canResume = false,
+                        reason = failureReason,
+                    )
                 }
             }
             DownloadRecordStatus.FAILED -> {
                 DownloadManagementScreenUiState.DownloadStatus.Failed(
                     // blob: URL は再取得できないため、部分ファイルがあっても再開ボタンを出さない
                     canResume = partialFileUri != null && DownloadUrl.isRefetchable(url),
+                    reason = failureReason,
                 )
             }
             DownloadRecordStatus.ENQUEUED -> {

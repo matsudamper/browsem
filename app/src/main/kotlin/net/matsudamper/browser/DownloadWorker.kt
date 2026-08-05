@@ -18,7 +18,9 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 import net.matsudamper.browser.data.download.DownloadRepository
+import net.matsudamper.browser.download.DownloadByteFormat
 import net.matsudamper.browser.download.DownloadEngine
+import net.matsudamper.browser.download.DownloadFailureReason
 import net.matsudamper.browser.download.DownloadHttpClient
 import net.matsudamper.browser.download.DownloadHttpResponse
 import net.matsudamper.browser.download.DownloadMetadata
@@ -133,6 +135,8 @@ internal class DownloadWorker(
             throw e
         } catch (e: Exception) {
             e.printStackTrace()
+            // 「失敗」表示だけでは原因が分からないため、例外の内容をレコードに残して UI・通知に出す
+            val failureReason = DownloadFailureReason.from(e)
             val savedUri = partialResultUri
             if (savedUri != null && partialResultTotalRead > 0) {
                 // 部分ファイルが存在する場合は再開可能として保存する
@@ -142,13 +146,14 @@ internal class DownloadWorker(
                     fileName = partialResultFileName,
                     totalRead = partialResultTotalRead,
                     contentLength = partialResultContentLength,
+                    failureReason = failureReason,
                 )
             } else {
                 // partialResultUri が非null かつ 0バイトの場合は孤立したMediaStoreエントリを削除する
                 savedUri?.let { context.contentResolver.delete(it, null, null) }
-                repository.updateFailed(id.toString())
+                repository.updateFailed(id.toString(), failureReason)
             }
-            postFailureNotification(stableWorkerId)
+            postFailureNotification(stableWorkerId, failureReason)
             Result.failure()
         }
     }
@@ -190,7 +195,7 @@ internal class DownloadWorker(
         notificationManager.notify(NOTIFICATION_ID_COMPLETE_BASE + positiveHash, notification)
     }
 
-    private suspend fun postFailureNotification(stableWorkerId: String) {
+    private suspend fun postFailureNotification(stableWorkerId: String, failureReason: String) {
         // フォアグラウンド通知と異なるIDを使う。
         // フォアグラウンド通知と同じIDを使うと、WorkManager がフォアグラウンドサービス停止時に
         // stopForeground(STOP_FOREGROUND_REMOVE) で同IDの通知を削除してしまうため。
@@ -207,11 +212,15 @@ internal class DownloadWorker(
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
         val fileName = repository.getByCurrentWorkerId(id)?.fileName.orEmpty()
-
+        // 通知を開かなくても原因が分かるよう、タイトルに失敗した旨、本文に原因を表示する。
+        // 原因は1行に収まらないことがあるため BigTextStyle で展開できるようにする
+        val title = fileName.ifBlank { context.getString(R.string.download_notification_failed) }
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_notify_error)
-            .setContentTitle(fileName)
-            .setContentText(context.getString(R.string.download_notification_failed))
+            .setContentTitle(title)
+            .setSubText(context.getString(R.string.download_notification_failed))
+            .setContentText(failureReason)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(failureReason))
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
             .build()
@@ -482,11 +491,7 @@ internal class DownloadWorker(
             }
         }
 
-        fun formatBytes(bytes: Long): String = when {
-            bytes >= 1024L * 1024 -> "%.1f MB".format(bytes / (1024.0 * 1024.0))
-            bytes >= 1024 -> "%.1f KB".format(bytes / 1024.0)
-            else -> "$bytes B"
-        }
+        fun formatBytes(bytes: Long): String = DownloadByteFormat.format(bytes)
 
         fun ensureNotificationChannel(context: Context) {
             val notificationManager = context.getSystemService(NotificationManager::class.java)

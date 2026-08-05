@@ -410,6 +410,14 @@ private fun DownloadItemRow(
                     }
 
                     is DownloadManagementScreenUiState.DownloadStatus.Failed -> {
+                        // 「失敗」だけでは対処できないため、原因が分かっている場合は必ず表示する
+                        status.reason?.let { reason ->
+                            Text(
+                                text = reason,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                        }
                         if (!status.canResume) {
                             Text(
                                 text = "再試行するには再度ダウンロードしてください。",
@@ -541,7 +549,10 @@ private fun PreviewFailedCanResume() {
             item = DownloadManagementScreenUiState.DownloadItem(
                 id = UUID.randomUUID(),
                 fileName = "example.zip",
-                status = DownloadManagementScreenUiState.DownloadStatus.Failed(canResume = true),
+                status = DownloadManagementScreenUiState.DownloadStatus.Failed(
+                    canResume = true,
+                    reason = "通信が途中で切断されました (1.0 MB / 5.0 MB)",
+                ),
                 enqueuedAt = 0L,
                 originPageUrl = "https://example.com/page",
             ),
@@ -680,7 +691,10 @@ private fun PreviewFailedCannotResume() {
             item = DownloadManagementScreenUiState.DownloadItem(
                 id = UUID.randomUUID(),
                 fileName = "example.zip",
-                status = DownloadManagementScreenUiState.DownloadStatus.Failed(canResume = false),
+                status = DownloadManagementScreenUiState.DownloadStatus.Failed(
+                    canResume = false,
+                    reason = "ページ内で生成された一時データ (blob) のため、取得し直せません",
+                ),
                 enqueuedAt = 0L,
                 originPageUrl = null,
             ),
