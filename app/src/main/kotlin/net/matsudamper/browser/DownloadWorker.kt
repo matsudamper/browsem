@@ -22,6 +22,7 @@ import net.matsudamper.browser.download.DownloadEngine
 import net.matsudamper.browser.download.DownloadHttpClient
 import net.matsudamper.browser.download.DownloadHttpResponse
 import net.matsudamper.browser.download.DownloadMetadata
+import net.matsudamper.browser.download.DownloadUrl
 import net.matsudamper.browser.download.GeckoDownloadHttpClient
 import net.matsudamper.browser.download.PendingDownloadBodyStore
 import net.matsudamper.browser.download.WebResponseDownloadResponse
@@ -228,12 +229,20 @@ internal class DownloadWorker(
         // パスワード submit(POST)・ワンタイムURL・セッション依存のダウンロードは
         // URL を GET し直すと 0 バイトになるため、元レスポンスのボディを優先する。
         val pendingResponse = PendingDownloadBodyStore.take(id.toString())
-        val response: DownloadHttpResponse = pendingResponse?.let { WebResponseDownloadResponse(it) }
-            ?: httpClient.fetch(urlString, referrerUrl, 0L)
+        val response: DownloadHttpResponse = if (pendingResponse != null) {
+            WebResponseDownloadResponse(pendingResponse)
+        } else {
+            // blob: URL は生成元ドキュメントでしか解決できず、GET し直しても取得できない。
+            // 何が起きたのか分かるメッセージにして、原因不明の失敗として扱わないようにする
+            if (!DownloadUrl.isRefetchable(urlString)) {
+                throw IOException("ページ内で生成された一時データ (blob) のため、取得し直せません")
+            }
+            httpClient.fetch(urlString, referrerUrl, 0L)
+        }
 
         try {
             val statusCode = response.statusCode
-            if (statusCode !in 200 until 300) {
+            if (!DownloadMetadata.isSuccessStatus(statusCode)) {
                 throw IOException("HTTP エラー: $statusCode")
             }
 
@@ -327,8 +336,9 @@ internal class DownloadWorker(
         try {
             val statusCode = response.statusCode
 
-            // サーバーがRangeリクエストをサポートしていない場合（200 OK）は最初からやり直す
-            if (statusCode == 200) {
+            // サーバーがRangeリクエストをサポートしていない場合（200 OK）は最初からやり直す。
+            // 非HTTP（statusCode が無い）レスポンスも Range 継続はできないため同様に扱う
+            if (statusCode == 200 || statusCode == DownloadMetadata.NO_HTTP_STATUS) {
                 // 部分ファイルを削除して新規ダウンロードを開始する
                 resolver.delete(partialUri, null, null)
                 partialResultUri = null
