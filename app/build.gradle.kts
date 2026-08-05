@@ -172,5 +172,8 @@ dependencies {
     androidTestImplementation(libs.androidx.test.espresso.core)
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     androidTestImplementation(libs.androidx.test.uiautomator)
+    // テスト用ページを 127.0.0.1 の HTTP で配信するローカルサーバー (LocalHttpServer)
+    androidTestImplementation(libs.ktor.server.cio)
+    androidTestImplementation(libs.ktor.server.partial.content)
     androidTestUtil(libs.androidx.test.orchestrator)
 }
