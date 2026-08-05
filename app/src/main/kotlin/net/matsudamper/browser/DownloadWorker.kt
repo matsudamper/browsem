@@ -244,7 +244,7 @@ internal class DownloadWorker(
             // blob: URL は生成元ドキュメントでしか解決できず、GET し直しても取得できない。
             // 何が起きたのか分かるメッセージにして、原因不明の失敗として扱わないようにする
             if (!DownloadUrl.isRefetchable(urlString)) {
-                throw IOException("ページ内で生成された一時データ (blob) のため、取得し直せません")
+                throw IOException(BLOB_NOT_REFETCHABLE_MESSAGE)
             }
             httpClient.fetch(urlString, referrerUrl, 0L)
         }
@@ -336,6 +336,12 @@ internal class DownloadWorker(
         partialUri: Uri,
     ): Pair<Uri, String> {
         val resolver = context.contentResolver
+
+        // 再開は必ずURLの再取得を伴うため、再取得できないURLはここで止める。
+        // UI からは再開ボタンを出していないが、UI 以外の経路でも不正な再取得を始めないようにする
+        if (!DownloadUrl.isRefetchable(urlString)) {
+            throw IOException(BLOB_NOT_REFETCHABLE_MESSAGE)
+        }
 
         // 部分ファイルの実際のサイズを取得する（DBの値と一致しない場合に備える）
         val actualFileSize = resolver.openFileDescriptor(partialUri, "r")?.use { it.statSize } ?: 0L
@@ -450,6 +456,9 @@ internal class DownloadWorker(
     }
 
     companion object {
+        /** blob: URL を取得し直そうとした場合の失敗理由 */
+        private const val BLOB_NOT_REFETCHABLE_MESSAGE = "ページ内で生成された一時データ (blob) のため、取得し直せません"
+
         /** 進捗（通知・Room）の更新間隔。頻繁な更新を避けるためのレート制限 */
         private const val PROGRESS_UPDATE_INTERVAL_MILLIS = 1000L
 

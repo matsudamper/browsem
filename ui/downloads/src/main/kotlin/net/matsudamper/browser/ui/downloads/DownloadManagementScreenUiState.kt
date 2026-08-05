@@ -39,12 +39,14 @@ data class DownloadManagementScreenUiState(
         data object Cancelled : DownloadStatus
 
         /**
-         * ダウンロード一時停止中。再開ボタンを表示する。
+         * ダウンロード一時停止中。
+         * [canResume] が true の場合は再開ボタンを表示する
          */
         data class Paused(
             val progress: Int,
             val totalRead: Long,
             val contentLength: Long,
+            val canResume: Boolean,
         ) : DownloadStatus
     }
 

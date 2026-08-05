@@ -264,6 +264,8 @@ internal class DownloadManagementScreenViewModel(
                     progress = progress,
                     totalRead = totalRead,
                     contentLength = contentLength,
+                    // blob: URL は再取得できないため、部分ファイルがあっても再開ボタンを出さない
+                    canResume = DownloadUrl.isRefetchable(url),
                 )
             }
         }
