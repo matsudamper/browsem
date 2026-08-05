@@ -27,7 +27,7 @@ koin = "4.2.2"
 androidxBrowser = "1.10.0"
 uiautomator = "2.4.0"
 detekt = "2.0.0-alpha.6"
-composeRules = "0.6.3"
+composeRules = "0.6.4"
 mockk = "1.14.11"
 robolectric = "4.16.1"
 
