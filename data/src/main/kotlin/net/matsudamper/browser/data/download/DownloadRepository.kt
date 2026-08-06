@@ -23,6 +23,8 @@ data class DownloadRecord(
     val referrerUrl: String,
     /** 失敗・一時停止時に保存した部分ファイルURI。非nullの場合は再開可能 */
     val partialFileUri: String?,
+    /** 失敗した場合の原因。UIに表示する。失敗していない場合は null */
+    val failureReason: String?,
 )
 
 class DownloadRepository(context: Context) {
@@ -99,8 +101,8 @@ class DownloadRepository(context: Context) {
         dao.updateCompleted(currentWorkerId = currentWorkerId, fileName = fileName, fileUri = fileUri)
     }
 
-    suspend fun updateFailed(currentWorkerId: String) {
-        dao.updateFailed(currentWorkerId = currentWorkerId)
+    suspend fun updateFailed(currentWorkerId: String, failureReason: String?) {
+        dao.updateFailed(currentWorkerId = currentWorkerId, failureReason = failureReason)
     }
 
     /**
@@ -113,6 +115,7 @@ class DownloadRepository(context: Context) {
         fileName: String,
         totalRead: Long,
         contentLength: Long,
+        failureReason: String?,
     ) {
         dao.updatePartialFailed(
             currentWorkerId = currentWorkerId,
@@ -120,6 +123,7 @@ class DownloadRepository(context: Context) {
             fileName = fileName,
             totalRead = totalRead,
             contentLength = contentLength,
+            failureReason = failureReason,
         )
     }
 
@@ -210,6 +214,7 @@ class DownloadRepository(context: Context) {
             enqueuedAt = enqueuedAt,
             referrerUrl = referrerUrl,
             partialFileUri = partialFileUri,
+            failureReason = failureReason,
         )
     }
 }

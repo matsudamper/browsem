@@ -30,6 +30,7 @@ import net.matsudamper.browser.GeckoDownloadManager
 import net.matsudamper.browser.data.download.DownloadRecord
 import net.matsudamper.browser.data.download.DownloadRecordStatus
 import net.matsudamper.browser.data.download.DownloadRepository
+import net.matsudamper.browser.download.DownloadUrl
 import net.matsudamper.browser.ui.downloads.DownloadManagementScreenUiState
 import java.io.File
 import java.util.Locale
@@ -228,12 +229,17 @@ internal class DownloadManagementScreenViewModel(
                         fileUri = uri,
                     )
                 } else {
-                    DownloadManagementScreenUiState.DownloadStatus.Failed(canResume = false)
+                    DownloadManagementScreenUiState.DownloadStatus.Failed(
+                        canResume = false,
+                        reason = failureReason,
+                    )
                 }
             }
             DownloadRecordStatus.FAILED -> {
                 DownloadManagementScreenUiState.DownloadStatus.Failed(
-                    canResume = partialFileUri != null,
+                    // blob: URL は再取得できないため、部分ファイルがあっても再開ボタンを出さない
+                    canResume = partialFileUri != null && DownloadUrl.isRefetchable(url),
+                    reason = failureReason,
                 )
             }
             DownloadRecordStatus.ENQUEUED -> {
@@ -258,6 +264,8 @@ internal class DownloadManagementScreenViewModel(
                     progress = progress,
                     totalRead = totalRead,
                     contentLength = contentLength,
+                    // blob: URL は再取得できないため、部分ファイルがあっても再開ボタンを出さない
+                    canResume = DownloadUrl.isRefetchable(url),
                 )
             }
         }

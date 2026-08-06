@@ -26,4 +26,6 @@ data class DownloadEntity(
     val referrerUrl: String = "",
     /** ダウンロード失敗時に保存した部分ファイルのMediaStore URI。再開時にRangeリクエストで使用 */
     val partialFileUri: String? = null,
+    /** ダウンロード失敗の原因。UI・通知に表示する。失敗していない場合は null */
+    val failureReason: String? = null,
 )

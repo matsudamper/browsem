@@ -1,6 +1,8 @@
 package net.matsudamper.browser.download
 
+import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
+import java.io.InputStream
 import kotlinx.coroutines.test.runTest
 import net.matsudamper.browser.download.LocalDownloadServer.Companion.respondChunked
 import net.matsudamper.browser.download.LocalDownloadServer.Companion.respondFixed
@@ -40,15 +42,20 @@ class DownloadEndToEndTest {
     /** WorkerのdownloadFileと同じ標準フロー（ステータス確認→body→copyTo）でURLを保存する */
     private suspend fun fetchAndSave(path: String): SaveResult {
         client.fetch(server.baseUrl + path, "", 0L).use { response ->
-            if (response.statusCode !in 200 until 300) {
-                return SaveResult(response.statusCode, ByteArray(0), failed = true)
-            }
-            val body = response.body ?: return SaveResult(response.statusCode, ByteArray(0), failed = true)
-            val out = ByteArrayOutputStream()
-            val contentLength = DownloadMetadata.parseContentLength(response.header("Content-Length"))
-            engine.copyTo(body, out, contentLength)
-            return SaveResult(response.statusCode, out.toByteArray(), failed = false)
+            return saveResponse(response)
         }
+    }
+
+    /** Workerの保存フローそのもの。レスポンスの生成元に依存せず検証できるよう切り出す */
+    private suspend fun saveResponse(response: DownloadHttpResponse): SaveResult {
+        if (!DownloadMetadata.isSuccessStatus(response.statusCode)) {
+            return SaveResult(response.statusCode, ByteArray(0), failed = true)
+        }
+        val body = response.body ?: return SaveResult(response.statusCode, ByteArray(0), failed = true)
+        val out = ByteArrayOutputStream()
+        val contentLength = DownloadMetadata.parseContentLength(response.header("Content-Length"))
+        engine.copyTo(body, out, contentLength)
+        return SaveResult(response.statusCode, out.toByteArray(), failed = false)
     }
 
     @Test
@@ -202,6 +209,59 @@ class DownloadEndToEndTest {
             val out = ByteArrayOutputStream()
             engine.copyTo(response.body!!, out, total ?: -1L, startBytes = 400L)
             assertArrayEquals(full.copyOfRange(400, 1000), out.toByteArray())
+        }
+    }
+
+    /**
+     * blob: URL のダウンロード再現。
+     *
+     * GeckoView は HTTP 以外のチャンネル（blob: / data: / file:）のレスポンスに
+     * ステータスコードを設定しないため WebResponse.statusCode が 0 になる。
+     * Material Symbols (fonts.google.com) の SVG ダウンロードは blob:null/<uuid> で行われるため、
+     * 0 をエラー扱いすると必ず失敗する。
+     */
+    @Test
+    fun blobResponseWithoutStatusCodeIsSaved() = runTest {
+        val svg = "<svg xmlns=\"http://www.w3.org/2000/svg\"/>".toByteArray()
+        val response = FakeResponse(
+            statusCode = DownloadMetadata.NO_HTTP_STATUS,
+            url = "blob:null/1f0e3dad-9990-4f4c-a8e3-000000000000",
+            body = svg,
+            headers = mapOf(
+                "Content-Type" to "image/svg+xml",
+                "Content-Length" to svg.size.toString(),
+                "Content-Disposition" to "attachment; filename=\"home_24dp.svg\"",
+            ),
+        )
+
+        val result = response.use { saveResponse(it) }
+
+        assertFalse("blob レスポンスが失敗扱いされている", result.failed)
+        assertArrayEquals(svg, result.bytes)
+    }
+
+    /** blob: URL はページ内でのみ有効なため、取得し直すことはできない */
+    @Test
+    fun blobUrlIsNotRefetchable() {
+        assertFalse(DownloadUrl.isRefetchable("blob:null/1f0e3dad-9990-4f4c-a8e3-000000000000"))
+    }
+
+    /** 非HTTPチャンネルのレスポンス（statusCode 未設定）を再現するテストダブル */
+    private class FakeResponse(
+        override val statusCode: Int,
+        url: String,
+        body: ByteArray,
+        private val headers: Map<String, String>,
+    ) : DownloadHttpResponse {
+        override val finalUrl: String = url
+        override val body: InputStream = ByteArrayInputStream(body)
+
+        override fun header(name: String): String? {
+            return headers.entries.firstOrNull { it.key.equals(name, ignoreCase = true) }?.value
+        }
+
+        override fun close() {
+            body.close()
         }
     }
 }
