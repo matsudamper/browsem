@@ -1,7 +1,9 @@
 package net.matsudamper.browser.download
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class DownloadMetadataTest {
@@ -28,6 +30,32 @@ class DownloadMetadataTest {
         // 解析できない値は -1（不明）
         assertEquals(-1L, DownloadMetadata.parseContentLength(null))
         assertEquals(-1L, DownloadMetadata.parseContentLength("abc"))
+    }
+
+    @Test
+    fun isSuccessStatusAcceptsSuccessRange() {
+        assertTrue(DownloadMetadata.isSuccessStatus(200))
+        assertTrue(DownloadMetadata.isSuccessStatus(206))
+        assertTrue(DownloadMetadata.isSuccessStatus(299))
+    }
+
+    /**
+     * blob: など非HTTPのレスポンスは GeckoView がステータスコードを設定せず 0 になる。
+     * これをエラー扱いすると Material Symbols の SVG ダウンロード（blob:null/...）が
+     * 「HTTP エラー: 0」で必ず失敗するため、成功として扱う
+     */
+    @Test
+    fun isSuccessStatusAcceptsNonHttpResponse() {
+        assertTrue(DownloadMetadata.isSuccessStatus(DownloadMetadata.NO_HTTP_STATUS))
+        assertEquals(0, DownloadMetadata.NO_HTTP_STATUS)
+    }
+
+    @Test
+    fun isSuccessStatusRejectsErrorStatus() {
+        assertFalse(DownloadMetadata.isSuccessStatus(301))
+        assertFalse(DownloadMetadata.isSuccessStatus(403))
+        assertFalse(DownloadMetadata.isSuccessStatus(404))
+        assertFalse(DownloadMetadata.isSuccessStatus(500))
     }
 
     @Test
