@@ -24,8 +24,11 @@ interface DownloadDao {
     suspend fun updateStatus(workerId: String, status: String)
 
     /** 実行中（ENQUEUED/RUNNING）のときのみ失敗にする。PAUSED/CANCELLED の上書きを防ぐ */
-    @Query("UPDATE download SET status = 'FAILED' WHERE currentWorkerId = :currentWorkerId AND status IN ('ENQUEUED', 'RUNNING')")
-    suspend fun updateFailed(currentWorkerId: String)
+    @Query(
+        "UPDATE download SET status = 'FAILED', failureReason = :failureReason " +
+            "WHERE currentWorkerId = :currentWorkerId AND status IN ('ENQUEUED', 'RUNNING')",
+    )
+    suspend fun updateFailed(currentWorkerId: String, failureReason: String?)
 
     /** SUCCEEDED/FAILED 以外の状態のときのみキャンセルする。完了済みの上書きを防ぐ */
     @Query("UPDATE download SET status = 'CANCELLED' WHERE currentWorkerId = :currentWorkerId AND status NOT IN ('SUCCEEDED', 'FAILED', 'CANCELLED')")
@@ -71,7 +74,8 @@ interface DownloadDao {
      */
     @Query(
         "UPDATE download SET status = 'FAILED', partialFileUri = :partialFileUri, " +
-            "fileName = :fileName, totalRead = :totalRead, contentLength = :contentLength " +
+            "fileName = :fileName, totalRead = :totalRead, contentLength = :contentLength, " +
+            "failureReason = :failureReason " +
             "WHERE currentWorkerId = :currentWorkerId AND status = 'RUNNING'",
     )
     suspend fun updatePartialFailed(
@@ -80,6 +84,7 @@ interface DownloadDao {
         fileName: String,
         totalRead: Long,
         contentLength: Long,
+        failureReason: String?,
     )
 
     /**
@@ -104,7 +109,10 @@ interface DownloadDao {
      * レコードを削除・再作成しないため、enqueuedAt（リスト上の位置）と
      * UIのアイテム同一性（workerId）が維持される
      */
-    @Query("UPDATE download SET currentWorkerId = :newWorkerId, status = 'ENQUEUED' WHERE workerId = :workerId")
+    @Query(
+        "UPDATE download SET currentWorkerId = :newWorkerId, status = 'ENQUEUED', failureReason = NULL " +
+            "WHERE workerId = :workerId",
+    )
     suspend fun updateResumed(workerId: String, newWorkerId: String)
 
     /** 指定URLに一致するアクティブ（ENQUEUED/RUNNING/SUCCEEDED/PAUSED）なダウンロードを取得する */

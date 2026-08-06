@@ -7,7 +7,7 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
-@Database(entities = [DownloadEntity::class], version = 4, exportSchema = true)
+@Database(entities = [DownloadEntity::class], version = 5, exportSchema = true)
 abstract class DownloadDatabase : RoomDatabase() {
 
     abstract fun downloadDao(): DownloadDao
@@ -41,8 +41,20 @@ abstract class DownloadDatabase : RoomDatabase() {
             }
         }
 
+        /** バージョン4→5: 失敗原因を保持する failureReason カラムを追加 */
+        private val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE download ADD COLUMN failureReason TEXT")
+            }
+        }
+
         /** 全マイグレーション。getInstance とマイグレーションテストで共用する */
-        internal val ALL_MIGRATIONS: Array<Migration> = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+        internal val ALL_MIGRATIONS: Array<Migration> = arrayOf(
+            MIGRATION_1_2,
+            MIGRATION_2_3,
+            MIGRATION_3_4,
+            MIGRATION_4_5,
+        )
 
         fun getInstance(context: Context): DownloadDatabase {
             return instance ?: synchronized(this) {

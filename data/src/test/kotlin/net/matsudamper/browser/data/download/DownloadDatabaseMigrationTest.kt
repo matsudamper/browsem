@@ -87,6 +87,31 @@ class DownloadDatabaseMigrationTest {
         }
     }
 
+    /** v4→v5: failureReason カラム追加。既存レコードが保持され、NULL で埋まることを確認する */
+    @Test
+    fun migrate4To5() {
+        helper.createDatabase(TEST_DB, 4).apply {
+            execSQL(
+                "INSERT INTO download " +
+                    "(workerId, currentWorkerId, url, fileName, fileUri, status, progress, totalRead, " +
+                    "contentLength, enqueuedAt, referrerUrl, partialFileUri) " +
+                    "VALUES ('w3', 'w3', 'https://example.com/c.zip', 'c.zip', NULL, 'FAILED', 50, 100, 200, " +
+                    "1000, '', NULL)",
+            )
+            close()
+        }
+
+        helper.runMigrationsAndValidate(TEST_DB, 5, true, *DownloadDatabase.ALL_MIGRATIONS).use { db ->
+            db.query("SELECT workerId, failureReason FROM download WHERE workerId = 'w3'").use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertEquals("w3", cursor.getString(0))
+                // 既存レコードの失敗原因は不明なため NULL
+                assertTrue(cursor.isNull(1))
+                assertNull(cursor.getString(1))
+            }
+        }
+    }
+
     companion object {
         private const val TEST_DB = "migration-test-download"
     }
