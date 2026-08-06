@@ -108,7 +108,11 @@ internal class DownloadManagementScreenViewModel(
             // SVG は BitmapFactory ベースの loadThumbnail ではデコードできないため、loadThumbnail を試さず Coil で個別にラスタライズする
             if (isSvg(mimeType, fileName)) {
                 loadSvgThumbnail(uri)?.let {
-                    return@withContext DownloadManagementScreenUiState.Preview.Thumbnail(it)
+                    // SVG は背景が透過していることが多く、そのままでは枠の色と同化するため市松模様を敷く
+                    return@withContext DownloadManagementScreenUiState.Preview.Thumbnail(
+                        image = it,
+                        hasTransparency = true,
+                    )
                 }
                 return@withContext DownloadManagementScreenUiState.Preview.FileType(
                     toDownloadFileType(mimeType, fileName),

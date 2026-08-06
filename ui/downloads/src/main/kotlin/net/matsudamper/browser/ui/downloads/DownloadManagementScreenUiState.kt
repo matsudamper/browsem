@@ -56,8 +56,15 @@ data class DownloadManagementScreenUiState(
      */
     @Stable
     sealed interface Preview {
-        /** 画像・動画などのサムネイル。表示領域いっぱいにクロップして表示する */
-        data class Thumbnail(val image: ImageBitmap) : Preview
+        /**
+         * 画像・動画などのサムネイル。表示領域いっぱいにクロップして表示する。
+         * [hasTransparency] が true の場合は透過部分が背景と同化しないよう市松模様を敷き、
+         * 絵柄が欠けないように全体を収めて表示する
+         */
+        data class Thumbnail(
+            val image: ImageBitmap,
+            val hasTransparency: Boolean = false,
+        ) : Preview
 
         /** APK から取り出したアプリアイコン。全体が収まるように表示する */
         data class AppIcon(val image: ImageBitmap) : Preview

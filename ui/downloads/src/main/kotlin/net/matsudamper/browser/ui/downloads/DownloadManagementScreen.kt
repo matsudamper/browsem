@@ -46,12 +46,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Canvas
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -64,6 +66,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.UUID
+import kotlin.math.ceil
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -256,13 +259,26 @@ private fun DownloadItemRow(
                     when (val currentPreview = preview) {
                         null -> Unit
 
-                        // サムネイルは領域いっぱいにクロップする
+                        // サムネイルは領域いっぱいにクロップする。
+                        // 透過画像は市松模様を敷いた上に絵柄全体を収めて表示する
                         is DownloadManagementScreenUiState.Preview.Thumbnail -> {
                             Image(
                                 bitmap = currentPreview.image,
                                 contentDescription = null,
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier.fillMaxSize(),
+                                contentScale = if (currentPreview.hasTransparency) {
+                                    ContentScale.Fit
+                                } else {
+                                    ContentScale.Crop
+                                },
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .then(
+                                        if (currentPreview.hasTransparency) {
+                                            Modifier.checkerboard()
+                                        } else {
+                                            Modifier
+                                        },
+                                    ),
                             )
                         }
 
@@ -446,6 +462,32 @@ private fun DownloadItemRow(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+        }
+    }
+}
+
+/** 市松模様の 1 マスの大きさ。48dp のプレビュー枠に対して 8x8 マスになる */
+private val CheckerboardCellSize = 6.dp
+
+/**
+ * 透過画像の背景に敷く市松模様を描画する。
+ * 絵柄の色を変えずに透過部分だけを見せる必要があるため、
+ * テーマに追従せず画像編集ソフトと同じ明るい中間色で固定する
+ */
+private fun Modifier.checkerboard(): Modifier = drawBehind {
+    val cellPx = CheckerboardCellSize.toPx()
+    drawRect(color = Color(0xFFFFFFFF))
+    val columns = ceil(size.width / cellPx).toInt()
+    val rows = ceil(size.height / cellPx).toInt()
+    for (row in 0 until rows) {
+        for (column in 0 until columns) {
+            // 市松模様にするため、行と列の偶奇が一致するマスだけ塗る
+            if ((row + column) % 2 == 0) continue
+            drawRect(
+                color = Color(0xFFCFD1D3),
+                topLeft = Offset(column * cellPx, row * cellPx),
+                size = Size(cellPx, cellPx),
+            )
         }
     }
 }
@@ -641,6 +683,54 @@ private fun PreviewCompletedWithThumbnail() {
             onResume = {},
             onOpenOriginPage = {},
             loadPreview = { DownloadManagementScreenUiState.Preview.Thumbnail(thumbnail) },
+            isHighlighted = false,
+            onHighlightFinished = {},
+        )
+    }
+}
+
+@Preview(name = "完了・SVGサムネイルあり")
+@Composable
+private fun PreviewCompletedWithSvgThumbnail() {
+    // 背景が透過した横長の単色 SVG を模した画像。
+    // 市松模様を敷かないと暗いテーマで絵柄が枠と同化して見えなくなる
+    val svgThumbnail = remember {
+        ImageBitmap(width = 96, height = 48).also { bitmap ->
+            Canvas(bitmap).apply {
+                drawRect(
+                    rect = Rect(8f, 16f, 88f, 32f),
+                    paint = Paint().apply { color = Color(0xFF202124) },
+                )
+                drawCircle(
+                    center = Offset(24f, 24f),
+                    radius = 14f,
+                    paint = Paint().apply { color = Color(0xFF202124) },
+                )
+            }
+        }
+    }
+    MaterialTheme {
+        DownloadItemRow(
+            item = DownloadManagementScreenUiState.DownloadItem(
+                id = UUID.randomUUID(),
+                fileName = "logo.svg",
+                status = DownloadManagementScreenUiState.DownloadStatus.Completed(
+                    fileUri = "content://media/external/downloads/6",
+                ),
+                enqueuedAt = 0L,
+                originPageUrl = "https://example.com/page",
+            ),
+            onCancel = {},
+            onPause = {},
+            onOpenFile = {},
+            onResume = {},
+            onOpenOriginPage = {},
+            loadPreview = {
+                DownloadManagementScreenUiState.Preview.Thumbnail(
+                    image = svgThumbnail,
+                    hasTransparency = true,
+                )
+            },
             isHighlighted = false,
             onHighlightFinished = {},
         )
