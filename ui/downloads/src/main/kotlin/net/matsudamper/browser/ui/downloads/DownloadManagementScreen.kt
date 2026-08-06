@@ -471,12 +471,16 @@ private val CheckerboardCellSize = 6.dp
 
 /**
  * 透過画像の背景に敷く市松模様を描画する。
- * 絵柄の色を変えずに透過部分だけを見せる必要があるため、
- * テーマに追従せず画像編集ソフトと同じ明るい中間色で固定する
+ *
+ * tint で着色すると多色の SVG が単色に潰れて元の絵柄が失われるため、
+ * 絵柄の色は変えずに背景側だけで見え方を担保する。
+ * 白い絵柄と黒い絵柄のどちらもコントラストが確保できるよう、
+ * 明るい側にも暗い側にも寄せない中間の灰色で固定する
+ * （テーマに追従させると暗いテーマで黒い絵柄が同化して同じ問題が再発する）
  */
 private fun Modifier.checkerboard(): Modifier = drawBehind {
     val cellPx = CheckerboardCellSize.toPx()
-    drawRect(color = Color(0xFFFFFFFF))
+    drawRect(color = Color(0xFFABADAF))
     val columns = ceil(size.width / cellPx).toInt()
     val rows = ceil(size.height / cellPx).toInt()
     for (row in 0 until rows) {
@@ -484,7 +488,7 @@ private fun Modifier.checkerboard(): Modifier = drawBehind {
             // 市松模様にするため、行と列の偶奇が一致するマスだけ塗る
             if ((row + column) % 2 == 0) continue
             drawRect(
-                color = Color(0xFFCFD1D3),
+                color = Color(0xFF909193),
                 topLeft = Offset(column * cellPx, row * cellPx),
                 size = Size(cellPx, cellPx),
             )
@@ -689,51 +693,62 @@ private fun PreviewCompletedWithThumbnail() {
     }
 }
 
+/** 背景が透過した横長の単色 SVG を模した画像を作る */
+private fun createSvgThumbnail(color: Color): ImageBitmap {
+    return ImageBitmap(width = 96, height = 48).also { bitmap ->
+        Canvas(bitmap).apply {
+            drawRect(
+                rect = Rect(8f, 16f, 88f, 32f),
+                paint = Paint().apply { this.color = color },
+            )
+            drawCircle(
+                center = Offset(24f, 24f),
+                radius = 14f,
+                paint = Paint().apply { this.color = color },
+            )
+        }
+    }
+}
+
 @Preview(name = "完了・SVGサムネイルあり")
 @Composable
 private fun PreviewCompletedWithSvgThumbnail() {
-    // 背景が透過した横長の単色 SVG を模した画像。
-    // 市松模様を敷かないと暗いテーマで絵柄が枠と同化して見えなくなる
-    val svgThumbnail = remember {
-        ImageBitmap(width = 96, height = 48).also { bitmap ->
-            Canvas(bitmap).apply {
-                drawRect(
-                    rect = Rect(8f, 16f, 88f, 32f),
-                    paint = Paint().apply { color = Color(0xFF202124) },
-                )
-                drawCircle(
-                    center = Offset(24f, 24f),
-                    radius = 14f,
-                    paint = Paint().apply { color = Color(0xFF202124) },
+    // 市松模様が明暗どちらの絵柄でも成立することを確認するため、黒と白の両方を並べる
+    val samples = remember {
+        listOf(
+            "logo-dark.svg" to createSvgThumbnail(Color(0xFF202124)),
+            "logo-light.svg" to createSvgThumbnail(Color(0xFFFFFFFF)),
+        )
+    }
+    MaterialTheme {
+        Column {
+            samples.forEachIndexed { index, (fileName, thumbnail) ->
+                DownloadItemRow(
+                    item = DownloadManagementScreenUiState.DownloadItem(
+                        id = UUID.randomUUID(),
+                        fileName = fileName,
+                        status = DownloadManagementScreenUiState.DownloadStatus.Completed(
+                            fileUri = "content://media/external/downloads/${index + 6}",
+                        ),
+                        enqueuedAt = 0L,
+                        originPageUrl = "https://example.com/page",
+                    ),
+                    onCancel = {},
+                    onPause = {},
+                    onOpenFile = {},
+                    onResume = {},
+                    onOpenOriginPage = {},
+                    loadPreview = {
+                        DownloadManagementScreenUiState.Preview.Thumbnail(
+                            image = thumbnail,
+                            hasTransparency = true,
+                        )
+                    },
+                    isHighlighted = false,
+                    onHighlightFinished = {},
                 )
             }
         }
-    }
-    MaterialTheme {
-        DownloadItemRow(
-            item = DownloadManagementScreenUiState.DownloadItem(
-                id = UUID.randomUUID(),
-                fileName = "logo.svg",
-                status = DownloadManagementScreenUiState.DownloadStatus.Completed(
-                    fileUri = "content://media/external/downloads/6",
-                ),
-                enqueuedAt = 0L,
-                originPageUrl = "https://example.com/page",
-            ),
-            onCancel = {},
-            onPause = {},
-            onOpenFile = {},
-            onResume = {},
-            onOpenOriginPage = {},
-            loadPreview = {
-                DownloadManagementScreenUiState.Preview.Thumbnail(
-                    image = svgThumbnail,
-                    hasTransparency = true,
-                )
-            },
-            isHighlighted = false,
-            onHighlightFinished = {},
-        )
     }
 }
 
