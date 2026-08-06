@@ -13,6 +13,9 @@
       "Read(./**)",
       "mcp__ide__getDiagnostics"
     ],
+    "deny": [
+      "mcp__Claude_Code_Remote__send_later"
+    ],
     "additionalDirectories": [
       "~/.gradle"
     ]
