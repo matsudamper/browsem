@@ -127,6 +127,8 @@ class WebAppActivity : ComponentActivity() {
                             showInstallExtensionItem = false,
                             webAppMode = true,
                             onOpenInBrowser = ::openInMainBrowser,
+                            // onLoadRequest で TARGET_WINDOW_NEW を現在タブへ畳み込むため、
+                            // ここへ到達することは想定しない。GeckoView 契約上 null を返して安全に拒否する。
                             onOpenNewSessionRequest = { null },
                             onOpenNewTabRequest = { uri, referrerUrl ->
                                 openNewTabInMainBrowser(uri, referrerUrl)
@@ -175,6 +177,11 @@ class WebAppActivity : ComponentActivity() {
 
     /**
      * Recents に表示するタイトルとアイコンを更新する。
+     * favicon が無い場合はアイコン未指定とし、ランチャー側のデフォルトに任せる。
+     *
+     * 公開 API の TaskDescription.Builder.setIcon は drawable resource id のみ受け付け、
+     * Bitmap を渡すには deprecated コンストラクタを使う必要があるため、ここでは
+     * Bitmap を直接渡す旧コンストラクタを使用する。
      */
     @Suppress("DEPRECATION")
     private fun updateTaskDescription(title: String, favicon: Bitmap?) {
@@ -183,6 +190,16 @@ class WebAppActivity : ComponentActivity() {
         setTaskDescription(description)
     }
 
+    /**
+     * HomeScreenIconFetcher を用いてページの高品質アイコンを取得し、BrowserTab に保存する。
+     * GeckoView が提供する 16x16 favicon や、<origin>/favicon.ico が 404 を返すサイトでも
+     * apple-touch-icon や Web App Manifest 由来の大きなアイコンを取得できる。
+     *
+     * ただしセッションが既に favicon を持っている場合は上書きしない。
+     * HomeScreenIconFetcher は Gecko セッション外の HttpURLConnection で取得するため、
+     * 認証ページが未認証リクエストをログイン/ランディングページへリダイレクトすると
+     * 無関係なアイコンを掴む恐れがある。あくまで favicon が無い場合のフォールバックに留める。
+     */
     private suspend fun fetchHighQualityFavicon(browserTab: BrowserTab, pageUrl: String) {
         if (pageUrl.isBlank()) return
         if (browserTab.faviconBitmap != null) return
@@ -193,11 +210,17 @@ class WebAppActivity : ComponentActivity() {
         } catch (_: Exception) {
             null
         } ?: return
+        // fetch 中にセッション側が favicon を設定した場合も上書きしない
         if (browserTab.currentUrl == pageUrl && browserTab.faviconBitmap == null) {
             browserTab.faviconBitmap = fetched
         }
     }
 
+    /**
+     * Intentのデータから安全なURLを取り出す。
+     * ACTION_VIEW かつ http/https スキームの場合のみURLとして採用し、
+     * それ以外は null を返してホームページにフォールバックさせる。
+     */
     private fun resolveInitialUrl(): String? {
         if (intent.action != Intent.ACTION_VIEW) return null
         val data = intent.data ?: return null
@@ -206,6 +229,10 @@ class WebAppActivity : ComponentActivity() {
         return data.toString()
     }
 
+    /**
+     * ダウンロード通知を表示するために POST_NOTIFICATIONS パーミッションを要求し、
+     * ユーザーが GRANT または DENY を選択するまで待機する。
+     */
     private suspend fun requestDownloadNotificationPermission() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
         if (ContextCompat.checkSelfPermission(
@@ -213,6 +240,7 @@ class WebAppActivity : ComponentActivity() {
                 Manifest.permission.POST_NOTIFICATIONS,
             ) == PackageManager.PERMISSION_GRANTED
         ) return
+        // 別のダウンロード通知パーミッション要求が保留中の場合は合流して待機
         val existingDownloadDeferred = pendingDownloadNotificationPermissionDeferred
         if (existingDownloadDeferred != null) {
             existingDownloadDeferred.await()
