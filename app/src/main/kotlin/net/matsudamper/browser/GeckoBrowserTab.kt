@@ -857,6 +857,9 @@ internal fun GeckoBrowserTab(
                     onOpenInBrowser = onOpenInBrowser?.let { callback ->
                         { callback(state.currentPageUrl) }
                     },
+                    onOpenSiteSettings = onOpenSiteSettings?.let { callback ->
+                        { callback(state.currentPageUrl) }
+                    },
                     pageZoomPercent = state.pageZoomPercent,
                     onPageZoomIn = state::pageZoomIn,
                     onPageZoomOut = state::pageZoomOut,
