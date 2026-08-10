@@ -10,8 +10,8 @@ class NavControllerTest {
     @Test
     fun replaceCurrentBrowserTab_keepsTabsScreenAndUpdatesBackTarget() {
         val backStack = NavBackStack<NavKey>(
-            AppDestination.Browser(tabId = "tab-a", beforeTab = null),
-            AppDestination.Tabs,
+            BrowserNavDestination.Browser(tabId = "tab-a", beforeTab = null),
+            BrowserNavDestination.Tabs,
         )
         val navController = NavController(backStack)
 
@@ -19,8 +19,8 @@ class NavControllerTest {
 
         assertEquals(
             listOf(
-                AppDestination.Browser(tabId = "tab-b", beforeTab = null),
-                AppDestination.Tabs,
+                BrowserNavDestination.Browser(tabId = "tab-b", beforeTab = null),
+                BrowserNavDestination.Tabs,
             ),
             backStack.toList(),
         )
@@ -28,7 +28,7 @@ class NavControllerTest {
         navController.back()
 
         assertEquals(
-            listOf(AppDestination.Browser(tabId = "tab-b", beforeTab = null)),
+            listOf(BrowserNavDestination.Browser(tabId = "tab-b", beforeTab = null)),
             backStack.toList(),
         )
     }
