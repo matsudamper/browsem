@@ -30,6 +30,15 @@
     return geoConfig ? geoConfig.mode : 'mock';
   }
 
+  // Geolocation API の仕様ではコールバックは必ず非同期に呼ばれる。
+  // モック/拒否を同期的に呼ぶと、getCurrentPosition() の「呼び出し直後」に
+  // 状態を初期化するページ（例: 取得完了フラグを呼び出し後に立て直すサイト）で
+  // コールバックの結果が上書きされ、処理が進まなくなる。
+  // そのため実位置情報と同じく必ず次のタスクへ回して呼び出す。
+  function dispatchAsync(fn) {
+    setTimeout(fn, 0);
+  }
+
   function buildPosition(lat, lng) {
     return cloneInto(
       {
@@ -48,16 +57,41 @@
     );
   }
 
+  // モック座標を成功コールバックへ通知する
+  function notifyMockPosition(success, error) {
+    if (!geoConfig) {
+      notifyUnsupported(error);
+      return;
+    }
+    if (!success) return;
+    // 非同期化するため、通知時点ではなく呼び出し時点の座標を退避しておく
+    const lat = geoConfig.latitude;
+    const lng = geoConfig.longitude;
+    dispatchAsync(function () {
+      try {
+        success(buildPosition(lat, lng));
+      } catch (e) {
+        if (error) {
+          try { error(cloneInto({ code: 2, message: 'mock error' }, pageWin)); } catch (_) {}
+        }
+      }
+    });
+  }
+
   // PERMISSION_DENIED(code: 1) のエラーを通知する
   function notifyDenied(error) {
     if (!error) return;
-    try { error(cloneInto({ code: 1, message: 'User denied Geolocation' }, pageWin)); } catch (_) {}
+    dispatchAsync(function () {
+      try { error(cloneInto({ code: 1, message: 'User denied Geolocation' }, pageWin)); } catch (_) {}
+    });
   }
 
   // 元の geolocation が存在しない環境でのエラーを通知する
   function notifyUnsupported(error) {
     if (!error) return;
-    try { error(cloneInto({ code: 2, message: 'Geolocation not supported' }, pageWin)); } catch (_) {}
+    dispatchAsync(function () {
+      try { error(cloneInto({ code: 2, message: 'Geolocation not supported' }, pageWin)); } catch (_) {}
+    });
   }
 
   // ページが位置情報を要求したことをネイティブへ通知する（ページごとに一度だけ）
@@ -70,13 +104,7 @@
   function handleGetCurrentPosition(success, error, options) {
     const mode = currentMode();
     if (mode === 'mock') {
-      try {
-        success(buildPosition(geoConfig.latitude, geoConfig.longitude));
-      } catch (e) {
-        if (error) {
-          try { error(cloneInto({ code: 2, message: 'mock error' }, pageWin)); } catch (_) {}
-        }
-      }
+      notifyMockPosition(success, error);
     } else if (mode === 'deny') {
       notifyDenied(error);
     } else if (origGeo) {
@@ -112,7 +140,7 @@
     const mode = currentMode();
     if (mode === 'mock') {
       activeWatches.set(id, { success: success, error: error, options: options, realId: undefined, pending: false });
-      try { success(buildPosition(geoConfig.latitude, geoConfig.longitude)); } catch (_) {}
+      notifyMockPosition(success, error);
     } else if (mode === 'deny') {
       activeWatches.set(id, { success: success, error: error, options: options, realId: undefined, pending: false });
       notifyDenied(error);
@@ -166,7 +194,7 @@
       if (!entry.pending) continue;
       entry.pending = false;
       if (mode === 'mock') {
-        try { entry.success(buildPosition(geoConfig.latitude, geoConfig.longitude)); } catch (_) {}
+        notifyMockPosition(entry.success, entry.error);
       } else if (mode === 'deny') {
         notifyDenied(entry.error);
       } else if (origGeo) {
@@ -183,7 +211,7 @@
     ) {
       for (const [, entry] of activeWatches) {
         if (entry.pending || entry.realId !== undefined) continue;
-        try { entry.success(buildPosition(geoConfig.latitude, geoConfig.longitude)); } catch (_) {}
+        notifyMockPosition(entry.success, entry.error);
       }
     }
 
@@ -197,7 +225,7 @@
           entry.realId = undefined;
         }
         if (mode === 'mock') {
-          try { entry.success(buildPosition(geoConfig.latitude, geoConfig.longitude)); } catch (_) {}
+          notifyMockPosition(entry.success, entry.error);
         } else if (mode === 'deny') {
           notifyDenied(entry.error);
         } else if (entry.realId === undefined && origGeo) {
