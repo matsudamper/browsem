@@ -200,10 +200,15 @@ internal class BrowserTabScreenState(
     /** バックジェスチャーが終了 (コミットまたはキャンセル) した時刻 */
     private var backGestureEndedAtMs = 0L
 
+    /** バックジェスチャーの開始を記録する。以降 onContextMenu は抑制される。 */
     fun onBackGestureStarted() {
         isBackGestureInProgress = true
     }
 
+    /**
+     * バックジェスチャーの終了 (コミットまたはキャンセル) を記録する。
+     * 終了時刻を残し、遅れて届く onContextMenu も一定時間抑制できるようにする。
+     */
     fun onBackGestureEnded() {
         isBackGestureInProgress = false
         backGestureEndedAtMs = SystemClock.elapsedRealtime()
