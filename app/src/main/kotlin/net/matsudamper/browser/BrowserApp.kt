@@ -133,8 +133,7 @@ internal fun BrowserApp(
                     )
                     selectTabRequester.request(newTab.tabId)
                 },
-            ) { outerBackStack ->
-                val outerNavActions = remember(outerBackStack) { OuterNavActions(outerBackStack) }
+            ) { outerNavActions ->
                 MainBrowserContent(
                     uiState = uiState,
                     viewModel = viewModel,
@@ -168,9 +167,10 @@ internal fun BrowserAppShell(
     runtime: GeckoRuntime,
     openDownloadsFlow: Flow<String?>? = null,
     onNavigateToUrl: (suspend (url: String) -> Unit)? = null,
-    rootContent: @Composable (outerBackStack: MutableList<NavKey>) -> Unit,
+    rootContent: @Composable (outerNavActions: OuterNavActions) -> Unit,
 ) {
     val outerBackStack = rememberNavBackStack(AppDestination.Root)
+    val outerNavActions = remember(outerBackStack) { OuterNavActions(outerBackStack) }
     val settingsRepository: SettingsRepository = koinInject()
     val historyRepository: HistoryRepository = koinInject()
     val scope = rememberCoroutineScope()
@@ -203,7 +203,7 @@ internal fun BrowserAppShell(
         entryProvider = { key: NavKey ->
             when (key) {
                 AppDestination.Root -> navEntry(key) {
-                    rootContent(outerBackStack)
+                    rootContent(outerNavActions)
                 }
 
                 AppDestination.Settings -> navEntry(key) {
@@ -490,6 +490,14 @@ internal class OuterNavActions(private val backStack: MutableList<NavKey>) {
     fun addIfAbsent(destination: AppDestination) {
         if (backStack.none { it == destination }) backStack.add(destination)
     }
+
+    /**
+     * 現在のページのホストでサイト設定を開く。ホストを取り出せない URL（about: など）では何もしない。
+     */
+    fun openSiteSettings(currentUrl: String, tabId: String?) {
+        val host = extractSiteHost(currentUrl) ?: return
+        add(AppDestination.SiteSettings(host = host, tabId = tabId))
+    }
 }
 
 /**
@@ -748,15 +756,7 @@ private fun MainBrowserContent(
                                     outerNavActions.addIfAbsent(AppDestination.Downloads)
                                 },
                                 onOpenSiteSettings = { currentUrl ->
-                                    val host = extractSiteHost(currentUrl)
-                                    if (host != null) {
-                                        outerNavActions.add(
-                                            AppDestination.SiteSettings(
-                                                host = host,
-                                                tabId = key.tabId,
-                                            ),
-                                        )
-                                    }
+                                    outerNavActions.openSiteSettings(currentUrl, key.tabId)
                                 },
                                 onOpenTabs = { innerBackStack.add(BrowserNavDestination.Tabs) },
                                 browserSessionLifecycleController = browserSessionLifecycleController,

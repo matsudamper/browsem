@@ -16,17 +16,14 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.navigation3.runtime.NavKey
 import kotlinx.coroutines.CompletableDeferred
 import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.TabRepository
-import net.matsudamper.browser.data.extractSiteHost
 import net.matsudamper.browser.data.history.HistoryRepository
 import net.matsudamper.browser.data.resolvedHomepageUrl
 import net.matsudamper.browser.data.resolvedSearchTemplate
 import net.matsudamper.browser.data.websuggestion.WebSuggestionRepository
 import net.matsudamper.browser.media.MediaWebExtension
-import net.matsudamper.browser.navigation.AppDestination
 import net.matsudamper.browser.screen.browser.WebAppScreenViewModel
 import net.matsudamper.browser.ui.browser.WebAppScreen
 import net.matsudamper.browser.ui.common.BrowserTheme
@@ -93,7 +90,7 @@ class WebAppActivity : ComponentActivity() {
                     browserTabController = browserTabController,
                     browserSessionLifecycleController = browserSessionLifecycleController,
                     runtime = runtime,
-                ) { outerBackStack ->
+                ) { outerNavActions ->
                     WebAppScreen(
                         initialUrl = initialUrl ?: browserSettings.resolvedHomepageUrl(),
                         browserTabController = browserTabController,
@@ -122,15 +119,7 @@ class WebAppActivity : ComponentActivity() {
                             onRequestDownloadNotificationPermission = { requestDownloadNotificationPermission() },
                             onOpenSettings = {},
                             onOpenSiteSettings = { url ->
-                                val host = extractSiteHost(url)
-                                if (host != null) {
-                                    outerBackStack.add(
-                                        AppDestination.SiteSettings(
-                                            host = host,
-                                            tabId = browserTab.tabId,
-                                        ),
-                                    )
-                                }
+                                outerNavActions.openSiteSettings(url, browserTab.tabId)
                             },
                             onOpenDownloads = null,
                             onOpenTabs = {},
