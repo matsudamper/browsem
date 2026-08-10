@@ -52,7 +52,7 @@ import androidx.navigation3.ui.defaultPopTransitionSpec
 import androidx.navigation3.ui.defaultTransitionSpec
 import androidx.work.WorkManager
 import java.util.UUID
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
@@ -61,7 +61,6 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import mozilla.components.lib.publicsuffixlist.PublicSuffixList
 import net.matsudamper.browser.data.BackupRepository
 import net.matsudamper.browser.data.SettingsRepository
@@ -119,8 +118,8 @@ internal fun BrowserApp(
     } else {
         BrowserTheme(themeMode = uiState.themeMode) {
             // 履歴・ダウンロード画面から URL を開く際、内側ナビのタブ選択が必要。
-            // MainBrowserContent が selectTab を生成した後にセットされる。
-            val selectTabRef = remember { SelectTabRef() }
+            // MainBrowserContent がコンポジションに戻ってから消費される。
+            val selectTabRequester = remember { SelectTabRequester() }
             BrowserAppShell(
                 browserTabController = viewModel.browserTabController,
                 browserSessionLifecycleController = viewModel.browserSessionLifecycleController,
@@ -132,7 +131,7 @@ internal fun BrowserApp(
                         tabId = tabId,
                         initialUrl = url,
                     )
-                    selectTabRef.selectTab?.invoke(newTab.tabId, null)
+                    selectTabRequester.request(newTab.tabId)
                 },
             ) { outerBackStack ->
                 val outerNavActions = remember(outerBackStack) { OuterNavActions(outerBackStack) }
@@ -143,7 +142,7 @@ internal fun BrowserApp(
                     onInstallExtensionRequest = onInstallExtensionRequest,
                     onRequestDownloadNotificationPermission = onRequestDownloadNotificationPermission,
                     outerNavActions = outerNavActions,
-                    selectTabRef = selectTabRef,
+                    selectTabRequester = selectTabRequester,
                 )
             }
         }
@@ -487,9 +486,24 @@ internal class OuterNavActions(private val backStack: MutableList<NavKey>) {
     }
 }
 
+/**
+ * 外側シェル（履歴・ダウンロード）から内側ナビへタブ選択を依頼するための中継。
+ *
+ * 外側スタックに History / Downloads が積まれている間、Root の navEntry である
+ * [MainBrowserContent] はコンポジションから外れる。コールバック参照を保持すると
+ * 破棄済みコンポジションの `NavBackStack` を変更してしまい、Root 復帰時に
+ * rememberSaveable のスナップショットから復元されて変更が失われる。
+ * そのため要求を Channel にバッファし、Root 復帰後に生きている backStack へ適用する。
+ */
 @Stable
-internal class SelectTabRef {
-    var selectTab: ((String, BrowserNavDestination.Browser?) -> Unit)? = null
+internal class SelectTabRequester {
+    private val channel = Channel<String>(Channel.BUFFERED)
+
+    val requests: Flow<String> = channel.receiveAsFlow()
+
+    fun request(tabId: String) {
+        channel.trySend(tabId)
+    }
 }
 
 @Composable
@@ -500,7 +514,7 @@ private fun MainBrowserContent(
     onInstallExtensionRequest: (String) -> Unit,
     onRequestDownloadNotificationPermission: suspend () -> Unit,
     outerNavActions: OuterNavActions,
-    selectTabRef: SelectTabRef,
+    selectTabRequester: SelectTabRequester,
 ) {
     val browserTabController = viewModel.browserTabController
     val browserSessionLifecycleController = viewModel.browserSessionLifecycleController
@@ -522,7 +536,12 @@ private fun MainBrowserContent(
             browserTabController.selectTab(tabId)
         }
     }
-    selectTabRef.selectTab = selectTab
+    // 履歴・ダウンロードから開かれた URL のタブ選択要求を、Root 復帰後に消費する
+    LaunchedEffect(selectTabRequester, selectTab) {
+        selectTabRequester.requests.collect { tabId ->
+            selectTab(tabId, null)
+        }
+    }
 
     val scope = rememberCoroutineScope()
 
