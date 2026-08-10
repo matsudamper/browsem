@@ -99,30 +99,26 @@ class CustomTabActivity : ComponentActivity() {
                         testTagsAsResourceId = true
                     },
                 ) {
-                    BrowserAppShell(
+                    // カスタムタブは設定・サイト設定などの全画面系画面を持たないため、
+                    // BrowserAppShell は挟まず CustomTabScreen を直接描画する
+                    CustomTabScreen(
+                        initialUrl = initialUrl.takeIf { it.isNotBlank() } ?: browserSettings.resolvedHomepageUrl(),
+                        customTabsSessionToken = customTabsSessionToken,
+                        homepageUrl = browserSettings.resolvedHomepageUrl(),
+                        searchTemplate = browserSettings.resolvedSearchTemplate(),
+                        translationProvider = browserSettings.translationProvider,
                         browserTabController = browserTabController,
                         browserSessionLifecycleController = browserSessionLifecycleController,
-                        runtime = runtime,
-                    ) { _ ->
-                        CustomTabScreen(
-                            initialUrl = initialUrl.takeIf { it.isNotBlank() } ?: browserSettings.resolvedHomepageUrl(),
-                            customTabsSessionToken = customTabsSessionToken,
-                            homepageUrl = browserSettings.resolvedHomepageUrl(),
-                            searchTemplate = browserSettings.resolvedSearchTemplate(),
-                            translationProvider = browserSettings.translationProvider,
-                            browserTabController = browserTabController,
-                            browserSessionLifecycleController = browserSessionLifecycleController,
-                            settingsRepository = settingsRepository,
-                            historyRepository = historyRepository,
-                            webSuggestionRepository = webSuggestionRepository,
-                            themeColorExtension = themeColorExtension,
-                            mediaWebExtension = mediaWebExtensionInstance,
-                            onClose = ::finish,
-                            onOpenInBrowser = ::openInMainBrowser,
-                            onOpenNewTabInBrowser = ::openNewTabInMainBrowser,
-                            onRequestDownloadNotificationPermission = { requestDownloadNotificationPermission() },
-                        )
-                    }
+                        settingsRepository = settingsRepository,
+                        historyRepository = historyRepository,
+                        webSuggestionRepository = webSuggestionRepository,
+                        themeColorExtension = themeColorExtension,
+                        mediaWebExtension = mediaWebExtensionInstance,
+                        onClose = ::finish,
+                        onOpenInBrowser = ::openInMainBrowser,
+                        onOpenNewTabInBrowser = ::openNewTabInMainBrowser,
+                        onRequestDownloadNotificationPermission = { requestDownloadNotificationPermission() },
+                    )
                 }
             }
         }
