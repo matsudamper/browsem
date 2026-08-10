@@ -157,7 +157,9 @@ internal fun BrowserApp(
 
 /**
  * @param onNavigateToUrl 履歴やダウンロードからURLを開く際のコールバック。
- *   呼び出し側がタブ作成と内側ナビの更新を行う。null の場合は導線を非表示にする。
+ *   呼び出し側がタブ作成と内側ナビの更新を行う。
+ *   タブ UI を持たない WebApp / CustomTab では null を渡す。この場合 URL タップは
+ *   何もしない（画面も閉じない）。
  */
 @Composable
 internal fun BrowserAppShell(
@@ -301,8 +303,10 @@ internal fun BrowserAppShell(
                         historyViewModel.eventHandler.receiveAsFlow().collect {
                             it(object : HistoryScreenViewModel.Event {
                                 override fun navigateToUrl(url: String) {
+                                    // null のモードでは URL を開けないため、画面だけ閉じないよう何もしない
+                                    val navigateToUrl = onNavigateToUrl ?: return
                                     scope.launch {
-                                        onNavigateToUrl?.invoke(url)
+                                        navigateToUrl(url)
                                         while (outerBackStack.size > 1) {
                                             outerBackStack.removeLastOrNull()
                                         }
@@ -360,8 +364,10 @@ internal fun BrowserAppShell(
                         downloadsViewModel.eventHandler.receiveAsFlow().collect {
                             it(object : DownloadManagementScreenViewModel.Event {
                                 override fun navigateToUrl(url: String) {
+                                    // null のモードでは URL を開けないため、画面だけ閉じないよう何もしない
+                                    val navigateToUrl = onNavigateToUrl ?: return
                                     scope.launch {
-                                        onNavigateToUrl?.invoke(url)
+                                        navigateToUrl(url)
                                         while (outerBackStack.size > 1) {
                                             outerBackStack.removeLastOrNull()
                                         }
