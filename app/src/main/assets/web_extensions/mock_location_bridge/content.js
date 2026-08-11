@@ -77,32 +77,46 @@
     const lng = geoConfig.longitude;
     dispatchAsync(function () {
       if (!isWatchActive(watchId)) return;
+      let position;
+      // 位置オブジェクトの生成失敗のみをここで拾う。
+      // success が投げた例外まで拾うとページ側の不具合を
+      // POSITION_UNAVAILABLE として誤って通知してしまう
       try {
-        success(buildPosition(lat, lng));
+        position = buildPosition(lat, lng);
       } catch (e) {
         if (error) {
           try { error(cloneInto({ code: 2, message: 'mock error' }, pageWin)); } catch (_) {}
         }
+        return;
       }
+      success(position);
+    });
+  }
+
+  // エラーオブジェクトを生成してエラーコールバックへ通知する
+  function notifyError(error, watchId, code, message) {
+    if (!error) return;
+    dispatchAsync(function () {
+      if (!isWatchActive(watchId)) return;
+      let positionError;
+      // 生成失敗のみをここで拾う。error が投げた例外はページ側の不具合なので伝播させる
+      try {
+        positionError = cloneInto({ code: code, message: message }, pageWin);
+      } catch (_) {
+        return;
+      }
+      error(positionError);
     });
   }
 
   // PERMISSION_DENIED(code: 1) のエラーを通知する
   function notifyDenied(error, watchId) {
-    if (!error) return;
-    dispatchAsync(function () {
-      if (!isWatchActive(watchId)) return;
-      try { error(cloneInto({ code: 1, message: 'User denied Geolocation' }, pageWin)); } catch (_) {}
-    });
+    notifyError(error, watchId, 1, 'User denied Geolocation');
   }
 
   // 元の geolocation が存在しない環境でのエラーを通知する
   function notifyUnsupported(error, watchId) {
-    if (!error) return;
-    dispatchAsync(function () {
-      if (!isWatchActive(watchId)) return;
-      try { error(cloneInto({ code: 2, message: 'Geolocation not supported' }, pageWin)); } catch (_) {}
-    });
+    notifyError(error, watchId, 2, 'Geolocation not supported');
   }
 
   // ページが位置情報を要求したことをネイティブへ通知する（ページごとに一度だけ）
