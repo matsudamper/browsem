@@ -39,7 +39,7 @@
     setTimeout(fn, 0);
   }
 
-  function buildPosition(lat, lng) {
+  function buildPosition(lat, lng, timestamp) {
     return cloneInto(
       {
         coords: {
@@ -51,7 +51,7 @@
           heading: null,
           speed: null,
         },
-        timestamp: Date.now(),
+        timestamp: timestamp,
       },
       pageWin
     );
@@ -72,9 +72,11 @@
       return;
     }
     if (!success) return;
-    // 非同期化するため、通知時点ではなく呼び出し時点の座標を退避しておく
+    // 非同期化するため、通知時点ではなく要求時点の座標・時刻を退避しておく。
+    // timestamp は「位置を取得した時刻」を表すため要求時点の値を使う
     const lat = geoConfig.latitude;
     const lng = geoConfig.longitude;
+    const timestamp = Date.now();
     dispatchAsync(function () {
       if (!isWatchActive(watchId)) return;
       let position;
@@ -82,7 +84,7 @@
       // success が投げた例外まで拾うとページ側の不具合を
       // POSITION_UNAVAILABLE として誤って通知してしまう
       try {
-        position = buildPosition(lat, lng);
+        position = buildPosition(lat, lng, timestamp);
       } catch (e) {
         if (error) {
           try { error(cloneInto({ code: 2, message: 'mock error' }, pageWin)); } catch (_) {}
