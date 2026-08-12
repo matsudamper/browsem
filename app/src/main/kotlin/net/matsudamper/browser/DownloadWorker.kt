@@ -9,6 +9,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Environment
 import android.provider.MediaStore
+import android.webkit.MimeTypeMap
 import android.webkit.URLUtil
 import androidx.core.app.NotificationCompat
 import androidx.work.CoroutineWorker
@@ -170,6 +171,24 @@ internal class DownloadWorker(
         }
     }
 
+    /**
+     * Content-Disposition・URLからダウンロードファイル名を推測する。
+     *
+     * targetSdk 35 (Android 15 VANILLA_ICE_CREAM) 以降は URLUtil.guessFileName の内部実装が
+     * RFC 6266 ベースに切り替わり、mimeType から MimeTypeMap で拡張子を導けない場合（例:
+     * application/octet-stream）でも最終手段の ".bin" を無条件にファイル名末尾へ追記するように
+     * なった。旧実装（RFC 2616）は拡張子を導けない場合は元の拡張子を保持するフォールバックが
+     * あったため問題なかったが、新実装には無く、GitHub Releases など Content-Type が汎用的な
+     * application/octet-stream で返るサーバーからのダウンロードで
+     * "foo.zip" → "foo.zip.bin" のように壊れる。
+     * MimeTypeMap が拡張子に変換できない mimeType は渡さないことで、この上書きを抑止する。
+     */
+    private fun guessDownloadFileName(urlString: String, contentDisposition: String?, mimeType: String): String {
+        val mimeTypeForGuess = MimeTypeMap.getSingleton().getExtensionFromMimeType(mimeType)?.let { mimeType }
+        return URLUtil.guessFileName(urlString, contentDisposition, mimeTypeForGuess)
+            .ifBlank { "download-${System.currentTimeMillis()}" }
+    }
+
     private fun postCompletionNotification(fileName: String, stableWorkerId: String) {
         // 負のhashCodeによる通知ID衝突を防ぐため、非負の値に変換する
         val positiveHash = id.hashCode() and 0x7fffffff
@@ -258,8 +277,7 @@ internal class DownloadWorker(
             val body = response.body ?: throw IOException("レスポンスボディが空です。")
             val contentLength = DownloadMetadata.parseContentLength(response.header("Content-Length"))
             val mimeType = DownloadMetadata.parseMimeType(response.header("Content-Type"))
-            val fileName = URLUtil.guessFileName(urlString, response.header("Content-Disposition"), mimeType)
-                .ifBlank { "download-${System.currentTimeMillis()}" }
+            val fileName = guessDownloadFileName(urlString, response.header("Content-Disposition"), mimeType)
 
             setForeground(createForegroundInfo(notificationId, 0, contentLength <= 0, fileName, 0L, contentLength, stableWorkerId))
             repository.updateProgress(id.toString(), fileName, 0, 0L, contentLength)
@@ -372,8 +390,7 @@ internal class DownloadWorker(
                 ?: (rangeStart + DownloadMetadata.parseContentLength(response.header("Content-Length")))
             val contentLength = totalFileSize
             val mimeType = DownloadMetadata.parseMimeType(response.header("Content-Type"))
-            val fileName = URLUtil.guessFileName(urlString, response.header("Content-Disposition"), mimeType)
-                .ifBlank { "download-${System.currentTimeMillis()}" }
+            val fileName = guessDownloadFileName(urlString, response.header("Content-Disposition"), mimeType)
 
             setForeground(createForegroundInfo(notificationId, if (contentLength > 0) (rangeStart * 100 / contentLength).toInt() else 0, contentLength <= 0, fileName, rangeStart, contentLength, stableWorkerId))
 
