@@ -48,6 +48,7 @@ import java.util.concurrent.CancellationException
 class MainActivity : ComponentActivity() {
 
     private val runtime: GeckoRuntime by inject()
+    private val webExtensionActionController: WebExtensionActionController by inject()
     private val browserViewModel: BrowserViewModel by viewModel()
     private lateinit var extensionInstaller: WebExtensionInstaller
     private var pendingActivityResult: GeckoResult<Intent>? = null
@@ -368,6 +369,8 @@ class MainActivity : ComponentActivity() {
         // ビルトイン拡張機能 (ThemeColor/Media/FindInPage/MockLocation) は session-level の
         // MessageDelegate で完結する設計のため runtime-level delegate は不要。
         if (extension.isBuiltIn) return
+        // browserAction/pageAction を受け取り、ツールバーメニューへアイコンとして並べる
+        webExtensionActionController.attachExtension(extension)
         extension.setTabDelegate(
             object : WebExtension.TabDelegate {
                 override fun onNewTab(
