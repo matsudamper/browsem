@@ -9,9 +9,13 @@ data class ExtensionsScreenUiState(
     val errorMessage: String?,
     val uninstallingId: String?,
     val togglingId: String?,
+    val isInstalling: Boolean,
 ) {
     interface Callbacks {
         fun refreshExtensions()
+
+        /** ZIP / XPI ファイルを選択して拡張機能をインストールする */
+        fun installExtensionFromFile()
         fun uninstallExtension(extensionId: String)
         fun openExtensionSettings(extensionId: String)
         fun setExtensionEnabled(extensionId: String, enabled: Boolean)

@@ -1,7 +1,10 @@
 package net.matsudamper.browser.screen.extensions
 
-import androidx.lifecycle.ViewModel
+import android.app.Application
+import android.net.Uri
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -9,14 +12,19 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import net.matsudamper.browser.isWebExtensionArchive
 import net.matsudamper.browser.ui.extensions.ExtensionsScreenUiState
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.WebExtension
 import org.mozilla.geckoview.WebExtensionController
+import java.io.File
+import java.io.IOException
 
 internal class ExtensionsScreenViewModel(
+    application: Application,
     private val runtime: GeckoRuntime,
-) : ViewModel() {
+) : AndroidViewModel(application) {
 
     private val viewModelStateFlow = MutableStateFlow(ViewModelState())
     val eventHandler = Channel<(Event) -> Unit>(Channel.UNLIMITED)
@@ -24,6 +32,11 @@ internal class ExtensionsScreenViewModel(
     private val callbacks = object : ExtensionsScreenUiState.Callbacks {
         override fun refreshExtensions() {
             loadExtensions()
+        }
+
+        override fun installExtensionFromFile() {
+            if (viewModelStateFlow.value.isInstalling) return
+            eventHandler.trySend { it.requestExtensionFilePicker() }
         }
 
         override fun uninstallExtension(extensionId: String) {
@@ -102,6 +115,7 @@ internal class ExtensionsScreenViewModel(
             errorMessage = null,
             uninstallingId = null,
             togglingId = null,
+            isInstalling = false,
         )
     ).also { uiStateFlow ->
         viewModelScope.launch {
@@ -128,6 +142,7 @@ internal class ExtensionsScreenViewModel(
                         errorMessage = state.errorMessage,
                         uninstallingId = state.uninstallingId,
                         togglingId = state.togglingId,
+                        isInstalling = state.isInstalling,
                     )
                 }
             }
@@ -136,6 +151,96 @@ internal class ExtensionsScreenViewModel(
 
     init {
         loadExtensions()
+    }
+
+    /**
+     * ファイルピッカーで選択された ZIP / XPI をインストールする。
+     * キャンセル時は uri が null で呼ばれる。
+     */
+    fun onExtensionFileSelected(uri: Uri?) {
+        if (uri == null) return
+        if (viewModelStateFlow.value.isInstalling) return
+        viewModelStateFlow.update { it.copy(isInstalling = true, errorMessage = null) }
+        viewModelScope.launch {
+            val archiveFile = runCatching {
+                withContext(Dispatchers.IO) { copyToInstallCache(uri) }
+            }.getOrElse { error ->
+                viewModelStateFlow.update {
+                    it.copy(
+                        isInstalling = false,
+                        errorMessage = "拡張機能ファイルの読み込みに失敗しました。\n${error.message.orEmpty()}",
+                    )
+                }
+                return@launch
+            }
+            val isExtensionArchive = withContext(Dispatchers.IO) { isWebExtensionArchive(archiveFile) }
+            if (!isExtensionArchive) {
+                withContext(Dispatchers.IO) { archiveFile.delete() }
+                viewModelStateFlow.update {
+                    it.copy(
+                        isInstalling = false,
+                        errorMessage = "選択したファイルは拡張機能ではありません。\nmanifest.json を含む ZIP / XPI を選択してください。",
+                    )
+                }
+                return@launch
+            }
+            install(archiveFile)
+        }
+    }
+
+    /**
+     * ローカルファイルからインストールする。
+     * GeckoView の install() は file:// URI を受け付け、署名検証やインストール確認ダイアログ
+     * (PromptDelegate) は AMO からのインストールと同じ経路で処理される。
+     */
+    private fun install(archiveFile: File) {
+        runtime.webExtensionController.install(
+            Uri.fromFile(archiveFile).toString(),
+            WebExtensionController.INSTALLATION_METHOD_MANAGER,
+        ).accept(
+            {
+                archiveFile.delete()
+                viewModelStateFlow.update { it.copy(isInstalling = false) }
+                loadExtensions()
+            },
+            { error ->
+                archiveFile.delete()
+                viewModelStateFlow.update {
+                    it.copy(
+                        isInstalling = false,
+                        // InstallException (署名なし・非対応など) はアプリ全体のインストール失敗
+                        // ダイアログ (MainActivity の WebExtensionInstaller) が AddonManagerDelegate
+                        // 経由で表示するため、二重表示を避けてここではメッセージを出さない。
+                        errorMessage = if (error is WebExtension.InstallException) {
+                            it.errorMessage
+                        } else {
+                            "拡張機能のインストールに失敗しました。\n${error?.message.orEmpty()}"
+                        },
+                    )
+                }
+            },
+        )
+    }
+
+    /**
+     * SAF の Uri は Gecko 側から読めないため、アプリのキャッシュへコピーして file:// で渡す。
+     * GeckoView (AddonManager) は拡張子 .xpi / .zip のみをアーカイブとして扱うため .xpi で保存する。
+     */
+    private fun copyToInstallCache(uri: Uri): File {
+        val context = getApplication<Application>()
+        val cacheDir = File(context.cacheDir, EXTENSION_INSTALL_CACHE_DIR)
+        cacheDir.mkdirs()
+        // インストール途中でプロセスが落ちた場合に備え、残っているファイルを削除する
+        cacheDir.listFiles()?.forEach { it.delete() }
+        val destination = File(cacheDir, "extension-${System.currentTimeMillis()}.xpi")
+        val inputStream = context.contentResolver.openInputStream(uri)
+            ?: throw IOException("ファイルを開けませんでした: $uri")
+        inputStream.use { input ->
+            destination.outputStream().use { output ->
+                input.copyTo(output)
+            }
+        }
+        return destination
     }
 
     private fun loadExtensions() {
@@ -164,6 +269,9 @@ internal class ExtensionsScreenViewModel(
 
     interface Event {
         fun navigateToExtensionSettings(url: String)
+
+        /** ZIP / XPI を選択するファイルピッカーを開く */
+        fun requestExtensionFilePicker()
     }
 
     data class ViewModelState(
@@ -171,6 +279,20 @@ internal class ExtensionsScreenViewModel(
         val isLoading: Boolean = true,
         val uninstallingId: String? = null,
         val togglingId: String? = null,
+        val isInstalling: Boolean = false,
         val errorMessage: String? = null,
     )
+
+    companion object {
+        private const val EXTENSION_INSTALL_CACHE_DIR = "extension_install"
+
+        /** ファイルピッカーで選択可能にする MIME タイプ */
+        val EXTENSION_ARCHIVE_MIME_TYPES = arrayOf(
+            "application/zip",
+            "application/x-xpinstall",
+            // 提供元によっては ZIP / XPI が octet-stream や不明な MIME で返るため広く許可する
+            "application/octet-stream",
+            "*/*",
+        )
+    }
 }
