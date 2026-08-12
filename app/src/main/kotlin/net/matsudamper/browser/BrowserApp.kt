@@ -326,7 +326,6 @@ internal fun BrowserAppShell(
                         ExtensionsScreenViewModel(
                             application = context.applicationContext as Application,
                             runtime = runtime,
-                            settingsRepository = settingsRepository,
                         )
                     })
                     val extensionsUiState by extensionsViewModel.uiState.collectAsState()

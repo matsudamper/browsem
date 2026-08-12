@@ -3,7 +3,7 @@ package net.matsudamper.browser.di
 import android.util.Log
 import mozilla.components.lib.publicsuffixlist.PublicSuffixList
 import net.matsudamper.browser.BrowserViewModel
-import net.matsudamper.browser.applyAllowUnsignedExtensions
+import net.matsudamper.browser.allowUnsignedExtensions
 import net.matsudamper.browser.DevToolsWebExtension
 import net.matsudamper.browser.DownloadWorker
 import net.matsudamper.browser.FindInPageWebExtension
@@ -20,7 +20,6 @@ import net.matsudamper.browser.data.TabGroupRepositoryImpl
 import net.matsudamper.browser.data.TabRepository
 import net.matsudamper.browser.data.download.DownloadRepository
 import net.matsudamper.browser.data.history.HistoryRepository
-import net.matsudamper.browser.data.resolvedAllowUnsignedExtensions
 import net.matsudamper.browser.data.resolvedExtensionsProcessEnabled
 import net.matsudamper.browser.data.websuggestion.HttpWebSuggestionRepository
 import net.matsudamper.browser.data.websuggestion.WebSuggestionRepository
@@ -48,20 +47,22 @@ val dataModule = module {
 val appModule = module {
     single<GeckoRuntime> {
         val settings = get<SettingsRepository>()
-        val browserSettings = runBlocking { settings.settings.first() }
+        val extensionsProcessEnabled = runBlocking {
+            settings.settings.first().resolvedExtensionsProcessEnabled()
+        }
         GeckoRuntime.create(
             androidContext(),
             GeckoRuntimeSettings.Builder()
                 .forceUserScalableEnabled(true)
-                .extensionsProcessEnabled(browserSettings.resolvedExtensionsProcessEnabled())
+                .extensionsProcessEnabled(extensionsProcessEnabled)
                 .build()
         ).also {
-            // 署名要求は GeckoRuntimeSettings では設定できず pref でしか制御できないため、
-            // runtime 生成直後に保存済みの設定を反映する。Gecko 起動前の呼び出しはキューされる。
-            applyAllowUnsignedExtensions(browserSettings.resolvedAllowUnsignedExtensions())
-                .accept({}, { error ->
-                    Log.w("AppModule", "署名要求 pref の反映に失敗", error)
-                })
+            // 署名要求は GeckoRuntimeSettings では設定できず pref でしか制御できない。
+            // 起動時の検証にも使われる値のため runtime 生成のたびに反映する。
+            // Gecko 起動前の呼び出しはキューされる。
+            allowUnsignedExtensions().accept({}, { error ->
+                Log.w("AppModule", "署名要求 pref の反映に失敗", error)
+            })
         }
     }
     // 拡張機能はプロセスに1つの GeckoRuntime に対してインストールするため single で管理

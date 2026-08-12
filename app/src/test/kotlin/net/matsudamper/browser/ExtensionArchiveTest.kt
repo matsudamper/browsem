@@ -50,24 +50,6 @@ class ExtensionArchiveTest {
         assertFalse(isWebExtensionArchive(File(temporaryFolder.root, "missing.zip")))
     }
 
-    @Test
-    fun `META-INF_mozilla_rsa を含む XPI は署名済みと判定される`() {
-        val file = createZip("signed.xpi", listOf("manifest.json", "META-INF/mozilla.rsa", "META-INF/mozilla.sf"))
-        assertTrue(isSignedWebExtensionArchive(file))
-    }
-
-    @Test
-    fun `署名ファイルを含まない ZIP は署名なしと判定される`() {
-        val file = createZip("unsigned.zip", listOf("manifest.json", "background.js"))
-        assertFalse(isSignedWebExtensionArchive(file))
-    }
-
-    @Test
-    fun `署名ファイル名の大文字小文字は区別しない`() {
-        val file = createZip("signed-upper.xpi", listOf("manifest.json", "META-INF/MOZILLA.RSA"))
-        assertTrue(isSignedWebExtensionArchive(file))
-    }
-
     private fun createZip(fileName: String, entryNames: List<String>): File {
         val file = temporaryFolder.newFile(fileName)
         ZipOutputStream(file.outputStream()).use { zip ->

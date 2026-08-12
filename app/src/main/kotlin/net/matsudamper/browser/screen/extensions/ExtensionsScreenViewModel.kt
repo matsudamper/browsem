@@ -10,15 +10,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import net.matsudamper.browser.applyAllowUnsignedExtensions
-import net.matsudamper.browser.awaitGecko
-import net.matsudamper.browser.data.SettingsRepository
-import net.matsudamper.browser.data.resolvedAllowUnsignedExtensions
-import net.matsudamper.browser.isSignedWebExtensionArchive
 import net.matsudamper.browser.isWebExtensionArchive
 import net.matsudamper.browser.ui.extensions.ExtensionsScreenUiState
 import org.mozilla.geckoview.GeckoRuntime
@@ -30,7 +24,6 @@ import java.io.IOException
 internal class ExtensionsScreenViewModel(
     application: Application,
     private val runtime: GeckoRuntime,
-    private val settingsRepository: SettingsRepository,
 ) : AndroidViewModel(application) {
 
     private val viewModelStateFlow = MutableStateFlow(ViewModelState())
@@ -44,40 +37,6 @@ internal class ExtensionsScreenViewModel(
         override fun installExtensionFromFile() {
             if (viewModelStateFlow.value.isInstalling) return
             eventHandler.trySend { it.requestExtensionFilePicker() }
-        }
-
-        override fun confirmUnsignedInstall() {
-            val archiveFile = viewModelStateFlow.value.unsignedArchiveFile ?: return
-            viewModelStateFlow.update {
-                it.copy(unsignedArchiveFile = null, isInstalling = true)
-            }
-            viewModelScope.launch {
-                // 署名検証は起動時にも行われるため、設定を保存して以降の起動にも反映する。
-                // 必須に戻すとインストール済みの署名なし拡張機能は無効化される。
-                settingsRepository.setAllowUnsignedExtensions(true)
-                val applied = runCatching {
-                    applyAllowUnsignedExtensions(allowUnsigned = true).awaitGecko()
-                }.isSuccess
-                if (!applied) {
-                    deleteQuietly(archiveFile)
-                    viewModelStateFlow.update {
-                        it.copy(
-                            isInstalling = false,
-                            errorMessage = "署名検証の設定変更に失敗したため、インストールを中止しました。",
-                        )
-                    }
-                    return@launch
-                }
-                install(archiveFile)
-            }
-        }
-
-        override fun dismissUnsignedInstall() {
-            val archiveFile = viewModelStateFlow.value.unsignedArchiveFile ?: return
-            viewModelStateFlow.update { it.copy(unsignedArchiveFile = null) }
-            viewModelScope.launch {
-                withContext(Dispatchers.IO) { deleteQuietly(archiveFile) }
-            }
         }
 
         override fun uninstallExtension(extensionId: String) {
@@ -157,7 +116,6 @@ internal class ExtensionsScreenViewModel(
             uninstallingId = null,
             togglingId = null,
             isInstalling = false,
-            unsignedInstallConfirmation = null,
         )
     ).also { uiStateFlow ->
         viewModelScope.launch {
@@ -185,11 +143,6 @@ internal class ExtensionsScreenViewModel(
                         uninstallingId = state.uninstallingId,
                         togglingId = state.togglingId,
                         isInstalling = state.isInstalling,
-                        unsignedInstallConfirmation = state.unsignedArchiveFile?.let {
-                            ExtensionsScreenUiState.UnsignedInstallConfirmation(
-                                message = UNSIGNED_INSTALL_WARNING_MESSAGE,
-                            )
-                        },
                     )
                 }
             }
@@ -228,15 +181,6 @@ internal class ExtensionsScreenViewModel(
                         isInstalling = false,
                         errorMessage = "選択したファイルは拡張機能ではありません。\nmanifest.json を含む ZIP / XPI を選択してください。",
                     )
-                }
-                return@launch
-            }
-            val isSigned = withContext(Dispatchers.IO) { isSignedWebExtensionArchive(archiveFile) }
-            val allowUnsigned = settingsRepository.settings.first().resolvedAllowUnsignedExtensions()
-            if (!isSigned && !allowUnsigned) {
-                // 署名なしはそのままではインストールできないため、警告に同意した場合のみ続行する
-                viewModelStateFlow.update {
-                    it.copy(isInstalling = false, unsignedArchiveFile = archiveFile)
                 }
                 return@launch
             }
@@ -340,20 +284,11 @@ internal class ExtensionsScreenViewModel(
         val uninstallingId: String? = null,
         val togglingId: String? = null,
         val isInstalling: Boolean = false,
-        // 署名なしの警告に同意されるまで保持するインストール対象ファイル
-        val unsignedArchiveFile: File? = null,
         val errorMessage: String? = null,
     )
 
     companion object {
         private const val EXTENSION_INSTALL_CACHE_DIR = "extension_install"
-
-        private const val UNSIGNED_INSTALL_WARNING_MESSAGE =
-            "このファイルは署名されていません。\n\n" +
-                "署名されていない拡張機能は改ざんされている可能性があり、" +
-                "閲覧内容やアカウント情報が盗まれる危険があります。" +
-                "信頼できる提供元のファイルのみインストールしてください。\n\n" +
-                "続行すると拡張機能の署名検証が無効になり、以降にインストールする拡張機能にも適用されます。"
 
         /** ファイルピッカーで選択可能にする MIME タイプ */
         val EXTENSION_ARCHIVE_MIME_TYPES = arrayOf(

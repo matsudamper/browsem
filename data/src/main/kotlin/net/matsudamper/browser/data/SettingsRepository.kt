@@ -41,13 +41,6 @@ class SettingsRepository(context: Context) {
                         clearExtensionsProcessEnabled()
                     }
                 }
-                .apply {
-                    if (settings.hasAllowUnsignedExtensions()) {
-                        setAllowUnsignedExtensions(settings.allowUnsignedExtensions)
-                    } else {
-                        clearAllowUnsignedExtensions()
-                    }
-                }
                 .build()
         }
     }
@@ -124,14 +117,6 @@ class SettingsRepository(context: Context) {
         }
     }
 
-    suspend fun setAllowUnsignedExtensions(allow: Boolean) {
-        dataStore.updateData { current ->
-            current.toBuilder()
-                .setAllowUnsignedExtensions(allow)
-                .build()
-        }
-    }
-
     suspend fun setMockLocationCoordinates(latitude: Double, longitude: Double) {
         dataStore.updateData { current ->
             current.toBuilder()
@@ -175,14 +160,6 @@ fun BrowserSettings.resolvedExtensionsProcessEnabled(): Boolean {
         extensionsProcessEnabled
     } else {
         true
-    }
-}
-
-fun BrowserSettings.resolvedAllowUnsignedExtensions(): Boolean {
-    return if (hasAllowUnsignedExtensions()) {
-        allowUnsignedExtensions
-    } else {
-        false
     }
 }
 

@@ -42,7 +42,4 @@ message BrowserSettings {
   double mock_location_latitude = 13;
   double mock_location_longitude = 14;
   optional bool extensions_process_enabled = 15;
-  // 署名されていない拡張機能のインストールを許可する。
-  // Gecko の xpinstall.signatures.required に反映する。
-  optional bool allow_unsigned_extensions = 16;
 }

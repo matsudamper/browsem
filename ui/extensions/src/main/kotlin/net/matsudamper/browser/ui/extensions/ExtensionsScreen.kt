@@ -52,10 +52,6 @@ sealed interface ExtensionsScreenTestTags {
     val testTag get() = "${ExtensionsScreenTestTags::class.java.name}#$id"
 
     object InstallFromFileButton : ExtensionsScreenTestTags { override val id = "install_from_file_button" }
-
-    object UnsignedInstallConfirmButton : ExtensionsScreenTestTags {
-        override val id = "unsigned_install_confirm_button"
-    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -161,27 +157,6 @@ fun ExtensionsScreen(
         }
     }
 
-    uiState.unsignedInstallConfirmation?.let { confirmation ->
-        AlertDialog(
-            onDismissRequest = uiState.callbacks::dismissUnsignedInstall,
-            title = { Text("署名されていない拡張機能") },
-            text = { Text(confirmation.message) },
-            confirmButton = {
-                TextButton(
-                    onClick = uiState.callbacks::confirmUnsignedInstall,
-                    modifier = Modifier.testTag(ExtensionsScreenTestTags.UnsignedInstallConfirmButton.testTag),
-                ) {
-                    Text("インストールする")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = uiState.callbacks::dismissUnsignedInstall) {
-                    Text("キャンセル")
-                }
-            },
-        )
-    }
-
     uiState.errorMessage?.let { message ->
         AlertDialog(
             onDismissRequest = uiState.callbacks::dismissError,
@@ -199,8 +174,6 @@ fun ExtensionsScreen(
 private val previewCallbacks = object : ExtensionsScreenUiState.Callbacks {
     override fun refreshExtensions() = Unit
     override fun installExtensionFromFile() = Unit
-    override fun confirmUnsignedInstall() = Unit
-    override fun dismissUnsignedInstall() = Unit
     override fun uninstallExtension(extensionId: String) = Unit
     override fun openExtensionSettings(extensionId: String) = Unit
     override fun setExtensionEnabled(extensionId: String, enabled: Boolean) = Unit
@@ -246,7 +219,6 @@ private fun ExtensionsScreenLoadedPreview() {
                 uninstallingId = null,
                 togglingId = null,
                 isInstalling = false,
-                unsignedInstallConfirmation = null,
             ),
             onBack = {},
         )
@@ -276,7 +248,6 @@ private fun ExtensionsScreenTogglingPreview() {
                 uninstallingId = null,
                 togglingId = "ublock-origin@raymondhill.net",
                 isInstalling = false,
-                unsignedInstallConfirmation = null,
             ),
             onBack = {},
         )
@@ -306,39 +277,11 @@ private fun ExtensionsScreenInstallingPreview() {
                 uninstallingId = null,
                 togglingId = null,
                 isInstalling = true,
-                unsignedInstallConfirmation = null,
             ),
             onBack = {},
         )
     }
 }
-
-@Preview(showBackground = true)
-@Composable
-private fun ExtensionsScreenUnsignedConfirmationPreview() {
-    MaterialTheme {
-        ExtensionsScreen(
-            uiState = ExtensionsScreenUiState(
-                callbacks = previewCallbacks,
-                loadingState = ExtensionsScreenUiState.LoadingState.Loaded(extensions = listOf()),
-                errorMessage = null,
-                uninstallingId = null,
-                togglingId = null,
-                isInstalling = false,
-                unsignedInstallConfirmation = ExtensionsScreenUiState.UnsignedInstallConfirmation(
-                    message = UNSIGNED_INSTALL_PREVIEW_MESSAGE,
-                ),
-            ),
-            onBack = {},
-        )
-    }
-}
-
-private const val UNSIGNED_INSTALL_PREVIEW_MESSAGE =
-    "このファイルは署名されていません。\n\n" +
-        "署名されていない拡張機能は改ざんされている可能性があり、閲覧内容やアカウント情報が盗まれる危険があります。" +
-        "信頼できる提供元のファイルのみインストールしてください。\n\n" +
-        "続行すると拡張機能の署名検証が無効になり、以降にインストールする拡張機能にも適用されます。"
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
