@@ -91,6 +91,7 @@ internal fun ExtensionActionPopupDialog(
                         },
                         onRelease = { geckoView ->
                             // ダイアログを閉じる際にセッションが先に close されている場合があるため保護する
+                            runCatching { popup.session.setActive(false) }
                             runCatching { geckoView.releaseSession() }
                         },
                     )
