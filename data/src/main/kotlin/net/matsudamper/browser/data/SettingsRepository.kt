@@ -117,6 +117,16 @@ class SettingsRepository(context: Context) {
         }
     }
 
+    /** ツールバーメニューに並べる拡張機能アイコンの表示順を保存する */
+    suspend fun setExtensionActionOrder(extensionIds: List<String>) {
+        dataStore.updateData { current ->
+            current.toBuilder()
+                .clearExtensionActionOrder()
+                .addAllExtensionActionOrder(extensionIds)
+                .build()
+        }
+    }
+
     suspend fun setMockLocationCoordinates(latitude: Double, longitude: Double) {
         dataStore.updateData { current ->
             current.toBuilder()
