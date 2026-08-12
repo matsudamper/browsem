@@ -518,6 +518,11 @@ internal class BrowserTabScreenState(
             ?: return
     }
 
+    /** 長押しドラッグの中断。入れ替え途中の一時的な並び順を破棄する */
+    fun onExtensionActionMoveCancel() {
+        draggingExtensionActionOrder = null
+    }
+
     /** 長押しドラッグの終了。この時点の並び順を保存する */
     fun onExtensionActionMoveEnd() {
         val visibleOrder = draggingExtensionActionOrder ?: return

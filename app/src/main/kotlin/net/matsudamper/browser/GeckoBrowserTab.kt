@@ -960,6 +960,7 @@ internal fun GeckoBrowserTab(
                     onExtensionActionClick = state::onExtensionActionClick,
                     onExtensionActionMove = state::onExtensionActionMove,
                     onExtensionActionMoveEnd = state::onExtensionActionMoveEnd,
+                    onExtensionActionMoveCancel = state::onExtensionActionMoveCancel,
                     onHorizontalDrag = onToolbarHorizontalDrag,
                     onHorizontalDragEnd = {
                         // タブ切替スワイプになる可能性があるため、現在のタブのプレビューを事前にキャプチャする

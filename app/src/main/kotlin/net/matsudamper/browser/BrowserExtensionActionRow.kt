@@ -18,13 +18,14 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -42,13 +43,15 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
-import kotlinx.coroutines.launch
 import net.matsudamper.browser.data.ThemeMode
 import net.matsudamper.browser.ui.common.BrowserTheme
 import net.matsudamper.browser.resources.R as ResourcesR
@@ -62,6 +65,9 @@ private val ICON_SIZE = 24.dp
 /** ドラッグ中に端へ近づいたら自動スクロールを始める距離 */
 private val AUTO_SCROLL_EDGE = 24.dp
 
+/** 自動スクロールの 1 フレームあたりの移動量 */
+private val AUTO_SCROLL_STEP = 4.dp
+
 /**
  * タブに対して有効な拡張機能アクションを横スクロールで並べる行。
  * 短押しで拡張機能のポップアップを開き、長押しドラッグで並び替えられる。
@@ -73,24 +79,74 @@ internal fun ExtensionActionRow(
     onActionClick: (String) -> Unit,
     onActionMove: (fromIndex: Int, toIndex: Int) -> Unit,
     onActionMoveEnd: () -> Unit,
+    onActionMoveCancel: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val density = LocalDensity.current
     val itemSizePx = with(density) { ITEM_SIZE.toPx() }
     val autoScrollEdgePx = with(density) { AUTO_SCROLL_EDGE.toPx() }
-    val coroutineScope = rememberCoroutineScope()
+    val autoScrollStepPx = with(density) { AUTO_SCROLL_STEP.toPx() }
     val latestActions by rememberUpdatedState(actions)
     val latestOnActionClick by rememberUpdatedState(onActionClick)
     val latestOnActionMove by rememberUpdatedState(onActionMove)
     val latestOnActionMoveEnd by rememberUpdatedState(onActionMoveEnd)
+    val latestOnActionMoveCancel by rememberUpdatedState(onActionMoveCancel)
     // 並び替え中のアイテム位置。-1 は並び替えしていない状態
     var draggingIndex by remember { mutableIntStateOf(-1) }
     var dragOffset by remember { mutableFloatStateOf(0f) }
     var viewportWidthPx by remember { mutableIntStateOf(0) }
+    // ドラッグ中の自動スクロール方向。-1 = 左, 0 = なし, 1 = 右
+    var autoScrollDirection by remember { mutableFloatStateOf(0f) }
 
     fun indexAt(x: Float): Int? {
         val index = (x / itemSizePx).toInt()
         return index.takeIf { it in latestActions.indices }
+    }
+
+    // 端に寄せたまま指を止めても自動スクロールを続けられるよう、
+    // ドラッグ量とスクロール量の両方をここで一元的に処理する
+    fun applyDragDelta(deltaX: Float) {
+        if (draggingIndex < 0) return
+        dragOffset += deltaX
+        // 半分を越えたら隣と入れ替える。連続で越えた場合は複数回入れ替える
+        var currentIndex = draggingIndex
+        while (dragOffset > itemSizePx / 2 && currentIndex < latestActions.lastIndex) {
+            latestOnActionMove(currentIndex, currentIndex + 1)
+            dragOffset -= itemSizePx
+            currentIndex += 1
+        }
+        while (dragOffset < -itemSizePx / 2 && currentIndex > 0) {
+            latestOnActionMove(currentIndex, currentIndex - 1)
+            dragOffset += itemSizePx
+            currentIndex -= 1
+        }
+        draggingIndex = currentIndex
+        // 端まで運んだら自動スクロールを始め、画面外へも移動できるようにする
+        val itemStart = currentIndex * itemSizePx + dragOffset
+        val visibleStart = scrollState.value.toFloat()
+        val visibleEnd = visibleStart + viewportWidthPx
+        autoScrollDirection = when {
+            itemStart < visibleStart + autoScrollEdgePx -> -1f
+            itemStart + itemSizePx > visibleEnd - autoScrollEdgePx -> 1f
+            else -> 0f
+        }
+    }
+
+    fun endDrag() {
+        draggingIndex = -1
+        dragOffset = 0f
+        autoScrollDirection = 0f
+    }
+
+    // 指を止めていてもフレームごとにスクロールし、スクロールした分だけアイテムを追従させる
+    LaunchedEffect(draggingIndex >= 0, autoScrollDirection) {
+        if (draggingIndex < 0 || autoScrollDirection == 0f) return@LaunchedEffect
+        while (true) {
+            withFrameNanos { }
+            val consumed = scrollState.scrollBy(autoScrollDirection * autoScrollStepPx)
+            if (consumed == 0f) break
+            applyDragDelta(consumed)
+        }
     }
 
     MenuWidthNeutralBox(
@@ -122,49 +178,19 @@ internal fun ExtensionActionRow(
                             if (draggingIndex >= 0) {
                                 latestOnActionMoveEnd()
                             }
-                            draggingIndex = -1
-                            dragOffset = 0f
+                            endDrag()
                         },
                         onDragCancel = {
-                            draggingIndex = -1
-                            dragOffset = 0f
+                            // 途中まで入れ替えた一時的な並び順を破棄する
+                            if (draggingIndex >= 0) {
+                                latestOnActionMoveCancel()
+                            }
+                            endDrag()
                         },
                         onDrag = { change, dragAmount ->
                             if (draggingIndex < 0) return@detectDragGesturesAfterLongPress
                             change.consume()
-                            dragOffset += dragAmount.x
-                            // 半分を越えたら隣と入れ替える。連続で越えた場合は複数回入れ替える
-                            var currentIndex = draggingIndex
-                            while (dragOffset > itemSizePx / 2 && currentIndex < latestActions.lastIndex) {
-                                latestOnActionMove(currentIndex, currentIndex + 1)
-                                dragOffset -= itemSizePx
-                                currentIndex += 1
-                            }
-                            while (dragOffset < -itemSizePx / 2 && currentIndex > 0) {
-                                latestOnActionMove(currentIndex, currentIndex - 1)
-                                dragOffset += itemSizePx
-                                currentIndex -= 1
-                            }
-                            draggingIndex = currentIndex
-                            // 端まで運んだら自動でスクロールし、画面外へも移動できるようにする
-                            val itemStart = currentIndex * itemSizePx + dragOffset
-                            val visibleStart = scrollState.value.toFloat()
-                            val visibleEnd = visibleStart + viewportWidthPx
-                            val scrollDelta = when {
-                                itemStart < visibleStart + autoScrollEdgePx ->
-                                    itemStart - visibleStart - autoScrollEdgePx
-
-                                itemStart + itemSizePx > visibleEnd - autoScrollEdgePx ->
-                                    itemStart + itemSizePx - visibleEnd + autoScrollEdgePx
-
-                                else -> 0f
-                            }
-                            if (scrollDelta != 0f) {
-                                coroutineScope.launch {
-                                    // スクロールした分だけ指との位置関係がずれるため、オフセットで打ち消す
-                                    dragOffset += scrollState.scrollBy(scrollDelta)
-                                }
-                            }
+                            applyDragDelta(dragAmount.x)
                         },
                     )
                 },
@@ -174,6 +200,7 @@ internal fun ExtensionActionRow(
                 val isDragging = index == draggingIndex
                 ExtensionActionItem(
                     action = action,
+                    onActionClick = { latestOnActionClick(action.extensionId) },
                     modifier = Modifier
                         .zIndex(if (isDragging) 1f else 0f)
                         .graphicsLayer {
@@ -194,13 +221,23 @@ private const val DRAG_SCALE = 1.2f
 @Composable
 private fun ExtensionActionItem(
     action: WebExtensionActionController.ActionUiState,
+    onActionClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Box(
         modifier = modifier
             .size(ITEM_SIZE)
             .testTag(BrowserExtensionActionRowTestTags.ActionItem.testTag(action.extensionId))
-            .semantics { contentDescription = action.title },
+            // タップは行全体の pointerInput で位置から解決しているため、
+            // TalkBack 等から個別に実行できるようアクションをセマンティクスへ公開する
+            .semantics {
+                contentDescription = action.title
+                role = Role.Button
+                onClick(label = action.title) {
+                    onActionClick()
+                    true
+                }
+            },
         contentAlignment = Alignment.Center,
     ) {
         val icon = action.icon
@@ -312,6 +349,7 @@ private fun PreviewExtensionActionRow() {
                 onActionClick = {},
                 onActionMove = { _, _ -> },
                 onActionMoveEnd = {},
+                onActionMoveCancel = {},
             )
         }
     }

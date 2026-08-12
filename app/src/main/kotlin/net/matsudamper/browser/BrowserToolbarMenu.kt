@@ -71,6 +71,7 @@ internal fun ToolbarMenu(
     onExtensionActionClick: (String) -> Unit = {},
     onExtensionActionMove: (fromIndex: Int, toIndex: Int) -> Unit = { _, _ -> },
     onExtensionActionMoveEnd: () -> Unit = {},
+    onExtensionActionMoveCancel: () -> Unit = {},
     showOpenSettings: Boolean = true,
     showAddToHomeScreen: Boolean = true,
     showHome: Boolean = true,
@@ -111,6 +112,7 @@ internal fun ToolbarMenu(
             onExtensionActionClick = onExtensionActionClick,
             onExtensionActionMove = onExtensionActionMove,
             onExtensionActionMoveEnd = onExtensionActionMoveEnd,
+            onExtensionActionMoveCancel = onExtensionActionMoveCancel,
             showOpenSettings = showOpenSettings,
             showAddToHomeScreen = showAddToHomeScreen,
             showHome = showHome,
@@ -152,6 +154,7 @@ private fun ToolbarMenuContent(
     onExtensionActionClick: (String) -> Unit,
     onExtensionActionMove: (fromIndex: Int, toIndex: Int) -> Unit,
     onExtensionActionMoveEnd: () -> Unit,
+    onExtensionActionMoveCancel: () -> Unit,
     showOpenSettings: Boolean,
     showAddToHomeScreen: Boolean,
     showHome: Boolean,
@@ -391,6 +394,7 @@ private fun ToolbarMenuContent(
                 },
                 onActionMove = onExtensionActionMove,
                 onActionMoveEnd = onExtensionActionMoveEnd,
+                onActionMoveCancel = onExtensionActionMoveCancel,
             )
         }
         HorizontalDivider()
@@ -608,6 +612,7 @@ private fun PreviewToolbarMenuContent() {
                 onExtensionActionClick = {},
                 onExtensionActionMove = { _, _ -> },
                 onExtensionActionMoveEnd = {},
+                onExtensionActionMoveCancel = {},
                 showOpenSettings = true,
                 showAddToHomeScreen = true,
                 showHome = true,
@@ -654,6 +659,7 @@ private fun PreviewToolbarMenuContentWebApp() {
                 onExtensionActionClick = {},
                 onExtensionActionMove = { _, _ -> },
                 onExtensionActionMoveEnd = {},
+                onExtensionActionMoveCancel = {},
                 showOpenSettings = false,
                 showAddToHomeScreen = false,
                 showHome = false,
