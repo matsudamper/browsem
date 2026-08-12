@@ -624,6 +624,18 @@ internal fun GeckoBrowserTab(
         }
     }
 
+    // 拡張機能のツールバーアクション (browserAction/pageAction) のセッション登録。
+    // これを設定しないと拡張機能がタブごとに出すアイコン・ポップアップを受け取れない
+    val webExtensionActionController: WebExtensionActionController = koinInject()
+    DisposableEffect(session, state, webExtensionActionController) {
+        webExtensionActionController.registerSession(session) { popup ->
+            state.extensionActionPopup = popup
+        }
+        onDispose {
+            webExtensionActionController.unregisterSession(session)
+        }
+    }
+
     // DevToolsWebExtension のセッション登録（フォーカス中の入力要素情報の通知）
     DisposableEffect(session, state) {
         val devToolsWebExtension = state.devToolsWebExtension
@@ -943,6 +955,11 @@ internal fun GeckoBrowserTab(
                     onPageZoomIn = state::pageZoomIn,
                     onPageZoomOut = state::pageZoomOut,
                     onResetPageZoom = state::resetPageZoom,
+                    extensionActions = state.extensionActions,
+                    extensionActionScrollState = state.extensionActionScrollState,
+                    onExtensionActionClick = state::onExtensionActionClick,
+                    onExtensionActionMove = state::onExtensionActionMove,
+                    onExtensionActionMoveEnd = state::onExtensionActionMoveEnd,
                     onHorizontalDrag = onToolbarHorizontalDrag,
                     onHorizontalDragEnd = {
                         // タブ切替スワイプになる可能性があるため、現在のタブのプレビューを事前にキャプチャする
@@ -1046,6 +1063,14 @@ internal fun GeckoBrowserTab(
             favicon = addToHomeScreenState.favicon,
             isIconLoading = addToHomeScreenState.isIconLoading,
             onDismiss = state::dismissAddToHomeScreen,
+        )
+    }
+
+    // 拡張機能のポップアップ（タブに対する拡張機能の操作画面）
+    state.extensionActionPopup?.let { popup ->
+        ExtensionActionPopupDialog(
+            popup = popup,
+            onDismissRequest = state::dismissExtensionActionPopup,
         )
     }
 
