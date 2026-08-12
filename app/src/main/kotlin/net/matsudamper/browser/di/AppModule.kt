@@ -1,7 +1,9 @@
 package net.matsudamper.browser.di
 
+import android.util.Log
 import mozilla.components.lib.publicsuffixlist.PublicSuffixList
 import net.matsudamper.browser.BrowserViewModel
+import net.matsudamper.browser.allowUnsignedExtensions
 import net.matsudamper.browser.DevToolsWebExtension
 import net.matsudamper.browser.DownloadWorker
 import net.matsudamper.browser.FindInPageWebExtension
@@ -54,7 +56,14 @@ val appModule = module {
                 .forceUserScalableEnabled(true)
                 .extensionsProcessEnabled(extensionsProcessEnabled)
                 .build()
-        )
+        ).also {
+            // 署名要求は GeckoRuntimeSettings では設定できず pref でしか制御できない。
+            // 起動時の検証にも使われる値のため runtime 生成のたびに反映する。
+            // Gecko 起動前の呼び出しはキューされる。
+            allowUnsignedExtensions().accept({}, { error ->
+                Log.w("AppModule", "署名要求 pref の反映に失敗", error)
+            })
+        }
     }
     // 拡張機能はプロセスに1つの GeckoRuntime に対してインストールするため single で管理
     single { ThemeColorWebExtension().also { it.install(get()) } }
