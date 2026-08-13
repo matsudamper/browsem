@@ -323,9 +323,17 @@ internal fun BrowserAppShell(
 
                 AppDestination.Extensions -> navEntry(key) {
                     val extensionsViewModel = composeViewModel(initializer = {
-                        ExtensionsScreenViewModel(runtime = runtime)
+                        ExtensionsScreenViewModel(
+                            application = context.applicationContext as Application,
+                            runtime = runtime,
+                        )
                     })
                     val extensionsUiState by extensionsViewModel.uiState.collectAsState()
+                    val extensionFileLauncher = rememberLauncherForActivityResult(
+                        ActivityResultContracts.OpenDocument(),
+                    ) { uri ->
+                        extensionsViewModel.onExtensionFileSelected(uri)
+                    }
                     LaunchedEffect(extensionsViewModel) {
                         extensionsViewModel.eventHandler.receiveAsFlow().collect {
                             it(object : ExtensionsScreenViewModel.Event {
@@ -337,6 +345,12 @@ internal fun BrowserAppShell(
                                             context,
                                             CustomTabActivity::class.java,
                                         )
+                                    )
+                                }
+
+                                override fun requestExtensionFilePicker() {
+                                    extensionFileLauncher.launch(
+                                        ExtensionsScreenViewModel.EXTENSION_ARCHIVE_MIME_TYPES,
                                     )
                                 }
                             })

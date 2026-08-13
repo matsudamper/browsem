@@ -42,4 +42,6 @@ message BrowserSettings {
   double mock_location_latitude = 13;
   double mock_location_longitude = 14;
   optional bool extensions_process_enabled = 15;
+  // ツールバーメニューに並べる拡張機能アイコンの表示順 (拡張機能 ID の並び)
+  repeated string extension_action_order = 16;
 }

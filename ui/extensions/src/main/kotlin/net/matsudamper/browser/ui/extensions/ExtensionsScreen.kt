@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -36,11 +37,22 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import net.matsudamper.browser.resources.R as ResourcesR
+
+sealed interface ExtensionsScreenTestTags {
+    val id: String
+
+    val testTag get() = "${ExtensionsScreenTestTags::class.java.name}#$id"
+
+    object InstallFromFileButton : ExtensionsScreenTestTags { override val id = "install_from_file_button" }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -63,6 +75,25 @@ fun ExtensionsScreen(
                     }
                 },
                 actions = {
+                    if (uiState.isInstalling) {
+                        CircularProgressIndicator(
+                            modifier = Modifier
+                                .padding(horizontal = 12.dp)
+                                .size(24.dp),
+                            strokeWidth = 2.dp,
+                        )
+                    } else {
+                        IconButton(
+                            onClick = uiState.callbacks::installExtensionFromFile,
+                            enabled = uiState.uninstallingId == null && uiState.togglingId == null,
+                            modifier = Modifier.testTag(ExtensionsScreenTestTags.InstallFromFileButton.testTag),
+                        ) {
+                            Icon(
+                                painter = painterResource(ResourcesR.drawable.ic_add_24dp),
+                                contentDescription = "ファイルからインストール",
+                            )
+                        }
+                    }
                     IconButton(
                         onClick = uiState.callbacks::refreshExtensions,
                         enabled = uiState.uninstallingId == null,
@@ -142,6 +173,7 @@ fun ExtensionsScreen(
 
 private val previewCallbacks = object : ExtensionsScreenUiState.Callbacks {
     override fun refreshExtensions() = Unit
+    override fun installExtensionFromFile() = Unit
     override fun uninstallExtension(extensionId: String) = Unit
     override fun openExtensionSettings(extensionId: String) = Unit
     override fun setExtensionEnabled(extensionId: String, enabled: Boolean) = Unit
@@ -186,6 +218,7 @@ private fun ExtensionsScreenLoadedPreview() {
                 errorMessage = null,
                 uninstallingId = null,
                 togglingId = null,
+                isInstalling = false,
             ),
             onBack = {},
         )
@@ -214,6 +247,36 @@ private fun ExtensionsScreenTogglingPreview() {
                 errorMessage = null,
                 uninstallingId = null,
                 togglingId = "ublock-origin@raymondhill.net",
+                isInstalling = false,
+            ),
+            onBack = {},
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun ExtensionsScreenInstallingPreview() {
+    MaterialTheme {
+        ExtensionsScreen(
+            uiState = ExtensionsScreenUiState(
+                callbacks = previewCallbacks,
+                loadingState = ExtensionsScreenUiState.LoadingState.Loaded(
+                    extensions = listOf(
+                        ExtensionsScreenUiState.ExtensionUiState(
+                            id = "ublock-origin@raymondhill.net",
+                            displayName = "uBlock Origin",
+                            version = "1.57.2",
+                            hasSettingsPage = true,
+                            isEnabled = true,
+                            isBuiltIn = false,
+                        ),
+                    ),
+                ),
+                errorMessage = null,
+                uninstallingId = null,
+                togglingId = null,
+                isInstalling = true,
             ),
             onBack = {},
         )

@@ -1,6 +1,7 @@
 package net.matsudamper.browser
 
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -112,6 +113,12 @@ internal fun BrowserToolBar(
     onResetPageZoom: () -> Unit,
     toolbarColor: Color?,
     modifier: Modifier = Modifier,
+    extensionActions: List<WebExtensionActionController.ActionUiState> = emptyList(),
+    extensionActionScrollState: ScrollState? = null,
+    onExtensionActionClick: (String) -> Unit = {},
+    onExtensionActionMove: (fromIndex: Int, toIndex: Int) -> Unit = { _, _ -> },
+    onExtensionActionMoveEnd: () -> Unit = {},
+    onExtensionActionMoveCancel: () -> Unit = {},
     showTabActions: Boolean = true,
     onHorizontalDrag: (Float) -> Unit = {},
     onHorizontalDragEnd: () -> Unit = {},
@@ -188,6 +195,12 @@ internal fun BrowserToolBar(
                 onPageZoomIn = onPageZoomIn,
                 onPageZoomOut = onPageZoomOut,
                 onResetPageZoom = onResetPageZoom,
+                extensionActions = extensionActions,
+                extensionActionScrollState = extensionActionScrollState,
+                onExtensionActionClick = onExtensionActionClick,
+                onExtensionActionMove = onExtensionActionMove,
+                onExtensionActionMoveEnd = onExtensionActionMoveEnd,
+                onExtensionActionMoveCancel = onExtensionActionMoveCancel,
                 onOpenSiteSettings = onOpenSiteSettings,
                 onOpenDownloads = onOpenDownloads,
                 onOpenDevTools = onOpenDevTools,

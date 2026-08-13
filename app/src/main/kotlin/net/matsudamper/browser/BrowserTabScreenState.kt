@@ -7,6 +7,7 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.util.Log
 import android.widget.Toast
+import androidx.compose.foundation.ScrollState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
@@ -31,6 +32,7 @@ import java.net.URL
 import net.matsudamper.browser.data.download.DownloadRecordStatus
 import net.matsudamper.browser.data.SiteGeolocationState
 import net.matsudamper.browser.data.SitePermissionState
+import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.SiteSettingsRepository
 import net.matsudamper.browser.data.TranslationProvider
 import net.matsudamper.browser.data.extractSiteHost
@@ -76,6 +78,8 @@ internal fun rememberBrowserTabScreenState(
     val findInPageWebExtension: FindInPageWebExtension = koinInject()
     val devToolsWebExtension: DevToolsWebExtension = koinInject()
     val siteSettingsRepository: SiteSettingsRepository = koinInject()
+    val settingsRepository: SettingsRepository = koinInject()
+    val webExtensionActionController: WebExtensionActionController = koinInject()
     val state = remember(browserTab) {
         BrowserTabScreenState(
             browserTab = browserTab,
@@ -87,6 +91,8 @@ internal fun rememberBrowserTabScreenState(
             findInPageWebExtension = findInPageWebExtension,
             devToolsWebExtension = devToolsWebExtension,
             siteSettingsRepository = siteSettingsRepository,
+            settingsRepository = settingsRepository,
+            webExtensionActionController = webExtensionActionController,
             context = context,
             onHistoryRecord = onHistoryRecord,
             onHistoryTitleUpdate = onHistoryTitleUpdate,
@@ -112,6 +118,8 @@ internal class BrowserTabScreenState(
     internal val findInPageWebExtension: FindInPageWebExtension,
     internal val devToolsWebExtension: DevToolsWebExtension,
     private val siteSettingsRepository: SiteSettingsRepository,
+    private val settingsRepository: SettingsRepository,
+    private val webExtensionActionController: WebExtensionActionController,
     private val context: Context,
     private val onRequestDownloadNotificationPermission: suspend () -> Unit = {},
     private val onRequestAndroidPermissions: suspend (Array<String>) -> Array<String> = { emptyArray() },
@@ -346,6 +354,11 @@ internal class BrowserTabScreenState(
             TAG,
             "init previewCaptureReady=$previewCaptureReady (tabId=${browserTab.tabId} hasPreview=${browserTab.previewBitmap?.isNotEmpty() == true} hasSessionState=${browserTab.sessionState.isNotBlank()})",
         )
+        coroutineScope.launch {
+            settingsRepository.settings.collect { settings ->
+                extensionActionOrder = settings.extensionActionOrderList
+            }
+        }
     }
     var pageLoadError by mutableStateOf<PageLoadError?>(null)
 
@@ -364,6 +377,23 @@ internal class BrowserTabScreenState(
 
     val showInstallExtensionItem: Boolean
         get() = resolveAmoInstallUriFromPage(currentPageUrl) != null
+
+    // --- 拡張機能アクション（ツールバーメニューのアイコン行）---
+    /** メニューのアイコン行の横スクロール位置。タブ内でのみ保持し、永続化はしない */
+    val extensionActionScrollState = ScrollState(initial = 0)
+    /** 表示中の拡張機能ポップアップ。null なら非表示 */
+    var extensionActionPopup by mutableStateOf<WebExtensionActionController.PopupRequest?>(null)
+    private var extensionActionOrder by mutableStateOf<List<String>>(emptyList())
+    // ドラッグ中は保存済みの並び順ではなく、この一時的な並び順を使う
+    private var draggingExtensionActionOrder by mutableStateOf<List<String>?>(null)
+
+    /** このタブに対して有効な拡張機能アクションを、ユーザーが決めた並び順で返す */
+    val extensionActions: List<WebExtensionActionController.ActionUiState>
+        get() = sortByExtensionActionOrder(
+            items = webExtensionActionController.actions(session),
+            order = draggingExtensionActionOrder ?: extensionActionOrder,
+            idOf = { it.extensionId },
+        )
 
     // ================================================================
     // Actions
@@ -474,6 +504,43 @@ internal class BrowserTabScreenState(
 
     fun resetPageZoom() {
         applyPageZoom(100)
+    }
+
+    /** 拡張機能アイコンの短押し。ポップアップを持つ拡張機能はダイアログで表示される */
+    fun onExtensionActionClick(extensionId: String) {
+        webExtensionActionController.click(session, extensionId)
+    }
+
+    /** 長押しドラッグ中の並び替え。ドラッグが終わるまでは永続化しない */
+    fun onExtensionActionMove(fromIndex: Int, toIndex: Int) {
+        val currentIds = extensionActions.map { it.extensionId }
+        draggingExtensionActionOrder = moveExtensionActionOrder(currentIds, fromIndex, toIndex)
+            ?: return
+    }
+
+    /** 長押しドラッグの中断。入れ替え途中の一時的な並び順を破棄する */
+    fun onExtensionActionMoveCancel() {
+        draggingExtensionActionOrder = null
+    }
+
+    /** 長押しドラッグの終了。この時点の並び順を保存する */
+    fun onExtensionActionMoveEnd() {
+        val visibleOrder = draggingExtensionActionOrder ?: return
+        draggingExtensionActionOrder = null
+        val merged = mergeVisibleExtensionActionOrder(
+            savedOrder = extensionActionOrder,
+            visibleOrder = visibleOrder,
+        )
+        extensionActionOrder = merged
+        coroutineScope.launch {
+            settingsRepository.setExtensionActionOrder(merged)
+        }
+    }
+
+    /** 拡張機能ポップアップを閉じ、表示に使っていたセッションを破棄する */
+    fun dismissExtensionActionPopup() {
+        webExtensionActionController.closePopup(session)
+        extensionActionPopup = null
     }
 
     private fun applyPageZoom(percent: Int) {
