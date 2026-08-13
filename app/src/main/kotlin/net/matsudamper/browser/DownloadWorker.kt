@@ -9,7 +9,6 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Environment
 import android.provider.MediaStore
-import android.webkit.MimeTypeMap
 import android.webkit.URLUtil
 import androidx.core.app.NotificationCompat
 import androidx.work.CoroutineWorker
@@ -174,19 +173,28 @@ internal class DownloadWorker(
     /**
      * Content-Disposition・URLからダウンロードファイル名を推測する。
      *
-     * targetSdk 35 (Android 15 VANILLA_ICE_CREAM) 以降は URLUtil.guessFileName の内部実装が
-     * RFC 6266 ベースに切り替わり、mimeType から MimeTypeMap で拡張子を導けない場合（例:
-     * application/octet-stream）でも最終手段の ".bin" を無条件にファイル名末尾へ追記するように
-     * なった。旧実装（RFC 2616）は拡張子を導けない場合は元の拡張子を保持するフォールバックが
-     * あったため問題なかったが、新実装には無く、GitHub Releases など Content-Type が汎用的な
-     * application/octet-stream で返るサーバーからのダウンロードで
-     * "foo.zip" → "foo.zip.bin" のように壊れる。
-     * MimeTypeMap が拡張子に変換できない mimeType は渡さないことで、この上書きを抑止する。
+     * URLUtil.guessFileName に mimeType を渡すと、ファイル名の拡張子が mimeType と
+     * 「一致しない」と判定された場合に、mimeType 由来の拡張子で上書きされる。
+     * この「拡張子」の切り出しには最初のピリオドが使われるため、
+     * "tab_volume_controller-1.0.2.zip" のようにバージョン番号でピリオドを複数含む
+     * ファイル名では、"1.0.2.zip" 部分が丸ごと消えてしまう。
+     * GitHub Releases 等が返す Content-Type: application/octet-stream は
+     * MimeTypeMap 上 ".bin" に対応付けられているため、
+     * "tab_volume_controller-1.0.2.zip" → "tab_volume_controller-1.bin" のように壊れる。
+     *
+     * そのため、Content-Disposition・URL由来のファイル名に拡張子が既にある場合は
+     * mimeType を渡さずそのまま採用し、拡張子が全く無い場合のみ mimeType から補完する。
      */
     private fun guessDownloadFileName(urlString: String, contentDisposition: String?, mimeType: String): String {
-        val mimeTypeForGuess = MimeTypeMap.getSingleton().getExtensionFromMimeType(mimeType)?.let { mimeType }
-        return URLUtil.guessFileName(urlString, contentDisposition, mimeTypeForGuess)
-            .ifBlank { "download-${System.currentTimeMillis()}" }
+        val guessedWithoutMimeType = URLUtil.guessFileName(urlString, contentDisposition, null)
+        // mimeType を渡さない場合、拡張子が全く無いファイル名には URLUtil が機械的に
+        // ".bin" を補うため、そのケースに限り mimeType を渡して適切な拡張子を補完させる
+        val fileName = if (guessedWithoutMimeType.endsWith(".bin", ignoreCase = true)) {
+            URLUtil.guessFileName(urlString, contentDisposition, mimeType)
+        } else {
+            guessedWithoutMimeType
+        }
+        return fileName.ifBlank { "download-${System.currentTimeMillis()}" }
     }
 
     private fun postCompletionNotification(fileName: String, stableWorkerId: String) {
