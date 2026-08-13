@@ -65,6 +65,17 @@ jobs:
           name: ${{ env.APK_NAME }}
           path: ${{ env.APK_PATH }}
 
+      - name: Run Android Lint
+        run: ./gradlew :app:lintDebug
+
+      - name: Upload lint report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: app-lint-report
+          path: app/build/reports/lint-results-debug.html
+
+      # Lint 通過後にのみ公開し、失敗した APK が Releases に残らないようにする
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -75,16 +86,6 @@ jobs:
             --notes "main ブランチへの push により自動生成されたリリースです。
 
           Commit: ${COMMIT_URL}"
-
-      - name: Run Android Lint
-        run: ./gradlew :app:lintDebug
-
-      - name: Upload lint report
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: app-lint-report
-          path: app/build/reports/lint-results-debug.html
 
   android-test:
     runs-on: ubuntu-latest
