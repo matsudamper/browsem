@@ -248,6 +248,16 @@ internal fun BrowserAppShell(
                             uiState = uiState,
                             onOpenExtensions = { outerBackStack.add(AppDestination.Extensions) },
                             onOpenHistory = { outerBackStack.add(AppDestination.History) },
+                            onOpenReleases = {
+                                context.startActivity(
+                                    Intent(
+                                        Intent.ACTION_VIEW,
+                                        Uri.parse(GITHUB_RELEASES_URL),
+                                        context,
+                                        CustomTabActivity::class.java,
+                                    ),
+                                )
+                            },
                             onBack = { outerBackStack.removeLastOrNull() },
                         )
                     }
@@ -884,6 +894,8 @@ private fun MainBrowserContent(
 // ──────────────────────────────────────────────────────────────
 // ユーティリティ
 // ──────────────────────────────────────────────────────────────
+
+private const val GITHUB_RELEASES_URL = "https://github.com/matsudamper/browsem/releases"
 
 private fun buildBackupFileName(): String {
     val formatter = java.text.SimpleDateFormat("yyyyMMdd-HHmmss", java.util.Locale.US)
