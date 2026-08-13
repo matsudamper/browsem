@@ -52,6 +52,7 @@ fun SettingsScreen(
     uiState: SettingsScreenUiState,
     onOpenExtensions: () -> Unit,
     onOpenHistory: () -> Unit,
+    onOpenReleases: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -394,6 +395,17 @@ fun SettingsScreen(
             }
 
             Spacer(Modifier.height(betweenPadding))
+
+            SettingSection(title = "リリース") {
+                TextButton(
+                    onClick = onOpenReleases,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("GitHub Releases を開く")
+                }
+            }
+
+            Spacer(Modifier.height(betweenPadding))
             Spacer(Modifier.height(8.dp))
             Spacer(Modifier.padding(bottom = paddingValues.calculateBottomPadding()))
         }
@@ -511,6 +523,7 @@ private fun SettingsScreenPreview() {
             ),
             onOpenExtensions = {},
             onOpenHistory = {},
+            onOpenReleases = {},
             onBack = {},
         )
     }

@@ -12,6 +12,9 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
 
     steps:
       - name: Checkout
@@ -34,16 +37,33 @@ jobs:
         run: |
           echo "${{ secrets.DEBUG_KEYSTORE_BASE64 }}" | base64 --decode > "${RUNNER_TEMP}/debug.keystore"
 
-      - name: Build release APK
+      # 署名・バージョンともに PR ビルドと同じ debug ビルドを Releases にアップロードする
+      - name: Build debug APK
         env:
           DEBUG_KEYSTORE_PATH: ${{ runner.temp }}/debug.keystore
-        run: ./gradlew :app:assembleRelease
+        run: ./gradlew :app:assembleDebug
 
-      - name: Upload release APK
+      - name: Determine release version
+        run: |
+          VERSION="$(TZ=Asia/Tokyo date +%Y-%m-%d_%H-%M)"
+          echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
+
+      - name: Rename APK with release version
+        env:
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          SAFE_REPO="${REPOSITORY##*/}"
+          APK_NAME="app-${SAFE_REPO}-${VERSION}.apk"
+          mv app/build/outputs/apk/debug/app-debug.apk \
+             "app/build/outputs/apk/debug/${APK_NAME}"
+          echo "APK_NAME=${APK_NAME}" >> "$GITHUB_ENV"
+          echo "APK_PATH=app/build/outputs/apk/debug/${APK_NAME}" >> "$GITHUB_ENV"
+
+      - name: Upload release APK to GitHub Artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: app-release-apk
-          path: app/build/outputs/apk/release/app-release.apk
+          name: ${{ env.APK_NAME }}
+          path: ${{ env.APK_PATH }}
 
       - name: Run Android Lint
         run: ./gradlew :app:lintDebug
@@ -54,6 +74,18 @@ jobs:
         with:
           name: app-lint-report
           path: app/build/reports/lint-results-debug.html
+
+      # Lint 通過後にのみ公開し、失敗した APK が Releases に残らないようにする
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          COMMIT_URL: ${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}
+        run: |
+          gh release create "${VERSION}" "${APK_PATH}" \
+            --title "${VERSION}" \
+            --notes "main ブランチへの push により自動生成されたリリースです。
+
+          Commit: ${COMMIT_URL}"
 
   android-test:
     runs-on: ubuntu-latest
