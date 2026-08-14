@@ -7,8 +7,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
@@ -33,6 +35,9 @@ import org.mozilla.geckoview.GeckoView
 import net.matsudamper.browser.data.ThemeMode
 import net.matsudamper.browser.ui.common.BrowserTheme
 import net.matsudamper.browser.resources.R as ResourcesR
+
+/** ポップアップの高さの上限。PC の Firefox のポップアップ上限 (600 CSS px) に合わせる */
+private val POPUP_MAX_HEIGHT = 600.dp
 
 /**
  * 拡張機能のツールバーポップアップ (browser_action の default_popup) を表示するダイアログ。
@@ -93,12 +98,16 @@ private fun ExtensionActionPopupContent(
     content: @Composable () -> Unit,
 ) {
     Surface(
-        // 拡張機能のポップアップは HTML 側が高さを決めており、AdGuard のように
-        // ビューポートより高い内容を持つものはスクロールできず下側が見切れてしまう。
-        // ダイアログの高さを固定せず、表示できる領域いっぱいまで広げて見切れを防ぐ。
+        // 拡張機能のポップアップは HTML 側が高さを決めるが、GeckoView には文書の内容の
+        // 高さを取得する API がないためコンテンツにフィットさせられない。
+        // 画面いっぱいに広げると PC のポップアップとかけ離れるので、PC の Firefox の
+        // ポップアップ上限 (600 CSS px) に揃えた高さを上限とし、画面が狭ければ
+        // 表示できる範囲まで縮める。
         modifier = modifier
             .padding(horizontal = 8.dp, vertical = 16.dp)
-            .fillMaxSize()
+            .fillMaxWidth()
+            .heightIn(max = POPUP_MAX_HEIGHT)
+            .fillMaxHeight()
             .testTag(ExtensionActionPopupDialogTestTags.Dialog.testTag),
         shape = MaterialTheme.shapes.large,
         tonalElevation = 6.dp,
@@ -136,12 +145,16 @@ private fun ExtensionActionPopupContent(
     }
 }
 
-@Preview(name = "ExtensionActionPopupLight")
-@Preview(name = "ExtensionActionPopupDark", uiMode = Configuration.UI_MODE_NIGHT_YES)
+@Preview(name = "ExtensionActionPopupLight", widthDp = 412, heightDp = 915)
+@Preview(name = "ExtensionActionPopupDark", widthDp = 412, heightDp = 915, uiMode = Configuration.UI_MODE_NIGHT_YES)
 @Composable
 private fun PreviewExtensionActionPopup() {
     BrowserTheme(themeMode = ThemeMode.THEME_SYSTEM) {
-        Surface {
+        // Dialog は Paparazzi で描画できないため、画面中央に置かれた見た目を再現する
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center,
+        ) {
             ExtensionActionPopupContent(
                 title = "AdGuard",
                 onCloseRequest = {},
