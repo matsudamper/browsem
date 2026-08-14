@@ -277,6 +277,27 @@ internal fun GeckoBrowserTab(
             }
     }
 
+    // コンテンツプロセスのクラッシュ/kill (onCrash/onKill) を検知した際の即時復元。
+    // 前面表示中 (lifecycle >= STARTED) のみ実行する。バックグラウンド中に検知した場合は
+    // ここでは何もせず、ON_START 側の safety-net (attachSessionAfterStableSize 内の
+    // !session.isOpen チェック) で次回復帰時に復元させる。
+    LaunchedEffect(state, browserTab, browserSessionLifecycleController) {
+        snapshotFlow { state.sessionRecoveryRequestCount }
+            .collectLatest { count ->
+                if (count == 0) return@collectLatest
+                if (!lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
+                    Log.d(
+                        TAG_SURFACE_RESUME,
+                        "sessionRecoveryRequestCount: バックグラウンドのため即時復元をスキップ",
+                    )
+                    return@collectLatest
+                }
+                withContext(Dispatchers.Main.immediate) {
+                    browserSessionLifecycleController.restoreSession(browserTab)
+                }
+            }
+    }
+
     // URLバー入力変更時にサジェスト検索を発火
     LaunchedEffect(state, onUrlInputChanged) {
         snapshotFlow { state.urlInput to state.isUrlInputFocused }
@@ -302,7 +323,20 @@ internal fun GeckoBrowserTab(
     // local function は前方参照不可なので attach → schedule → restore の順で定義する。
     fun attachSessionAfterStableSize(gecko: GeckoView) {
         gecko.setSession(session)
-        session.setActive(true)
+        if (session.isOpen) {
+            session.setActive(true)
+        } else {
+            // バックグラウンド中に onCrash/onKill でコンテンツプロセスが失われ、
+            // isOpen=false のまま復帰したケース。setActive するだけでは何も描画されず
+            // coverUntilFirstPaint の単色のまま固まるため、restoreSession の
+            // open→restoreState 経路で復元する。
+            Log.w(
+                TAG_SURFACE_RESUME,
+                "attachSessionAfterStableSize: session closed (crash/kill) → restoreSession で復元" +
+                    " session=${session.logKey()}",
+            )
+            browserSessionLifecycleController.restoreSession(browserTab)
+        }
         surfaceResumeState = SurfaceResumeState.ACTIVE
     }
 

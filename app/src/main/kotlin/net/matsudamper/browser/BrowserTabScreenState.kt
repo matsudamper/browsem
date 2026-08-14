@@ -317,6 +317,13 @@ internal class BrowserTabScreenState(
 
     var renderReady by mutableStateOf(false)
 
+    // コンテンツプロセスのクラッシュ/kill (onCrash/onKill) を検知するたびにインクリメントされる
+    // カウンター。GeckoBrowserTab がこの値を監視し、前面表示中であれば即座にセッションの
+    // 復元 (open→restoreState) をトリガーする。バックグラウンド中に発生した場合は ON_START の
+    // safety-net (attachSessionAfterStableSize) 側で復元される。
+    var sessionRecoveryRequestCount by mutableIntStateOf(0)
+        private set
+
     // ページの初回描画・ロード完了の度にインクリメントされるカウンター。
     // GeckoBrowserTab がこの値を監視してプレビューキャプチャをトリガーする。
     // ドメイン遷移後も古いプレビューが残らないよう、プレビュー取得済みでも毎回更新する。
@@ -1390,6 +1397,14 @@ internal class BrowserTabScreenState(
 
     override fun onScrollChanged(scrollY: Int) {
         this.scrollY = scrollY
+    }
+
+    override fun onSessionClosedUnexpectedly() {
+        Log.w(TAG, "onSessionClosedUnexpectedly: コンテンツプロセスが失われました。復元をリクエストします")
+        // GeckoView 自身の初回描画コールバックが再度発火するまで、フリーズした最終フレームを
+        // 上に重ねて隠す（BrowserTabSurface は renderReady=false の間プレビュー/スピナーを表示する）。
+        renderReady = false
+        sessionRecoveryRequestCount++
     }
 
     override fun onAndroidPermissionsRequest(
