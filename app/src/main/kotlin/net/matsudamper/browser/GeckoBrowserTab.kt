@@ -1069,7 +1069,7 @@ internal fun GeckoBrowserTab(
 
     // 拡張機能のポップアップ（タブに対する拡張機能の操作画面）
     state.extensionActionPopup?.let { popup ->
-        ExtensionActionPopupSheet(
+        ExtensionActionPopupDialog(
             popup = popup,
             onDismissRequest = state::dismissExtensionActionPopup,
         )
