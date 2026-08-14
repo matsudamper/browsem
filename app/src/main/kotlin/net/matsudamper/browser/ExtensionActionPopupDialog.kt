@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
@@ -36,8 +37,17 @@ import net.matsudamper.browser.data.ThemeMode
 import net.matsudamper.browser.ui.common.BrowserTheme
 import net.matsudamper.browser.resources.R as ResourcesR
 
-/** ポップアップの高さの上限。PC の Firefox のポップアップ上限 (600 CSS px) に合わせる */
-private val POPUP_MAX_HEIGHT = 600.dp
+/**
+ * ポップアップ本体 (拡張機能の HTML) を表示する領域の高さの上限。
+ * PC の Firefox のポップアップ上限 (600 CSS px) に合わせる。
+ * 拡張機能側もこの上限を前提に作られており、例えば AdGuard の popup は
+ * body の高さが 600px 固定 (Android では幅のみ 100% に上書き) のため、
+ * ここが 600dp を下回るとスクロールしないと下側が見えなくなる。
+ */
+private val POPUP_CONTENT_MAX_HEIGHT = 600.dp
+
+/** タイトル行の高さ。ポップアップ本体の高さを上限どおり確保するため固定する */
+private val POPUP_HEADER_HEIGHT = 48.dp
 
 /**
  * 拡張機能のツールバーポップアップ (browser_action の default_popup) を表示するダイアログ。
@@ -100,13 +110,14 @@ private fun ExtensionActionPopupContent(
     Surface(
         // 拡張機能のポップアップは HTML 側が高さを決めるが、GeckoView には文書の内容の
         // 高さを取得する API がないためコンテンツにフィットさせられない。
-        // 画面いっぱいに広げると PC のポップアップとかけ離れるので、PC の Firefox の
-        // ポップアップ上限 (600 CSS px) に揃えた高さを上限とし、画面が狭ければ
-        // 表示できる範囲まで縮める。
+        // 画面いっぱいに広げると PC のポップアップとかけ離れるので、ポップアップ本体に
+        // 上限どおりの高さを与えたサイズを上限とし、画面が狭ければ表示できる範囲まで縮める。
+        // タイトル行の分を足さずに上限を掛けると本体が上限より低くなり、
+        // 上限ちょうどの高さを持つ拡張機能が毎回スクロールしないと収まらなくなる。
         modifier = modifier
             .padding(horizontal = 8.dp, vertical = 16.dp)
             .fillMaxWidth()
-            .heightIn(max = POPUP_MAX_HEIGHT)
+            .heightIn(max = POPUP_HEADER_HEIGHT + POPUP_CONTENT_MAX_HEIGHT)
             .fillMaxHeight()
             .testTag(ExtensionActionPopupDialogTestTags.Dialog.testTag),
         shape = MaterialTheme.shapes.large,
@@ -116,6 +127,7 @@ private fun ExtensionActionPopupContent(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .height(POPUP_HEADER_HEIGHT)
                     .padding(start = 16.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -147,6 +159,8 @@ private fun ExtensionActionPopupContent(
 
 @Preview(name = "ExtensionActionPopupLight", widthDp = 412, heightDp = 915)
 @Preview(name = "ExtensionActionPopupDark", widthDp = 412, heightDp = 915, uiMode = Configuration.UI_MODE_NIGHT_YES)
+// 横向きは高さが上限に満たないため、表示できる高さまで縮むことを確認する
+@Preview(name = "ExtensionActionPopupLandscape", widthDp = 915, heightDp = 412)
 @Composable
 private fun PreviewExtensionActionPopup() {
     BrowserTheme(themeMode = ThemeMode.THEME_SYSTEM) {
