@@ -46,6 +46,23 @@ class WebExtensionActionController(private val runtime: GeckoRuntime) {
         val pageAction: WebExtension.Action? = null,
     )
 
+    private enum class ActionType { BROWSER, PAGE }
+
+    private data class ResolvedAction(
+        val action: WebExtension.Action,
+        val type: ActionType,
+    )
+
+    /**
+     * アイコンの保存先。[session] が null なら全タブ共通の既定アイコンを表す。
+     * browserAction と pageAction はアイコンが異なりうるため [type] も含める。
+     */
+    private data class IconSlot(
+        val session: GeckoSession?,
+        val extensionId: String,
+        val type: ActionType,
+    )
+
     // 対象の拡張機能。UI から参照するため観測可能にする
     private val extensions = mutableStateMapOf<String, WebExtension>()
 
@@ -55,9 +72,16 @@ class WebExtensionActionController(private val runtime: GeckoRuntime) {
     // タブごとのアクション上書き
     private val sessionActions = mutableStateMapOf<GeckoSession, SnapshotStateMap<String, ActionEntry>>()
 
-    // アイコンの Bitmap。Image は equals を持たないため同一性でキャッシュする
-    private val iconBitmaps = mutableStateMapOf<Image, Bitmap>()
-    private val requestedIcons = mutableSetOf<Image>()
+    // 最後にデコードできたアイコン。Image は通知のたびに作り直されるため、
+    // Image ではなく「どのタブのどのアクションのアイコンか」をキーにする
+    private val iconBitmaps = mutableStateMapOf<IconSlot, Bitmap>()
+
+    // 各スロットで最後にデコードを要求した Image。古いデコード結果で上書きしないための目印
+    private val pendingIcons = mutableMapOf<IconSlot, Image>()
+
+    // 同一内容の Bitmap を共有するための正規化テーブル。
+    // ほとんどのタブは同じアイコンを表示するため、これでタブ数分の複製を避ける
+    private val canonicalBitmaps = mutableListOf<Bitmap>()
 
     // セッションごとのポップアップ表示コールバック。null 通知は非表示を表す
     private val popupCallbacks = mutableMapOf<GeckoSession, (PopupRequest?) -> Unit>()
@@ -74,7 +98,7 @@ class WebExtensionActionController(private val runtime: GeckoRuntime) {
             session: GeckoSession?,
             action: WebExtension.Action,
         ) {
-            requestIcon(action.icon)
+            requestIcon(IconSlot(session, extension.id, ActionType.BROWSER), action.icon)
             updateEntry(extension, session) { it.copy(browserAction = action) }
         }
 
@@ -83,7 +107,7 @@ class WebExtensionActionController(private val runtime: GeckoRuntime) {
             session: GeckoSession?,
             action: WebExtension.Action,
         ) {
-            requestIcon(action.icon)
+            requestIcon(IconSlot(session, extension.id, ActionType.PAGE), action.icon)
             updateEntry(extension, session) { it.copy(pageAction = action) }
         }
 
@@ -132,6 +156,9 @@ class WebExtensionActionController(private val runtime: GeckoRuntime) {
     fun unregisterSession(session: GeckoSession) {
         popupCallbacks.remove(session)
         sessionActions.remove(session)
+        // タブ固有アイコンのキャッシュも一緒に破棄する
+        iconBitmaps.keys.filter { it.session === session }.forEach { iconBitmaps.remove(it) }
+        pendingIcons.keys.filter { it.session === session }.forEach { pendingIcons.remove(it) }
         closePopup(session)
         extensions.values.forEach { extension ->
             session.webExtensionController.setActionDelegate(extension, null)
@@ -146,7 +173,8 @@ class WebExtensionActionController(private val runtime: GeckoRuntime) {
     fun actions(session: GeckoSession): List<ActionUiState> {
         val overrides = sessionActions[session]
         return extensions.values.mapNotNull { extension ->
-            val action = resolveAction(extension.id, overrides) ?: return@mapNotNull null
+            val resolved = resolveAction(extension.id, overrides) ?: return@mapNotNull null
+            val action = resolved.action
             // enabled は未指定 (null) のとき有効扱い。pageAction は show() 済みのみ有効
             if (action.enabled == false) return@mapNotNull null
             ActionUiState(
@@ -154,15 +182,34 @@ class WebExtensionActionController(private val runtime: GeckoRuntime) {
                 title = action.title?.takeIf { it.isNotBlank() }
                     ?: extension.metaData.name?.takeIf { it.isNotBlank() }
                     ?: extension.id,
-                icon = action.icon?.let { iconBitmaps[it] },
+                icon = iconBitmap(session, extension.id, resolved.type),
                 badgeText = action.badgeText?.takeIf { it.isNotBlank() },
             )
         }.sortedBy { it.title.lowercase() }
     }
 
+    /**
+     * 表示するアイコンを、タブ固有 → 全タブ共通の順で解決する。
+     *
+     * ページ遷移やバッジ更新のたびに GeckoView は新しい [Image] を作り直して通知してくるため、
+     * 新しい Image のデコードが終わるまでは直前にデコードできた Bitmap を出し続ける。
+     * これをしないと、デコードの間だけアイコンが未取得 (null) となり、
+     * 代替アイコンとの間でちらつきが起きる。
+     */
+    private fun iconBitmap(
+        session: GeckoSession,
+        extensionId: String,
+        type: ActionType,
+    ): Bitmap? {
+        // タブ固有アイコン (setIcon({tabId})) を他のタブへ流用しないよう、
+        // タブのスロットを優先し、無い場合のみ全タブ共通のアイコンへ落とす
+        return iconBitmaps[IconSlot(session, extensionId, type)]
+            ?: iconBitmaps[IconSlot(null, extensionId, type)]
+    }
+
     /** アイコンのクリック。ポップアップを持つ拡張機能は [PopupRequest] が通知される */
     fun click(session: GeckoSession, extensionId: String) {
-        val action = resolveAction(extensionId, sessionActions[session]) ?: return
+        val action = resolveAction(extensionId, sessionActions[session])?.action ?: return
         pendingPopupOwner = session
         runCatching { action.click() }
             .onFailure { error -> Log.w(TAG, "拡張機能アクションのクリックに失敗: $extensionId", error) }
@@ -212,11 +259,15 @@ class WebExtensionActionController(private val runtime: GeckoRuntime) {
     private fun resolveAction(
         extensionId: String,
         overrides: SnapshotStateMap<String, ActionEntry>?,
-    ): WebExtension.Action? {
+    ): ResolvedAction? {
         val default = defaultActions[extensionId]
         val override = overrides?.get(extensionId)
-        return merge(override?.browserAction, default?.browserAction)
-            ?: merge(override?.pageAction, default?.pageAction)
+        merge(override?.browserAction, default?.browserAction)?.let {
+            return ResolvedAction(it, ActionType.BROWSER)
+        }
+        return merge(override?.pageAction, default?.pageAction)?.let {
+            ResolvedAction(it, ActionType.PAGE)
+        }
     }
 
     private fun merge(
@@ -247,24 +298,47 @@ class WebExtensionActionController(private val runtime: GeckoRuntime) {
         target[extension.id] = transform(target[extension.id] ?: ActionEntry())
     }
 
-    private fun requestIcon(image: Image?) {
+    private fun requestIcon(slot: IconSlot, image: Image?) {
         if (image == null) return
-        if (!requestedIcons.add(image)) return
+        // 同じ Image の再通知なら、既に走らせたデコードの結果をそのまま使う
+        if (pendingIcons[slot] === image) return
+        pendingIcons[slot] = image
         image.getBitmap(ICON_SIZE_PX).accept(
             { bitmap ->
-                if (bitmap != null) {
-                    iconBitmaps[image] = bitmap
+                // デコード中に新しい通知が来ていた場合、古い結果で上書きしない
+                if (bitmap != null && pendingIcons[slot] === image) {
+                    iconBitmaps[slot] = canonicalize(bitmap)
                 }
             },
             { error ->
-                requestedIcons.remove(image)
+                if (pendingIcons[slot] === image) {
+                    pendingIcons.remove(slot)
+                }
                 Log.w(TAG, "拡張機能アイコンの取得に失敗", error)
             },
         )
     }
 
+    /**
+     * 同じ見た目の Bitmap を 1 インスタンスに寄せる。
+     * タブごとにアイコンを保持するとタブ数分だけ複製されてしまうため、
+     * 内容が一致するものは既存のインスタンスを共有する。
+     * インスタンスが変わらなければ UiState の再生成による再コンポーズも避けられる。
+     */
+    private fun canonicalize(bitmap: Bitmap): Bitmap {
+        canonicalBitmaps.firstOrNull { it.sameAs(bitmap) }?.let { return it }
+        // アイコンをアニメーションさせる拡張機能で無限に増えないよう上限を設ける
+        if (canonicalBitmaps.size < MAX_CANONICAL_BITMAPS) {
+            canonicalBitmaps.add(bitmap)
+        }
+        return bitmap
+    }
+
     companion object {
         private const val TAG = "WebExtensionAction"
         private const val ICON_SIZE_PX = 96
+
+        /** 正規化テーブルに保持するアイコンの上限 */
+        private const val MAX_CANONICAL_BITMAPS = 64
     }
 }
