@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -29,6 +30,8 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
@@ -45,6 +48,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
@@ -164,7 +168,10 @@ internal fun ExtensionActionRow(
                         onLongPress = {},
                         onTap = { offset ->
                             val index = indexAt(offset.x) ?: return@detectTapGestures
-                            latestOnActionClick(latestActions[index].extensionId)
+                            val action = latestActions[index]
+                            // グレー表示のアクションはそのタブで機能しないため反応させない
+                            if (!action.isEnabled) return@detectTapGestures
+                            latestOnActionClick(action.extensionId)
                         },
                     )
                 }
@@ -233,25 +240,34 @@ private fun ExtensionActionItem(
             .semantics {
                 contentDescription = action.title
                 role = Role.Button
-                onClick(label = action.title) {
-                    onActionClick()
-                    true
+                if (action.isEnabled) {
+                    onClick(label = action.title) {
+                        onActionClick()
+                        true
+                    }
+                } else {
+                    disabled()
                 }
             },
         contentAlignment = Alignment.Center,
     ) {
+        // 無効なアクションは彩度を落として薄く描き、押せないことを示す
+        val contentAlpha = if (action.isEnabled) 1f else DISABLED_ALPHA
         val icon = action.icon
         if (icon != null) {
             Image(
                 modifier = Modifier.size(ICON_SIZE),
                 bitmap = icon.asImageBitmap(),
                 contentDescription = null,
+                alpha = contentAlpha,
+                colorFilter = if (action.isEnabled) null else GrayscaleColorFilter,
             )
         } else {
             Icon(
                 modifier = Modifier.size(ICON_SIZE),
                 painter = painterResource(ResourcesR.drawable.ic_extension_24dp),
                 contentDescription = null,
+                tint = LocalContentColor.current.copy(alpha = contentAlpha),
             )
         }
         val badgeText = action.badgeText
@@ -261,16 +277,24 @@ private fun ExtensionActionItem(
                     .align(Alignment.BottomEnd)
                     .padding(end = 2.dp, bottom = 2.dp)
                     .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.secondary)
+                    .background(MaterialTheme.colorScheme.secondary.copy(alpha = contentAlpha))
                     .padding(horizontal = 4.dp),
                 text = badgeText,
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSecondary,
+                color = MaterialTheme.colorScheme.onSecondary.copy(alpha = contentAlpha),
                 maxLines = 1,
             )
         }
     }
 }
+
+/** 無効なアクションの不透明度 */
+private const val DISABLED_ALPHA = 0.38f
+
+/** 無効なアクションのアイコンから色味を落とすフィルタ */
+private val GrayscaleColorFilter = ColorFilter.colorMatrix(
+    ColorMatrix().apply { setToSaturation(0f) },
+)
 
 /**
  * メニューの幅を押し広げないラッパー。
@@ -343,6 +367,8 @@ private fun PreviewExtensionActionRow() {
                         title = "拡張機能 $index",
                         icon = null,
                         badgeText = if (index == 0) "12" else null,
+                        // そのタブで機能しないアクションはグレー表示になる
+                        isEnabled = index % 3 != 1,
                     )
                 },
                 scrollState = ScrollState(0),

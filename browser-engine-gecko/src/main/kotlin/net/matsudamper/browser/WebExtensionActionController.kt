@@ -31,6 +31,8 @@ class WebExtensionActionController(private val runtime: GeckoRuntime) {
         val title: String,
         val icon: Bitmap?,
         val badgeText: String?,
+        /** そのタブで機能するか。false ならグレー表示で操作できない */
+        val isEnabled: Boolean,
     )
 
     /** 拡張機能のポップアップ (browser_action の default_popup) の表示要求 */
@@ -166,17 +168,17 @@ class WebExtensionActionController(private val runtime: GeckoRuntime) {
     }
 
     /**
-     * タブに対して有効なアクションの一覧。
-     * pageAction はタブで show() されたときのみ enabled になるため、
-     * 「そのタブに対して機能を持つ拡張機能」だけが並ぶ。
+     * アクションを持つ拡張機能の一覧。
+     *
+     * そのタブで機能しないアクションも [ActionUiState.isEnabled] を false にして含める。
+     * ページ遷移中は一時的に無効になるアクションがあり、一覧から取り除いてしまうと
+     * アイコンの位置がずれて点滅して見えるため、並びは保ったままグレー表示にする。
      */
     fun actions(session: GeckoSession): List<ActionUiState> {
         val overrides = sessionActions[session]
         return extensions.values.mapNotNull { extension ->
             val resolved = resolveAction(extension.id, overrides) ?: return@mapNotNull null
             val action = resolved.action
-            // enabled は未指定 (null) のとき有効扱い。pageAction は show() 済みのみ有効
-            if (action.enabled == false) return@mapNotNull null
             ActionUiState(
                 extensionId = extension.id,
                 title = action.title?.takeIf { it.isNotBlank() }
@@ -184,6 +186,8 @@ class WebExtensionActionController(private val runtime: GeckoRuntime) {
                     ?: extension.id,
                 icon = iconBitmap(session, extension.id, resolved.type),
                 badgeText = action.badgeText?.takeIf { it.isNotBlank() },
+                // enabled は未指定 (null) のとき有効扱い。pageAction は show() 済みのみ有効
+                isEnabled = action.enabled != false,
             )
         }.sortedBy { it.title.lowercase() }
     }
@@ -210,6 +214,8 @@ class WebExtensionActionController(private val runtime: GeckoRuntime) {
     /** アイコンのクリック。ポップアップを持つ拡張機能は [PopupRequest] が通知される */
     fun click(session: GeckoSession, extensionId: String) {
         val action = resolveAction(extensionId, sessionActions[session])?.action ?: return
+        // グレー表示のアクションは操作させない
+        if (action.enabled == false) return
         pendingPopupOwner = session
         runCatching { action.click() }
             .onFailure { error -> Log.w(TAG, "拡張機能アクションのクリックに失敗: $extensionId", error) }
