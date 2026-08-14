@@ -281,7 +281,7 @@ internal fun GeckoBrowserTab(
     // 前面表示中 (lifecycle >= STARTED) のみ実行する。バックグラウンド中に検知した場合は
     // ここでは何もせず、ON_START 側の safety-net (attachSessionAfterStableSize 内の
     // !session.isOpen チェック) で次回復帰時に復元させる。
-    LaunchedEffect(state, browserTab, browserSessionLifecycleController) {
+    LaunchedEffect(state, browserTab, browserSessionLifecycleController, lifecycleOwner) {
         snapshotFlow { state.sessionRecoveryRequestCount }
             .collectLatest { count ->
                 if (count == 0) return@collectLatest
