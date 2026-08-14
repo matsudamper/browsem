@@ -49,6 +49,9 @@ private val POPUP_CONTENT_MAX_HEIGHT = 600.dp
 /** タイトル行の高さ。ポップアップ本体の高さを上限どおり確保するため固定する */
 private val POPUP_HEADER_HEIGHT = 48.dp
 
+/** タイトル行と本体の区切り線の高さ。上限の計算に含めるため固定する */
+private val POPUP_DIVIDER_HEIGHT = 1.dp
+
 /**
  * 拡張機能のツールバーポップアップ (browser_action の default_popup) を表示するダイアログ。
  * ポップアップは現在のタブに対して動作するため、タブごとの設定はここから操作する。
@@ -117,7 +120,7 @@ private fun ExtensionActionPopupContent(
         modifier = modifier
             .padding(horizontal = 8.dp, vertical = 16.dp)
             .fillMaxWidth()
-            .heightIn(max = POPUP_HEADER_HEIGHT + POPUP_CONTENT_MAX_HEIGHT)
+            .heightIn(max = POPUP_HEADER_HEIGHT + POPUP_DIVIDER_HEIGHT + POPUP_CONTENT_MAX_HEIGHT)
             .fillMaxHeight()
             .testTag(ExtensionActionPopupDialogTestTags.Dialog.testTag),
         shape = MaterialTheme.shapes.large,
@@ -149,7 +152,7 @@ private fun ExtensionActionPopupContent(
                     )
                 }
             }
-            HorizontalDivider()
+            HorizontalDivider(thickness = POPUP_DIVIDER_HEIGHT)
             Box(modifier = Modifier.weight(1f)) {
                 content()
             }
