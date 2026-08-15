@@ -22,18 +22,16 @@ class PaparazziComposablePreviewTest {
     @Test
     fun snapshot() {
         val filter = System.getProperty("paparazzi.filter", "") ?: ""
-        val targets = AndroidComposablePreviewScanner()
+        val allTargets = AndroidComposablePreviewScanner()
             .scanPackageTrees(PACKAGE_TREE)
             .includePrivatePreviews()
             .getPreviews()
             .map { preview -> preview to preview.snapshotName() }
-            .filter { (_, snapshotName) ->
-                filter.isEmpty() || snapshotName.contains(filter, ignoreCase = true)
-            }
 
         // Paparazzi は名前を小文字化してファイル名にするため、小文字化して重複を判定する。
-        // 重複したままだと同じファイルに上書きされ、片方のスナップショットが検証されなくなる
-        val duplicatedNames = targets
+        // 重複したままだと同じファイルに上書きされ、片方のスナップショットが検証されなくなる。
+        // filter で絞る前の全 Preview を対象にしないと、絞り込みの仕方によって衝突を見逃す
+        val duplicatedNames = allTargets
             .groupingBy { (_, snapshotName) -> snapshotName.lowercase(Locale.US) }
             .eachCount()
             .filterValues { count -> count > 1 }
@@ -42,10 +40,14 @@ class PaparazziComposablePreviewTest {
             "スナップショット名が重複しています: ${duplicatedNames.joinToString()}"
         }
 
-        targets.forEach { (preview, snapshotName) ->
-            paparazzi.unsafeUpdateConfig(deviceConfig = preview.deviceConfig())
-            paparazzi.snapshot(name = snapshotName) { preview() }
-        }
+        allTargets
+            .filter { (_, snapshotName) ->
+                filter.isEmpty() || snapshotName.contains(filter, ignoreCase = true)
+            }
+            .forEach { (preview, snapshotName) ->
+                paparazzi.unsafeUpdateConfig(deviceConfig = preview.deviceConfig())
+                paparazzi.snapshot(name = snapshotName) { preview() }
+            }
     }
 
     /**
