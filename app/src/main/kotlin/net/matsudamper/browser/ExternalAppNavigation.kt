@@ -50,23 +50,29 @@ internal fun resolveExternalAppNavigationAction(
         }
     intent.removeExtra(EXTRA_BROWSER_FALLBACK_URL)
 
+    // intent://... の fragment に scheme= が無い場合、Intent.parseUri が返すデータURIは
+    // スキームを持たない（例: intent://open?x=y → //open?x=y）ためどのアプリでも解決できない。
+    // 起動を試みても必ず ActivityNotFoundException になるので、代替手段へ回す。
+    if (!isLaunchableIntent(intent)) {
+        return resolveUnavailableAppAction(
+            context = context,
+            sourceUri = uri,
+            intent = intent,
+            fallbackUrl = fallbackUrl,
+            launchable = false,
+        )
+    }
+
     val packageManager = context.packageManager
     val resolvedActivity = packageManager.resolveActivity(intent, PackageManager.MATCH_DEFAULT_ONLY)
         ?: packageManager.resolveActivity(intent, 0)
     if (resolvedActivity == null) {
-        // fallbackUrl がある場合はフォールバックURLを使用する
-        if (fallbackUrl != null) {
-            return ExternalAppNavigationAction.OpenFallback(fallbackUrl)
-        }
-        // Android 11+ ではパッケージ可視性制限により resolveActivity が null を返すことがある。
-        // startActivity は可視性制限なしに動作するため、appName なしで Launch として返し起動を試みる。
-        return ExternalAppNavigationAction.Launch(
-            PendingExternalAppLaunch(
-                sourceUri = uri,
-                intent = intent,
-                appName = null,
-                fallbackUrl = null,
-            )
+        return resolveUnavailableAppAction(
+            context = context,
+            sourceUri = uri,
+            intent = intent,
+            fallbackUrl = fallbackUrl,
+            launchable = true,
         )
     }
 
@@ -78,6 +84,90 @@ internal fun resolveExternalAppNavigationAction(
             appName = appName,
             fallbackUrl = fallbackUrl,
         )
+    )
+}
+
+/**
+ * 対象アプリが見つからなかった場合の代替手段を決定する。
+ *
+ * 1. browser_fallback_url が指定されていればそのURLを開く
+ * 2. package が指定されていれば Play ストアのアプリページを開く
+ * 3. どちらも無い場合、起動可能な Intent であれば起動を試みる
+ *    （Android 11以降のパッケージ可視性制限で resolveActivity が null を返しても
+ *    startActivity は成功する場合があるため）
+ *
+ * @param launchable Intent 自体が解決され得る形（データURIにスキームがある等）かどうか
+ */
+private fun resolveUnavailableAppAction(
+    context: Context,
+    sourceUri: String,
+    intent: Intent,
+    fallbackUrl: String?,
+    launchable: Boolean,
+): ExternalAppNavigationAction {
+    if (fallbackUrl != null) {
+        return ExternalAppNavigationAction.OpenFallback(fallbackUrl)
+    }
+    val marketLaunch = buildMarketLaunch(
+        context = context,
+        sourceUri = sourceUri,
+        packageName = intent.`package`,
+    )
+    if (marketLaunch != null) {
+        return ExternalAppNavigationAction.Launch(marketLaunch)
+    }
+    if (!launchable) {
+        return ExternalAppNavigationAction.AppNotFound
+    }
+    return ExternalAppNavigationAction.Launch(
+        PendingExternalAppLaunch(
+            sourceUri = sourceUri,
+            intent = intent,
+            appName = null,
+            fallbackUrl = null,
+        )
+    )
+}
+
+/**
+ * Intent 単体でアプリ解決の対象になり得るかを判定する。
+ * データURIにスキームが無い、または intent スキームのままの場合はどのIntentFilterにもマッチしない。
+ */
+private fun isLaunchableIntent(intent: Intent): Boolean {
+    val dataScheme = intent.data?.scheme?.lowercase(Locale.US)
+        ?: return intent.`package` != null
+    return dataScheme.isNotBlank() && dataScheme != INTENT_SCHEME
+}
+
+/**
+ * 未インストールのアプリに対して Play ストアのアプリページを開く Intent を作る。
+ * Play ストアが利用できない端末では null を返す。
+ */
+private fun buildMarketLaunch(
+    context: Context,
+    sourceUri: String,
+    packageName: String?,
+): PendingExternalAppLaunch? {
+    if (packageName.isNullOrBlank()) return null
+    val marketUri = Uri.parse("market://details").buildUpon()
+        .appendQueryParameter("id", packageName)
+        .build()
+    val marketIntent = Intent(Intent.ACTION_VIEW, marketUri).apply {
+        addCategory(Intent.CATEGORY_BROWSABLE)
+    }
+    val packageManager = context.packageManager
+    val resolvedActivity = packageManager.resolveActivity(marketIntent, PackageManager.MATCH_DEFAULT_ONLY)
+        ?: return null
+    val appName = resolvedActivity.loadLabel(packageManager).toString().takeIf { it.isNotBlank() }
+    val webStoreUrl = Uri.parse("https://play.google.com/store/apps/details").buildUpon()
+        .appendQueryParameter("id", packageName)
+        .build()
+        .toString()
+    return PendingExternalAppLaunch(
+        sourceUri = sourceUri,
+        intent = marketIntent,
+        appName = appName,
+        fallbackUrl = webStoreUrl,
     )
 }
 

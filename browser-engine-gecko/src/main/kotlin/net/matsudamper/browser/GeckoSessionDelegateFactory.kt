@@ -27,6 +27,11 @@ interface BrowserSessionStateCallbacks {
         translationState: TranslationsController.SessionTranslation.TranslationState?,
     )
     fun onScrollChanged(scrollY: Int)
+    /**
+     * GeckoView のコンテンツプロセスがクラッシュ／OSに kill された直後に呼ばれる。
+     * GeckoSession はこの時点で isOpen=false の使用不能状態になる。
+     */
+    fun onSessionClosedUnexpectedly()
     fun onLoadRequest(
         request: GeckoSession.NavigationDelegate.LoadRequest,
     ): GeckoResult<AllowOrDeny>?
@@ -256,6 +261,16 @@ fun createGeckoSessionDelegateBundle(
             override fun onFullScreen(session: GeckoSession, fullScreen: Boolean) {
                 callbacks.onFullScreen(fullScreen)
             }
+
+            override fun onCrash(session: GeckoSession) {
+                Log.w("BrowserTabContent", "onCrash: コンテンツプロセスがクラッシュしました")
+                callbacks.onSessionClosedUnexpectedly()
+            }
+
+            override fun onKill(session: GeckoSession) {
+                Log.w("BrowserTabContent", "onKill: コンテンツプロセスが終了させられました")
+                callbacks.onSessionClosedUnexpectedly()
+            }
         },
         progressDelegate = object : GeckoSession.ProgressDelegate {
             override fun onSessionStateChange(
@@ -432,6 +447,20 @@ internal class BrowserTabSessionDelegateHost(
 
             override fun onScrollChanged(scrollY: Int) {
                 currentCallbacks()?.onScrollChanged(scrollY)
+            }
+
+            override fun onSessionClosedUnexpectedly() {
+                // セッションが使用不能になった時点の canGoBack/canGoForward は無効な値のため、
+                // 復元完了を待たずに即 false へ戻す。これをしないと PredictiveBackHandler が
+                // canGoBack=true のまま固まり、閉じたセッションへの goBack() が no-op になって
+                // バックボタンでアプリを終了できなくなる。
+                synchronized(lock) {
+                    cachedCanGoBack = false
+                    cachedCanGoForward = false
+                }
+                currentCallbacks()?.onCanGoBackChanged(false)
+                currentCallbacks()?.onCanGoForwardChanged(false)
+                currentCallbacks()?.onSessionClosedUnexpectedly()
             }
 
             override fun onLoadRequest(

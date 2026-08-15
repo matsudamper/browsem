@@ -606,6 +606,7 @@ private fun PreviewToolbarMenuContent() {
                         title = "拡張機能 $index",
                         icon = null,
                         badgeText = if (index == 0) "3" else null,
+                        isEnabled = index != 1,
                     )
                 },
                 extensionActionScrollState = ScrollState(initial = 0),
