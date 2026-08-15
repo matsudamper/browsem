@@ -305,7 +305,14 @@ class WebExtensionActionController(private val runtime: GeckoRuntime) {
     }
 
     private fun requestIcon(slot: IconSlot, image: Image?) {
-        if (image == null) return
+        if (image == null) {
+            // アイコンが外されたときに直前の Bitmap を残すと、
+            // タブ固有アイコンの解除後も古いアイコンを出し続けてしまう。
+            // 進行中のデコードも目印を消して無効化し、後から復活しないようにする
+            pendingIcons.remove(slot)
+            iconBitmaps.remove(slot)
+            return
+        }
         // 同じ Image の再通知なら、既に走らせたデコードの結果をそのまま使う
         if (pendingIcons[slot] === image) return
         pendingIcons[slot] = image
