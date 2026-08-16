@@ -37,7 +37,6 @@ jobs:
         run: |
           echo "${{ secrets.DEBUG_KEYSTORE_BASE64 }}" | base64 --decode > "${RUNNER_TEMP}/debug.keystore"
 
-      # 署名・バージョンともに PR ビルドと同じ debug ビルドを Releases にアップロードする
       - name: Build debug APK
         env:
           DEBUG_KEYSTORE_PATH: ${{ runner.temp }}/debug.keystore
