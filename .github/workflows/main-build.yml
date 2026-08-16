@@ -75,7 +75,6 @@ jobs:
           name: app-lint-report
           path: app/build/reports/lint-results-debug.html
 
-      # Lint 通過後にのみ公開し、失敗した APK が Releases に残らないようにする
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
