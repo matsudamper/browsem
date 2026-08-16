@@ -83,7 +83,6 @@ jobs:
         run: |
           gh release create "${VERSION}" "${APK_PATH}" \
             --title "${VERSION}" \
-            --notes "main ブランチへの push により自動生成されたリリースです。
 
           Commit: ${COMMIT_URL}"
 
