@@ -191,6 +191,10 @@ internal class BrowserTabScreenState(
     // 現在フォーカスされている入力要素の情報。フォーカスがない場合は null。
     var devToolsFocusedInput by mutableStateOf<DevToolsWebExtension.FocusedInputInfo?>(null)
 
+    // ネットワークログ画面を表示中かどうか
+    var showNetworkLog by mutableStateOf(false)
+        private set
+
     // --- Back gesture state ---
     var isBackGestureInProgress by mutableStateOf(false)
 
@@ -692,6 +696,16 @@ internal class BrowserTabScreenState(
 
     fun closeDevTools() {
         showDevTools = false
+    }
+
+    /** ネットワークログ画面を開く。開発者ツールのダイアログは閉じる */
+    fun openNetworkLog() {
+        showDevTools = false
+        showNetworkLog = true
+    }
+
+    fun closeNetworkLog() {
+        showNetworkLog = false
     }
 
     fun onTranslate(translationProvider: TranslationProvider) {

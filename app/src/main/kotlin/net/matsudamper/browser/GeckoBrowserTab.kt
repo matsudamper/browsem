@@ -44,6 +44,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
@@ -681,6 +682,17 @@ internal fun GeckoBrowserTab(
         }
     }
 
+    // NetworkLogWebExtension のセッション登録。
+    // 通信ログ自体はバックグラウンドスクリプトが常時収集しており、
+    // ここではセッションと webRequest の tabId を対応付けるために登録する
+    val networkLogWebExtension: NetworkLogWebExtension = koinInject()
+    DisposableEffect(session, networkLogWebExtension) {
+        networkLogWebExtension.registerSession(session)
+        onDispose {
+            networkLogWebExtension.unregisterSession(session)
+        }
+    }
+
     DisposableEffect(session, state, browserTab, mediaWebExtension) {
         browserTab.attachSessionCallbacks(
             callbacks = state,
@@ -1111,11 +1123,31 @@ internal fun GeckoBrowserTab(
 
     // 開発者ツールダイアログ
     if (state.showDevTools) {
+        val networkLogStore: NetworkLogStore = koinInject()
+        val networkLogEntries by networkLogStore.entries.collectAsState()
+        val networkLogTabIds by networkLogWebExtension.sessionTabIds.collectAsState()
+        val networkLogTabId = networkLogTabIds[session]
         DevToolsDialog(
             focusedInput = state.devToolsFocusedInput,
+            networkLogCount = if (networkLogTabId == null) {
+                networkLogEntries.size
+            } else {
+                networkLogEntries.count { it.tabId == networkLogTabId }
+            },
             onCopyFocusedInputId = state::copyFocusedInputId,
+            onOpenNetworkLog = state::openNetworkLog,
             onRefresh = state::refreshDevToolsFocusedInput,
             onDismiss = state::closeDevTools,
+        )
+    }
+
+    // ネットワークログ画面
+    if (state.showNetworkLog) {
+        NetworkLogDialog(
+            uiState = rememberNetworkLogUiState(
+                session = session,
+                onDismiss = state::closeNetworkLog,
+            ),
         )
     }
 
