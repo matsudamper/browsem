@@ -1,0 +1,11 @@
+--- app/src/main/kotlin/net/matsudamper/browser/WebAppActivity.kt
++++ app/src/main/kotlin/net/matsudamper/browser/WebAppActivity.kt
+@@ -107,7 +107,7 @@
+                         GeckoBrowserTab(
+                             modifier = modifier,
+                             browserTab = browserTab,
+-                            homepageUrl = browserSettings.resolvedHomepageUrl(),
++                            homepageUrl = initialUrl ?: browserSettings.resolvedHomepageUrl(),
+                             searchTemplate = browserSettings.resolvedSearchTemplate(),
+                             translationProvider = browserSettings.translationProvider,
+                             themeColorExtension = themeColorExtension,

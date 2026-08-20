@@ -108,7 +108,7 @@ class WebAppActivity : ComponentActivity() {
                         GeckoBrowserTab(
                             modifier = modifier,
                             browserTab = browserTab,
-                            homepageUrl = initialUrl ?: browserSettings.resolvedHomepageUrl(),
+                            homepageUrl = browserSettings.resolvedHomepageUrl(),
                             searchTemplate = browserSettings.resolvedSearchTemplate(),
                             translationProvider = browserSettings.translationProvider,
                             themeColorExtension = themeColorExtension,

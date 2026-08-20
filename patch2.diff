@@ -1,0 +1,10 @@
+--- app/src/main/kotlin/net/matsudamper/browser/GeckoBrowserTab.kt
++++ app/src/main/kotlin/net/matsudamper/browser/GeckoBrowserTab.kt
+@@ -904,6 +904,7 @@
+                     onResetPageZoom = state::resetPageZoom,
+                     // ウェブアプリモードでは閉じるボタンを非表示にする
+                     showCloseButton = customTabMode,
++                    showHome = webAppMode,
+                 )
+             } else {
+                 BrowserToolBar(
