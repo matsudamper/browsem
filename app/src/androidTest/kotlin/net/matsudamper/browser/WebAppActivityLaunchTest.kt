@@ -47,6 +47,34 @@ class WebAppActivityLaunchTest {
     }
 
     /**
+     * ウェブアプリモードのツールバーメニューにホームボタンが表示されることを確認する。
+     */
+    @Test(timeout = 45_000L)
+    fun webAppMenuShowsHomeButton() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val intent = Intent(context, WebAppActivity::class.java).apply {
+            action = Intent.ACTION_VIEW
+            data = Uri.parse("https://webapp-home-button-test.invalid/")
+            addFlags(Intent.FLAG_ACTIVITY_NEW_DOCUMENT)
+        }
+
+        ActivityScenario.launch<WebAppActivity>(intent).use {
+            composeRule.waitUntil(timeoutMillis = 20_000) {
+                composeRule.onAllNodesWithTag(CustomTabToolbarTestTags.MenuButton.testTag)
+                    .fetchSemanticsNodes()
+                    .isNotEmpty()
+            }
+            composeRule.onNodeWithTag(CustomTabToolbarTestTags.MenuButton.testTag).performClick()
+
+            composeRule.waitUntil(timeoutMillis = 10_000) {
+                composeRule.onAllNodesWithTag(BrowserToolbarMenuTestTags.HomeButton.testTag)
+                    .fetchSemanticsNodes()
+                    .isNotEmpty()
+            }
+        }
+    }
+
+    /**
      * ウェブアプリモードのツールバーメニューから「サイトの設定」を開けることを確認する。
      */
     @Test(timeout = 45_000L)

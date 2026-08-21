@@ -71,6 +71,7 @@ internal fun CustomTabToolbar(
     onPageZoomOut: () -> Unit,
     onResetPageZoom: () -> Unit,
     showCloseButton: Boolean = true,
+    showHome: Boolean = false,
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
     val resolvedToolbarColor = toolbarColor ?: MaterialTheme.colorScheme.primaryContainer
@@ -161,7 +162,7 @@ internal fun CustomTabToolbar(
                     onResetPageZoom = onResetPageZoom,
                     showOpenSettings = false,
                     showAddToHomeScreen = showAddToHomeScreen,
-                    showHome = false,
+                    showHome = showHome,
                     onOpenInBrowser = onOpenInBrowser,
                     onOpenSiteSettings = onOpenSiteSettings,
                 )
