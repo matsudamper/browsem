@@ -23,6 +23,7 @@ import net.matsudamper.browser.ui.settings.SettingsScreenUiState
 
 internal class SettingsScreenViewModel(
     private val settingsRepository: SettingsRepository,
+    private val isDefaultBrowser: () -> Boolean,
 ) : ViewModel() {
 
     val eventHandler = Channel<(Event) -> Unit>(Channel.UNLIMITED)
@@ -40,6 +41,9 @@ internal class SettingsScreenViewModel(
     // 拡張プロセス設定変更時の再起動確認ダイアログ
     private val extensionsProcessRestartDialogFlow = MutableStateFlow(false)
     private var pendingExtensionsProcessEnabled: Boolean? = null
+
+    // デフォルトブラウザでない場合にバナーを表示する
+    private val showDefaultBrowserBannerFlow = MutableStateFlow(false)
 
     private val callbacks = object : SettingsScreenUiState.Callbacks {
         override fun setHomepageType(type: HomepageType) {
@@ -125,6 +129,18 @@ internal class SettingsScreenViewModel(
         override fun dismissBackupConfirm() {
             backupConfirmDialogFlow.value = null
         }
+
+        override fun openDefaultBrowserSettings() {
+            eventHandler.trySend { it.onOpenDefaultBrowserSettings() }
+        }
+    }
+
+    init {
+        refreshDefaultBrowserStatus()
+    }
+
+    fun refreshDefaultBrowserStatus() {
+        showDefaultBrowserBannerFlow.value = !isDefaultBrowser()
     }
 
     val uiState: StateFlow<SettingsScreenUiState?> = MutableStateFlow<SettingsScreenUiState?>(null)
@@ -134,23 +150,30 @@ internal class SettingsScreenViewModel(
                     settingsRepository.settings,
                     backupConfirmDialogFlow,
                     extensionsProcessRestartDialogFlow,
-                ) { settings, confirmDialog, restartDialog ->
-                    Triple(settings, confirmDialog, restartDialog)
-                }.collectLatest { (settings, confirmDialog, restartDialog) ->
+                    showDefaultBrowserBannerFlow,
+                ) { settings, confirmDialog, restartDialog, showDefaultBrowserBanner ->
+                    SettingsScreenCombineState(
+                        settings = settings,
+                        backupConfirmDialog = confirmDialog,
+                        extensionsProcessRestartDialog = restartDialog,
+                        showDefaultBrowserBanner = showDefaultBrowserBanner,
+                    )
+                }.collectLatest { state ->
                     // 初回だけ入力欄をリポジトリの値で初期化する
                     if (!mockLocationInputInitialized) {
                         mockLocationInputFlow.value = formatMockLocationInput(
-                            settings.mockLocationLatitude,
-                            settings.mockLocationLongitude,
+                            state.settings.mockLocationLatitude,
+                            state.settings.mockLocationLongitude,
                         )
                         mockLocationInputInitialized = true
                     }
                     uiStateFlow.update {
-                        settings.toUiState(
+                        state.settings.toUiState(
                             callbacks = callbacks,
                             mockLocationInput = mockLocationInputFlow.value,
-                            backupConfirmDialog = confirmDialog,
-                            extensionsProcessRestartDialog = restartDialog,
+                            backupConfirmDialog = state.backupConfirmDialog,
+                            extensionsProcessRestartDialog = state.extensionsProcessRestartDialog,
+                            showDefaultBrowserBanner = state.showDefaultBrowserBanner,
                         )
                     }
                     // 拡張機能への反映は BrowserViewModel が設定の Flow を監視して行う
@@ -176,8 +199,17 @@ internal class SettingsScreenViewModel(
         fun onNavigateToBackupProgress(isImport: Boolean)
         /** 拡張プロセス設定変更のためプロセスを再起動する */
         fun onRestartProcess()
+        /** デフォルトブラウザの設定画面を開く */
+        fun onOpenDefaultBrowserSettings()
     }
 }
+
+private data class SettingsScreenCombineState(
+    val settings: BrowserSettings,
+    val backupConfirmDialog: SettingsScreenUiState.BackupConfirmType?,
+    val extensionsProcessRestartDialog: Boolean,
+    val showDefaultBrowserBanner: Boolean,
+)
 
 /** "緯度,経度" 形式の文字列を (latitude, longitude) にパースする。不正な場合は null */
 internal fun parseMockLocationInput(input: String): Pair<Double, Double>? {
@@ -227,6 +259,7 @@ private fun BrowserSettings.toUiState(
     mockLocationInput: String,
     backupConfirmDialog: SettingsScreenUiState.BackupConfirmType?,
     extensionsProcessRestartDialog: Boolean,
+    showDefaultBrowserBanner: Boolean,
 ): SettingsScreenUiState {
     return SettingsScreenUiState(
         callbacks = callbacks,
@@ -243,5 +276,6 @@ private fun BrowserSettings.toUiState(
         mockLocationInputError = validateMockLocationInput(mockLocationInput),
         backupConfirmDialog = backupConfirmDialog,
         extensionsProcessRestartDialog = extensionsProcessRestartDialog,
+        showDefaultBrowserBanner = showDefaultBrowserBanner,
     )
 }
