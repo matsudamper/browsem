@@ -72,6 +72,7 @@ class WebAppActivity : ComponentActivity() {
             val browserSessionLifecycleController = browserViewModel.browserSessionLifecycleController
             val settings by settingsRepository.settings.collectAsState(initial = null)
             val browserSettings = settings ?: return@setContent
+            val resolvedInitialUrl = initialUrl ?: browserSettings.resolvedHomepageUrl()
             val webAppScreenViewModel = viewModel(initializer = {
                 WebAppScreenViewModel(
                     historyRepository = historyRepository,
@@ -92,7 +93,7 @@ class WebAppActivity : ComponentActivity() {
                     runtime = runtime,
                 ) { outerNavActions ->
                     WebAppScreen(
-                        initialUrl = initialUrl ?: browserSettings.resolvedHomepageUrl(),
+                        initialUrl = resolvedInitialUrl,
                         browserTabController = browserTabController,
                         uiState = uiState,
                     ) { modifier, browserTab, webAppUiState ->
@@ -108,7 +109,7 @@ class WebAppActivity : ComponentActivity() {
                         GeckoBrowserTab(
                             modifier = modifier,
                             browserTab = browserTab,
-                            homepageUrl = browserSettings.resolvedHomepageUrl(),
+                            homepageUrl = resolvedInitialUrl,
                             searchTemplate = browserSettings.resolvedSearchTemplate(),
                             translationProvider = browserSettings.translationProvider,
                             themeColorExtension = themeColorExtension,

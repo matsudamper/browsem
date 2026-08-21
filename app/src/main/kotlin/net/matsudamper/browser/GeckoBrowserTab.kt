@@ -912,6 +912,7 @@ internal fun GeckoBrowserTab(
                     onResetPageZoom = state::resetPageZoom,
                     // ウェブアプリモードでは閉じるボタンを非表示にする
                     showCloseButton = customTabMode,
+                    showHome = webAppMode,
                 )
             } else {
                 BrowserToolBar(
