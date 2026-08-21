@@ -67,6 +67,8 @@ internal fun rememberBrowserTabScreenState(
     homepageUrl: String,
     searchTemplate: String,
     isSinglePageMode: Boolean = false,
+    webAppPinnedHost: String? = null,
+    onWebAppCrossDomainNavigation: ((String) -> Unit)? = null,
     onHistoryRecord: (suspend (url: String, title: String) -> Long)? = null,
     onHistoryTitleUpdate: (suspend (id: Long, title: String) -> Unit)? = null,
     onRequestDownloadNotificationPermission: suspend () -> Unit = {},
@@ -86,6 +88,8 @@ internal fun rememberBrowserTabScreenState(
             homepageUrl = homepageUrl,
             searchTemplate = searchTemplate,
             isSinglePageMode = isSinglePageMode,
+            webAppPinnedHost = webAppPinnedHost,
+            onWebAppCrossDomainNavigation = onWebAppCrossDomainNavigation,
             coroutineScope = coroutineScope,
             geckoDownloadManager = geckoDownloadManager,
             findInPageWebExtension = findInPageWebExtension,
@@ -102,6 +106,8 @@ internal fun rememberBrowserTabScreenState(
     }
     state.homepageUrl = homepageUrl
     state.searchTemplate = searchTemplate
+    state.webAppPinnedHost = webAppPinnedHost
+    state.onWebAppCrossDomainNavigation = onWebAppCrossDomainNavigation
     state.onHistoryRecord = onHistoryRecord
     state.onHistoryTitleUpdate = onHistoryTitleUpdate
     return state
@@ -113,6 +119,8 @@ internal class BrowserTabScreenState(
     homepageUrl: String,
     searchTemplate: String,
     private val isSinglePageMode: Boolean = false,
+    webAppPinnedHost: String? = null,
+    onWebAppCrossDomainNavigation: ((String) -> Unit)? = null,
     private val coroutineScope: CoroutineScope,
     private val geckoDownloadManager: GeckoDownloadManager,
     internal val findInPageWebExtension: FindInPageWebExtension,
@@ -134,6 +142,8 @@ internal class BrowserTabScreenState(
     private var historyRecordSequence: Long = 0
     var homepageUrl by mutableStateOf(homepageUrl)
     var searchTemplate by mutableStateOf(searchTemplate)
+    var webAppPinnedHost by mutableStateOf(webAppPinnedHost)
+    var onWebAppCrossDomainNavigation by mutableStateOf(onWebAppCrossDomainNavigation)
     val session: GeckoSession get() = browserTab.session
 
     // --- URL / Navigation state ---
@@ -408,6 +418,7 @@ internal class BrowserTabScreenState(
 
     fun onUrlSubmit(rawInput: String) {
         val resolved = buildUrlFromInput(rawInput, homepageUrl, searchTemplate)
+        if (handleWebAppCrossDomainNavigation(resolved)) return
         urlInput = resolved
         maybeResetToolbarColor(currentPageUrl, resolved)
         currentPageUrl = resolved
@@ -422,6 +433,7 @@ internal class BrowserTabScreenState(
      * ホットリンク保護のあるサーバーで 403 にならないようにする。
      */
     fun openUrlWithReferrer(url: String) {
+        if (handleWebAppCrossDomainNavigation(url)) return
         val referrerUrl = currentPageUrl
         urlInput = url
         maybeResetToolbarColor(currentPageUrl, url)
@@ -1324,6 +1336,16 @@ internal class BrowserTabScreenState(
         }
     }
 
+    /**
+     * WebApp のピン留めドメイン外への遷移を Custom Tabs で開く。
+     * インターセプトした場合は true を返す。
+     */
+    internal fun handleWebAppCrossDomainNavigation(url: String): Boolean {
+        if (!isWebAppCrossDomainNavigation(url, webAppPinnedHost)) return false
+        onWebAppCrossDomainNavigation?.invoke(url)
+        return onWebAppCrossDomainNavigation != null
+    }
+
     override fun onLoadRequest(
         request: GeckoSession.NavigationDelegate.LoadRequest,
     ): GeckoResult<AllowOrDeny>? {
@@ -1348,7 +1370,9 @@ internal class BrowserTabScreenState(
                 ExternalAppNavigationAction.AllowInBrowser -> {
                     val uri = request.uri
                     if (uri.isNotBlank() && uri != "about:blank") {
-                        session.loadUri(uri)
+                        if (!handleWebAppCrossDomainNavigation(uri)) {
+                            session.loadUri(uri)
+                        }
                     }
                 }
                 ExternalAppNavigationAction.AppNotFound -> {
@@ -1364,7 +1388,13 @@ internal class BrowserTabScreenState(
             return GeckoResult.fromValue(AllowOrDeny.DENY)
         }
         return when (externalAction) {
-            ExternalAppNavigationAction.AllowInBrowser -> null
+            ExternalAppNavigationAction.AllowInBrowser -> {
+                if (handleWebAppCrossDomainNavigation(request.uri)) {
+                    GeckoResult.fromValue(AllowOrDeny.DENY)
+                } else {
+                    null
+                }
+            }
             ExternalAppNavigationAction.AppNotFound -> {
                 Toast.makeText(context, "対応するアプリが見つかりません", Toast.LENGTH_SHORT).show()
                 GeckoResult.fromValue(AllowOrDeny.DENY)
@@ -1562,4 +1592,11 @@ internal class BrowserTabScreenState(
         clipboard.setPrimaryClip(android.content.ClipData.newPlainText("URL", url))
         Toast.makeText(context, "URLをコピーしました", Toast.LENGTH_SHORT).show()
     }
+}
+
+/** WebApp のピン留めホストと異なるホストへの遷移かどうかを判定する */
+internal fun isWebAppCrossDomainNavigation(url: String, pinnedHost: String?): Boolean {
+    if (pinnedHost.isNullOrBlank()) return false
+    val targetHost = extractSiteHost(url) ?: return false
+    return !targetHost.equals(pinnedHost, ignoreCase = true)
 }
