@@ -71,11 +71,15 @@ internal fun BrowserTabDialogLayer(
             customTabMode = customTabMode,
             // ホットリンク保護のあるサーバーで 403 にならないよう、元ページを referrer に付ける
             onOpenNewTab = { url ->
-                onOpenNewTabRequest(url, state.currentPageUrl)
+                if (!state.handleWebAppCrossDomainNavigation(url)) {
+                    onOpenNewTabRequest(url, state.currentPageUrl)
+                }
                 state.dismissContextMenu()
             },
             onOpenUrl = { url ->
-                state.openUrlWithReferrer(url)
+                if (!state.handleWebAppCrossDomainNavigation(url)) {
+                    state.openUrlWithReferrer(url)
+                }
                 state.dismissContextMenu()
             },
             onCopyLink = { url -> state.copyLinkUrl(url) },
