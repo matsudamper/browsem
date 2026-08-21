@@ -23,27 +23,14 @@ import net.matsudamper.browser.ui.settings.SettingsScreenUiState
 
 internal class SettingsScreenViewModel(
     private val settingsRepository: SettingsRepository,
-    private val isDefaultBrowser: () -> Boolean,
 ) : ViewModel() {
 
+    private val viewModelStateFlow = MutableStateFlow(ViewModelState())
     val eventHandler = Channel<(Event) -> Unit>(Channel.UNLIMITED)
 
-    // 設定入力中の一時的な文字列（バリデーション前）
-    private val mockLocationInputFlow = MutableStateFlow("")
     // リポジトリ値による初回セットを完了したかどうかのフラグ
     // isEmpty() では空文字入力と未初期化を区別できないため専用フラグを使用する
     private var mockLocationInputInitialized = false
-
-    // 確認ダイアログの表示状態
-    private val backupConfirmDialogFlow =
-        MutableStateFlow<SettingsScreenUiState.BackupConfirmType?>(null)
-
-    // 拡張プロセス設定変更時の再起動確認ダイアログ
-    private val extensionsProcessRestartDialogFlow = MutableStateFlow(false)
-    private var pendingExtensionsProcessEnabled: Boolean? = null
-
-    // デフォルトブラウザでない場合にバナーを表示する
-    private val showDefaultBrowserBannerFlow = MutableStateFlow(false)
 
     private val callbacks = object : SettingsScreenUiState.Callbacks {
         override fun setHomepageType(type: HomepageType) {
@@ -79,14 +66,22 @@ internal class SettingsScreenViewModel(
         }
 
         override fun setExtensionsProcessEnabled(enabled: Boolean) {
-            pendingExtensionsProcessEnabled = enabled
-            extensionsProcessRestartDialogFlow.value = true
+            viewModelStateFlow.update {
+                it.copy(
+                    pendingExtensionsProcessEnabled = enabled,
+                    extensionsProcessRestartDialog = true,
+                )
+            }
         }
 
         override fun confirmExtensionsProcessRestart() {
-            val enabled = pendingExtensionsProcessEnabled ?: return
-            extensionsProcessRestartDialogFlow.value = false
-            pendingExtensionsProcessEnabled = null
+            val enabled = viewModelStateFlow.value.pendingExtensionsProcessEnabled ?: return
+            viewModelStateFlow.update {
+                it.copy(
+                    extensionsProcessRestartDialog = false,
+                    pendingExtensionsProcessEnabled = null,
+                )
+            }
             viewModelScope.launch {
                 settingsRepository.setExtensionsProcessEnabled(enabled)
                 eventHandler.trySend { it.onRestartProcess() }
@@ -94,12 +89,16 @@ internal class SettingsScreenViewModel(
         }
 
         override fun dismissExtensionsProcessRestartDialog() {
-            extensionsProcessRestartDialogFlow.value = false
-            pendingExtensionsProcessEnabled = null
+            viewModelStateFlow.update {
+                it.copy(
+                    extensionsProcessRestartDialog = false,
+                    pendingExtensionsProcessEnabled = null,
+                )
+            }
         }
 
         override fun setMockLocationInput(input: String) {
-            mockLocationInputFlow.value = input
+            viewModelStateFlow.update { it.copy(mockLocationInput = input) }
             val parsed = parseMockLocationInput(input) ?: return
             viewModelScope.launch {
                 settingsRepository.setMockLocationCoordinates(parsed.first, parsed.second)
@@ -111,23 +110,27 @@ internal class SettingsScreenViewModel(
         }
 
         override fun requestBackupExport() {
-            backupConfirmDialogFlow.value = SettingsScreenUiState.BackupConfirmType.Export
+            viewModelStateFlow.update {
+                it.copy(backupConfirmDialog = SettingsScreenUiState.BackupConfirmType.Export)
+            }
         }
 
         override fun requestBackupImport() {
-            backupConfirmDialogFlow.value = SettingsScreenUiState.BackupConfirmType.Import
+            viewModelStateFlow.update {
+                it.copy(backupConfirmDialog = SettingsScreenUiState.BackupConfirmType.Import)
+            }
         }
 
         override fun confirmBackup() {
-            val type = backupConfirmDialogFlow.value ?: return
-            backupConfirmDialogFlow.value = null
+            val type = viewModelStateFlow.value.backupConfirmDialog ?: return
+            viewModelStateFlow.update { it.copy(backupConfirmDialog = null) }
             eventHandler.trySend {
                 it.onNavigateToBackupProgress(type == SettingsScreenUiState.BackupConfirmType.Import)
             }
         }
 
         override fun dismissBackupConfirm() {
-            backupConfirmDialogFlow.value = null
+            viewModelStateFlow.update { it.copy(backupConfirmDialog = null) }
         }
 
         override fun openDefaultBrowserSettings() {
@@ -135,12 +138,13 @@ internal class SettingsScreenViewModel(
         }
     }
 
-    init {
-        refreshDefaultBrowserStatus()
+    /** デフォルトブラウザの状態を UI 側に問い合わせる。結果は onDefaultBrowserStatusChecked で受け取る */
+    fun refreshDefaultBrowserStatus() {
+        eventHandler.trySend { it.onCheckDefaultBrowserStatus() }
     }
 
-    fun refreshDefaultBrowserStatus() {
-        showDefaultBrowserBannerFlow.value = !isDefaultBrowser()
+    fun onDefaultBrowserStatusChecked(isDefaultBrowser: Boolean) {
+        viewModelStateFlow.update { it.copy(showDefaultBrowserBanner = !isDefaultBrowser) }
     }
 
     val uiState: StateFlow<SettingsScreenUiState?> = MutableStateFlow<SettingsScreenUiState?>(null)
@@ -148,47 +152,33 @@ internal class SettingsScreenViewModel(
             viewModelScope.launch {
                 combine(
                     settingsRepository.settings,
-                    backupConfirmDialogFlow,
-                    extensionsProcessRestartDialogFlow,
-                    showDefaultBrowserBannerFlow,
-                ) { settings, confirmDialog, restartDialog, showDefaultBrowserBanner ->
-                    SettingsScreenCombineState(
-                        settings = settings,
-                        backupConfirmDialog = confirmDialog,
-                        extensionsProcessRestartDialog = restartDialog,
-                        showDefaultBrowserBanner = showDefaultBrowserBanner,
-                    )
-                }.collectLatest { state ->
+                    viewModelStateFlow,
+                ) { settings, state ->
+                    settings to state
+                }.collectLatest { (settings, state) ->
                     // 初回だけ入力欄をリポジトリの値で初期化する
                     if (!mockLocationInputInitialized) {
-                        mockLocationInputFlow.value = formatMockLocationInput(
-                            state.settings.mockLocationLatitude,
-                            state.settings.mockLocationLongitude,
-                        )
+                        viewModelStateFlow.update {
+                            it.copy(
+                                mockLocationInput = formatMockLocationInput(
+                                    settings.mockLocationLatitude,
+                                    settings.mockLocationLongitude,
+                                ),
+                            )
+                        }
                         mockLocationInputInitialized = true
+                        return@collectLatest
                     }
                     uiStateFlow.update {
-                        state.settings.toUiState(
+                        settings.toUiState(
                             callbacks = callbacks,
-                            mockLocationInput = mockLocationInputFlow.value,
+                            mockLocationInput = state.mockLocationInput,
                             backupConfirmDialog = state.backupConfirmDialog,
                             extensionsProcessRestartDialog = state.extensionsProcessRestartDialog,
                             showDefaultBrowserBanner = state.showDefaultBrowserBanner,
                         )
                     }
                     // 拡張機能への反映は BrowserViewModel が設定の Flow を監視して行う
-                }
-            }
-            // 入力欄が変化したら UiState を再構築する
-            viewModelScope.launch {
-                mockLocationInputFlow.collectLatest { input ->
-                    // update のラムダ内で最新値を参照し、他のコレクタの更新を上書きしない
-                    uiStateFlow.update { current ->
-                        current?.copy(
-                            mockLocationInput = input,
-                            mockLocationInputError = validateMockLocationInput(input),
-                        )
-                    }
                 }
             }
         }.asStateFlow()
@@ -201,15 +191,18 @@ internal class SettingsScreenViewModel(
         fun onRestartProcess()
         /** デフォルトブラウザの設定画面を開く */
         fun onOpenDefaultBrowserSettings()
+        /** デフォルトブラウザかどうかを UI 側で確認する */
+        fun onCheckDefaultBrowserStatus()
     }
-}
 
-private data class SettingsScreenCombineState(
-    val settings: BrowserSettings,
-    val backupConfirmDialog: SettingsScreenUiState.BackupConfirmType?,
-    val extensionsProcessRestartDialog: Boolean,
-    val showDefaultBrowserBanner: Boolean,
-)
+    data class ViewModelState(
+        val mockLocationInput: String = "",
+        val backupConfirmDialog: SettingsScreenUiState.BackupConfirmType? = null,
+        val extensionsProcessRestartDialog: Boolean = false,
+        val pendingExtensionsProcessEnabled: Boolean? = null,
+        val showDefaultBrowserBanner: Boolean = false,
+    )
+}
 
 /** "緯度,経度" 形式の文字列を (latitude, longitude) にパースする。不正な場合は null */
 internal fun parseMockLocationInput(input: String): Pair<Double, Double>? {

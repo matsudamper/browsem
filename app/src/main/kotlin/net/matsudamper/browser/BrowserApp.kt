@@ -212,10 +212,7 @@ internal fun BrowserAppShell(
                 AppDestination.Settings -> navEntry(key) {
                     val lifecycleOwner = LocalLifecycleOwner.current
                     val settingsViewModel = composeViewModel(initializer = {
-                        SettingsScreenViewModel(
-                            settingsRepository = settingsRepository,
-                            isDefaultBrowser = { DefaultBrowserChecker.isDefaultBrowser(context) },
-                        )
+                        SettingsScreenViewModel(settingsRepository)
                     })
                     val settingsUiState by settingsViewModel.uiState.collectAsState()
                     DisposableEffect(lifecycleOwner, settingsViewModel) {
@@ -266,6 +263,12 @@ internal fun BrowserAppShell(
                                         context.startActivity(intent)
                                     } catch (_: ActivityNotFoundException) {
                                     }
+                                }
+
+                                override fun onCheckDefaultBrowserStatus() {
+                                    settingsViewModel.onDefaultBrowserStatusChecked(
+                                        DefaultBrowserChecker.isDefaultBrowser(context),
+                                    )
                                 }
                             })
                         }
