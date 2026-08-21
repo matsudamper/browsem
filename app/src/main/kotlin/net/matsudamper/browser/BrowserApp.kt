@@ -215,6 +215,13 @@ internal fun BrowserAppShell(
                         SettingsScreenViewModel(settingsRepository)
                     })
                     val settingsUiState by settingsViewModel.uiState.collectAsState()
+                    val requestDefaultBrowserLauncher = rememberLauncherForActivityResult(
+                        ActivityResultContracts.StartActivityForResult(),
+                    ) {
+                        settingsViewModel.onDefaultBrowserStatusChecked(
+                            DefaultBrowserChecker.isDefaultBrowser(context),
+                        )
+                    }
                     DisposableEffect(lifecycleOwner, settingsViewModel) {
                         val observer = LifecycleEventObserver { _, event ->
                             if (event == Lifecycle.Event.ON_RESUME) {
@@ -259,10 +266,7 @@ internal fun BrowserAppShell(
                                 override fun onOpenDefaultBrowserSettings() {
                                     val intent = DefaultBrowserChecker.createRequestDefaultBrowserIntent(context)
                                         ?: return
-                                    try {
-                                        context.startActivity(intent)
-                                    } catch (_: ActivityNotFoundException) {
-                                    }
+                                    requestDefaultBrowserLauncher.launch(intent)
                                 }
 
                                 override fun onCheckDefaultBrowserStatus() {
