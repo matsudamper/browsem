@@ -52,6 +52,27 @@ class NavController(
             ?.tabId
     }
 
+    /**
+     * 構成変更後など、NavBackStack の復元結果が [selectedTabId] とずれているときに揃える。
+     *
+     * ViewModel は構成変更をまたいで生存するため、表示中タブの正は
+     * BrowserTabController の選択タブ側にある。
+     * Tabs 画面が表示中ならそれを残したまま下の Browser 先だけを差し替える。
+     */
+    fun syncToSelectedTab(selectedTabId: String) {
+        val currentTabId = getSelectedTab()
+        val hasOnlySetup = backStack.isNotEmpty() &&
+            backStack.all { it is BrowserNavDestination.Setup }
+        if (currentTabId == selectedTabId && !hasOnlySetup) {
+            return
+        }
+        if (backStack.lastOrNull() is BrowserNavDestination.Tabs) {
+            replaceCurrentBrowserTab(selectedTabId)
+            return
+        }
+        selectTab(selectedTabId)
+    }
+
     fun disposeTabs() {
         backStack.removeAll { it is BrowserNavDestination.Tabs }
     }
