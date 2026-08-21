@@ -73,6 +73,7 @@ class WebAppActivity : ComponentActivity() {
             val settings by settingsRepository.settings.collectAsState(initial = null)
             val browserSettings = settings ?: return@setContent
             val resolvedInitialUrl = initialUrl ?: browserSettings.resolvedHomepageUrl()
+            val webAppPinnedHost = runCatching { java.net.URI(resolvedInitialUrl).host }.getOrNull()
             val webAppScreenViewModel = viewModel(initializer = {
                 WebAppScreenViewModel(
                     historyRepository = historyRepository,
@@ -127,6 +128,8 @@ class WebAppActivity : ComponentActivity() {
                             enableTabUi = false,
                             showInstallExtensionItem = false,
                             webAppMode = true,
+                            webAppPinnedHost = webAppPinnedHost,
+                            onWebAppCrossDomainNavigation = ::openInCustomTab,
                             onOpenInBrowser = ::openInMainBrowser,
                             // onLoadRequest で TARGET_WINDOW_NEW を現在タブへ畳み込むため、
                             // ここへ到達することは想定しない。GeckoView 契約上 null を返して安全に拒否する。
@@ -161,6 +164,18 @@ class WebAppActivity : ComponentActivity() {
         )
         pendingDownloadNotificationPermissionDeferred = null
         super.onDestroy()
+    }
+
+    /**
+     * 別ドメインの URL を Custom Tabs で開く。
+     */
+    private fun openInCustomTab(url: String) {
+        startActivity(
+            Intent(this, CustomTabActivity::class.java).apply {
+                action = Intent.ACTION_VIEW
+                data = Uri.parse(url)
+            }
+        )
     }
 
     /**
