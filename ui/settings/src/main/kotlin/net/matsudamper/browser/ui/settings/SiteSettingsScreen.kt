@@ -105,7 +105,7 @@ fun SiteSettingsScreen(
             Spacer(Modifier.height(12.dp))
 
             if (uiState.tlsCertificate != null) {
-                SettingSection(title = "TLS証明書") {
+                CollapsibleSettingSection(title = "TLS証明書") {
                     when (val certificate = uiState.tlsCertificate) {
                         is SiteSettingsScreenUiState.TlsCertificate.Available -> {
                             CertificateInfoRow(label = "発行先", value = certificate.subjectCommonName)
@@ -429,6 +429,38 @@ private fun SiteSettingsScreenNoRequestedPermissionPreview() {
             ),
             onBack = {},
         )
+    }
+}
+
+@Preview(showBackground = true, name = "TLS証明書展開")
+@Composable
+private fun SiteSettingsScreenTlsCertificateExpandedPreview() {
+    MaterialTheme {
+        CollapsibleSettingSection(
+            title = "TLS証明書",
+            initiallyExpanded = true,
+        ) {
+            CertificateInfoRow(label = "発行先", value = "www.example.com")
+            CertificateInfoRow(label = "発行者", value = "Example CA")
+            CertificateInfoRow(label = "有効期間の開始", value = "2026/01/01 00:00")
+            CertificateInfoRow(label = "有効期間の終了", value = "2027/01/01 00:00")
+            CertificateInfoRow(
+                label = "SHA-256 フィンガープリント",
+                value = "AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99:" +
+                    "AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99",
+            )
+        }
+    }
+}
+
+@Preview(showBackground = true, name = "TLS証明書折りたたみ")
+@Composable
+private fun SiteSettingsScreenTlsCertificateCollapsedPreview() {
+    MaterialTheme {
+        CollapsibleSettingSection(title = "TLS証明書") {
+            CertificateInfoRow(label = "発行先", value = "www.example.com")
+            CertificateInfoRow(label = "発行者", value = "Example CA")
+        }
     }
 }
 

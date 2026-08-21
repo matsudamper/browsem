@@ -6,3 +6,4 @@ local.properties
 .idea/
 .keystore
 .kotlin
+**/src/test/snapshots/images/
