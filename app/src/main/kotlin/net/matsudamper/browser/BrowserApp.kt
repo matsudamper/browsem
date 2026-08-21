@@ -596,6 +596,11 @@ private fun MainBrowserContent(
     }
 
     LaunchedEffect(viewModel) {
+        // 構成変更後は onTabsRestored が既に消費済み。NavBackStack が Setup に戻ったり
+        // 別タブに復元されたりしても、ViewModel 上の選択タブへ戻す。
+        if (viewModel.setupComplete.isCompleted) {
+            browserTabController.selectedTabId?.let { navController.syncToSelectedTab(it) }
+        }
         viewModel.eventHandler.receiveAsFlow().collect { event ->
             event(object : BrowserViewModel.Event {
                 override fun onTabsRestored(tabId: String) {
