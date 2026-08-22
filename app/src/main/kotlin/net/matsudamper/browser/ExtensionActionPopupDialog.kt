@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.HorizontalDivider
@@ -36,6 +37,12 @@ import org.mozilla.geckoview.GeckoView
 import net.matsudamper.browser.data.ThemeMode
 import net.matsudamper.browser.ui.common.BrowserTheme
 import net.matsudamper.browser.resources.R as ResourcesR
+
+/**
+ * ポップアップ本体 (拡張機能の HTML) を表示する領域の幅の上限。
+ * PC の Firefox のポップアップ上限 (800 CSS px) に合わせる。
+ */
+private val POPUP_CONTENT_MAX_WIDTH = 800.dp
 
 /**
  * ポップアップ本体 (拡張機能の HTML) を表示する領域の高さの上限。
@@ -71,30 +78,36 @@ internal fun ExtensionActionPopupDialog(
             decorFitsSystemWindows = false,
         ),
     ) {
-        ExtensionActionPopupContent(
-            title = popup.title,
-            onCloseRequest = onDismissRequest,
-            modifier = modifier.windowInsetsPadding(WindowInsets.safeDrawing),
+        Box(
+            modifier = modifier
+                .fillMaxSize()
+                .windowInsetsPadding(WindowInsets.safeDrawing),
+            contentAlignment = Alignment.Center,
         ) {
-            AndroidView(
-                modifier = Modifier.fillMaxSize(),
-                factory = { context ->
-                    GeckoView(context).also { geckoView ->
-                        geckoView.layoutParams = ViewGroup.LayoutParams(
-                            ViewGroup.LayoutParams.MATCH_PARENT,
-                            ViewGroup.LayoutParams.MATCH_PARENT,
-                        )
-                        geckoView.setSession(popup.session)
-                        // 非アクティブのままだと Compositor が描画を開始せず白画面になる
-                        popup.session.setActive(true)
-                    }
-                },
-                onRelease = { geckoView ->
-                    // ダイアログを閉じる際にセッションが先に close されている場合があるため保護する
-                    runCatching { popup.session.setActive(false) }
-                    runCatching { geckoView.releaseSession() }
-                },
-            )
+            ExtensionActionPopupContent(
+                title = popup.title,
+                onCloseRequest = onDismissRequest,
+            ) {
+                AndroidView(
+                    modifier = Modifier.fillMaxSize(),
+                    factory = { context ->
+                        GeckoView(context).also { geckoView ->
+                            geckoView.layoutParams = ViewGroup.LayoutParams(
+                                ViewGroup.LayoutParams.MATCH_PARENT,
+                                ViewGroup.LayoutParams.MATCH_PARENT,
+                            )
+                            geckoView.setSession(popup.session)
+                            // 非アクティブのままだと Compositor が描画を開始せず白画面になる
+                            popup.session.setActive(true)
+                        }
+                    },
+                    onRelease = { geckoView ->
+                        // ダイアログを閉じる際にセッションが先に close されている場合があるため保護する
+                        runCatching { popup.session.setActive(false) }
+                        runCatching { geckoView.releaseSession() }
+                    },
+                )
+            }
         }
     }
 }
@@ -111,14 +124,16 @@ private fun ExtensionActionPopupContent(
     content: @Composable () -> Unit,
 ) {
     Surface(
-        // 拡張機能のポップアップは HTML 側が高さを決めるが、GeckoView には文書の内容の
-        // 高さを取得する API がないためコンテンツにフィットさせられない。
-        // 画面いっぱいに広げると PC のポップアップとかけ離れるので、ポップアップ本体に
-        // 上限どおりの高さを与えたサイズを上限とし、画面が狭ければ表示できる範囲まで縮める。
-        // タイトル行の分を足さずに上限を掛けると本体が上限より低くなり、
+        // 拡張機能のポップアップは HTML 側がサイズを決めるが、GeckoView には文書の内容の
+        // サイズを取得する API がないためコンテンツにフィットさせられない。
+        // 画面いっぱいに広げると PC のポップアップとかけ離れるので、PC の Firefox の
+        // ポップアップ上限 (800x600 CSS px) に揃えたサイズを上限とし、画面が狭ければ
+        // 表示できる範囲まで縮める。
+        // タイトル行の分を足さずに高さの上限を掛けると本体が上限より低くなり、
         // 上限ちょうどの高さを持つ拡張機能が毎回スクロールしないと収まらなくなる。
         modifier = modifier
             .padding(horizontal = 8.dp, vertical = 16.dp)
+            .widthIn(max = POPUP_CONTENT_MAX_WIDTH)
             .fillMaxWidth()
             .heightIn(max = POPUP_HEADER_HEIGHT + POPUP_DIVIDER_HEIGHT + POPUP_CONTENT_MAX_HEIGHT)
             .fillMaxHeight()
@@ -164,6 +179,8 @@ private fun ExtensionActionPopupContent(
 @Preview(name = "ExtensionActionPopupDark", widthDp = 412, heightDp = 915, uiMode = Configuration.UI_MODE_NIGHT_YES)
 // 横向きは高さが上限に満たないため、表示できる高さまで縮むことを確認する
 @Preview(name = "ExtensionActionPopupLandscape", widthDp = 915, heightDp = 412)
+// 広い画面は幅が上限に達し、中央に配置されることを確認する
+@Preview(name = "ExtensionActionPopupWide", widthDp = 1024, heightDp = 768)
 @Composable
 private fun PreviewExtensionActionPopup() {
     BrowserTheme(themeMode = ThemeMode.THEME_SYSTEM) {
