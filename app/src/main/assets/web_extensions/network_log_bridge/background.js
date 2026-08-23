@@ -30,7 +30,7 @@
     queued = [];
     try {
       port.postMessage({ action: 'entries', entries: entries });
-    } catch (e) {
+    } catch (ignoredPortError) {
       // ポート切断後は送信できないため無視する
     }
   }
@@ -154,7 +154,7 @@
     payload.requestId = requestId;
     try {
       port.postMessage(payload);
-    } catch (e) {
+    } catch (ignoredPortError) {
       // ポート切断後は送信できないため無視する
     }
   }
@@ -217,8 +217,8 @@
         const base64 = await toBase64(blob);
         replyBody(requestId, { ok: true, kind: 'binary', base64: base64, mimeType: mimeType, size: blob.size });
       }
-    } catch (e) {
-      replyBody(requestId, { ok: false, reason: 'fetch_failed', message: String(e) });
+    } catch (error) {
+      replyBody(requestId, { ok: false, reason: 'fetch_failed', message: String(error) });
     }
   }
 

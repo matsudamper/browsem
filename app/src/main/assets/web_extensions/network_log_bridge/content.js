@@ -11,7 +11,7 @@
     if (!response || typeof response.tabId !== 'number') return;
     try {
       port.postMessage({ action: 'tabId', tabId: response.tabId });
-    } catch (e) {
+    } catch (ignoredPortError) {
       // ポート切断後は送信できないため無視する
     }
   }).catch(function () {
