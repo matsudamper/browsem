@@ -1,11 +1,11 @@
 package net.matsudamper.browser
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -18,18 +18,18 @@ import net.matsudamper.browser.ui.common.BrowserTheme
 
 /**
  * 開発者ツールのダイアログ。
- * タイトルの下にリストメニューを表示し、項目を押すと対応する値をクリップボードへコピーする。
+ * タイトルの下に項目名だけのリストメニューを表示する。
  *
  * @param focusedInput フォーカス中の入力要素の情報。フォーカスがない場合は null。
  * @param onCopyFocusedInputId フォーカス中の input の id をコピーする。
- * @param onRefresh 最新のフォーカス情報を再取得する。
+ * @param onOpenNetworkLog ネットワークログ画面を開く。
  * @param onDismiss ダイアログを閉じる。
  */
 @Composable
 internal fun DevToolsDialog(
     focusedInput: DevToolsWebExtension.FocusedInputInfo?,
     onCopyFocusedInputId: () -> Unit,
-    onRefresh: () -> Unit,
+    onOpenNetworkLog: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     // フォーカス中の input の id（空文字は「なし」とみなす）
@@ -39,26 +39,25 @@ internal fun DevToolsDialog(
         onDismissRequest = onDismiss,
         title = { Text("開発者ツール") },
         text = {
-            // 現状メニュー項目は「フォーカス中の input id」の 1 件のみ。押すとコピーする。
-            ListItem(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable(enabled = focusedId != null, onClick = onCopyFocusedInputId)
-                    .testTag(DevToolsDialogTestTags.FocusedInputId.testTag),
-                colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                headlineContent = { Text("フォーカス中の input id をコピー") },
-                supportingContent = {
-                    Text(
-                        text = focusedId ?: "フォーカスされている入力要素はありません",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                },
-            )
-        },
-        dismissButton = {
-            TextButton(onClick = onRefresh) {
-                Text("更新")
+            Column {
+                // 押すとフォーカス中の input id をコピーする
+                ListItem(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(enabled = focusedId != null, onClick = onCopyFocusedInputId)
+                        .testTag(DevToolsDialogTestTags.FocusedInputId.testTag),
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                    headlineContent = { Text("フォーカス中の input id をコピー") },
+                )
+                // 押すとページが行った通信の一覧を開く
+                ListItem(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(onClick = onOpenNetworkLog)
+                        .testTag(DevToolsDialogTestTags.NetworkLog.testTag),
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                    headlineContent = { Text("ネットワークログ") },
+                )
             }
         },
         confirmButton = {
@@ -75,6 +74,7 @@ sealed interface DevToolsDialogTestTags {
 
     object Dialog : DevToolsDialogTestTags { override val id = "dialog" }
     object FocusedInputId : DevToolsDialogTestTags { override val id = "focused_input_id" }
+    object NetworkLog : DevToolsDialogTestTags { override val id = "network_log" }
 }
 
 @Preview(name = "input フォーカスあり")
@@ -89,7 +89,7 @@ private fun PreviewDevToolsDialogFocused() {
                 name = "q",
             ),
             onCopyFocusedInputId = {},
-            onRefresh = {},
+            onOpenNetworkLog = {},
             onDismiss = {},
         )
     }
@@ -102,7 +102,7 @@ private fun PreviewDevToolsDialogNoFocus() {
         DevToolsDialog(
             focusedInput = null,
             onCopyFocusedInputId = {},
-            onRefresh = {},
+            onOpenNetworkLog = {},
             onDismiss = {},
         )
     }
