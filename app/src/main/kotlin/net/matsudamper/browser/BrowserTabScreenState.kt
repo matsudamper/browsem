@@ -370,17 +370,6 @@ internal class BrowserTabScreenState(
             field = value
         }
 
-    init {
-        Log.d(
-            TAG,
-            "init previewCaptureReady=$previewCaptureReady (tabId=${browserTab.tabId} hasPreview=${browserTab.previewBitmap?.isNotEmpty() == true} hasSessionState=${browserTab.sessionState.isNotBlank()})",
-        )
-        coroutineScope.launch {
-            settingsRepository.settings.collect { settings ->
-                extensionActionOrder = settings.extensionActionOrderList
-            }
-        }
-    }
     var pageLoadError by mutableStateOf<PageLoadError?>(null)
 
     // --- ズーム状態（viewport width 操作によりテキスト・画像含め全体をズーム）---
@@ -407,6 +396,21 @@ internal class BrowserTabScreenState(
     private var extensionActionOrder by mutableStateOf<List<String>>(emptyList())
     // ドラッグ中は保存済みの並び順ではなく、この一時的な並び順を使う
     private var draggingExtensionActionOrder by mutableStateOf<List<String>?>(null)
+
+    // 収集した設定を extensionActionOrder へ書き込むため、
+    // このプロパティを宣言した後で init を実行する必要がある。
+    // 宣言前に置くと、設定が即座に流れてきた場合に未初期化のプロパティへ代入して落ちる
+    init {
+        Log.d(
+            TAG,
+            "init previewCaptureReady=$previewCaptureReady (tabId=${browserTab.tabId} hasPreview=${browserTab.previewBitmap?.isNotEmpty() == true} hasSessionState=${browserTab.sessionState.isNotBlank()})",
+        )
+        coroutineScope.launch {
+            settingsRepository.settings.collect { settings ->
+                extensionActionOrder = settings.extensionActionOrderList
+            }
+        }
+    }
 
     /** このタブに対して有効な拡張機能アクションを、ユーザーが決めた並び順で返す */
     val extensionActions: List<WebExtensionActionController.ActionUiState>
