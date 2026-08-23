@@ -225,10 +225,24 @@ private fun TabsScreenLoadedContent(
     val density = LocalDensity.current
     val currentOnGroupPageChanged by rememberUpdatedState(onGroupPageChanged)
 
+    // 直前にアクティブだったグループの ID。
+    // 並び替えでアクティブグループの index だけが変わった場合を判別するために保持する
+    var lastActiveGroupId by remember { mutableStateOf(groups.getOrNull(safeInitialPage)?.id) }
+
     // ViewModelのactiveGroupIndex変化 → ページスクロールとタブバースクロールを同期
     LaunchedEffect(activeGroupIndex) {
+        // 同じグループのまま index だけが変わった = 長押しドラッグによる並び替え。
+        // この場合ページ内容も同時に入れ替わっているためアニメーションさせると
+        // 別グループのページが流れて見えるので、即座に位置だけ合わせる
+        val activeGroupId = groups.getOrNull(activeGroupIndex)?.id
+        val isReorder = activeGroupId != null && activeGroupId == lastActiveGroupId
+        lastActiveGroupId = activeGroupId
         if (pagerState.currentPage != activeGroupIndex && activeGroupIndex in 0 until groups.size) {
-            pagerState.animateScrollToPage(activeGroupIndex)
+            if (isReorder) {
+                pagerState.scrollToPage(activeGroupIndex)
+            } else {
+                pagerState.animateScrollToPage(activeGroupIndex)
+            }
         }
         if (activeGroupIndex in 0 until groups.size) {
             val layoutInfo = groupTabListState.layoutInfo
