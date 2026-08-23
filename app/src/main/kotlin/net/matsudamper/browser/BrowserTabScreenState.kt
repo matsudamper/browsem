@@ -680,11 +680,6 @@ internal class BrowserTabScreenState(
         devToolsWebExtension.requestFocusedInput(session)
     }
 
-    /** フォーカスされている入力要素の情報を再取得する */
-    fun refreshDevToolsFocusedInput() {
-        devToolsWebExtension.requestFocusedInput(session)
-    }
-
     /** フォーカス中の input の id をクリップボードにコピーする */
     fun copyFocusedInputId() {
         val id = devToolsFocusedInput?.id?.takeIf { it.isNotBlank() } ?: return

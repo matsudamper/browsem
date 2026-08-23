@@ -44,7 +44,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
@@ -1123,20 +1122,10 @@ internal fun GeckoBrowserTab(
 
     // 開発者ツールダイアログ
     if (state.showDevTools) {
-        val networkLogStore: NetworkLogStore = koinInject()
-        val networkLogEntries by networkLogStore.entries.collectAsState()
-        val networkLogTabIds by networkLogWebExtension.sessionTabIds.collectAsState()
-        val networkLogTabId = networkLogTabIds[session]
         DevToolsDialog(
             focusedInput = state.devToolsFocusedInput,
-            networkLogCount = if (networkLogTabId == null) {
-                networkLogEntries.size
-            } else {
-                networkLogEntries.count { it.tabId == networkLogTabId }
-            },
             onCopyFocusedInputId = state::copyFocusedInputId,
             onOpenNetworkLog = state::openNetworkLog,
-            onRefresh = state::refreshDevToolsFocusedInput,
             onDismiss = state::closeDevTools,
         )
     }

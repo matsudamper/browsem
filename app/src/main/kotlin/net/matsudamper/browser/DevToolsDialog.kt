@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -19,22 +18,18 @@ import net.matsudamper.browser.ui.common.BrowserTheme
 
 /**
  * 開発者ツールのダイアログ。
- * タイトルの下にリストメニューを表示し、項目を押すと対応する値をクリップボードへコピーする。
+ * タイトルの下に項目名だけのリストメニューを表示する。
  *
  * @param focusedInput フォーカス中の入力要素の情報。フォーカスがない場合は null。
- * @param networkLogCount 記録済みの通信ログ件数。
  * @param onCopyFocusedInputId フォーカス中の input の id をコピーする。
  * @param onOpenNetworkLog ネットワークログ画面を開く。
- * @param onRefresh 最新のフォーカス情報を再取得する。
  * @param onDismiss ダイアログを閉じる。
  */
 @Composable
 internal fun DevToolsDialog(
     focusedInput: DevToolsWebExtension.FocusedInputInfo?,
-    networkLogCount: Int,
     onCopyFocusedInputId: () -> Unit,
     onOpenNetworkLog: () -> Unit,
-    onRefresh: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     // フォーカス中の input の id（空文字は「なし」とみなす）
@@ -53,13 +48,6 @@ internal fun DevToolsDialog(
                         .testTag(DevToolsDialogTestTags.FocusedInputId.testTag),
                     colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                     headlineContent = { Text("フォーカス中の input id をコピー") },
-                    supportingContent = {
-                        Text(
-                            text = focusedId ?: "フォーカスされている入力要素はありません",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    },
                 )
                 // 押すとページが行った通信の一覧を開く
                 ListItem(
@@ -69,19 +57,7 @@ internal fun DevToolsDialog(
                         .testTag(DevToolsDialogTestTags.NetworkLog.testTag),
                     colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                     headlineContent = { Text("ネットワークログ") },
-                    supportingContent = {
-                        Text(
-                            text = "記録済み $networkLogCount 件。画像や JS のプレビュー・容量・URL を確認できます",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    },
                 )
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onRefresh) {
-                Text("更新")
             }
         },
         confirmButton = {
@@ -112,10 +88,8 @@ private fun PreviewDevToolsDialogFocused() {
                 type = "text",
                 name = "q",
             ),
-            networkLogCount = 42,
             onCopyFocusedInputId = {},
             onOpenNetworkLog = {},
-            onRefresh = {},
             onDismiss = {},
         )
     }
@@ -127,10 +101,8 @@ private fun PreviewDevToolsDialogNoFocus() {
     BrowserTheme(themeMode = ThemeMode.THEME_SYSTEM) {
         DevToolsDialog(
             focusedInput = null,
-            networkLogCount = 0,
             onCopyFocusedInputId = {},
             onOpenNetworkLog = {},
-            onRefresh = {},
             onDismiss = {},
         )
     }
