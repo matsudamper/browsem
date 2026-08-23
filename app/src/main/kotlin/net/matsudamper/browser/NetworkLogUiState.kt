@@ -145,6 +145,9 @@ internal data class NetworkLogUiState(
         fun onClickCopyBody()
         fun onClickReloadPreview()
         fun onClickClear()
+
+        /** 一覧で見えている範囲。サムネイルの取得対象を決めるために使う */
+        fun onVisibleRangeChange(firstIndex: Int, lastIndex: Int)
         fun onDismiss()
     }
 }

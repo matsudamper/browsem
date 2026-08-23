@@ -16,8 +16,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
@@ -36,6 +38,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -53,6 +57,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.window.DialogProperties
+import kotlinx.coroutines.flow.distinctUntilChanged
 import net.matsudamper.browser.data.ThemeMode
 import net.matsudamper.browser.ui.common.BrowserTheme
 import net.matsudamper.browser.resources.R as ResourcesR
@@ -91,6 +96,8 @@ internal fun NetworkLogScreen(
     modifier: Modifier = Modifier,
 ) {
     val detail = uiState.detail
+    // 詳細を開いている間も保持し、一覧へ戻ったときにスクロール位置を復元する
+    val listState = rememberLazyListState()
     Scaffold(
         modifier = modifier.testTag(NetworkLogScreenTestTags.Screen.testTag),
         topBar = {
@@ -148,7 +155,7 @@ internal fun NetworkLogScreen(
     ) { paddingValues ->
         Box(modifier = Modifier.padding(paddingValues)) {
             if (detail == null) {
-                NetworkLogList(uiState = uiState)
+                NetworkLogList(uiState = uiState, listState = listState)
             } else {
                 NetworkLogDetail(detail = detail, callbacks = uiState.callbacks)
             }
@@ -159,8 +166,29 @@ internal fun NetworkLogScreen(
 @Composable
 private fun NetworkLogList(
     uiState: NetworkLogUiState,
+    listState: LazyListState,
     modifier: Modifier = Modifier,
 ) {
+    val callbacks = uiState.callbacks
+    // 見えている範囲を伝えて、その範囲のサムネイルだけ取得させる
+    LaunchedEffect(listState, callbacks) {
+        snapshotFlow {
+            val visibleItems = listState.layoutInfo.visibleItemsInfo
+            if (visibleItems.isEmpty()) {
+                null
+            } else {
+                visibleItems.first().index to visibleItems.last().index
+            }
+        }
+            .distinctUntilChanged()
+            .collect { range ->
+                if (range == null) return@collect
+                callbacks.onVisibleRangeChange(
+                    firstIndex = range.first,
+                    lastIndex = range.second,
+                )
+            }
+    }
     Column(modifier = modifier.fillMaxSize()) {
         OutlinedTextField(
             modifier = Modifier
@@ -225,7 +253,10 @@ private fun NetworkLogList(
                 )
             }
         } else {
-            LazyColumn(modifier = Modifier.fillMaxSize()) {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                state = listState,
+            ) {
                 items(uiState.entries, key = { it.id }) { entry ->
                     NetworkLogRow(
                         entry = entry,
@@ -584,6 +615,7 @@ private object PreviewNetworkLogCallbacks : NetworkLogUiState.Callbacks {
     override fun onClickCopyBody() = Unit
     override fun onClickReloadPreview() = Unit
     override fun onClickClear() = Unit
+    override fun onVisibleRangeChange(firstIndex: Int, lastIndex: Int) = Unit
     override fun onDismiss() = Unit
 }
 

@@ -95,9 +95,17 @@ internal class NetworkLogStateHolder(
     // 取得済みのサムネイル。取得に失敗した場合も再取得しないよう null を入れて記録する
     private val thumbnails = mutableStateMapOf<String, ThumbnailState>()
 
-    // サムネイル表示の対象。createUiState で最新の表示内容に更新する
-    private var thumbnailTargets: List<NetworkLogEntry> = emptyList()
-    private var thumbnailTargetIds: Set<String> = emptySet()
+    // 取得済みサムネイルの追加順。上限を超えた分を古い方から捨てるために持つ
+    private val thumbnailOrder = ArrayDeque<String>()
+
+    // 一覧に表示しているログ。サムネイルの取得対象を可視範囲から求めるために保持する
+    private var shownEntries: List<NetworkLogEntry> = emptyList()
+
+    // サムネイルを出すかどうか（画像フィルタ選択中のみ true）
+    private var showsThumbnail: Boolean = false
+
+    // 一覧で見えている範囲。前後の余白を含めてサムネイルを先読みする
+    private var visibleRange: IntRange = IntRange.EMPTY
 
     /** サムネイルの取得状態 */
     private class ThumbnailState(val bitmap: ImageBitmap?)
@@ -149,6 +157,14 @@ internal class NetworkLogStateHolder(
             selectedId = null
         }
 
+        override fun onVisibleRangeChange(firstIndex: Int, lastIndex: Int) {
+            val from = (firstIndex - THUMBNAIL_PREFETCH_MARGIN).coerceAtLeast(0)
+            val to = lastIndex + THUMBNAIL_PREFETCH_MARGIN
+            if (visibleRange.first == from && visibleRange.last == to) return
+            visibleRange = from..to
+            loadThumbnails()
+        }
+
         override fun onDismiss() {
             onDismiss.invoke()
         }
@@ -169,10 +185,9 @@ internal class NetworkLogStateHolder(
             ?.let { id -> tabEntries.firstOrNull { it.requestId == id } }
             ?.toDetail()
         // サムネイルは画像フィルタを選んでいるときだけ出す
-        val showThumbnail = filter == NetworkLogUiState.ResourceFilter.Image
         val shown = filtered.asReversed()
-        thumbnailTargets = if (showThumbnail) shown.take(MAX_THUMBNAIL_COUNT) else emptyList()
-        thumbnailTargetIds = thumbnailTargets.mapTo(mutableSetOf()) { it.requestId }
+        showsThumbnail = filter == NetworkLogUiState.ResourceFilter.Image
+        shownEntries = shown
         return NetworkLogUiState(
             callbacks = callbacks,
             entries = shown.map { it.toUiStateEntry() },
@@ -211,15 +226,16 @@ internal class NetworkLogStateHolder(
         }
     }
 
-    /** 画像フィルタ選択中の一覧に出すサムネイルを取得する */
+    /**
+     * 一覧で見えている範囲のサムネイルを取得する。
+     * 一覧の先頭だけを対象にすると下までスクロールしたときに出ないため、
+     * スクロール位置に追従して取得する。
+     */
     fun loadThumbnails() {
-        // ログから消えたリクエストのサムネイルを持ち続けないよう、
-        // ログの保持上限に合わせて捨てる
-        if (thumbnails.isNotEmpty()) {
-            val livingIds = store.entries.value.mapTo(mutableSetOf()) { it.requestId }
-            thumbnails.keys.retainAll(livingIds)
-        }
-        thumbnailTargets.forEach { entry ->
+        pruneThumbnails()
+        if (!showsThumbnail) return
+        val targets = shownEntries.filterIndexed { index, _ -> index in visibleRange }
+        targets.forEach { entry ->
             // 取得済み・取得失敗済みのものは再取得しない
             if (thumbnails.containsKey(entry.requestId)) return@forEach
             extension.requestBody(
@@ -228,8 +244,28 @@ internal class NetworkLogStateHolder(
                 method = entry.method,
             ) { body ->
                 val bitmap = (body as? NetworkLogBody.Binary)?.let { decodeThumbnail(it.bytes) }
-                thumbnails[entry.requestId] = ThumbnailState(bitmap = bitmap?.asImageBitmap())
+                putThumbnail(entry.requestId, ThumbnailState(bitmap = bitmap?.asImageBitmap()))
             }
+        }
+    }
+
+    /** サムネイルを記録する。上限を超えた分は古いものから捨てる */
+    private fun putThumbnail(requestId: String, state: ThumbnailState) {
+        if (thumbnails.put(requestId, state) == null) {
+            thumbnailOrder.addLast(requestId)
+        }
+        while (thumbnailOrder.size > MAX_THUMBNAIL_CACHE) {
+            val oldest = thumbnailOrder.removeFirst()
+            thumbnails.remove(oldest)
+        }
+    }
+
+    /** ログから消えたリクエストのサムネイルを捨てる */
+    private fun pruneThumbnails() {
+        if (thumbnails.isEmpty()) return
+        val livingIds = store.entries.value.mapTo(mutableSetOf()) { it.requestId }
+        if (thumbnails.keys.retainAll(livingIds)) {
+            thumbnailOrder.retainAll(livingIds)
         }
     }
 
@@ -336,8 +372,8 @@ internal class NetworkLogStateHolder(
             sizeLabel = NetworkLogFormat.formatBytes(sizeBytes),
             durationLabel = NetworkLogFormat.formatDuration(durationMillis),
             fromCache = fromCache,
-            // 取得対象外の項目に枠だけ出すと、埋まらないままになるため出さない
-            thumbnail = if (thumbnailTargetIds.contains(requestId)) {
+            // 画像フィルタ中は枠を出し、その行が見えた時点で取得して埋める
+            thumbnail = if (showsThumbnail) {
                 NetworkLogUiState.Thumbnail(bitmap = thumbnails[requestId]?.bitmap)
             } else {
                 null
@@ -421,8 +457,11 @@ internal class NetworkLogStateHolder(
     private companion object {
         const val MAX_PREVIEW_TEXT_LENGTH = 20000
 
-        // 一度に取得するサムネイルの上限。画像が多いページで取得が膨らまないようにする
-        const val MAX_THUMBNAIL_COUNT = 60
+        // 保持するサムネイルの上限。スクロールで対象が増えても際限なく持たないようにする
+        const val MAX_THUMBNAIL_CACHE = 120
+
+        // 見えている範囲の前後に何件を先読みするか
+        const val THUMBNAIL_PREFETCH_MARGIN = 5
 
         // サムネイルの長辺のピクセル数の目安
         const val THUMBNAIL_MAX_PIXELS = 128
