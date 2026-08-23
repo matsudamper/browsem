@@ -9,6 +9,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -68,11 +71,24 @@ fun BackupProgressScreen(
                 }
 
                 is BackupProgressUiState.Phase.InProgress -> {
-                    // 処理中はプログレスインジケーターと現在処理中の内容を表示する
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        CircularProgressIndicator()
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.widthIn(max = 320.dp),
+                    ) {
+                        if (phase.fraction != null) {
+                            LinearProgressIndicator(
+                                progress = { phase.fraction },
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        } else {
+                            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                        }
                         Spacer(Modifier.height(16.dp))
                         Text(phase.message)
+                        if (phase.fraction != null) {
+                            Spacer(Modifier.height(8.dp))
+                            Text("${(phase.fraction * 100).toInt()}%")
+                        }
                     }
                 }
 
@@ -146,7 +162,10 @@ private fun BackupProgressScreenInProgressPreview() {
     BackupProgressScreen(
         uiState = BackupProgressUiState(
             isImport = true,
-            phase = BackupProgressUiState.Phase.InProgress(message = "タブデータを書き出し中…"),
+            phase = BackupProgressUiState.Phase.InProgress(
+                message = "タブデータを書き出し中…",
+                fraction = 0.42f,
+            ),
             callbacks = object : BackupProgressUiState.Callbacks {
                 override fun onDismiss() = Unit
                 override fun onRestart() = Unit
