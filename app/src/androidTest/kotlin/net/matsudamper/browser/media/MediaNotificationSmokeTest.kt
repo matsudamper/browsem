@@ -11,6 +11,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.Until
+import net.matsudamper.browser.AutoplayPermissionDialogTestTags
 import net.matsudamper.browser.LocalHttpServer
 import net.matsudamper.browser.MainActivity
 import org.junit.After
@@ -117,6 +118,10 @@ class MediaNotificationSmokeTest {
      */
     private fun startPlaybackByTapping(uiDevice: UiDevice, tapX: Int, tapY: Int): Boolean {
         repeat(PLAYBACK_TAP_RETRY_COUNT) { index ->
+            // index.html は autoplay 属性を持つため自動再生の確認ダイアログが出る。
+            // ダイアログは画面中央を覆いタップが動画へ届かないので、先に閉じる。
+            // 「却下」を選んでもユーザー操作による再生はブロックされない。
+            dismissAutoplayPermissionDialogIfShown(uiDevice)
             Log.d(TAG, "タップ試行${index + 1}/${PLAYBACK_TAP_RETRY_COUNT}: 座標=($tapX, $tapY)")
             uiDevice.click(tapX, tapY)
             val deadline = SystemClock.elapsedRealtime() + PLAYBACK_START_CONFIRM_TIMEOUT_MS
@@ -134,6 +139,23 @@ class MediaNotificationSmokeTest {
             )
         }
         return MediaSessionBridge.playbackState.value.isPlaying
+    }
+
+    /**
+     * 自動再生の確認ダイアログが表示されていれば「却下」を押して閉じる。
+     * 表示されていなければ何もしない。
+     */
+    private fun dismissAutoplayPermissionDialogIfShown(uiDevice: UiDevice) {
+        val denyButton = uiDevice.wait(
+            Until.findObject(By.res(AutoplayPermissionDialogTestTags.Deny.testTag)),
+            AUTOPLAY_DIALOG_TIMEOUT_MS,
+        ) ?: return
+        Log.d(TAG, "自動再生の確認ダイアログを却下で閉じる")
+        denyButton.click()
+        uiDevice.wait(
+            Until.gone(By.res(AutoplayPermissionDialogTestTags.Deny.testTag)),
+            AUTOPLAY_DIALOG_TIMEOUT_MS,
+        )
     }
 
     private fun openMediaPage(mediaPageUri: String) {
@@ -176,6 +198,8 @@ class MediaNotificationSmokeTest {
 
     companion object {
         private const val TAG = "MediaNotificationSmoke"
+        // ダイアログはページロード後に出るため、初回は少し待つ
+        private const val AUTOPLAY_DIALOG_TIMEOUT_MS = 2_000L
         private const val TEST_TIMEOUT_MS = 180_000L
         // ページロード待ちを兼ねるため、タップ試行は多め・確認間隔は短めに設定する
         private const val PLAYBACK_TAP_RETRY_COUNT = 10

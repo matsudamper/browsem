@@ -35,6 +35,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -442,19 +445,50 @@ private fun AutoplayPermissionDialog(
         },
         // 選択肢が3つあり、日本語ラベルは横並びだと狭い画面で見切れるため縦に並べる
         confirmButton = {
-            Column(horizontalAlignment = Alignment.End) {
-                TextButton(onClick = onAllow) {
+            Column(
+                horizontalAlignment = Alignment.End,
+                // ダイアログは MainActivity とは別のコンポジションルートになり、
+                // MainActivity で設定した testTagsAsResourceId が届かないためここでも設定する
+                modifier = Modifier.semantics { testTagsAsResourceId = true },
+            ) {
+                TextButton(
+                    onClick = onAllow,
+                    modifier = Modifier.testTag(AutoplayPermissionDialogTestTags.Allow.testTag),
+                ) {
                     Text("許可")
                 }
-                TextButton(onClick = onAllowOnce) {
+                TextButton(
+                    onClick = onAllowOnce,
+                    modifier = Modifier.testTag(AutoplayPermissionDialogTestTags.AllowOnce.testTag),
+                ) {
                     Text("今回のみ許可")
                 }
-                TextButton(onClick = onDeny) {
+                TextButton(
+                    onClick = onDeny,
+                    modifier = Modifier.testTag(AutoplayPermissionDialogTestTags.Deny.testTag),
+                ) {
                     Text("却下")
                 }
             }
         },
     )
+}
+
+sealed interface AutoplayPermissionDialogTestTags {
+    val id: String
+    val testTag get() = "${AutoplayPermissionDialogTestTags::class.java.name}#$id"
+
+    object Allow : AutoplayPermissionDialogTestTags {
+        override val id = "allow"
+    }
+
+    object AllowOnce : AutoplayPermissionDialogTestTags {
+        override val id = "allow_once"
+    }
+
+    object Deny : AutoplayPermissionDialogTestTags {
+        override val id = "deny"
+    }
 }
 
 @Composable
