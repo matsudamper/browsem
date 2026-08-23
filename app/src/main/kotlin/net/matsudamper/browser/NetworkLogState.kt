@@ -97,6 +97,7 @@ internal class NetworkLogStateHolder(
 
     // サムネイル表示の対象。createUiState で最新の表示内容に更新する
     private var thumbnailTargets: List<NetworkLogEntry> = emptyList()
+    private var thumbnailTargetIds: Set<String> = emptySet()
 
     /** サムネイルの取得状態 */
     private class ThumbnailState(val bitmap: ImageBitmap?)
@@ -171,9 +172,10 @@ internal class NetworkLogStateHolder(
         val showThumbnail = filter == NetworkLogUiState.ResourceFilter.Image
         val shown = filtered.asReversed()
         thumbnailTargets = if (showThumbnail) shown.take(MAX_THUMBNAIL_COUNT) else emptyList()
+        thumbnailTargetIds = thumbnailTargets.mapTo(mutableSetOf()) { it.requestId }
         return NetworkLogUiState(
             callbacks = callbacks,
-            entries = shown.map { it.toUiStateEntry(showThumbnail = showThumbnail) },
+            entries = shown.map { it.toUiStateEntry() },
             filters = createFilters(tabEntries),
             searchQuery = searchQuery,
             summary = NetworkLogUiState.Summary(
@@ -211,6 +213,12 @@ internal class NetworkLogStateHolder(
 
     /** 画像フィルタ選択中の一覧に出すサムネイルを取得する */
     fun loadThumbnails() {
+        // ログから消えたリクエストのサムネイルを持ち続けないよう、
+        // ログの保持上限に合わせて捨てる
+        if (thumbnails.isNotEmpty()) {
+            val livingIds = store.entries.value.mapTo(mutableSetOf()) { it.requestId }
+            thumbnails.keys.retainAll(livingIds)
+        }
         thumbnailTargets.forEach { entry ->
             // 取得済み・取得失敗済みのものは再取得しない
             if (thumbnails.containsKey(entry.requestId)) return@forEach
@@ -316,7 +324,7 @@ internal class NetworkLogStateHolder(
         }
     }
 
-    private fun NetworkLogEntry.toUiStateEntry(showThumbnail: Boolean): NetworkLogUiState.Entry {
+    private fun NetworkLogEntry.toUiStateEntry(): NetworkLogUiState.Entry {
         return NetworkLogUiState.Entry(
             id = requestId,
             method = method,
@@ -328,7 +336,8 @@ internal class NetworkLogStateHolder(
             sizeLabel = NetworkLogFormat.formatBytes(sizeBytes),
             durationLabel = NetworkLogFormat.formatDuration(durationMillis),
             fromCache = fromCache,
-            thumbnail = if (showThumbnail) {
+            // 取得対象外の項目に枠だけ出すと、埋まらないままになるため出さない
+            thumbnail = if (thumbnailTargetIds.contains(requestId)) {
                 NetworkLogUiState.Thumbnail(bitmap = thumbnails[requestId]?.bitmap)
             } else {
                 null

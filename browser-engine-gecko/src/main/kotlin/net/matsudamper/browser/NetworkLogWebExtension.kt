@@ -47,8 +47,10 @@ class NetworkLogWebExtension(
     private val attachedSessions: MutableSet<GeckoSession> =
         Collections.newSetFromMap(ConcurrentHashMap())
 
-    // 本文取得の待ち受けコールバック
-    private val bodyCallbacks = ConcurrentHashMap<String, (NetworkLogBody) -> Unit>()
+    // 本文取得の待ち受けコールバック。
+    // 同じリクエストをサムネイルと詳細プレビューが同時に要求しうるため、
+    // リクエストごとに複数のコールバックを保持して結果を共有する
+    private val bodyCallbacks = ConcurrentHashMap<String, MutableList<(NetworkLogBody) -> Unit>>()
 
     fun install(runtime: GeckoRuntime) {
         Log.d(TAG, "install() 開始: uri=$EXTENSION_URI")
@@ -106,7 +108,16 @@ class NetworkLogWebExtension(
             onResult(NetworkLogBody.Failure(NetworkLogBody.Failure.Reason.Unavailable))
             return
         }
-        bodyCallbacks[requestId] = onResult
+        // 既に同じリクエストの取得が進行中なら、取得は増やさず結果だけ受け取る
+        var isFirstRequest = false
+        bodyCallbacks.compute(requestId) { _, current ->
+            val callbacks = current ?: mutableListOf<(NetworkLogBody) -> Unit>().also {
+                isFirstRequest = true
+            }
+            callbacks.add(onResult)
+            callbacks
+        }
+        if (!isFirstRequest) return
         runCatching {
             port.postMessage(
                 JSONObject().apply {
@@ -118,8 +129,10 @@ class NetworkLogWebExtension(
             )
         }.onFailure { error ->
             Log.w(TAG, "requestBody: 送信に失敗", error)
-            bodyCallbacks.remove(requestId)
-            onResult(NetworkLogBody.Failure(NetworkLogBody.Failure.Reason.Unavailable))
+            val callbacks = bodyCallbacks.remove(requestId).orEmpty()
+            callbacks.forEach { callback ->
+                callback(NetworkLogBody.Failure(NetworkLogBody.Failure.Reason.Unavailable))
+            }
         }
     }
 
@@ -204,8 +217,8 @@ class NetworkLogWebExtension(
 
     /** 応答待ちの本文取得をすべて取得不可として完了させる */
     private fun failPendingBodyRequests() {
-        val pending = bodyCallbacks.keys.toList().mapNotNull { requestId ->
-            bodyCallbacks.remove(requestId)
+        val pending = bodyCallbacks.keys.toList().flatMap { requestId ->
+            bodyCallbacks.remove(requestId).orEmpty()
         }
         if (pending.isEmpty()) return
         mainHandler.post {
@@ -217,10 +230,13 @@ class NetworkLogWebExtension(
 
     private fun handleBody(json: JSONObject) {
         val requestId = json.optString("requestId").takeIf { it.isNotEmpty() } ?: return
-        val callback = bodyCallbacks.remove(requestId) ?: return
+        val callbacks = bodyCallbacks.remove(requestId).orEmpty()
+        if (callbacks.isEmpty()) return
         val body = json.toNetworkLogBody()
         mainHandler.post {
-            callback(body)
+            callbacks.forEach { callback ->
+                callback(body)
+            }
         }
     }
 
