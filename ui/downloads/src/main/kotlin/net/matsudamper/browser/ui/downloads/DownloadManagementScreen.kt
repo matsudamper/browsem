@@ -322,11 +322,14 @@ private fun DownloadItemRow(
 
                         is DownloadManagementScreenUiState.DownloadStatus.Paused -> {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                DownloadIconButton(
-                                    iconRes = R.drawable.ic_play_arrow,
-                                    contentDescription = "再開",
-                                    onClick = onResume,
-                                )
+                                // 再取得できないURL（blob: 等）は再開しても必ず失敗するためボタンを出さない
+                                if (status.canResume) {
+                                    DownloadIconButton(
+                                        iconRes = R.drawable.ic_play_arrow,
+                                        contentDescription = "再開",
+                                        onClick = onResume,
+                                    )
+                                }
                                 DownloadIconButton(
                                     iconRes = R.drawable.ic_close,
                                     contentDescription = "キャンセル",
@@ -393,6 +396,14 @@ private fun DownloadItemRow(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
+                        // 再開ボタンが無い理由が分かるようにする
+                        if (!status.canResume) {
+                            Text(
+                                text = "再開できません。再度ダウンロードしてください。",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                        }
                         LinearProgressIndicator(
                             progress = { status.progress / 100f },
                             modifier = Modifier
@@ -410,6 +421,14 @@ private fun DownloadItemRow(
                     }
 
                     is DownloadManagementScreenUiState.DownloadStatus.Failed -> {
+                        // 「失敗」だけでは対処できないため、原因が分かっている場合は必ず表示する
+                        status.reason?.let { reason ->
+                            Text(
+                                text = reason,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                        }
                         if (!status.canResume) {
                             Text(
                                 text = "再試行するには再度ダウンロードしてください。",
@@ -515,9 +534,41 @@ private fun PreviewPaused() {
                     progress = 40,
                     totalRead = 40L * 1024 * 1024,
                     contentLength = 100L * 1024 * 1024,
+                    canResume = true,
                 ),
                 enqueuedAt = 0L,
                 originPageUrl = "https://example.com/page",
+            ),
+            onCancel = {},
+            onPause = {},
+            onOpenFile = {},
+            onResume = {},
+            onOpenOriginPage = {},
+            loadPreview = { DownloadManagementScreenUiState.Preview.FileType(
+                DownloadManagementScreenUiState.DownloadFileType.UNKNOWN,
+            ) },
+            isHighlighted = false,
+            onHighlightFinished = {},
+        )
+    }
+}
+
+@Preview(name = "一時停止・再開不可")
+@Composable
+private fun PreviewPausedCannotResume() {
+    MaterialTheme {
+        DownloadItemRow(
+            item = DownloadManagementScreenUiState.DownloadItem(
+                id = UUID.randomUUID(),
+                fileName = "home_24dp.svg",
+                status = DownloadManagementScreenUiState.DownloadStatus.Paused(
+                    progress = 40,
+                    totalRead = 40L * 1024 * 1024,
+                    contentLength = 100L * 1024 * 1024,
+                    canResume = false,
+                ),
+                enqueuedAt = 0L,
+                originPageUrl = "https://fonts.google.com/icons",
             ),
             onCancel = {},
             onPause = {},
@@ -541,7 +592,10 @@ private fun PreviewFailedCanResume() {
             item = DownloadManagementScreenUiState.DownloadItem(
                 id = UUID.randomUUID(),
                 fileName = "example.zip",
-                status = DownloadManagementScreenUiState.DownloadStatus.Failed(canResume = true),
+                status = DownloadManagementScreenUiState.DownloadStatus.Failed(
+                    canResume = true,
+                    reason = "通信が途中で切断されました (1.0 MB / 5.0 MB)",
+                ),
                 enqueuedAt = 0L,
                 originPageUrl = "https://example.com/page",
             ),
@@ -680,7 +734,10 @@ private fun PreviewFailedCannotResume() {
             item = DownloadManagementScreenUiState.DownloadItem(
                 id = UUID.randomUUID(),
                 fileName = "example.zip",
-                status = DownloadManagementScreenUiState.DownloadStatus.Failed(canResume = false),
+                status = DownloadManagementScreenUiState.DownloadStatus.Failed(
+                    canResume = false,
+                    reason = "ページ内で生成された一時データ (blob) のため、取得し直せません",
+                ),
                 enqueuedAt = 0L,
                 originPageUrl = null,
             ),

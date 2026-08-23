@@ -99,6 +99,8 @@ class CustomTabActivity : ComponentActivity() {
                         testTagsAsResourceId = true
                     },
                 ) {
+                    // カスタムタブは設定・サイト設定などの全画面系画面を持たないため、
+                    // BrowserAppShell は挟まず CustomTabScreen を直接描画する
                     CustomTabScreen(
                         initialUrl = initialUrl.takeIf { it.isNotBlank() } ?: browserSettings.resolvedHomepageUrl(),
                         customTabsSessionToken = customTabsSessionToken,

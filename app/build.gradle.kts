@@ -14,6 +14,7 @@ val useCiDebugKeystore = ciDebugKeystoreFile != null && ciDebugKeystoreFile.exis
 android {
     namespace = "net.matsudamper.browser"
     compileSdk = 37
+    compileSdkMinor = 1
 
     defaultConfig {
         applicationId = "net.matsudamper.browser"
@@ -138,6 +139,7 @@ dependencies {
     implementation(libs.androidx.browser)
     implementation(libs.mozilla.geckoview)
     implementation(libs.mozilla.publicsuffixlist)
+    implementation(libs.androidsvg)
     implementation(libs.mlkit.translate)
     implementation(libs.mlkit.language.id)
     implementation(libs.kotlinx.coroutines.play.services)
@@ -167,10 +169,14 @@ dependencies {
     testImplementation(libs.junit4)
     testImplementation(libs.composable.preview.scanner)
     testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.robolectric)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.androidx.test.espresso.core)
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     androidTestImplementation(libs.androidx.test.uiautomator)
+    // テスト用ページを 127.0.0.1 の HTTP で配信するローカルサーバー (LocalHttpServer)
+    androidTestImplementation(libs.ktor.server.cio)
+    androidTestImplementation(libs.ktor.server.partial.content)
     androidTestUtil(libs.androidx.test.orchestrator)
 }

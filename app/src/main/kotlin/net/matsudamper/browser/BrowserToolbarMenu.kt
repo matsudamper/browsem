@@ -1,6 +1,8 @@
 package net.matsudamper.browser
 
+import android.content.res.Configuration
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -34,6 +36,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import net.matsudamper.browser.data.ThemeMode
 import net.matsudamper.browser.ui.common.BrowserTheme
 import net.matsudamper.browser.resources.R as ResourcesR
 
@@ -63,6 +66,12 @@ internal fun ToolbarMenu(
     onPageZoomIn: () -> Unit,
     onPageZoomOut: () -> Unit,
     onResetPageZoom: () -> Unit,
+    extensionActions: List<WebExtensionActionController.ActionUiState> = emptyList(),
+    extensionActionScrollState: ScrollState? = null,
+    onExtensionActionClick: (String) -> Unit = {},
+    onExtensionActionMove: (fromIndex: Int, toIndex: Int) -> Unit = { _, _ -> },
+    onExtensionActionMoveEnd: () -> Unit = {},
+    onExtensionActionMoveCancel: () -> Unit = {},
     showOpenSettings: Boolean = true,
     showAddToHomeScreen: Boolean = true,
     showHome: Boolean = true,
@@ -98,6 +107,12 @@ internal fun ToolbarMenu(
             onPageZoomIn = onPageZoomIn,
             onPageZoomOut = onPageZoomOut,
             onResetPageZoom = onResetPageZoom,
+            extensionActions = extensionActions,
+            extensionActionScrollState = extensionActionScrollState,
+            onExtensionActionClick = onExtensionActionClick,
+            onExtensionActionMove = onExtensionActionMove,
+            onExtensionActionMoveEnd = onExtensionActionMoveEnd,
+            onExtensionActionMoveCancel = onExtensionActionMoveCancel,
             showOpenSettings = showOpenSettings,
             showAddToHomeScreen = showAddToHomeScreen,
             showHome = showHome,
@@ -134,6 +149,12 @@ private fun ToolbarMenuContent(
     onPageZoomIn: () -> Unit,
     onPageZoomOut: () -> Unit,
     onResetPageZoom: () -> Unit,
+    extensionActions: List<WebExtensionActionController.ActionUiState>,
+    extensionActionScrollState: ScrollState?,
+    onExtensionActionClick: (String) -> Unit,
+    onExtensionActionMove: (fromIndex: Int, toIndex: Int) -> Unit,
+    onExtensionActionMoveEnd: () -> Unit,
+    onExtensionActionMoveCancel: () -> Unit,
     showOpenSettings: Boolean,
     showAddToHomeScreen: Boolean,
     showHome: Boolean,
@@ -361,6 +382,21 @@ private fun ToolbarMenuContent(
                 }
             }
         }
+        // このタブに対して有効な拡張機能のアイコン行。短押しでポップアップ、長押しで並び替え
+        if (extensionActions.isNotEmpty() && extensionActionScrollState != null) {
+            HorizontalDivider()
+            ExtensionActionRow(
+                actions = extensionActions,
+                scrollState = extensionActionScrollState,
+                onActionClick = { extensionId ->
+                    onDismissRequest()
+                    onExtensionActionClick(extensionId)
+                },
+                onActionMove = onExtensionActionMove,
+                onActionMoveEnd = onExtensionActionMoveEnd,
+                onActionMoveCancel = onExtensionActionMoveCancel,
+            )
+        }
         HorizontalDivider()
         DropdownMenuItem(
             text = { Text(text = "PCページ") },
@@ -536,10 +572,10 @@ private fun MenuColumnLabel(
 }
 
 @Preview(name = "ToolbarMenuLight")
-@Preview(name = "ToolbarMenuDark", uiMode = android.content.res.Configuration.UI_MODE_NIGHT_YES)
+@Preview(name = "ToolbarMenuDark", uiMode = Configuration.UI_MODE_NIGHT_YES)
 @Composable
 private fun PreviewToolbarMenuContent() {
-    BrowserTheme(themeMode = net.matsudamper.browser.data.ThemeMode.THEME_SYSTEM) {
+    BrowserTheme(themeMode = ThemeMode.THEME_SYSTEM) {
         Surface(modifier = Modifier.width(280.dp)) {
             ToolbarMenuContent(
                 onDismissRequest = {},
@@ -564,6 +600,20 @@ private fun PreviewToolbarMenuContent() {
                 onPageZoomIn = {},
                 onPageZoomOut = {},
                 onResetPageZoom = {},
+                extensionActions = List(5) { index ->
+                    WebExtensionActionController.ActionUiState(
+                        extensionId = "extension_$index",
+                        title = "拡張機能 $index",
+                        icon = null,
+                        badgeText = if (index == 0) "3" else null,
+                        isEnabled = index != 1,
+                    )
+                },
+                extensionActionScrollState = ScrollState(initial = 0),
+                onExtensionActionClick = {},
+                onExtensionActionMove = { _, _ -> },
+                onExtensionActionMoveEnd = {},
+                onExtensionActionMoveCancel = {},
                 showOpenSettings = true,
                 showAddToHomeScreen = true,
                 showHome = true,
@@ -571,6 +621,53 @@ private fun PreviewToolbarMenuContent() {
                 onOpenSiteSettings = {},
                 onOpenDownloads = {},
                 onOpenDevTools = {},
+            )
+        }
+    }
+}
+
+@Preview(name = "ToolbarMenuWebAppLight")
+@Preview(name = "ToolbarMenuWebAppDark", uiMode = Configuration.UI_MODE_NIGHT_YES)
+@Composable
+private fun PreviewToolbarMenuContentWebApp() {
+    BrowserTheme(themeMode = ThemeMode.THEME_SYSTEM) {
+        Surface(modifier = Modifier.width(280.dp)) {
+            ToolbarMenuContent(
+                onDismissRequest = {},
+                onRefresh = {},
+                onSuperRefresh = {},
+                onHome = {},
+                onForward = {},
+                canGoForward = true,
+                onBack = {},
+                canGoBack = true,
+                onLongPressHistory = {},
+                isPcMode = false,
+                onPcModeToggle = {},
+                showInstallExtensionItem = false,
+                onInstallExtension = {},
+                onTranslatePage = {},
+                onShare = {},
+                onFindInPage = {},
+                onOpenSettings = {},
+                onAddToHomeScreen = {},
+                pageZoomPercent = 100,
+                onPageZoomIn = {},
+                onPageZoomOut = {},
+                onResetPageZoom = {},
+                extensionActions = emptyList(),
+                extensionActionScrollState = null,
+                onExtensionActionClick = {},
+                onExtensionActionMove = { _, _ -> },
+                onExtensionActionMoveEnd = {},
+                onExtensionActionMoveCancel = {},
+                showOpenSettings = false,
+                showAddToHomeScreen = false,
+                showHome = true,
+                onOpenInBrowser = {},
+                onOpenSiteSettings = {},
+                onOpenDownloads = null,
+                onOpenDevTools = null,
             )
         }
     }

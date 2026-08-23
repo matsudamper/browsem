@@ -30,7 +30,16 @@
     <!--
         Android 11 (API 30) 以降のパッケージ可視性制限に対応するため、
         App Links チェックおよびカスタムスキーム解決に必要なアプリを可視化する。
+
+        ブラウザは intent:// のディープリンクで任意のカスタムスキーム・パッケージを
+        解決する必要があり、対象を <queries> に列挙できない。QUERY_ALL_PACKAGES が無いと
+        インストール済みのアプリでも resolveActivity が null を返し、アプリ名を表示できず
+        フォールバックURLに流れてしまうため、ブラウザの中核機能として宣言する。
     -->
+    <uses-permission
+        android:name="android.permission.QUERY_ALL_PACKAGES"
+        tools:ignore="QueryAllPackagesPermission" />
+
     <queries>
         <!-- App Links を持つアプリ（Play Store、YouTube など）および他のブラウザを可視化 -->
         <intent>

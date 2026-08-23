@@ -18,10 +18,13 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 import net.matsudamper.browser.data.download.DownloadRepository
+import net.matsudamper.browser.download.DownloadByteFormat
 import net.matsudamper.browser.download.DownloadEngine
+import net.matsudamper.browser.download.DownloadFailureReason
 import net.matsudamper.browser.download.DownloadHttpClient
 import net.matsudamper.browser.download.DownloadHttpResponse
 import net.matsudamper.browser.download.DownloadMetadata
+import net.matsudamper.browser.download.DownloadUrl
 import net.matsudamper.browser.download.GeckoDownloadHttpClient
 import net.matsudamper.browser.download.PendingDownloadBodyStore
 import net.matsudamper.browser.download.WebResponseDownloadResponse
@@ -132,6 +135,8 @@ internal class DownloadWorker(
             throw e
         } catch (e: Exception) {
             e.printStackTrace()
+            // 「失敗」表示だけでは原因が分からないため、例外の内容をレコードに残して UI・通知に出す
+            val failureReason = DownloadFailureReason.from(e)
             val savedUri = partialResultUri
             if (savedUri != null && partialResultTotalRead > 0) {
                 // 部分ファイルが存在する場合は再開可能として保存する
@@ -141,13 +146,14 @@ internal class DownloadWorker(
                     fileName = partialResultFileName,
                     totalRead = partialResultTotalRead,
                     contentLength = partialResultContentLength,
+                    failureReason = failureReason,
                 )
             } else {
                 // partialResultUri が非null かつ 0バイトの場合は孤立したMediaStoreエントリを削除する
                 savedUri?.let { context.contentResolver.delete(it, null, null) }
-                repository.updateFailed(id.toString())
+                repository.updateFailed(id.toString(), failureReason)
             }
-            postFailureNotification(stableWorkerId)
+            postFailureNotification(stableWorkerId, failureReason)
             Result.failure()
         }
     }
@@ -162,6 +168,33 @@ internal class DownloadWorker(
         if (repository.isStopRequested(id.toString())) {
             throw CancellationException("ダウンロードがキャンセルまたは一時停止されました")
         }
+    }
+
+    /**
+     * Content-Disposition・URLからダウンロードファイル名を推測する。
+     *
+     * URLUtil.guessFileName に mimeType を渡すと、ファイル名の拡張子が mimeType と
+     * 「一致しない」と判定された場合に、mimeType 由来の拡張子で上書きされる。
+     * この「拡張子」の切り出しには最初のピリオドが使われるため、
+     * "tab_volume_controller-1.0.2.zip" のようにバージョン番号でピリオドを複数含む
+     * ファイル名では、"1.0.2.zip" 部分が丸ごと消えてしまう。
+     * GitHub Releases 等が返す Content-Type: application/octet-stream は
+     * MimeTypeMap 上 ".bin" に対応付けられているため、
+     * "tab_volume_controller-1.0.2.zip" → "tab_volume_controller-1.bin" のように壊れる。
+     *
+     * そのため、Content-Disposition・URL由来のファイル名に拡張子が既にある場合は
+     * mimeType を渡さずそのまま採用し、拡張子が全く無い場合のみ mimeType から補完する。
+     */
+    private fun guessDownloadFileName(urlString: String, contentDisposition: String?, mimeType: String): String {
+        val guessedWithoutMimeType = URLUtil.guessFileName(urlString, contentDisposition, null)
+        // mimeType を渡さない場合、拡張子が全く無いファイル名には URLUtil が機械的に
+        // ".bin" を補うため、そのケースに限り mimeType を渡して適切な拡張子を補完させる
+        val fileName = if (guessedWithoutMimeType.endsWith(".bin", ignoreCase = true)) {
+            URLUtil.guessFileName(urlString, contentDisposition, mimeType)
+        } else {
+            guessedWithoutMimeType
+        }
+        return fileName.ifBlank { "download-${System.currentTimeMillis()}" }
     }
 
     private fun postCompletionNotification(fileName: String, stableWorkerId: String) {
@@ -189,7 +222,7 @@ internal class DownloadWorker(
         notificationManager.notify(NOTIFICATION_ID_COMPLETE_BASE + positiveHash, notification)
     }
 
-    private suspend fun postFailureNotification(stableWorkerId: String) {
+    private suspend fun postFailureNotification(stableWorkerId: String, failureReason: String) {
         // フォアグラウンド通知と異なるIDを使う。
         // フォアグラウンド通知と同じIDを使うと、WorkManager がフォアグラウンドサービス停止時に
         // stopForeground(STOP_FOREGROUND_REMOVE) で同IDの通知を削除してしまうため。
@@ -206,11 +239,15 @@ internal class DownloadWorker(
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
         val fileName = repository.getByCurrentWorkerId(id)?.fileName.orEmpty()
-
+        // 通知を開かなくても原因が分かるよう、タイトルに失敗した旨、本文に原因を表示する。
+        // 原因は1行に収まらないことがあるため BigTextStyle で展開できるようにする
+        val title = fileName.ifBlank { context.getString(R.string.download_notification_failed) }
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_notify_error)
-            .setContentTitle(fileName)
-            .setContentText(context.getString(R.string.download_notification_failed))
+            .setContentTitle(title)
+            .setSubText(context.getString(R.string.download_notification_failed))
+            .setContentText(failureReason)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(failureReason))
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
             .build()
@@ -228,20 +265,27 @@ internal class DownloadWorker(
         // パスワード submit(POST)・ワンタイムURL・セッション依存のダウンロードは
         // URL を GET し直すと 0 バイトになるため、元レスポンスのボディを優先する。
         val pendingResponse = PendingDownloadBodyStore.take(id.toString())
-        val response: DownloadHttpResponse = pendingResponse?.let { WebResponseDownloadResponse(it) }
-            ?: httpClient.fetch(urlString, referrerUrl, 0L)
+        val response: DownloadHttpResponse = if (pendingResponse != null) {
+            WebResponseDownloadResponse(pendingResponse)
+        } else {
+            // blob: URL は生成元ドキュメントでしか解決できず、GET し直しても取得できない。
+            // 何が起きたのか分かるメッセージにして、原因不明の失敗として扱わないようにする
+            if (!DownloadUrl.isRefetchable(urlString)) {
+                throw IOException(BLOB_NOT_REFETCHABLE_MESSAGE)
+            }
+            httpClient.fetch(urlString, referrerUrl, 0L)
+        }
 
         try {
             val statusCode = response.statusCode
-            if (statusCode !in 200 until 300) {
+            if (!DownloadMetadata.isSuccessStatus(statusCode)) {
                 throw IOException("HTTP エラー: $statusCode")
             }
 
             val body = response.body ?: throw IOException("レスポンスボディが空です。")
             val contentLength = DownloadMetadata.parseContentLength(response.header("Content-Length"))
             val mimeType = DownloadMetadata.parseMimeType(response.header("Content-Type"))
-            val fileName = URLUtil.guessFileName(urlString, response.header("Content-Disposition"), mimeType)
-                .ifBlank { "download-${System.currentTimeMillis()}" }
+            val fileName = guessDownloadFileName(urlString, response.header("Content-Disposition"), mimeType)
 
             setForeground(createForegroundInfo(notificationId, 0, contentLength <= 0, fileName, 0L, contentLength, stableWorkerId))
             repository.updateProgress(id.toString(), fileName, 0, 0L, contentLength)
@@ -319,6 +363,12 @@ internal class DownloadWorker(
     ): Pair<Uri, String> {
         val resolver = context.contentResolver
 
+        // 再開は必ずURLの再取得を伴うため、再取得できないURLはここで止める。
+        // UI からは再開ボタンを出していないが、UI 以外の経路でも不正な再取得を始めないようにする
+        if (!DownloadUrl.isRefetchable(urlString)) {
+            throw IOException(BLOB_NOT_REFETCHABLE_MESSAGE)
+        }
+
         // 部分ファイルの実際のサイズを取得する（DBの値と一致しない場合に備える）
         val actualFileSize = resolver.openFileDescriptor(partialUri, "r")?.use { it.statSize } ?: 0L
         val rangeStart = actualFileSize
@@ -327,8 +377,9 @@ internal class DownloadWorker(
         try {
             val statusCode = response.statusCode
 
-            // サーバーがRangeリクエストをサポートしていない場合（200 OK）は最初からやり直す
-            if (statusCode == 200) {
+            // サーバーがRangeリクエストをサポートしていない場合（200 OK）は最初からやり直す。
+            // 非HTTP（statusCode が無い）レスポンスも Range 継続はできないため同様に扱う
+            if (statusCode == 200 || statusCode == DownloadMetadata.NO_HTTP_STATUS) {
                 // 部分ファイルを削除して新規ダウンロードを開始する
                 resolver.delete(partialUri, null, null)
                 partialResultUri = null
@@ -347,8 +398,7 @@ internal class DownloadWorker(
                 ?: (rangeStart + DownloadMetadata.parseContentLength(response.header("Content-Length")))
             val contentLength = totalFileSize
             val mimeType = DownloadMetadata.parseMimeType(response.header("Content-Type"))
-            val fileName = URLUtil.guessFileName(urlString, response.header("Content-Disposition"), mimeType)
-                .ifBlank { "download-${System.currentTimeMillis()}" }
+            val fileName = guessDownloadFileName(urlString, response.header("Content-Disposition"), mimeType)
 
             setForeground(createForegroundInfo(notificationId, if (contentLength > 0) (rangeStart * 100 / contentLength).toInt() else 0, contentLength <= 0, fileName, rangeStart, contentLength, stableWorkerId))
 
@@ -431,6 +481,9 @@ internal class DownloadWorker(
     }
 
     companion object {
+        /** blob: URL を取得し直そうとした場合の失敗理由 */
+        private const val BLOB_NOT_REFETCHABLE_MESSAGE = "ページ内で生成された一時データ (blob) のため、取得し直せません"
+
         /** 進捗（通知・Room）の更新間隔。頻繁な更新を避けるためのレート制限 */
         private const val PROGRESS_UPDATE_INTERVAL_MILLIS = 1000L
 
@@ -472,11 +525,7 @@ internal class DownloadWorker(
             }
         }
 
-        fun formatBytes(bytes: Long): String = when {
-            bytes >= 1024L * 1024 -> "%.1f MB".format(bytes / (1024.0 * 1024.0))
-            bytes >= 1024 -> "%.1f KB".format(bytes / 1024.0)
-            else -> "$bytes B"
-        }
+        fun formatBytes(bytes: Long): String = DownloadByteFormat.format(bytes)
 
         fun ensureNotificationChannel(context: Context) {
             val notificationManager = context.getSystemService(NotificationManager::class.java)

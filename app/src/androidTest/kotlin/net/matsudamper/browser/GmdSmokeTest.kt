@@ -16,6 +16,7 @@ import androidx.compose.ui.test.performTextReplacement
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import net.matsudamper.browser.ui.tabs.TabsScreenTestTags
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
@@ -37,18 +38,30 @@ class GmdSmokeTest {
     @get:Rule
     val composeRule = createAndroidComposeRule<MainActivity>()
 
+    private var localHttpServer: LocalHttpServer? = null
+
+    @After
+    fun tearDown() {
+        localHttpServer?.close()
+        localHttpServer = null
+    }
+
     /**
      * ローカルHTMLを開いたときにツールバーの色ソースが `default` から `theme` に切り替わることを確認する。
+     *
+     * テーマカラーはビルトイン拡張のコンテンツスクリプト経由で取得する。
+     * GeckoView 153 以降は拡張機能が file URL へアクセスできないため、
+     * ページはループバックの HTTP サーバーから配信する(LocalHttpServer 参照)。
      */
     @Test
     fun openHatenablogAndApplyThemeColor() {
         ensureBrowserScreen()
-        val localThemeColorPageUri = prepareLocalThemeColorPageUri()
+        val themeColorPageUrl = startThemeColorPageServer()
         val initialToolbarState = waitForToolbarState()
         assertEquals("default", initialToolbarState.source)
 
         openLocalPage(
-            url = localThemeColorPageUri,
+            url = themeColorPageUrl,
             urlMarker = LOCAL_THEME_COLOR_INDEX_FILE_NAME,
         )
 
@@ -58,7 +71,10 @@ class GmdSmokeTest {
 
         val resolvedToolbarState = waitForToolbarState()
         val currentUrl = composeRule.currentUrlBarText()
-        assertTrue(currentUrl.startsWith("file:"))
+        assertTrue(
+            "テーマカラーページのURLが一致しない: currentUrl=\"$currentUrl\"",
+            currentUrl.startsWith(themeColorPageUrl.substringBeforeLast('/')),
+        )
         assertTrue(currentUrl.contains(LOCAL_THEME_COLOR_INDEX_FILE_NAME))
         assertEquals("theme", resolvedToolbarState.source)
         assertNotEquals(initialToolbarState.argbHex, resolvedToolbarState.argbHex)
@@ -358,9 +374,10 @@ class GmdSmokeTest {
     }
 
     /**
-     * テーマカラー検証用のローカルHTMLをキャッシュへ展開し、file URI を返す。
+     * テーマカラー検証用のローカルHTMLをキャッシュへ展開し、
+     * ループバック HTTP サーバーから配信してその URL を返す。
      */
-    private fun prepareLocalThemeColorPageUri(): String {
+    private fun startThemeColorPageServer(): String {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val targetContext = instrumentation.targetContext
         val destinationDir = File(targetContext.cacheDir, LOCAL_THEME_COLOR_DIR_NAME).apply { mkdirs() }
@@ -371,7 +388,9 @@ class GmdSmokeTest {
                 input.copyTo(output)
             }
         }
-        return destination.toURI().toString()
+        val server = LocalHttpServer(destinationDir)
+        localHttpServer = server
+        return server.url(LOCAL_THEME_COLOR_INDEX_FILE_NAME)
     }
 
     /**

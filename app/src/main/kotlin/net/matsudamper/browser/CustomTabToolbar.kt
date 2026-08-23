@@ -36,6 +36,7 @@ internal sealed interface CustomTabToolbarTestTags {
     val testTag get() = "${CustomTabToolbarTestTags::class.java.name}#$id"
 
     object Toolbar : CustomTabToolbarTestTags { override val id = "custom_tab_toolbar" }
+    object MenuButton : CustomTabToolbarTestTags { override val id = "custom_tab_menu_button" }
 }
 
 @Composable
@@ -63,11 +64,14 @@ internal fun CustomTabToolbar(
     onAddToHomeScreen: () -> Unit,
     showAddToHomeScreen: Boolean,
     onOpenInBrowser: (() -> Unit)?,
+    // null の場合はメニューに「サイトの設定」を表示しない（設定画面のナビゲーションスタックを持たないカスタムタブ用）
+    onOpenSiteSettings: (() -> Unit)?,
     pageZoomPercent: Int,
     onPageZoomIn: () -> Unit,
     onPageZoomOut: () -> Unit,
     onResetPageZoom: () -> Unit,
     showCloseButton: Boolean = true,
+    showHome: Boolean = false,
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
     val resolvedToolbarColor = toolbarColor ?: MaterialTheme.colorScheme.primaryContainer
@@ -123,7 +127,10 @@ internal fun CustomTabToolbar(
                 )
             }
             Box {
-                IconButton(onClick = { menuExpanded = true }) {
+                IconButton(
+                    modifier = Modifier.testTag(CustomTabToolbarTestTags.MenuButton.testTag),
+                    onClick = { menuExpanded = true },
+                ) {
                     Icon(
                         painter = painterResource(ResourcesR.drawable.ic_more_vert_24dp),
                         contentDescription = "メニュー",
@@ -155,8 +162,9 @@ internal fun CustomTabToolbar(
                     onResetPageZoom = onResetPageZoom,
                     showOpenSettings = false,
                     showAddToHomeScreen = showAddToHomeScreen,
-                    showHome = false,
+                    showHome = showHome,
                     onOpenInBrowser = onOpenInBrowser,
+                    onOpenSiteSettings = onOpenSiteSettings,
                 )
             }
         }

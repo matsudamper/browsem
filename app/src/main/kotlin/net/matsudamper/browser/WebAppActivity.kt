@@ -72,6 +72,8 @@ class WebAppActivity : ComponentActivity() {
             val browserSessionLifecycleController = browserViewModel.browserSessionLifecycleController
             val settings by settingsRepository.settings.collectAsState(initial = null)
             val browserSettings = settings ?: return@setContent
+            val resolvedInitialUrl = initialUrl ?: browserSettings.resolvedHomepageUrl()
+            val webAppPinnedHost = runCatching { java.net.URI(resolvedInitialUrl).host }.getOrNull()
             val webAppScreenViewModel = viewModel(initializer = {
                 WebAppScreenViewModel(
                     historyRepository = historyRepository,
@@ -86,64 +88,61 @@ class WebAppActivity : ComponentActivity() {
             }
 
             BrowserTheme(themeMode = browserSettings.themeMode) {
-                WebAppScreen(
-                    initialUrl = initialUrl ?: browserSettings.resolvedHomepageUrl(),
+                BrowserAppShell(
                     browserTabController = browserTabController,
-                    uiState = uiState,
-                ) { modifier, browserTab, webAppUiState ->
-                    // Recents (最近のアプリ) のサムネイル左上に表示されるアイコンとラベルを
-                    // ページのタイトル / favicon に追従させる。setTaskDescription が呼ばれない
-                    // 場合はアプリの label / icon (ic_firefox_like) にフォールバックするため、
-                    // ホーム追加のアプリピンと同じく "アプリのデフォルトアイコン" に見えてしまう。
-                    val taskTitle = browserTab.title
-                    val taskFavicon = browserTab.faviconBitmap
-                    LaunchedEffect(taskTitle, taskFavicon) {
-                        updateTaskDescription(taskTitle, taskFavicon)
+                    browserSessionLifecycleController = browserSessionLifecycleController,
+                    runtime = runtime,
+                ) { outerNavActions ->
+                    WebAppScreen(
+                        initialUrl = resolvedInitialUrl,
+                        browserTabController = browserTabController,
+                        uiState = uiState,
+                    ) { modifier, browserTab, webAppUiState ->
+                        val taskTitle = browserTab.title
+                        val taskFavicon = browserTab.faviconBitmap
+                        LaunchedEffect(taskTitle, taskFavicon) {
+                            updateTaskDescription(taskTitle, taskFavicon)
+                        }
+                        val currentUrl = browserTab.currentUrl
+                        LaunchedEffect(currentUrl) {
+                            fetchHighQualityFavicon(browserTab, currentUrl)
+                        }
+                        GeckoBrowserTab(
+                            modifier = modifier,
+                            browserTab = browserTab,
+                            homepageUrl = resolvedInitialUrl,
+                            searchTemplate = browserSettings.resolvedSearchTemplate(),
+                            translationProvider = browserSettings.translationProvider,
+                            themeColorExtension = themeColorExtension,
+                            mediaWebExtension = mediaWebExtension,
+                            browserSessionLifecycleController = browserSessionLifecycleController,
+                            tabCount = 1,
+                            onInstallExtensionRequest = {},
+                            onRequestDownloadNotificationPermission = { requestDownloadNotificationPermission() },
+                            onOpenSettings = {},
+                            onOpenSiteSettings = { url ->
+                                outerNavActions.openSiteSettings(url, browserTab.tabId)
+                            },
+                            onOpenDownloads = null,
+                            onOpenTabs = {},
+                            enableTabUi = false,
+                            showInstallExtensionItem = false,
+                            webAppMode = true,
+                            webAppPinnedHost = webAppPinnedHost,
+                            onWebAppCrossDomainNavigation = ::openInCustomTab,
+                            onOpenInBrowser = ::openInMainBrowser,
+                            // onLoadRequest で TARGET_WINDOW_NEW を現在タブへ畳み込むため、
+                            // ここへ到達することは想定しない。GeckoView 契約上 null を返して安全に拒否する。
+                            onOpenNewSessionRequest = { null },
+                            onOpenNewTabRequest = { uri, referrerUrl ->
+                                openNewTabInMainBrowser(uri, referrerUrl)
+                            },
+                            onHistoryRecord = webAppUiState.callbacks::onHistoryRecord,
+                            onHistoryTitleUpdate = webAppUiState.callbacks::onHistoryTitleUpdate,
+                            urlBarSuggestions = webAppUiState.urlBarSuggestions,
+                            onUrlInputChanged = webAppUiState.callbacks::onUrlInputChanged,
+                        )
                     }
-                    // GeckoView が onMetadataChanged で配る favicon は小さい (16x16 程度) ことが
-                    // 多く、また <origin>/favicon.ico を返さないサイト (例: sns.plusmember.jp) では
-                    // BrowserTabScreenState の fetchFavicon が失敗し faviconBitmap が null になる。
-                    // ホーム追加のアプリピンから WebAppActivity を起動すると、その時点では favicon
-                    // の手がかりが無く Recents アイコンがデフォルトアイコンのままになるため、
-                    // ここで HomeScreenIconFetcher を走らせて apple-touch-icon / manifest 由来の
-                    // 高品質アイコンを取得しておく。
-                    val currentUrl = browserTab.currentUrl
-                    LaunchedEffect(currentUrl) {
-                        fetchHighQualityFavicon(browserTab, currentUrl)
-                    }
-                    GeckoBrowserTab(
-                        modifier = modifier,
-                        browserTab = browserTab,
-                        homepageUrl = browserSettings.resolvedHomepageUrl(),
-                        searchTemplate = browserSettings.resolvedSearchTemplate(),
-                        translationProvider = browserSettings.translationProvider,
-                        themeColorExtension = themeColorExtension,
-                        mediaWebExtension = mediaWebExtension,
-                        browserSessionLifecycleController = browserSessionLifecycleController,
-                        tabCount = 1,
-                        onInstallExtensionRequest = {},
-                        onRequestDownloadNotificationPermission = { requestDownloadNotificationPermission() },
-                        onOpenSettings = {},
-                        // ウェブアプリモードは設定画面のナビゲーションスタックを持たないため非表示
-                        onOpenSiteSettings = null,
-                        onOpenDownloads = null,
-                        onOpenTabs = {},
-                        enableTabUi = false,
-                        showInstallExtensionItem = false,
-                        // ウェブアプリモード: 閉じるボタンなし、カスタムタブ風のツールバー
-                        webAppMode = true,
-                        onOpenInBrowser = ::openInMainBrowser,
-                        // onLoadRequest で TARGET_WINDOW_NEW を現在タブへ畳み込むため、
-                        // ここへ到達することは想定しない。GeckoView 契約上 null を返して安全に拒否する。
-                        onOpenNewSessionRequest = { null },
-                        onOpenNewTabRequest = { uri, referrerUrl ->
-                            openNewTabInMainBrowser(uri, referrerUrl)
-                        },
-                        onHistoryRecord = webAppUiState.callbacks::onHistoryRecord,
-                        onHistoryTitleUpdate = webAppUiState.callbacks::onHistoryTitleUpdate,
-                        urlBarSuggestions = webAppUiState.urlBarSuggestions,
-                        onUrlInputChanged = webAppUiState.callbacks::onUrlInputChanged,
-                    )
                 }
             }
         }
@@ -165,6 +164,18 @@ class WebAppActivity : ComponentActivity() {
         )
         pendingDownloadNotificationPermissionDeferred = null
         super.onDestroy()
+    }
+
+    /**
+     * 別ドメインの URL を Custom Tabs で開く。
+     */
+    private fun openInCustomTab(url: String) {
+        startActivity(
+            Intent(this, CustomTabActivity::class.java).apply {
+                action = Intent.ACTION_VIEW
+                data = Uri.parse(url)
+            }
+        )
     }
 
     /**

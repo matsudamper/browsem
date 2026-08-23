@@ -109,6 +109,8 @@ internal fun GeckoBrowserTab(
     showInstallExtensionItem: Boolean = true,
     customTabMode: Boolean = false,
     webAppMode: Boolean = false,
+    webAppPinnedHost: String? = null,
+    onWebAppCrossDomainNavigation: ((String) -> Unit)? = null,
     onCloseCustomTab: (() -> Unit)? = null,
     onOpenInBrowser: ((String) -> Unit)? = null,
     onCloseTab: (() -> Unit)? = null,
@@ -145,6 +147,8 @@ internal fun GeckoBrowserTab(
         homepageUrl = homepageUrl,
         searchTemplate = searchTemplate,
         isSinglePageMode = webAppMode || customTabMode,
+        webAppPinnedHost = webAppPinnedHost.takeIf { webAppMode },
+        onWebAppCrossDomainNavigation = onWebAppCrossDomainNavigation.takeIf { webAppMode },
         onHistoryRecord = onHistoryRecord,
         onHistoryTitleUpdate = onHistoryTitleUpdate,
         onRequestDownloadNotificationPermission = onRequestDownloadNotificationPermission,
@@ -277,6 +281,27 @@ internal fun GeckoBrowserTab(
             }
     }
 
+    // コンテンツプロセスのクラッシュ/kill (onCrash/onKill) を検知した際の即時復元。
+    // 前面表示中 (lifecycle >= STARTED) のみ実行する。バックグラウンド中に検知した場合は
+    // ここでは何もせず、ON_START 側の safety-net (attachSessionAfterStableSize 内の
+    // !session.isOpen チェック) で次回復帰時に復元させる。
+    LaunchedEffect(state, browserTab, browserSessionLifecycleController, lifecycleOwner) {
+        snapshotFlow { state.sessionRecoveryRequestCount }
+            .collectLatest { count ->
+                if (count == 0) return@collectLatest
+                if (!lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
+                    Log.d(
+                        TAG_SURFACE_RESUME,
+                        "sessionRecoveryRequestCount: バックグラウンドのため即時復元をスキップ",
+                    )
+                    return@collectLatest
+                }
+                withContext(Dispatchers.Main.immediate) {
+                    browserSessionLifecycleController.restoreSession(browserTab)
+                }
+            }
+    }
+
     // URLバー入力変更時にサジェスト検索を発火
     LaunchedEffect(state, onUrlInputChanged) {
         snapshotFlow { state.urlInput to state.isUrlInputFocused }
@@ -302,7 +327,20 @@ internal fun GeckoBrowserTab(
     // local function は前方参照不可なので attach → schedule → restore の順で定義する。
     fun attachSessionAfterStableSize(gecko: GeckoView) {
         gecko.setSession(session)
-        session.setActive(true)
+        if (session.isOpen) {
+            session.setActive(true)
+        } else {
+            // バックグラウンド中に onCrash/onKill でコンテンツプロセスが失われ、
+            // isOpen=false のまま復帰したケース。setActive するだけでは何も描画されず
+            // coverUntilFirstPaint の単色のまま固まるため、restoreSession の
+            // open→restoreState 経路で復元する。
+            Log.w(
+                TAG_SURFACE_RESUME,
+                "attachSessionAfterStableSize: session closed (crash/kill) → restoreSession で復元" +
+                    " session=${session.logKey()}",
+            )
+            browserSessionLifecycleController.restoreSession(browserTab)
+        }
         surfaceResumeState = SurfaceResumeState.ACTIVE
     }
 
@@ -624,6 +662,18 @@ internal fun GeckoBrowserTab(
         }
     }
 
+    // 拡張機能のツールバーアクション (browserAction/pageAction) のセッション登録。
+    // これを設定しないと拡張機能がタブごとに出すアイコン・ポップアップを受け取れない
+    val webExtensionActionController: WebExtensionActionController = koinInject()
+    DisposableEffect(session, state, webExtensionActionController) {
+        webExtensionActionController.registerSession(session) { popup ->
+            state.extensionActionPopup = popup
+        }
+        onDispose {
+            webExtensionActionController.unregisterSession(session)
+        }
+    }
+
     // DevToolsWebExtension のセッション登録（フォーカス中の入力要素情報の通知）
     DisposableEffect(session, state) {
         val devToolsWebExtension = state.devToolsWebExtension
@@ -632,6 +682,17 @@ internal fun GeckoBrowserTab(
         }
         onDispose {
             devToolsWebExtension.unregisterSession(session)
+        }
+    }
+
+    // NetworkLogWebExtension のセッション登録。
+    // 通信ログ自体はバックグラウンドスクリプトが常時収集しており、
+    // ここではセッションと webRequest の tabId を対応付けるために登録する
+    val networkLogWebExtension: NetworkLogWebExtension = koinInject()
+    DisposableEffect(session, networkLogWebExtension) {
+        networkLogWebExtension.registerSession(session)
+        onDispose {
+            networkLogWebExtension.unregisterSession(session)
         }
     }
 
@@ -857,12 +918,16 @@ internal fun GeckoBrowserTab(
                     onOpenInBrowser = onOpenInBrowser?.let { callback ->
                         { callback(state.currentPageUrl) }
                     },
+                    onOpenSiteSettings = onOpenSiteSettings?.let { callback ->
+                        { callback(state.currentPageUrl) }
+                    },
                     pageZoomPercent = state.pageZoomPercent,
                     onPageZoomIn = state::pageZoomIn,
                     onPageZoomOut = state::pageZoomOut,
                     onResetPageZoom = state::resetPageZoom,
                     // ウェブアプリモードでは閉じるボタンを非表示にする
                     showCloseButton = customTabMode,
+                    showHome = webAppMode,
                 )
             } else {
                 BrowserToolBar(
@@ -940,6 +1005,12 @@ internal fun GeckoBrowserTab(
                     onPageZoomIn = state::pageZoomIn,
                     onPageZoomOut = state::pageZoomOut,
                     onResetPageZoom = state::resetPageZoom,
+                    extensionActions = state.extensionActions,
+                    extensionActionScrollState = state.extensionActionScrollState,
+                    onExtensionActionClick = state::onExtensionActionClick,
+                    onExtensionActionMove = state::onExtensionActionMove,
+                    onExtensionActionMoveEnd = state::onExtensionActionMoveEnd,
+                    onExtensionActionMoveCancel = state::onExtensionActionMoveCancel,
                     onHorizontalDrag = onToolbarHorizontalDrag,
                     onHorizontalDragEnd = {
                         // タブ切替スワイプになる可能性があるため、現在のタブのプレビューを事前にキャプチャする
@@ -1046,13 +1117,31 @@ internal fun GeckoBrowserTab(
         )
     }
 
+    // 拡張機能のポップアップ（タブに対する拡張機能の操作画面）
+    state.extensionActionPopup?.let { popup ->
+        ExtensionActionPopupDialog(
+            popup = popup,
+            onDismissRequest = state::dismissExtensionActionPopup,
+        )
+    }
+
     // 開発者ツールダイアログ
     if (state.showDevTools) {
         DevToolsDialog(
             focusedInput = state.devToolsFocusedInput,
             onCopyFocusedInputId = state::copyFocusedInputId,
-            onRefresh = state::refreshDevToolsFocusedInput,
+            onOpenNetworkLog = state::openNetworkLog,
             onDismiss = state::closeDevTools,
+        )
+    }
+
+    // ネットワークログ画面
+    if (state.showNetworkLog) {
+        NetworkLogDialog(
+            uiState = rememberNetworkLogUiState(
+                session = session,
+                onDismiss = state::closeNetworkLog,
+            ),
         )
     }
 
