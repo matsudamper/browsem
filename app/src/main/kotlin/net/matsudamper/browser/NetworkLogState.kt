@@ -3,6 +3,7 @@ package net.matsudamper.browser
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.widget.Toast
 import androidx.compose.runtime.Composable
@@ -12,9 +13,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.collectAsState
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import org.koin.compose.koinInject
@@ -50,7 +53,15 @@ internal fun rememberNetworkLogUiState(
     LaunchedEffect(holder, holder.selectedId, holder.previewReloadCount) {
         holder.loadPreview()
     }
-    return holder.createUiState(allEntries = entries, tabId = tabId)
+    val uiState = holder.createUiState(allEntries = entries, tabId = tabId)
+    // 画像フィルタ選択中は一覧のサムネイルを読み込む。
+    // 読み込み結果で entries 自体が変わるため、対象が変わったときだけ動くようキーを絞る
+    val thumbnailKey = uiState.filters.firstOrNull { it.isSelected }?.type to
+        uiState.entries.map { it.id }
+    LaunchedEffect(holder, thumbnailKey) {
+        holder.loadThumbnails()
+    }
+    return uiState
 }
 
 /**
@@ -80,6 +91,15 @@ internal class NetworkLogStateHolder(
 
     // コピー用に保持する取得済みの本文
     private var previewText: String? = null
+
+    // 取得済みのサムネイル。取得に失敗した場合も再取得しないよう null を入れて記録する
+    private val thumbnails = mutableStateMapOf<String, ThumbnailState>()
+
+    // サムネイル表示の対象。createUiState で最新の表示内容に更新する
+    private var thumbnailTargets: List<NetworkLogEntry> = emptyList()
+
+    /** サムネイルの取得状態 */
+    private class ThumbnailState(val bitmap: ImageBitmap?)
 
     // 表示対象のタブ ID。null の場合は全タブ分を表示する
     private var currentTabId: Int? = null
@@ -147,9 +167,13 @@ internal class NetworkLogStateHolder(
         val detail = selectedId
             ?.let { id -> tabEntries.firstOrNull { it.requestId == id } }
             ?.toDetail()
+        // サムネイルは画像フィルタを選んでいるときだけ出す
+        val showThumbnail = filter == NetworkLogUiState.ResourceFilter.Image
+        val shown = filtered.asReversed()
+        thumbnailTargets = if (showThumbnail) shown.take(MAX_THUMBNAIL_COUNT) else emptyList()
         return NetworkLogUiState(
             callbacks = callbacks,
-            entries = filtered.asReversed().map { it.toUiStateEntry() },
+            entries = shown.map { it.toUiStateEntry(showThumbnail = showThumbnail) },
             filters = createFilters(tabEntries),
             searchQuery = searchQuery,
             summary = NetworkLogUiState.Summary(
@@ -183,6 +207,41 @@ internal class NetworkLogStateHolder(
             if (selectedId != id) return@requestBody
             preview = body.toPreview()
         }
+    }
+
+    /** 画像フィルタ選択中の一覧に出すサムネイルを取得する */
+    fun loadThumbnails() {
+        thumbnailTargets.forEach { entry ->
+            // 取得済み・取得失敗済みのものは再取得しない
+            if (thumbnails.containsKey(entry.requestId)) return@forEach
+            extension.requestBody(
+                requestId = entry.requestId,
+                url = entry.url,
+                method = entry.method,
+            ) { body ->
+                val bitmap = (body as? NetworkLogBody.Binary)?.let { decodeThumbnail(it.bytes) }
+                thumbnails[entry.requestId] = ThumbnailState(bitmap = bitmap?.asImageBitmap())
+            }
+        }
+    }
+
+    /**
+     * 一覧に並べる小さい画像を作る。
+     * 元の解像度のまま持つとメモリを圧迫するため、縮小して読み込む。
+     */
+    private fun decodeThumbnail(bytes: ByteArray): Bitmap? {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        runCatching { BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds) }
+        val longerSide = maxOf(bounds.outWidth, bounds.outHeight)
+        if (longerSide <= 0) return null
+        var sampleSize = 1
+        while (longerSide / sampleSize > THUMBNAIL_MAX_PIXELS) {
+            sampleSize *= 2
+        }
+        val options = BitmapFactory.Options().apply { inSampleSize = sampleSize }
+        return runCatching {
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)
+        }.getOrNull()
     }
 
     private fun selectedEntry(): NetworkLogEntry? {
@@ -257,7 +316,7 @@ internal class NetworkLogStateHolder(
         }
     }
 
-    private fun NetworkLogEntry.toUiStateEntry(): NetworkLogUiState.Entry {
+    private fun NetworkLogEntry.toUiStateEntry(showThumbnail: Boolean): NetworkLogUiState.Entry {
         return NetworkLogUiState.Entry(
             id = requestId,
             method = method,
@@ -269,6 +328,11 @@ internal class NetworkLogStateHolder(
             sizeLabel = NetworkLogFormat.formatBytes(sizeBytes),
             durationLabel = NetworkLogFormat.formatDuration(durationMillis),
             fromCache = fromCache,
+            thumbnail = if (showThumbnail) {
+                NetworkLogUiState.Thumbnail(bitmap = thumbnails[requestId]?.bitmap)
+            } else {
+                null
+            },
         )
     }
 
@@ -347,5 +411,11 @@ internal class NetworkLogStateHolder(
 
     private companion object {
         const val MAX_PREVIEW_TEXT_LENGTH = 20000
+
+        // 一度に取得するサムネイルの上限。画像が多いページで取得が膨らまないようにする
+        const val MAX_THUMBNAIL_COUNT = 60
+
+        // サムネイルの長辺のピクセル数の目安
+        const val THUMBNAIL_MAX_PIXELS = 128
     }
 }

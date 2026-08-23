@@ -257,6 +257,9 @@ private fun NetworkLogRow(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             StatusBadge(statusLabel = entry.statusLabel, statusKind = entry.statusKind)
+            entry.thumbnail?.let { thumbnail ->
+                NetworkLogThumbnail(thumbnail = thumbnail)
+            }
             Text(
                 modifier = Modifier.weight(1f),
                 text = entry.name,
@@ -296,6 +299,34 @@ private fun NetworkLogRow(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+    }
+}
+
+/**
+ * 一覧に出す画像のサムネイル。
+ * 取得できていない間もレイアウトが動かないよう、同じ大きさの枠を出す。
+ */
+@Composable
+private fun NetworkLogThumbnail(
+    thumbnail: NetworkLogUiState.Thumbnail,
+    modifier: Modifier = Modifier,
+) {
+    val boxModifier = modifier
+        .size(THUMBNAIL_SIZE)
+        .background(
+            color = MaterialTheme.colorScheme.surfaceVariant,
+            shape = RoundedCornerShape(4.dp),
+        )
+        .testTag(NetworkLogScreenTestTags.Thumbnail.testTag)
+    if (thumbnail.bitmap == null) {
+        Box(modifier = boxModifier)
+    } else {
+        Image(
+            modifier = boxModifier,
+            bitmap = thumbnail.bitmap,
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+        )
     }
 }
 
@@ -527,6 +558,7 @@ private fun SectionTitle(
 }
 
 private const val BADGE_BACKGROUND_ALPHA = 0.15f
+private val THUMBNAIL_SIZE = 32.dp
 
 sealed interface NetworkLogScreenTestTags {
     val id: String
@@ -539,6 +571,7 @@ sealed interface NetworkLogScreenTestTags {
     object Detail : NetworkLogScreenTestTags { override val id = "detail" }
     object DetailBackButton : NetworkLogScreenTestTags { override val id = "detail_back_button" }
     object ImagePreview : NetworkLogScreenTestTags { override val id = "image_preview" }
+    object Thumbnail : NetworkLogScreenTestTags { override val id = "thumbnail" }
     object TextPreview : NetworkLogScreenTestTags { override val id = "text_preview" }
 }
 
@@ -567,6 +600,7 @@ private fun previewEntries(): List<NetworkLogUiState.Entry> {
             sizeLabel = "12.4 KB",
             durationLabel = "231 ms",
             fromCache = false,
+            thumbnail = null,
         ),
         NetworkLogUiState.Entry(
             id = "2",
@@ -579,6 +613,7 @@ private fun previewEntries(): List<NetworkLogUiState.Entry> {
             sizeLabel = "482.0 KB",
             durationLabel = "1.24 s",
             fromCache = false,
+            thumbnail = null,
         ),
         NetworkLogUiState.Entry(
             id = "3",
@@ -591,6 +626,7 @@ private fun previewEntries(): List<NetworkLogUiState.Entry> {
             sizeLabel = "1.2 MB",
             durationLabel = "88 ms",
             fromCache = true,
+            thumbnail = null,
         ),
         NetworkLogUiState.Entry(
             id = "4",
@@ -603,6 +639,7 @@ private fun previewEntries(): List<NetworkLogUiState.Entry> {
             sizeLabel = "512 B",
             durationLabel = "64 ms",
             fromCache = false,
+            thumbnail = null,
         ),
         NetworkLogUiState.Entry(
             id = "5",
@@ -615,6 +652,7 @@ private fun previewEntries(): List<NetworkLogUiState.Entry> {
             sizeLabel = "-",
             durationLabel = "12 ms",
             fromCache = false,
+            thumbnail = null,
         ),
     )
 }
@@ -687,6 +725,74 @@ private fun PreviewNetworkLogScreenList() {
                 filters = previewFilters(),
                 searchQuery = "",
                 summary = NetworkLogUiState.Summary(countLabel = "5 件", sizeLabel = "1.7 MB"),
+                notice = null,
+                canClear = true,
+                detail = null,
+            ),
+        )
+    }
+}
+
+/** 画像フィルタ選択時の一覧。サムネイル取得前の項目も混ぜている */
+private fun previewImageEntries(): List<NetworkLogUiState.Entry> {
+    return listOf(
+        NetworkLogUiState.Entry(
+            id = "3",
+            method = "GET",
+            statusLabel = "200",
+            statusKind = NetworkLogUiState.StatusKind.Success,
+            typeLabel = "画像",
+            name = "hero@2x.png",
+            host = "img.example.com",
+            sizeLabel = "1.2 MB",
+            durationLabel = "88 ms",
+            fromCache = true,
+            thumbnail = NetworkLogUiState.Thumbnail(bitmap = previewImageBitmap()),
+        ),
+        NetworkLogUiState.Entry(
+            id = "6",
+            method = "GET",
+            statusLabel = "200",
+            statusKind = NetworkLogUiState.StatusKind.Success,
+            typeLabel = "画像",
+            name = "avatar.webp",
+            host = "img.example.com",
+            sizeLabel = "24.5 KB",
+            durationLabel = "31 ms",
+            fromCache = false,
+            thumbnail = NetworkLogUiState.Thumbnail(bitmap = previewImageBitmap()),
+        ),
+        NetworkLogUiState.Entry(
+            id = "7",
+            method = "GET",
+            statusLabel = "200",
+            statusKind = NetworkLogUiState.StatusKind.Success,
+            typeLabel = "画像",
+            name = "sprite.svg",
+            host = "cdn.example.com",
+            sizeLabel = "8.0 KB",
+            durationLabel = "18 ms",
+            fromCache = false,
+            thumbnail = NetworkLogUiState.Thumbnail(bitmap = null),
+        ),
+    )
+}
+
+@Preview(name = "一覧_画像フィルタ")
+@Composable
+private fun PreviewNetworkLogScreenImageFilter() {
+    BrowserTheme(themeMode = ThemeMode.THEME_SYSTEM) {
+        NetworkLogScreen(
+            uiState = NetworkLogUiState(
+                callbacks = PreviewNetworkLogCallbacks,
+                entries = previewImageEntries(),
+                filters = listOf(
+                    NetworkLogUiState.Filter(NetworkLogUiState.ResourceFilter.All, "すべて", 8, false),
+                    NetworkLogUiState.Filter(NetworkLogUiState.ResourceFilter.Image, "画像", 3, true),
+                    NetworkLogUiState.Filter(NetworkLogUiState.ResourceFilter.Script, "JS", 1, false),
+                ),
+                searchQuery = "",
+                summary = NetworkLogUiState.Summary(countLabel = "3 件", sizeLabel = "1.2 MB"),
                 notice = null,
                 canClear = true,
                 detail = null,

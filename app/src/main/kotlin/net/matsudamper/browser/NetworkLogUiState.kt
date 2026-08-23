@@ -35,6 +35,17 @@ internal data class NetworkLogUiState(
         val sizeLabel: String,
         val durationLabel: String,
         val fromCache: Boolean,
+        /** 画像フィルタ選択時のみ設定されるサムネイル。それ以外は null */
+        val thumbnail: Thumbnail?,
+    )
+
+    /**
+     * 一覧に出す画像のサムネイル。
+     * 取得中や取得できなかった場合も枠だけ出すため、[bitmap] は null になりうる。
+     */
+    @Immutable
+    data class Thumbnail(
+        val bitmap: ImageBitmap?,
     )
 
     /** ステータスの区分。表示色の出し分けに使う */
