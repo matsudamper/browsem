@@ -3,6 +3,7 @@ package net.matsudamper.browser.ui.tabs
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -25,11 +26,15 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.ui.res.painterResource
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -64,6 +69,12 @@ private val GroupTabBarHeight = 48.dp
 /** 非選択タブの最小高さ。選択タブは GroupTabBarHeight まで伸びて「浮き上がり」を表現する */
 private val GroupTabUnselectedHeight = 40.dp
 
+/** ドラッグ中に自動スクロールを開始する、ビューポート端からの距離 */
+private val AutoScrollThreshold = 48.dp
+
+/** 自動スクロールの1フレームあたりの最大移動量 */
+private val AutoScrollMaxSpeedPerFrame = 12.dp
+
 /**
  * グループタブバー。
  * 栞形のタブを横並びに表示し、末尾に追加ボタンを配置する。
@@ -82,6 +93,7 @@ internal fun GroupTabBar(
     onReorderGroups: (fromIndex: Int, toIndex: Int) -> Unit,
     onAddGroup: () -> Unit,
     onGroupTabBoundsChanged: (index: Int, bounds: Rect) -> Unit,
+    onDraggingChanged: (isDragging: Boolean) -> Unit,
     listState: LazyListState,
     modifier: Modifier = Modifier,
 ) {
@@ -93,6 +105,30 @@ internal fun GroupTabBar(
     // ページスクロール進捗を読み取る（タブの高さ・色アニメーションに使用）
     val currentPage = pagerState.currentPage
     val offsetFraction = pagerState.currentPageOffsetFraction
+
+    // ドラッグ中はポインタイベントを長押しドラッグが消費するためユーザーはスクロールできない。
+    // 端に近づいたら自動でスクロールし、画面外のグループまで移動できるようにする
+    // ドラッグ中は画面側のタブバースクロール同期を止めてもらう（自動スクロールと競合するため）
+    val currentOnDraggingChanged by rememberUpdatedState(onDraggingChanged)
+    LaunchedEffect(dragDropState.isDragging) {
+        currentOnDraggingChanged(dragDropState.isDragging)
+    }
+
+    val density = LocalDensity.current
+    LaunchedEffect(dragDropState, dragDropState.isDragging) {
+        if (!dragDropState.isDragging) return@LaunchedEffect
+        val threshold = with(density) { AutoScrollThreshold.toPx() }
+        val maxSpeed = with(density) { AutoScrollMaxSpeedPerFrame.toPx() }
+        while (true) {
+            val delta = dragDropState.autoScrollDelta(threshold = threshold, maxSpeed = maxSpeed)
+            if (delta != 0f) {
+                listState.scrollBy(delta)
+                // 指を止めたままでもスクロールで位置関係が変わるため、毎フレーム判定し直す
+                dragDropState.updateDropTarget()
+            }
+            withFrameNanos { }
+        }
+    }
 
     Box(
         modifier = modifier
@@ -192,6 +228,7 @@ private fun rememberGroupDragDropState(
 }
 
 /** グループタブバーのドラッグ&ドロップ状態を管理するクラス */
+@Stable
 private class GroupDragDropState(
     val listState: LazyListState,
     private val onMove: (fromIndex: Int, toIndex: Int) -> Unit,
@@ -211,14 +248,11 @@ private class GroupDragDropState(
     /** 並び替え追跡用の現在インデックス */
     private var currentDragIndex: Int by mutableIntStateOf(-1)
 
-    /**
-     * ドラッグ開始時に確定したスロット（各グループタブの表示位置）。
-     * visibleItemsInfo の offset は animateItem のアニメーション中に変化するため、
-     * ドラッグ中にそれを読むと「並び替え → アニメーションで動いた位置に反応 → 並び替え直し」を
-     * 繰り返して振動する。全タブは同じ幅で並び順によらずスロット位置は不変なので、
-     * 開始時のスロットを固定で使い判定を安定させる。
-     */
-    private var slots: List<GroupSlotInfo> = emptyList()
+    /** グループタブ1つ分の幅（px）。スロット位置の算出に使う */
+    private var itemWidth: Int = 0
+
+    /** 追加ボタンを除いたグループ数 */
+    private var groupCount: Int = 0
 
     val isDragging: Boolean get() = draggedItemKey != null
 
@@ -242,22 +276,34 @@ private class GroupDragDropState(
         draggedItemOffset = IntOffset(item.offset - viewportOffset, 0)
         draggedItemSize = IntSize(item.size, listState.layoutInfo.viewportSize.height)
         currentDragIndex = item.index
-        slots = items
-            .filter { it.index < groupCount }
-            .map { info ->
-                val left = (info.offset - viewportOffset).toFloat()
-                GroupSlotInfo(index = info.index, left = left, right = left + info.size)
-            }
+        itemWidth = item.size
+        this.groupCount = groupCount
     }
 
     /** ドラッグ中の移動処理 */
     fun onDrag(dragAmount: Offset, groupCount: Int) {
         if (!isDragging) return
+        this.groupCount = groupCount
         draggedItemOffset = (draggedItemOffset.toOffset() + dragAmount).round()
+        updateDropTarget()
+    }
 
+    /**
+     * 現在のドラッグ位置とスクロール位置から移動先を判定して並び替える。
+     * 指を止めたまま自動スクロールした場合にも判定する必要があるため、
+     * onDrag だけでなく自動スクロールのフレームごとにも呼ぶ。
+     */
+    fun updateDropTarget() {
+        if (!isDragging || itemWidth <= 0) return
+        val slots = calculateGroupSlots(
+            groupCount = groupCount,
+            itemWidth = itemWidth,
+            startPadding = -listState.layoutInfo.viewportStartOffset.toFloat(),
+            scrolledPx = scrolledPx(),
+        )
         val centerX = draggedItemOffset.x + draggedItemSize.width / 2f
         val targetIndex = findGroupDropTargetIndex(
-            slots = slots.filter { it.index < groupCount },
+            slots = slots,
             centerX = centerX,
             currentIndex = currentDragIndex,
         ) ?: return
@@ -266,18 +312,99 @@ private class GroupDragDropState(
         currentDragIndex = targetIndex
     }
 
+    /** 自動スクロール量（px）。0 ならスクロール不要 */
+    fun autoScrollDelta(threshold: Float, maxSpeed: Float): Float {
+        if (!isDragging) return 0f
+        return calculateAutoScrollDelta(
+            draggedLeft = draggedItemOffset.x.toFloat(),
+            draggedWidth = draggedItemSize.width,
+            viewportWidth = listState.layoutInfo.viewportSize.width,
+            threshold = threshold,
+            maxSpeed = maxSpeed,
+        )
+    }
+
     /** ドラッグ終了時の処理 */
     fun onDragEnd() {
         draggedItemKey = null
         draggedItemOffset = IntOffset.Zero
         draggedItemSize = IntSize.Zero
         currentDragIndex = -1
-        slots = emptyList()
+        itemWidth = 0
+        groupCount = 0
+    }
+
+    /**
+     * 先頭からの現在のスクロール量（px）。
+     * firstVisibleItem* は animateItem の並び替えアニメーションに影響されないため、
+     * visibleItemsInfo の offset と違って安定した基準になる。
+     * グループタブは全て同じ幅なので index * itemWidth で先頭からの距離を算出できる。
+     */
+    private fun scrolledPx(): Float {
+        val firstIndex = listState.firstVisibleItemIndex.coerceIn(0, groupCount)
+        return firstIndex * itemWidth.toFloat() + listState.firstVisibleItemScrollOffset
     }
 }
 
-/** ドラッグ開始時点で確定したグループタブのスロット位置（ビューポート座標） */
+/** グループタブのスロット位置（ビューポート座標） */
 internal data class GroupSlotInfo(val index: Int, val left: Float, val right: Float)
+
+/**
+ * 全グループタブのスロット位置を算出する。
+ *
+ * visibleItemsInfo の offset は animateItem の並び替えアニメーション中に変化するため、
+ * それを見て判定すると「並び替え → アニメーションで動いた位置に反応 → 並び替え直し」を
+ * 繰り返して振動する。グループタブは全て同じ幅で並び順によらずスロット位置は不変なので、
+ * スクロール量から算出することで判定を安定させる。画面外のスロットも算出できるため、
+ * 自動スクロールで端から端まで移動する場合にも対応できる。
+ *
+ * @param startPadding LazyRow の contentPadding.start（px）
+ * @param scrolledPx 先頭からのスクロール量（px）
+ */
+internal fun calculateGroupSlots(
+    groupCount: Int,
+    itemWidth: Int,
+    startPadding: Float,
+    scrolledPx: Float,
+): List<GroupSlotInfo> {
+    if (groupCount <= 0 || itemWidth <= 0) return emptyList()
+    return List(groupCount) { index ->
+        val left = startPadding - scrolledPx + index * itemWidth
+        GroupSlotInfo(index = index, left = left, right = left + itemWidth)
+    }
+}
+
+/**
+ * ドラッグ中のアイテムがビューポート端に近づいた際の自動スクロール量を算出する。
+ * 端に近いほど速くなり、しきい値の外では 0 を返す。
+ *
+ * @param draggedLeft ドラッグ中アイテムの左端（ビューポート座標）
+ * @param threshold スクロールを開始する端からの距離（px）
+ * @param maxSpeed 1回あたりの最大スクロール量（px）
+ * @return 正: 末尾方向へスクロール / 負: 先頭方向へスクロール
+ */
+internal fun calculateAutoScrollDelta(
+    draggedLeft: Float,
+    draggedWidth: Int,
+    viewportWidth: Int,
+    threshold: Float,
+    maxSpeed: Float,
+): Float {
+    if (viewportWidth <= 0 || threshold <= 0f) return 0f
+    val draggedRight = draggedLeft + draggedWidth
+    val endThreshold = viewportWidth - threshold
+    return when {
+        draggedLeft < threshold -> {
+            -maxSpeed * ((threshold - draggedLeft) / threshold).coerceIn(0f, 1f)
+        }
+
+        draggedRight > endThreshold -> {
+            maxSpeed * ((draggedRight - endThreshold) / threshold).coerceIn(0f, 1f)
+        }
+
+        else -> 0f
+    }
+}
 
 /**
  * ドラッグ中のオーバーレイ中心位置から移動先スロットを求める。
