@@ -123,6 +123,14 @@ class MainActivity : ComponentActivity() {
         hostsBrowserContent = true
         registerSystemNavigationObserverIfAvailable()
 
+        // 構成変更後は ViewModel が生存し GeckoRuntime も既に生成済み。
+        // geckoInitialized=false のまま初回フレームを描くと BrowserApp が
+        // composition に乗らず、rememberNavBackStack の saveable 復元キーが
+        // ずれて別タブが表示されることがある。
+        if (savedInstanceState != null && browserViewModel.setupComplete.isCompleted) {
+            initializeGeckoRuntime()
+        }
+
         // GeckoRuntime に依存しない Intent 処理を先に実行する。
         // チャネルはバッファ付きなので BrowserApp の composition 開始後に消費される。
         if (intent.action == DownloadWorker.ACTION_OPEN_DOWNLOADS) {
@@ -196,14 +204,20 @@ class MainActivity : ComponentActivity() {
 
         // 最初のフレーム描画後に GeckoRuntime を初期化する。
         // これによりスプラッシュが解除されてからブロッキングの可能性がある処理が走る。
-        window.decorView.post {
-            if (!isFinishing && !isDestroyed) {
-                initializeGeckoRuntime()
+        // 構成変更後は上で初期化済みなので、ここでは走らせない。
+        if (!geckoInitialized) {
+            window.decorView.post {
+                if (!isFinishing && !isDestroyed && !geckoInitialized) {
+                    initializeGeckoRuntime()
+                }
             }
         }
     }
 
     private fun initializeGeckoRuntime() {
+        if (geckoInitialized) {
+            return
+        }
         extensionInstaller = WebExtensionInstaller(
             runtime = runtime,
             onExtensionReady = ::setupDelegatesForExtension,

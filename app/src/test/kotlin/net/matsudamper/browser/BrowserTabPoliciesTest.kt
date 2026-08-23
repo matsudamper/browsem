@@ -170,4 +170,54 @@ class BrowserTabPoliciesTest {
             )
         )
     }
+
+    @Test
+    fun webAppSameHostIsNotCrossDomain() {
+        assertFalse(
+            isWebAppCrossDomainNavigation(
+                url = "https://example.com/other-path",
+                pinnedHost = "example.com",
+            ),
+        )
+    }
+
+    @Test
+    fun webAppDifferentHostIsCrossDomain() {
+        assertTrue(
+            isWebAppCrossDomainNavigation(
+                url = "https://other.example.org/page",
+                pinnedHost = "example.com",
+            ),
+        )
+    }
+
+    @Test
+    fun webAppHostComparisonIsCaseInsensitive() {
+        assertFalse(
+            isWebAppCrossDomainNavigation(
+                url = "https://Example.COM/page",
+                pinnedHost = "example.com",
+            ),
+        )
+    }
+
+    @Test
+    fun webAppNullPinnedHostIsNotCrossDomain() {
+        assertFalse(
+            isWebAppCrossDomainNavigation(
+                url = "https://example.com/page",
+                pinnedHost = null,
+            ),
+        )
+    }
+
+    @Test
+    fun webAppUrlWithoutHostIsNotCrossDomain() {
+        assertFalse(
+            isWebAppCrossDomainNavigation(
+                url = "about:blank",
+                pinnedHost = "example.com",
+            ),
+        )
+    }
 }

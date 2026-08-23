@@ -663,7 +663,7 @@ private fun PreviewToolbarMenuContentWebApp() {
                 onExtensionActionMoveCancel = {},
                 showOpenSettings = false,
                 showAddToHomeScreen = false,
-                showHome = false,
+                showHome = true,
                 onOpenInBrowser = {},
                 onOpenSiteSettings = {},
                 onOpenDownloads = null,
