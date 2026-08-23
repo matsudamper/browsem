@@ -211,6 +211,15 @@ private class GroupDragDropState(
     /** 並び替え追跡用の現在インデックス */
     private var currentDragIndex: Int by mutableIntStateOf(-1)
 
+    /**
+     * ドラッグ開始時に確定したスロット（各グループタブの表示位置）。
+     * visibleItemsInfo の offset は animateItem のアニメーション中に変化するため、
+     * ドラッグ中にそれを読むと「並び替え → アニメーションで動いた位置に反応 → 並び替え直し」を
+     * 繰り返して振動する。全タブは同じ幅で並び順によらずスロット位置は不変なので、
+     * 開始時のスロットを固定で使い判定を安定させる。
+     */
+    private var slots: List<GroupSlotInfo> = emptyList()
+
     val isDragging: Boolean get() = draggedItemKey != null
 
     /** ドラッグ開始時の処理。groupCount は追加ボタンを除いたグループ数。 */
@@ -233,6 +242,12 @@ private class GroupDragDropState(
         draggedItemOffset = IntOffset(item.offset - viewportOffset, 0)
         draggedItemSize = IntSize(item.size, listState.layoutInfo.viewportSize.height)
         currentDragIndex = item.index
+        slots = items
+            .filter { it.index < groupCount }
+            .map { info ->
+                val left = (info.offset - viewportOffset).toFloat()
+                GroupSlotInfo(index = info.index, left = left, right = left + info.size)
+            }
     }
 
     /** ドラッグ中の移動処理 */
@@ -241,22 +256,14 @@ private class GroupDragDropState(
         draggedItemOffset = (draggedItemOffset.toOffset() + dragAmount).round()
 
         val centerX = draggedItemOffset.x + draggedItemSize.width / 2f
-        val viewportOffset = listState.layoutInfo.viewportStartOffset
+        val targetIndex = findGroupDropTargetIndex(
+            slots = slots.filter { it.index < groupCount },
+            centerX = centerX,
+            currentIndex = currentDragIndex,
+        ) ?: return
 
-        val targetItem = listState.layoutInfo.visibleItemsInfo
-            .filter { it.key != draggedItemKey && it.index < groupCount }
-            .minByOrNull { info ->
-                val itemCenterX = (info.offset - viewportOffset).toFloat() + info.size / 2f
-                abs(centerX - itemCenterX)
-            } ?: return
-
-        val targetLeft = (targetItem.offset - viewportOffset).toFloat()
-        val targetRight = targetLeft + targetItem.size
-
-        if (centerX in targetLeft..targetRight && targetItem.index != currentDragIndex) {
-            onMove(currentDragIndex, targetItem.index)
-            currentDragIndex = targetItem.index
-        }
+        onMove(currentDragIndex, targetIndex)
+        currentDragIndex = targetIndex
     }
 
     /** ドラッグ終了時の処理 */
@@ -265,7 +272,33 @@ private class GroupDragDropState(
         draggedItemOffset = IntOffset.Zero
         draggedItemSize = IntSize.Zero
         currentDragIndex = -1
+        slots = emptyList()
     }
+}
+
+/** ドラッグ開始時点で確定したグループタブのスロット位置（ビューポート座標） */
+internal data class GroupSlotInfo(val index: Int, val left: Float, val right: Float)
+
+/**
+ * ドラッグ中のオーバーレイ中心位置から移動先スロットを求める。
+ * 中心がどのスロットにも入らない場合（両端を越えた場合）は端のスロットへ寄せる。
+ * @return 移動先インデックス。移動不要なら null
+ */
+internal fun findGroupDropTargetIndex(
+    slots: List<GroupSlotInfo>,
+    centerX: Float,
+    currentIndex: Int,
+): Int? {
+    if (slots.isEmpty()) return null
+    val sorted = slots.sortedBy { it.left }
+    val target = when {
+        centerX < sorted.first().left -> sorted.first()
+        centerX > sorted.last().right -> sorted.last()
+        else -> sorted.firstOrNull { centerX >= it.left && centerX <= it.right }
+            // スロット間に隙間がある場合は最も近いスロットを選ぶ
+            ?: sorted.minByOrNull { minOf(abs(centerX - it.left), abs(centerX - it.right)) }
+    } ?: return null
+    return target.index.takeIf { it != currentIndex }
 }
 
 /**
