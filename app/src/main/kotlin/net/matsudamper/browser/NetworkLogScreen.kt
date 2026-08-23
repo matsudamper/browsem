@@ -142,6 +142,18 @@ internal fun NetworkLogScreen(
                         }
                     },
                     actions = {
+                        if (detail.canSaveImage) {
+                            IconButton(
+                                modifier = Modifier
+                                    .testTag(NetworkLogScreenTestTags.SaveImageButton.testTag),
+                                onClick = uiState.callbacks::onClickSaveImage,
+                            ) {
+                                Icon(
+                                    painter = painterResource(ResourcesR.drawable.ic_download_24dp),
+                                    contentDescription = "画像を保存",
+                                )
+                            }
+                        }
                         IconButton(onClick = uiState.callbacks::onClickCopyUrl) {
                             Icon(
                                 painter = painterResource(ResourcesR.drawable.ic_content_copy_24dp),
@@ -477,6 +489,11 @@ private fun NetworkLogPreview(
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                if (preview.canCopyBody) {
+                    TextButton(onClick = callbacks::onClickCopyBody) {
+                        Text("本文をコピー")
+                    }
+                }
             }
 
             is NetworkLogUiState.Preview.Text -> {
@@ -603,6 +620,7 @@ sealed interface NetworkLogScreenTestTags {
     object DetailBackButton : NetworkLogScreenTestTags { override val id = "detail_back_button" }
     object ImagePreview : NetworkLogScreenTestTags { override val id = "image_preview" }
     object Thumbnail : NetworkLogScreenTestTags { override val id = "thumbnail" }
+    object SaveImageButton : NetworkLogScreenTestTags { override val id = "save_image_button" }
     object TextPreview : NetworkLogScreenTestTags { override val id = "text_preview" }
 }
 
@@ -614,6 +632,7 @@ private object PreviewNetworkLogCallbacks : NetworkLogUiState.Callbacks {
     override fun onClickCopyUrl() = Unit
     override fun onClickCopyBody() = Unit
     override fun onClickReloadPreview() = Unit
+    override fun onClickSaveImage() = Unit
     override fun onClickClear() = Unit
     override fun onVisibleRangeChange(firstIndex: Int, lastIndex: Int) = Unit
     override fun onDismiss() = Unit
@@ -715,6 +734,7 @@ private fun previewDetail(preview: NetworkLogUiState.Preview): NetworkLogUiState
             NetworkLogUiState.Detail.Item("開始", "12:34:56.789"),
             NetworkLogUiState.Detail.Item("キャッシュ", "あり"),
         ),
+        canSaveImage = preview is NetworkLogUiState.Preview.Image,
         requestHeaders = listOf(
             NetworkLogUiState.Header("Accept", "image/avif,image/webp,*/*"),
             NetworkLogUiState.Header("Referer", "https://example.com/"),
@@ -869,6 +889,32 @@ private fun PreviewNetworkLogScreenImageDetail() {
                     NetworkLogUiState.Preview.Image(
                         bitmap = previewImageBitmap(),
                         sizeLabel = "240 × 135 · 1.2 MB",
+                        canCopyBody = false,
+                    ),
+                ),
+            ),
+        )
+    }
+}
+
+@Preview(name = "詳細_SVGプレビュー")
+@Composable
+private fun PreviewNetworkLogScreenSvgDetail() {
+    BrowserTheme(themeMode = ThemeMode.THEME_SYSTEM) {
+        NetworkLogScreen(
+            uiState = NetworkLogUiState(
+                callbacks = PreviewNetworkLogCallbacks,
+                entries = previewImageEntries(),
+                filters = previewFilters(),
+                searchQuery = "",
+                summary = NetworkLogUiState.Summary(countLabel = "3 件", sizeLabel = "1.2 MB"),
+                notice = null,
+                canClear = true,
+                detail = previewDetail(
+                    NetworkLogUiState.Preview.Image(
+                        bitmap = previewImageBitmap(),
+                        sizeLabel = "SVG · 8.0 KB",
+                        canCopyBody = true,
                     ),
                 ),
             ),

@@ -81,6 +81,8 @@ internal data class NetworkLogUiState(
         val name: String,
         val url: String,
         val items: List<Item>,
+        /** 画像として保存できるかどうか。保存ボタンの表示に使う */
+        val canSaveImage: Boolean,
         val requestHeaders: List<Header>,
         val responseHeaders: List<Header>,
         val preview: Preview,
@@ -109,6 +111,8 @@ internal data class NetworkLogUiState(
         data class Image(
             val bitmap: ImageBitmap,
             val sizeLabel: String,
+            /** SVG のように元がテキストで、本文をコピーできる場合は true */
+            val canCopyBody: Boolean,
         ) : Preview
 
         /** テキストとして表示できる場合 */
@@ -144,6 +148,9 @@ internal data class NetworkLogUiState(
         fun onClickCopyUrl()
         fun onClickCopyBody()
         fun onClickReloadPreview()
+
+        /** プレビュー中の画像を端末に保存する */
+        fun onClickSaveImage()
         fun onClickClear()
 
         /** 一覧で見えている範囲。サムネイルの取得対象を決めるために使う */

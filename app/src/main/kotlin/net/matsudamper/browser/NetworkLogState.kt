@@ -2,9 +2,13 @@ package net.matsudamper.browser
 
 import android.content.ClipData
 import android.content.ClipboardManager
+import android.content.ContentValues
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.os.Environment
+import android.util.Log
+import android.provider.MediaStore
 import android.widget.Toast
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -14,12 +18,17 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.koin.compose.koinInject
 import org.mozilla.geckoview.GeckoSession
 
@@ -37,11 +46,13 @@ internal fun rememberNetworkLogUiState(
     val store: NetworkLogStore = koinInject()
     val extension: NetworkLogWebExtension = koinInject()
     val currentOnDismiss by rememberUpdatedState(onDismiss)
+    val coroutineScope = rememberCoroutineScope()
     val holder = remember(session) {
         NetworkLogStateHolder(
             extension = extension,
             store = store,
             context = context,
+            coroutineScope = coroutineScope,
             onDismiss = { currentOnDismiss() },
         )
     }
@@ -72,6 +83,7 @@ internal class NetworkLogStateHolder(
     private val extension: NetworkLogWebExtension,
     private val store: NetworkLogStore,
     private val context: Context,
+    private val coroutineScope: CoroutineScope,
     private val onDismiss: () -> Unit,
 ) {
     private var filter by mutableStateOf(NetworkLogUiState.ResourceFilter.All)
@@ -91,6 +103,10 @@ internal class NetworkLogStateHolder(
 
     // コピー用に保持する取得済みの本文
     private var previewText: String? = null
+
+    // 保存用に保持する取得済みの本文（画像プレビュー中のみ）
+    private var previewBytes: ByteArray? = null
+    private var previewMimeType: String = ""
 
     // 取得済みのサムネイル。取得に失敗した場合も再取得しないよう null を入れて記録する
     private val thumbnails = mutableStateMapOf<String, ThumbnailState>()
@@ -125,12 +141,12 @@ internal class NetworkLogStateHolder(
         override fun onClickEntry(id: String) {
             selectedId = id
             preview = NetworkLogUiState.Preview.Loading
-            previewText = null
+            clearPreviewBody()
         }
 
         override fun onClickCloseDetail() {
             selectedId = null
-            previewText = null
+            clearPreviewBody()
         }
 
         override fun onClickCopyUrl() {
@@ -145,8 +161,12 @@ internal class NetworkLogStateHolder(
 
         override fun onClickReloadPreview() {
             preview = NetworkLogUiState.Preview.Loading
-            previewText = null
+            clearPreviewBody()
             previewReloadCount += 1
+        }
+
+        override fun onClickSaveImage() {
+            saveImage()
         }
 
         override fun onClickClear() {
@@ -243,9 +263,25 @@ internal class NetworkLogStateHolder(
                 url = entry.url,
                 method = entry.method,
             ) { body ->
-                val bitmap = (body as? NetworkLogBody.Binary)?.let { decodeThumbnail(it.bytes) }
+                val bitmap = body.toThumbnailBitmap()
                 putThumbnail(entry.requestId, ThumbnailState(bitmap = bitmap?.asImageBitmap()))
             }
+        }
+    }
+
+    /** サムネイル用の小さい画像を作る。SVG はテキストとして届くため描画する */
+    private fun NetworkLogBody.toThumbnailBitmap(): Bitmap? {
+        return when (this) {
+            is NetworkLogBody.Binary -> decodeThumbnail(bytes)
+            is NetworkLogBody.Text -> {
+                if (NetworkLogSvgRenderer.isSvg(mimeType)) {
+                    NetworkLogSvgRenderer.render(text, THUMBNAIL_MAX_PIXELS)
+                } else {
+                    null
+                }
+            }
+
+            is NetworkLogBody.Failure -> null
         }
     }
 
@@ -288,6 +324,88 @@ internal class NetworkLogStateHolder(
         }.getOrNull()
     }
 
+    private fun clearPreviewBody() {
+        previewText = null
+        previewBytes = null
+        previewMimeType = ""
+    }
+
+    /**
+     * プレビュー中の画像を端末に保存する。
+     * ラスタ画像はギャラリーから見られるよう Pictures へ、
+     * ギャラリーで開けない SVG は Download へ保存する。
+     */
+    private fun saveImage() {
+        val bytes = previewBytes ?: return
+        val entry = selectedEntry() ?: return
+        val mimeType = previewMimeType.substringBefore(';').trim()
+            .ifEmpty { entry.mimeTypeWithoutParameter }
+        val fileName = saveFileName(url = entry.url, mimeType = mimeType)
+        val isSvg = NetworkLogSvgRenderer.isSvg(mimeType)
+        coroutineScope.launch {
+            val saved = withContext(Dispatchers.IO) {
+                writeToMediaStore(
+                    bytes = bytes,
+                    fileName = fileName,
+                    mimeType = mimeType.ifEmpty { "application/octet-stream" },
+                    isSvg = isSvg,
+                )
+            }
+            val directory = if (isSvg) "Download" else "Pictures"
+            val message = if (saved) {
+                "$directory に $fileName を保存しました"
+            } else {
+                "保存に失敗しました"
+            }
+            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun writeToMediaStore(
+        bytes: ByteArray,
+        fileName: String,
+        mimeType: String,
+        isSvg: Boolean,
+    ): Boolean {
+        val collection = if (isSvg) {
+            MediaStore.Downloads.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+        } else {
+            MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+        }
+        val values = ContentValues().apply {
+            put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+            put(MediaStore.MediaColumns.MIME_TYPE, mimeType)
+            put(
+                MediaStore.MediaColumns.RELATIVE_PATH,
+                if (isSvg) Environment.DIRECTORY_DOWNLOADS else Environment.DIRECTORY_PICTURES,
+            )
+        }
+        return runCatching {
+            val resolver = context.contentResolver
+            val uri = resolver.insert(collection, values) ?: return false
+            resolver.openOutputStream(uri)?.use { output ->
+                output.write(bytes)
+            } ?: return false
+            true
+        }.getOrElse { error ->
+            Log.w(TAG, "画像の保存に失敗", error)
+            false
+        }
+    }
+
+    /** 保存するファイル名。拡張子が無い場合は MIME から補う */
+    private fun saveFileName(url: String, mimeType: String): String {
+        val name = NetworkLogFormat.displayName(url).substringBefore('?').trim()
+        val extension = SAVE_EXTENSIONS[mimeType]
+        val fallbackName = "network_log_image"
+        val baseName = name.takeIf { it.isNotEmpty() && it != "-" } ?: fallbackName
+        return when {
+            extension == null -> baseName
+            baseName.endsWith(".$extension", ignoreCase = true) -> baseName
+            else -> "$baseName.$extension"
+        }
+    }
+
     private fun selectedEntry(): NetworkLogEntry? {
         val id = selectedId ?: return null
         return store.entries.value.firstOrNull { it.requestId == id }
@@ -318,10 +436,26 @@ internal class NetworkLogStateHolder(
         return when (this) {
             is NetworkLogBody.Text -> {
                 previewText = text
-                NetworkLogUiState.Preview.Text(
-                    text = text.take(MAX_PREVIEW_TEXT_LENGTH),
-                    isTruncated = text.length > MAX_PREVIEW_TEXT_LENGTH,
-                )
+                // SVG はテキストとして届くため、画像として描画してから表示する
+                val svgBitmap = if (NetworkLogSvgRenderer.isSvg(mimeType)) {
+                    NetworkLogSvgRenderer.render(text, PREVIEW_IMAGE_MAX_PIXELS)
+                } else {
+                    null
+                }
+                if (svgBitmap != null) {
+                    previewBytes = text.toByteArray()
+                    previewMimeType = mimeType
+                    NetworkLogUiState.Preview.Image(
+                        bitmap = svgBitmap.asImageBitmap(),
+                        sizeLabel = "SVG · ${NetworkLogFormat.formatBytes(sizeBytes)}",
+                        canCopyBody = true,
+                    )
+                } else {
+                    NetworkLogUiState.Preview.Text(
+                        text = text.take(MAX_PREVIEW_TEXT_LENGTH),
+                        isTruncated = text.length > MAX_PREVIEW_TEXT_LENGTH,
+                    )
+                }
             }
 
             is NetworkLogBody.Binary -> {
@@ -333,10 +467,13 @@ internal class NetworkLogStateHolder(
                         message = "この形式 (${mimeType.ifEmpty { "不明" }}) はプレビューできません",
                     )
                 } else {
+                    previewBytes = bytes
+                    previewMimeType = mimeType
                     NetworkLogUiState.Preview.Image(
                         bitmap = bitmap.asImageBitmap(),
                         sizeLabel = "${bitmap.width} × ${bitmap.height} · " +
                             NetworkLogFormat.formatBytes(sizeBytes),
+                        canCopyBody = false,
                     )
                 }
             }
@@ -438,6 +575,7 @@ internal class NetworkLogStateHolder(
                 )
                 error?.let { add(NetworkLogUiState.Detail.Item(label = "エラー", value = it)) }
             },
+            canSaveImage = preview is NetworkLogUiState.Preview.Image && previewBytes != null,
             requestHeaders = requestHeaders.map {
                 NetworkLogUiState.Header(name = it.name, value = it.value)
             },
@@ -457,11 +595,27 @@ internal class NetworkLogStateHolder(
     private companion object {
         const val MAX_PREVIEW_TEXT_LENGTH = 20000
 
+        // 詳細のプレビューで SVG を描画する大きさ（長辺のピクセル数）
+        const val PREVIEW_IMAGE_MAX_PIXELS = 512
+
         // 保持するサムネイルの上限。スクロールで対象が増えても際限なく持たないようにする
         const val MAX_THUMBNAIL_CACHE = 120
 
         // 見えている範囲の前後に何件を先読みするか
         const val THUMBNAIL_PREFETCH_MARGIN = 5
+
+        const val TAG = "NetworkLogState"
+
+        // 保存時に補う拡張子
+        val SAVE_EXTENSIONS = mapOf(
+            "image/png" to "png",
+            "image/jpeg" to "jpg",
+            "image/webp" to "webp",
+            "image/gif" to "gif",
+            "image/bmp" to "bmp",
+            "image/svg+xml" to "svg",
+            "image/avif" to "avif",
+        )
 
         // サムネイルの長辺のピクセル数の目安
         const val THUMBNAIL_MAX_PIXELS = 128
