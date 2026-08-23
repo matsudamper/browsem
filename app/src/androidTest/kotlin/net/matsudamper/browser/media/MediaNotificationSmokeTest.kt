@@ -5,18 +5,25 @@ import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.util.Log
-import androidx.test.ext.junit.rules.ActivityScenarioRule
+import androidx.compose.ui.test.click
+import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.Until
 import net.matsudamper.browser.AutoplayPermissionDialogTestTags
+import net.matsudamper.browser.GeckoBrowserTabTestTags
 import net.matsudamper.browser.LocalHttpServer
 import net.matsudamper.browser.MainActivity
+import net.matsudamper.browser.openUrlViaViewIntent
+import net.matsudamper.browser.waitForUrlBarContains
 import org.junit.After
 import org.junit.Assert.assertTrue
-import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.Timeout
@@ -33,21 +40,18 @@ import java.util.concurrent.TimeUnit
  */
 @RunWith(AndroidJUnit4::class)
 class MediaNotificationSmokeTest {
-    private lateinit var activity: MainActivity
     private var localHttpServer: LocalHttpServer? = null
 
     @get:Rule
-    val activityRule = ActivityScenarioRule(MainActivity::class.java)
+    val composeRule = createAndroidComposeRule<MainActivity>()
 
     @get:Rule
     val timeoutRule: Timeout = Timeout.millis(TEST_TIMEOUT_MS)
 
-    @Before
-    fun setUp() {
-        activityRule.scenario.onActivity { launchedActivity ->
-            activity = launchedActivity
-        }
-    }
+    private val activity: MainActivity get() = composeRule.activity
+
+    /** 自動再生の確認ダイアログを閉じた回数。失敗時の診断に使う */
+    private var autoplayDialogDismissCount = 0
 
     @After
     fun tearDown() {
@@ -76,27 +80,26 @@ class MediaNotificationSmokeTest {
 
         openMediaPage(mediaPageUri)
 
-        val displayWidth = uiDevice.displayWidth
-        val displayHeight = uiDevice.displayHeight
-        Log.d(TAG, "ページオープン完了: package=${uiDevice.currentPackageName}, " +
-            "画面サイズ=${displayWidth}x${displayHeight}")
+        Log.d(TAG, "ページオープン完了: package=${uiDevice.currentPackageName}")
 
         // ユーザー操作で再生を開始する（自動再生制限の影響を避ける）。
         // 固定時間の sleep だとページロードが遅い環境でタップが空振りしたまま通知確認へ進んで
         // flaky になるため、タップ後に MediaSessionBridge の isPlaying をポーリングし、
         // 実際に再生が始まるまでタップを繰り返す。
-        val playbackStarted = startPlaybackByTapping(uiDevice, displayWidth / 2, displayHeight / 2)
-        Log.d(
-            TAG,
-            "再生開始確認: started=$playbackStarted state=${MediaSessionBridge.playbackState.value}",
-        )
+        val playbackStarted = startPlaybackByTapping()
+        val stateAfterTap = MediaSessionBridge.playbackState.value
+        Log.d(TAG, "再生開始確認: started=$playbackStarted state=$stateAfterTap")
 
         uiDevice.openNotification()
         val found = uiDevice.wait(Until.hasObject(By.text(EXPECTED_TITLE)), NOTIFICATION_CONTROL_TIMEOUT_MS)
         Log.d(TAG, "通知検索完了: 発見=$found, タイトル=\"$EXPECTED_TITLE\", タイムアウト=${NOTIFICATION_CONTROL_TIMEOUT_MS}ms")
         try {
+            // CI は日本語メソッド名の logcat を紐付けられないため、原因切り分けに必要な情報を
+            // assert メッセージへ含める。
             assertTrue(
-                "通知タイトル \"$EXPECTED_TITLE\" が ${NOTIFICATION_CONTROL_TIMEOUT_MS}ms 以内に表示されなかった",
+                "通知タイトル \"$EXPECTED_TITLE\" が ${NOTIFICATION_CONTROL_TIMEOUT_MS}ms 以内に表示されなかった " +
+                    "(再生開始=$playbackStarted, 自動再生ダイアログ却下回数=$autoplayDialogDismissCount, " +
+                    "再生状態=$stateAfterTap)",
                 found,
             )
         } finally {
@@ -109,21 +112,28 @@ class MediaNotificationSmokeTest {
     // ================================================================
 
     /**
-     * 画面中央をタップして動画再生を開始し、MediaSessionBridge の isPlaying が
+     * GeckoView をタップして動画再生を開始し、MediaSessionBridge の isPlaying が
      * true になるまで待つ。再生が確認できたら true を返す。
+     *
+     * 座標タップではなく Compose セマンティクス経由でタップする。index.html は
+     * autoplay 属性を持ち自動再生の確認ダイアログが前面に出るため、座標タップだと
+     * ダイアログに吸われて動画へ届かない。セマンティクス経由なら対象ノードへ直接
+     * ディスパッチされるのでダイアログの有無に影響されない。
      *
      * ページロード完了前のタップは空振りするため、試行ごとにタップし直す。
      * 再生が始まらないまま試行上限に達した場合も false を返して通知確認へ進み、
-     * 失敗時は直前にログ出力した再生状態から原因（再生未開始 or 通知未表示）を特定できるようにする。
+     * 失敗時は assert メッセージの診断情報から原因を特定できるようにする。
      */
-    private fun startPlaybackByTapping(uiDevice: UiDevice, tapX: Int, tapY: Int): Boolean {
+    private fun startPlaybackByTapping(): Boolean {
         repeat(PLAYBACK_TAP_RETRY_COUNT) { index ->
-            // index.html は autoplay 属性を持つため自動再生の確認ダイアログが出る。
-            // ダイアログは画面中央を覆いタップが動画へ届かないので、先に閉じる。
-            // 「却下」を選んでもユーザー操作による再生はブロックされない。
-            dismissAutoplayPermissionDialogIfShown(uiDevice)
-            Log.d(TAG, "タップ試行${index + 1}/${PLAYBACK_TAP_RETRY_COUNT}: 座標=($tapX, $tapY)")
-            uiDevice.click(tapX, tapY)
+            // ダイアログを開いたままにすると通知シェードの確認と干渉するため、出ていれば閉じる。
+            // 「却下」してもユーザー操作による再生はブロックされない。
+            dismissAutoplayPermissionDialogIfShown()
+            Log.d(TAG, "タップ試行${index + 1}/${PLAYBACK_TAP_RETRY_COUNT}")
+            runCatching {
+                composeRule.onNodeWithTag(GeckoBrowserTabTestTags.GeckoContainer.testTag)
+                    .performTouchInput { click() }
+            }.onFailure { Log.d(TAG, "タップ失敗: ${it.message}") }
             val deadline = SystemClock.elapsedRealtime() + PLAYBACK_START_CONFIRM_TIMEOUT_MS
             while (SystemClock.elapsedRealtime() < deadline) {
                 if (MediaSessionBridge.playbackState.value.isPlaying) {
@@ -132,42 +142,32 @@ class MediaNotificationSmokeTest {
                 }
                 Thread.sleep(POLL_INTERVAL_MS)
             }
-            Log.d(
-                TAG,
-                "タップ試行${index + 1}完了: 再生未開始 package=${uiDevice.currentPackageName} " +
-                    "state=${MediaSessionBridge.playbackState.value}",
-            )
+            Log.d(TAG, "タップ試行${index + 1}完了: 再生未開始 state=${MediaSessionBridge.playbackState.value}")
         }
         return MediaSessionBridge.playbackState.value.isPlaying
     }
 
     /**
      * 自動再生の確認ダイアログが表示されていれば「却下」を押して閉じる。
-     * 表示されていなければ何もしない。
+     * 表示されていなければ何もしない。閉じたかどうかを [autoplayDialogDismissCount] に記録し、
+     * 失敗時の診断に使う。
      */
-    private fun dismissAutoplayPermissionDialogIfShown(uiDevice: UiDevice) {
-        val denyButton = uiDevice.wait(
-            Until.findObject(By.res(AutoplayPermissionDialogTestTags.Deny.testTag)),
-            AUTOPLAY_DIALOG_TIMEOUT_MS,
-        ) ?: return
+    private fun dismissAutoplayPermissionDialogIfShown() {
+        val denyNode = composeRule
+            .onAllNodesWithTag(AutoplayPermissionDialogTestTags.Deny.testTag)
+            .fetchSemanticsNodes(atLeastOneRootRequired = false)
+        if (denyNode.isEmpty()) return
         Log.d(TAG, "自動再生の確認ダイアログを却下で閉じる")
-        denyButton.click()
-        uiDevice.wait(
-            Until.gone(By.res(AutoplayPermissionDialogTestTags.Deny.testTag)),
-            AUTOPLAY_DIALOG_TIMEOUT_MS,
-        )
+        autoplayDialogDismissCount += 1
+        runCatching {
+            composeRule.onNodeWithTag(AutoplayPermissionDialogTestTags.Deny.testTag).performClick()
+            composeRule.waitForIdle()
+        }.onFailure { Log.d(TAG, "ダイアログ却下に失敗: ${it.message}") }
     }
 
     private fun openMediaPage(mediaPageUri: String) {
-        activityRule.scenario.onActivity { currentActivity ->
-            currentActivity.startActivity(
-                Intent(Intent.ACTION_VIEW).apply {
-                    data = android.net.Uri.parse(mediaPageUri)
-                    addCategory(Intent.CATEGORY_BROWSABLE)
-                    setClass(currentActivity, MainActivity::class.java)
-                }
-            )
-        }
+        composeRule.openUrlViaViewIntent(mediaPageUri)
+        composeRule.waitForUrlBarContains(LOCAL_MEDIA_INDEX_FILE_NAME, timeoutMillis = PAGE_LOAD_TIMEOUT_MS)
     }
 
     /**
@@ -198,9 +198,8 @@ class MediaNotificationSmokeTest {
 
     companion object {
         private const val TAG = "MediaNotificationSmoke"
-        // ダイアログはページロード後に出るため、初回は少し待つ
-        private const val AUTOPLAY_DIALOG_TIMEOUT_MS = 2_000L
         private const val TEST_TIMEOUT_MS = 180_000L
+        private const val PAGE_LOAD_TIMEOUT_MS = 60_000L
         // ページロード待ちを兼ねるため、タップ試行は多め・確認間隔は短めに設定する
         private const val PLAYBACK_TAP_RETRY_COUNT = 10
         private const val PLAYBACK_START_CONFIRM_TIMEOUT_MS = 2_500L
