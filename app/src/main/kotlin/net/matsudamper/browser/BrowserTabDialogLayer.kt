@@ -32,6 +32,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
@@ -114,12 +115,26 @@ internal fun BrowserTabDialogLayer(
     }
 
     // サイトごとの自動再生（音声付きメディア）許可確認ダイアログ。
-    // 選択はサイト設定として永続化され、次回以降は確認せずに適用される。
+    // 「許可」「却下」はサイト設定として永続化され、次回以降は確認せずに適用される。
+    // 「今回のみ許可」とダイアログを閉じただけの場合は永続化せず、次回も確認する。
     state.autoplayPermissionDialog?.let { dialog ->
         AutoplayPermissionDialog(
             host = dialog.host,
-            onAllow = { state.confirmAutoplayPermissionDialog(true) },
-            onBlock = { state.confirmAutoplayPermissionDialog(false) },
+            onAllow = {
+                state.confirmAutoplayPermissionDialog(
+                    BrowserTabScreenState.AutoplayPermissionChoice.Allow,
+                )
+            },
+            onAllowOnce = {
+                state.confirmAutoplayPermissionDialog(
+                    BrowserTabScreenState.AutoplayPermissionChoice.AllowOnce,
+                )
+            },
+            onDeny = {
+                state.confirmAutoplayPermissionDialog(
+                    BrowserTabScreenState.AutoplayPermissionChoice.Deny,
+                )
+            },
             onDismiss = state::dismissAutoplayPermissionDialog,
         )
     }
@@ -410,7 +425,8 @@ internal fun BrowserTabDialogLayer(
 private fun AutoplayPermissionDialog(
     host: String,
     onAllow: () -> Unit,
-    onBlock: () -> Unit,
+    onAllowOnce: () -> Unit,
+    onDeny: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     AlertDialog(
@@ -419,18 +435,23 @@ private fun AutoplayPermissionDialog(
         text = {
             Text(
                 "$host が音声付きメディアの自動再生を求めています。" +
-                    "ブロックしても再生ボタンを押せば再生できます。" +
+                    "却下しても再生ボタンを押せば再生できます。" +
+                    "「今回のみ許可」を選ぶと設定は保存されず、次回も確認します。" +
                     "この設定はメニューの「サイトの設定」から変更できます。",
             )
         },
+        // 選択肢が3つあり、日本語ラベルは横並びだと狭い画面で見切れるため縦に並べる
         confirmButton = {
-            TextButton(onClick = onAllow) {
-                Text("許可")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onBlock) {
-                Text("ブロック")
+            Column(horizontalAlignment = Alignment.End) {
+                TextButton(onClick = onAllow) {
+                    Text("許可")
+                }
+                TextButton(onClick = onAllowOnce) {
+                    Text("今回のみ許可")
+                }
+                TextButton(onClick = onDeny) {
+                    Text("却下")
+                }
             }
         },
     )
@@ -1065,7 +1086,8 @@ private fun PreviewAutoplayPermissionDialog() {
         AutoplayPermissionDialog(
             host = "www.example.com",
             onAllow = {},
-            onBlock = {},
+            onAllowOnce = {},
+            onDeny = {},
             onDismiss = {},
         )
     }

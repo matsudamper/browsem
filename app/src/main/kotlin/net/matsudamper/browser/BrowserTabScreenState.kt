@@ -267,19 +267,32 @@ internal class BrowserTabScreenState(
     var autoplayPermissionDialog by mutableStateOf<AutoplayPermissionDialogState?>(null)
         private set
 
+    /** 自動再生確認ダイアログでの選択 */
+    enum class AutoplayPermissionChoice {
+        /** 許可してサイト設定へ永続化する */
+        Allow,
+
+        /** 今回だけ許可し、永続化しない（次回も確認する） */
+        AllowOnce,
+
+        /** 却下してサイト設定へ永続化する */
+        Deny,
+    }
+
     /**
-     * @param onResult true=許可(永続化), false=ブロック(永続化), null=今回のみ拒否
+     * @param onResult 選択された [AutoplayPermissionChoice]。
+     * null は未選択（ダイアログを閉じただけ）で、今回のみ拒否し永続化しない
      */
     @Stable
     class AutoplayPermissionDialogState(
         val host: String,
-        internal val onResult: (Boolean?) -> Unit,
+        internal val onResult: (AutoplayPermissionChoice?) -> Unit,
     )
 
-    fun confirmAutoplayPermissionDialog(allow: Boolean) {
+    fun confirmAutoplayPermissionDialog(choice: AutoplayPermissionChoice) {
         val dialog = autoplayPermissionDialog ?: return
         autoplayPermissionDialog = null
-        dialog.onResult(allow)
+        dialog.onResult(choice)
     }
 
     fun dismissAutoplayPermissionDialog() {
@@ -290,8 +303,9 @@ internal class BrowserTabScreenState(
 
     /**
      * サイトごとの自動再生（音声付きメディア）の許可を解決する。
-     * 未設定 (ASK) の場合は確認ダイアログを表示してユーザーの応答を待ち、
-     * 許可/ブロックの選択をサイト設定として永続化する。
+     * 未設定 (ASK) の場合は確認ダイアログを表示してユーザーの応答を待つ。
+     * 「許可」「却下」はサイト設定として永続化し、「今回のみ許可」と未選択は
+     * 永続化しないため次回の要求でも再びダイアログを表示する。
      */
     private suspend fun resolveAutoplayPermission(host: String): Boolean {
         // 要求があったことを記録し、「サイトの設定」画面に自動再生の項目を表示できるようにする
@@ -306,22 +320,18 @@ internal class BrowserTabScreenState(
             autoplayPermissionDialog = null
             previous.onResult(null)
         }
-        val result = CompletableDeferred<Boolean?>()
-        autoplayPermissionDialog = AutoplayPermissionDialogState(host) { allow ->
-            result.complete(allow)
+        val result = CompletableDeferred<AutoplayPermissionChoice?>()
+        autoplayPermissionDialog = AutoplayPermissionDialogState(host) { choice ->
+            result.complete(choice)
         }
-        val choice = result.await()
-        if (choice != null) {
-            siteSettingsRepository.setAutoplayPermission(
-                host = host,
-                state = if (choice) {
-                    SitePermissionState.SITE_PERMISSION_ALLOW
-                } else {
-                    SitePermissionState.SITE_PERMISSION_DENY
-                },
-            )
+        val persistedState = when (val choice = result.await()) {
+            AutoplayPermissionChoice.Allow -> SitePermissionState.SITE_PERMISSION_ALLOW
+            AutoplayPermissionChoice.Deny -> SitePermissionState.SITE_PERMISSION_DENY
+            // 今回のみ許可・未選択は永続化せず ASK のままにして、次回も確認する
+            AutoplayPermissionChoice.AllowOnce, null -> return choice == AutoplayPermissionChoice.AllowOnce
         }
-        return choice == true
+        siteSettingsRepository.setAutoplayPermission(host = host, state = persistedState)
+        return persistedState == SitePermissionState.SITE_PERMISSION_ALLOW
     }
 
     /**
