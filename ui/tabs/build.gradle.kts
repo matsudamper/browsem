@@ -7,6 +7,7 @@ plugins {
 android {
     namespace = "net.matsudamper.browser.ui.tabs"
     compileSdk = 37
+    compileSdkMinor = 1
 
     defaultConfig {
         minSdk = 30

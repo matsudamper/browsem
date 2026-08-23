@@ -109,6 +109,8 @@ internal fun GeckoBrowserTab(
     showInstallExtensionItem: Boolean = true,
     customTabMode: Boolean = false,
     webAppMode: Boolean = false,
+    webAppPinnedHost: String? = null,
+    onWebAppCrossDomainNavigation: ((String) -> Unit)? = null,
     onCloseCustomTab: (() -> Unit)? = null,
     onOpenInBrowser: ((String) -> Unit)? = null,
     onCloseTab: (() -> Unit)? = null,
@@ -145,6 +147,8 @@ internal fun GeckoBrowserTab(
         homepageUrl = homepageUrl,
         searchTemplate = searchTemplate,
         isSinglePageMode = webAppMode || customTabMode,
+        webAppPinnedHost = webAppPinnedHost.takeIf { webAppMode },
+        onWebAppCrossDomainNavigation = onWebAppCrossDomainNavigation.takeIf { webAppMode },
         onHistoryRecord = onHistoryRecord,
         onHistoryTitleUpdate = onHistoryTitleUpdate,
         onRequestDownloadNotificationPermission = onRequestDownloadNotificationPermission,
@@ -923,6 +927,7 @@ internal fun GeckoBrowserTab(
                     onResetPageZoom = state::resetPageZoom,
                     // ウェブアプリモードでは閉じるボタンを非表示にする
                     showCloseButton = customTabMode,
+                    showHome = webAppMode,
                 )
             } else {
                 BrowserToolBar(
