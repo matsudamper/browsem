@@ -29,6 +29,9 @@ sealed interface NetworkLogBody {
             /** 再取得に失敗した */
             FetchFailed,
 
+            /** GET 以外のため再取得できない */
+            NotReplayable,
+
             /** 拡張機能へ問い合わせできなかった */
             Unavailable,
         }

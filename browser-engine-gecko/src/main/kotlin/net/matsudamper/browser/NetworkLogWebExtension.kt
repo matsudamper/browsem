@@ -97,6 +97,7 @@ class NetworkLogWebExtension(
     fun requestBody(
         requestId: String,
         url: String,
+        method: String,
         onResult: (NetworkLogBody) -> Unit,
     ) {
         val port = backgroundPort
@@ -112,6 +113,7 @@ class NetworkLogWebExtension(
                     put("action", "fetchBody")
                     put("requestId", requestId)
                     put("url", url)
+                    put("method", method)
                 },
             )
         }.onFailure { error ->
@@ -146,6 +148,9 @@ class NetworkLogWebExtension(
                             Log.d(TAG, "バックグラウンドポート切断")
                             if (backgroundPort === port) {
                                 backgroundPort = null
+                                // 応答を待っている本文取得は二度と返らないため、
+                                // 取得不可として通知しないと呼び出し側が待ち続ける
+                                failPendingBodyRequests()
                             }
                         }
                     })
@@ -194,6 +199,19 @@ class NetworkLogWebExtension(
         }
         mainHandler.post {
             store.record(entries)
+        }
+    }
+
+    /** 応答待ちの本文取得をすべて取得不可として完了させる */
+    private fun failPendingBodyRequests() {
+        val pending = bodyCallbacks.keys.toList().mapNotNull { requestId ->
+            bodyCallbacks.remove(requestId)
+        }
+        if (pending.isEmpty()) return
+        mainHandler.post {
+            pending.forEach { callback ->
+                callback(NetworkLogBody.Failure(NetworkLogBody.Failure.Reason.Unavailable))
+            }
         }
     }
 
@@ -246,6 +264,7 @@ class NetworkLogWebExtension(
             val reason = when (optString("reason")) {
                 "too_large" -> NetworkLogBody.Failure.Reason.TooLarge
                 "fetch_failed" -> NetworkLogBody.Failure.Reason.FetchFailed
+                "not_replayable" -> NetworkLogBody.Failure.Reason.NotReplayable
                 else -> NetworkLogBody.Failure.Reason.Unavailable
             }
             return NetworkLogBody.Failure(reason = reason, sizeBytes = optLong("size", -1))

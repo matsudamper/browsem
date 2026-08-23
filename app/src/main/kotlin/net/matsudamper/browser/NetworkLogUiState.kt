@@ -14,6 +14,10 @@ internal data class NetworkLogUiState(
     val filters: List<Filter>,
     val searchQuery: String,
     val summary: Summary,
+    /** タブを特定できていない等、一覧の前提を伝える案内。不要な場合は null */
+    val notice: String?,
+    /** ログ消去を行えるかどうか。タブを特定できていない間は行えない */
+    val canClear: Boolean,
     /** 詳細を開いている場合の内容。一覧表示中は null */
     val detail: Detail?,
 ) {

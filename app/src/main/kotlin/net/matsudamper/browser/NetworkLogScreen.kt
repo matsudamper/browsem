@@ -101,6 +101,7 @@ internal fun NetworkLogScreen(
                     actions = {
                         IconButton(
                             modifier = Modifier.testTag(NetworkLogScreenTestTags.ClearButton.testTag),
+                            enabled = uiState.canClear,
                             onClick = uiState.callbacks::onClickClear,
                         ) {
                             Icon(
@@ -190,6 +191,16 @@ private fun NetworkLogList(
             Text(
                 text = uiState.summary.sizeLabel,
                 style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        uiState.notice?.let { notice ->
+            Text(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                text = notice,
+                style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
@@ -669,6 +680,8 @@ private fun PreviewNetworkLogScreenList() {
                 filters = previewFilters(),
                 searchQuery = "",
                 summary = NetworkLogUiState.Summary(countLabel = "5 件", sizeLabel = "1.7 MB"),
+                notice = null,
+                canClear = true,
                 detail = null,
             ),
         )
@@ -686,6 +699,8 @@ private fun PreviewNetworkLogScreenEmpty() {
                 filters = listOf(previewFilters().first()),
                 searchQuery = "",
                 summary = NetworkLogUiState.Summary(countLabel = "0 件", sizeLabel = "0 B"),
+                notice = null,
+                canClear = true,
                 detail = null,
             ),
         )
@@ -703,6 +718,8 @@ private fun PreviewNetworkLogScreenImageDetail() {
                 filters = previewFilters(),
                 searchQuery = "",
                 summary = NetworkLogUiState.Summary(countLabel = "5 件", sizeLabel = "1.7 MB"),
+                notice = null,
+                canClear = true,
                 detail = previewDetail(
                     NetworkLogUiState.Preview.Image(
                         bitmap = previewImageBitmap(),
@@ -725,6 +742,8 @@ private fun PreviewNetworkLogScreenTextDetail() {
                 filters = previewFilters(),
                 searchQuery = "main",
                 summary = NetworkLogUiState.Summary(countLabel = "1 件", sizeLabel = "482.0 KB"),
+                notice = null,
+                canClear = true,
                 detail = previewDetail(
                     NetworkLogUiState.Preview.Text(
                         text = """

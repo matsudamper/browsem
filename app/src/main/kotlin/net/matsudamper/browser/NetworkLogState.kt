@@ -121,7 +121,10 @@ internal class NetworkLogStateHolder(
         }
 
         override fun onClickClear() {
-            store.clear(currentTabId)
+            // タブを特定できていない間は全タブ分を表示しているため、
+            // ここでクリアすると他のタブのログまで消えてしまう
+            val tabId = currentTabId ?: return
+            store.clear(tabId)
             selectedId = null
         }
 
@@ -153,15 +156,31 @@ internal class NetworkLogStateHolder(
                 countLabel = "${filtered.size} 件",
                 sizeLabel = NetworkLogFormat.formatBytes(filtered.sumOf { it.sizeBytes }),
             ),
+            notice = if (tabId == null) {
+                "タブを特定中のため、すべてのタブの通信を表示しています"
+            } else {
+                null
+            },
+            canClear = tabId != null,
             detail = detail,
         )
     }
 
     /** プレビュー用の本文を取得する */
     fun loadPreview() {
-        val entry = selectedEntry() ?: return
+        val id = selectedId ?: return
+        val entry = selectedEntry()
+        if (entry == null) {
+            // ログが消去された等でエントリが無い場合、待ち続けないよう即座に確定させる
+            preview = NetworkLogUiState.Preview.Unavailable(
+                message = "この通信のログは既に破棄されています",
+            )
+            return
+        }
         preview = NetworkLogUiState.Preview.Loading
-        extension.requestBody(requestId = entry.requestId, url = entry.url) { body ->
+        extension.requestBody(requestId = id, url = entry.url, method = entry.method) { body ->
+            // 取得中に別の項目へ切り替わっている場合は破棄する
+            if (selectedId != id) return@requestBody
             preview = body.toPreview()
         }
     }
@@ -178,8 +197,11 @@ internal class NetworkLogStateHolder(
             } else {
                 entries.count { NetworkLogFormat.filterOf(it.resourceType) == candidate }
             }
-            // 該当が無い種別のチップは出さない（すべては常に出す）
-            if (count == 0 && candidate != NetworkLogUiState.ResourceFilter.All) return@mapNotNull null
+            // 該当が無い種別のチップは出さない。
+            // ただし「すべて」と選択中のものは、選択を戻せなくなるため残す
+            val isAlwaysVisible = candidate == NetworkLogUiState.ResourceFilter.All ||
+                candidate == filter
+            if (count == 0 && !isAlwaysVisible) return@mapNotNull null
             NetworkLogUiState.Filter(
                 type = candidate,
                 label = NetworkLogFormat.filterLabel(candidate),
@@ -223,6 +245,9 @@ internal class NetworkLogStateHolder(
 
                     NetworkLogBody.Failure.Reason.FetchFailed ->
                         "本文を取得できませんでした。キャッシュに残っていない可能性があります"
+
+                    NetworkLogBody.Failure.Reason.NotReplayable ->
+                        "GET 以外のリクエストは本文を再取得できません"
 
                     NetworkLogBody.Failure.Reason.Unavailable ->
                         "拡張機能へ接続できないため取得できませんでした"

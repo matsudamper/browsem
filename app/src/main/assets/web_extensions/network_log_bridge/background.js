@@ -195,7 +195,13 @@
   // プレビュー用に本文を取得する。
   // 通信時の本文を保持し続けるとメモリを圧迫するため、
   // 要求されたタイミングで HTTP キャッシュを優先して再取得する。
-  async function fetchBody(requestId, url) {
+  // 再取得は GET のみを対象とする。GET 以外を再送すると
+  // 元のリクエストとは異なる結果になるうえ、サーバ側に副作用を与えうる。
+  async function fetchBody(requestId, url, method) {
+    if ((method || 'GET').toUpperCase() !== 'GET') {
+      replyBody(requestId, { ok: false, reason: 'not_replayable' });
+      return;
+    }
     try {
       const response = await fetch(url, { credentials: 'include', cache: 'force-cache' });
       const blob = await response.blob();
@@ -219,7 +225,7 @@
   port.onMessage.addListener(function (message) {
     if (!message) return;
     if (message.action === 'fetchBody') {
-      fetchBody(message.requestId, message.url);
+      fetchBody(message.requestId, message.url, message.method);
     } else if (message.action === 'flush') {
       flush();
     }
