@@ -64,7 +64,14 @@ import net.matsudamper.browser.resources.R as ResourcesR
 @Composable
 internal fun NetworkLogDialog(uiState: NetworkLogUiState) {
     Dialog(
-        onDismissRequest = uiState.callbacks::onDismiss,
+        // 詳細を開いている場合、OS の戻る操作では画面ごと閉じずに一覧へ戻す
+        onDismissRequest = {
+            if (uiState.detail != null) {
+                uiState.callbacks.onClickCloseDetail()
+            } else {
+                uiState.callbacks.onDismiss()
+            }
+        },
         properties = DialogProperties(usePlatformDefaultWidth = false),
     ) {
         Surface(modifier = Modifier.fillMaxSize()) {
