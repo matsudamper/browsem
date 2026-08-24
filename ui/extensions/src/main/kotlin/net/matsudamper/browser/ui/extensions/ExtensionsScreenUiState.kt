@@ -9,6 +9,7 @@ data class ExtensionsScreenUiState(
     val errorMessage: String?,
     val uninstallingId: String?,
     val togglingId: String?,
+    val isTogglingGlobal: Boolean,
     val isInstalling: Boolean,
 ) {
     interface Callbacks {
@@ -19,6 +20,9 @@ data class ExtensionsScreenUiState(
         fun uninstallExtension(extensionId: String)
         fun openExtensionSettings(extensionId: String)
         fun setExtensionEnabled(extensionId: String, enabled: Boolean)
+
+        /** 拡張機能全体の有効/無効を切り替える */
+        fun setExtensionsGloballyEnabled(enabled: Boolean)
         fun dismissError()
     }
 
@@ -27,6 +31,7 @@ data class ExtensionsScreenUiState(
 
         data class Loaded(
             val extensions: List<ExtensionUiState>,
+            val areExtensionsEnabled: Boolean,
         ) : LoadingState
     }
 

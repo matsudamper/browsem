@@ -12,8 +12,11 @@ data class BackupProgressUiState(
         /** ファイルピッカー表示中（選択待ち） */
         data object WaitingForFile : Phase
 
-        /** バックアップ処理を実行中のフェーズ。message には現在の処理内容を表示する */
-        data class InProgress(val message: String) : Phase
+        /** バックアップ処理を実行中のフェーズ */
+        data class InProgress(
+            val message: String,
+            val fraction: Float? = null,
+        ) : Phase
 
         /** 処理が正常に完了したフェーズ */
         data class Completed(val successMessage: String) : Phase

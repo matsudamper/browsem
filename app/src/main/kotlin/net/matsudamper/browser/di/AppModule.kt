@@ -14,6 +14,7 @@ import net.matsudamper.browser.NetworkLogWebExtension
 import net.matsudamper.browser.ThemeColorWebExtension
 import net.matsudamper.browser.TwitterShareWebExtension
 import net.matsudamper.browser.ViewportScaleWebExtension
+import net.matsudamper.browser.ExtensionRuntimeCoordinator
 import net.matsudamper.browser.WebExtensionActionController
 import net.matsudamper.browser.data.BackupRepository
 import net.matsudamper.browser.data.SettingsRepository
@@ -81,6 +82,7 @@ val appModule = module {
     single { TwitterShareWebExtension().also { it.install(get()) } }
     // 拡張機能のツールバーアクションはランタイム単位で受け取るため single
     single { WebExtensionActionController(get()) }
+    single { ExtensionRuntimeCoordinator(get()) }
     // eTLD+1 (基底ドメイン) の算出に使用する Public Suffix List。初回ロードを共有するため single
     single { PublicSuffixList(androidContext()) }
     factory { GeckoDownloadManager(androidContext(), get()) }

@@ -313,10 +313,11 @@ internal fun UrlSuggestionList(
                 SuggestionSectionHeader(title = "履歴")
             }
             items(historySuggestions, key = { it.id }) { entry ->
+                val displayUrl = HistoryUrlFormat.forDisplay(entry.url)
                 ListItem(
                     headlineContent = {
                         Text(
-                            text = entry.title.ifBlank { entry.url },
+                            text = entry.title.ifBlank { displayUrl },
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
@@ -324,7 +325,7 @@ internal fun UrlSuggestionList(
                     supportingContent = {
                         if (entry.title.isNotBlank()) {
                             Text(
-                                text = entry.url,
+                                text = displayUrl,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                             )
