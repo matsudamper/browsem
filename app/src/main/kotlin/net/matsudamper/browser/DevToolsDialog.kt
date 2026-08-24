@@ -13,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.tooling.preview.Preview
+import net.matsudamper.browser.feature.devtools.DevToolsWebExtension
 import net.matsudamper.browser.data.ThemeMode
 import net.matsudamper.browser.ui.common.BrowserTheme
 

@@ -29,6 +29,10 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import net.matsudamper.browser.feature.networklog.NetworkLogBody
+import net.matsudamper.browser.feature.networklog.NetworkLogEntry
+import net.matsudamper.browser.feature.networklog.NetworkLogStore
+import net.matsudamper.browser.feature.networklog.NetworkLogWebExtension
 import org.koin.compose.koinInject
 import org.mozilla.geckoview.GeckoSession
 

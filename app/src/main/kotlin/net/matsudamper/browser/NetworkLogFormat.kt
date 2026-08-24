@@ -1,5 +1,7 @@
 package net.matsudamper.browser
 
+import net.matsudamper.browser.feature.networklog.NetworkLogEntry
+import net.matsudamper.browser.feature.networklog.NetworkResourceType
 import java.net.URI
 import java.time.Instant
 import java.time.ZoneId

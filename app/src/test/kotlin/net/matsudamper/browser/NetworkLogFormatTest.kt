@@ -1,5 +1,7 @@
 package net.matsudamper.browser
 
+import net.matsudamper.browser.feature.networklog.NetworkLogEntry
+import net.matsudamper.browser.feature.networklog.NetworkResourceType
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
