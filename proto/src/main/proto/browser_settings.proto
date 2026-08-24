@@ -44,4 +44,6 @@ message BrowserSettings {
   optional bool extensions_process_enabled = 15;
   // ツールバーメニューに並べる拡張機能アイコンの表示順 (拡張機能 ID の並び)
   repeated string extension_action_order = 16;
+  // 拡張機能全体の有効/無効 (オフ時は APP ソースで無効化し、個別の USER 設定は保持する)
+  optional bool extensions_enabled = 17;
 }
