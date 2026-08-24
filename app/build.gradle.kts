@@ -139,6 +139,7 @@ dependencies {
     implementation(libs.androidx.browser)
     implementation(libs.mozilla.geckoview)
     implementation(libs.mozilla.publicsuffixlist)
+    implementation(libs.androidsvg)
     implementation(libs.mlkit.translate)
     implementation(libs.mlkit.language.id)
     implementation(libs.kotlinx.coroutines.play.services)

@@ -201,6 +201,10 @@ internal class BrowserTabScreenState(
     // 現在フォーカスされている入力要素の情報。フォーカスがない場合は null。
     var devToolsFocusedInput by mutableStateOf<DevToolsWebExtension.FocusedInputInfo?>(null)
 
+    // ネットワークログ画面を表示中かどうか
+    var showNetworkLog by mutableStateOf(false)
+        private set
+
     // --- Back gesture state ---
     var isBackGestureInProgress by mutableStateOf(false)
 
@@ -257,6 +261,77 @@ internal class BrowserTabScreenState(
         val dialog = microphonePermissionDialog ?: return
         microphonePermissionDialog = null
         dialog.onResult(null)
+    }
+
+    // --- サイトごとの自動再生（音声付きメディア）許可確認ダイアログ状態 ---
+    var autoplayPermissionDialog by mutableStateOf<AutoplayPermissionDialogState?>(null)
+        private set
+
+    /** 自動再生確認ダイアログでの選択 */
+    enum class AutoplayPermissionChoice {
+        /** 許可してサイト設定へ永続化する */
+        Allow,
+
+        /** 今回だけ許可し、永続化しない（次回も確認する） */
+        AllowOnce,
+
+        /** 却下してサイト設定へ永続化する */
+        Deny,
+    }
+
+    /**
+     * @param onResult 選択された [AutoplayPermissionChoice]。
+     * null は未選択（ダイアログを閉じただけ）で、今回のみ拒否し永続化しない
+     */
+    @Stable
+    class AutoplayPermissionDialogState(
+        val host: String,
+        internal val onResult: (AutoplayPermissionChoice?) -> Unit,
+    )
+
+    fun confirmAutoplayPermissionDialog(choice: AutoplayPermissionChoice) {
+        val dialog = autoplayPermissionDialog ?: return
+        autoplayPermissionDialog = null
+        dialog.onResult(choice)
+    }
+
+    fun dismissAutoplayPermissionDialog() {
+        val dialog = autoplayPermissionDialog ?: return
+        autoplayPermissionDialog = null
+        dialog.onResult(null)
+    }
+
+    /**
+     * サイトごとの自動再生（音声付きメディア）の許可を解決する。
+     * 未設定 (ASK) の場合は確認ダイアログを表示してユーザーの応答を待つ。
+     * 「許可」「却下」はサイト設定として永続化し、「今回のみ許可」と未選択は
+     * 永続化しないため次回の要求でも再びダイアログを表示する。
+     */
+    private suspend fun resolveAutoplayPermission(host: String): Boolean {
+        // 要求があったことを記録し、「サイトの設定」画面に自動再生の項目を表示できるようにする
+        siteSettingsRepository.markAutoplayPermissionRequested(host)
+        when (siteSettingsRepository.getAutoplayPermission(host)) {
+            SitePermissionState.SITE_PERMISSION_ALLOW -> return true
+            SitePermissionState.SITE_PERMISSION_DENY -> return false
+            else -> Unit
+        }
+        // 表示中のダイアログが残っている場合は今回のみ拒否として閉じる
+        autoplayPermissionDialog?.also { previous ->
+            autoplayPermissionDialog = null
+            previous.onResult(null)
+        }
+        val result = CompletableDeferred<AutoplayPermissionChoice?>()
+        autoplayPermissionDialog = AutoplayPermissionDialogState(host) { choice ->
+            result.complete(choice)
+        }
+        val persistedState = when (val choice = result.await()) {
+            AutoplayPermissionChoice.Allow -> SitePermissionState.SITE_PERMISSION_ALLOW
+            AutoplayPermissionChoice.Deny -> SitePermissionState.SITE_PERMISSION_DENY
+            // 今回のみ許可・未選択は永続化せず ASK のままにして、次回も確認する
+            AutoplayPermissionChoice.AllowOnce, null -> return choice == AutoplayPermissionChoice.AllowOnce
+        }
+        siteSettingsRepository.setAutoplayPermission(host = host, state = persistedState)
+        return persistedState == SitePermissionState.SITE_PERMISSION_ALLOW
     }
 
     /**
@@ -366,17 +441,6 @@ internal class BrowserTabScreenState(
             field = value
         }
 
-    init {
-        Log.d(
-            TAG,
-            "init previewCaptureReady=$previewCaptureReady (tabId=${browserTab.tabId} hasPreview=${browserTab.previewBitmap?.isNotEmpty() == true} hasSessionState=${browserTab.sessionState.isNotBlank()})",
-        )
-        coroutineScope.launch {
-            settingsRepository.settings.collect { settings ->
-                extensionActionOrder = settings.extensionActionOrderList
-            }
-        }
-    }
     var pageLoadError by mutableStateOf<PageLoadError?>(null)
 
     // --- ズーム状態（viewport width 操作によりテキスト・画像含め全体をズーム）---
@@ -403,6 +467,21 @@ internal class BrowserTabScreenState(
     private var extensionActionOrder by mutableStateOf<List<String>>(emptyList())
     // ドラッグ中は保存済みの並び順ではなく、この一時的な並び順を使う
     private var draggingExtensionActionOrder by mutableStateOf<List<String>?>(null)
+
+    // 収集した設定を extensionActionOrder へ書き込むため、
+    // このプロパティを宣言した後で init を実行する必要がある。
+    // 宣言前に置くと、設定が即座に流れてきた場合に未初期化のプロパティへ代入して落ちる
+    init {
+        Log.d(
+            TAG,
+            "init previewCaptureReady=$previewCaptureReady (tabId=${browserTab.tabId} hasPreview=${browserTab.previewBitmap?.isNotEmpty() == true} hasSessionState=${browserTab.sessionState.isNotBlank()})",
+        )
+        coroutineScope.launch {
+            settingsRepository.settings.collect { settings ->
+                extensionActionOrder = settings.extensionActionOrderList
+            }
+        }
+    }
 
     /** このタブに対して有効な拡張機能アクションを、ユーザーが決めた並び順で返す */
     val extensionActions: List<WebExtensionActionController.ActionUiState>
@@ -688,11 +767,6 @@ internal class BrowserTabScreenState(
         devToolsWebExtension.requestFocusedInput(session)
     }
 
-    /** フォーカスされている入力要素の情報を再取得する */
-    fun refreshDevToolsFocusedInput() {
-        devToolsWebExtension.requestFocusedInput(session)
-    }
-
     /** フォーカス中の input の id をクリップボードにコピーする */
     fun copyFocusedInputId() {
         val id = devToolsFocusedInput?.id?.takeIf { it.isNotBlank() } ?: return
@@ -704,6 +778,16 @@ internal class BrowserTabScreenState(
 
     fun closeDevTools() {
         showDevTools = false
+    }
+
+    /** ネットワークログ画面を開く。開発者ツールのダイアログは閉じる */
+    fun openNetworkLog() {
+        showDevTools = false
+        showNetworkLog = true
+    }
+
+    fun closeNetworkLog() {
+        showNetworkLog = false
     }
 
     fun onTranslate(translationProvider: TranslationProvider) {
@@ -1497,6 +1581,29 @@ internal class BrowserTabScreenState(
             val allow = host != null &&
                 runCatching { siteSettingsRepository.getGeolocationState(host) }.getOrNull() ==
                 SiteGeolocationState.SITE_GEOLOCATION_REAL
+            if (completed.compareAndSet(false, true)) {
+                onResult(allow)
+            }
+        }
+        job.invokeOnCompletion { cause ->
+            // スコープのキャンセル等で onResult まで到達しなかった場合は拒否として完了させる
+            if (cause != null && completed.compareAndSet(false, true)) {
+                onResult(false)
+            }
+        }
+    }
+
+    override fun onAutoplayPermissionRequest(
+        uri: String?,
+        onResult: (allow: Boolean) -> Unit,
+    ) {
+        // Gecko の GeckoResult を未解決のまま残さないよう、onResult は必ず一度呼ぶ
+        val completed = AtomicBoolean(false)
+        val job = coroutineScope.launch {
+            // 自動再生の許可はトップレベルサイト基準のため、iframe からの要求
+            // （uri が iframe のオリジン）も表示中ページのホストで判定する
+            val host = extractSiteHost(currentPageUrl) ?: uri?.let { extractSiteHost(it) }
+            val allow = host != null && resolveAutoplayPermission(host)
             if (completed.compareAndSet(false, true)) {
                 onResult(allow)
             }
