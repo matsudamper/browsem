@@ -22,6 +22,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import net.matsudamper.browser.data.ResolvedBrowserSettings
 import net.matsudamper.browser.data.SettingsRepository
+import net.matsudamper.browser.feature.media.MediaWebExtension
 import net.matsudamper.browser.feature.mocklocation.MockLocationWebExtension
 import net.matsudamper.browser.feature.themecolor.ThemeColorWebExtension
 import net.matsudamper.browser.data.SiteGeolocationState
@@ -63,7 +64,7 @@ internal data class ExternalTabFinishCleanup(
 internal class BrowserViewModel(
     val runtime: GeckoRuntime,
     val themeColorExtension: ThemeColorWebExtension,
-    val mediaWebExtension: net.matsudamper.browser.feature.media.MediaWebExtension,
+    val mediaWebExtension: MediaWebExtension,
     private val settingsRepository: SettingsRepository,
     private val tabRepository: TabRepository,
     private val tabGroupRepository: TabGroupRepository,
