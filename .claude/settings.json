@@ -21,6 +21,17 @@
     ]
   },
   "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "CronCreate|ScheduleWakeup|mcp__Claude_Code_Remote__create_trigger|mcp__Claude_Code_Remote__fire_trigger",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/deny-scheduled-checkin.sh"
+          }
+        ]
+      }
+    ],
     "SessionStart": [
       {
         "hooks": [
