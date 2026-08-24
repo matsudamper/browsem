@@ -31,6 +31,11 @@ message SitePermissionSettings {
   // このサイトが位置情報を要求したことがあるか。
   // 一度も要求されていない権限は「サイトの設定」画面に表示しない
   bool geolocation_requested = 4;
+  // 音声付きメディアの自動再生。消音メディアの自動再生は常に許可するため対象外
+  SitePermissionState autoplay = 5;
+  // このサイトが音声付きメディアの自動再生を要求したことがあるか。
+  // 一度も要求されていない権限は「サイトの設定」画面に表示しない
+  bool autoplay_requested = 6;
 }
 
 // サイトごとの設定全体。key はホスト名
