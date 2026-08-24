@@ -245,6 +245,16 @@ internal class BrowserTabScreenState(
         touchGestureEndedAtMs = SystemClock.elapsedRealtime()
     }
 
+    /**
+     * キーボード・マウス等、タッチ以外の入力があった。
+     * 以降のコンテキストメニューはタッチ由来ではないため、記録済みのジェスチャーによる
+     * 抑制の対象から外す。タッチ操作中の入力は現在のジェスチャーを壊さないよう無視する。
+     */
+    fun onContentNonTouchInput() {
+        if (isTouchGestureActive) return
+        hasTouchGestureRecord = false
+    }
+
     @Stable
     sealed interface ContextMenuState {
         data class Link(val url: String) : ContextMenuState
