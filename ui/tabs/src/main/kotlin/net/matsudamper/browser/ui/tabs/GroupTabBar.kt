@@ -75,6 +75,9 @@ private val AutoScrollThreshold = 48.dp
 /** 自動スクロールの1フレームあたりの最大移動量 */
 private val AutoScrollMaxSpeedPerFrame = 12.dp
 
+/** 並び替え後にスクロール位置を上書きし直すフレーム数 */
+private const val PinScrollFrameCount = 2
+
 /**
  * グループタブバー。
  * 栞形のタブを横並びに表示し、末尾に追加ボタンを配置する。
@@ -120,6 +123,8 @@ internal fun GroupTabBar(
         val threshold = with(density) { AutoScrollThreshold.toPx() }
         val maxSpeed = with(density) { AutoScrollMaxSpeedPerFrame.toPx() }
         while (true) {
+            // 直前の並び替えで LazyList がスクロール位置を補正していたら打ち消す
+            dragDropState.pinScrollIfNeeded()
             val delta = dragDropState.autoScrollDelta(threshold = threshold, maxSpeed = maxSpeed)
             if (delta != 0f) {
                 // scrollBy の戻り値は実際に消費された量。端に到達していれば 0 になる
@@ -261,6 +266,12 @@ private class GroupDragDropState(
     /** ドラッグ開始以降に自動スクロールで実際に消費されたスクロール量（px） */
     private var autoScrolledPx: Float = 0f
 
+    /**
+     * 並び替え後にスクロール位置を上書きし直す残りフレーム数。
+     * 並び替えの再レイアウトは次フレーム以降に走るため、1 フレームでは足りない。
+     */
+    private var pinScrollFrames: Int = 0
+
     val isDragging: Boolean get() = draggedItemKey != null
 
     /** ドラッグ開始時の処理。groupCount は追加ボタンを除いたグループ数。 */
@@ -324,6 +335,35 @@ private class GroupDragDropState(
 
         onMove(currentDragIndex, targetIndex)
         currentDragIndex = targetIndex
+        pinScrollFrames = PinScrollFrameCount
+    }
+
+    /**
+     * 並び替えで LazyList がスクロール位置を補正した分を打ち消す。
+     *
+     * LazyList は並び替えが起きると先頭可視アイテムの「キー」を基準に表示位置を保つため、
+     * そのアイテムの index が変わるとスクロール位置が 1 アイテム分ずれる。ドラッグ中の
+     * スクロール位置はこちらで管理しているので、並び替えの直後は自分の値で上書きし直す。
+     * これをしないと、ドラッグ中のタブが先頭可視アイテムを追い越すたびに実際の表示と
+     * スロット位置の計算がずれ、末尾まで移動できなくなる。
+     */
+    suspend fun pinScrollIfNeeded() {
+        if (!isDragging || itemWidth <= 0 || pinScrollFrames <= 0) return
+        pinScrollFrames -= 1
+        val position = calculateScrollToItemPosition(
+            scrolledPx = scrolledPx(),
+            itemWidth = itemWidth,
+            groupCount = groupCount,
+        )
+        listState.scrollToItem(index = position.first, scrollOffset = position.second)
+        // 末尾でクランプされた場合に追従できるよう、反映後の実際の位置を取り込む。
+        // 明示的なスクロール直後は並び替えを挟んでいないため firstVisibleItem* を信頼できる
+        autoScrolledPx = calculateScrolledPx(
+            firstVisibleItemIndex = listState.firstVisibleItemIndex,
+            firstVisibleItemScrollOffset = listState.firstVisibleItemScrollOffset,
+            itemWidth = itemWidth,
+            groupCount = groupCount,
+        ) - scrolledPxAtDragStart
     }
 
     /** 自動スクロール量（px）。0 ならスクロール不要 */
@@ -353,6 +393,7 @@ private class GroupDragDropState(
         groupCount = 0
         scrolledPxAtDragStart = 0f
         autoScrolledPx = 0f
+        pinScrollFrames = 0
     }
 
     /**
@@ -368,6 +409,7 @@ private class GroupDragDropState(
      * ドラッグ中のスクロールは自分の自動スクロールだけ（長押しドラッグがポインタ
      * イベントを消費するのでユーザーはスクロールできない）なので、開始時点の値に
      * 実際に消費されたスクロール量を積算すれば、並び順に一切影響されずに追跡できる。
+     * LazyList 側が並び替えでスクロール位置を補正した分は pinScrollIfNeeded で打ち消す。
      */
     private fun scrolledPx(): Float = scrolledPxAtDragStart + autoScrolledPx
 }
@@ -412,6 +454,21 @@ internal fun calculateGroupSlots(
         val left = startPadding - scrolledPx + index * itemWidth
         GroupSlotInfo(index = index, left = left, right = left + itemWidth)
     }
+}
+
+/**
+ * スクロール量（px）を LazyListState.scrollToItem に渡す (index, scrollOffset) に変換する。
+ * calculateScrolledPx の逆変換にあたる。
+ */
+internal fun calculateScrollToItemPosition(
+    scrolledPx: Float,
+    itemWidth: Int,
+    groupCount: Int,
+): Pair<Int, Int> {
+    if (itemWidth <= 0) return 0 to 0
+    val clamped = scrolledPx.coerceAtLeast(0f)
+    val index = (clamped / itemWidth).toInt().coerceIn(0, groupCount.coerceAtLeast(0))
+    return index to (clamped - index * itemWidth).toInt().coerceAtLeast(0)
 }
 
 /**

@@ -250,4 +250,47 @@ class GroupTabBarDragTest {
         )
         assertEquals(610f, result, 0f)
     }
+
+    @Test
+    fun calculateScrollToItemPosition_isInverseOfCalculateScrolledPx() {
+        val (index, offset) = calculateScrollToItemPosition(
+            scrolledPx = 270f,
+            itemWidth = 120,
+            groupCount = 5,
+        )
+        assertEquals(2, index)
+        assertEquals(30, offset)
+        assertEquals(
+            270f,
+            calculateScrolledPx(
+                firstVisibleItemIndex = index,
+                firstVisibleItemScrollOffset = offset,
+                itemWidth = 120,
+                groupCount = 5,
+            ),
+            0f,
+        )
+    }
+
+    @Test
+    fun calculateScrollToItemPosition_clampsIndexToGroupCount() {
+        // 追加ボタンの領域までスクロールしていてもグループ数までで頭打ちにする
+        val (index, offset) = calculateScrollToItemPosition(
+            scrolledPx = 900f,
+            itemWidth = 120,
+            groupCount = 5,
+        )
+        assertEquals(5, index)
+        assertEquals(300, offset)
+    }
+
+    @Test
+    fun calculateScrollToItemPosition_clampsNegativeToStart() {
+        assertEquals(0 to 0, calculateScrollToItemPosition(-100f, 120, 5))
+    }
+
+    @Test
+    fun calculateScrollToItemPosition_returnsStartWhenSizeUnknown() {
+        assertEquals(0 to 0, calculateScrollToItemPosition(500f, 0, 5))
+    }
 }
