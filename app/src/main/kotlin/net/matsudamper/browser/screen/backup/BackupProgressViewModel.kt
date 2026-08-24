@@ -2,6 +2,7 @@ package net.matsudamper.browser.screen.backup
 
 import android.net.Uri
 import android.os.Process
+import androidx.compose.runtime.Stable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.NonCancellable
@@ -12,9 +13,11 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import net.matsudamper.browser.data.BackupProgress
 import net.matsudamper.browser.data.BackupRepository
 import net.matsudamper.browser.ui.settings.BackupProgressUiState
 
+@Stable
 internal class BackupProgressViewModel(
     private val isImport: Boolean,
     private val backupRepository: BackupRepository,
@@ -65,7 +68,7 @@ internal class BackupProgressViewModel(
      */
     fun startWithUri(uri: Uri) {
         if (_phaseFlow.value !is BackupProgressUiState.Phase.WaitingForFile) return
-        _phaseFlow.update { BackupProgressUiState.Phase.InProgress(message = "準備中…") }
+        _phaseFlow.update { BackupProgressUiState.Phase.InProgress(message = "準備中…", fraction = 0f) }
         viewModelScope.launch {
             if (isImport) {
                 runImport(uri)
@@ -80,7 +83,7 @@ internal class BackupProgressViewModel(
      */
     private suspend fun runExport(uri: Uri) {
         val result = try {
-            backupRepository.exportToZip(uri, onProgress = ::updateProgressMessage)
+            backupRepository.exportToZip(uri, onProgress = ::updateProgress)
             Result.success(Unit)
         } catch (t: Throwable) {
             Result.failure(t)
@@ -112,7 +115,7 @@ internal class BackupProgressViewModel(
         // アプリが degraded 状態になる可能性がある。NonCancellable で最後まで完了させる。
         withContext(NonCancellable) {
             try {
-                backupRepository.importFromZip(uri, onProgress = ::updateProgressMessage)
+                backupRepository.importFromZip(uri, onProgress = ::updateProgress)
                 _phaseFlow.update { BackupProgressUiState.Phase.PendingRestart(errorMessage = null) }
                 forceRestartIfDetached()
             } catch (e: BackupRepository.RestartRequiredException) {
@@ -139,10 +142,13 @@ internal class BackupProgressViewModel(
      * Repository から通知された処理内容を InProgress フェーズに反映する。
      * 既に完了/エラー/再起動待ちに遷移している場合は無視する。
      */
-    private fun updateProgressMessage(message: String) {
+    private fun updateProgress(progress: BackupProgress) {
         _phaseFlow.update { current ->
             if (current is BackupProgressUiState.Phase.InProgress) {
-                BackupProgressUiState.Phase.InProgress(message = message)
+                BackupProgressUiState.Phase.InProgress(
+                    message = progress.message,
+                    fraction = progress.fraction,
+                )
             } else {
                 current
             }
