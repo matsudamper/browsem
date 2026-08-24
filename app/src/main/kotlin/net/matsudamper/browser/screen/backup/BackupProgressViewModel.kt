@@ -2,6 +2,7 @@ package net.matsudamper.browser.screen.backup
 
 import android.net.Uri
 import android.os.Process
+import androidx.compose.runtime.Stable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.NonCancellable
@@ -16,6 +17,7 @@ import net.matsudamper.browser.data.BackupProgress
 import net.matsudamper.browser.data.BackupRepository
 import net.matsudamper.browser.ui.settings.BackupProgressUiState
 
+@Stable
 internal class BackupProgressViewModel(
     private val isImport: Boolean,
     private val backupRepository: BackupRepository,
