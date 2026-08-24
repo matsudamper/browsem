@@ -366,10 +366,13 @@ internal fun BrowserAppShell(
                 }
 
                 AppDestination.Extensions -> navEntry(key) {
+                    val extensionRuntimeCoordinator: ExtensionRuntimeCoordinator = koinInject()
                     val extensionsViewModel = composeViewModel(initializer = {
                         ExtensionsScreenViewModel(
                             application = context.applicationContext as Application,
                             runtime = runtime,
+                            settingsRepository = settingsRepository,
+                            extensionRuntimeCoordinator = extensionRuntimeCoordinator,
                         )
                     })
                     val extensionsUiState by extensionsViewModel.uiState.collectAsState()
