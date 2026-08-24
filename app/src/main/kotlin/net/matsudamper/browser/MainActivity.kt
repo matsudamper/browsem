@@ -342,6 +342,9 @@ class MainActivity : ComponentActivity() {
         if (::extensionInstaller.isInitialized) {
             extensionInstaller.cleanup()
         }
+        if (isFinishing) {
+            extensionRuntimeCoordinator.clearOnExtensionReady()
+        }
         pendingActivityResult?.completeExceptionally(
             CancellationException("Activity was destroyed before Gecko activity completed.")
         )

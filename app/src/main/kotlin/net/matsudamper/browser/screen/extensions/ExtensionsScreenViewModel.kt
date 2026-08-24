@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -48,6 +49,7 @@ internal class ExtensionsScreenViewModel(
         override fun uninstallExtension(extensionId: String) {
             val extension = viewModelStateFlow.value.extensions
                 .firstOrNull { it.id == extensionId } ?: return
+            if (extension.isBuiltIn) return
             viewModelStateFlow.update { it.copy(uninstallingId = extensionId) }
             runtime.webExtensionController.uninstall(extension).accept(
                 {
@@ -67,7 +69,7 @@ internal class ExtensionsScreenViewModel(
 
         override fun setExtensionEnabled(extensionId: String, enabled: Boolean) {
             val currentState = viewModelStateFlow.value
-            if (!currentState.extensionsGloballyEnabled ||
+            if (currentState.extensionsGloballyEnabled != true ||
                 currentState.togglingId != null ||
                 currentState.uninstallingId != null ||
                 currentState.isTogglingGlobal
@@ -106,7 +108,8 @@ internal class ExtensionsScreenViewModel(
 
         override fun setExtensionsGloballyEnabled(enabled: Boolean) {
             val currentState = viewModelStateFlow.value
-            if (currentState.extensionsGloballyEnabled == enabled ||
+            val globallyEnabled = currentState.extensionsGloballyEnabled ?: return
+            if (globallyEnabled == enabled ||
                 currentState.togglingId != null ||
                 currentState.uninstallingId != null ||
                 currentState.isTogglingGlobal
@@ -171,7 +174,7 @@ internal class ExtensionsScreenViewModel(
                 uiStateFlow.update {
                     ExtensionsScreenUiState(
                         callbacks = callbacks,
-                        loadingState = if (state.isLoading) {
+                        loadingState = if (state.isLoading || state.extensionsGloballyEnabled == null) {
                             ExtensionsScreenUiState.LoadingState.Loading
                         } else {
                             ExtensionsScreenUiState.LoadingState.Loaded(
@@ -201,6 +204,10 @@ internal class ExtensionsScreenViewModel(
 
     init {
         viewModelScope.launch {
+            val initialSettings = settingsRepository.settings.first()
+            viewModelStateFlow.update {
+                it.copy(extensionsGloballyEnabled = initialSettings.resolvedExtensionsEnabled())
+            }
             settingsRepository.settings.collectLatest { settings ->
                 viewModelStateFlow.update {
                     it.copy(extensionsGloballyEnabled = settings.resolvedExtensionsEnabled())
@@ -337,7 +344,7 @@ internal class ExtensionsScreenViewModel(
 
     data class ViewModelState(
         val extensions: List<WebExtension> = emptyList(),
-        val extensionsGloballyEnabled: Boolean = true,
+        val extensionsGloballyEnabled: Boolean? = null,
         val isLoading: Boolean = true,
         val uninstallingId: String? = null,
         val togglingId: String? = null,

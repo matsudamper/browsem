@@ -102,7 +102,10 @@ fun ExtensionsScreen(
                     }
                     IconButton(
                         onClick = uiState.callbacks::refreshExtensions,
-                        enabled = uiState.uninstallingId == null,
+                        enabled = uiState.uninstallingId == null &&
+                            uiState.togglingId == null &&
+                            !uiState.isTogglingGlobal &&
+                            !uiState.isInstalling,
                     ) {
                         Icon(
                             imageVector = Icons.Default.Refresh,
