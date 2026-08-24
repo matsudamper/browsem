@@ -12,14 +12,9 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows
-import org.robolectric.annotation.Config
 
-/**
- * intent:// スキームのディープリンクを解決する際の分岐を検証する。
- * compileSdk が Robolectric の対応上限を超えているため sdk を明示する。
- */
+/** intent:// スキームのディープリンクを解決する際の分岐を検証する。 */
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [34])
 class ExternalAppIntentResolveTest {
 
     private val context: Context get() = RuntimeEnvironment.getApplication()
