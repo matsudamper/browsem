@@ -42,13 +42,13 @@
     const mediaElements = listMediaElements();
     mediaElements.forEach((media) => KNOWN_MEDIA.add(media));
     KNOWN_MEDIA.forEach((media) => {
-      if (!media.isConnected && media !== lastPrimaryMedia) {
+      if (!media.isConnected) {
         KNOWN_MEDIA.delete(media);
+        if (media === lastPrimaryMedia) {
+          lastPrimaryMedia = null;
+        }
       }
     });
-    if (lastPrimaryMedia) {
-      KNOWN_MEDIA.add(lastPrimaryMedia);
-    }
     return Array.from(KNOWN_MEDIA);
   }
 
