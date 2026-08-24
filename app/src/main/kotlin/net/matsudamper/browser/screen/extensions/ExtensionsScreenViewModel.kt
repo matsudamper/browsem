@@ -61,7 +61,9 @@ internal class ExtensionsScreenViewModel(
 
         override fun setExtensionEnabled(extensionId: String, enabled: Boolean) {
             val currentState = viewModelStateFlow.value
-            if (currentState.togglingId != null || currentState.uninstallingId != null) return
+            if (currentState.togglingId != null || currentState.uninstallingId != null || currentState.isTogglingAll) {
+                return
+            }
             val extension = currentState.extensions
                 .firstOrNull { it.id == extensionId } ?: return
             viewModelStateFlow.update { it.copy(togglingId = extensionId) }
@@ -92,6 +94,21 @@ internal class ExtensionsScreenViewModel(
             )
         }
 
+        override fun setAllExtensionsEnabled(enabled: Boolean) {
+            val currentState = viewModelStateFlow.value
+            if (currentState.togglingId != null || currentState.uninstallingId != null || currentState.isTogglingAll) {
+                return
+            }
+            val extensionsToToggle = currentState.extensions.filter { it.metaData.enabled != enabled }
+            if (extensionsToToggle.isEmpty()) return
+            viewModelStateFlow.update { it.copy(isTogglingAll = true) }
+            toggleExtensionsSequentially(
+                extensions = extensionsToToggle,
+                enabled = enabled,
+                index = 0,
+            )
+        }
+
         override fun openExtensionSettings(extensionId: String) {
             val extension = viewModelStateFlow.value.extensions
                 .firstOrNull { it.id == extensionId } ?: return
@@ -115,6 +132,7 @@ internal class ExtensionsScreenViewModel(
             errorMessage = null,
             uninstallingId = null,
             togglingId = null,
+            isTogglingAll = false,
             isInstalling = false,
         )
     ).also { uiStateFlow ->
@@ -126,8 +144,9 @@ internal class ExtensionsScreenViewModel(
                         loadingState = if (state.isLoading) {
                             ExtensionsScreenUiState.LoadingState.Loading
                         } else {
+                            val extensions = state.extensions
                             ExtensionsScreenUiState.LoadingState.Loaded(
-                                extensions = state.extensions.map { ext ->
+                                extensions = extensions.map { ext ->
                                     ExtensionsScreenUiState.ExtensionUiState(
                                         id = ext.id,
                                         displayName = ext.metaData.name?.takeIf { it.isNotBlank() } ?: ext.id,
@@ -137,11 +156,14 @@ internal class ExtensionsScreenViewModel(
                                         isBuiltIn = ext.isBuiltIn,
                                     )
                                 },
+                                areExtensionsEnabled = extensions.isNotEmpty() &&
+                                    extensions.all { it.metaData.enabled },
                             )
                         },
                         errorMessage = state.errorMessage,
                         uninstallingId = state.uninstallingId,
                         togglingId = state.togglingId,
+                        isTogglingAll = state.isTogglingAll,
                         isInstalling = state.isInstalling,
                     )
                 }
@@ -247,6 +269,43 @@ internal class ExtensionsScreenViewModel(
         runCatching { file.delete() }
     }
 
+    private fun toggleExtensionsSequentially(
+        extensions: List<WebExtension>,
+        enabled: Boolean,
+        index: Int,
+    ) {
+        if (index >= extensions.size) {
+            viewModelStateFlow.update { it.copy(isTogglingAll = false) }
+            return
+        }
+        val extension = extensions[index]
+        val result = if (enabled) {
+            runtime.webExtensionController.enable(extension, WebExtensionController.EnableSource.USER)
+        } else {
+            runtime.webExtensionController.disable(extension, WebExtensionController.EnableSource.USER)
+        }
+        result.accept(
+            { updatedExtension ->
+                viewModelStateFlow.update { state ->
+                    state.copy(
+                        extensions = state.extensions.map { ext ->
+                            if (ext.id == extension.id && updatedExtension != null) updatedExtension else ext
+                        },
+                    )
+                }
+                toggleExtensionsSequentially(extensions, enabled, index + 1)
+            },
+            { error ->
+                viewModelStateFlow.update {
+                    it.copy(
+                        isTogglingAll = false,
+                        errorMessage = error?.message ?: "拡張機能の一括切り替えに失敗しました。",
+                    )
+                }
+            },
+        )
+    }
+
     private fun loadExtensions() {
         viewModelStateFlow.update { it.copy(isLoading = true) }
         runtime.webExtensionController.list().accept(
@@ -283,6 +342,7 @@ internal class ExtensionsScreenViewModel(
         val isLoading: Boolean = true,
         val uninstallingId: String? = null,
         val togglingId: String? = null,
+        val isTogglingAll: Boolean = false,
         val isInstalling: Boolean = false,
         val errorMessage: String? = null,
     )

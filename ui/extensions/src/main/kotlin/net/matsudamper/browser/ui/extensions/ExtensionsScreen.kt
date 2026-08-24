@@ -24,6 +24,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
@@ -31,6 +32,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -52,6 +54,8 @@ sealed interface ExtensionsScreenTestTags {
     val testTag get() = "${ExtensionsScreenTestTags::class.java.name}#$id"
 
     object InstallFromFileButton : ExtensionsScreenTestTags { override val id = "install_from_file_button" }
+    object AllExtensionsSwitch : ExtensionsScreenTestTags { override val id = "all_extensions_switch" }
+    object SystemSectionHeader : ExtensionsScreenTestTags { override val id = "system_section_header" }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -85,7 +89,9 @@ fun ExtensionsScreen(
                     } else {
                         IconButton(
                             onClick = uiState.callbacks::installExtensionFromFile,
-                            enabled = uiState.uninstallingId == null && uiState.togglingId == null,
+                            enabled = uiState.uninstallingId == null &&
+                                uiState.togglingId == null &&
+                                !uiState.isTogglingAll,
                             modifier = Modifier.testTag(ExtensionsScreenTestTags.InstallFromFileButton.testTag),
                         ) {
                             Icon(
@@ -120,36 +126,81 @@ fun ExtensionsScreen(
             }
 
             is ExtensionsScreenUiState.LoadingState.Loaded -> {
-                if (loadingState.extensions.isEmpty()) {
-                    Box(
-                        modifier = Modifier
-                            .padding(paddingValues)
-                            .fillMaxSize()
-                            .padding(16.dp),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text("インストール済み拡張機能はありません。")
+                val userExtensions = loadingState.extensions.filterNot { it.isBuiltIn }
+                val systemExtensions = loadingState.extensions.filter { it.isBuiltIn }
+                val individualToggleEnabled = uiState.togglingId == null &&
+                    uiState.uninstallingId == null &&
+                    !uiState.isTogglingAll
+                val masterToggleEnabled = uiState.togglingId == null &&
+                    uiState.uninstallingId == null &&
+                    !uiState.isTogglingAll
+
+                LazyColumn(
+                    modifier = Modifier
+                        .padding(paddingValues)
+                        .fillMaxSize(),
+                ) {
+                    item(key = "all_extensions_switch") {
+                        AllExtensionsSwitchRow(
+                            areExtensionsEnabled = loadingState.areExtensionsEnabled,
+                            isTogglingAll = uiState.isTogglingAll,
+                            enabled = masterToggleEnabled,
+                            onToggle = uiState.callbacks::setAllExtensionsEnabled,
+                        )
                     }
-                } else {
-                    LazyColumn(
-                        modifier = Modifier
-                            .padding(paddingValues)
-                            .fillMaxSize(),
-                    ) {
+
+                    if (userExtensions.isEmpty() && systemExtensions.isEmpty()) {
+                        item(key = "empty_message") {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text("インストール済み拡張機能はありません。")
+                            }
+                        }
+                    } else {
                         items(
-                            items = loadingState.extensions,
+                            items = userExtensions,
                             key = { it.id },
                         ) { extension ->
                             ExtensionRow(
                                 extension = extension,
                                 isUninstalling = uiState.uninstallingId == extension.id,
-                                uninstallEnabled = uiState.uninstallingId == null && uiState.togglingId == null,
+                                uninstallEnabled = individualToggleEnabled,
                                 isToggling = uiState.togglingId == extension.id,
-                                toggleEnabled = uiState.togglingId == null && uiState.uninstallingId == null,
+                                toggleEnabled = individualToggleEnabled,
                                 onOpenSettings = { uiState.callbacks.openExtensionSettings(extension.id) },
                                 onUninstall = { uiState.callbacks.uninstallExtension(extension.id) },
                                 onToggle = { enabled -> uiState.callbacks.setExtensionEnabled(extension.id, enabled) },
                             )
+                        }
+
+                        if (systemExtensions.isNotEmpty()) {
+                            item(key = "system_section_header") {
+                                ExtensionSectionHeader(
+                                    title = "システム",
+                                    modifier = Modifier.testTag(ExtensionsScreenTestTags.SystemSectionHeader.testTag),
+                                )
+                            }
+                            items(
+                                items = systemExtensions,
+                                key = { it.id },
+                            ) { extension ->
+                                ExtensionRow(
+                                    extension = extension,
+                                    isUninstalling = uiState.uninstallingId == extension.id,
+                                    uninstallEnabled = individualToggleEnabled,
+                                    isToggling = uiState.togglingId == extension.id,
+                                    toggleEnabled = individualToggleEnabled,
+                                    onOpenSettings = { uiState.callbacks.openExtensionSettings(extension.id) },
+                                    onUninstall = { uiState.callbacks.uninstallExtension(extension.id) },
+                                    onToggle = { enabled ->
+                                        uiState.callbacks.setExtensionEnabled(extension.id, enabled)
+                                    },
+                                )
+                            }
                         }
                     }
                 }
@@ -171,12 +222,79 @@ fun ExtensionsScreen(
     }
 }
 
+@Composable
+private fun AllExtensionsSwitchRow(
+    areExtensionsEnabled: Boolean,
+    isTogglingAll: Boolean,
+    enabled: Boolean,
+    onToggle: (Boolean) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(end = 12.dp),
+        ) {
+            Text(
+                text = "拡張機能を有効にする",
+                style = MaterialTheme.typography.titleSmall,
+            )
+            Text(
+                text = "すべての拡張機能をまとめて有効/無効にします",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Spacer(modifier = Modifier.width(8.dp))
+        if (isTogglingAll) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(24.dp),
+                strokeWidth = 2.dp,
+            )
+        } else {
+            Switch(
+                checked = areExtensionsEnabled,
+                onCheckedChange = onToggle,
+                enabled = enabled,
+                modifier = Modifier
+                    .testTag(ExtensionsScreenTestTags.AllExtensionsSwitch.testTag)
+                    .semantics {
+                        contentDescription = "すべての拡張機能の有効/無効"
+                    },
+            )
+        }
+    }
+}
+
+@Composable
+private fun ExtensionSectionHeader(
+    title: String,
+    modifier: Modifier = Modifier,
+) {
+    CompositionLocalProvider(
+        LocalContentColor provides MaterialTheme.colorScheme.onSurfaceVariant,
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.labelLarge,
+            modifier = modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+        )
+    }
+}
+
 private val previewCallbacks = object : ExtensionsScreenUiState.Callbacks {
     override fun refreshExtensions() = Unit
     override fun installExtensionFromFile() = Unit
     override fun uninstallExtension(extensionId: String) = Unit
     override fun openExtensionSettings(extensionId: String) = Unit
     override fun setExtensionEnabled(extensionId: String, enabled: Boolean) = Unit
+    override fun setAllExtensionsEnabled(enabled: Boolean) = Unit
     override fun dismissError() = Unit
 }
 
@@ -214,10 +332,12 @@ private fun ExtensionsScreenLoadedPreview() {
                             isBuiltIn = true,
                         ),
                     ),
+                    areExtensionsEnabled = false,
                 ),
                 errorMessage = null,
                 uninstallingId = null,
                 togglingId = null,
+                isTogglingAll = false,
                 isInstalling = false,
             ),
             onBack = {},
@@ -243,10 +363,12 @@ private fun ExtensionsScreenTogglingPreview() {
                             isBuiltIn = false,
                         ),
                     ),
+                    areExtensionsEnabled = true,
                 ),
                 errorMessage = null,
                 uninstallingId = null,
                 togglingId = "ublock-origin@raymondhill.net",
+                isTogglingAll = false,
                 isInstalling = false,
             ),
             onBack = {},
@@ -272,10 +394,12 @@ private fun ExtensionsScreenInstallingPreview() {
                             isBuiltIn = false,
                         ),
                     ),
+                    areExtensionsEnabled = true,
                 ),
                 errorMessage = null,
                 uninstallingId = null,
                 togglingId = null,
+                isTogglingAll = false,
                 isInstalling = true,
             ),
             onBack = {},
