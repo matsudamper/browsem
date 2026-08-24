@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.os.SystemClock
 import android.util.Log
 import android.widget.Toast
 import androidx.compose.foundation.ScrollState
@@ -214,6 +215,44 @@ internal class BrowserTabScreenState(
 
     fun dismissContextMenu() {
         contextMenuState = null
+    }
+
+    // --- コンテンツ領域のタッチジェスチャー追跡 ---
+    // JS フリーズ中に滞留したタッチが解放後にまとめて処理されると、スクロール操作でも
+    // 長押し判定になり onContextMenu が届くことがあるため、実際のジェスチャーを記録して抑制する。
+    private var hasTouchGestureRecord = false
+    private var isTouchGestureActive = false
+    private var touchGestureMoved = false
+    private var touchGestureStartedAtMs = 0L
+    private var touchGestureEndedAtMs = 0L
+
+    /** コンテンツ領域で新しいタッチジェスチャーが始まった */
+    fun onContentTouchStart() {
+        hasTouchGestureRecord = true
+        isTouchGestureActive = true
+        touchGestureMoved = false
+        touchGestureStartedAtMs = SystemClock.elapsedRealtime()
+    }
+
+    /** タッチスロップを超える移動、またはマルチタッチが発生した */
+    fun onContentTouchMoved() {
+        touchGestureMoved = true
+    }
+
+    /** タッチジェスチャーが終了した (UP / CANCEL) */
+    fun onContentTouchEnd() {
+        isTouchGestureActive = false
+        touchGestureEndedAtMs = SystemClock.elapsedRealtime()
+    }
+
+    /**
+     * キーボード・マウス等、タッチ以外の入力があった。
+     * 以降のコンテキストメニューはタッチ由来ではないため、記録済みのジェスチャーによる
+     * 抑制の対象から外す。タッチ操作中の入力は現在のジェスチャーを壊さないよう無視する。
+     */
+    fun onContentNonTouchInput() {
+        if (isTouchGestureActive) return
+        hasTouchGestureRecord = false
     }
 
     @Stable
@@ -1321,6 +1360,17 @@ internal class BrowserTabScreenState(
 
     override fun onContextMenu(element: GeckoSession.ContentDelegate.ContextElement) {
         if (isBackGestureInProgress) return
+        if (
+            !shouldShowContextMenuForGesture(
+                hasTouchGestureRecord = hasTouchGestureRecord,
+                isTouchGestureActive = isTouchGestureActive,
+                gestureMoved = touchGestureMoved,
+                elapsedSinceGestureStartMs = SystemClock.elapsedRealtime() - touchGestureStartedAtMs,
+                elapsedSinceGestureEndMs = SystemClock.elapsedRealtime() - touchGestureEndedAtMs,
+            )
+        ) {
+            return
+        }
         val linkUri = element.linkUri
         val srcUri = element.srcUri
         val isImage = element.type == GeckoSession.ContentDelegate.ContextElement.TYPE_IMAGE
