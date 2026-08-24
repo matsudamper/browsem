@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.os.SystemClock
 import android.util.Log
 import android.widget.Toast
 import androidx.compose.foundation.ScrollState
@@ -214,6 +215,32 @@ internal class BrowserTabScreenState(
 
     fun dismissContextMenu() {
         contextMenuState = null
+    }
+
+    // --- コンテンツ領域のタッチジェスチャー追跡 ---
+    // JS フリーズ中に滞留したタッチが解放後にまとめて処理されると、スクロール操作でも
+    // 長押し判定になり onContextMenu が届くことがあるため、実際のジェスチャーを記録して抑制する。
+    private var hasTouchGestureRecord = false
+    private var isTouchGestureActive = false
+    private var touchGestureMoved = false
+    private var touchGestureEndedAtMs = 0L
+
+    /** コンテンツ領域で新しいタッチジェスチャーが始まった */
+    fun onContentTouchStart() {
+        hasTouchGestureRecord = true
+        isTouchGestureActive = true
+        touchGestureMoved = false
+    }
+
+    /** タッチスロップを超える移動、またはマルチタッチが発生した */
+    fun onContentTouchMoved() {
+        touchGestureMoved = true
+    }
+
+    /** タッチジェスチャーが終了した (UP / CANCEL) */
+    fun onContentTouchEnd() {
+        isTouchGestureActive = false
+        touchGestureEndedAtMs = SystemClock.elapsedRealtime()
     }
 
     @Stable
@@ -1321,6 +1348,16 @@ internal class BrowserTabScreenState(
 
     override fun onContextMenu(element: GeckoSession.ContentDelegate.ContextElement) {
         if (isBackGestureInProgress) return
+        if (
+            !shouldShowContextMenuForGesture(
+                hasTouchGestureRecord = hasTouchGestureRecord,
+                isTouchGestureActive = isTouchGestureActive,
+                gestureMoved = touchGestureMoved,
+                elapsedSinceGestureEndMs = SystemClock.elapsedRealtime() - touchGestureEndedAtMs,
+            )
+        ) {
+            return
+        }
         val linkUri = element.linkUri
         val srcUri = element.srcUri
         val isImage = element.type == GeckoSession.ContentDelegate.ContextElement.TYPE_IMAGE
