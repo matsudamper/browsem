@@ -51,6 +51,10 @@ interface BrowserSessionStateCallbacks {
         uri: String?,
         onResult: (allow: Boolean) -> Unit,
     )
+    fun onAutoplayPermissionRequest(
+        uri: String?,
+        onResult: (allow: Boolean) -> Unit,
+    )
     fun onFullScreen(fullScreen: Boolean)
 }
 
@@ -82,14 +86,33 @@ fun createGeckoSessionDelegateBundle(
                     "BrowserTabPermission",
                     "onContentPermissionRequest: permission=${perm.permission}, uri=${perm.uri}"
                 )
-                if (
-                    perm.permission == GeckoSession.PermissionDelegate.PERMISSION_AUTOPLAY_INAUDIBLE ||
-                    perm.permission == GeckoSession.PermissionDelegate.PERMISSION_AUTOPLAY_AUDIBLE
-                ) {
-                    Log.d("BrowserTabPermission", "autoplay permission allowed")
+                if (perm.permission == GeckoSession.PermissionDelegate.PERMISSION_AUTOPLAY_INAUDIBLE) {
+                    // 消音メディアは音が出ず邪魔にならないため、従来通り自動再生を許可する
+                    Log.d("BrowserTabPermission", "inaudible autoplay permission allowed")
                     return GeckoResult.fromValue(
                         GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW
                     )
+                }
+                if (perm.permission == GeckoSession.PermissionDelegate.PERMISSION_AUTOPLAY_AUDIBLE) {
+                    // 音声付きメディアの勝手な自動再生を防ぐため、サイトごとの設定で判断する。
+                    // 拒否してもユーザー操作による再生はブロックされない。
+                    val result = GeckoResult<Int>()
+                    callbacks.onAutoplayPermissionRequest(perm.uri) { allow ->
+                        Log.d("BrowserTabPermission", "audible autoplay permission allow=$allow")
+                        result.complete(
+                            if (allow) {
+                                GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW
+                            } else {
+                                // GeckoView は応答をパーミッションマネージャへ永続化するため、
+                                // DENY だと後でサイト設定を「許可」へ変えてもこのデリゲートが
+                                // 呼ばれなくなる恐れがある。永続化されても「確認する」のままに
+                                // なる PROMPT で拒否する（位置情報と同じ理由）。
+                                // Gecko は ALLOW 以外を拒否として扱うため自動再生はブロックされる
+                                GeckoSession.PermissionDelegate.ContentPermission.VALUE_PROMPT
+                            },
+                        )
+                    }
+                    return result
                 }
                 if (perm.permission == GeckoSession.PermissionDelegate.PERMISSION_GEOLOCATION) {
                     // モック/拒否はコンテンツスクリプトが処理する。Gecko 本体の位置情報へ
@@ -507,6 +530,18 @@ internal class BrowserTabSessionDelegateHost(
                 val cb = currentCallbacks()
                 if (cb != null) {
                     cb.onGeolocationPermissionRequest(uri, onResult)
+                } else {
+                    onResult(false)
+                }
+            }
+
+            override fun onAutoplayPermissionRequest(
+                uri: String?,
+                onResult: (allow: Boolean) -> Unit,
+            ) {
+                val cb = currentCallbacks()
+                if (cb != null) {
+                    cb.onAutoplayPermissionRequest(uri, onResult)
                 } else {
                     onResult(false)
                 }
