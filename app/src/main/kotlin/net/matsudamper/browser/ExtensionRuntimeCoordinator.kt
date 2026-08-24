@@ -15,6 +15,10 @@ internal class ExtensionRuntimeCoordinator(
         onExtensionReady = handler
     }
 
+    fun clearOnExtensionReady() {
+        onExtensionReady = null
+    }
+
     fun notifyExtensionsGloballyEnabled() {
         val handler = onExtensionReady ?: return
         runtime.webExtensionController.list().accept(

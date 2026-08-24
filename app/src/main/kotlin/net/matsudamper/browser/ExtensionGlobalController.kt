@@ -9,7 +9,7 @@ import org.mozilla.geckoview.WebExtensionController
  */
 internal object ExtensionGlobalController {
     fun isUserEnabled(extension: WebExtension): Boolean {
-        return extension.metaData.disabledFlags and WebExtension.DisabledFlags.USER == 0
+        return (extension.metaData.disabledFlags and WebExtension.DisabledFlags.USER) == 0
     }
 
     fun applyGlobalEnabled(
@@ -24,6 +24,7 @@ internal object ExtensionGlobalController {
             extensions = extensions,
             globallyEnabled = globallyEnabled,
             index = 0,
+            firstError = null,
             onComplete = onComplete,
             onError = onError,
         )
@@ -34,11 +35,16 @@ internal object ExtensionGlobalController {
         extensions: List<WebExtension>,
         globallyEnabled: Boolean,
         index: Int,
+        firstError: Throwable?,
         onComplete: () -> Unit,
         onError: (Throwable?) -> Unit,
     ) {
         if (index >= extensions.size) {
-            onComplete()
+            if (firstError != null) {
+                onError(firstError)
+            } else {
+                onComplete()
+            }
             return
         }
         val extension = extensions[index]
@@ -54,11 +60,22 @@ internal object ExtensionGlobalController {
                     extensions = extensions,
                     globallyEnabled = globallyEnabled,
                     index = index + 1,
+                    firstError = firstError,
                     onComplete = onComplete,
                     onError = onError,
                 )
             },
-            onError,
+            { error ->
+                applySequentially(
+                    runtime = runtime,
+                    extensions = extensions,
+                    globallyEnabled = globallyEnabled,
+                    index = index + 1,
+                    firstError = firstError ?: error,
+                    onComplete = onComplete,
+                    onError = onError,
+                )
+            },
         )
     }
 }
