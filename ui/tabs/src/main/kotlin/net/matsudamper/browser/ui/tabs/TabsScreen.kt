@@ -47,6 +47,7 @@ import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -87,6 +88,9 @@ internal object TabsLayoutDefaults {
         return contentWidth / columns
     }
 }
+
+/** 並び替え中に Pager オフセットが残っているとみなす閾値 */
+private const val PagerSnapOffsetEpsilon = 0.001f
 
 /** PagerIndicator 計算用の軽量アイテム情報。LazyListItemInfo を Compose に依存しない形で保持する */
 internal data class IndicatorItemInfo(val index: Int, val offset: Int, val size: Int)
@@ -224,44 +228,61 @@ private fun TabsScreenLoadedContent(
     val groupTabListState = rememberLazyListState()
     val density = LocalDensity.current
     val currentOnGroupPageChanged by rememberUpdatedState(onGroupPageChanged)
+    // グループタブの長押し並び替え中。Pager をページ送りせずスナップし、インジケータの振動を防ぐ。
+    var isReorderingGroups by remember { mutableStateOf(false) }
+    val currentIsReorderingGroups by rememberUpdatedState(isReorderingGroups)
 
-    // ViewModelのactiveGroupIndex変化 → ページスクロールとタブバースクロールを同期
-    LaunchedEffect(activeGroupIndex) {
-        if (pagerState.currentPage != activeGroupIndex && activeGroupIndex in 0 until groups.size) {
-            pagerState.animateScrollToPage(activeGroupIndex)
-        }
-        if (activeGroupIndex in 0 until groups.size) {
-            val layoutInfo = groupTabListState.layoutInfo
-            val targetItem = layoutInfo.visibleItemsInfo.firstOrNull { it.index == activeGroupIndex }
-            if (targetItem == null) {
-                // 画面外にある場合は通常スクロール（左端揃え）
-                groupTabListState.animateScrollToItem(activeGroupIndex)
-            } else {
-                val itemViewportLeft = (targetItem.offset - layoutInfo.viewportStartOffset).toFloat()
-                val itemViewportRight = itemViewportLeft + targetItem.size
-                val viewportWidth = layoutInfo.viewportSize.width.toFloat()
-                // スクロール量に ±24dp のバッファを加えて少し余裕を持たせる
-                val bufferPx = with(density) { 24.dp.toPx() }
-                when {
-                    itemViewportRight > viewportWidth -> {
-                        // 右にはみ出している: はみ出し分 + バッファ分スクロール
-                        groupTabListState.animateScrollBy(itemViewportRight - viewportWidth + bufferPx)
-                    }
-
-                    itemViewportLeft < 0f -> {
-                        // 左にはみ出している: バッファ分手前でとめる（負 = 左方向）
-                        groupTabListState.animateScrollBy(itemViewportLeft - bufferPx)
-                    }
-                    // else: 完全に表示されているのでスクロール不要
-                }
+    // 並び替え中は選択グループのページへ即時スナップし、オフセットが残ってインジケータが
+    // 隣のタブと往復しないようにする。animateScrollToPage は使わない。
+    SideEffect {
+        if (isReorderingGroups && activeGroupIndex in 0 until groups.size) {
+            val offset = pagerState.currentPageOffsetFraction
+            if (pagerState.currentPage != activeGroupIndex || kotlin.math.abs(offset) > PagerSnapOffsetEpsilon) {
+                pagerState.requestScrollToPage(activeGroupIndex)
             }
         }
     }
 
-    // ユーザーのスワイプ → ViewModelへ通知（settledPage でアニメーション完了後のみ通知）
+    // ViewModelのactiveGroupIndex変化 → ページスクロールとタブバースクロールを同期
+    LaunchedEffect(activeGroupIndex, isReorderingGroups) {
+        if (activeGroupIndex !in 0 until groups.size) return@LaunchedEffect
+        if (isReorderingGroups) return@LaunchedEffect
+        if (pagerState.currentPage != activeGroupIndex) {
+            pagerState.animateScrollToPage(activeGroupIndex)
+        }
+        val layoutInfo = groupTabListState.layoutInfo
+        val targetItem = layoutInfo.visibleItemsInfo.firstOrNull { it.index == activeGroupIndex }
+        if (targetItem == null) {
+            // 画面外にある場合は通常スクロール（左端揃え）
+            groupTabListState.animateScrollToItem(activeGroupIndex)
+        } else {
+            val itemViewportLeft = (targetItem.offset - layoutInfo.viewportStartOffset).toFloat()
+            val itemViewportRight = itemViewportLeft + targetItem.size
+            val viewportWidth = layoutInfo.viewportSize.width.toFloat()
+            // スクロール量に ±24dp のバッファを加えて少し余裕を持たせる
+            val bufferPx = with(density) { 24.dp.toPx() }
+            when {
+                itemViewportRight > viewportWidth -> {
+                    // 右にはみ出している: はみ出し分 + バッファ分スクロール
+                    groupTabListState.animateScrollBy(itemViewportRight - viewportWidth + bufferPx)
+                }
+
+                itemViewportLeft < 0f -> {
+                    // 左にはみ出している: バッファ分手前でとめる（負 = 左方向）
+                    groupTabListState.animateScrollBy(itemViewportLeft - bufferPx)
+                }
+                // else: 完全に表示されているのでスクロール不要
+            }
+        }
+    }
+
+    // ユーザーのスワイプ → ViewModelへ通知（settledPage でアニメーション完了後のみ通知）。
+    // 並び替え中は古いページ報告で選択が巻き戻らないよう無視し、終了時に確定値を送る。
     LaunchedEffect(pagerState) {
         snapshotFlow { pagerState.settledPage }.collect { page ->
-            currentOnGroupPageChanged(page)
+            if (!currentIsReorderingGroups) {
+                currentOnGroupPageChanged(page)
+            }
         }
     }
 
@@ -354,6 +375,13 @@ private fun TabsScreenLoadedContent(
                 groupHasPlayingTab = groupHasPlayingTab,
                 onGroupSelected = onGroupSelected,
                 onReorderGroups = onReorderGroups,
+                onReorderDragStateChanged = { dragging ->
+                    isReorderingGroups = dragging
+                    if (!dragging) {
+                        // programmaticScrollTarget を解除するため、確定したページを通知する
+                        currentOnGroupPageChanged(activeGroupIndex)
+                    }
+                },
                 onAddGroup = onAddGroup,
                 onGroupTabBoundsChanged = { index, bounds ->
                     groupTabBounds[index] = bounds
@@ -366,6 +394,7 @@ private fun TabsScreenLoadedContent(
             PagerIndicator(
                 pagerState = pagerState,
                 listState = groupTabListState,
+                pinnedPage = if (isReorderingGroups) activeGroupIndex else null,
                 modifier = Modifier.fillMaxWidth(),
             )
 
@@ -375,7 +404,8 @@ private fun TabsScreenLoadedContent(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f),
-                userScrollEnabled = !isTabDragging,
+                userScrollEnabled = !isTabDragging && !isReorderingGroups,
+                key = { page -> groups.getOrNull(page)?.id?.value ?: page },
             ) { page ->
                 val tabsForPage = groupedTabs.getOrElse(page) { emptyList() }
                 Column(
@@ -579,14 +609,16 @@ private fun SnackbarContent(
 private fun PagerIndicator(
     pagerState: PagerState,
     listState: LazyListState,
+    pinnedPage: Int? = null,
     modifier: Modifier = Modifier,
 ) {
     val indicatorColor = MaterialTheme.colorScheme.primary
     val trackColor = MaterialTheme.colorScheme.surfaceVariant
     // スクロールやページ変化時に再コンポーズされるよう composable body で状態を読み取る
     val layoutInfo = listState.layoutInfo
-    val currentPage = pagerState.currentPage
-    val offsetFraction = pagerState.currentPageOffsetFraction
+    // 並び替え中は Pager のオフセットではなく選択グループの論理位置に固定する
+    val currentPage = pinnedPage ?: pagerState.currentPage
+    val offsetFraction = if (pinnedPage != null) 0f else pagerState.currentPageOffsetFraction
     // viewportStartOffset = -contentPadding.start のため符号反転で描画座標へのオフセット量を得る
     val startOffsetPx = -layoutInfo.viewportStartOffset.toFloat()
     val items = layoutInfo.visibleItemsInfo.map { IndicatorItemInfo(it.index, it.offset, it.size) }

@@ -25,10 +25,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.ui.res.painterResource
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -64,12 +65,18 @@ private val GroupTabBarHeight = 48.dp
 /** 非選択タブの最小高さ。選択タブは GroupTabBarHeight まで伸びて「浮き上がり」を表現する */
 private val GroupTabUnselectedHeight = 40.dp
 
+/** 隣のスロットへ移るために必要な移動量（タブ幅に対する割合） */
+internal const val GroupReorderSlotThreshold = 0.55f
+
 /**
  * グループタブバー。
  * 栞形のタブを横並びに表示し、末尾に追加ボタンを配置する。
  * 選択中のタブが手前に表示され、非選択タブは下に沈んで奥にあるように見える。
  * 長押しドラッグでグループの順序を入れ替えられる。
  * タブドラッグ中のドロップターゲットをハイライト表示する。
+ *
+ * 並び替え判定は LazyRow の layoutInfo（animateItem 中は中間座標になる）を使わず、
+ * ドラッグ開始位置からの移動量と固定タブ幅だけで目標インデックスを決める。
  */
 @Composable
 internal fun GroupTabBar(
@@ -80,6 +87,7 @@ internal fun GroupTabBar(
     groupHasPlayingTab: List<Boolean>,
     onGroupSelected: (Int) -> Unit,
     onReorderGroups: (fromIndex: Int, toIndex: Int) -> Unit,
+    onReorderDragStateChanged: (Boolean) -> Unit = {},
     onAddGroup: () -> Unit,
     onGroupTabBoundsChanged: (index: Int, bounds: Rect) -> Unit,
     listState: LazyListState,
@@ -88,11 +96,21 @@ internal fun GroupTabBar(
     val dragDropState = rememberGroupDragDropState(
         listState = listState,
         onMove = onReorderGroups,
+        onDragStateChanged = onReorderDragStateChanged,
     )
 
-    // ページスクロール進捗を読み取る（タブの高さ・色アニメーションに使用）
-    val currentPage = pagerState.currentPage
-    val offsetFraction = pagerState.currentPageOffsetFraction
+    // ページスクロール進捗を読み取る（タブの高さ・色アニメーションに使用）。
+    // グループ並び替え中は Pager の中間オフセットに追従させるとインジケータが振動するため、
+    // 選択中グループの論理インデックスに固定する。
+    val currentPage: Int
+    val offsetFraction: Float
+    if (dragDropState.isDragging) {
+        currentPage = activeGroupIndex
+        offsetFraction = 0f
+    } else {
+        currentPage = pagerState.currentPage
+        offsetFraction = pagerState.currentPageOffsetFraction
+    }
 
     Box(
         modifier = modifier
@@ -185,16 +203,25 @@ internal fun GroupTabBar(
 private fun rememberGroupDragDropState(
     listState: LazyListState,
     onMove: (fromIndex: Int, toIndex: Int) -> Unit,
+    onDragStateChanged: (Boolean) -> Unit,
 ): GroupDragDropState {
+    val currentOnMove by rememberUpdatedState(onMove)
+    val currentOnDragStateChanged by rememberUpdatedState(onDragStateChanged)
     return remember(listState) {
-        GroupDragDropState(listState = listState, onMove = onMove)
+        GroupDragDropState(
+            listState = listState,
+            onMove = { from, to -> currentOnMove(from, to) },
+            onDragStateChanged = { dragging -> currentOnDragStateChanged(dragging) },
+        )
     }
 }
 
 /** グループタブバーのドラッグ&ドロップ状態を管理するクラス */
+@Stable
 private class GroupDragDropState(
     val listState: LazyListState,
     private val onMove: (fromIndex: Int, toIndex: Int) -> Unit,
+    private val onDragStateChanged: (Boolean) -> Unit,
 ) {
     /** ドラッグ中のグループの key（group.id.value） */
     var draggedItemKey: Any? by mutableStateOf(null)
@@ -209,7 +236,13 @@ private class GroupDragDropState(
         private set
 
     /** 並び替え追跡用の現在インデックス */
-    private var currentDragIndex: Int by mutableIntStateOf(-1)
+    private var currentDragIndex: Int = -1
+
+    /** ドラッグ開始時のインデックス。目標位置はここからの累積移動量で決める。 */
+    private var dragStartIndex: Int = -1
+
+    /** ドラッグ開始からの水平移動量（px） */
+    private var totalDragX: Float = 0f
 
     val isDragging: Boolean get() = draggedItemKey != null
 
@@ -233,39 +266,80 @@ private class GroupDragDropState(
         draggedItemOffset = IntOffset(item.offset - viewportOffset, 0)
         draggedItemSize = IntSize(item.size, listState.layoutInfo.viewportSize.height)
         currentDragIndex = item.index
+        dragStartIndex = item.index
+        totalDragX = 0f
+        onDragStateChanged(true)
     }
 
     /** ドラッグ中の移動処理 */
     fun onDrag(dragAmount: Offset, groupCount: Int) {
         if (!isDragging) return
+        totalDragX += dragAmount.x
         draggedItemOffset = (draggedItemOffset.toOffset() + dragAmount).round()
 
-        val centerX = draggedItemOffset.x + draggedItemSize.width / 2f
-        val viewportOffset = listState.layoutInfo.viewportStartOffset
-
-        val targetItem = listState.layoutInfo.visibleItemsInfo
-            .filter { it.key != draggedItemKey && it.index < groupCount }
-            .minByOrNull { info ->
-                val itemCenterX = (info.offset - viewportOffset).toFloat() + info.size / 2f
-                abs(centerX - itemCenterX)
-            } ?: return
-
-        val targetLeft = (targetItem.offset - viewportOffset).toFloat()
-        val targetRight = targetLeft + targetItem.size
-
-        if (centerX in targetLeft..targetRight && targetItem.index != currentDragIndex) {
-            onMove(currentDragIndex, targetItem.index)
-            currentDragIndex = targetItem.index
+        val targetIndex = calculateGroupReorderTargetIndex(
+            startIndex = dragStartIndex,
+            totalDragX = totalDragX,
+            itemWidthPx = draggedItemSize.width.toFloat(),
+            groupCount = groupCount,
+            currentIndex = currentDragIndex,
+        )
+        if (targetIndex != currentDragIndex) {
+            onMove(currentDragIndex, targetIndex)
+            currentDragIndex = targetIndex
         }
     }
 
     /** ドラッグ終了時の処理 */
     fun onDragEnd() {
+        val wasDragging = isDragging
         draggedItemKey = null
         draggedItemOffset = IntOffset.Zero
         draggedItemSize = IntSize.Zero
         currentDragIndex = -1
+        dragStartIndex = -1
+        totalDragX = 0f
+        if (wasDragging) {
+            onDragStateChanged(false)
+        }
     }
+}
+
+/**
+ * グループタブの長押しドラッグで、指の移動量から並び替え先インデックスを決める。
+ *
+ * LazyRow の layoutInfo は animateItem 中に中間座標を返すため、
+ * 当たり判定に使うと隣アイテムと高速で入れ替わり続ける。
+ * タブ幅は固定なので、開始インデックス + 移動量 / 幅 だけで目標を計算する。
+ *
+ * [currentIndex] からのヒステリシス（スロット幅の 55%）により、境界付近の微小な揺れで
+ * 往復しない。素早いフリックで複数スロット飛ばした場合は追いつくまで進める。
+ */
+internal fun calculateGroupReorderTargetIndex(
+    startIndex: Int,
+    totalDragX: Float,
+    itemWidthPx: Float,
+    groupCount: Int,
+    currentIndex: Int,
+): Int {
+    val lastIndex = (groupCount - 1).coerceAtLeast(0)
+    if (itemWidthPx <= 0f || groupCount <= 0) {
+        return startIndex.coerceIn(0, lastIndex)
+    }
+    val fingerIndex = startIndex + totalDragX / itemWidthPx
+    val threshold = GroupReorderSlotThreshold
+    var index = currentIndex.coerceIn(0, lastIndex)
+    repeat(groupCount) {
+        val delta = fingerIndex - index
+        val next = when {
+            delta > threshold && index < lastIndex -> index + 1
+            delta < -threshold && index > 0 -> index - 1
+            else -> index
+        }
+        if (next == index) return index
+        index = next
+    }
+    return index
 }
 
 /**

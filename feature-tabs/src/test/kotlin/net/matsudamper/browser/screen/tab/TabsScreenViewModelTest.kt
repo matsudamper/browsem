@@ -945,4 +945,139 @@ class TabsScreenViewModelTest {
         assertEquals("moveTab は1回だけ呼ばれるべき", 1, tabStore.moveRequests.size)
         assertEquals("先頭タブを2番目に移動する要求が発行されるべき", 0 to 1, tabStore.moveRequests.single())
     }
+
+    private fun TabsScreenViewModel.groupIdsFromUiState(): List<String>? {
+        return (uiState.value.loadingState as? TabsScreenUiState.LoadingState.Loaded)
+            ?.groups
+            ?.map { it.id.value }
+    }
+
+    private fun fiveGroups(): List<TabGroupData> = (1..5).map { n ->
+        TabGroupData(TabGroupId("g$n"), n.toString())
+    }
+
+    /**
+     * 再現: グループ1〜5、選択が3のとき2つめを1へ持っていく。
+     * 選択はグループ3のまま、順序だけ [2,1,3,4,5] になる。
+     */
+    @Test
+    fun reorderGroups_selectedThird_movingSecondToFirst_keepsThirdSelected() = runTest(testDispatcher) {
+        val tabStore = FakeTabStore()
+        val repo = FakeTabGroupRepository()
+        repo.setGroups(fiveGroups())
+
+        val viewModel = buildViewModel(tabStore, repo, this)
+        advanceUntilIdle()
+
+        viewModel.uiState.value.callbacks.onGroupSelected(2)
+        advanceUntilIdle()
+        assertEquals(2, viewModel.activeGroupIndexFromUiState())
+
+        viewModel.uiState.value.callbacks.onReorderGroups(1, 0)
+        advanceUntilIdle()
+
+        assertEquals(listOf("g2", "g1", "g3", "g4", "g5"), viewModel.groupIdsFromUiState())
+        assertEquals(
+            "選択中グループ3はインデックス2のまま",
+            2,
+            viewModel.activeGroupIndexFromUiState(),
+        )
+    }
+
+    /**
+     * 再現: グループ1〜5、選択が2のとき2つめを1へ持っていく。
+     * 選択はグループ2のまま、新しいインデックス0を指す。
+     */
+    @Test
+    fun reorderGroups_selectedSecond_movingSecondToFirst_keepsSecondSelectedAtNewIndex() = runTest(testDispatcher) {
+        val tabStore = FakeTabStore()
+        val repo = FakeTabGroupRepository()
+        repo.setGroups(fiveGroups())
+
+        val viewModel = buildViewModel(tabStore, repo, this)
+        advanceUntilIdle()
+
+        viewModel.uiState.value.callbacks.onGroupSelected(1)
+        advanceUntilIdle()
+        assertEquals(1, viewModel.activeGroupIndexFromUiState())
+
+        viewModel.uiState.value.callbacks.onReorderGroups(1, 0)
+        advanceUntilIdle()
+
+        assertEquals(listOf("g2", "g1", "g3", "g4", "g5"), viewModel.groupIdsFromUiState())
+        assertEquals(
+            "選択中グループ2は先頭（index=0）へ追従する",
+            0,
+            viewModel.activeGroupIndexFromUiState(),
+        )
+    }
+
+    /**
+     * 並び替えで選択インデックスが動いた直後、Pager が古い settledPage を報告しても
+     * 選択が元の位置へ戻らないこと。
+     */
+    @Test
+    fun reorderGroups_ignoresStaleSettledPage_afterSelectedGroupMoves() = runTest(testDispatcher) {
+        val tabStore = FakeTabStore()
+        val repo = FakeTabGroupRepository()
+        repo.setGroups(fiveGroups())
+
+        val viewModel = buildViewModel(tabStore, repo, this)
+        advanceUntilIdle()
+
+        viewModel.uiState.value.callbacks.onGroupSelected(1)
+        viewModel.uiState.value.callbacks.onGroupPageChanged(1)
+        advanceUntilIdle()
+
+        viewModel.uiState.value.callbacks.onReorderGroups(1, 0)
+        advanceUntilIdle()
+        assertEquals(0, viewModel.activeGroupIndexFromUiState())
+
+        // 並び替え前のページ（1）が遅れて報告される
+        viewModel.uiState.value.callbacks.onGroupPageChanged(1)
+        advanceUntilIdle()
+        assertEquals(
+            "古い settledPage で選択がグループ1（index=1）へ戻ってはいけない",
+            0,
+            viewModel.activeGroupIndexFromUiState(),
+        )
+
+        viewModel.uiState.value.callbacks.onGroupPageChanged(0)
+        advanceUntilIdle()
+        assertEquals(0, viewModel.activeGroupIndexFromUiState())
+
+        // ガード解除後のユーザースワイプは反映される
+        viewModel.uiState.value.callbacks.onGroupPageChanged(2)
+        advanceUntilIdle()
+        assertEquals(2, viewModel.activeGroupIndexFromUiState())
+    }
+
+    /**
+     * 選択中でないグループの並び替えでは、Pager の settledPage が同じでも選択グループは変わらない。
+     */
+    @Test
+    fun reorderGroups_selectedThird_staleNeighborPageDoesNotStealSelection() = runTest(testDispatcher) {
+        val tabStore = FakeTabStore()
+        val repo = FakeTabGroupRepository()
+        repo.setGroups(fiveGroups())
+
+        val viewModel = buildViewModel(tabStore, repo, this)
+        advanceUntilIdle()
+
+        viewModel.uiState.value.callbacks.onGroupSelected(2)
+        viewModel.uiState.value.callbacks.onGroupPageChanged(2)
+        advanceUntilIdle()
+
+        viewModel.uiState.value.callbacks.onReorderGroups(1, 0)
+        advanceUntilIdle()
+
+        viewModel.uiState.value.callbacks.onGroupPageChanged(1)
+        advanceUntilIdle()
+        assertEquals(
+            "選択3のまま2つめを動かしたあと、隣ページ報告で選択が2へ移ってはいけない",
+            2,
+            viewModel.activeGroupIndexFromUiState(),
+        )
+        assertEquals(listOf("g2", "g1", "g3", "g4", "g5"), viewModel.groupIdsFromUiState())
+    }
 }
