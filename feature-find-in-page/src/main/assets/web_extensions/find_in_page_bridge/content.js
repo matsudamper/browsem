@@ -7,6 +7,24 @@
   const CURRENT_CLASS = '__find_in_page_current';
   const HIGHLIGHT_STYLE = 'background: #ffff00; color: #000000; border-radius: 2px; padding: 0;';
   const CURRENT_STYLE = 'background: #ff8c00; color: #000000; border-radius: 2px; padding: 0;';
+  const MAX_QUERY_LENGTH = 500;
+
+  function isHiddenElement(element) {
+    let current = element;
+    while (current && current.nodeType === 1) {
+      const style = window.getComputedStyle(current);
+      if (style.display === 'none' || style.visibility === 'hidden') {
+        return true;
+      }
+      current = current.parentElement;
+    }
+    return false;
+  }
+
+  function isUnsafeRegexPattern(pattern) {
+    // 入れ子の量指定子など、バックトラックが爆発しやすいパターンを拒否する
+    return /(\([^)]*[+*][?]?\))[+*{?]/.test(pattern);
+  }
 
   let currentIndex = -1;
   let highlights = [];
@@ -50,11 +68,15 @@
       NodeFilter.SHOW_TEXT,
       {
         acceptNode: function (node) {
-          const tag = node.parentElement && node.parentElement.tagName
-            ? node.parentElement.tagName.toLowerCase()
+          const parent = node.parentElement;
+          const tag = parent && parent.tagName
+            ? parent.tagName.toLowerCase()
             : '';
           // スクリプト・スタイル・非表示要素はスキップ
           if (['script', 'style', 'noscript', 'iframe', 'textarea'].indexOf(tag) !== -1) {
+            return NodeFilter.FILTER_REJECT;
+          }
+          if (isHiddenElement(parent)) {
             return NodeFilter.FILTER_REJECT;
           }
           return NodeFilter.FILTER_ACCEPT;
@@ -116,6 +138,10 @@
         port.postMessage({ current: 0, total: 0 });
         return;
       }
+      if (query.length > MAX_QUERY_LENGTH) {
+        port.postMessage({ current: 0, total: 0, error: 'invalid_regex' });
+        return;
+      }
 
       let regex;
       try {
@@ -123,6 +149,10 @@
         // 平文検索は大文字小文字を区別しない（Firefox デフォルトに合わせる）
         const flags = msg.isRegex ? 'g' : 'gi';
         const pattern = msg.isRegex ? query : escapeRegex(query);
+        if (msg.isRegex && isUnsafeRegexPattern(pattern)) {
+          port.postMessage({ current: 0, total: 0, error: 'invalid_regex' });
+          return;
+        }
         regex = new RegExp(pattern, flags);
       } catch (e) {
         // 無効な正規表現
