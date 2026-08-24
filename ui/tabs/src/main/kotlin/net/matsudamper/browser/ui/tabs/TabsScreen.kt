@@ -234,9 +234,11 @@ private fun TabsScreenLoadedContent(
 
     // ViewModelのactiveGroupIndex変化 → ページスクロールとタブバースクロールを同期
     // index が変わらずアクティブグループだけが入れ替わる場合（削除など）にも
-    // lastActiveGroupId を更新する必要があるため、ID もキーに含める
+    // lastActiveGroupId を更新する必要があるため、ID もキーに含める。
+    // isGroupDragging もキーに含めないと、ドラッグ中に activeGroupIndex が変わった場合に
+    // タブバーの同期がスキップされたまま再開されず、アクティブグループが画面外に残る
     val activeGroupId = groups.getOrNull(activeGroupIndex)?.id
-    LaunchedEffect(activeGroupIndex, activeGroupId) {
+    LaunchedEffect(activeGroupIndex, activeGroupId, isGroupDragging) {
         // 同じグループのまま index だけが変わった = 長押しドラッグによる並び替え。
         // この場合ページ内容も同時に入れ替わっているためアニメーションさせると
         // 別グループのページが流れて見えるので、即座に位置だけ合わせる
