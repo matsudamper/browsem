@@ -22,6 +22,7 @@ data class SettingsScreenUiState(
     val mockLocationInputError: String?,
     val backupConfirmDialog: BackupConfirmType?,
     val extensionsProcessRestartDialog: Boolean,
+    val showDefaultBrowserBanner: Boolean,
 ) {
     enum class BackupConfirmType { Export, Import }
 
@@ -47,5 +48,7 @@ data class SettingsScreenUiState(
         fun confirmBackup()
         /** 確認ダイアログを閉じる */
         fun dismissBackupConfirm()
+        /** デフォルトブラウザの設定画面を開く */
+        fun openDefaultBrowserSettings()
     }
 }
