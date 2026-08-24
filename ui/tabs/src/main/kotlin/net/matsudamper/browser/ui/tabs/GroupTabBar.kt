@@ -122,7 +122,8 @@ internal fun GroupTabBar(
         while (true) {
             val delta = dragDropState.autoScrollDelta(threshold = threshold, maxSpeed = maxSpeed)
             if (delta != 0f) {
-                listState.scrollBy(delta)
+                // scrollBy の戻り値は実際に消費された量。端に到達していれば 0 になる
+                dragDropState.onAutoScrolled(listState.scrollBy(delta))
                 // 指を止めたままでもスクロールで位置関係が変わるため、毎フレーム判定し直す
                 dragDropState.updateDropTarget()
             }
@@ -254,6 +255,12 @@ private class GroupDragDropState(
     /** 追加ボタンを除いたグループ数 */
     private var groupCount: Int = 0
 
+    /** ドラッグ開始時点の先頭からのスクロール量（px） */
+    private var scrolledPxAtDragStart: Float = 0f
+
+    /** ドラッグ開始以降に自動スクロールで実際に消費されたスクロール量（px） */
+    private var autoScrolledPx: Float = 0f
+
     val isDragging: Boolean get() = draggedItemKey != null
 
     /** ドラッグ開始時の処理。groupCount は追加ボタンを除いたグループ数。 */
@@ -278,6 +285,13 @@ private class GroupDragDropState(
         currentDragIndex = item.index
         itemWidth = item.size
         this.groupCount = groupCount
+        scrolledPxAtDragStart = calculateScrolledPx(
+            firstVisibleItemIndex = listState.firstVisibleItemIndex,
+            firstVisibleItemScrollOffset = listState.firstVisibleItemScrollOffset,
+            itemWidth = item.size,
+            groupCount = groupCount,
+        )
+        autoScrolledPx = 0f
     }
 
     /** ドラッグ中の移動処理 */
@@ -324,6 +338,11 @@ private class GroupDragDropState(
         )
     }
 
+    /** 自動スクロールで実際に消費されたスクロール量を記録する */
+    fun onAutoScrolled(consumed: Float) {
+        autoScrolledPx += consumed
+    }
+
     /** ドラッグ終了時の処理 */
     fun onDragEnd() {
         draggedItemKey = null
@@ -332,18 +351,39 @@ private class GroupDragDropState(
         currentDragIndex = -1
         itemWidth = 0
         groupCount = 0
+        scrolledPxAtDragStart = 0f
+        autoScrolledPx = 0f
     }
 
     /**
      * 先頭からの現在のスクロール量（px）。
-     * firstVisibleItem* は animateItem の並び替えアニメーションに影響されないため、
-     * visibleItemsInfo の offset と違って安定した基準になる。
-     * グループタブは全て同じ幅なので index * itemWidth で先頭からの距離を算出できる。
+     *
+     * ドラッグ中は firstVisibleItem* を読んではいけない。LazyList は並び替えが起きると
+     * 先頭可視アイテムの「キー」を基準に表示位置を維持するため、そのアイテムの index が
+     * 変わると firstVisibleItemIndex も追随して変わる。左方向へドラッグして先頭可視
+     * アイテムを追い越すと index が 1 つ増え、スロット位置が 1 個分ずれて即座に戻され、
+     * 往復（発振）していた。右方向は先頭可視アイテムから遠ざかるだけなので index が
+     * 変わらず、発振しなかった。
+     *
+     * ドラッグ中のスクロールは自分の自動スクロールだけ（長押しドラッグがポインタ
+     * イベントを消費するのでユーザーはスクロールできない）なので、開始時点の値に
+     * 実際に消費されたスクロール量を積算すれば、並び順に一切影響されずに追跡できる。
      */
-    private fun scrolledPx(): Float {
-        val firstIndex = listState.firstVisibleItemIndex.coerceIn(0, groupCount)
-        return firstIndex * itemWidth.toFloat() + listState.firstVisibleItemScrollOffset
-    }
+    private fun scrolledPx(): Float = scrolledPxAtDragStart + autoScrolledPx
+}
+
+/**
+ * 先頭からのスクロール量（px）を算出する。
+ * グループタブは全て同じ幅なので index * itemWidth で先頭からの距離を求められる。
+ */
+internal fun calculateScrolledPx(
+    firstVisibleItemIndex: Int,
+    firstVisibleItemScrollOffset: Int,
+    itemWidth: Int,
+    groupCount: Int,
+): Float {
+    val firstIndex = firstVisibleItemIndex.coerceIn(0, groupCount.coerceAtLeast(0))
+    return firstIndex * itemWidth.toFloat() + firstVisibleItemScrollOffset
 }
 
 /** グループタブのスロット位置（ビューポート座標） */

@@ -227,4 +227,27 @@ class GroupTabBarDragTest {
         )
         assertEquals(0f, delta, 0f)
     }
+
+    @Test
+    fun calculateScrolledPx_combinesIndexAndOffset() {
+        val result = calculateScrolledPx(
+            firstVisibleItemIndex = 2,
+            firstVisibleItemScrollOffset = 30,
+            itemWidth = 120,
+            groupCount = 5,
+        )
+        assertEquals(270f, result, 0f)
+    }
+
+    @Test
+    fun calculateScrolledPx_clampsIndexToGroupCount() {
+        // 追加ボタン（index == groupCount）が先頭可視でも、グループ分の幅までで頭打ちにする
+        val result = calculateScrolledPx(
+            firstVisibleItemIndex = 7,
+            firstVisibleItemScrollOffset = 10,
+            itemWidth = 120,
+            groupCount = 5,
+        )
+        assertEquals(610f, result, 0f)
+    }
 }
