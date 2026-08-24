@@ -225,12 +225,33 @@ private fun TabsScreenLoadedContent(
     val density = LocalDensity.current
     val currentOnGroupPageChanged by rememberUpdatedState(onGroupPageChanged)
 
+    // 直前にアクティブだったグループの ID。
+    // 並び替えでアクティブグループの index だけが変わった場合を判別するために保持する
+    var lastActiveGroupId by remember { mutableStateOf(groups.getOrNull(safeInitialPage)?.id) }
+
+    // グループタブの長押しドラッグ中はタブバーが自動スクロールするため、同期処理を止める
+    var isGroupDragging by remember { mutableStateOf(false) }
+
     // ViewModelのactiveGroupIndex変化 → ページスクロールとタブバースクロールを同期
-    LaunchedEffect(activeGroupIndex) {
+    // index が変わらずアクティブグループだけが入れ替わる場合（削除など）にも
+    // lastActiveGroupId を更新する必要があるため、ID もキーに含める。
+    // isGroupDragging もキーに含めないと、ドラッグ中に activeGroupIndex が変わった場合に
+    // タブバーの同期がスキップされたまま再開されず、アクティブグループが画面外に残る
+    val activeGroupId = groups.getOrNull(activeGroupIndex)?.id
+    LaunchedEffect(activeGroupIndex, activeGroupId, isGroupDragging) {
+        // 同じグループのまま index だけが変わった = 長押しドラッグによる並び替え。
+        // この場合ページ内容も同時に入れ替わっているためアニメーションさせると
+        // 別グループのページが流れて見えるので、即座に位置だけ合わせる
+        val isReorder = activeGroupId != null && activeGroupId == lastActiveGroupId
+        lastActiveGroupId = activeGroupId
         if (pagerState.currentPage != activeGroupIndex && activeGroupIndex in 0 until groups.size) {
-            pagerState.animateScrollToPage(activeGroupIndex)
+            if (isReorder) {
+                pagerState.scrollToPage(activeGroupIndex)
+            } else {
+                pagerState.animateScrollToPage(activeGroupIndex)
+            }
         }
-        if (activeGroupIndex in 0 until groups.size) {
+        if (!isGroupDragging && activeGroupIndex in 0 until groups.size) {
             val layoutInfo = groupTabListState.layoutInfo
             val targetItem = layoutInfo.visibleItemsInfo.firstOrNull { it.index == activeGroupIndex }
             if (targetItem == null) {
@@ -358,6 +379,7 @@ private fun TabsScreenLoadedContent(
                 onGroupTabBoundsChanged = { index, bounds ->
                     groupTabBounds[index] = bounds
                 },
+                onDraggingChanged = { isGroupDragging = it },
                 listState = groupTabListState,
                 modifier = Modifier.fillMaxWidth(),
             )
