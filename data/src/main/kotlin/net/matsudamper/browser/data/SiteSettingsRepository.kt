@@ -81,6 +81,67 @@ class SiteSettingsRepository(context: Context) {
         }
     }
 
+    /**
+     * 指定ホストの音声付きメディアの自動再生の状態を監視する。未設定の場合は ASK を返す。
+     * 消音メディアの自動再生は常に許可するため、この設定の対象外
+     */
+    fun autoplayPermission(host: String): Flow<SitePermissionState> {
+        return dataStore.data
+            .map { settings ->
+                settings.hostPermissionsMap[host]?.autoplay
+                    ?: SitePermissionState.SITE_PERMISSION_ASK
+            }
+            .distinctUntilChanged()
+    }
+
+    /**
+     * 指定ホストの音声付きメディアの自動再生の状態を監視する。
+     * サイトから一度も要求されていない場合は null を返す
+     */
+    fun requestedAutoplayPermission(host: String): Flow<SitePermissionState?> {
+        return dataStore.data
+            .map { settings ->
+                val permissions = settings.hostPermissionsMap[host] ?: return@map null
+                if (permissions.autoplayRequested) {
+                    permissions.autoplay
+                } else {
+                    null
+                }
+            }
+            .distinctUntilChanged()
+    }
+
+    /** 指定ホストが音声付きメディアの自動再生を要求したことを記録する */
+    suspend fun markAutoplayPermissionRequested(host: String) {
+        dataStore.updateData { current ->
+            val permissions = current.hostPermissionsMap[host] ?: SitePermissionSettings.getDefaultInstance()
+            if (permissions.autoplayRequested) return@updateData current
+            current.toBuilder()
+                .putHostPermissions(
+                    host,
+                    permissions.toBuilder().setAutoplayRequested(true).build(),
+                )
+                .build()
+        }
+    }
+
+    /** 指定ホストの現在の音声付きメディアの自動再生の状態を取得する */
+    suspend fun getAutoplayPermission(host: String): SitePermissionState {
+        return autoplayPermission(host).first()
+    }
+
+    suspend fun setAutoplayPermission(host: String, state: SitePermissionState) {
+        dataStore.updateData { current ->
+            val permissions = (current.hostPermissionsMap[host] ?: SitePermissionSettings.getDefaultInstance())
+                .toBuilder()
+                .setAutoplay(state)
+                .build()
+            current.toBuilder()
+                .putHostPermissions(host, permissions)
+                .build()
+        }
+    }
+
     /** 指定ホストの位置情報の扱いを監視する。未設定の場合は MOCK を返す */
     fun geolocationState(host: String): Flow<SiteGeolocationState> {
         return dataStore.data

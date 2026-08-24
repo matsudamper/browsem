@@ -248,6 +248,16 @@ internal fun BrowserAppShell(
                             uiState = uiState,
                             onOpenExtensions = { outerBackStack.add(AppDestination.Extensions) },
                             onOpenHistory = { outerBackStack.add(AppDestination.History) },
+                            onOpenReleases = {
+                                context.startActivity(
+                                    Intent(
+                                        Intent.ACTION_VIEW,
+                                        Uri.parse(GITHUB_RELEASES_URL),
+                                        context,
+                                        CustomTabActivity::class.java,
+                                    ),
+                                )
+                            },
                             onBack = { outerBackStack.removeLastOrNull() },
                         )
                     }
@@ -323,9 +333,17 @@ internal fun BrowserAppShell(
 
                 AppDestination.Extensions -> navEntry(key) {
                     val extensionsViewModel = composeViewModel(initializer = {
-                        ExtensionsScreenViewModel(runtime = runtime)
+                        ExtensionsScreenViewModel(
+                            application = context.applicationContext as Application,
+                            runtime = runtime,
+                        )
                     })
                     val extensionsUiState by extensionsViewModel.uiState.collectAsState()
+                    val extensionFileLauncher = rememberLauncherForActivityResult(
+                        ActivityResultContracts.OpenDocument(),
+                    ) { uri ->
+                        extensionsViewModel.onExtensionFileSelected(uri)
+                    }
                     LaunchedEffect(extensionsViewModel) {
                         extensionsViewModel.eventHandler.receiveAsFlow().collect {
                             it(object : ExtensionsScreenViewModel.Event {
@@ -337,6 +355,12 @@ internal fun BrowserAppShell(
                                             context,
                                             CustomTabActivity::class.java,
                                         )
+                                    )
+                                }
+
+                                override fun requestExtensionFilePicker() {
+                                    extensionFileLauncher.launch(
+                                        ExtensionsScreenViewModel.EXTENSION_ARCHIVE_MIME_TYPES,
                                     )
                                 }
                             })
@@ -572,6 +596,11 @@ private fun MainBrowserContent(
     }
 
     LaunchedEffect(viewModel) {
+        // 構成変更後は onTabsRestored が既に消費済み。NavBackStack が Setup に戻ったり
+        // 別タブに復元されたりしても、ViewModel 上の選択タブへ戻す。
+        if (viewModel.setupComplete.isCompleted) {
+            browserTabController.selectedTabId?.let { navController.syncToSelectedTab(it) }
+        }
         viewModel.eventHandler.receiveAsFlow().collect { event ->
             event(object : BrowserViewModel.Event {
                 override fun onTabsRestored(tabId: String) {
@@ -870,6 +899,8 @@ private fun MainBrowserContent(
 // ──────────────────────────────────────────────────────────────
 // ユーティリティ
 // ──────────────────────────────────────────────────────────────
+
+private const val GITHUB_RELEASES_URL = "https://github.com/matsudamper/browsem/releases"
 
 private fun buildBackupFileName(): String {
     val formatter = java.text.SimpleDateFormat("yyyyMMdd-HHmmss", java.util.Locale.US)

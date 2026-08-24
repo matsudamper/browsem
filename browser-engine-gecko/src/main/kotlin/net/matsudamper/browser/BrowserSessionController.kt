@@ -81,7 +81,11 @@ class BrowserSessionLifecycleController(
             return
         }
         tab.session.open(geckoRuntime)
-        val state = tab.pendingSessionState
+        // 通常は pendingSessionState (永続化からの復元用) を使うが、それが既に消費済みの
+        // 場合でも tab.sessionState (直近の onSessionStateChange でキャッシュされた状態) に
+        // フォールバックする。これにより、一度正常に開いた後にコンテンツプロセスが
+        // クラッシュ/kill されて isOpen=false になったタブも、ページ状態を保ったまま復元できる。
+        val state = tab.pendingSessionState ?: tab.sessionState.takeIf { it.isNotBlank() }
         if (state != null) {
             tab.pendingSessionState = null
             val parsed = GeckoSession.SessionState.fromString(state)

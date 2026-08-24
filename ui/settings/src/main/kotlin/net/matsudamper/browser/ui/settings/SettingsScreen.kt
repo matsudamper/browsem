@@ -1,5 +1,11 @@
 package net.matsudamper.browser.ui.settings
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -32,6 +38,10 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -52,6 +62,7 @@ fun SettingsScreen(
     uiState: SettingsScreenUiState,
     onOpenExtensions: () -> Unit,
     onOpenHistory: () -> Unit,
+    onOpenReleases: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -394,6 +405,17 @@ fun SettingsScreen(
             }
 
             Spacer(Modifier.height(betweenPadding))
+
+            SettingSection(title = "リリース") {
+                TextButton(
+                    onClick = onOpenReleases,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("GitHub Releases を開く")
+                }
+            }
+
+            Spacer(Modifier.height(betweenPadding))
             Spacer(Modifier.height(8.dp))
             Spacer(Modifier.padding(bottom = paddingValues.calculateBottomPadding()))
         }
@@ -469,6 +491,62 @@ internal fun SettingSection(
     }
 }
 
+@Composable
+internal fun CollapsibleSettingSection(
+    title: String,
+    modifier: Modifier = Modifier,
+    initiallyExpanded: Boolean = false,
+    content: @Composable () -> Unit,
+) {
+    var expanded by remember { mutableStateOf(initiallyExpanded) }
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.surfaceContainer,
+    ) {
+        Column {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { expanded = !expanded }
+                    .padding(horizontal = 12.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleLarge,
+                )
+                Icon(
+                    painter = painterResource(
+                        if (expanded) {
+                            ResourcesR.drawable.ic_keyboard_arrow_up_24dp
+                        } else {
+                            ResourcesR.drawable.ic_keyboard_arrow_down_24dp
+                        },
+                    ),
+                    contentDescription = if (expanded) "閉じる" else "展開",
+                )
+            }
+            AnimatedVisibility(
+                visible = expanded,
+                enter = expandVertically() + fadeIn(),
+                exit = shrinkVertically() + fadeOut(),
+            ) {
+                Column(
+                    modifier = Modifier.padding(
+                        start = 12.dp,
+                        end = 12.dp,
+                        bottom = 12.dp,
+                    ),
+                ) {
+                    content()
+                }
+            }
+        }
+    }
+}
+
 // 設定項目が縦に長いため、全体が見えるように高さを広げて Preview する
 @Preview(showBackground = true, heightDp = 2400)
 @Composable
@@ -511,6 +589,7 @@ private fun SettingsScreenPreview() {
             ),
             onOpenExtensions = {},
             onOpenHistory = {},
+            onOpenReleases = {},
             onBack = {},
         )
     }

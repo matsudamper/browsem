@@ -32,8 +32,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -71,11 +75,15 @@ internal fun BrowserTabDialogLayer(
             customTabMode = customTabMode,
             // ホットリンク保護のあるサーバーで 403 にならないよう、元ページを referrer に付ける
             onOpenNewTab = { url ->
-                onOpenNewTabRequest(url, state.currentPageUrl)
+                if (!state.handleWebAppCrossDomainNavigation(url)) {
+                    onOpenNewTabRequest(url, state.currentPageUrl)
+                }
                 state.dismissContextMenu()
             },
             onOpenUrl = { url ->
-                state.openUrlWithReferrer(url)
+                if (!state.handleWebAppCrossDomainNavigation(url)) {
+                    state.openUrlWithReferrer(url)
+                }
                 state.dismissContextMenu()
             },
             onCopyLink = { url -> state.copyLinkUrl(url) },
@@ -106,6 +114,31 @@ internal fun BrowserTabDialogLayer(
                     Text("ブロック")
                 }
             },
+        )
+    }
+
+    // サイトごとの自動再生（音声付きメディア）許可確認ダイアログ。
+    // 「許可」「却下」はサイト設定として永続化され、次回以降は確認せずに適用される。
+    // 「今回のみ許可」とダイアログを閉じただけの場合は永続化せず、次回も確認する。
+    state.autoplayPermissionDialog?.let { dialog ->
+        AutoplayPermissionDialog(
+            host = dialog.host,
+            onAllow = {
+                state.confirmAutoplayPermissionDialog(
+                    BrowserTabScreenState.AutoplayPermissionChoice.Allow,
+                )
+            },
+            onAllowOnce = {
+                state.confirmAutoplayPermissionDialog(
+                    BrowserTabScreenState.AutoplayPermissionChoice.AllowOnce,
+                )
+            },
+            onDeny = {
+                state.confirmAutoplayPermissionDialog(
+                    BrowserTabScreenState.AutoplayPermissionChoice.Deny,
+                )
+            },
+            onDismiss = state::dismissAutoplayPermissionDialog,
         )
     }
 
@@ -388,6 +421,73 @@ internal fun BrowserTabDialogLayer(
                 }
             },
         )
+    }
+}
+
+@Composable
+private fun AutoplayPermissionDialog(
+    host: String,
+    onAllow: () -> Unit,
+    onAllowOnce: () -> Unit,
+    onDeny: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("音声の自動再生") },
+        text = {
+            Text(
+                "$host が音声付きメディアの自動再生を求めています。" +
+                    "却下しても再生ボタンを押せば再生できます。" +
+                    "「今回のみ許可」を選ぶと設定は保存されず、次回も確認します。" +
+                    "この設定はメニューの「サイトの設定」から変更できます。",
+            )
+        },
+        // 選択肢が3つあり、日本語ラベルは横並びだと狭い画面で見切れるため縦に並べる
+        confirmButton = {
+            Column(
+                horizontalAlignment = Alignment.End,
+                // ダイアログは MainActivity とは別のコンポジションルートになり、
+                // MainActivity で設定した testTagsAsResourceId が届かないためここでも設定する
+                modifier = Modifier.semantics { testTagsAsResourceId = true },
+            ) {
+                TextButton(
+                    onClick = onAllow,
+                    modifier = Modifier.testTag(AutoplayPermissionDialogTestTags.Allow.testTag),
+                ) {
+                    Text("許可")
+                }
+                TextButton(
+                    onClick = onAllowOnce,
+                    modifier = Modifier.testTag(AutoplayPermissionDialogTestTags.AllowOnce.testTag),
+                ) {
+                    Text("今回のみ許可")
+                }
+                TextButton(
+                    onClick = onDeny,
+                    modifier = Modifier.testTag(AutoplayPermissionDialogTestTags.Deny.testTag),
+                ) {
+                    Text("却下")
+                }
+            }
+        },
+    )
+}
+
+sealed interface AutoplayPermissionDialogTestTags {
+    val id: String
+    val testTag get() = "${AutoplayPermissionDialogTestTags::class.java.name}#$id"
+
+    object Allow : AutoplayPermissionDialogTestTags {
+        override val id = "allow"
+    }
+
+    object AllowOnce : AutoplayPermissionDialogTestTags {
+        override val id = "allow_once"
+    }
+
+    object Deny : AutoplayPermissionDialogTestTags {
+        override val id = "deny"
     }
 }
 
@@ -1009,6 +1109,20 @@ private fun PreviewDuplicateDownloadDialog() {
             onConfirm = {},
             onDismiss = {},
             onOpenFile = {},
+        )
+    }
+}
+
+@Preview(name = "AutoplayPermissionDialog")
+@Composable
+private fun PreviewAutoplayPermissionDialog() {
+    BrowserTheme(themeMode = ThemeMode.THEME_SYSTEM) {
+        AutoplayPermissionDialog(
+            host = "www.example.com",
+            onAllow = {},
+            onAllowOnce = {},
+            onDeny = {},
+            onDismiss = {},
         )
     }
 }

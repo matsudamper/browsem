@@ -7,6 +7,7 @@ plugins {
 android {
     namespace = "net.matsudamper.browser.ui.extensions"
     compileSdk = 37
+    compileSdkMinor = 1
 
     defaultConfig {
         minSdk = 30
@@ -34,4 +35,5 @@ dependencies {
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.ui.tooling.preview)
+    implementation(project(":resources"))
 }

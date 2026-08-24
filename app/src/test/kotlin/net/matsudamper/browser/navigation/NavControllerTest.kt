@@ -32,4 +32,62 @@ class NavControllerTest {
             backStack.toList(),
         )
     }
+
+    @Test
+    fun syncToSelectedTab_replacesSetupWithSelectedTab() {
+        val backStack = NavBackStack<NavKey>(BrowserNavDestination.Setup)
+        val navController = NavController(backStack)
+
+        navController.syncToSelectedTab("tab-a")
+
+        assertEquals(
+            listOf(BrowserNavDestination.Browser(tabId = "tab-a", beforeTab = null)),
+            backStack.toList(),
+        )
+    }
+
+    @Test
+    fun syncToSelectedTab_correctsMismatchedBrowserDestination() {
+        val backStack = NavBackStack<NavKey>(
+            BrowserNavDestination.Browser(tabId = "tab-stale", beforeTab = null),
+        )
+        val navController = NavController(backStack)
+
+        navController.syncToSelectedTab("tab-current")
+
+        assertEquals(
+            listOf(BrowserNavDestination.Browser(tabId = "tab-current", beforeTab = null)),
+            backStack.toList(),
+        )
+    }
+
+    @Test
+    fun syncToSelectedTab_keepsMatchingBrowserDestination() {
+        val destination = BrowserNavDestination.Browser(tabId = "tab-a", beforeTab = null)
+        val backStack = NavBackStack<NavKey>(destination)
+        val navController = NavController(backStack)
+
+        navController.syncToSelectedTab("tab-a")
+
+        assertEquals(listOf(destination), backStack.toList())
+    }
+
+    @Test
+    fun syncToSelectedTab_keepsTabsScreenWhenCorrectingUnderlyingTab() {
+        val backStack = NavBackStack<NavKey>(
+            BrowserNavDestination.Browser(tabId = "tab-stale", beforeTab = null),
+            BrowserNavDestination.Tabs,
+        )
+        val navController = NavController(backStack)
+
+        navController.syncToSelectedTab("tab-current")
+
+        assertEquals(
+            listOf(
+                BrowserNavDestination.Browser(tabId = "tab-current", beforeTab = null),
+                BrowserNavDestination.Tabs,
+            ),
+            backStack.toList(),
+        )
+    }
 }

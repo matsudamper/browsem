@@ -8,6 +8,7 @@ import android.graphics.BitmapFactory
 import android.os.SystemClock
 import android.util.Log
 import android.widget.Toast
+import androidx.compose.foundation.ScrollState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
@@ -32,6 +33,7 @@ import java.net.URL
 import net.matsudamper.browser.data.download.DownloadRecordStatus
 import net.matsudamper.browser.data.SiteGeolocationState
 import net.matsudamper.browser.data.SitePermissionState
+import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.SiteSettingsRepository
 import net.matsudamper.browser.data.TranslationProvider
 import net.matsudamper.browser.data.extractSiteHost
@@ -75,6 +77,8 @@ internal fun rememberBrowserTabScreenState(
     homepageUrl: String,
     searchTemplate: String,
     isSinglePageMode: Boolean = false,
+    webAppPinnedHost: String? = null,
+    onWebAppCrossDomainNavigation: ((String) -> Unit)? = null,
     onHistoryRecord: (suspend (url: String, title: String) -> Long)? = null,
     onHistoryTitleUpdate: (suspend (id: Long, title: String) -> Unit)? = null,
     onRequestDownloadNotificationPermission: suspend () -> Unit = {},
@@ -86,17 +90,23 @@ internal fun rememberBrowserTabScreenState(
     val findInPageWebExtension: FindInPageWebExtension = koinInject()
     val devToolsWebExtension: DevToolsWebExtension = koinInject()
     val siteSettingsRepository: SiteSettingsRepository = koinInject()
+    val settingsRepository: SettingsRepository = koinInject()
+    val webExtensionActionController: WebExtensionActionController = koinInject()
     val state = remember(browserTab) {
         BrowserTabScreenState(
             browserTab = browserTab,
             homepageUrl = homepageUrl,
             searchTemplate = searchTemplate,
             isSinglePageMode = isSinglePageMode,
+            webAppPinnedHost = webAppPinnedHost,
+            onWebAppCrossDomainNavigation = onWebAppCrossDomainNavigation,
             coroutineScope = coroutineScope,
             geckoDownloadManager = geckoDownloadManager,
             findInPageWebExtension = findInPageWebExtension,
             devToolsWebExtension = devToolsWebExtension,
             siteSettingsRepository = siteSettingsRepository,
+            settingsRepository = settingsRepository,
+            webExtensionActionController = webExtensionActionController,
             context = context,
             onHistoryRecord = onHistoryRecord,
             onHistoryTitleUpdate = onHistoryTitleUpdate,
@@ -106,6 +116,8 @@ internal fun rememberBrowserTabScreenState(
     }
     state.homepageUrl = homepageUrl
     state.searchTemplate = searchTemplate
+    state.webAppPinnedHost = webAppPinnedHost
+    state.onWebAppCrossDomainNavigation = onWebAppCrossDomainNavigation
     state.onHistoryRecord = onHistoryRecord
     state.onHistoryTitleUpdate = onHistoryTitleUpdate
     return state
@@ -117,11 +129,15 @@ internal class BrowserTabScreenState(
     homepageUrl: String,
     searchTemplate: String,
     private val isSinglePageMode: Boolean = false,
+    webAppPinnedHost: String? = null,
+    onWebAppCrossDomainNavigation: ((String) -> Unit)? = null,
     private val coroutineScope: CoroutineScope,
     private val geckoDownloadManager: GeckoDownloadManager,
     internal val findInPageWebExtension: FindInPageWebExtension,
     internal val devToolsWebExtension: DevToolsWebExtension,
     private val siteSettingsRepository: SiteSettingsRepository,
+    private val settingsRepository: SettingsRepository,
+    private val webExtensionActionController: WebExtensionActionController,
     private val context: Context,
     private val onRequestDownloadNotificationPermission: suspend () -> Unit = {},
     private val onRequestAndroidPermissions: suspend (Array<String>) -> Array<String> = { emptyArray() },
@@ -136,6 +152,8 @@ internal class BrowserTabScreenState(
     private var historyRecordSequence: Long = 0
     var homepageUrl by mutableStateOf(homepageUrl)
     var searchTemplate by mutableStateOf(searchTemplate)
+    var webAppPinnedHost by mutableStateOf(webAppPinnedHost)
+    var onWebAppCrossDomainNavigation by mutableStateOf(onWebAppCrossDomainNavigation)
     val session: GeckoSession get() = browserTab.session
 
     // --- URL / Navigation state ---
@@ -192,6 +210,10 @@ internal class BrowserTabScreenState(
         private set
     // 現在フォーカスされている入力要素の情報。フォーカスがない場合は null。
     var devToolsFocusedInput by mutableStateOf<DevToolsWebExtension.FocusedInputInfo?>(null)
+
+    // ネットワークログ画面を表示中かどうか
+    var showNetworkLog by mutableStateOf(false)
+        private set
 
     // --- Back gesture state ---
     var isBackGestureInProgress by mutableStateOf(false)
@@ -269,6 +291,77 @@ internal class BrowserTabScreenState(
         dialog.onResult(null)
     }
 
+    // --- サイトごとの自動再生（音声付きメディア）許可確認ダイアログ状態 ---
+    var autoplayPermissionDialog by mutableStateOf<AutoplayPermissionDialogState?>(null)
+        private set
+
+    /** 自動再生確認ダイアログでの選択 */
+    enum class AutoplayPermissionChoice {
+        /** 許可してサイト設定へ永続化する */
+        Allow,
+
+        /** 今回だけ許可し、永続化しない（次回も確認する） */
+        AllowOnce,
+
+        /** 却下してサイト設定へ永続化する */
+        Deny,
+    }
+
+    /**
+     * @param onResult 選択された [AutoplayPermissionChoice]。
+     * null は未選択（ダイアログを閉じただけ）で、今回のみ拒否し永続化しない
+     */
+    @Stable
+    class AutoplayPermissionDialogState(
+        val host: String,
+        internal val onResult: (AutoplayPermissionChoice?) -> Unit,
+    )
+
+    fun confirmAutoplayPermissionDialog(choice: AutoplayPermissionChoice) {
+        val dialog = autoplayPermissionDialog ?: return
+        autoplayPermissionDialog = null
+        dialog.onResult(choice)
+    }
+
+    fun dismissAutoplayPermissionDialog() {
+        val dialog = autoplayPermissionDialog ?: return
+        autoplayPermissionDialog = null
+        dialog.onResult(null)
+    }
+
+    /**
+     * サイトごとの自動再生（音声付きメディア）の許可を解決する。
+     * 未設定 (ASK) の場合は確認ダイアログを表示してユーザーの応答を待つ。
+     * 「許可」「却下」はサイト設定として永続化し、「今回のみ許可」と未選択は
+     * 永続化しないため次回の要求でも再びダイアログを表示する。
+     */
+    private suspend fun resolveAutoplayPermission(host: String): Boolean {
+        // 要求があったことを記録し、「サイトの設定」画面に自動再生の項目を表示できるようにする
+        siteSettingsRepository.markAutoplayPermissionRequested(host)
+        when (siteSettingsRepository.getAutoplayPermission(host)) {
+            SitePermissionState.SITE_PERMISSION_ALLOW -> return true
+            SitePermissionState.SITE_PERMISSION_DENY -> return false
+            else -> Unit
+        }
+        // 表示中のダイアログが残っている場合は今回のみ拒否として閉じる
+        autoplayPermissionDialog?.also { previous ->
+            autoplayPermissionDialog = null
+            previous.onResult(null)
+        }
+        val result = CompletableDeferred<AutoplayPermissionChoice?>()
+        autoplayPermissionDialog = AutoplayPermissionDialogState(host) { choice ->
+            result.complete(choice)
+        }
+        val persistedState = when (val choice = result.await()) {
+            AutoplayPermissionChoice.Allow -> SitePermissionState.SITE_PERMISSION_ALLOW
+            AutoplayPermissionChoice.Deny -> SitePermissionState.SITE_PERMISSION_DENY
+            // 今回のみ許可・未選択は永続化せず ASK のままにして、次回も確認する
+            AutoplayPermissionChoice.AllowOnce, null -> return choice == AutoplayPermissionChoice.AllowOnce
+        }
+        siteSettingsRepository.setAutoplayPermission(host = host, state = persistedState)
+        return persistedState == SitePermissionState.SITE_PERMISSION_ALLOW
+    }
+
     /**
      * サイトごとのマイク権限を解決する。
      * 未設定 (ASK) の場合は確認ダイアログを表示してユーザーの応答を待ち、
@@ -337,6 +430,13 @@ internal class BrowserTabScreenState(
 
     var renderReady by mutableStateOf(false)
 
+    // コンテンツプロセスのクラッシュ/kill (onCrash/onKill) を検知するたびにインクリメントされる
+    // カウンター。GeckoBrowserTab がこの値を監視し、前面表示中であれば即座にセッションの
+    // 復元 (open→restoreState) をトリガーする。バックグラウンド中に発生した場合は ON_START の
+    // safety-net (attachSessionAfterStableSize) 側で復元される。
+    var sessionRecoveryRequestCount by mutableIntStateOf(0)
+        private set
+
     // ページの初回描画・ロード完了の度にインクリメントされるカウンター。
     // GeckoBrowserTab がこの値を監視してプレビューキャプチャをトリガーする。
     // ドメイン遷移後も古いプレビューが残らないよう、プレビュー取得済みでも毎回更新する。
@@ -369,12 +469,6 @@ internal class BrowserTabScreenState(
             field = value
         }
 
-    init {
-        Log.d(
-            TAG,
-            "init previewCaptureReady=$previewCaptureReady (tabId=${browserTab.tabId} hasPreview=${browserTab.previewBitmap?.isNotEmpty() == true} hasSessionState=${browserTab.sessionState.isNotBlank()})",
-        )
-    }
     var pageLoadError by mutableStateOf<PageLoadError?>(null)
 
     // --- ズーム状態（viewport width 操作によりテキスト・画像含め全体をズーム）---
@@ -393,12 +487,45 @@ internal class BrowserTabScreenState(
     val showInstallExtensionItem: Boolean
         get() = resolveAmoInstallUriFromPage(currentPageUrl) != null
 
+    // --- 拡張機能アクション（ツールバーメニューのアイコン行）---
+    /** メニューのアイコン行の横スクロール位置。タブ内でのみ保持し、永続化はしない */
+    val extensionActionScrollState = ScrollState(initial = 0)
+    /** 表示中の拡張機能ポップアップ。null なら非表示 */
+    var extensionActionPopup by mutableStateOf<WebExtensionActionController.PopupRequest?>(null)
+    private var extensionActionOrder by mutableStateOf<List<String>>(emptyList())
+    // ドラッグ中は保存済みの並び順ではなく、この一時的な並び順を使う
+    private var draggingExtensionActionOrder by mutableStateOf<List<String>?>(null)
+
+    // 収集した設定を extensionActionOrder へ書き込むため、
+    // このプロパティを宣言した後で init を実行する必要がある。
+    // 宣言前に置くと、設定が即座に流れてきた場合に未初期化のプロパティへ代入して落ちる
+    init {
+        Log.d(
+            TAG,
+            "init previewCaptureReady=$previewCaptureReady (tabId=${browserTab.tabId} hasPreview=${browserTab.previewBitmap?.isNotEmpty() == true} hasSessionState=${browserTab.sessionState.isNotBlank()})",
+        )
+        coroutineScope.launch {
+            settingsRepository.settings.collect { settings ->
+                extensionActionOrder = settings.extensionActionOrderList
+            }
+        }
+    }
+
+    /** このタブに対して有効な拡張機能アクションを、ユーザーが決めた並び順で返す */
+    val extensionActions: List<WebExtensionActionController.ActionUiState>
+        get() = sortByExtensionActionOrder(
+            items = webExtensionActionController.actions(session),
+            order = draggingExtensionActionOrder ?: extensionActionOrder,
+            idOf = { it.extensionId },
+        )
+
     // ================================================================
     // Actions
     // ================================================================
 
     fun onUrlSubmit(rawInput: String) {
         val resolved = buildUrlFromInput(rawInput, homepageUrl, searchTemplate)
+        if (handleWebAppCrossDomainNavigation(resolved)) return
         urlInput = resolved
         maybeResetToolbarColor(currentPageUrl, resolved)
         currentPageUrl = resolved
@@ -413,6 +540,7 @@ internal class BrowserTabScreenState(
      * ホットリンク保護のあるサーバーで 403 にならないようにする。
      */
     fun openUrlWithReferrer(url: String) {
+        if (handleWebAppCrossDomainNavigation(url)) return
         val referrerUrl = currentPageUrl
         urlInput = url
         maybeResetToolbarColor(currentPageUrl, url)
@@ -502,6 +630,43 @@ internal class BrowserTabScreenState(
 
     fun resetPageZoom() {
         applyPageZoom(100)
+    }
+
+    /** 拡張機能アイコンの短押し。ポップアップを持つ拡張機能はダイアログで表示される */
+    fun onExtensionActionClick(extensionId: String) {
+        webExtensionActionController.click(session, extensionId)
+    }
+
+    /** 長押しドラッグ中の並び替え。ドラッグが終わるまでは永続化しない */
+    fun onExtensionActionMove(fromIndex: Int, toIndex: Int) {
+        val currentIds = extensionActions.map { it.extensionId }
+        draggingExtensionActionOrder = moveExtensionActionOrder(currentIds, fromIndex, toIndex)
+            ?: return
+    }
+
+    /** 長押しドラッグの中断。入れ替え途中の一時的な並び順を破棄する */
+    fun onExtensionActionMoveCancel() {
+        draggingExtensionActionOrder = null
+    }
+
+    /** 長押しドラッグの終了。この時点の並び順を保存する */
+    fun onExtensionActionMoveEnd() {
+        val visibleOrder = draggingExtensionActionOrder ?: return
+        draggingExtensionActionOrder = null
+        val merged = mergeVisibleExtensionActionOrder(
+            savedOrder = extensionActionOrder,
+            visibleOrder = visibleOrder,
+        )
+        extensionActionOrder = merged
+        coroutineScope.launch {
+            settingsRepository.setExtensionActionOrder(merged)
+        }
+    }
+
+    /** 拡張機能ポップアップを閉じ、表示に使っていたセッションを破棄する */
+    fun dismissExtensionActionPopup() {
+        webExtensionActionController.closePopup(session)
+        extensionActionPopup = null
     }
 
     private fun applyPageZoom(percent: Int) {
@@ -630,11 +795,6 @@ internal class BrowserTabScreenState(
         devToolsWebExtension.requestFocusedInput(session)
     }
 
-    /** フォーカスされている入力要素の情報を再取得する */
-    fun refreshDevToolsFocusedInput() {
-        devToolsWebExtension.requestFocusedInput(session)
-    }
-
     /** フォーカス中の input の id をクリップボードにコピーする */
     fun copyFocusedInputId() {
         val id = devToolsFocusedInput?.id?.takeIf { it.isNotBlank() } ?: return
@@ -646,6 +806,16 @@ internal class BrowserTabScreenState(
 
     fun closeDevTools() {
         showDevTools = false
+    }
+
+    /** ネットワークログ画面を開く。開発者ツールのダイアログは閉じる */
+    fun openNetworkLog() {
+        showDevTools = false
+        showNetworkLog = true
+    }
+
+    fun closeNetworkLog() {
+        showNetworkLog = false
     }
 
     fun onTranslate(translationProvider: TranslationProvider) {
@@ -1282,6 +1452,16 @@ internal class BrowserTabScreenState(
         }
     }
 
+    /**
+     * WebApp のピン留めドメイン外への遷移を Custom Tabs で開く。
+     * インターセプトした場合は true を返す。
+     */
+    internal fun handleWebAppCrossDomainNavigation(url: String): Boolean {
+        if (!isWebAppCrossDomainNavigation(url, webAppPinnedHost)) return false
+        onWebAppCrossDomainNavigation?.invoke(url)
+        return onWebAppCrossDomainNavigation != null
+    }
+
     override fun onLoadRequest(
         request: GeckoSession.NavigationDelegate.LoadRequest,
     ): GeckoResult<AllowOrDeny>? {
@@ -1306,7 +1486,9 @@ internal class BrowserTabScreenState(
                 ExternalAppNavigationAction.AllowInBrowser -> {
                     val uri = request.uri
                     if (uri.isNotBlank() && uri != "about:blank") {
-                        session.loadUri(uri)
+                        if (!handleWebAppCrossDomainNavigation(uri)) {
+                            session.loadUri(uri)
+                        }
                     }
                 }
                 ExternalAppNavigationAction.AppNotFound -> {
@@ -1322,7 +1504,13 @@ internal class BrowserTabScreenState(
             return GeckoResult.fromValue(AllowOrDeny.DENY)
         }
         return when (externalAction) {
-            ExternalAppNavigationAction.AllowInBrowser -> null
+            ExternalAppNavigationAction.AllowInBrowser -> {
+                if (handleWebAppCrossDomainNavigation(request.uri)) {
+                    GeckoResult.fromValue(AllowOrDeny.DENY)
+                } else {
+                    null
+                }
+            }
             ExternalAppNavigationAction.AppNotFound -> {
                 Toast.makeText(context, "対応するアプリが見つかりません", Toast.LENGTH_SHORT).show()
                 GeckoResult.fromValue(AllowOrDeny.DENY)
@@ -1355,6 +1543,14 @@ internal class BrowserTabScreenState(
 
     override fun onScrollChanged(scrollY: Int) {
         this.scrollY = scrollY
+    }
+
+    override fun onSessionClosedUnexpectedly() {
+        Log.w(TAG, "onSessionClosedUnexpectedly: コンテンツプロセスが失われました。復元をリクエストします")
+        // GeckoView 自身の初回描画コールバックが再度発火するまで、フリーズした最終フレームを
+        // 上に重ねて隠す（BrowserTabSurface は renderReady=false の間プレビュー/スピナーを表示する）。
+        renderReady = false
+        sessionRecoveryRequestCount++
     }
 
     override fun onAndroidPermissionsRequest(
@@ -1417,6 +1613,29 @@ internal class BrowserTabScreenState(
             val allow = host != null &&
                 runCatching { siteSettingsRepository.getGeolocationState(host) }.getOrNull() ==
                 SiteGeolocationState.SITE_GEOLOCATION_REAL
+            if (completed.compareAndSet(false, true)) {
+                onResult(allow)
+            }
+        }
+        job.invokeOnCompletion { cause ->
+            // スコープのキャンセル等で onResult まで到達しなかった場合は拒否として完了させる
+            if (cause != null && completed.compareAndSet(false, true)) {
+                onResult(false)
+            }
+        }
+    }
+
+    override fun onAutoplayPermissionRequest(
+        uri: String?,
+        onResult: (allow: Boolean) -> Unit,
+    ) {
+        // Gecko の GeckoResult を未解決のまま残さないよう、onResult は必ず一度呼ぶ
+        val completed = AtomicBoolean(false)
+        val job = coroutineScope.launch {
+            // 自動再生の許可はトップレベルサイト基準のため、iframe からの要求
+            // （uri が iframe のオリジン）も表示中ページのホストで判定する
+            val host = extractSiteHost(currentPageUrl) ?: uri?.let { extractSiteHost(it) }
+            val allow = host != null && resolveAutoplayPermission(host)
             if (completed.compareAndSet(false, true)) {
                 onResult(allow)
             }
@@ -1512,4 +1731,11 @@ internal class BrowserTabScreenState(
         clipboard.setPrimaryClip(android.content.ClipData.newPlainText("URL", url))
         Toast.makeText(context, "URLをコピーしました", Toast.LENGTH_SHORT).show()
     }
+}
+
+/** WebApp のピン留めホストと異なるホストへの遷移かどうかを判定する */
+internal fun isWebAppCrossDomainNavigation(url: String, pinnedHost: String?): Boolean {
+    if (pinnedHost.isNullOrBlank()) return false
+    val targetHost = extractSiteHost(url) ?: return false
+    return !targetHost.equals(pinnedHost, ignoreCase = true)
 }

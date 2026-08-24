@@ -107,7 +107,9 @@ internal fun GroupTabBar(
                 .fillMaxWidth()
                 // 全アイテムが常に GroupTabBarHeight のwrapperを持つため、高さは固定で問題なし
                 .height(GroupTabBarHeight)
-                .pointerInput(dragDropState) {
+                // groups.size をキーに含めないと、グループ追加後も古い groupCount が
+                // クロージャに残り、新規グループ（index == 旧 size）がドラッグ対象外になる
+                .pointerInput(dragDropState, groups.size) {
                     detectDragGesturesAfterLongPress(
                         onDragStart = { offset ->
                             dragDropState.onDragStart(offset, groups.size)
@@ -213,16 +215,21 @@ private class GroupDragDropState(
 
     /** ドラッグ開始時の処理。groupCount は追加ボタンを除いたグループ数。 */
     fun onDragStart(offset: Offset, groupCount: Int) {
-        // info.offset はコンテンツ領域先頭（contentPadding 以降）からの相対座標。
-        // viewportStartOffset = -contentPadding.start のため引き算で描画座標に変換する。
         val viewportOffset = listState.layoutInfo.viewportStartOffset
-        val item = listState.layoutInfo.visibleItemsInfo.firstOrNull { info ->
-            val itemLeft = (info.offset - viewportOffset).toFloat()
-            val itemRight = itemLeft + info.size
-            info.index < groupCount && offset.x >= itemLeft && offset.x <= itemRight
-        } ?: return
+        val items = listState.layoutInfo.visibleItemsInfo.map {
+            IndicatorItemInfo(it.index, it.offset, it.size)
+        }
+        val item = findGroupDragStartItem(
+            items = items,
+            offsetX = offset.x,
+            viewportStartOffset = viewportOffset,
+            groupCount = groupCount,
+        ) ?: return
 
-        draggedItemKey = item.key
+        draggedItemKey = listState.layoutInfo.visibleItemsInfo
+            .firstOrNull { it.index == item.index }
+            ?.key
+            ?: return
         draggedItemOffset = IntOffset(item.offset - viewportOffset, 0)
         draggedItemSize = IntSize(item.size, listState.layoutInfo.viewportSize.height)
         currentDragIndex = item.index
@@ -258,6 +265,25 @@ private class GroupDragDropState(
         draggedItemOffset = IntOffset.Zero
         draggedItemSize = IntSize.Zero
         currentDragIndex = -1
+    }
+}
+
+/**
+ * 長押しドラッグ開始位置から対象グループタブを特定する。
+ * @param groupCount 追加ボタンを除いたグループ数
+ */
+internal fun findGroupDragStartItem(
+    items: List<IndicatorItemInfo>,
+    offsetX: Float,
+    viewportStartOffset: Int,
+    groupCount: Int,
+): IndicatorItemInfo? {
+    // info.offset はコンテンツ領域先頭（contentPadding 以降）からの相対座標。
+    // viewportStartOffset = -contentPadding.start のため引き算で描画座標に変換する。
+    return items.firstOrNull { info ->
+        val itemLeft = (info.offset - viewportStartOffset).toFloat()
+        val itemRight = itemLeft + info.size
+        info.index < groupCount && offsetX >= itemLeft && offsetX <= itemRight
     }
 }
 

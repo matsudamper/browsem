@@ -2,6 +2,7 @@ package net.matsudamper.browser
 
 import android.content.res.Configuration
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -65,6 +66,12 @@ internal fun ToolbarMenu(
     onPageZoomIn: () -> Unit,
     onPageZoomOut: () -> Unit,
     onResetPageZoom: () -> Unit,
+    extensionActions: List<WebExtensionActionController.ActionUiState> = emptyList(),
+    extensionActionScrollState: ScrollState? = null,
+    onExtensionActionClick: (String) -> Unit = {},
+    onExtensionActionMove: (fromIndex: Int, toIndex: Int) -> Unit = { _, _ -> },
+    onExtensionActionMoveEnd: () -> Unit = {},
+    onExtensionActionMoveCancel: () -> Unit = {},
     showOpenSettings: Boolean = true,
     showAddToHomeScreen: Boolean = true,
     showHome: Boolean = true,
@@ -100,6 +107,12 @@ internal fun ToolbarMenu(
             onPageZoomIn = onPageZoomIn,
             onPageZoomOut = onPageZoomOut,
             onResetPageZoom = onResetPageZoom,
+            extensionActions = extensionActions,
+            extensionActionScrollState = extensionActionScrollState,
+            onExtensionActionClick = onExtensionActionClick,
+            onExtensionActionMove = onExtensionActionMove,
+            onExtensionActionMoveEnd = onExtensionActionMoveEnd,
+            onExtensionActionMoveCancel = onExtensionActionMoveCancel,
             showOpenSettings = showOpenSettings,
             showAddToHomeScreen = showAddToHomeScreen,
             showHome = showHome,
@@ -136,6 +149,12 @@ private fun ToolbarMenuContent(
     onPageZoomIn: () -> Unit,
     onPageZoomOut: () -> Unit,
     onResetPageZoom: () -> Unit,
+    extensionActions: List<WebExtensionActionController.ActionUiState>,
+    extensionActionScrollState: ScrollState?,
+    onExtensionActionClick: (String) -> Unit,
+    onExtensionActionMove: (fromIndex: Int, toIndex: Int) -> Unit,
+    onExtensionActionMoveEnd: () -> Unit,
+    onExtensionActionMoveCancel: () -> Unit,
     showOpenSettings: Boolean,
     showAddToHomeScreen: Boolean,
     showHome: Boolean,
@@ -363,6 +382,21 @@ private fun ToolbarMenuContent(
                 }
             }
         }
+        // このタブに対して有効な拡張機能のアイコン行。短押しでポップアップ、長押しで並び替え
+        if (extensionActions.isNotEmpty() && extensionActionScrollState != null) {
+            HorizontalDivider()
+            ExtensionActionRow(
+                actions = extensionActions,
+                scrollState = extensionActionScrollState,
+                onActionClick = { extensionId ->
+                    onDismissRequest()
+                    onExtensionActionClick(extensionId)
+                },
+                onActionMove = onExtensionActionMove,
+                onActionMoveEnd = onExtensionActionMoveEnd,
+                onActionMoveCancel = onExtensionActionMoveCancel,
+            )
+        }
         HorizontalDivider()
         DropdownMenuItem(
             text = { Text(text = "PCページ") },
@@ -566,6 +600,20 @@ private fun PreviewToolbarMenuContent() {
                 onPageZoomIn = {},
                 onPageZoomOut = {},
                 onResetPageZoom = {},
+                extensionActions = List(5) { index ->
+                    WebExtensionActionController.ActionUiState(
+                        extensionId = "extension_$index",
+                        title = "拡張機能 $index",
+                        icon = null,
+                        badgeText = if (index == 0) "3" else null,
+                        isEnabled = index != 1,
+                    )
+                },
+                extensionActionScrollState = ScrollState(initial = 0),
+                onExtensionActionClick = {},
+                onExtensionActionMove = { _, _ -> },
+                onExtensionActionMoveEnd = {},
+                onExtensionActionMoveCancel = {},
                 showOpenSettings = true,
                 showAddToHomeScreen = true,
                 showHome = true,
@@ -607,9 +655,15 @@ private fun PreviewToolbarMenuContentWebApp() {
                 onPageZoomIn = {},
                 onPageZoomOut = {},
                 onResetPageZoom = {},
+                extensionActions = emptyList(),
+                extensionActionScrollState = null,
+                onExtensionActionClick = {},
+                onExtensionActionMove = { _, _ -> },
+                onExtensionActionMoveEnd = {},
+                onExtensionActionMoveCancel = {},
                 showOpenSettings = false,
                 showAddToHomeScreen = false,
-                showHome = false,
+                showHome = true,
                 onOpenInBrowser = {},
                 onOpenSiteSettings = {},
                 onOpenDownloads = null,
