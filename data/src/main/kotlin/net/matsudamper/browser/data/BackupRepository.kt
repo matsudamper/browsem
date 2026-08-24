@@ -33,8 +33,9 @@ class BackupRepository(private val context: Context) {
 
     suspend fun exportToZip(
         outputUri: Uri,
-        onProgress: (String) -> Unit = {},
+        onProgress: (BackupProgress) -> Unit = {},
     ): Unit = withContext(Dispatchers.IO) {
+        val progress = ProgressReporter(onProgress)
         val snapshotFile = File(context.cacheDir, "backup_tab_snapshot.db")
         val defaultSettingsFile = File(context.cacheDir, "backup_default_settings.pb")
         snapshotFile.delete()
@@ -43,15 +44,16 @@ class BackupRepository(private val context: Context) {
             // WAL を含めた整合性のあるスナップショットを別ファイルに書き出す。
             // VACUUM INTO は実行中に主データベースへ排他ロックを取るため、
             // 他のコルーチンの書き込みがあれば一時的にブロックされる点に注意。
-            onProgress("タブデータのスナップショットを作成中…")
+            progress.report("タブデータのスナップショットを作成中…", 0f)
             val db = TabDatabase.getInstance(context)
             val escapedPath = snapshotFile.absolutePath.replace("'", "''")
             db.openHelper.writableDatabase.execSQL("VACUUM INTO '$escapedPath'")
+            progress.report("タブデータのスナップショットを作成中…", 0.15f)
 
             // 新規インストール直後など、まだ DataStore が一度も書き込みを
             // 行っていない場合は本体ファイルが存在しない。その場合は
             // デフォルト設定のシリアライズ結果を書き出してエントリに含める。
-            onProgress("設定を読み込み中…")
+            progress.report("設定を読み込み中…", 0.20f)
             val settingsForExport = settingsFile().takeIf { it.exists() } ?: run {
                 defaultSettingsFile.outputStream().use { out ->
                     BrowserSettings.getDefaultInstance().writeTo(out)
@@ -59,16 +61,35 @@ class BackupRepository(private val context: Context) {
                 defaultSettingsFile
             }
 
+            val mozillaProfileFiles = listMozillaProfileFiles()
             val outputStream = context.contentResolver.openOutputStream(outputUri, "w")
                 ?: error("出力先を開けませんでした")
             ZipOutputStream(outputStream.buffered()).use { zos ->
-                onProgress("設定を書き出し中…")
+                progress.report("設定を書き出し中…", 0.25f)
                 writeEntry(zos, SETTINGS_ENTRY_NAME, settingsForExport)
-                onProgress("タブデータを書き出し中…")
+                progress.report("タブデータを書き出し中…", 0.35f)
                 writeEntry(zos, TAB_DB_ENTRY_NAME, snapshotFile)
-                onProgress("プロファイルを書き出し中…")
-                writeMozillaProfileEntries(zos)
+                writeMozillaProfileEntries(
+                    zos = zos,
+                    files = mozillaProfileFiles,
+                    onFileWritten = { index ->
+                        if (
+                            mozillaProfileFiles.isEmpty() ||
+                            index % 10 == 0 ||
+                            index == mozillaProfileFiles.lastIndex
+                        ) {
+                            progress.reportRange(
+                                message = "プロファイルを書き出し中…",
+                                index = index,
+                                total = mozillaProfileFiles.size,
+                                rangeStart = 0.35f,
+                                rangeEnd = 1f,
+                            )
+                        }
+                    },
+                )
             }
+            progress.report("書き出しを完了しています…", 1f)
         } finally {
             snapshotFile.delete()
             defaultSettingsFile.delete()
@@ -77,8 +98,9 @@ class BackupRepository(private val context: Context) {
 
     suspend fun importFromZip(
         inputUri: Uri,
-        onProgress: (String) -> Unit = {},
+        onProgress: (BackupProgress) -> Unit = {},
     ): Unit = withContext(Dispatchers.IO) {
+        val progress = ProgressReporter(onProgress)
         val workDir = File(context.cacheDir, "backup_restore").apply {
             deleteRecursively()
             mkdirs()
@@ -103,9 +125,12 @@ class BackupRepository(private val context: Context) {
             val extracted = mutableMapOf<String, File>()
             var hasMozillaPayload = false
             val mozillaStagingRoot = mozillaStaging.canonicalFile
-            onProgress("バックアップを展開中…")
+            progress.report("バックアップを読み込み中…", 0f)
+            val importableEntryCount = countImportableZipEntries(inputUri)
+            progress.report("バックアップを展開中…", 0.05f)
             val inputStream = context.contentResolver.openInputStream(inputUri)
                 ?: error("バックアップファイルを開けませんでした")
+            var extractedEntryCount = 0
             ZipInputStream(inputStream.buffered()).use { zis ->
                 while (true) {
                     val entry = zis.nextEntry ?: break
@@ -117,6 +142,14 @@ class BackupRepository(private val context: Context) {
                                 val out = File(workDir, name)
                                 out.outputStream().buffered().use { dst -> zis.copyTo(dst) }
                                 extracted[name] = out
+                                extractedEntryCount++
+                                progress.reportRange(
+                                    message = "バックアップを展開中…",
+                                    index = extractedEntryCount - 1,
+                                    total = importableEntryCount,
+                                    rangeStart = 0.05f,
+                                    rangeEnd = 0.55f,
+                                )
                             }
                             name.startsWith("$MOZILLA_DIR_NAME/") -> {
                                 val relative = name.substring(MOZILLA_DIR_NAME.length + 1)
@@ -133,6 +166,14 @@ class BackupRepository(private val context: Context) {
                                     out.parentFile?.mkdirs()
                                     out.outputStream().buffered().use { dst -> zis.copyTo(dst) }
                                     hasMozillaPayload = true
+                                    extractedEntryCount++
+                                    progress.reportRange(
+                                        message = "バックアップを展開中…",
+                                        index = extractedEntryCount - 1,
+                                        total = importableEntryCount,
+                                        rangeStart = 0.05f,
+                                        rangeEnd = 0.55f,
+                                    )
                                 }
                             }
                             else -> Unit
@@ -150,7 +191,7 @@ class BackupRepository(private val context: Context) {
 
             // リスクのあるコピー (容量不足・I/O エラー) を先に済ませる。
             // この時点では Room は生きているので失敗しても app は通常動作に戻れる。
-            onProgress("ファイルを準備中…")
+            progress.report("ファイルを準備中…", 0.60f)
             settingsExtracted.copyTo(settingsStaging, overwrite = true)
             tabDbExtracted.copyTo(tabDbStaging, overwrite = true)
 
@@ -158,7 +199,7 @@ class BackupRepository(private val context: Context) {
             // なるため、close 前に staging の tab.db を読み取って互換性を確認する。
             // user_version=0 (未初期化や外部由来) や対応マイグレーションがないバージョンも、
             // 復元後の起動で Room が「missing migration」で落ちるため弾く。
-            onProgress("バックアップを検証中…")
+            progress.report("バックアップを検証中…", 0.65f)
             val backupSchemaVersion = readSchemaVersion(tabDbStaging)
             if (backupSchemaVersion !in 1..TabDatabase.SCHEMA_VERSION) {
                 error(
@@ -171,7 +212,7 @@ class BackupRepository(private val context: Context) {
             // ステージング成功後に DB を閉じて置換に入る。
             // タブ永続化が裏で tab.db を書き続けているため、置き換え前に
             // Room の接続を完全に閉じてインフライト書き込みを止める。
-            onProgress("データベースを閉じています…")
+            progress.report("データベースを閉じています…", 0.70f)
             TabDatabase.closeInstance()
             dbClosed = true
 
@@ -180,14 +221,15 @@ class BackupRepository(private val context: Context) {
                 // 古い WAL/SHM は新 DB と整合しないので削除する
                 File(tabDbTarget.parentFile, "$TAB_DB_FILE_NAME-shm").delete()
                 File(tabDbTarget.parentFile, "$TAB_DB_FILE_NAME-wal").delete()
-                onProgress("設定とタブデータを置き換え中…")
+                progress.report("設定とタブデータを置き換え中…", 0.85f)
                 replaceWithStaging(settingsStaging, settingsTarget)
                 replaceWithStaging(tabDbStaging, tabDbTarget)
                 if (hasMozillaPayload) {
-                    onProgress("プロファイルを置き換え中…")
+                    progress.report("プロファイルを置き換え中…", 0.95f)
                     swapMozillaProfile(mozillaStaging, mozillaTarget)
                     mozillaReplaced = true
                 }
+                progress.report("復元を完了しています…", 1f)
             } catch (t: Throwable) {
                 throw RestartRequiredException(t)
             }
@@ -262,6 +304,18 @@ class BackupRepository(private val context: Context) {
     }
 
     /**
+     * GeckoView プロファイル (`files/mozilla/`) 配下のバックアップ対象ファイルを列挙する。
+     */
+    private fun listMozillaProfileFiles(): List<File> {
+        val root = mozillaDir().takeIf { it.exists() && it.isDirectory } ?: return emptyList()
+        val rootPath = root.absolutePath
+        return root.walkTopDown()
+            .onEnter { dir -> !isMozillaPathExcluded(rootPath, dir) }
+            .filter { it.isFile && !isMozillaPathExcluded(rootPath, it) }
+            .toList()
+    }
+
+    /**
      * GeckoView プロファイル (`files/mozilla/`) 配下のファイルを zip に追加する。
      * exclude (ブラックリスト) 方式を採用している:
      *   - Cookie・ログイン・履歴・権限・サイト別設定など、Gecko 側に追加される
@@ -270,17 +324,76 @@ class BackupRepository(private val context: Context) {
      *     ブラックリストの方が将来の Gecko 更新に対して頑健
      * パスはセグメント単位で比較し、ディレクトリ名一致は配下を丸ごと除外する。
      */
-    private fun writeMozillaProfileEntries(zos: ZipOutputStream) {
-        val root = mozillaDir().takeIf { it.exists() && it.isDirectory } ?: return
+    private fun writeMozillaProfileEntries(
+        zos: ZipOutputStream,
+        files: List<File>,
+        onFileWritten: (index: Int) -> Unit,
+    ) {
+        if (files.isEmpty()) return
+        val root = mozillaDir()
         val rootPath = root.absolutePath
-        root.walkTopDown()
-            .onEnter { dir -> !isMozillaPathExcluded(rootPath, dir) }
-            .filter { it.isFile && !isMozillaPathExcluded(rootPath, it) }
-            .forEach { file ->
-                val relative = file.absolutePath.substring(rootPath.length + 1)
-                    .replace(File.separatorChar, '/')
-                writeEntry(zos, "$MOZILLA_DIR_NAME/$relative", file)
+        files.forEachIndexed { index, file ->
+            val relative = file.absolutePath.substring(rootPath.length + 1)
+                .replace(File.separatorChar, '/')
+            writeEntry(zos, "$MOZILLA_DIR_NAME/$relative", file)
+            onFileWritten(index)
+        }
+    }
+
+    /** インポート対象の zip エントリ数を数える (展開前の進捗算出用) */
+    private fun countImportableZipEntries(inputUri: Uri): Int {
+        val inputStream = context.contentResolver.openInputStream(inputUri)
+            ?: error("バックアップファイルを開けませんでした")
+        return ZipInputStream(inputStream.buffered()).use { zis ->
+            var count = 0
+            while (true) {
+                val entry = zis.nextEntry ?: break
+                try {
+                    if (!entry.isDirectory && isImportableZipEntry(entry.name)) {
+                        count++
+                    }
+                } finally {
+                    zis.closeEntry()
+                }
             }
+            count
+        }
+    }
+
+    private fun isImportableZipEntry(name: String): Boolean {
+        if (name in ALLOWED_ROOT_ENTRY_NAMES) return true
+        if (!name.startsWith("$MOZILLA_DIR_NAME/")) return false
+        val relative = name.substring(MOZILLA_DIR_NAME.length + 1)
+        return relative.isNotEmpty()
+    }
+
+    private class ProgressReporter(
+        private val onProgress: (BackupProgress) -> Unit,
+    ) {
+        fun report(message: String, fraction: Float? = null) {
+            onProgress(
+                BackupProgress(
+                    message = message,
+                    fraction = fraction?.coerceIn(0f, 1f),
+                ),
+            )
+        }
+
+        fun reportRange(
+            message: String,
+            index: Int,
+            total: Int,
+            rangeStart: Float,
+            rangeEnd: Float,
+        ) {
+            if (total <= 0) {
+                report(message, rangeEnd)
+                return
+            }
+            val fraction = rangeStart + (rangeEnd - rangeStart) * (index + 1) / total
+            val detail = if (total > 1) "$message (${index + 1}/$total)" else message
+            report(detail, fraction)
+        }
     }
 
     private fun isMozillaPathExcluded(rootPath: String, file: File): Boolean {
