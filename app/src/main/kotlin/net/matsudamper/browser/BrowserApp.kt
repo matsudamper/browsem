@@ -40,6 +40,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntOffset
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel as composeViewModel
 import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
 import androidx.navigation3.runtime.NavEntry
@@ -207,10 +210,29 @@ internal fun BrowserAppShell(
                 }
 
                 AppDestination.Settings -> navEntry(key) {
+                    val lifecycleOwner = LocalLifecycleOwner.current
                     val settingsViewModel = composeViewModel(initializer = {
                         SettingsScreenViewModel(settingsRepository)
                     })
                     val settingsUiState by settingsViewModel.uiState.collectAsState()
+                    val requestDefaultBrowserLauncher = rememberLauncherForActivityResult(
+                        ActivityResultContracts.StartActivityForResult(),
+                    ) {
+                        settingsViewModel.onDefaultBrowserStatusChecked(
+                            DefaultBrowserChecker.isDefaultBrowser(context),
+                        )
+                    }
+                    DisposableEffect(lifecycleOwner, settingsViewModel) {
+                        val observer = LifecycleEventObserver { _, event ->
+                            if (event == Lifecycle.Event.ON_RESUME) {
+                                settingsViewModel.refreshDefaultBrowserStatus()
+                            }
+                        }
+                        lifecycleOwner.lifecycle.addObserver(observer)
+                        onDispose {
+                            lifecycleOwner.lifecycle.removeObserver(observer)
+                        }
+                    }
                     LaunchedEffect(settingsViewModel) {
                         settingsViewModel.eventHandler.receiveAsFlow().collect { handler ->
                             handler(object : SettingsScreenViewModel.Event {
@@ -239,6 +261,18 @@ internal fun BrowserAppShell(
                                         .postDelayed({
                                             Process.killProcess(Process.myPid())
                                         }, 300)
+                                }
+
+                                override fun onOpenDefaultBrowserSettings() {
+                                    val intent = DefaultBrowserChecker.createRequestDefaultBrowserIntent(context)
+                                        ?: return
+                                    requestDefaultBrowserLauncher.launch(intent)
+                                }
+
+                                override fun onCheckDefaultBrowserStatus() {
+                                    settingsViewModel.onDefaultBrowserStatusChecked(
+                                        DefaultBrowserChecker.isDefaultBrowser(context),
+                                    )
                                 }
                             })
                         }

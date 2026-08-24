@@ -94,6 +94,12 @@ fun SettingsScreen(
                 .padding(horizontal = 8.dp, vertical = 8.dp),
         ) {
             val betweenPadding = 12.dp
+            if (uiState.showDefaultBrowserBanner) {
+                DefaultBrowserBanner(
+                    onClick = uiState.callbacks::openDefaultBrowserSettings,
+                )
+                Spacer(Modifier.height(betweenPadding))
+            }
             SettingSection(title = "ホームページ") {
                 Column {
                     Column(Modifier.selectableGroup()) {
@@ -469,6 +475,37 @@ fun SettingsScreen(
 }
 
 @Composable
+internal fun DefaultBrowserBanner(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.errorContainer,
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "デフォルトのブラウザに設定されていません。タップして設定を開く",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onErrorContainer,
+                modifier = Modifier.weight(1f),
+            )
+            Icon(
+                painter = painterResource(ResourcesR.drawable.ic_arrow_forward_24dp),
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onErrorContainer,
+            )
+        }
+    }
+}
+
+@Composable
 internal fun SettingSection(
     title: String,
     content: @Composable () -> Unit,
@@ -551,6 +588,17 @@ internal fun CollapsibleSettingSection(
 @Preview(showBackground = true, heightDp = 2400)
 @Composable
 private fun SettingsScreenPreview() {
+    SettingsScreenPreviewContent(showDefaultBrowserBanner = false)
+}
+
+@Preview(showBackground = true, heightDp = 2400)
+@Composable
+private fun SettingsScreenDefaultBrowserBannerPreview() {
+    SettingsScreenPreviewContent(showDefaultBrowserBanner = true)
+}
+
+@Composable
+private fun SettingsScreenPreviewContent(showDefaultBrowserBanner: Boolean) {
     MaterialTheme {
         SettingsScreen(
             uiState = SettingsScreenUiState(
@@ -572,6 +620,7 @@ private fun SettingsScreenPreview() {
                     override fun requestBackupImport() = Unit
                     override fun confirmBackup() = Unit
                     override fun dismissBackupConfirm() = Unit
+                    override fun openDefaultBrowserSettings() = Unit
                 },
                 homepageType = HomepageType.HOMEPAGE_GOOGLE,
                 customHomepageUrl = "",
@@ -586,6 +635,7 @@ private fun SettingsScreenPreview() {
                 mockLocationInputError = null,
                 backupConfirmDialog = null,
                 extensionsProcessRestartDialog = false,
+                showDefaultBrowserBanner = showDefaultBrowserBanner,
             ),
             onOpenExtensions = {},
             onOpenHistory = {},
