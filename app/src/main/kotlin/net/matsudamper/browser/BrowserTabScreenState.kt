@@ -223,6 +223,7 @@ internal class BrowserTabScreenState(
     private var hasTouchGestureRecord = false
     private var isTouchGestureActive = false
     private var touchGestureMoved = false
+    private var touchGestureStartedAtMs = 0L
     private var touchGestureEndedAtMs = 0L
 
     /** コンテンツ領域で新しいタッチジェスチャーが始まった */
@@ -230,6 +231,7 @@ internal class BrowserTabScreenState(
         hasTouchGestureRecord = true
         isTouchGestureActive = true
         touchGestureMoved = false
+        touchGestureStartedAtMs = SystemClock.elapsedRealtime()
     }
 
     /** タッチスロップを超える移動、またはマルチタッチが発生した */
@@ -1353,6 +1355,7 @@ internal class BrowserTabScreenState(
                 hasTouchGestureRecord = hasTouchGestureRecord,
                 isTouchGestureActive = isTouchGestureActive,
                 gestureMoved = touchGestureMoved,
+                elapsedSinceGestureStartMs = SystemClock.elapsedRealtime() - touchGestureStartedAtMs,
                 elapsedSinceGestureEndMs = SystemClock.elapsedRealtime() - touchGestureEndedAtMs,
             )
         ) {
