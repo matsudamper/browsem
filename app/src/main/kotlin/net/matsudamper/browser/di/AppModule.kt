@@ -9,6 +9,8 @@ import net.matsudamper.browser.DownloadWorker
 import net.matsudamper.browser.FindInPageWebExtension
 import net.matsudamper.browser.GeckoDownloadManager
 import net.matsudamper.browser.MockLocationWebExtension
+import net.matsudamper.browser.NetworkLogStore
+import net.matsudamper.browser.NetworkLogWebExtension
 import net.matsudamper.browser.ThemeColorWebExtension
 import net.matsudamper.browser.TwitterShareWebExtension
 import net.matsudamper.browser.ViewportScaleWebExtension
@@ -72,6 +74,9 @@ val appModule = module {
     single { FindInPageWebExtension().also { it.install(get()) } }
     single { DevToolsWebExtension().also { it.install(get()) } }
     single { MockLocationWebExtension().also { it.install(get()) } }
+    // 通信ログはランタイム単位で収集するため、ストア・拡張機能ともに single で管理
+    single { NetworkLogStore() }
+    single { NetworkLogWebExtension(get()).also { it.install(get()) } }
     single { ViewportScaleWebExtension().also { it.install(get()) } }
     single { TwitterShareWebExtension().also { it.install(get()) } }
     // 拡張機能のツールバーアクションはランタイム単位で受け取るため single

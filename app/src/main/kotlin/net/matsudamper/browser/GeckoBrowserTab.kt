@@ -685,6 +685,17 @@ internal fun GeckoBrowserTab(
         }
     }
 
+    // NetworkLogWebExtension のセッション登録。
+    // 通信ログ自体はバックグラウンドスクリプトが常時収集しており、
+    // ここではセッションと webRequest の tabId を対応付けるために登録する
+    val networkLogWebExtension: NetworkLogWebExtension = koinInject()
+    DisposableEffect(session, networkLogWebExtension) {
+        networkLogWebExtension.registerSession(session)
+        onDispose {
+            networkLogWebExtension.unregisterSession(session)
+        }
+    }
+
     DisposableEffect(session, state, browserTab, mediaWebExtension) {
         browserTab.attachSessionCallbacks(
             callbacks = state,
@@ -1119,8 +1130,18 @@ internal fun GeckoBrowserTab(
         DevToolsDialog(
             focusedInput = state.devToolsFocusedInput,
             onCopyFocusedInputId = state::copyFocusedInputId,
-            onRefresh = state::refreshDevToolsFocusedInput,
+            onOpenNetworkLog = state::openNetworkLog,
             onDismiss = state::closeDevTools,
+        )
+    }
+
+    // ネットワークログ画面
+    if (state.showNetworkLog) {
+        NetworkLogDialog(
+            uiState = rememberNetworkLogUiState(
+                session = session,
+                onDismiss = state::closeNetworkLog,
+            ),
         )
     }
 
