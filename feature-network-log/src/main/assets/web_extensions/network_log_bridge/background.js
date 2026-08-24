@@ -197,6 +197,38 @@
   // 要求されたタイミングで HTTP キャッシュを優先して再取得する。
   // 再取得は GET のみを対象とする。GET 以外を再送すると
   // 元のリクエストとは異なる結果になるうえ、サーバ側に副作用を与えうる。
+  async function readResponseBodyWithLimit(response) {
+    const contentLength = Number(response.headers.get('content-length'));
+    if (Number.isFinite(contentLength) && contentLength > MAX_BODY_BYTES) {
+      return { tooLarge: true, size: contentLength };
+    }
+    if (!response.body) {
+      const blob = await response.blob();
+      if (blob.size > MAX_BODY_BYTES) {
+        return { tooLarge: true, size: blob.size };
+      }
+      return { blob: blob };
+    }
+
+    const reader = response.body.getReader();
+    const chunks = [];
+    let totalBytes = 0;
+    while (true) {
+      const result = await reader.read();
+      if (result.done) break;
+      totalBytes += result.value.byteLength;
+      if (totalBytes > MAX_BODY_BYTES) {
+        await reader.cancel();
+        return { tooLarge: true, size: totalBytes };
+      }
+      chunks.push(result.value);
+    }
+    const mimeType = response.headers.get('content-type') || '';
+    return {
+      blob: new Blob(chunks, { type: mimeType }),
+    };
+  }
+
   async function fetchBody(requestId, url, method) {
     if ((method || 'GET').toUpperCase() !== 'GET') {
       replyBody(requestId, { ok: false, reason: 'not_replayable' });
@@ -204,12 +236,13 @@
     }
     try {
       const response = await fetch(url, { credentials: 'include', cache: 'force-cache' });
-      const blob = await response.blob();
-      const mimeType = blob.type || '';
-      if (blob.size > MAX_BODY_BYTES) {
-        replyBody(requestId, { ok: false, reason: 'too_large', size: blob.size });
+      const bodyResult = await readResponseBodyWithLimit(response);
+      if (bodyResult.tooLarge) {
+        replyBody(requestId, { ok: false, reason: 'too_large', size: bodyResult.size });
         return;
       }
+      const blob = bodyResult.blob;
+      const mimeType = blob.type || '';
       if (isTextLike(mimeType)) {
         const text = await blob.text();
         replyBody(requestId, { ok: true, kind: 'text', text: text, mimeType: mimeType, size: blob.size });
