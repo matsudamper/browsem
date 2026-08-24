@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.view.MotionEvent
 import android.view.View
+import android.view.ViewConfiguration
 import android.view.ViewGroup
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -50,6 +51,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import kotlin.math.abs
 import net.matsudamper.browser.data.ThemeMode
 import net.matsudamper.browser.ui.browser.UrlBarSuggestionsUiState
 import net.matsudamper.browser.ui.common.BrowserTheme
@@ -79,6 +81,10 @@ internal fun BrowserContentHost(
                     // ジェスチャー単位のフラグ。ACTION_DOWN の非同期判定結果が
                     // ACTION_POINTER_DOWN より後に届いても上書きされないようにする。
                     var gestureHadMultiTouch = false
+                    // 長押しメニューの誤発火判定用に、ジェスチャー開始位置とタッチスロップを保持する
+                    val touchSlop = ViewConfiguration.get(context).scaledTouchSlop
+                    var gestureDownX = 0f
+                    var gestureDownY = 0f
                     val gecko = GeckoView(context).also { geckoView ->
                         geckoView.id = id
                         geckoView.isNestedScrollingEnabled = true
@@ -89,12 +95,26 @@ internal fun BrowserContentHost(
                         // Engine 側で非アクティブ扱いになると Compositor の描画更新が止まり、
                         // 復帰時の黒画面につながるため、初期生成時に必ず active 化する。
                         session.setActive(true)
+                        // キーボード操作 (コンテキストメニューキー等) 由来のメニューを
+                        // 過去のタッチ記録で抑制しないよう、キー入力でタッチ記録を解除する。
+                        geckoView.setOnKeyListener { _, _, _ ->
+                            state.onContentNonTouchInput()
+                            false
+                        }
                         @SuppressLint("ClickableViewAccessibility")
                         geckoView.setOnTouchListener { view, event ->
+                            // マウスの右クリック等はタッチジェスチャーとして扱わない
+                            if (event.getToolType(0) == MotionEvent.TOOL_TYPE_MOUSE) {
+                                state.onContentNonTouchInput()
+                                return@setOnTouchListener false
+                            }
                             when (event.actionMasked) {
                                 MotionEvent.ACTION_DOWN -> {
                                     swipeRefreshScrollEnabled = false
                                     gestureHadMultiTouch = false
+                                    gestureDownX = event.x
+                                    gestureDownY = event.y
+                                    state.onContentTouchStart()
                                     (view as GeckoView).onTouchEventForDetailResult(event).then { detail ->
                                         if (detail != null && !gestureHadMultiTouch) {
                                             swipeRefreshScrollEnabled = canTriggerPullToRefresh(
@@ -110,6 +130,21 @@ internal fun BrowserContentHost(
                                 MotionEvent.ACTION_POINTER_DOWN -> {
                                     gestureHadMultiTouch = true
                                     swipeRefreshScrollEnabled = false
+                                    // ピンチ等のマルチタッチは長押しではない
+                                    state.onContentTouchMoved()
+                                    false
+                                }
+                                MotionEvent.ACTION_MOVE -> {
+                                    val movedBeyondSlop =
+                                        abs(event.x - gestureDownX) > touchSlop ||
+                                            abs(event.y - gestureDownY) > touchSlop
+                                    if (movedBeyondSlop) {
+                                        state.onContentTouchMoved()
+                                    }
+                                    false
+                                }
+                                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                                    state.onContentTouchEnd()
                                     false
                                 }
                                 else -> false
