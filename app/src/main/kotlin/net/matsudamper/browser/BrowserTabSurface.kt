@@ -53,7 +53,6 @@ import androidx.compose.ui.viewinterop.AndroidView
 import net.matsudamper.browser.data.ThemeMode
 import net.matsudamper.browser.ui.browser.UrlBarSuggestionsUiState
 import net.matsudamper.browser.ui.common.BrowserTheme
-import net.matsudamper.browser.ui.history.HistoryUrlFormat
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.GeckoView

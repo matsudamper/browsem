@@ -25,7 +25,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import net.matsudamper.browser.data.history.HistoryEntry
 import java.text.SimpleDateFormat
@@ -113,12 +112,11 @@ private fun HistoryItem(
     onDelete: () -> Unit,
 ) {
     val dateFormat = remember { SimpleDateFormat("yyyy/MM/dd HH:mm", Locale.getDefault()) }
-    val displayUrl = HistoryUrlFormat.forDisplay(entry.url)
 
     ListItem(
         headlineContent = {
             Text(
-                text = entry.title.ifBlank { displayUrl },
+                text = entry.title.ifBlank { entry.url },
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -127,7 +125,7 @@ private fun HistoryItem(
             Column {
                 if (entry.title.isNotBlank()) {
                     Text(
-                        text = displayUrl,
+                        text = entry.url,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         style = MaterialTheme.typography.bodySmall,
@@ -150,42 +148,4 @@ private fun HistoryItem(
         },
         modifier = Modifier.clickable(onClick = onClick),
     )
-}
-
-private val previewHistoryCallbacks = object : HistoryScreenUiState.Callbacks {
-    override fun onSearchQueryChange(query: String) = Unit
-    override fun onClickEntry(url: String) = Unit
-    override fun onDeleteEntry(id: Long) = Unit
-    override fun onClickDeleteAll() = Unit
-    override fun onConfirmDeleteAll() = Unit
-    override fun onDismissDeleteAllDialog() = Unit
-}
-
-@Preview(name = "閲覧履歴", showBackground = true)
-@Composable
-private fun HistoryScreenPreview() {
-    MaterialTheme {
-        HistoryScreen(
-            uiState = HistoryScreenUiState(
-                callbacks = previewHistoryCallbacks,
-                searchQuery = "",
-                entries = listOf(
-                    HistoryEntry(
-                        id = 1,
-                        url = "https://example.com/articles/sample",
-                        title = "サンプルページ",
-                        visitedAt = 1_700_000_000_000L,
-                    ),
-                    HistoryEntry(
-                        id = 2,
-                        url = "http://legacy.example.com/page",
-                        title = "",
-                        visitedAt = 1_700_000_100_000L,
-                    ),
-                ),
-                showDeleteAllDialog = false,
-            ),
-            onBack = {},
-        )
-    }
 }

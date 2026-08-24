@@ -36,6 +36,4 @@ dependencies {
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(project(":data"))
-
-    testImplementation(libs.junit4)
 }

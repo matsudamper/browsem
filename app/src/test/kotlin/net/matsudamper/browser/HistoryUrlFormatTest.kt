@@ -1,4 +1,4 @@
-package net.matsudamper.browser.ui.history
+package net.matsudamper.browser
 
 import org.junit.Assert.assertEquals
 import org.junit.Test
