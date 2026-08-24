@@ -41,6 +41,13 @@ class SettingsRepository(context: Context) {
                         clearExtensionsProcessEnabled()
                     }
                 }
+                .apply {
+                    if (settings.hasExtensionsEnabled()) {
+                        setExtensionsEnabled(settings.extensionsEnabled)
+                    } else {
+                        clearExtensionsEnabled()
+                    }
+                }
                 .build()
         }
     }
@@ -117,6 +124,14 @@ class SettingsRepository(context: Context) {
         }
     }
 
+    suspend fun setExtensionsEnabled(enabled: Boolean) {
+        dataStore.updateData { current ->
+            current.toBuilder()
+                .setExtensionsEnabled(enabled)
+                .build()
+        }
+    }
+
     /** ツールバーメニューに並べる拡張機能アイコンの表示順を保存する */
     suspend fun setExtensionActionOrder(extensionIds: List<String>) {
         dataStore.updateData { current ->
@@ -168,6 +183,14 @@ fun BrowserSettings.resolvedSearchTemplate(): String = when (searchProvider) {
 fun BrowserSettings.resolvedExtensionsProcessEnabled(): Boolean {
     return if (hasExtensionsProcessEnabled()) {
         extensionsProcessEnabled
+    } else {
+        true
+    }
+}
+
+fun BrowserSettings.resolvedExtensionsEnabled(): Boolean {
+    return if (hasExtensionsEnabled()) {
+        extensionsEnabled
     } else {
         true
     }

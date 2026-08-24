@@ -91,7 +91,7 @@ fun ExtensionsScreen(
                             onClick = uiState.callbacks::installExtensionFromFile,
                             enabled = uiState.uninstallingId == null &&
                                 uiState.togglingId == null &&
-                                !uiState.isTogglingAll,
+                                !uiState.isTogglingGlobal,
                             modifier = Modifier.testTag(ExtensionsScreenTestTags.InstallFromFileButton.testTag),
                         ) {
                             Icon(
@@ -128,24 +128,25 @@ fun ExtensionsScreen(
             is ExtensionsScreenUiState.LoadingState.Loaded -> {
                 val userExtensions = loadingState.extensions.filterNot { it.isBuiltIn }
                 val systemExtensions = loadingState.extensions.filter { it.isBuiltIn }
-                val individualToggleEnabled = uiState.togglingId == null &&
+                val individualToggleEnabled = loadingState.areExtensionsEnabled &&
+                    uiState.togglingId == null &&
                     uiState.uninstallingId == null &&
-                    !uiState.isTogglingAll
+                    !uiState.isTogglingGlobal
                 val masterToggleEnabled = uiState.togglingId == null &&
                     uiState.uninstallingId == null &&
-                    !uiState.isTogglingAll
+                    !uiState.isTogglingGlobal
 
                 LazyColumn(
                     modifier = Modifier
                         .padding(paddingValues)
                         .fillMaxSize(),
                 ) {
-                    item(key = "all_extensions_switch") {
-                        AllExtensionsSwitchRow(
+                    item(key = "global_extensions_switch") {
+                        GlobalExtensionsSwitchRow(
                             areExtensionsEnabled = loadingState.areExtensionsEnabled,
-                            isTogglingAll = uiState.isTogglingAll,
+                            isTogglingGlobal = uiState.isTogglingGlobal,
                             enabled = masterToggleEnabled,
-                            onToggle = uiState.callbacks::setAllExtensionsEnabled,
+                            onToggle = uiState.callbacks::setExtensionsGloballyEnabled,
                         )
                     }
 
@@ -223,9 +224,9 @@ fun ExtensionsScreen(
 }
 
 @Composable
-private fun AllExtensionsSwitchRow(
+private fun GlobalExtensionsSwitchRow(
     areExtensionsEnabled: Boolean,
-    isTogglingAll: Boolean,
+    isTogglingGlobal: Boolean,
     enabled: Boolean,
     onToggle: (Boolean) -> Unit,
 ) {
@@ -246,13 +247,13 @@ private fun AllExtensionsSwitchRow(
                 style = MaterialTheme.typography.titleSmall,
             )
             Text(
-                text = "すべての拡張機能をまとめて有効/無効にします",
+                text = "オフにすると拡張機能全体が動作しなくなります",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
         Spacer(modifier = Modifier.width(8.dp))
-        if (isTogglingAll) {
+        if (isTogglingGlobal) {
             CircularProgressIndicator(
                 modifier = Modifier.size(24.dp),
                 strokeWidth = 2.dp,
@@ -265,7 +266,7 @@ private fun AllExtensionsSwitchRow(
                 modifier = Modifier
                     .testTag(ExtensionsScreenTestTags.AllExtensionsSwitch.testTag)
                     .semantics {
-                        contentDescription = "すべての拡張機能の有効/無効"
+                        contentDescription = "拡張機能全体の有効/無効"
                     },
             )
         }
@@ -294,7 +295,7 @@ private val previewCallbacks = object : ExtensionsScreenUiState.Callbacks {
     override fun uninstallExtension(extensionId: String) = Unit
     override fun openExtensionSettings(extensionId: String) = Unit
     override fun setExtensionEnabled(extensionId: String, enabled: Boolean) = Unit
-    override fun setAllExtensionsEnabled(enabled: Boolean) = Unit
+    override fun setExtensionsGloballyEnabled(enabled: Boolean) = Unit
     override fun dismissError() = Unit
 }
 
@@ -337,7 +338,7 @@ private fun ExtensionsScreenLoadedPreview() {
                 errorMessage = null,
                 uninstallingId = null,
                 togglingId = null,
-                isTogglingAll = false,
+                isTogglingGlobal = false,
                 isInstalling = false,
             ),
             onBack = {},
@@ -368,7 +369,7 @@ private fun ExtensionsScreenTogglingPreview() {
                 errorMessage = null,
                 uninstallingId = null,
                 togglingId = "ublock-origin@raymondhill.net",
-                isTogglingAll = false,
+                isTogglingGlobal = false,
                 isInstalling = false,
             ),
             onBack = {},
@@ -399,7 +400,7 @@ private fun ExtensionsScreenInstallingPreview() {
                 errorMessage = null,
                 uninstallingId = null,
                 togglingId = null,
-                isTogglingAll = false,
+                isTogglingGlobal = false,
                 isInstalling = true,
             ),
             onBack = {},

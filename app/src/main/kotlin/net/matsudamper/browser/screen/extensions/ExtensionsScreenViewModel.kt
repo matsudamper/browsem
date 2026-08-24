@@ -13,6 +13,10 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import net.matsudamper.browser.ExtensionGlobalController
+import net.matsudamper.browser.ExtensionRuntimeCoordinator
+import net.matsudamper.browser.data.SettingsRepository
+import net.matsudamper.browser.data.resolvedExtensionsEnabled
 import net.matsudamper.browser.isWebExtensionArchive
 import net.matsudamper.browser.ui.extensions.ExtensionsScreenUiState
 import org.mozilla.geckoview.GeckoRuntime
@@ -24,6 +28,8 @@ import java.io.IOException
 internal class ExtensionsScreenViewModel(
     application: Application,
     private val runtime: GeckoRuntime,
+    private val settingsRepository: SettingsRepository,
+    private val extensionRuntimeCoordinator: ExtensionRuntimeCoordinator,
 ) : AndroidViewModel(application) {
 
     private val viewModelStateFlow = MutableStateFlow(ViewModelState())
@@ -61,7 +67,11 @@ internal class ExtensionsScreenViewModel(
 
         override fun setExtensionEnabled(extensionId: String, enabled: Boolean) {
             val currentState = viewModelStateFlow.value
-            if (currentState.togglingId != null || currentState.uninstallingId != null || currentState.isTogglingAll) {
+            if (!currentState.extensionsGloballyEnabled ||
+                currentState.togglingId != null ||
+                currentState.uninstallingId != null ||
+                currentState.isTogglingGlobal
+            ) {
                 return
             }
             val extension = currentState.extensions
@@ -94,19 +104,39 @@ internal class ExtensionsScreenViewModel(
             )
         }
 
-        override fun setAllExtensionsEnabled(enabled: Boolean) {
+        override fun setExtensionsGloballyEnabled(enabled: Boolean) {
             val currentState = viewModelStateFlow.value
-            if (currentState.togglingId != null || currentState.uninstallingId != null || currentState.isTogglingAll) {
+            if (currentState.extensionsGloballyEnabled == enabled ||
+                currentState.togglingId != null ||
+                currentState.uninstallingId != null ||
+                currentState.isTogglingGlobal
+            ) {
                 return
             }
-            val extensionsToToggle = currentState.extensions.filter { it.metaData.enabled != enabled }
-            if (extensionsToToggle.isEmpty()) return
-            viewModelStateFlow.update { it.copy(isTogglingAll = true) }
-            toggleExtensionsSequentially(
-                extensions = extensionsToToggle,
-                enabled = enabled,
-                index = 0,
-            )
+            viewModelStateFlow.update { it.copy(isTogglingGlobal = true) }
+            viewModelScope.launch {
+                settingsRepository.setExtensionsEnabled(enabled)
+                ExtensionGlobalController.applyGlobalEnabled(
+                    runtime = runtime,
+                    extensions = currentState.extensions,
+                    globallyEnabled = enabled,
+                    onComplete = {
+                        viewModelStateFlow.update { it.copy(isTogglingGlobal = false) }
+                        if (enabled) {
+                            extensionRuntimeCoordinator.notifyExtensionsGloballyEnabled()
+                        }
+                        loadExtensions()
+                    },
+                    onError = { error ->
+                        viewModelStateFlow.update {
+                            it.copy(
+                                isTogglingGlobal = false,
+                                errorMessage = error?.message ?: "拡張機能全体の切り替えに失敗しました。",
+                            )
+                        }
+                    },
+                )
+            }
         }
 
         override fun openExtensionSettings(extensionId: String) {
@@ -132,7 +162,7 @@ internal class ExtensionsScreenViewModel(
             errorMessage = null,
             uninstallingId = null,
             togglingId = null,
-            isTogglingAll = false,
+            isTogglingGlobal = false,
             isInstalling = false,
         )
     ).also { uiStateFlow ->
@@ -144,26 +174,24 @@ internal class ExtensionsScreenViewModel(
                         loadingState = if (state.isLoading) {
                             ExtensionsScreenUiState.LoadingState.Loading
                         } else {
-                            val extensions = state.extensions
                             ExtensionsScreenUiState.LoadingState.Loaded(
-                                extensions = extensions.map { ext ->
+                                extensions = state.extensions.map { ext ->
                                     ExtensionsScreenUiState.ExtensionUiState(
                                         id = ext.id,
                                         displayName = ext.metaData.name?.takeIf { it.isNotBlank() } ?: ext.id,
                                         version = ext.metaData.version,
                                         hasSettingsPage = ext.metaData.optionsPageUrl?.isNotBlank() == true,
-                                        isEnabled = ext.metaData.enabled,
+                                        isEnabled = ExtensionGlobalController.isUserEnabled(ext),
                                         isBuiltIn = ext.isBuiltIn,
                                     )
                                 },
-                                areExtensionsEnabled = extensions.isNotEmpty() &&
-                                    extensions.all { it.metaData.enabled },
+                                areExtensionsEnabled = state.extensionsGloballyEnabled,
                             )
                         },
                         errorMessage = state.errorMessage,
                         uninstallingId = state.uninstallingId,
                         togglingId = state.togglingId,
-                        isTogglingAll = state.isTogglingAll,
+                        isTogglingGlobal = state.isTogglingGlobal,
                         isInstalling = state.isInstalling,
                     )
                 }
@@ -172,6 +200,13 @@ internal class ExtensionsScreenViewModel(
     }.asStateFlow()
 
     init {
+        viewModelScope.launch {
+            settingsRepository.settings.collectLatest { settings ->
+                viewModelStateFlow.update {
+                    it.copy(extensionsGloballyEnabled = settings.resolvedExtensionsEnabled())
+                }
+            }
+        }
         loadExtensions()
     }
 
@@ -269,43 +304,6 @@ internal class ExtensionsScreenViewModel(
         runCatching { file.delete() }
     }
 
-    private fun toggleExtensionsSequentially(
-        extensions: List<WebExtension>,
-        enabled: Boolean,
-        index: Int,
-    ) {
-        if (index >= extensions.size) {
-            viewModelStateFlow.update { it.copy(isTogglingAll = false) }
-            return
-        }
-        val extension = extensions[index]
-        val result = if (enabled) {
-            runtime.webExtensionController.enable(extension, WebExtensionController.EnableSource.USER)
-        } else {
-            runtime.webExtensionController.disable(extension, WebExtensionController.EnableSource.USER)
-        }
-        result.accept(
-            { updatedExtension ->
-                viewModelStateFlow.update { state ->
-                    state.copy(
-                        extensions = state.extensions.map { ext ->
-                            if (ext.id == extension.id && updatedExtension != null) updatedExtension else ext
-                        },
-                    )
-                }
-                toggleExtensionsSequentially(extensions, enabled, index + 1)
-            },
-            { error ->
-                viewModelStateFlow.update {
-                    it.copy(
-                        isTogglingAll = false,
-                        errorMessage = error?.message ?: "拡張機能の一括切り替えに失敗しました。",
-                    )
-                }
-            },
-        )
-    }
-
     private fun loadExtensions() {
         viewModelStateFlow.update { it.copy(isLoading = true) }
         runtime.webExtensionController.list().accept(
@@ -339,10 +337,11 @@ internal class ExtensionsScreenViewModel(
 
     data class ViewModelState(
         val extensions: List<WebExtension> = emptyList(),
+        val extensionsGloballyEnabled: Boolean = true,
         val isLoading: Boolean = true,
         val uninstallingId: String? = null,
         val togglingId: String? = null,
-        val isTogglingAll: Boolean = false,
+        val isTogglingGlobal: Boolean = false,
         val isInstalling: Boolean = false,
         val errorMessage: String? = null,
     )

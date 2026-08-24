@@ -34,9 +34,12 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import net.matsudamper.browser.data.SettingsRepository
+import net.matsudamper.browser.data.resolvedExtensionsEnabled
 import org.koin.android.ext.android.inject
 import org.koin.androidx.viewmodel.ext.android.viewModel
 import org.mozilla.geckoview.GeckoResult
@@ -48,6 +51,8 @@ import java.util.concurrent.CancellationException
 class MainActivity : ComponentActivity() {
 
     private val runtime: GeckoRuntime by inject()
+    private val settingsRepository: SettingsRepository by inject()
+    private val extensionRuntimeCoordinator: ExtensionRuntimeCoordinator by inject()
     private val webExtensionActionController: WebExtensionActionController by inject()
     private val browserViewModel: BrowserViewModel by viewModel()
     private lateinit var extensionInstaller: WebExtensionInstaller
@@ -220,7 +225,7 @@ class MainActivity : ComponentActivity() {
         }
         extensionInstaller = WebExtensionInstaller(
             runtime = runtime,
-            onExtensionReady = ::setupDelegatesForExtension,
+            onExtensionReady = ::onExtensionReady,
         )
 
         runtime.setActivityDelegate(activityDelegate)
@@ -233,8 +238,24 @@ class MainActivity : ComponentActivity() {
             extensionInstaller.extensionProcessDelegate,
         )
         warmUpWebExtensionController()
+        extensionRuntimeCoordinator.setOnExtensionReady(::setupDelegatesForExtension)
 
         geckoInitialized = true
+    }
+
+    private fun onExtensionReady(extension: WebExtension) {
+        val globallyEnabled = runBlocking {
+            settingsRepository.settings.first().resolvedExtensionsEnabled()
+        }
+        if (!globallyEnabled) {
+            ExtensionGlobalController.applyGlobalEnabled(
+                runtime = runtime,
+                extensions = listOf(extension),
+                globallyEnabled = false,
+            )
+            return
+        }
+        setupDelegatesForExtension(extension)
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -354,8 +375,20 @@ class MainActivity : ComponentActivity() {
             { extensions ->
                 webExtensionWarmUpInProgress = false
                 webExtensionWarmUpCompleted = true
+                val extensionList = extensions ?: emptyList()
+                val globallyEnabled = runBlocking {
+                    settingsRepository.settings.first().resolvedExtensionsEnabled()
+                }
+                if (!globallyEnabled) {
+                    ExtensionGlobalController.applyGlobalEnabled(
+                        runtime = runtime,
+                        extensions = extensionList,
+                        globallyEnabled = false,
+                    )
+                    return@accept
+                }
                 // 起動時点ですでにインストール済みの拡張機能にも delegate を設定する。
-                extensions?.forEach { ext -> setupDelegatesForExtension(ext) }
+                extensionList.forEach { ext -> setupDelegatesForExtension(ext) }
             },
             {
                 webExtensionWarmUpInProgress = false
