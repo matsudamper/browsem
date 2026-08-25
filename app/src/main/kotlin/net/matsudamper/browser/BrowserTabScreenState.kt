@@ -74,6 +74,7 @@ internal fun rememberBrowserTabScreenState(
     onHistoryTitleUpdate: (suspend (id: Long, title: String) -> Unit)? = null,
     onRequestDownloadNotificationPermission: suspend () -> Unit = {},
     onRequestAndroidPermissions: suspend (Array<String>) -> Array<String> = { emptyArray() },
+    onClosePaymentPopupTab: (tabId: String) -> Unit = {},
 ): BrowserTabScreenState {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -103,6 +104,7 @@ internal fun rememberBrowserTabScreenState(
             onHistoryTitleUpdate = onHistoryTitleUpdate,
             onRequestDownloadNotificationPermission = onRequestDownloadNotificationPermission,
             onRequestAndroidPermissions = onRequestAndroidPermissions,
+            onClosePaymentPopupTab = onClosePaymentPopupTab,
         )
     }
     state.homepageUrl = homepageUrl
@@ -132,6 +134,7 @@ internal class BrowserTabScreenState(
     private val context: Context,
     private val onRequestDownloadNotificationPermission: suspend () -> Unit = {},
     private val onRequestAndroidPermissions: suspend (Array<String>) -> Array<String> = { emptyArray() },
+    private val onClosePaymentPopupTab: (tabId: String) -> Unit = {},
     var onHistoryRecord: (suspend (url: String, title: String) -> Long)? = null,
     var onHistoryTitleUpdate: (suspend (id: Long, title: String) -> Unit)? = null,
 ) : BrowserSessionStateCallbacks {
@@ -503,6 +506,8 @@ internal class BrowserTabScreenState(
     val extensionActionScrollState = ScrollState(initial = 0)
     /** 表示中の拡張機能ポップアップ。null なら非表示 */
     var extensionActionPopup by mutableStateOf<WebExtensionActionController.PopupRequest?>(null)
+    /** 表示中の決済ポップアップ。null なら非表示 */
+    var paymentPopup by mutableStateOf<PaymentPopupRequest?>(null)
     private var extensionActionOrder by mutableStateOf<List<String>>(emptyList())
     // ドラッグ中は保存済みの並び順ではなく、この一時的な並び順を使う
     private var draggingExtensionActionOrder by mutableStateOf<List<String>?>(null)
@@ -678,6 +683,30 @@ internal class BrowserTabScreenState(
     fun dismissExtensionActionPopup() {
         webExtensionActionController.closePopup(session)
         extensionActionPopup = null
+    }
+
+    /** 決済ポップアップを表示する */
+    fun showPaymentPopup(tab: BrowserTab, initialUrl: String) {
+        paymentPopup = PaymentPopupRequest(
+            tab = tab,
+            title = resolvePaymentPopupTitle(initialUrl),
+        )
+    }
+
+    /** 決済ポップアップを閉じ、裏で保持していたタブを破棄する */
+    fun dismissPaymentPopup() {
+        val popup = paymentPopup ?: return
+        paymentPopup = null
+        onClosePaymentPopupTab(popup.tab.tabId)
+    }
+
+    private fun resolvePaymentPopupTitle(initialUrl: String): String {
+        val host = android.net.Uri.parse(initialUrl).host?.lowercase().orEmpty()
+        return when {
+            host.contains("pay.google") || host.contains("payments.google") -> "Google Pay"
+            host.contains("accounts.google") -> "Google アカウント"
+            else -> "決済"
+        }
     }
 
     private fun applyPageZoom(percent: Int) {

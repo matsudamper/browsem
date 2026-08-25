@@ -837,6 +837,19 @@ private fun MainBrowserContent(
                                     selectTab(newTab.tabId, key)
                                     newTab.session
                                 },
+                                onCreatePaymentPopupTab = { uri ->
+                                    val popupTab = browserTabController.createTabForNewSession(
+                                        initialUrl = uri,
+                                        openerTabId = key.tabId,
+                                    )
+                                    scope.launch {
+                                        assignTabToOpenerGroup(popupTab.tabId, key.tabId)
+                                    }
+                                    popupTab
+                                },
+                                onClosePaymentPopupTab = { tabId ->
+                                    browserTabController.closeTab(tabId)
+                                },
                                 onOpenNewTabRequest = { uri, referrerUrl ->
                                     scope.launch {
                                         val tabId = UUID.randomUUID().toString()

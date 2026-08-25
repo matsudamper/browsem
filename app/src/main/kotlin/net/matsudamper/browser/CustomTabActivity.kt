@@ -296,9 +296,15 @@ private fun CustomTabScreen(
         customTabMode = true,
         onCloseCustomTab = onClose,
         onOpenInBrowser = { url -> onOpenInBrowser(url, activeTab) },
-        // onLoadRequest で TARGET_WINDOW_NEW を現在タブへ畳み込むため、
-        // ここへ到達することは想定しない。GeckoView 契約上 null を返して安全に拒否する。
+        // 決済ポップアップは opener タブを維持したままダイアログで表示する。
+        // 通常の window.open は onLoadRequest で現在タブへ畳み込むため、ここへ到達しない想定。
         onOpenNewSessionRequest = { null },
+        onCreatePaymentPopupTab = { uri ->
+            browserTabController.createTabForNewSession(uri, activeTab.tabId)
+        },
+        onClosePaymentPopupTab = { tabId ->
+            browserTabController.closeTab(tabId)
+        },
         onOpenNewTabRequest = { uri, referrerUrl ->
             onOpenNewTabInBrowser(uri, referrerUrl)
         },

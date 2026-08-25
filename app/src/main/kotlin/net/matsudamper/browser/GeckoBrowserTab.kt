@@ -104,6 +104,8 @@ internal fun GeckoBrowserTab(
     onOpenNewSessionRequest: (String) -> GeckoSession?,
     onOpenNewTabRequest: (url: String, referrerUrl: String?) -> Unit,
     modifier: Modifier = Modifier,
+    onCreatePaymentPopupTab: (String) -> BrowserTab? = { null },
+    onClosePaymentPopupTab: (String) -> Unit = {},
     onRequestDownloadNotificationPermission: suspend () -> Unit = {},
     enableTabUi: Boolean = true,
     showInstallExtensionItem: Boolean = true,
@@ -169,6 +171,7 @@ internal fun GeckoBrowserTab(
                 (alreadyGranted + newlyGranted).toTypedArray()
             }
         },
+        onClosePaymentPopupTab = onClosePaymentPopupTab,
     )
 
     // ツールバー色の輝度に応じてステータスバーアイコン色（黒/白）を動的に切り替える
@@ -255,7 +258,9 @@ internal fun GeckoBrowserTab(
     // 不安定なラムダキーによる DisposableEffect の再実行を防ぐ
     val currentOnCloseTab by rememberUpdatedState(onCloseTab)
     val currentOnOpenNewSessionRequest by rememberUpdatedState(onOpenNewSessionRequest)
+    val currentOnCreatePaymentPopupTab by rememberUpdatedState(onCreatePaymentPopupTab)
     val currentOnOpenNewTabRequest by rememberUpdatedState(onOpenNewTabRequest)
+    val paymentPopupCallbacks = remember(context) { PaymentPopupSessionCallbacks(context) }
     val closeUrlInput: (Boolean) -> Unit = { restoreCurrentUrl ->
         state.isUrlInputFocused = false
         if (restoreCurrentUrl) {
@@ -701,7 +706,14 @@ internal fun GeckoBrowserTab(
             callbacks = state,
             onOpenNewSessionRequest = { uri ->
                 runCatching {
-                    GeckoResult.fromValue(currentOnOpenNewSessionRequest(uri))
+                    if (isPaymentPopupUrl(uri)) {
+                        val popupTab = currentOnCreatePaymentPopupTab(uri)
+                            ?: return@runCatching GeckoResult.fromValue<GeckoSession>(null)
+                        state.showPaymentPopup(popupTab, uri)
+                        GeckoResult.fromValue(popupTab.session)
+                    } else {
+                        GeckoResult.fromValue(currentOnOpenNewSessionRequest(uri))
+                    }
                 }.getOrElse { error ->
                     GeckoResult.fromException(error)
                 }
@@ -1122,6 +1134,16 @@ internal fun GeckoBrowserTab(
         ExtensionActionPopupDialog(
             popup = popup,
             onDismissRequest = state::dismissExtensionActionPopup,
+        )
+    }
+
+    // Google Pay などの決済ポップアップ（opener タブを維持したまま表示）
+    state.paymentPopup?.let { popup ->
+        PaymentPopupDialog(
+            popup = popup,
+            promptDelegate = dialogState.createPromptDelegate(),
+            popupCallbacks = paymentPopupCallbacks,
+            onDismissRequest = state::dismissPaymentPopup,
         )
     }
 

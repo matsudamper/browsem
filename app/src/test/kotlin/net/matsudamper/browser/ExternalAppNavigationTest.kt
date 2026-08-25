@@ -34,4 +34,16 @@ class ExternalAppNavigationTest {
         assertFalse(isBrowserPinnedHost("fakepay.google.com.example.com"))
         assertFalse(isBrowserPinnedHost("notpay.google.com.evil.test"))
     }
+
+    @Test
+    fun `決済ポップアップ URL と判定される`() {
+        assertTrue(isPaymentPopupUrl("https://pay.google.com/gp/p/ui/pay"))
+        assertTrue(isPaymentPopupUrl("https://accounts.google.com/signin"))
+    }
+
+    @Test
+    fun `決済ポップアップ URL 以外は判定されない`() {
+        assertFalse(isPaymentPopupUrl("https://example.com/checkout"))
+        assertFalse(isPaymentPopupUrl("about:blank"))
+    }
 }

@@ -282,6 +282,15 @@ private val browserPinnedHosts = setOf(
     "accounts.google.com",
 )
 
+/**
+ * window.open で開かれる Google Pay などの決済・認証ポップアップかどうかを判定する。
+ * これらは opener タブを維持したままダイアログで表示する必要がある。
+ */
+internal fun isPaymentPopupUrl(uri: String): Boolean {
+    val host = Uri.parse(uri).host ?: return false
+    return isBrowserPinnedHost(host)
+}
+
 private val browserHandledSchemes = setOf(
     "about",
     "blob",

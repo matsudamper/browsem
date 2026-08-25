@@ -131,9 +131,14 @@ class WebAppActivity : ComponentActivity() {
                             webAppPinnedHost = webAppPinnedHost,
                             onWebAppCrossDomainNavigation = ::openInCustomTab,
                             onOpenInBrowser = ::openInMainBrowser,
-                            // onLoadRequest で TARGET_WINDOW_NEW を現在タブへ畳み込むため、
-                            // ここへ到達することは想定しない。GeckoView 契約上 null を返して安全に拒否する。
+                            // 決済ポップアップは opener タブを維持したままダイアログで表示する。
                             onOpenNewSessionRequest = { null },
+                            onCreatePaymentPopupTab = { uri ->
+                                browserTabController.createTabForNewSession(uri, browserTab.tabId)
+                            },
+                            onClosePaymentPopupTab = { tabId ->
+                                browserTabController.closeTab(tabId)
+                            },
                             onOpenNewTabRequest = { uri, referrerUrl ->
                                 openNewTabInMainBrowser(uri, referrerUrl)
                             },
