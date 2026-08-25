@@ -23,7 +23,8 @@ import net.matsudamper.browser.data.history.HistoryRepository
 import net.matsudamper.browser.data.resolvedHomepageUrl
 import net.matsudamper.browser.data.resolvedSearchTemplate
 import net.matsudamper.browser.data.websuggestion.WebSuggestionRepository
-import net.matsudamper.browser.media.MediaWebExtension
+import net.matsudamper.browser.feature.media.MediaWebExtension
+import net.matsudamper.browser.feature.themecolor.ThemeColorWebExtension
 import net.matsudamper.browser.screen.browser.WebAppScreenViewModel
 import net.matsudamper.browser.ui.browser.WebAppScreen
 import net.matsudamper.browser.ui.common.BrowserTheme

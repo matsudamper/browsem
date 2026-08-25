@@ -3,7 +3,7 @@ agp = "9.3.2"
 kotlin = "2.4.10"
 composeBom = "2026.08.00"
 activityCompose = "1.13.0"
-geckoview = "154.0.20260814215756"
+geckoview = "154.0.20260824154132"
 junit4 = "4.13.2"
 androidxJunit = "1.3.0"
 androidxTestOrchestrator = "1.6.1"
@@ -43,7 +43,7 @@ androidx-compose-ui = { module = "androidx.compose.ui:ui" }
 androidx-compose-ui-tooling-preview = { module = "androidx.compose.ui:ui-tooling-preview" }
 mozilla-geckoview = { module = "org.mozilla.geckoview:geckoview", version.ref = "geckoview" }
 androidsvg = { module = "com.caverock:androidsvg-aar", version.ref = "androidsvg" }
-mozilla-publicsuffixlist = { module = "org.mozilla.components:lib-publicsuffixlist", version = "154.0" }
+mozilla-publicsuffixlist = { module = "org.mozilla.components:lib-publicsuffixlist", version = "154.0.1" }
 androidx-compose-ui-tooling = { module = "androidx.compose.ui:ui-tooling" }
 androidx-compose-ui-test-manifest = { module = "androidx.compose.ui:ui-test-manifest" }
 junit4 = { module = "junit:junit", version.ref = "junit4" }
