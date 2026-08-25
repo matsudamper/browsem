@@ -120,7 +120,7 @@ internal fun GeckoBrowserTab(
     onHistoryTitleUpdate: (suspend (id: Long, title: String) -> Unit)? = null,
     urlBarSuggestions: UrlBarSuggestionsUiState = UrlBarSuggestionsUiState(),
     onUrlInputChanged: ((String) -> Unit)? = null,
-    onSessionDetachedFromView: (BrowserTab) -> Unit = {},
+    onSessionDetachedFromView: (BrowserTab) -> Unit,
 ) {
     val context = LocalContext.current
     val findInPageWebExtension: FindInPageWebExtension = koinInject()

@@ -275,6 +275,14 @@ private fun CustomTabScreen(
     }
 
     val popupController = rememberWindowOpenPopupController(browserTabController)
+    val retainOpenersAfterDetach: (BrowserTab) -> Unit = {
+        WindowOpenSessionPolicy.postAfterFrame {
+            browserSessionLifecycleController.retainOpenersOfLivePopups(
+                tabs = browserTabController.tabs,
+                selectedTabId = browserTabController.selectedTabId,
+            )
+        }
+    }
 
     GeckoBrowserTab(
         modifier = Modifier.fillMaxSize(),
@@ -309,6 +317,7 @@ private fun CustomTabScreen(
         onHistoryTitleUpdate = uiState.callbacks::onHistoryTitleUpdate,
         urlBarSuggestions = uiState.urlBarSuggestions,
         onUrlInputChanged = uiState.callbacks::onUrlInputChanged,
+        onSessionDetachedFromView = retainOpenersAfterDetach,
     )
     popupController.top?.let { popupTab ->
         WindowOpenOverlayDialog(onDismissRequest = popupController::dismissTop) {
@@ -344,6 +353,7 @@ private fun CustomTabScreen(
                 onHistoryTitleUpdate = uiState.callbacks::onHistoryTitleUpdate,
                 urlBarSuggestions = uiState.urlBarSuggestions,
                 onUrlInputChanged = uiState.callbacks::onUrlInputChanged,
+                onSessionDetachedFromView = retainOpenersAfterDetach,
             )
         }
     }

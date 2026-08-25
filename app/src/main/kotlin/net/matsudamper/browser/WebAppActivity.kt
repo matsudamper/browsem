@@ -73,6 +73,14 @@ class WebAppActivity : ComponentActivity() {
             val browserTabController = browserViewModel.browserTabController
             val browserSessionLifecycleController = browserViewModel.browserSessionLifecycleController
             val popupController = rememberWindowOpenPopupController(browserTabController)
+            val retainOpenersAfterDetach: (BrowserTab) -> Unit = {
+                WindowOpenSessionPolicy.postAfterFrame {
+                    browserSessionLifecycleController.retainOpenersOfLivePopups(
+                        tabs = browserTabController.tabs,
+                        selectedTabId = browserTabController.selectedTabId,
+                    )
+                }
+            }
             val settings by settingsRepository.settings.collectAsState(initial = null)
             val browserSettings = settings ?: return@setContent
             val resolvedInitialUrl = initialUrl ?: browserSettings.resolvedHomepageUrl()
@@ -144,6 +152,7 @@ class WebAppActivity : ComponentActivity() {
                             onHistoryTitleUpdate = webAppUiState.callbacks::onHistoryTitleUpdate,
                             urlBarSuggestions = webAppUiState.urlBarSuggestions,
                             onUrlInputChanged = webAppUiState.callbacks::onUrlInputChanged,
+                            onSessionDetachedFromView = retainOpenersAfterDetach,
                         )
                         popupController.top?.let { popupTab ->
                             WindowOpenOverlayDialog(onDismissRequest = popupController::dismissTop) {
@@ -183,6 +192,7 @@ class WebAppActivity : ComponentActivity() {
                                     onHistoryTitleUpdate = webAppUiState.callbacks::onHistoryTitleUpdate,
                                     urlBarSuggestions = webAppUiState.urlBarSuggestions,
                                     onUrlInputChanged = webAppUiState.callbacks::onUrlInputChanged,
+                                    onSessionDetachedFromView = retainOpenersAfterDetach,
                                 )
                             }
                         }
