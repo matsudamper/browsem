@@ -1500,28 +1500,25 @@ internal class BrowserTabScreenState(
             return GeckoResult.fromValue(AllowOrDeny.DENY)
         }
         val externalAction = resolveExternalAppNavigationAction(context, request.uri)
-        // single-page モードで TARGET_WINDOW_NEW は外部アプリ判定を先に通してから現在タブへ畳み込む
+        // single-page でも TARGET_WINDOW_NEW は現在タブへ畳み込まない。
+        // DENY + loadUri すると onNewSession が呼ばれず overlay が出せない。
+        // 外部アプリ判定だけ行い、ブラウザ内なら ALLOW して onNewSession に渡す。
         if (isSinglePageMode && request.target == GeckoSession.NavigationDelegate.TARGET_WINDOW_NEW) {
-            when (externalAction) {
-                ExternalAppNavigationAction.AllowInBrowser -> {
-                    val uri = request.uri
-                    if (uri.isNotBlank() && uri != "about:blank") {
-                        if (!handleWebAppCrossDomainNavigation(uri)) {
-                            session.loadUri(uri)
-                        }
-                    }
-                }
+            return when (externalAction) {
+                ExternalAppNavigationAction.AllowInBrowser -> null
                 ExternalAppNavigationAction.AppNotFound -> {
                     Toast.makeText(context, "対応するアプリが見つかりません", Toast.LENGTH_SHORT).show()
+                    GeckoResult.fromValue(AllowOrDeny.DENY)
                 }
                 is ExternalAppNavigationAction.Launch -> {
                     pendingExternalAppLaunch = externalAction.request
+                    GeckoResult.fromValue(AllowOrDeny.DENY)
                 }
                 is ExternalAppNavigationAction.OpenFallback -> {
                     openFallbackUrl(externalAction.url)
+                    GeckoResult.fromValue(AllowOrDeny.DENY)
                 }
             }
-            return GeckoResult.fromValue(AllowOrDeny.DENY)
         }
         return when (externalAction) {
             ExternalAppNavigationAction.AllowInBrowser -> {

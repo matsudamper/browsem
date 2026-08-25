@@ -83,6 +83,12 @@ class CustomTabActivity : ComponentActivity() {
             isSinglePage = true,
         )
         browserSessionLifecycleController = BrowserSessionLifecycleController(runtime)
+        browserTabController.onTabListChanged = {
+            browserSessionLifecycleController.retainOpenersOfLivePopups(
+                tabs = browserTabController.tabs,
+                selectedTabId = browserTabController.selectedTabId,
+            )
+        }
 
         val initialUrl = intent.dataString.orEmpty()
         val customTabsSessionToken = CustomTabsSessionToken.getSessionTokenFromIntent(intent)
@@ -275,6 +281,16 @@ private fun CustomTabScreen(
         return
     }
 
+    val popupController = rememberWindowOpenPopupController(browserTabController)
+    val retainOpenersAfterDetach: (BrowserTab) -> Unit = {
+        WindowOpenSessionPolicy.postAfterFrame {
+            browserSessionLifecycleController.retainOpenersOfLivePopups(
+                tabs = browserTabController.tabs,
+                selectedTabId = browserTabController.selectedTabId,
+            )
+        }
+    }
+
     GeckoBrowserTab(
         modifier = Modifier.fillMaxSize(),
         browserTab = activeTab,
@@ -297,9 +313,9 @@ private fun CustomTabScreen(
         customTabMode = true,
         onCloseCustomTab = onClose,
         onOpenInBrowser = { url -> onOpenInBrowser(url, activeTab) },
-        // onLoadRequest で TARGET_WINDOW_NEW を現在タブへ畳み込むため、
-        // ここへ到達することは想定しない。GeckoView 契約上 null を返して安全に拒否する。
-        onOpenNewSessionRequest = { null },
+        onOpenNewSessionRequest = { uri ->
+            popupController.open(uri, activeTab.tabId)
+        },
         onOpenNewTabRequest = { uri, referrerUrl ->
             onOpenNewTabInBrowser(uri, referrerUrl)
         },
@@ -308,7 +324,46 @@ private fun CustomTabScreen(
         onHistoryTitleUpdate = uiState.callbacks::onHistoryTitleUpdate,
         urlBarSuggestions = uiState.urlBarSuggestions,
         onUrlInputChanged = uiState.callbacks::onUrlInputChanged,
+        onSessionDetachedFromView = retainOpenersAfterDetach,
     )
+    popupController.top?.let { popupTab ->
+        WindowOpenOverlayDialog(onDismissRequest = popupController::dismissTop) {
+            GeckoBrowserTab(
+                modifier = Modifier.fillMaxSize(),
+                browserTab = popupTab,
+                homepageUrl = homepageUrl,
+                searchTemplate = searchTemplate,
+                translationProvider = translationProvider,
+                themeColorExtension = themeColorExtension,
+                mediaWebExtension = mediaWebExtension,
+                browserSessionLifecycleController = browserSessionLifecycleController,
+                tabCount = 1,
+                onInstallExtensionRequest = {},
+                onRequestDownloadNotificationPermission = onRequestDownloadNotificationPermission,
+                onOpenSettings = {},
+                onOpenSiteSettings = null,
+                onOpenDownloads = null,
+                onOpenTabs = {},
+                enableTabUi = false,
+                showInstallExtensionItem = false,
+                customTabMode = true,
+                onCloseCustomTab = popupController::dismissTop,
+                onOpenInBrowser = { url -> onOpenInBrowser(url, popupTab) },
+                onOpenNewSessionRequest = { uri ->
+                    popupController.open(uri, popupTab.tabId)
+                },
+                onOpenNewTabRequest = { uri, referrerUrl ->
+                    onOpenNewTabInBrowser(uri, referrerUrl)
+                },
+                onCloseTab = popupController::dismissTop,
+                onHistoryRecord = uiState.callbacks::onHistoryRecord,
+                onHistoryTitleUpdate = uiState.callbacks::onHistoryTitleUpdate,
+                urlBarSuggestions = uiState.urlBarSuggestions,
+                onUrlInputChanged = uiState.callbacks::onUrlInputChanged,
+                onSessionDetachedFromView = retainOpenersAfterDetach,
+            )
+        }
+    }
 }
 
 /**

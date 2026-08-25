@@ -142,9 +142,48 @@ class BrowserSessionLifecycleController(
     /**
      * バックグラウンド遷移時に呼び、セッション側の処理を一時停止させる。
      * Surface バインドは維持するため復帰時のちらつきが少ない。
+     * `window.open` の opener として JS 実行を維持しているタブは止めない。
      */
     fun pauseSession(tab: BrowserTab) {
+        if (tab.retainForLivePopup) return
         if (tab.session.isOpen) {
+            tab.session.setActive(false)
+        }
+    }
+
+    /**
+     * onNewSession 由来の子タブが生きている opener は、GeckoView から外れても
+     * JS を止めない。Surface 解放後に GeckoView が inactive にしても、ここで戻す。
+     */
+    fun retainOpenersOfLivePopups(
+        tabs: List<BrowserTab>,
+        selectedTabId: String?,
+    ) {
+        val liveOpenerIds = tabs
+            .filter { it.openedViaNewSession }
+            .mapNotNull { it.openerTabId }
+            .toSet()
+        tabs.forEach { tab ->
+            if (tab.tabId in liveOpenerIds) {
+                retainOpenerForLivePopup(tab)
+            } else if (tab.retainForLivePopup) {
+                releaseOpenerRetention(tab, selectedTabId)
+            }
+        }
+    }
+
+    private fun retainOpenerForLivePopup(tab: BrowserTab) {
+        if (!tab.session.isOpen) return
+        tab.retainForLivePopup = true
+        tab.session.setActive(true)
+        tab.session.setPriorityHint(GeckoSession.PRIORITY_HIGH)
+    }
+
+    private fun releaseOpenerRetention(tab: BrowserTab, selectedTabId: String?) {
+        tab.retainForLivePopup = false
+        if (!tab.session.isOpen) return
+        tab.session.setPriorityHint(GeckoSession.PRIORITY_DEFAULT)
+        if (tab.tabId != selectedTabId) {
             tab.session.setActive(false)
         }
     }

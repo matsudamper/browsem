@@ -11,9 +11,11 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.CompletableDeferred
@@ -71,6 +73,15 @@ class WebAppActivity : ComponentActivity() {
             })
             val browserTabController = browserViewModel.browserTabController
             val browserSessionLifecycleController = browserViewModel.browserSessionLifecycleController
+            val popupController = browserViewModel.popupController
+            val retainOpenersAfterDetach: (BrowserTab) -> Unit = {
+                WindowOpenSessionPolicy.postAfterFrame {
+                    browserSessionLifecycleController.retainOpenersOfLivePopups(
+                        tabs = browserTabController.tabs,
+                        selectedTabId = browserTabController.selectedTabId,
+                    )
+                }
+            }
             val settings by settingsRepository.settings.collectAsState(initial = null)
             val browserSettings = settings ?: return@setContent
             val resolvedInitialUrl = initialUrl ?: browserSettings.resolvedHomepageUrl()
@@ -132,9 +143,9 @@ class WebAppActivity : ComponentActivity() {
                             webAppPinnedHost = webAppPinnedHost,
                             onWebAppCrossDomainNavigation = ::openInCustomTab,
                             onOpenInBrowser = ::openInMainBrowser,
-                            // onLoadRequest で TARGET_WINDOW_NEW を現在タブへ畳み込むため、
-                            // ここへ到達することは想定しない。GeckoView 契約上 null を返して安全に拒否する。
-                            onOpenNewSessionRequest = { null },
+                            onOpenNewSessionRequest = { uri ->
+                                popupController.open(uri, browserTab.tabId)
+                            },
                             onOpenNewTabRequest = { uri, referrerUrl ->
                                 openNewTabInMainBrowser(uri, referrerUrl)
                             },
@@ -142,7 +153,50 @@ class WebAppActivity : ComponentActivity() {
                             onHistoryTitleUpdate = webAppUiState.callbacks::onHistoryTitleUpdate,
                             urlBarSuggestions = webAppUiState.urlBarSuggestions,
                             onUrlInputChanged = webAppUiState.callbacks::onUrlInputChanged,
+                            onSessionDetachedFromView = retainOpenersAfterDetach,
                         )
+                        popupController.top?.let { popupTab ->
+                            WindowOpenOverlayDialog(onDismissRequest = popupController::dismissTop) {
+                                GeckoBrowserTab(
+                                    modifier = Modifier.fillMaxSize(),
+                                    browserTab = popupTab,
+                                    homepageUrl = resolvedInitialUrl,
+                                    searchTemplate = browserSettings.resolvedSearchTemplate(),
+                                    translationProvider = browserSettings.translationProvider,
+                                    themeColorExtension = themeColorExtension,
+                                    mediaWebExtension = mediaWebExtension,
+                                    browserSessionLifecycleController = browserSessionLifecycleController,
+                                    tabCount = 1,
+                                    onInstallExtensionRequest = {},
+                                    onRequestDownloadNotificationPermission = {
+                                        requestDownloadNotificationPermission()
+                                    },
+                                    onOpenSettings = {},
+                                    onOpenSiteSettings = { url ->
+                                        outerNavActions.openSiteSettings(url, popupTab.tabId)
+                                    },
+                                    onOpenDownloads = null,
+                                    onOpenTabs = {},
+                                    enableTabUi = false,
+                                    showInstallExtensionItem = false,
+                                    customTabMode = true,
+                                    onCloseCustomTab = popupController::dismissTop,
+                                    onCloseTab = popupController::dismissTop,
+                                    onOpenInBrowser = ::openInMainBrowser,
+                                    onOpenNewSessionRequest = { uri ->
+                                        popupController.open(uri, popupTab.tabId)
+                                    },
+                                    onOpenNewTabRequest = { uri, referrerUrl ->
+                                        openNewTabInMainBrowser(uri, referrerUrl)
+                                    },
+                                    onHistoryRecord = webAppUiState.callbacks::onHistoryRecord,
+                                    onHistoryTitleUpdate = webAppUiState.callbacks::onHistoryTitleUpdate,
+                                    urlBarSuggestions = webAppUiState.urlBarSuggestions,
+                                    onUrlInputChanged = webAppUiState.callbacks::onUrlInputChanged,
+                                    onSessionDetachedFromView = retainOpenersAfterDetach,
+                                )
+                            }
+                        }
                     }
                 }
             }
