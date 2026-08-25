@@ -78,6 +78,12 @@ class BrowserTabController(
     val tabs: List<BrowserTab>
         get() = tabRegistry.orderedTabs()
 
+    /**
+     * タブ一覧が変わったあと（閉鎖・Undo）に呼ぶ。
+     * popup 子の閉鎖で opener の retain を再計算するために使う。
+     */
+    var onTabListChanged: (() -> Unit)? = null
+
     fun findTab(tabId: String): BrowserTab? = tabRegistry.find(tabId)
 
     /** タブがこのセッション中に [closeTab] で閉じられたかどうかを返す */
@@ -329,6 +335,7 @@ class BrowserTabController(
         closedTabIds.add(tabId)
         publishRuntimeState(resolvedNextSelectedTabId)
         persistenceCoordinator.persistClosedTab(tabId, resolvedNextSelectedTabId)
+        onTabListChanged?.invoke()
         return selectedTabId
     }
 
@@ -345,6 +352,7 @@ class BrowserTabController(
         )
         // closeTab の永続化でサムネイルが削除されているため保存し直す
         persistenceCoordinator.persistPreviewBitmap(detached.tab.tabId, detached.tab.previewBitmap)
+        onTabListChanged?.invoke()
         return detached.tab.tabId
     }
 

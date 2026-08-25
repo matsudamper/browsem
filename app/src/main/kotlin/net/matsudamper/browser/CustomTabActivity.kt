@@ -82,6 +82,12 @@ class CustomTabActivity : ComponentActivity() {
             isSinglePage = true,
         )
         browserSessionLifecycleController = BrowserSessionLifecycleController(runtime)
+        browserTabController.onTabListChanged = {
+            browserSessionLifecycleController.retainOpenersOfLivePopups(
+                tabs = browserTabController.tabs,
+                selectedTabId = browserTabController.selectedTabId,
+            )
+        }
 
         val initialUrl = intent.dataString.orEmpty()
         val customTabsSessionToken = CustomTabsSessionToken.getSessionTokenFromIntent(intent)
