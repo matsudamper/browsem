@@ -78,6 +78,15 @@ internal class BrowserViewModel(
     )
     val browserSessionLifecycleController = BrowserSessionLifecycleController(runtime)
 
+    init {
+        browserTabController.onTabListChanged = {
+            browserSessionLifecycleController.retainOpenersOfLivePopups(
+                tabs = browserTabController.tabs,
+                selectedTabId = browserTabController.selectedTabId,
+            )
+        }
+    }
+
     // タブ復元完了シグナル。BrowserTabController が内部で管理し、構成変更後も有効。
     val setupComplete: Deferred<Unit> get() = browserTabController.restoreComplete
 

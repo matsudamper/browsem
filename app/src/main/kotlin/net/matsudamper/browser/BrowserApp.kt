@@ -834,7 +834,15 @@ private fun MainBrowserContent(
                                     scope.launch {
                                         assignTabToOpenerGroup(newTab.tabId, key.tabId)
                                     }
-                                    selectTab(newTab.tabId, key)
+                                    WindowOpenSessionPolicy.scheduleSelectAfterCallback(
+                                        selectTab = { selectTab(newTab.tabId, key) },
+                                        retainOpeners = {
+                                            browserSessionLifecycleController.retainOpenersOfLivePopups(
+                                                tabs = browserTabController.tabs,
+                                                selectedTabId = browserTabController.selectedTabId,
+                                            )
+                                        },
+                                    )
                                     newTab.session
                                 },
                                 onOpenNewTabRequest = { uri, referrerUrl ->
@@ -860,6 +868,14 @@ private fun MainBrowserContent(
                                 onHistoryTitleUpdate = browserScreenUiState.callbacks::onHistoryTitleUpdate,
                                 urlBarSuggestions = browserScreenUiState.urlBarSuggestions,
                                 onUrlInputChanged = browserScreenUiState.callbacks::onUrlInputChanged,
+                                onSessionDetachedFromView = {
+                                    WindowOpenSessionPolicy.postAfterFrame {
+                                        browserSessionLifecycleController.retainOpenersOfLivePopups(
+                                            tabs = browserTabController.tabs,
+                                            selectedTabId = browserTabController.selectedTabId,
+                                        )
+                                    }
+                                },
                                 onToolbarHorizontalDrag = onToolbarHorizontalDrag,
                                 onToolbarDragEnd = onToolbarDragEnd,
                             )

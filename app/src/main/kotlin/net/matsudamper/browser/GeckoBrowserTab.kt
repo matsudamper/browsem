@@ -107,6 +107,7 @@ internal fun GeckoBrowserTab(
     onOpenTabs: () -> Unit,
     onOpenNewSessionRequest: (String) -> GeckoSession?,
     onOpenNewTabRequest: (url: String, referrerUrl: String?) -> Unit,
+    onSessionDetachedFromView: (BrowserTab) -> Unit,
     modifier: Modifier = Modifier,
     onRequestDownloadNotificationPermission: suspend () -> Unit = {},
     enableTabUi: Boolean = true,
@@ -260,6 +261,7 @@ internal fun GeckoBrowserTab(
     val currentOnCloseTab by rememberUpdatedState(onCloseTab)
     val currentOnOpenNewSessionRequest by rememberUpdatedState(onOpenNewSessionRequest)
     val currentOnOpenNewTabRequest by rememberUpdatedState(onOpenNewTabRequest)
+    val currentOnSessionDetachedFromView by rememberUpdatedState(onSessionDetachedFromView)
     val closeUrlInput: (Boolean) -> Unit = { restoreCurrentUrl ->
         state.isUrlInputFocused = false
         if (restoreCurrentUrl) {
@@ -729,6 +731,9 @@ internal fun GeckoBrowserTab(
             ) {
                 session.mediaSessionDelegate = null
             }
+            // View が外れたあとに Gecko が opener を inactive にするため、
+            // 次メッセージで live popup の opener を再 active する。
+            currentOnSessionDetachedFromView(browserTab)
         }
     }
 

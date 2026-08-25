@@ -113,6 +113,13 @@ class BrowserTab(
     // ガードとして使い、実 URL への onLocationChange 発火でクリアされる。
     internal var pendingInitialUrl: String? by mutableStateOf(null)
 
+    // NavigationDelegate.onNewSession で作ったタブ。コンテキストメニューの
+    // 「新しいタブで開く」とは区別し、子が生きている間 opener の JS を止めない。
+    internal var openedViaNewSession: Boolean = false
+
+    // 非表示でも setActive(true) を維持している opener。子タブ閉鎖時に解除する。
+    internal var retainForLivePopup: Boolean = false
+
     // 初回読み込み時に referrer として送信する URL。コンテキストメニューの
     // 「新しいタブで開く」で、ホットリンク保護のあるサーバーが 403 を返さないように
     // 元ページの URL を引き継ぐために使用する。初回読み込みで消費される。
