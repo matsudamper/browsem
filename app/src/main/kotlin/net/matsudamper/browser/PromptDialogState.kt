@@ -17,6 +17,7 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.UUID
 import org.mozilla.geckoview.AllowOrDeny
+import org.mozilla.geckoview.Autocomplete
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
 
@@ -68,6 +69,12 @@ internal class PromptDialogState(
     // --- RepostConfirm (フォーム再送信確認) ---
     var pendingRepostConfirmPrompt by mutableStateOf<GeckoSession.PromptDelegate.RepostConfirmPrompt?>(null)
     var pendingRepostConfirmResult by mutableStateOf<GeckoResult<GeckoSession.PromptDelegate.PromptResponse>?>(null)
+
+    var pendingAddressSelectPrompt by mutableStateOf<GeckoSession.PromptDelegate.AutocompleteRequest<Autocomplete.AddressSelectOption>?>(null)
+    var pendingAddressSelectResult by mutableStateOf<GeckoResult<GeckoSession.PromptDelegate.PromptResponse>?>(null)
+    var pendingAddressSaveAddress by mutableStateOf<Autocomplete.Address?>(null)
+    var pendingAddressSavePrompt by mutableStateOf<GeckoSession.PromptDelegate.AutocompleteRequest<Autocomplete.AddressSaveOption>?>(null)
+    var pendingAddressSaveResult by mutableStateOf<GeckoResult<GeckoSession.PromptDelegate.PromptResponse>?>(null)
 
     // ================================================================
     // Actions
@@ -309,6 +316,38 @@ internal class PromptDialogState(
         pendingRepostConfirmResult = null
     }
 
+    fun confirmAddressSelect(option: Autocomplete.AddressSelectOption) {
+        val prompt = pendingAddressSelectPrompt ?: return
+        pendingAddressSelectResult?.complete(prompt.confirm(option))
+        pendingAddressSelectPrompt = null
+        pendingAddressSelectResult = null
+    }
+
+    fun dismissAddressSelect() {
+        val prompt = pendingAddressSelectPrompt ?: return
+        pendingAddressSelectResult?.complete(prompt.dismiss())
+        pendingAddressSelectPrompt = null
+        pendingAddressSelectResult = null
+    }
+
+    fun confirmAddressSave() {
+        val prompt = pendingAddressSavePrompt ?: return
+        pendingAddressSaveResult?.complete(prompt.options.firstOrNull()?.let(prompt::confirm) ?: prompt.dismiss())
+        clearAddressSave()
+    }
+
+    fun dismissAddressSave() {
+        val prompt = pendingAddressSavePrompt ?: return
+        pendingAddressSaveResult?.complete(prompt.dismiss())
+        clearAddressSave()
+    }
+
+    private fun clearAddressSave() {
+        pendingAddressSavePrompt = null
+        pendingAddressSaveResult = null
+        pendingAddressSaveAddress = null
+    }
+
     // ================================================================
     // Delegate 生成
     // ================================================================
@@ -421,6 +460,30 @@ internal class PromptDialogState(
             ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse> {
                 // ポップアップを許可する
                 return GeckoResult.fromValue(prompt.confirm(AllowOrDeny.ALLOW))
+            }
+
+            override fun onAddressSelect(
+                session: GeckoSession,
+                prompt: GeckoSession.PromptDelegate.AutocompleteRequest<Autocomplete.AddressSelectOption>,
+            ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse> {
+                if (prompt.options.isEmpty()) return GeckoResult.fromValue(prompt.dismiss())
+                return GeckoResult<GeckoSession.PromptDelegate.PromptResponse>().also {
+                    pendingAddressSelectPrompt = prompt
+                    pendingAddressSelectResult = it
+                }
+            }
+
+            override fun onAddressSave(
+                session: GeckoSession,
+                prompt: GeckoSession.PromptDelegate.AutocompleteRequest<Autocomplete.AddressSaveOption>,
+            ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse> {
+                val address = prompt.options.firstOrNull()?.value
+                    ?: return GeckoResult.fromValue(prompt.dismiss())
+                return GeckoResult<GeckoSession.PromptDelegate.PromptResponse>().also {
+                    pendingAddressSaveAddress = address
+                    pendingAddressSavePrompt = prompt
+                    pendingAddressSaveResult = it
+                }
             }
         }
 }

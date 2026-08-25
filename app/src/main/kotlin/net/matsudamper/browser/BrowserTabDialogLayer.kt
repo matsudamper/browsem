@@ -57,6 +57,7 @@ import java.util.TimeZone
 import net.matsudamper.browser.data.ThemeMode
 import net.matsudamper.browser.data.download.DownloadRecordStatus
 import net.matsudamper.browser.ui.common.BrowserTheme
+import org.mozilla.geckoview.Autocomplete
 import org.mozilla.geckoview.GeckoSession
 
 @Composable
@@ -422,7 +423,115 @@ internal fun BrowserTabDialogLayer(
             },
         )
     }
+
+    dialogState.pendingAddressSelectPrompt?.let { prompt ->
+        AddressSelectDialog(
+            options = prompt.options.toList(),
+            onSelect = dialogState::confirmAddressSelect,
+            onDismiss = dialogState::dismissAddressSelect,
+        )
+    }
+
+    dialogState.pendingAddressSaveAddress?.let { address ->
+        AddressSaveDialog(
+            address = address,
+            onSave = dialogState::confirmAddressSave,
+            onDismiss = dialogState::dismissAddressSave,
+        )
+    }
 }
+
+@Composable
+private fun AddressSelectDialog(
+    options: List<Autocomplete.AddressSelectOption>,
+    onSelect: (Autocomplete.AddressSelectOption) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        modifier = Modifier.testTag(BrowserTabDialogLayerTestTags.AddressSelectDialog.testTag),
+        onDismissRequest = onDismiss,
+        title = { Text("住所を選択") },
+        text = {
+            LazyColumn {
+                items(options) { option ->
+                    val address = option.value
+                    ListItem(
+                        headlineContent = {
+                            Text(
+                                text = "${address.familyName} ${address.givenName}".trim()
+                                    .ifEmpty { address.organization },
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        },
+                        supportingContent = {
+                            Text(
+                                text = buildAddressDisplayText(address),
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        },
+                        modifier = Modifier.clickable { onSelect(option) },
+                        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                    )
+                    if (option !== options.last()) HorizontalDivider()
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text("キャンセル") } },
+    )
+}
+
+@Composable
+private fun AddressSaveDialog(
+    address: Autocomplete.Address,
+    onSave: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val name = "${address.familyName} ${address.givenName}".trim()
+    AlertDialog(
+        modifier = Modifier.testTag(BrowserTabDialogLayerTestTags.AddressSaveDialog.testTag),
+        onDismissRequest = onDismiss,
+        title = { Text("住所を保存しますか？") },
+        text = {
+            Column {
+                if (name.isNotEmpty()) {
+                    Text(name, style = MaterialTheme.typography.bodyLarge)
+                    Spacer(modifier = Modifier.height(4.dp))
+                }
+                Text(buildAddressDisplayText(address), style = MaterialTheme.typography.bodyMedium)
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = onSave,
+                modifier = Modifier.testTag(BrowserTabDialogLayerTestTags.AddressSaveConfirmButton.testTag),
+            ) { Text("保存") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("保存しない") } },
+    )
+}
+
+sealed interface BrowserTabDialogLayerTestTags {
+    val id: String
+    val testTag get() = "${BrowserTabDialogLayerTestTags::class.java.name}#$id"
+
+    data object AddressSelectDialog : BrowserTabDialogLayerTestTags { override val id = "address_select_dialog" }
+    data object AddressSaveDialog : BrowserTabDialogLayerTestTags { override val id = "address_save_dialog" }
+    data object AddressSaveConfirmButton : BrowserTabDialogLayerTestTags { override val id = "address_save_confirm_button" }
+}
+
+private fun buildAddressDisplayText(address: Autocomplete.Address): String = buildList {
+    if (address.postalCode.isNotEmpty()) add("〒${address.postalCode}")
+    if (address.addressLevel1.isNotEmpty()) add(address.addressLevel1)
+    if (address.addressLevel2.isNotEmpty()) add(address.addressLevel2)
+    if (address.addressLevel3.isNotEmpty()) add(address.addressLevel3)
+    if (address.streetAddress.isNotEmpty()) add(address.streetAddress)
+    if (address.tel.isNotEmpty()) add(address.tel)
+    if (address.email.isNotEmpty()) add(address.email)
+}.joinToString(" ")
 
 @Composable
 private fun AutoplayPermissionDialog(
@@ -1122,6 +1231,27 @@ private fun PreviewAutoplayPermissionDialog() {
             onAllow = {},
             onAllowOnce = {},
             onDeny = {},
+            onDismiss = {},
+        )
+    }
+}
+
+@Preview(name = "AddressSaveDialog")
+@Composable
+private fun PreviewAddressSaveDialog() {
+    BrowserTheme(themeMode = ThemeMode.THEME_SYSTEM) {
+        AddressSaveDialog(
+            address = Autocomplete.Address.Builder()
+                .familyName("山田")
+                .givenName("太郎")
+                .postalCode("100-0001")
+                .addressLevel1("東京都")
+                .addressLevel2("千代田区")
+                .streetAddress("千代田1-1")
+                .tel("090-1234-5678")
+                .email("taro@example.com")
+                .build(),
+            onSave = {},
             onDismiss = {},
         )
     }
