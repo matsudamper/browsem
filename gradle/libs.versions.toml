@@ -43,7 +43,7 @@ androidx-compose-ui = { module = "androidx.compose.ui:ui" }
 androidx-compose-ui-tooling-preview = { module = "androidx.compose.ui:ui-tooling-preview" }
 mozilla-geckoview = { module = "org.mozilla.geckoview:geckoview", version.ref = "geckoview" }
 androidsvg = { module = "com.caverock:androidsvg-aar", version.ref = "androidsvg" }
-mozilla-publicsuffixlist = { module = "org.mozilla.components:lib-publicsuffixlist", version = "154.0" }
+mozilla-publicsuffixlist = { module = "org.mozilla.components:lib-publicsuffixlist", version = "154.0.1" }
 androidx-compose-ui-tooling = { module = "androidx.compose.ui:ui-tooling" }
 androidx-compose-ui-test-manifest = { module = "androidx.compose.ui:ui-test-manifest" }
 junit4 = { module = "junit:junit", version.ref = "junit4" }
