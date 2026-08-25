@@ -252,6 +252,7 @@ class BrowserTabController(
             insertIndex = insertIndex,
         )
         tab.pendingInitialUrl = normalizedInitialUrl
+        tab.openedViaNewSession = true
         publishRuntimeState()
         persistenceCoordinator.persistCreatedTab(
             tab = tab,
