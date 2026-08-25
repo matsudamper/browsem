@@ -103,6 +103,7 @@ internal fun GeckoBrowserTab(
     onOpenTabs: () -> Unit,
     onOpenNewSessionRequest: (String) -> GeckoSession?,
     onOpenNewTabRequest: (url: String, referrerUrl: String?) -> Unit,
+    onSessionDetachedFromView: (BrowserTab) -> Unit,
     modifier: Modifier = Modifier,
     onRequestDownloadNotificationPermission: suspend () -> Unit = {},
     enableTabUi: Boolean = true,
@@ -120,7 +121,6 @@ internal fun GeckoBrowserTab(
     onHistoryTitleUpdate: (suspend (id: Long, title: String) -> Unit)? = null,
     urlBarSuggestions: UrlBarSuggestionsUiState = UrlBarSuggestionsUiState(),
     onUrlInputChanged: ((String) -> Unit)? = null,
-    onSessionDetachedFromView: (BrowserTab) -> Unit,
 ) {
     val context = LocalContext.current
     val findInPageWebExtension: FindInPageWebExtension = koinInject()
