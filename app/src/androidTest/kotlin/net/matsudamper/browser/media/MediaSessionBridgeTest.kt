@@ -1,5 +1,7 @@
 package net.matsudamper.browser.media
 
+import net.matsudamper.browser.feature.media.MediaPlaybackService
+import net.matsudamper.browser.feature.media.MediaSessionBridge
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
