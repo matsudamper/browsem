@@ -1,32 +1,9 @@
 plugins {
-    alias(libs.plugins.android.library)
-    alias(libs.plugins.kotlin.compose)
-    id("detekt-compose-convention")
+    id("browser-android-compose-library-convention")
 }
 
 android {
     namespace = "net.matsudamper.browser.ui.downloads"
-    compileSdk = 37
-    compileSdkMinor = 1
-
-    defaultConfig {
-        minSdk = 30
-    }
-
-    compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_21
-        targetCompatibility = JavaVersion.VERSION_21
-    }
-
-    buildFeatures {
-        compose = true
-    }
-}
-
-kotlin {
-    compilerOptions {
-        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_21
-    }
 }
 
 dependencies {
