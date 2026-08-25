@@ -72,7 +72,7 @@ class WebAppActivity : ComponentActivity() {
             })
             val browserTabController = browserViewModel.browserTabController
             val browserSessionLifecycleController = browserViewModel.browserSessionLifecycleController
-            val popupController = rememberWindowOpenPopupController(browserTabController)
+            val popupController = browserViewModel.popupController
             val retainOpenersAfterDetach: (BrowserTab) -> Unit = {
                 WindowOpenSessionPolicy.postAfterFrame {
                     browserSessionLifecycleController.retainOpenersOfLivePopups(
