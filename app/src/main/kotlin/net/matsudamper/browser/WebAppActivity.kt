@@ -171,6 +171,7 @@ class WebAppActivity : ComponentActivity() {
                                     showInstallExtensionItem = false,
                                     customTabMode = true,
                                     onCloseCustomTab = popupController::dismissTop,
+                                    onCloseTab = popupController::dismissTop,
                                     onOpenInBrowser = ::openInMainBrowser,
                                     onOpenNewSessionRequest = { uri ->
                                         popupController.open(uri, popupTab.tabId)
