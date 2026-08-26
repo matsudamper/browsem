@@ -66,8 +66,11 @@ class AutocompleteStorageDelegate(
 }
 
 internal fun AddressEntity.toGeckoAddress(): Autocomplete.Address {
+    // GeckoViewAutocomplete.Address.isValid() は name ?? givenName で判定する。
+    // name が空文字だと givenName があっても候補から除外され、選択ダイアログが出ない。
     return Autocomplete.Address.Builder()
         .guid(id.toString())
+        .name(toGeckoFullName())
         .givenName(givenName)
         .additionalName(additionalName)
         .familyName(familyName)
@@ -81,6 +84,12 @@ internal fun AddressEntity.toGeckoAddress(): Autocomplete.Address {
         .tel(tel)
         .email(email)
         .build()
+}
+
+internal fun AddressEntity.toGeckoFullName(): String {
+    return listOf(givenName, additionalName, familyName)
+        .filter { it.isNotEmpty() }
+        .joinToString(" ")
 }
 
 internal fun Autocomplete.Address.toEntity(): AddressEntity {
