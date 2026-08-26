@@ -153,14 +153,35 @@ class AddressAutofillPromptTest {
 
         try {
             val pageUri = "http://127.0.0.1:${parentServer.port}/iframe-parent.html"
-            selfCheckHttp(pageUri)
-            selfCheckHttp("http://127.0.0.1:${contentServer.port}/$MDN_AUTOCOMPLETE_SAMPLE_FILE_NAME")
+            val contentUri = "http://127.0.0.1:${contentServer.port}/$MDN_AUTOCOMPLETE_SAMPLE_FILE_NAME"
+            val parentCheck = selfCheckHttp(pageUri)
+            val contentCheck = selfCheckHttp(contentUri)
+            if (!parentCheck.startsWith("HTTP") || !contentCheck.startsWith("HTTP")) {
+                fail("sandbox iframe 用サーバに接続できない parent=$parentCheck content=$contentCheck")
+            }
+            val contentRequestsBeforeLoad = contentServer.requests.size
 
             applyTestPrefsAndAwaitAddressAutofillEnabled()
             saveAndSetPref("geckoview.autocomplete.selection_dismiss_delay_ms", 60_000)
+            clearLogcat()
 
             composeRule.openUrlFromUrlBar(pageUri)
             composeRule.waitForUrlBarContains("iframe-parent.html", timeoutMillis = 60_000)
+            composeRule.waitForUrlBarNotFocused(timeoutMillis = 30_000)
+            try {
+                composeRule.waitUntil(timeoutMillis = 30_000) {
+                    contentServer.requests.size > contentRequestsBeforeLoad
+                }
+            } catch (e: ComposeTimeoutException) {
+                throw AssertionError(
+                    "sandbox iframe の子ページが読み込まれない\n" +
+                        "現在URL=${composeRule.currentPageUrlFromUi()}\n" +
+                        "parentCheck=$parentCheck contentCheck=$contentCheck\n" +
+                        "親サーバ=${parentServer.requests} 子サーバ=${contentServer.requests}",
+                    e,
+                )
+            }
+            clickMdnFamilyNameField()
 
             try {
                 composeRule.waitUntil(timeoutMillis = 60_000) {
