@@ -75,6 +75,15 @@ internal fun AndroidComposeTestRule<*, MainActivity>.waitForTabsScreenLoaded(
     }
 }
 
+internal fun AndroidComposeTestRule<*, MainActivity>.waitForTabsScreenClosed(
+    timeoutMillis: Long = 20_000,
+) {
+    waitUntil(timeoutMillis = timeoutMillis) {
+        onAllNodesWithTag(TabsScreenTestTags.AddTabButton.testTag)
+            .fetchSemanticsNodes().isEmpty()
+    }
+}
+
 internal fun AndroidComposeTestRule<*, MainActivity>.waitForUrlBarNotFocused(
     timeoutMillis: Long = 20_000,
 ) {

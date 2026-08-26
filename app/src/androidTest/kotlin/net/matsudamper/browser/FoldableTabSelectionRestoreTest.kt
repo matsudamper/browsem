@@ -61,11 +61,14 @@ class FoldableTabSelectionRestoreTest {
         }
         composeRule.onNode(hasTestTag(TabsScreenTestTags.TabItem(0).testTag)).performClick()
         composeRule.waitForIdle()
+        composeRule.waitForTabsScreenClosed(timeoutMillis = 10.seconds.inWholeMilliseconds)
         waitForBrowserScreen()
-        composeRule.waitForUrlBarContains(FIRST_PAGE_FILE, timeoutMillis = 30_000)
+        composeRule.waitForUrlBarNotFocused()
+        composeRule.waitForUrlBarContains(FIRST_PAGE_FILE, timeoutMillis = 60_000)
 
         composeRule.activityRule.scenario.recreate()
         waitForBrowserScreen()
+        composeRule.waitForUrlBarNotFocused()
         composeRule.waitForUrlBarContains(FIRST_PAGE_FILE, timeoutMillis = 60_000)
     }
 
