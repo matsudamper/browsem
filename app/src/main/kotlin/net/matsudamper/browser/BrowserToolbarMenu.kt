@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -30,6 +31,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -709,11 +711,69 @@ private fun PreviewToolbarMenuContentWebApp() {
 @Composable
 private fun PreviewToolbarMenuContentConstrainedHeight() {
     BrowserTheme(themeMode = ThemeMode.THEME_SYSTEM) {
+        val scrollState = rememberScrollState()
         // キーボード表示時と同様に縦方向の表示領域が狭い状態を再現する
         Surface(
             modifier = Modifier
                 .width(280.dp)
-                .heightIn(max = 320.dp),
+                .heightIn(max = 320.dp)
+                .verticalScroll(scrollState),
+        ) {
+            ToolbarMenuContent(
+                onDismissRequest = {},
+                onRefresh = {},
+                onSuperRefresh = {},
+                onHome = {},
+                onForward = {},
+                canGoForward = true,
+                onBack = {},
+                canGoBack = true,
+                onLongPressHistory = {},
+                isPcMode = false,
+                onPcModeToggle = {},
+                showInstallExtensionItem = true,
+                onInstallExtension = {},
+                onTranslatePage = {},
+                onShare = {},
+                onFindInPage = {},
+                onOpenSettings = {},
+                onAddToHomeScreen = {},
+                pageZoomPercent = 100,
+                onPageZoomIn = {},
+                onPageZoomOut = {},
+                onResetPageZoom = {},
+                extensionActions = emptyList(),
+                extensionActionScrollState = null,
+                onExtensionActionClick = {},
+                onExtensionActionMove = { _, _ -> },
+                onExtensionActionMoveEnd = {},
+                onExtensionActionMoveCancel = {},
+                showOpenSettings = true,
+                showAddToHomeScreen = true,
+                showHome = true,
+                onOpenInBrowser = null,
+                onOpenSiteSettings = {},
+                onOpenDownloads = {},
+                onOpenDevTools = {},
+            )
+        }
+    }
+}
+
+@Preview(name = "ToolbarMenuConstrainedHeightScrolled")
+@Preview(name = "ToolbarMenuConstrainedHeightScrolledDark", uiMode = Configuration.UI_MODE_NIGHT_YES)
+@Composable
+private fun PreviewToolbarMenuContentConstrainedHeightScrolled() {
+    BrowserTheme(themeMode = ThemeMode.THEME_SYSTEM) {
+        val scrollState = rememberScrollState()
+        LaunchedEffect(Unit) {
+            scrollState.scrollTo(scrollState.maxValue)
+        }
+        Surface(
+            modifier = Modifier
+                .width(280.dp)
+                .heightIn(max = 320.dp)
+                .verticalScroll(scrollState),
         ) {
             ToolbarMenuContent(
                 onDismissRequest = {},
