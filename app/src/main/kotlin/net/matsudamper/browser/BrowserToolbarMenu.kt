@@ -7,10 +7,12 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
@@ -52,6 +54,7 @@ private val ToolbarMenuVerticalMargin = 48.dp
  * キーボード表示中にツールバーメニューが IME に隠れないよう、
  * ウィンドウ高さから IME 分を引いた値をメニューの高さ上限とする。
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun rememberToolbarMenuMaxHeight(): Dp {
     val density = LocalDensity.current
