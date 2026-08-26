@@ -919,6 +919,16 @@ class AddressAutofillPromptTest {
                   // capture が動かないため、検出起動・入力・送信を時間差で分ける。
                   window.addEventListener('load', () => {
                     log('load');
+                    let submitAttempted = false;
+                    let resultLoaded = false;
+                    document.getElementById('result-frame').addEventListener('load', () => {
+                      if (!submitAttempted) {
+                        log('result-frame-ignored before-submit');
+                        return;
+                      }
+                      resultLoaded = true;
+                      log('result-frame-loaded');
+                    });
                     setTimeout(() => {
                       log('focus');
                       document.getElementById('given-name').focus();
@@ -938,6 +948,7 @@ class AddressAutofillPromptTest {
                     }, 5000);
                     setTimeout(() => {
                       log('submit href=' + location.href);
+                      submitAttempted = true;
                       const form = document.getElementById('address-form');
                       if (form.requestSubmit) {
                         form.requestSubmit();
@@ -947,7 +958,10 @@ class AddressAutofillPromptTest {
                       log('submit-called');
                     }, 8000);
                     setTimeout(() => {
-                      // 8 秒時点の送信で遷移しなかった場合のフォールバック
+                      if (resultLoaded) {
+                        log('fallback-submit skipped already-loaded');
+                        return;
+                      }
                       log('fallback-submit still-here href=' + location.href);
                       document.getElementById('address-form').submit();
                     }, 12000);
