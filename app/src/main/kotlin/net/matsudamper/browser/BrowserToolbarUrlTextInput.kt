@@ -107,8 +107,14 @@ internal fun UrlTextInput(
                         if (!resolvedScrollEnabled) return@LaunchedEffect
                         val layout = textLayoutResult ?: return@LaunchedEffect
                         if (textFieldValue.text.isEmpty()) return@LaunchedEffect
-                        val offset = textFieldValue.selection.end
-                            .coerceIn(0, textFieldValue.text.length)
+                        // 音声入力ではテキストと選択範囲が連続して更新され、直前の短いテキスト用の
+                        // TextLayoutResult が一時的に残ることがある。getCursorRect はレイアウト対象を
+                        // 超える offset を受け付けないため、現在値だけでなくレイアウト済み文字数でも制限する。
+                        val offset = cursorOffsetForLayout(
+                            selectionEnd = textFieldValue.selection.end,
+                            textLength = textFieldValue.text.length,
+                            layoutTextLength = layout.layoutInput.text.length,
+                        )
                         val cursorRect = layout.getCursorRect(offset)
                         // viewportWidth = コンテンツ幅 - 最大スクロール量
                         val viewportWidth = layout.size.width - scrollState.maxValue
@@ -181,6 +187,12 @@ internal fun UrlTextInput(
         },
     )
 }
+
+internal fun cursorOffsetForLayout(
+    selectionEnd: Int,
+    textLength: Int,
+    layoutTextLength: Int,
+): Int = selectionEnd.coerceIn(0, minOf(textLength, layoutTextLength))
 
 /**
  * 非フォーカス時の URL バー表示。
