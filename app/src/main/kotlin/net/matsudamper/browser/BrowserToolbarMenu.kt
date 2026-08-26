@@ -8,11 +8,13 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -29,16 +31,38 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import net.matsudamper.browser.data.ThemeMode
 import net.matsudamper.browser.ui.common.BrowserTheme
 import net.matsudamper.browser.resources.R as ResourcesR
+
+/** DropdownMenu の上下マージン。Material3 の MenuVerticalMargin と同値 */
+private val ToolbarMenuVerticalMargin = 48.dp
+
+/**
+ * キーボード表示中にツールバーメニューが IME に隠れないよう、
+ * ウィンドウ高さから IME 分を引いた値をメニューの高さ上限とする。
+ */
+@Composable
+private fun rememberToolbarMenuMaxHeight(): Dp {
+    val density = LocalDensity.current
+    val windowHeightPx = LocalWindowInfo.current.containerSize.height
+    val imeBottomPx = WindowInsets.ime.getBottom(density)
+    return with(density) {
+        val marginPx = ToolbarMenuVerticalMargin.roundToPx()
+        val availablePx = (windowHeightPx - imeBottomPx - marginPx).coerceAtLeast(0)
+        availablePx.toDp()
+    }
+}
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -80,9 +104,13 @@ internal fun ToolbarMenu(
     onOpenDownloads: (() -> Unit)? = null,
     onOpenDevTools: (() -> Unit)? = null,
 ) {
+    val menuScrollState = rememberScrollState()
+    val menuMaxHeight = rememberToolbarMenuMaxHeight()
     DropdownMenu(
         expanded = visibleMenu,
-        onDismissRequest = { onDismissRequest() }
+        onDismissRequest = { onDismissRequest() },
+        modifier = Modifier.heightIn(max = menuMaxHeight),
+        scrollState = menuScrollState,
     ) {
         ToolbarMenuContent(
             onDismissRequest = onDismissRequest,
@@ -668,6 +696,58 @@ private fun PreviewToolbarMenuContentWebApp() {
                 onOpenSiteSettings = {},
                 onOpenDownloads = null,
                 onOpenDevTools = null,
+            )
+        }
+    }
+}
+
+@Preview(name = "ToolbarMenuConstrainedHeight")
+@Preview(name = "ToolbarMenuConstrainedHeightDark", uiMode = Configuration.UI_MODE_NIGHT_YES)
+@Composable
+private fun PreviewToolbarMenuContentConstrainedHeight() {
+    BrowserTheme(themeMode = ThemeMode.THEME_SYSTEM) {
+        // キーボード表示時と同様に縦方向の表示領域が狭い状態を再現する
+        Surface(
+            modifier = Modifier
+                .width(280.dp)
+                .heightIn(max = 320.dp),
+        ) {
+            ToolbarMenuContent(
+                onDismissRequest = {},
+                onRefresh = {},
+                onSuperRefresh = {},
+                onHome = {},
+                onForward = {},
+                canGoForward = true,
+                onBack = {},
+                canGoBack = true,
+                onLongPressHistory = {},
+                isPcMode = false,
+                onPcModeToggle = {},
+                showInstallExtensionItem = true,
+                onInstallExtension = {},
+                onTranslatePage = {},
+                onShare = {},
+                onFindInPage = {},
+                onOpenSettings = {},
+                onAddToHomeScreen = {},
+                pageZoomPercent = 100,
+                onPageZoomIn = {},
+                onPageZoomOut = {},
+                onResetPageZoom = {},
+                extensionActions = emptyList(),
+                extensionActionScrollState = null,
+                onExtensionActionClick = {},
+                onExtensionActionMove = { _, _ -> },
+                onExtensionActionMoveEnd = {},
+                onExtensionActionMoveCancel = {},
+                showOpenSettings = true,
+                showAddToHomeScreen = true,
+                showHome = true,
+                onOpenInBrowser = null,
+                onOpenSiteSettings = {},
+                onOpenDownloads = {},
+                onOpenDevTools = {},
             )
         }
     }
