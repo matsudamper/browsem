@@ -35,6 +35,11 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.painterResource
@@ -51,6 +56,37 @@ import net.matsudamper.browser.resources.R as ResourcesR
 
 /** DropdownMenu の上下マージン。Material3 の MenuVerticalMargin と同値 */
 private val ToolbarMenuVerticalMargin = 48.dp
+
+private val ToolbarMenuScrollbarWidth = 3.dp
+private val ToolbarMenuScrollbarColor = Color(0xFFBDBDBD)
+private val ToolbarMenuScrollbarMinThumbHeight = 24.dp
+
+/**
+ * スクロール可能なときだけ右端に薄いグレーのスクロールバーを常時表示する。
+ * verticalScroll より前にチェーンすること。
+ */
+private fun Modifier.toolbarMenuScrollbar(scrollState: ScrollState): Modifier = drawWithContent {
+    drawContent()
+    val indicator = scrollState.scrollIndicatorState ?: return@drawWithContent
+    val contentSize = indicator.contentSize
+    val viewportSize = indicator.viewportSize
+    if (contentSize <= viewportSize || viewportSize <= 0) {
+        return@drawWithContent
+    }
+    val scrollbarWidthPx = ToolbarMenuScrollbarWidth.toPx()
+    val minThumbHeightPx = ToolbarMenuScrollbarMinThumbHeight.toPx()
+    val thumbHeight = (viewportSize.toFloat() / contentSize * viewportSize)
+        .coerceIn(minThumbHeightPx, viewportSize.toFloat())
+    val maxScroll = (contentSize - viewportSize).coerceAtLeast(1)
+    val trackHeight = viewportSize - thumbHeight
+    val thumbOffset = indicator.scrollOffset.toFloat() / maxScroll * trackHeight
+    drawRoundRect(
+        color = ToolbarMenuScrollbarColor,
+        topLeft = Offset(x = size.width - scrollbarWidthPx, y = thumbOffset),
+        size = Size(width = scrollbarWidthPx, height = thumbHeight),
+        cornerRadius = CornerRadius(scrollbarWidthPx / 2f),
+    )
+}
 
 /**
  * キーボード表示中にツールバーメニューが IME に隠れないよう、
@@ -114,7 +150,9 @@ internal fun ToolbarMenu(
     DropdownMenu(
         expanded = visibleMenu,
         onDismissRequest = { onDismissRequest() },
-        modifier = Modifier.heightIn(max = menuMaxHeight),
+        modifier = Modifier
+            .heightIn(max = menuMaxHeight)
+            .toolbarMenuScrollbar(menuScrollState),
         scrollState = menuScrollState,
     ) {
         ToolbarMenuContent(
@@ -717,6 +755,7 @@ private fun PreviewToolbarMenuContentConstrainedHeight() {
             modifier = Modifier
                 .width(280.dp)
                 .heightIn(max = 320.dp)
+                .toolbarMenuScrollbar(scrollState)
                 .verticalScroll(scrollState),
         ) {
             ToolbarMenuContent(
@@ -773,6 +812,7 @@ private fun PreviewToolbarMenuContentConstrainedHeightScrolled() {
             modifier = Modifier
                 .width(280.dp)
                 .heightIn(max = 320.dp)
+                .toolbarMenuScrollbar(scrollState)
                 .verticalScroll(scrollState),
         ) {
             ToolbarMenuContent(
