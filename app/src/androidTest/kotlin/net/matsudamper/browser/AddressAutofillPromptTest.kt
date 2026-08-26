@@ -136,6 +136,54 @@ class AddressAutofillPromptTest {
     }
 
     @Test
+    fun focusingMdnMarkupInSandboxedIframeShowsAddressSelectDialog() {
+        seedUserReportedAddressWithoutCountry()
+
+        val contentServer = LocalHttpServer(
+            pages = mapOf(
+                "/$MDN_AUTOCOMPLETE_SAMPLE_FILE_NAME" to buildMdnAutocompleteSampleHtml(),
+            ),
+        )
+        val parentServer = LocalHttpServer(
+            pages = mapOf(
+                "/iframe-parent.html" to buildSandboxedIframeParentHtml(contentServer.port),
+            ),
+        )
+        httpServer = parentServer
+
+        try {
+            val pageUri = "http://127.0.0.1:${parentServer.port}/iframe-parent.html"
+            selfCheckHttp(pageUri)
+            selfCheckHttp("http://127.0.0.1:${contentServer.port}/$MDN_AUTOCOMPLETE_SAMPLE_FILE_NAME")
+
+            applyTestPrefsAndAwaitAddressAutofillEnabled()
+            saveAndSetPref("geckoview.autocomplete.selection_dismiss_delay_ms", 60_000)
+
+            composeRule.openUrlFromUrlBar(pageUri)
+            composeRule.waitForUrlBarContains("iframe-parent.html", timeoutMillis = 60_000)
+
+            try {
+                composeRule.waitUntil(timeoutMillis = 60_000) {
+                    composeRule
+                        .onAllNodesWithTag(BrowserTabDialogLayerTestTags.AddressSelectDialog.testTag)
+                        .fetchSemanticsNodes()
+                        .isNotEmpty()
+                }
+            } catch (e: ComposeTimeoutException) {
+                throw AssertionError(
+                    "sandbox iframe 内の MDN マークアップで住所選択ダイアログが表示されない\n" +
+                        "現在URL=${composeRule.currentPageUrlFromUi()}\n" +
+                        "親サーバ=${parentServer.requests} 子サーバ=${contentServer.requests}\n" +
+                        "--- logcat (formautofill関連) ---\n${collectFormAutofillLogcat()}",
+                    e,
+                )
+            }
+        } finally {
+            contentServer.close()
+        }
+    }
+
+    @Test
     fun focusingMozillaAddressFormShowsAddressSelectDialog() {
         seedMozillaSampleAddress()
 
@@ -455,6 +503,27 @@ class AddressAutofillPromptTest {
         """.trimIndent()
     }
 
+    private fun buildSandboxedIframeParentHtml(contentPort: Int): String {
+        val iframeSrc = "http://127.0.0.1:$contentPort/$MDN_AUTOCOMPLETE_SAMPLE_FILE_NAME"
+        return """
+            <!doctype html>
+            <html lang="ja">
+              <head>
+                <meta charset="utf-8" />
+                <title>MDN sample iframe</title>
+              </head>
+              <body>
+                <p>parent</p>
+                <iframe
+                  sandbox="allow-scripts allow-same-origin allow-forms"
+                  src="$iframeSrc"
+                  style="width:100%;height:400px;border:1px solid #000"
+                ></iframe>
+              </body>
+            </html>
+        """.trimIndent()
+    }
+
     /**
      * MDN ライブサンプルの苗字欄をクリックする。
      *
@@ -477,7 +546,7 @@ class AddressAutofillPromptTest {
                 }
                 val dump = StringBuilder()
                 val target = findMdnFamilyNameField(root, dump)
-                    ?: findFirstEmptyContentEditText(root)
+                    ?: if (clickedOutputTab) findFirstEmptyContentEditText(root) else null
                 lastDump = dump.toString()
                 if (target != null) {
                     val viewId = target.viewIdResourceName.orEmpty()
@@ -485,9 +554,12 @@ class AddressAutofillPromptTest {
                     val text = target.text?.toString().orEmpty()
                     val clicked = target.performAction(AccessibilityNodeInfo.ACTION_CLICK) ||
                         target.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
+                    val summary =
+                        "clicked=$clicked cls=${target.className} viewId=$viewId desc=$desc " +
+                            "text=${text.take(80)} edit=${target.isEditable} outputTab=$clickedOutputTab"
                     target.recycle()
                     root.recycle()
-                    return "clicked=$clicked viewId=$viewId desc=$desc text=${text.take(80)} outputTab=$clickedOutputTab"
+                    return summary
                 }
                 scrollAccessibilityNode(root)
                 root.recycle()
@@ -518,13 +590,22 @@ class AddressAutofillPromptTest {
         val text = node.text?.toString().orEmpty()
         val cls = node.className?.toString().orEmpty()
         if (dump.lines().size < ACCESSIBILITY_DUMP_MAX_LINES) {
-            dump.append("  ".repeat(depth.coerceAtMost(16)))
-                .append(cls.substringAfterLast('.'))
-                .append(" id=").append(viewId)
-                .append(" text=").append(text.take(40))
-                .append(" desc=").append(desc.take(40))
-                .append(" edit=").append(node.isEditable)
-                .append('\n')
+            val interesting = node.isEditable ||
+                cls.contains("EditText", ignoreCase = true) ||
+                viewId.contains("lastName", ignoreCase = true) ||
+                text.contains("苗字") ||
+                desc.contains("苗字") ||
+                text in OUTPUT_TAB_LABELS ||
+                desc in OUTPUT_TAB_LABELS
+            if (interesting) {
+                dump.append("  ".repeat(depth.coerceAtMost(16)))
+                    .append(cls.substringAfterLast('.'))
+                    .append(" id=").append(viewId)
+                    .append(" text=").append(text.take(40))
+                    .append(" desc=").append(desc.take(40))
+                    .append(" edit=").append(node.isEditable)
+                    .append('\n')
+            }
         }
         if (isMdnLiveFamilyNameField(node)) {
             return AccessibilityNodeInfo.obtain(node)
@@ -543,13 +624,13 @@ class AddressAutofillPromptTest {
         val desc = node.contentDescription?.toString().orEmpty()
         val text = node.text?.toString().orEmpty()
         val cls = node.className?.toString().orEmpty()
-        val isEdit = node.isEditable || cls.contains("EditText", ignoreCase = true)
+        // CodeMirror の行は isEditable な View なので、HTML の input に相当する EditText だけを対象にする
+        if (!cls.contains("EditText", ignoreCase = true)) return false
         if (isSourceEditorText(text) || isSourceEditorText(desc)) return false
-        if (viewId.endsWith("lastName", ignoreCase = true)) return true
-        if (!isEdit) return false
-        return desc.contains("苗字") ||
+        return viewId.endsWith("lastName", ignoreCase = true) ||
+            desc.contains("苗字") ||
             desc.contains("family-name", ignoreCase = true) ||
-            (text.isEmpty() && viewId.contains("lastName", ignoreCase = true))
+            text.isBlank()
     }
 
     private fun isSourceEditorText(value: String): Boolean {
@@ -975,6 +1056,6 @@ class AddressAutofillPromptTest {
         private const val LOGCAT_TAIL_LINES = 250
         private const val MDN_FIELD_WAIT_MILLIS = 60_000L
         private const val ACCESSIBILITY_DUMP_MAX_LINES = 500
-        private val OUTPUT_TAB_LABELS = setOf("出力", "Output")
+        private val OUTPUT_TAB_LABELS = setOf("出力", "Output", "結果", "Play")
     }
 }
