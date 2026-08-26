@@ -3,8 +3,9 @@ package net.matsudamper.browser.di
 import android.util.Log
 import androidx.annotation.OptIn
 import mozilla.components.lib.publicsuffixlist.PublicSuffixList
-import net.matsudamper.browser.BrowserViewModel
+import net.matsudamper.browser.AddressAutofillCoordinator
 import net.matsudamper.browser.AutocompleteStorageDelegate
+import net.matsudamper.browser.BrowserViewModel
 import net.matsudamper.browser.allowUnsignedExtensions
 import net.matsudamper.browser.feature.devtools.DevToolsWebExtension
 import net.matsudamper.browser.DownloadWorker
@@ -58,6 +59,7 @@ val dataModule = module {
 }
 
 val appModule = module {
+    single { AddressAutofillCoordinator() }
     single<GeckoRuntime> {
         // Gecko 起動前の pref 設定はキューされる。メインスレッドをブロックして待機すると
         // initializeGeckoRuntime() とデッドロックするため非同期で投入する。
@@ -73,9 +75,11 @@ val appModule = module {
                 .extensionsProcessEnabled(extensionsProcessEnabled)
                 .build()
         ).also {
+            val addressAutofillCoordinator = get<AddressAutofillCoordinator>()
             it.autocompleteStorageDelegate = AutocompleteStorageDelegate(
                 addressRepository = get(),
                 coroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main),
+                onAddressFetched = addressAutofillCoordinator::onAddressFetch,
             )
             // 署名要求は GeckoRuntimeSettings では設定できず pref でしか制御できない。
             // 起動時の検証にも使われる値のため runtime 生成のたびに反映する。

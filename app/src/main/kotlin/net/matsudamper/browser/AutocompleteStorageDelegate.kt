@@ -13,6 +13,7 @@ import java.util.Locale
 class AutocompleteStorageDelegate(
     private val addressRepository: AddressRepository,
     private val coroutineScope: CoroutineScope,
+    private val onAddressFetched: (Int) -> Unit = {},
 ) : Autocomplete.StorageDelegate {
 
     override fun onAddressFetch(): GeckoResult<Array<Autocomplete.Address>> {
@@ -30,6 +31,7 @@ class AutocompleteStorageDelegate(
                         },
                 )
                 result.complete(addresses)
+                onAddressFetched(addresses.size)
             } catch (e: Exception) {
                 Log.w(TAG, "住所の取得に失敗", e)
                 result.complete(emptyArray())

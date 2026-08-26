@@ -345,9 +345,13 @@ internal class PromptDialogState(
         options: List<Autocomplete.AddressSelectOption>,
         onFill: (Autocomplete.Address) -> Unit,
     ) {
-        if (pendingAddressSelectPrompt != null || options.isEmpty()) return
+        if (hasVisibleAddressSelect() || options.isEmpty()) return
         pendingAutofillAddressOptions = options
         pendingAutofillFill = onFill
+    }
+
+    internal fun hasVisibleAddressSelect(): Boolean {
+        return pendingAddressSelectPrompt != null || pendingAutofillAddressOptions != null
     }
 
     private fun clearAutofillAddressSelect() {

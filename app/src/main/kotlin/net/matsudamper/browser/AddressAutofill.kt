@@ -16,15 +16,69 @@ import org.mozilla.geckoview.GeckoSession
 /**
  * Gecko FormAutofill はトップ文書から iframe を辿るため、shadow DOM 内の
  * cross-origin iframe（MDN の interactive-example など）では選択プロンプトを出せない。
- * GeckoView Autofill のフォーカス通知は iframe 内ノードにも届くので、
- * 住所欄フォーカス時に同じ AddressSelectDialog を出す。
+ *
+ * フォールバックは次の2経路:
+ * 1. `AutocompleteStorageDelegate.onAddressFetch`（フォーカス時のフィールド検出で確実に来る）
+ * 2. GeckoView Autofill の `onNodeFocus`（実タップでは来るが、a11y クリックでは来ないことがある）
+ *
+ * いずれも Gecko の `onAddressSelect` を優先し、来なければ同じ AddressSelectDialog を出す。
  */
+internal class AddressAutofillCoordinator {
+    private val lock = Any()
+    private var attached: Attached? = null
+    private var showJob: Job? = null
+
+    private class Attached(
+        val session: GeckoSession,
+        val promptDialogState: PromptDialogState,
+        val addressRepository: AddressRepository,
+    )
+
+    fun attach(
+        session: GeckoSession,
+        promptDialogState: PromptDialogState,
+        addressRepository: AddressRepository,
+    ) {
+        synchronized(lock) {
+            attached = Attached(session, promptDialogState, addressRepository)
+        }
+    }
+
+    fun detach(session: GeckoSession) {
+        synchronized(lock) {
+            if (attached?.session !== session) return
+            showJob?.cancel()
+            showJob = null
+            attached = null
+        }
+    }
+
+    fun onAddressFetch(count: Int) {
+        if (count <= 0) return
+        val current = synchronized(lock) { attached } ?: run {
+            Log.i(TAG, "onAddressFetch fallback skipped: tab not attached count=$count")
+            return
+        }
+        Log.i(TAG, "onAddressFetch fallback scheduled count=$count")
+        synchronized(lock) {
+            showJob?.cancel()
+            showJob = current.promptDialogState.coroutineScope.launch {
+                scheduleAddressSelectFallback(
+                    session = current.session,
+                    addressRepository = current.addressRepository,
+                    promptDialogState = current.promptDialogState,
+                )
+            }
+        }
+    }
+}
+
 internal class AddressAutofillDelegate(
     private val session: GeckoSession,
     private val addressRepository: AddressRepository,
     private val promptDialogState: PromptDialogState,
     private val coroutineScope: CoroutineScope,
-    private val wrapped: Autofill.Delegate?,
+    internal val wrapped: Autofill.Delegate?,
 ) : Autofill.Delegate {
 
     private var showJob: Job? = null
@@ -84,15 +138,10 @@ internal class AddressAutofillDelegate(
         if (!isAddressAutofillField(attributes)) return
         showJob?.cancel()
         showJob = coroutineScope.launch {
-            // Gecko の onAddressSelect が来るページではそちらを優先する
-            delay(GECKO_PROMPT_WAIT_MS)
-            if (promptDialogState.pendingAddressSelectPrompt != null) return@launch
-            val addresses = withContext(Dispatchers.IO) { addressRepository.getAll() }
-            if (addresses.isEmpty()) return@launch
-            if (promptDialogState.pendingAddressSelectPrompt != null) return@launch
-            promptDialogState.showAutofillAddressSelect(
-                options = addresses.map { Autocomplete.AddressSelectOption(it.toGeckoAddress()) },
-                onFill = { address -> fillAddress(address) },
+            scheduleAddressSelectFallback(
+                session = session,
+                addressRepository = addressRepository,
+                promptDialogState = promptDialogState,
             )
         }
     }
@@ -105,31 +154,47 @@ internal class AddressAutofillDelegate(
         wrapped?.onNodeBlur(session, node, data)
         // AlertDialog がフォーカスを奪うので blur ではダイアログを閉じない
     }
+}
 
-    private fun fillAddress(address: Autocomplete.Address) {
-        val autofillSession = session.autofillSession
-        val root = autofillSession.root
-        val values = SparseArray<CharSequence>()
-        fun walk(node: Autofill.Node) {
-            val nodeData = autofillSession.dataFor(node)
-            val value = resolveAddressAutofillValue(node.attributes, address)
-            if (value != null && value.isNotEmpty()) {
-                values.put(nodeData.id, value)
-            }
-            node.children.forEach { walk(it) }
+private suspend fun scheduleAddressSelectFallback(
+    session: GeckoSession,
+    addressRepository: AddressRepository,
+    promptDialogState: PromptDialogState,
+) {
+    // Gecko の onAddressSelect が来るページではそちらを優先する
+    delay(GECKO_PROMPT_WAIT_MS)
+    if (promptDialogState.hasVisibleAddressSelect()) return
+    val addresses = withContext(Dispatchers.IO) { addressRepository.getAll() }
+    if (addresses.isEmpty()) return
+    if (promptDialogState.hasVisibleAddressSelect()) return
+    Log.i(TAG, "show fallback AddressSelectDialog count=${addresses.size}")
+    promptDialogState.showAutofillAddressSelect(
+        options = addresses.map { Autocomplete.AddressSelectOption(it.toGeckoAddress()) },
+        onFill = { address -> fillAddressOnSession(session, address) },
+    )
+}
+
+internal fun fillAddressOnSession(session: GeckoSession, address: Autocomplete.Address) {
+    val autofillSession = session.autofillSession
+    val root = autofillSession.root
+    val values = SparseArray<CharSequence>()
+    fun walk(node: Autofill.Node) {
+        val nodeData = autofillSession.dataFor(node)
+        val value = resolveAddressAutofillValue(node.attributes, address)
+        if (value != null && value.isNotEmpty()) {
+            values.put(nodeData.id, value)
         }
-        walk(root)
-        Log.i(TAG, "autofill values=${values.size()}")
-        if (values.size() > 0) {
-            autofillSession.autofill(values)
-        }
+        node.children.forEach { walk(it) }
     }
-
-    companion object {
-        private const val TAG = "AddressAutofill"
-        private const val GECKO_PROMPT_WAIT_MS = 400L
+    walk(root)
+    Log.i(TAG, "autofill values=${values.size()}")
+    if (values.size() > 0) {
+        autofillSession.autofill(values)
     }
 }
+
+private const val TAG = "AddressAutofill"
+private const val GECKO_PROMPT_WAIT_MS = 400L
 
 internal fun isAddressAutofillField(attributes: Map<String, String>): Boolean {
     val autocompleteTokens = attributes["autocomplete"]
