@@ -60,6 +60,7 @@ import androidx.compose.ui.window.DialogProperties
 import kotlinx.coroutines.flow.distinctUntilChanged
 import net.matsudamper.browser.data.ThemeMode
 import net.matsudamper.browser.ui.common.BrowserTheme
+import net.matsudamper.browser.ui.common.ThemeSurfaceStatusBarAppearanceEffect
 import net.matsudamper.browser.resources.R as ResourcesR
 
 /**
@@ -80,6 +81,7 @@ internal fun NetworkLogDialog(uiState: NetworkLogUiState) {
         properties = DialogProperties(usePlatformDefaultWidth = false),
     ) {
         Surface(modifier = Modifier.fillMaxSize()) {
+            ThemeSurfaceStatusBarAppearanceEffect()
             NetworkLogScreen(uiState = uiState)
         }
     }

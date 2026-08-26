@@ -86,6 +86,7 @@ import net.matsudamper.browser.screen.sitesettings.SiteSettingsScreenViewModel
 import net.matsudamper.browser.screen.tab.TabsScreenViewModel
 import net.matsudamper.browser.ui.browser.BrowserScreen
 import net.matsudamper.browser.ui.common.BrowserTheme
+import net.matsudamper.browser.ui.common.ThemeSurfaceStatusBarAppearanceEffect
 import net.matsudamper.browser.ui.downloads.DownloadManagementScreen
 import net.matsudamper.browser.ui.extensions.ExtensionsScreen
 import net.matsudamper.browser.ui.history.HistoryScreen
@@ -210,6 +211,7 @@ internal fun BrowserAppShell(
                 }
 
                 AppDestination.Settings -> navEntry(key) {
+                    ThemeSurfaceStatusBarAppearanceEffect()
                     val lifecycleOwner = LocalLifecycleOwner.current
                     val settingsViewModel = composeViewModel(initializer = {
                         SettingsScreenViewModel(settingsRepository)
@@ -298,6 +300,7 @@ internal fun BrowserAppShell(
                 }
 
                 is AppDestination.SiteSettings -> navEntry(key) {
+                    ThemeSurfaceStatusBarAppearanceEffect()
                     val siteSettingsRepository: SiteSettingsRepository = koinInject()
                     val geckoRuntime: GeckoRuntime = koinInject()
                     val publicSuffixList: PublicSuffixList = koinInject()
@@ -339,6 +342,7 @@ internal fun BrowserAppShell(
                 }
 
                 AppDestination.History -> navEntry(key) {
+                    ThemeSurfaceStatusBarAppearanceEffect()
                     val historyViewModel = composeViewModel(initializer = {
                         HistoryScreenViewModel(historyRepository)
                     })
@@ -366,6 +370,7 @@ internal fun BrowserAppShell(
                 }
 
                 AppDestination.Extensions -> navEntry(key) {
+                    ThemeSurfaceStatusBarAppearanceEffect()
                     val extensionRuntimeCoordinator: ExtensionRuntimeCoordinator = koinInject()
                     val extensionsViewModel = composeViewModel(initializer = {
                         ExtensionsScreenViewModel(
@@ -410,6 +415,7 @@ internal fun BrowserAppShell(
                 }
 
                 AppDestination.Downloads -> navEntry(key) {
+                    ThemeSurfaceStatusBarAppearanceEffect()
                     val downloadsViewModel = composeViewModel(initializer = {
                         DownloadManagementScreenViewModel(context.applicationContext as Application)
                     })
@@ -450,6 +456,7 @@ internal fun BrowserAppShell(
                 }
 
                 is AppDestination.BackupProgress -> navEntry(key) {
+                    ThemeSurfaceStatusBarAppearanceEffect()
                     val backupRepository: BackupRepository = koinInject()
                     val backupViewModel = composeViewModel(initializer = {
                         BackupProgressViewModel(key.isImport, backupRepository)
@@ -884,6 +891,7 @@ private fun MainBrowserContent(
                 }
 
                 BrowserNavDestination.Tabs -> navEntry(key) {
+                    ThemeSurfaceStatusBarAppearanceEffect()
                     val tabsViewModel = composeViewModel(initializer = {
                         TabsScreenViewModel(
                             tabStore = browserTabController,

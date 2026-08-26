@@ -14,7 +14,6 @@ import androidx.core.net.toUri
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -45,7 +44,6 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -80,6 +78,9 @@ import net.matsudamper.browser.feature.themecolor.ThemeColorWebExtension
 import net.matsudamper.browser.feature.twittershare.TwitterShareWebExtension
 import net.matsudamper.browser.feature.viewportscale.ViewportScaleWebExtension
 import net.matsudamper.browser.translate.TranslationPriorityLanguage
+import net.matsudamper.browser.ui.common.StatusBarAppearanceEffect
+import net.matsudamper.browser.ui.common.isAppInDarkTheme
+import net.matsudamper.browser.ui.common.isBrightBackground
 import net.matsudamper.browser.ui.common.resolveBrowserToolbarColors
 import net.matsudamper.browser.ui.browser.UrlBarSuggestionsUiState
 import org.koin.compose.koinInject
@@ -180,16 +181,17 @@ internal fun GeckoBrowserTab(
     val toolbarColors = resolveBrowserToolbarColors(
         toolbarColor = state.toolbarColor,
         defaultToolbarColor = MaterialTheme.colorScheme.primaryContainer,
-        isSystemDarkTheme = isSystemInDarkTheme(),
+        isAppDarkTheme = isAppInDarkTheme(),
     )
-    val view = LocalView.current
-    if (!view.isInEditMode) {
-        SideEffect {
-            val window = (view.context as Activity).window
-            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars =
-                toolbarColors.isBrightBackground
-        }
+    val statusBarBackgroundColor = if (state.showFindInPage) {
+        MaterialTheme.colorScheme.surfaceVariant
+    } else {
+        toolbarColors.resolvedToolbarColor
     }
+    if (!state.isFullScreen) {
+        StatusBarAppearanceEffect(isBrightBackground = statusBarBackgroundColor.isBrightBackground())
+    }
+    val view = LocalView.current
 
     // フルスクリーン時にシステムバーを非表示にする
     if (!view.isInEditMode) {
