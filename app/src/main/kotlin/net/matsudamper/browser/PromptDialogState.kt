@@ -73,7 +73,7 @@ internal class PromptDialogState(
     var pendingAddressSelectPrompt by mutableStateOf<GeckoSession.PromptDelegate.AutocompleteRequest<Autocomplete.AddressSelectOption>?>(null)
     var pendingAddressSelectResult by mutableStateOf<GeckoResult<GeckoSession.PromptDelegate.PromptResponse>?>(null)
     var pendingAutofillAddressOptions by mutableStateOf<List<Autocomplete.AddressSelectOption>?>(null)
-    private var pendingAutofillFill: ((Autocomplete.Address) -> Unit)? = null
+    internal var addressFillHandler: ((Autocomplete.Address) -> Unit)? = null
     var pendingAddressSaveAddress by mutableStateOf<Autocomplete.Address?>(null)
     var pendingAddressSavePrompt by mutableStateOf<GeckoSession.PromptDelegate.AutocompleteRequest<Autocomplete.AddressSaveOption>?>(null)
     var pendingAddressSaveResult by mutableStateOf<GeckoResult<GeckoSession.PromptDelegate.PromptResponse>?>(null)
@@ -324,10 +324,10 @@ internal class PromptDialogState(
             pendingAddressSelectResult?.complete(prompt.confirm(option))
             pendingAddressSelectPrompt = null
             pendingAddressSelectResult = null
-            return
         }
-        pendingAutofillFill?.invoke(option.value)
         clearAutofillAddressSelect()
+        // Gecko 公式経路でも iframe 内は埋まらないことがあるため、選択値は常にアプリ側でも入れる
+        addressFillHandler?.invoke(option.value)
     }
 
     fun dismissAddressSelect() {
@@ -343,11 +343,9 @@ internal class PromptDialogState(
 
     fun showAutofillAddressSelect(
         options: List<Autocomplete.AddressSelectOption>,
-        onFill: (Autocomplete.Address) -> Unit,
     ) {
         if (hasVisibleAddressSelect() || options.isEmpty()) return
         pendingAutofillAddressOptions = options
-        pendingAutofillFill = onFill
     }
 
     internal fun hasVisibleAddressSelect(): Boolean {
@@ -356,7 +354,6 @@ internal class PromptDialogState(
 
     private fun clearAutofillAddressSelect() {
         pendingAutofillAddressOptions = null
-        pendingAutofillFill = null
     }
 
     fun confirmAddressSave() {

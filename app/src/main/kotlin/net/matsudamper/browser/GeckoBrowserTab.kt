@@ -723,7 +723,6 @@ internal fun GeckoBrowserTab(
             (session.autofillDelegate as? AddressAutofillDelegate)?.wrapped
                 ?: session.autofillDelegate
         val addressAutofillDelegate = AddressAutofillDelegate(
-            session = session,
             addressRepository = addressRepository,
             promptDialogState = dialogState,
             coroutineScope = dialogState.coroutineScope,

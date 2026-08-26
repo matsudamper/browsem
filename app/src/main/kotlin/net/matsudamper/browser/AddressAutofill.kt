@@ -22,8 +22,11 @@ import org.mozilla.geckoview.GeckoSession
  * 2. GeckoView Autofill の `onNodeFocus`（実タップでは来るが、a11y クリックでは来ないことがある）
  *
  * いずれも Gecko の `onAddressSelect` を優先し、来なければ同じ AddressSelectDialog を出す。
+ * 選択後の入力は Autofill.Session に加えて、all_frames の WebExtension で行う。
  */
-internal class AddressAutofillCoordinator {
+internal class AddressAutofillCoordinator(
+    private val fillExtension: AddressAutofillWebExtension,
+) {
     private val lock = Any()
     private var attached: Attached? = null
     private var showJob: Job? = null
@@ -41,16 +44,26 @@ internal class AddressAutofillCoordinator {
     ) {
         synchronized(lock) {
             attached = Attached(session, promptDialogState, addressRepository)
+            promptDialogState.addressFillHandler = ::fillSelectedAddress
         }
+        fillExtension.registerSession(session)
     }
 
     fun detach(session: GeckoSession) {
+        fillExtension.unregisterSession(session)
         synchronized(lock) {
             if (attached?.session !== session) return
             showJob?.cancel()
             showJob = null
+            attached?.promptDialogState?.addressFillHandler = null
             attached = null
         }
+    }
+
+    private fun fillSelectedAddress(address: Autocomplete.Address) {
+        val current = synchronized(lock) { attached } ?: return
+        fillAddressOnSession(current.session, address)
+        fillExtension.fill(current.session, address)
     }
 
     fun onAddressFetch(count: Int) {
@@ -64,7 +77,6 @@ internal class AddressAutofillCoordinator {
             showJob?.cancel()
             showJob = current.promptDialogState.coroutineScope.launch {
                 scheduleAddressSelectFallback(
-                    session = current.session,
                     addressRepository = current.addressRepository,
                     promptDialogState = current.promptDialogState,
                 )
@@ -74,7 +86,6 @@ internal class AddressAutofillCoordinator {
 }
 
 internal class AddressAutofillDelegate(
-    private val session: GeckoSession,
     private val addressRepository: AddressRepository,
     private val promptDialogState: PromptDialogState,
     private val coroutineScope: CoroutineScope,
@@ -139,7 +150,6 @@ internal class AddressAutofillDelegate(
         showJob?.cancel()
         showJob = coroutineScope.launch {
             scheduleAddressSelectFallback(
-                session = session,
                 addressRepository = addressRepository,
                 promptDialogState = promptDialogState,
             )
@@ -157,7 +167,6 @@ internal class AddressAutofillDelegate(
 }
 
 private suspend fun scheduleAddressSelectFallback(
-    session: GeckoSession,
     addressRepository: AddressRepository,
     promptDialogState: PromptDialogState,
 ) {
@@ -170,7 +179,6 @@ private suspend fun scheduleAddressSelectFallback(
     Log.i(TAG, "show fallback AddressSelectDialog count=${addresses.size}")
     promptDialogState.showAutofillAddressSelect(
         options = addresses.map { Autocomplete.AddressSelectOption(it.toGeckoAddress()) },
-        onFill = { address -> fillAddressOnSession(session, address) },
     )
 }
 

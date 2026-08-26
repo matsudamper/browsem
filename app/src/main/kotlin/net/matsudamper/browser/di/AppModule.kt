@@ -4,6 +4,7 @@ import android.util.Log
 import androidx.annotation.OptIn
 import mozilla.components.lib.publicsuffixlist.PublicSuffixList
 import net.matsudamper.browser.AddressAutofillCoordinator
+import net.matsudamper.browser.AddressAutofillWebExtension
 import net.matsudamper.browser.AutocompleteStorageDelegate
 import net.matsudamper.browser.BrowserViewModel
 import net.matsudamper.browser.allowUnsignedExtensions
@@ -59,7 +60,8 @@ val dataModule = module {
 }
 
 val appModule = module {
-    single { AddressAutofillCoordinator() }
+    single { AddressAutofillWebExtension() }
+    single { AddressAutofillCoordinator(get()) }
     single<GeckoRuntime> {
         // Gecko 起動前の pref 設定はキューされる。メインスレッドをブロックして待機すると
         // initializeGeckoRuntime() とデッドロックするため非同期で投入する。
@@ -75,6 +77,7 @@ val appModule = module {
                 .extensionsProcessEnabled(extensionsProcessEnabled)
                 .build()
         ).also {
+            get<AddressAutofillWebExtension>().install(it)
             val addressAutofillCoordinator = get<AddressAutofillCoordinator>()
             it.autocompleteStorageDelegate = AutocompleteStorageDelegate(
                 addressRepository = get(),
