@@ -32,4 +32,16 @@ class AutocompleteAddressMappingTest {
             AddressEntity(familyName = "山田").toGeckoFullName(),
         )
     }
+
+    @Test
+    fun toGeckoCountryFallsBackWhenBlank() {
+        val gecko = AddressEntity(
+            givenName = "a",
+            familyName = "b",
+            streetAddress = "p",
+            postalCode = "2222222",
+        ).toGeckoAddress()
+
+        assertTrue(gecko.country.isNotBlank())
+    }
 }

@@ -8,6 +8,7 @@ import net.matsudamper.browser.data.address.AddressEntity
 import net.matsudamper.browser.data.address.AddressRepository
 import org.mozilla.geckoview.Autocomplete
 import org.mozilla.geckoview.GeckoResult
+import java.util.Locale
 
 class AutocompleteStorageDelegate(
     private val addressRepository: AddressRepository,
@@ -80,7 +81,7 @@ internal fun AddressEntity.toGeckoAddress(): Autocomplete.Address {
         .addressLevel2(addressLevel2)
         .addressLevel3(addressLevel3)
         .postalCode(postalCode)
-        .country(country)
+        .country(toGeckoCountry())
         .tel(tel)
         .email(email)
         .build()
@@ -90,6 +91,15 @@ internal fun AddressEntity.toGeckoFullName(): String {
     return listOf(givenName, additionalName, familyName)
         .filter { it.isNotEmpty() }
         .joinToString(" ")
+}
+
+/**
+ * Gecko は addresses.supported=detect のとき、country が空のレコードを候補から除外する。
+ * 設定画面では国を空のまま保存できるため、未入力なら端末ロケールの国を使う。
+ */
+internal fun AddressEntity.toGeckoCountry(): String {
+    if (country.isNotBlank()) return country
+    return Locale.getDefault().country.ifBlank { "JP" }
 }
 
 internal fun Autocomplete.Address.toEntity(): AddressEntity {
