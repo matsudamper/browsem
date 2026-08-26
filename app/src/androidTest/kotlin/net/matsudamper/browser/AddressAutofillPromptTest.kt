@@ -24,7 +24,7 @@ import org.junit.runner.RunWith
 import org.mozilla.geckoview.ExperimentalGeckoViewApi
 import org.mozilla.geckoview.GeckoPreferenceController
 import org.mozilla.geckoview.GeckoResult
-import java.net.HttpURLConnection
+import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.net.Socket
 import java.net.URL
@@ -716,16 +716,25 @@ class AddressAutofillPromptTest {
     }
 
     /**
-     * テストプロセス自身からサーバへ HTTP 接続できるか確認する。失敗時の診断用。
+     * テストプロセスからサーバへ HTTP 接続できるか確認する。失敗時の診断用。
+     *
+     * Android の cleartext 制限は HttpURLConnection にだけ掛かるため、
+     * 生ソケットで送受信する。Gecko のページ読み込み可否とは別経路。
      */
     private fun selfCheckHttp(url: String): String {
         return runCatching {
-            val connection = URL(url).openConnection() as HttpURLConnection
-            connection.connectTimeout = 5_000
-            connection.readTimeout = 5_000
-            val code = connection.responseCode
-            connection.disconnect()
-            "HTTP $code"
+            val parsed = URL(url)
+            val port = parsed.port.takeIf { it > 0 } ?: parsed.defaultPort
+            Socket().use { socket ->
+                socket.soTimeout = 5_000
+                socket.connect(InetSocketAddress(parsed.host, port), 5_000)
+                val path = parsed.path.ifEmpty { "/" }
+                val request =
+                    "GET $path HTTP/1.1\r\nHost: ${parsed.host}:$port\r\nConnection: close\r\n\r\n"
+                socket.getOutputStream().write(request.toByteArray(Charsets.US_ASCII))
+                socket.getOutputStream().flush()
+                socket.getInputStream().bufferedReader().readLine() ?: "empty"
+            }
         }.getOrElse { "失敗: $it" }
     }
 
