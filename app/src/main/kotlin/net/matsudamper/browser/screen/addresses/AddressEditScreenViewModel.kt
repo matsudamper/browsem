@@ -6,6 +6,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.getAndUpdate
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import net.matsudamper.browser.data.address.AddressEntity
@@ -71,27 +72,34 @@ internal class AddressEditScreenViewModel(
         }
 
         override fun onSave() {
-            val state = viewModelStateFlow.value
-            if (!state.canSave) return
+            val previous = viewModelStateFlow.getAndUpdate { current ->
+                if (!current.canSave) current else current.copy(isSaving = true)
+            }
+            if (!previous.canSave) return
             viewModelScope.launch {
-                addressRepository.save(
-                    AddressEntity(
-                        id = state.id,
-                        givenName = state.givenName,
-                        additionalName = state.additionalName,
-                        familyName = state.familyName,
-                        organization = state.organization,
-                        streetAddress = state.streetAddress,
-                        addressLevel1 = state.addressLevel1,
-                        addressLevel2 = state.addressLevel2,
-                        addressLevel3 = state.addressLevel3,
-                        postalCode = state.postalCode,
-                        country = state.country,
-                        tel = state.tel,
-                        email = state.email,
-                    ),
-                )
-                eventHandler.trySend { it.navigateBack() }
+                runCatching {
+                    addressRepository.save(
+                        AddressEntity(
+                            id = previous.id,
+                            givenName = previous.givenName,
+                            additionalName = previous.additionalName,
+                            familyName = previous.familyName,
+                            organization = previous.organization,
+                            streetAddress = previous.streetAddress,
+                            addressLevel1 = previous.addressLevel1,
+                            addressLevel2 = previous.addressLevel2,
+                            addressLevel3 = previous.addressLevel3,
+                            postalCode = previous.postalCode,
+                            country = previous.country,
+                            tel = previous.tel,
+                            email = previous.email,
+                        ),
+                    )
+                }.onSuccess {
+                    eventHandler.trySend { it.navigateBack() }
+                }.onFailure {
+                    viewModelStateFlow.update { it.copy(isSaving = false) }
+                }
             }
         }
     }
@@ -167,9 +175,10 @@ internal class AddressEditScreenViewModel(
         val country: String = "",
         val tel: String = "",
         val email: String = "",
+        val isSaving: Boolean = false,
     ) {
         val canSave: Boolean
-            get() = listOf(
+            get() = !isSaving && listOf(
                 givenName,
                 additionalName,
                 familyName,
