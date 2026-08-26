@@ -128,7 +128,10 @@ class BackupRepository(private val context: Context) {
         }
         val settingsStaging = File(settingsTarget.parentFile, "$SETTINGS_FILE_NAME.import")
         val tabDbStaging = File(tabDbTarget.parentFile, "$TAB_DB_FILE_NAME.import")
-        val addressDbStaging = File(addressDbTarget.parentFile, "$ADDRESS_DB_FILE_NAME.import")
+        val addressDbStaging = File(addressDbTarget.parentFile, "$ADDRESS_DB_FILE_NAME.import").apply {
+            // 前回の失敗で残った staging が、住所なし ZIP の復元で誤って使われないようにする
+            delete()
+        }
         // GeckoView プロファイル staging はターゲットと同じ filesDir 直下に置き、
         // 同 FS 上での rename による atomic swap を可能にする。
         val mozillaTarget = mozillaDir()
@@ -255,7 +258,7 @@ class BackupRepository(private val context: Context) {
                 progress.report("設定とタブデータを置き換え中…", 0.85f)
                 replaceWithStaging(settingsStaging, settingsTarget)
                 replaceWithStaging(tabDbStaging, tabDbTarget)
-                if (addressDbStaging.exists()) {
+                if (addressDbExtracted != null) {
                     replaceWithStaging(addressDbStaging, addressDbTarget)
                 }
                 if (hasMozillaPayload) {
@@ -273,6 +276,7 @@ class BackupRepository(private val context: Context) {
             if (!dbClosed) {
                 settingsStaging.delete()
                 tabDbStaging.delete()
+                addressDbStaging.delete()
                 mozillaStaging.deleteRecursively()
             } else if (!mozillaReplaced) {
                 // DB は閉じた／置換済みだが mozilla 置換前に失敗したケース。
