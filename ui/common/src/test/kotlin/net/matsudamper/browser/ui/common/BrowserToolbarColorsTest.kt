@@ -60,9 +60,11 @@ class BrowserToolbarColorsTest {
         val palette = resolveBrowserToolbarColors(
             toolbarColor = null,
             defaultToolbarColor = darkDefaultToolbarColor,
-            isAppDarkTheme = true,
+            // OS/アプリテーマがライトでも、実際の背景色（暗い primaryContainer）で判定する
+            isAppDarkTheme = false,
         )
 
         assertFalse(palette.isBrightBackground)
+        assertEquals(Color.Black, palette.urlBarBackgroundColor)
     }
 }
