@@ -9,6 +9,7 @@ import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.After
@@ -43,19 +44,22 @@ class AddressAutofillPromptTest {
     val composeRule = createAndroidComposeRule<MainActivity>()
 
     private var httpServer: LocalHttpServer? = null
+    private val savedPrefs = mutableListOf<SavedPref>()
 
     @After
     fun tearDown() {
+        restoreSavedPrefs()
         httpServer?.close()
         httpServer = null
     }
 
     @Test
-    fun submittingAddressFormShowsAddressSaveDialog() {
+    fun submittingAddressFormSavesAddressAndShowsSelectDialogOnRefocus() {
         val server = LocalHttpServer(
             pages = mapOf(
                 "/$ADDRESS_FORM_FILE_NAME" to buildAddressFormHtml(),
                 "/$ADDRESS_FORM_DONE_FILE_NAME" to buildDoneHtml(),
+                "/$ADDRESS_AUTOFILL_FILE_NAME" to buildAddressAutofillHtml(),
             ),
         )
         httpServer = server
@@ -86,6 +90,47 @@ class AddressAutofillPromptTest {
 
         // 送信を Gecko の formautofill が検出すると onAddressSave プロンプトが発火し、
         // AddressSaveDialog が表示されるはず。
+        waitForAddressSaveDialog(submitted, selfCheck, server)
+
+        composeRule
+            .onNodeWithTag(BrowserTabDialogLayerTestTags.AddressSaveConfirmButton.testTag)
+            .performClick()
+
+        composeRule.waitUntil(timeoutMillis = 30_000) {
+            composeRule
+                .onAllNodesWithTag(BrowserTabDialogLayerTestTags.AddressSaveDialog.testTag)
+                .fetchSemanticsNodes()
+                .isEmpty()
+        }
+
+        val autofillPageUri = "http://127.0.0.1:${server.port}/$ADDRESS_AUTOFILL_FILE_NAME"
+        composeRule.openUrlFromUrlBar(autofillPageUri)
+        composeRule.waitForUrlBarContains(ADDRESS_AUTOFILL_FILE_NAME, timeoutMillis = 60_000)
+
+        // focus トリガー (load+2秒) 後に保存済み住所の選択ダイアログが出ることを確認する
+        try {
+            composeRule.waitUntil(timeoutMillis = 60_000) {
+                composeRule
+                    .onAllNodesWithTag(BrowserTabDialogLayerTestTags.AddressSelectDialog.testTag)
+                    .fetchSemanticsNodes()
+                    .isNotEmpty()
+            }
+        } catch (e: ComposeTimeoutException) {
+            throw AssertionError(
+                "住所選択ダイアログが表示されない\n" +
+                    "現在URL=${composeRule.currentPageUrlFromUi()}\n" +
+                    "サーバ受信リクエスト=${server.requests}\n" +
+                    "--- logcat (formautofill関連) ---\n${collectFormAutofillLogcat()}",
+                e,
+            )
+        }
+    }
+
+    private fun waitForAddressSaveDialog(
+        submitted: Boolean,
+        selfCheck: String,
+        server: LocalHttpServer,
+    ) {
         try {
             composeRule.waitUntil(timeoutMillis = 60_000) {
                 composeRule
@@ -109,6 +154,84 @@ class AddressAutofillPromptTest {
                 e,
             )
         }
+    }
+
+    private data class SavedPref(
+        val name: String,
+        val value: Any?,
+        val hadValue: Boolean,
+    )
+
+    @OptIn(ExperimentalGeckoViewApi::class)
+    private fun saveAndSetPref(name: String, value: Any) {
+        val current = awaitGeckoResult {
+            GeckoPreferenceController.getGeckoPrefs(listOf(name))
+        }?.firstOrNull()
+        savedPrefs.add(SavedPref(name, current?.value, current != null))
+        when (value) {
+            is Boolean -> awaitGeckoResult {
+                GeckoPreferenceController.setGeckoPref(
+                    name,
+                    value,
+                    GeckoPreferenceController.PREF_BRANCH_USER,
+                )
+            }
+            is String -> awaitGeckoResult {
+                GeckoPreferenceController.setGeckoPref(
+                    name,
+                    value,
+                    GeckoPreferenceController.PREF_BRANCH_USER,
+                )
+            }
+            is Int -> awaitGeckoResult {
+                GeckoPreferenceController.setGeckoPref(
+                    name,
+                    value,
+                    GeckoPreferenceController.PREF_BRANCH_USER,
+                )
+            }
+        }
+    }
+
+    @OptIn(ExperimentalGeckoViewApi::class)
+    private fun restoreSavedPrefs() {
+        savedPrefs.forEach { saved ->
+            val value = if (saved.hadValue) saved.value else defaultPrefValue(saved.name)
+            when (value) {
+                is Boolean -> awaitGeckoResult {
+                    GeckoPreferenceController.setGeckoPref(
+                        saved.name,
+                        value,
+                        GeckoPreferenceController.PREF_BRANCH_USER,
+                    )
+                }
+                is String -> awaitGeckoResult {
+                    GeckoPreferenceController.setGeckoPref(
+                        saved.name,
+                        value,
+                        GeckoPreferenceController.PREF_BRANCH_USER,
+                    )
+                }
+                is Int -> awaitGeckoResult {
+                    GeckoPreferenceController.setGeckoPref(
+                        saved.name,
+                        value,
+                        GeckoPreferenceController.PREF_BRANCH_USER,
+                    )
+                }
+            }
+        }
+        savedPrefs.clear()
+    }
+
+    private fun defaultPrefValue(name: String): Any? = when (name) {
+        "extensions.formautofill.skipProgrammaticCheckForTests" -> false
+        "extensions.formautofill.loglevel" -> "Warn"
+        "geckoview.console.enabled" -> false
+        "devtools.console.stdout.content" -> false
+        "network.lna.enabled" -> true
+        "network.lna.blocking" -> true
+        else -> null
     }
 
     /**
@@ -219,52 +342,16 @@ class AddressAutofillPromptTest {
      */
     @OptIn(ExperimentalGeckoViewApi::class)
     private fun applyTestPrefsAndAwaitAddressAutofillEnabled() {
-        awaitGeckoResult {
-            GeckoPreferenceController.setGeckoPref(
-                "extensions.formautofill.skipProgrammaticCheckForTests",
-                true,
-                GeckoPreferenceController.PREF_BRANCH_USER,
-            )
-        }
+        saveAndSetPref("extensions.formautofill.skipProgrammaticCheckForTests", true)
         // 失敗時の診断のため formautofill の Debug ログを logcat (GeckoConsole) に出す
-        awaitGeckoResult {
-            GeckoPreferenceController.setGeckoPref(
-                "extensions.formautofill.loglevel",
-                "Debug",
-                GeckoPreferenceController.PREF_BRANCH_USER,
-            )
-        }
+        saveAndSetPref("extensions.formautofill.loglevel", "Debug")
         // テストページの console.log を logcat に出してページ内 JS の進行を確認できるようにする
-        awaitGeckoResult {
-            GeckoPreferenceController.setGeckoPref(
-                "geckoview.console.enabled",
-                true,
-                GeckoPreferenceController.PREF_BRANCH_USER,
-            )
-        }
-        awaitGeckoResult {
-            GeckoPreferenceController.setGeckoPref(
-                "devtools.console.stdout.content",
-                true,
-                GeckoPreferenceController.PREF_BRANCH_USER,
-            )
-        }
+        saveAndSetPref("geckoview.console.enabled", true)
+        saveAndSetPref("devtools.console.stdout.content", true)
         // CI の診断でループバック HTTP サーバへの接続が一切行われずページロードに失敗して
         // いたため、Local Network Access のブロッキングを無効化する
-        awaitGeckoResult {
-            GeckoPreferenceController.setGeckoPref(
-                "network.lna.enabled",
-                false,
-                GeckoPreferenceController.PREF_BRANCH_USER,
-            )
-        }
-        awaitGeckoResult {
-            GeckoPreferenceController.setGeckoPref(
-                "network.lna.blocking",
-                false,
-                GeckoPreferenceController.PREF_BRANCH_USER,
-            )
-        }
+        saveAndSetPref("network.lna.enabled", false)
+        saveAndSetPref("network.lna.blocking", false)
 
         val deadline = System.currentTimeMillis() + PREF_TIMEOUT_MILLIS
         while (true) {
@@ -410,6 +497,49 @@ class AddressAutofillPromptTest {
     }
 
     /**
+     * 保存済み住所の自動入力プロンプト確認用ページ。
+     * フォーム送信は行わず、住所フィールドへの focus のみを行う。
+     */
+    private fun buildAddressAutofillHtml(): String {
+        return """
+            <!doctype html>
+            <html lang="en">
+              <head>
+                <meta charset="utf-8" />
+                <title>Address Autofill Test</title>
+              </head>
+              <body>
+                <form id="address-form">
+                  <input id="given-name" name="given-name" autocomplete="given-name" />
+                  <input id="family-name" name="family-name" autocomplete="family-name" />
+                  <input id="street-address" name="street-address" autocomplete="street-address" />
+                  <input id="address-level2" name="city" autocomplete="address-level2" />
+                  <input id="address-level1" name="state" autocomplete="address-level1" />
+                  <input id="postal-code" name="zip" autocomplete="postal-code" />
+                  <select id="country" name="country" autocomplete="country">
+                    <option value="US" selected>United States</option>
+                  </select>
+                  <input id="tel" name="tel" autocomplete="tel" />
+                  <input id="email" name="email" autocomplete="email" />
+                </form>
+                <script>
+                  function log(message) {
+                    console.log('addr-test: ' + message);
+                  }
+                  window.addEventListener('load', () => {
+                    log('autofill-load');
+                    setTimeout(() => {
+                      log('autofill-focus');
+                      document.getElementById('given-name').focus();
+                    }, 2000);
+                  });
+                </script>
+              </body>
+            </html>
+        """.trimIndent()
+    }
+
+    /**
      * テストページ配信用の最小限のループバック HTTP サーバ。
      *
      * file:// ではフォーム送信が行われないため、http:// でページを配信する。
@@ -488,6 +618,7 @@ class AddressAutofillPromptTest {
     private companion object {
         private const val ADDRESS_FORM_FILE_NAME = "address-form.html"
         private const val ADDRESS_FORM_DONE_FILE_NAME = "done.html"
+        private const val ADDRESS_AUTOFILL_FILE_NAME = "address-autofill.html"
         private const val PREF_TIMEOUT_MILLIS = 30_000L
         private const val PREF_POLL_TIMEOUT_MILLIS = 5_000L
         private const val FILL_COMPLETE_WAIT_MILLIS = 6_500L
