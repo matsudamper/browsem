@@ -64,6 +64,44 @@ class AddressAutofillPromptTest {
     }
 
     @Test
+    fun focusingMdnAutocompleteSampleShowsAddressSelectDialog() {
+        seedUserReportedAddressWithoutCountry()
+
+        val server = LocalHttpServer(
+            pages = mapOf(
+                "/$MDN_AUTOCOMPLETE_SAMPLE_FILE_NAME" to buildMdnAutocompleteSampleHtml(),
+            ),
+        )
+        httpServer = server
+        val pageUri = "http://127.0.0.1:${server.port}/$MDN_AUTOCOMPLETE_SAMPLE_FILE_NAME"
+
+        selfCheckHttp(pageUri)
+
+        applyTestPrefsAndAwaitAddressAutofillEnabled(forceAddressSupportedOn = false)
+        saveAndSetPref("geckoview.autocomplete.selection_dismiss_delay_ms", 60_000)
+
+        composeRule.openUrlFromUrlBar(pageUri)
+        composeRule.waitForUrlBarContains(MDN_AUTOCOMPLETE_SAMPLE_FILE_NAME, timeoutMillis = 60_000)
+
+        try {
+            composeRule.waitUntil(timeoutMillis = 60_000) {
+                composeRule
+                    .onAllNodesWithTag(BrowserTabDialogLayerTestTags.AddressSelectDialog.testTag)
+                    .fetchSemanticsNodes()
+                    .isNotEmpty()
+            }
+        } catch (e: ComposeTimeoutException) {
+            throw AssertionError(
+                "MDN autocomplete サンプルで住所選択ダイアログが表示されない\n" +
+                    "現在URL=${composeRule.currentPageUrlFromUi()}\n" +
+                    "サーバ受信リクエスト=${server.requests}\n" +
+                    "--- logcat (formautofill関連) ---\n${collectFormAutofillLogcat()}",
+                e,
+            )
+        }
+    }
+
+    @Test
     fun focusingMozillaAddressFormShowsAddressSelectDialog() {
         seedMozillaSampleAddress()
 
@@ -254,7 +292,31 @@ class AddressAutofillPromptTest {
         "network.lna.enabled" -> true
         "network.lna.blocking" -> true
         "geckoview.autocomplete.selection_dismiss_delay_ms" -> 0
+        "extensions.formautofill.addresses.supported" -> "detect"
         else -> null
+    }
+
+    private fun seedUserReportedAddressWithoutCountry() {
+        val repository = AddressRepository(
+            InstrumentationRegistry.getInstrumentation().targetContext,
+        )
+        runBlocking {
+            repository.deleteAll()
+            repository.save(
+                AddressEntity(
+                    givenName = "a",
+                    familyName = "b",
+                    addressLevel1 = "c",
+                    addressLevel2 = "i",
+                    addressLevel3 = "2",
+                    streetAddress = "p",
+                    postalCode = "2222222",
+                    tel = "09011111111",
+                    email = "let@h.com",
+                ),
+            )
+        }
+        seededAddresses = true
     }
 
     private fun seedMozillaSampleAddress() {
@@ -318,6 +380,40 @@ class AddressAutofillPromptTest {
                   window.addEventListener('load', () => {
                     setTimeout(() => {
                       document.getElementById('givenName').focus();
+                    }, 2000);
+                  });
+                </script>
+              </body>
+            </html>
+        """.trimIndent()
+    }
+
+    /**
+     * MDN の autocomplete ドキュメント「試してみましょう」と同じマークアップ。
+     * https://developer.mozilla.org/ja/docs/Web/HTML/Reference/Attributes/autocomplete
+     * form 要素はない。苗字欄へフォーカスして選択ダイアログを誘発する。
+     */
+    private fun buildMdnAutocompleteSampleHtml(): String {
+        return """
+            <!doctype html>
+            <html lang="ja">
+              <head>
+                <meta charset="utf-8" />
+                <title>HTML デモ: autocomplete</title>
+              </head>
+              <body>
+                <label for="lastName">苗字:</label>
+                <input name="lastName" id="lastName" type="text" autocomplete="family-name" />
+
+                <label for="firstName">名前:</label>
+                <input name="firstName" id="firstName" type="text" autocomplete="given-name" />
+
+                <label for="email">メールアドレス:</label>
+                <input name="email" id="email" type="email" autocomplete="off" />
+                <script>
+                  window.addEventListener('load', () => {
+                    setTimeout(() => {
+                      document.getElementById('lastName').focus();
                     }, 2000);
                   });
                 </script>
@@ -433,7 +529,9 @@ class AddressAutofillPromptTest {
      * JavaScript によるプログラム的なフォーム操作を formautofill が無視しないようにする。
      */
     @OptIn(ExperimentalGeckoViewApi::class)
-    private fun applyTestPrefsAndAwaitAddressAutofillEnabled() {
+    private fun applyTestPrefsAndAwaitAddressAutofillEnabled(
+        forceAddressSupportedOn: Boolean = true,
+    ) {
         saveAndSetPref("extensions.formautofill.skipProgrammaticCheckForTests", true)
         // 失敗時の診断のため formautofill の Debug ログを logcat (GeckoConsole) に出す
         saveAndSetPref("extensions.formautofill.loglevel", "Debug")
@@ -444,6 +542,10 @@ class AddressAutofillPromptTest {
         // いたため、Local Network Access のブロッキングを無効化する
         saveAndSetPref("network.lna.enabled", false)
         saveAndSetPref("network.lna.blocking", false)
+
+        if (forceAddressSupportedOn) {
+            saveAndSetPref("extensions.formautofill.addresses.supported", "on")
+        }
 
         val deadline = System.currentTimeMillis() + PREF_TIMEOUT_MILLIS
         while (true) {
@@ -457,10 +559,11 @@ class AddressAutofillPromptTest {
                 )
             }
             val values = prefs.orEmpty().associate { it.pref to it.value }
-            val applied = values["extensions.formautofill.addresses.enabled"] == true &&
-                values["extensions.formautofill.addresses.capture.enabled"] == true &&
+            val enabled = values["extensions.formautofill.addresses.enabled"] == true &&
+                values["extensions.formautofill.addresses.capture.enabled"] == true
+            val supportedOk = !forceAddressSupportedOn ||
                 values["extensions.formautofill.addresses.supported"] == "on"
-            if (applied) return
+            if (enabled && supportedOk) return
             if (System.currentTimeMillis() > deadline) {
                 fail("住所自動入力プリファレンスが適用されていない: $values")
             }
@@ -667,6 +770,7 @@ class AddressAutofillPromptTest {
     private companion object {
         private const val ADDRESS_FORM_FILE_NAME = "address-form.html"
         private const val ADDRESS_SELECT_FORM_FILE_NAME = "address_form.html"
+        private const val MDN_AUTOCOMPLETE_SAMPLE_FILE_NAME = "mdn-autocomplete-sample.html"
         private const val ADDRESS_FORM_DONE_FILE_NAME = "done.html"
         private const val PREF_TIMEOUT_MILLIS = 30_000L
         private const val PREF_POLL_TIMEOUT_MILLIS = 5_000L
