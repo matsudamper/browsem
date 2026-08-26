@@ -705,7 +705,7 @@ internal fun GeckoBrowserTab(
         }
     }
 
-    DisposableEffect(session, state, browserTab, mediaWebExtension, addressAutofillCoordinator) {
+    DisposableEffect(session, state, browserTab, mediaWebExtension, addressRepository, addressAutofillCoordinator) {
         browserTab.attachSessionCallbacks(
             callbacks = state,
             onOpenNewSessionRequest = { uri ->
@@ -719,8 +719,19 @@ internal fun GeckoBrowserTab(
         )
         val promptDelegate = dialogState.createPromptDelegate()
         val mediaSessionDelegate = GeckoMediaSessionDelegate(mediaWebExtension)
+        val previousAutofillDelegate =
+            (session.autofillDelegate as? AddressAutofillDelegate)?.wrapped
+                ?: session.autofillDelegate
+        val addressAutofillDelegate = AddressAutofillDelegate(
+            session = session,
+            addressRepository = addressRepository,
+            promptDialogState = dialogState,
+            coroutineScope = dialogState.coroutineScope,
+            wrapped = previousAutofillDelegate,
+        )
 
         session.promptDelegate = promptDelegate
+        session.autofillDelegate = addressAutofillDelegate
         addressAutofillCoordinator.attach(
             session = session,
             promptDialogState = dialogState,
@@ -735,6 +746,9 @@ internal fun GeckoBrowserTab(
             addressAutofillCoordinator.detach(session)
             browserTab.detachSessionCallbacks()
             session.promptDelegate = null
+            if (session.autofillDelegate === addressAutofillDelegate) {
+                session.autofillDelegate = previousAutofillDelegate
+            }
             if (session.mediaSessionDelegate === mediaSessionDelegate
                 && !mediaWebExtension.shouldKeepSessionAttached(session)
             ) {
@@ -743,31 +757,6 @@ internal fun GeckoBrowserTab(
             // View が外れたあとに Gecko が opener を inactive にするため、
             // 次メッセージで live popup の opener を再 active する。
             currentOnSessionDetachedFromView(browserTab)
-        }
-    }
-
-    // GeckoView.setAutofillEnabled / setSession が AndroidAutofillDelegate を後から
-    // 上書きするため、View 確定後に住所フォールバックを wrap する。
-    DisposableEffect(session, geckoView, addressRepository) {
-        if (geckoView == null) {
-            onDispose { }
-        } else {
-            val previousAutofillDelegate =
-                (session.autofillDelegate as? AddressAutofillDelegate)?.wrapped
-                    ?: session.autofillDelegate
-            val addressAutofillDelegate = AddressAutofillDelegate(
-                session = session,
-                addressRepository = addressRepository,
-                promptDialogState = dialogState,
-                coroutineScope = dialogState.coroutineScope,
-                wrapped = previousAutofillDelegate,
-            )
-            session.autofillDelegate = addressAutofillDelegate
-            onDispose {
-                if (session.autofillDelegate === addressAutofillDelegate) {
-                    session.autofillDelegate = previousAutofillDelegate
-                }
-            }
         }
     }
 
