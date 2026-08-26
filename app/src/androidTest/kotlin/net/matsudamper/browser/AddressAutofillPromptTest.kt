@@ -1,6 +1,7 @@
 package net.matsudamper.browser
 
 import android.os.ParcelFileDescriptor
+import android.view.accessibility.AccessibilityNodeInfo
 import androidx.annotation.OptIn
 import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -35,9 +36,9 @@ import java.util.concurrent.TimeoutException
  *
  * AppModule で有効化した extensions.formautofill.addresses.capture.enabled により、
  * 住所フォーム送信時に PromptDelegate.onAddressSave が発火して保存ダイアログが表示されること、
- * 保存済み住所がある状態で GeckoView 本家の address_form.html の住所フィールドに
- * フォーカスしたときに選択ダイアログが表示されることを検証する。
- * フォームへの値の投入と送信はページ内 JavaScript で行うため、Web コンテンツへの直接操作は行わない。
+ * 保存済み住所がある状態で GeckoView 本家の address_form.html と、
+ * ユーザーが再現に使っている MDN autocomplete の実ページで
+ * 選択ダイアログが表示されることを検証する。
  *
  * file:// ではフォーム送信が行われないことが CI の診断で判明したため、
  * ループバック HTTP サーバでページを配信する。
@@ -67,21 +68,15 @@ class AddressAutofillPromptTest {
     fun focusingMdnAutocompleteSampleShowsAddressSelectDialog() {
         seedUserReportedAddressWithoutCountry()
 
-        val server = LocalHttpServer(
-            pages = mapOf(
-                "/$MDN_AUTOCOMPLETE_SAMPLE_FILE_NAME" to buildMdnAutocompleteSampleHtml(),
-            ),
-        )
-        httpServer = server
-        val pageUri = "http://127.0.0.1:${server.port}/$MDN_AUTOCOMPLETE_SAMPLE_FILE_NAME"
-
-        selfCheckHttp(pageUri)
-
-        applyTestPrefsAndAwaitAddressAutofillEnabled(forceAddressSupportedOn = false)
+        applyTestPrefsAndAwaitAddressAutofillEnabled()
         saveAndSetPref("geckoview.autocomplete.selection_dismiss_delay_ms", 60_000)
+        clearLogcat()
 
-        composeRule.openUrlFromUrlBar(pageUri)
-        composeRule.waitForUrlBarContains(MDN_AUTOCOMPLETE_SAMPLE_FILE_NAME, timeoutMillis = 60_000)
+        composeRule.openUrlFromUrlBar(MDN_AUTOCOMPLETE_PAGE_URL)
+        composeRule.waitForUrlBarContains("autocomplete", timeoutMillis = 90_000)
+        composeRule.waitForUrlBarNotFocused(timeoutMillis = 30_000)
+
+        val fieldClick = clickMdnFamilyNameField()
 
         try {
             composeRule.waitUntil(timeoutMillis = 60_000) {
@@ -92,9 +87,10 @@ class AddressAutofillPromptTest {
             }
         } catch (e: ComposeTimeoutException) {
             throw AssertionError(
-                "MDN autocomplete サンプルで住所選択ダイアログが表示されない\n" +
+                "MDN の実ページで住所選択ダイアログが表示されない\n" +
                     "現在URL=${composeRule.currentPageUrlFromUi()}\n" +
-                    "サーバ受信リクエスト=${server.requests}\n" +
+                    "苗字欄クリック=$fieldClick\n" +
+                    "--- accessibility ---\n${dumpAccessibilityTree()}\n" +
                     "--- logcat (formautofill関連) ---\n${collectFormAutofillLogcat()}",
                 e,
             )
@@ -389,37 +385,92 @@ class AddressAutofillPromptTest {
     }
 
     /**
-     * MDN の autocomplete ドキュメント「試してみましょう」と同じマークアップ。
-     * https://developer.mozilla.org/ja/docs/Web/HTML/Reference/Attributes/autocomplete
-     * form 要素はない。苗字欄へフォーカスして選択ダイアログを誘発する。
+     * MDN ライブサンプルの苗字欄をクリックする。
+     *
+     * 実ページの入力は cross-origin iframe 内にあるため、ページ内 JS ではフォーカスできない。
+     * 生の MotionEvent は使わず、AccessibilityNodeInfo の ACTION_CLICK / ACTION_FOCUS で
+     * ユーザーが欄をタップしたのと同じフォーカスを入れる。
      */
-    private fun buildMdnAutocompleteSampleHtml(): String {
-        return """
-            <!doctype html>
-            <html lang="ja">
-              <head>
-                <meta charset="utf-8" />
-                <title>HTML デモ: autocomplete</title>
-              </head>
-              <body>
-                <label for="lastName">苗字:</label>
-                <input name="lastName" id="lastName" type="text" autocomplete="family-name" />
+    private fun clickMdnFamilyNameField(): String {
+        val uiAutomation = InstrumentationRegistry.getInstrumentation().uiAutomation
+        val deadline = System.currentTimeMillis() + MDN_FIELD_WAIT_MILLIS
+        var lastDump = ""
+        while (System.currentTimeMillis() < deadline) {
+            val root = uiAutomation.rootInActiveWindow
+            if (root != null) {
+                val dump = StringBuilder()
+                val target = findMdnFamilyNameField(root, dump)
+                lastDump = dump.toString()
+                if (target != null) {
+                    val viewId = target.viewIdResourceName.orEmpty()
+                    val desc = target.contentDescription?.toString().orEmpty()
+                    val clicked = target.performAction(AccessibilityNodeInfo.ACTION_CLICK) ||
+                        target.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
+                    target.recycle()
+                    root.recycle()
+                    return "clicked=$clicked viewId=$viewId desc=$desc"
+                }
+                scrollAccessibilityNode(root)
+                root.recycle()
+            }
+            Thread.sleep(500)
+        }
+        return "not-found dump=\n$lastDump"
+    }
 
-                <label for="firstName">名前:</label>
-                <input name="firstName" id="firstName" type="text" autocomplete="given-name" />
+    private fun findMdnFamilyNameField(
+        node: AccessibilityNodeInfo,
+        dump: StringBuilder,
+        depth: Int = 0,
+    ): AccessibilityNodeInfo? {
+        val viewId = node.viewIdResourceName.orEmpty()
+        val desc = node.contentDescription?.toString().orEmpty()
+        val text = node.text?.toString().orEmpty()
+        val cls = node.className?.toString().orEmpty()
+        if (dump.lines().size < ACCESSIBILITY_DUMP_MAX_LINES) {
+            dump.append("  ".repeat(depth.coerceAtMost(16)))
+                .append(cls.substringAfterLast('.'))
+                .append(" id=").append(viewId)
+                .append(" text=").append(text.take(40))
+                .append(" desc=").append(desc.take(40))
+                .append(" edit=").append(node.isEditable)
+                .append('\n')
+        }
+        val isEdit = node.isEditable || cls.contains("EditText", ignoreCase = true)
+        val looksLikeFamilyName = viewId.endsWith("lastName", ignoreCase = true) ||
+            desc.contains("苗字") ||
+            text.contains("苗字") ||
+            desc.contains("family-name", ignoreCase = true)
+        if (viewId.endsWith("lastName", ignoreCase = true) || (isEdit && looksLikeFamilyName)) {
+            return AccessibilityNodeInfo.obtain(node)
+        }
+        for (index in 0 until node.childCount) {
+            val child = node.getChild(index) ?: continue
+            val found = findMdnFamilyNameField(child, dump, depth + 1)
+            child.recycle()
+            if (found != null) return found
+        }
+        return null
+    }
 
-                <label for="email">メールアドレス:</label>
-                <input name="email" id="email" type="email" autocomplete="off" />
-                <script>
-                  window.addEventListener('load', () => {
-                    setTimeout(() => {
-                      document.getElementById('lastName').focus();
-                    }, 2000);
-                  });
-                </script>
-              </body>
-            </html>
-        """.trimIndent()
+    private fun scrollAccessibilityNode(node: AccessibilityNodeInfo) {
+        if (node.isScrollable) {
+            node.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)
+        }
+        for (index in 0 until node.childCount) {
+            val child = node.getChild(index) ?: continue
+            scrollAccessibilityNode(child)
+            child.recycle()
+        }
+    }
+
+    private fun dumpAccessibilityTree(): String {
+        val root = InstrumentationRegistry.getInstrumentation().uiAutomation.rootInActiveWindow
+            ?: return "(rootInActiveWindow=null)"
+        val dump = StringBuilder()
+        findMdnFamilyNameField(root, dump)
+        root.recycle()
+        return dump.toString()
     }
 
     /**
@@ -513,6 +564,11 @@ class AddressAutofillPromptTest {
             "GeckoConsole",
             "addr-test",
             "GeckoView:Prompt",
+            "AutocompleteStorage",
+            "PromptDialogState",
+            "delegateSelection",
+            "onAddressSelect",
+            "onAddressFetch",
         )
         // logcat は入力完了後にクリアしているため、先頭側 (送信直後) に重要なログが集まる
         return output
@@ -770,10 +826,13 @@ class AddressAutofillPromptTest {
     private companion object {
         private const val ADDRESS_FORM_FILE_NAME = "address-form.html"
         private const val ADDRESS_SELECT_FORM_FILE_NAME = "address_form.html"
-        private const val MDN_AUTOCOMPLETE_SAMPLE_FILE_NAME = "mdn-autocomplete-sample.html"
         private const val ADDRESS_FORM_DONE_FILE_NAME = "done.html"
+        private const val MDN_AUTOCOMPLETE_PAGE_URL =
+            "https://developer.mozilla.org/ja/docs/Web/HTML/Reference/Attributes/autocomplete"
         private const val PREF_TIMEOUT_MILLIS = 30_000L
         private const val PREF_POLL_TIMEOUT_MILLIS = 5_000L
         private const val LOGCAT_TAIL_LINES = 250
+        private const val MDN_FIELD_WAIT_MILLIS = 60_000L
+        private const val ACCESSIBILITY_DUMP_MAX_LINES = 200
     }
 }

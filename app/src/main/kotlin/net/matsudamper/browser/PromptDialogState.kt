@@ -466,6 +466,14 @@ internal class PromptDialogState(
                 session: GeckoSession,
                 prompt: GeckoSession.PromptDelegate.AutocompleteRequest<Autocomplete.AddressSelectOption>,
             ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse> {
+                Log.i(
+                    "PromptDialogState",
+                    "onAddressSelect options=${prompt.options.size} " +
+                        prompt.options.joinToString { option ->
+                            val address = option.value
+                            "name=${address.name} family=${address.familyName} country=${address.country}"
+                        },
+                )
                 if (prompt.options.isEmpty()) return GeckoResult.fromValue(prompt.dismiss())
                 return GeckoResult<GeckoSession.PromptDelegate.PromptResponse>().also {
                     pendingAddressSelectPrompt = prompt
