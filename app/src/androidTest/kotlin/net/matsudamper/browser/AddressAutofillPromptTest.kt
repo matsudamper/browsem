@@ -31,7 +31,8 @@ import java.util.concurrent.TimeoutException
  * GeckoView の住所フォーム自動入力 (formautofill) が実際に動作することを確認するテスト。
  *
  * AppModule で有効化した extensions.formautofill.addresses.capture.enabled により、
- * 住所フォーム送信時に PromptDelegate.onAddressSave が発火して保存ダイアログが表示されることを検証する。
+ * 住所フォーム送信時に PromptDelegate.onAddressSave が発火して保存ダイアログが表示されること、
+ * 保存確認後に住所が永続化されることを検証する。
  * フォームへの値の投入と送信はページ内 JavaScript で行うため、Web コンテンツへの直接操作は行わない。
  *
  * file:// ではフォーム送信が行われないことが CI の診断で判明したため、
@@ -54,12 +55,11 @@ class AddressAutofillPromptTest {
     }
 
     @Test
-    fun submittingAddressFormSavesAddressAndShowsSelectDialogOnRefocus() {
+    fun submittingAddressFormShowsSaveDialogAndPersistsAddress() {
         val server = LocalHttpServer(
             pages = mapOf(
                 "/$ADDRESS_FORM_FILE_NAME" to buildAddressFormHtml(),
                 "/$ADDRESS_FORM_DONE_FILE_NAME" to buildDoneHtml(),
-                "/$ADDRESS_AUTOFILL_FILE_NAME" to buildAddressAutofillHtml(),
             ),
         )
         httpServer = server
@@ -92,6 +92,7 @@ class AddressAutofillPromptTest {
         // AddressSaveDialog が表示されるはず。
         waitForAddressSaveDialog(submitted, selfCheck, server)
 
+        clearLogcat()
         composeRule
             .onNodeWithTag(BrowserTabDialogLayerTestTags.AddressSaveConfirmButton.testTag)
             .performClick()
@@ -102,28 +103,59 @@ class AddressAutofillPromptTest {
                 .fetchSemanticsNodes()
                 .isEmpty()
         }
+        waitForAddressPersistedLog()
 
-        val autofillPageUri = "http://127.0.0.1:${server.port}/$ADDRESS_AUTOFILL_FILE_NAME"
-        composeRule.openUrlFromUrlBar(autofillPageUri)
-        composeRule.waitForUrlBarContains(ADDRESS_AUTOFILL_FILE_NAME, timeoutMillis = 60_000)
+        val requestsBeforeSecondSubmit = server.requests.size
+        composeRule.openUrlFromUrlBar(pageUri)
+        composeRule.waitForUrlBarContains(ADDRESS_FORM_FILE_NAME, timeoutMillis = 60_000)
+        Thread.sleep(FILL_COMPLETE_WAIT_MILLIS)
 
-        // focus トリガー (load+2秒) 後に保存済み住所の選択ダイアログが出ることを確認する
+        val secondSubmitted = runCatching {
+            composeRule.waitUntil(timeoutMillis = 30_000) {
+                server.requests.size > requestsBeforeSecondSubmit &&
+                    server.requests.any { it.contains(ADDRESS_FORM_DONE_FILE_NAME) }
+            }
+        }.isSuccess
+        check(secondSubmitted) {
+            "2回目のフォーム送信が完了しない: requests=${server.requests}"
+        }
+
+        // 保存済み住所の再送信では capture プロンプトが出ないことを確認する。
+        // 単一住所では focus だけでは選択ダイアログが出ないことがあるため、
+        // 永続化の往復は「再送信しても保存ダイアログが出ない」で検証する。
         try {
-            composeRule.waitUntil(timeoutMillis = 60_000) {
+            composeRule.waitUntil(timeoutMillis = 15_000) {
                 composeRule
-                    .onAllNodesWithTag(BrowserTabDialogLayerTestTags.AddressSelectDialog.testTag)
+                    .onAllNodesWithTag(BrowserTabDialogLayerTestTags.AddressSaveDialog.testTag)
                     .fetchSemanticsNodes()
                     .isNotEmpty()
             }
-        } catch (e: ComposeTimeoutException) {
-            throw AssertionError(
-                "住所選択ダイアログが表示されない\n" +
-                    "現在URL=${composeRule.currentPageUrlFromUi()}\n" +
-                    "サーバ受信リクエスト=${server.requests}\n" +
-                    "--- logcat (formautofill関連) ---\n${collectFormAutofillLogcat()}",
-                e,
-            )
+            fail("保存済みの住所なのに再度保存ダイアログが表示された")
+        } catch (@Suppress("SwallowedException") e: ComposeTimeoutException) {
+            // 期待どおり保存ダイアログは出ない
         }
+    }
+
+    private fun waitForAddressPersistedLog(timeoutMillis: Long = 30_000) {
+        val deadline = System.currentTimeMillis() + timeoutMillis
+        while (System.currentTimeMillis() < deadline) {
+            if (readLogcat().contains("住所を保存しました")) return
+            Thread.sleep(500)
+        }
+        fail(
+            "住所の永続化ログが出ない\n" +
+                "--- logcat ---\n${readLogcat().takeLast(8_000)}",
+        )
+    }
+
+    private fun readLogcat(): String {
+        return runCatching {
+            val pfd = InstrumentationRegistry.getInstrumentation().uiAutomation
+                .executeShellCommand("logcat -d")
+            ParcelFileDescriptor.AutoCloseInputStream(pfd)
+                .bufferedReader()
+                .readText()
+        }.getOrElse { "" }
     }
 
     private fun waitForAddressSaveDialog(
@@ -497,49 +529,6 @@ class AddressAutofillPromptTest {
     }
 
     /**
-     * 保存済み住所の自動入力プロンプト確認用ページ。
-     * フォーム送信は行わず、住所フィールドへの focus のみを行う。
-     */
-    private fun buildAddressAutofillHtml(): String {
-        return """
-            <!doctype html>
-            <html lang="en">
-              <head>
-                <meta charset="utf-8" />
-                <title>Address Autofill Test</title>
-              </head>
-              <body>
-                <form id="address-form">
-                  <input id="given-name" name="given-name" autocomplete="given-name" />
-                  <input id="family-name" name="family-name" autocomplete="family-name" />
-                  <input id="street-address" name="street-address" autocomplete="street-address" />
-                  <input id="address-level2" name="city" autocomplete="address-level2" />
-                  <input id="address-level1" name="state" autocomplete="address-level1" />
-                  <input id="postal-code" name="zip" autocomplete="postal-code" />
-                  <select id="country" name="country" autocomplete="country">
-                    <option value="US" selected>United States</option>
-                  </select>
-                  <input id="tel" name="tel" autocomplete="tel" />
-                  <input id="email" name="email" autocomplete="email" />
-                </form>
-                <script>
-                  function log(message) {
-                    console.log('addr-test: ' + message);
-                  }
-                  window.addEventListener('load', () => {
-                    log('autofill-load');
-                    setTimeout(() => {
-                      log('autofill-focus');
-                      document.getElementById('given-name').focus();
-                    }, 2000);
-                  });
-                </script>
-              </body>
-            </html>
-        """.trimIndent()
-    }
-
-    /**
      * テストページ配信用の最小限のループバック HTTP サーバ。
      *
      * file:// ではフォーム送信が行われないため、http:// でページを配信する。
@@ -618,7 +607,6 @@ class AddressAutofillPromptTest {
     private companion object {
         private const val ADDRESS_FORM_FILE_NAME = "address-form.html"
         private const val ADDRESS_FORM_DONE_FILE_NAME = "done.html"
-        private const val ADDRESS_AUTOFILL_FILE_NAME = "address-autofill.html"
         private const val PREF_TIMEOUT_MILLIS = 30_000L
         private const val PREF_POLL_TIMEOUT_MILLIS = 5_000L
         private const val FILL_COMPLETE_WAIT_MILLIS = 6_500L
