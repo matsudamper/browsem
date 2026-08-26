@@ -80,6 +80,9 @@ import net.matsudamper.browser.screen.backup.BackupProgressViewModel
 import net.matsudamper.browser.screen.browser.BrowserScreenViewModel
 import net.matsudamper.browser.screen.downloads.DownloadManagementScreenViewModel
 import net.matsudamper.browser.screen.extensions.ExtensionsScreenViewModel
+import net.matsudamper.browser.data.address.AddressRepository
+import net.matsudamper.browser.screen.addresses.AddressEditScreenViewModel
+import net.matsudamper.browser.screen.addresses.AddressesScreenViewModel
 import net.matsudamper.browser.screen.history.HistoryScreenViewModel
 import net.matsudamper.browser.screen.settings.SettingsScreenViewModel
 import net.matsudamper.browser.screen.sitesettings.SiteSettingsScreenViewModel
@@ -89,6 +92,8 @@ import net.matsudamper.browser.ui.common.BrowserTheme
 import net.matsudamper.browser.ui.downloads.DownloadManagementScreen
 import net.matsudamper.browser.ui.extensions.ExtensionsScreen
 import net.matsudamper.browser.ui.history.HistoryScreen
+import net.matsudamper.browser.ui.settings.AddressEditScreen
+import net.matsudamper.browser.ui.settings.AddressesScreen
 import net.matsudamper.browser.ui.settings.BackupProgressScreen
 import net.matsudamper.browser.ui.settings.BackupProgressUiState
 import net.matsudamper.browser.ui.settings.SettingsScreen
@@ -282,6 +287,7 @@ internal fun BrowserAppShell(
                             uiState = uiState,
                             onOpenExtensions = { outerBackStack.add(AppDestination.Extensions) },
                             onOpenHistory = { outerBackStack.add(AppDestination.History) },
+                            onOpenAddresses = { outerBackStack.add(AppDestination.Addresses) },
                             onOpenReleases = {
                                 context.startActivity(
                                     Intent(
@@ -361,6 +367,51 @@ internal fun BrowserAppShell(
                     }
                     HistoryScreen(
                         uiState = historyUiState,
+                        onBack = { outerBackStack.removeLastOrNull() },
+                    )
+                }
+
+                AppDestination.Addresses -> navEntry(key) {
+                    val addressRepository: AddressRepository = koinInject()
+                    val addressesViewModel = composeViewModel(initializer = {
+                        AddressesScreenViewModel(addressRepository)
+                    })
+                    val addressesUiState by addressesViewModel.uiState.collectAsState()
+                    LaunchedEffect(addressesViewModel) {
+                        addressesViewModel.eventHandler.receiveAsFlow().collect {
+                            it(object : AddressesScreenViewModel.Event {
+                                override fun navigateToEdit(addressId: Long) {
+                                    outerBackStack.add(AppDestination.AddressEdit(addressId = addressId))
+                                }
+                            })
+                        }
+                    }
+                    AddressesScreen(
+                        uiState = addressesUiState,
+                        onBack = { outerBackStack.removeLastOrNull() },
+                    )
+                }
+
+                is AppDestination.AddressEdit -> navEntry(key) {
+                    val addressRepository: AddressRepository = koinInject()
+                    val addressEditViewModel = composeViewModel(initializer = {
+                        AddressEditScreenViewModel(
+                            addressRepository = addressRepository,
+                            addressId = key.addressId,
+                        )
+                    })
+                    val addressEditUiState by addressEditViewModel.uiState.collectAsState()
+                    LaunchedEffect(addressEditViewModel) {
+                        addressEditViewModel.eventHandler.receiveAsFlow().collect {
+                            it(object : AddressEditScreenViewModel.Event {
+                                override fun navigateBack() {
+                                    outerBackStack.removeLastOrNull()
+                                }
+                            })
+                        }
+                    }
+                    AddressEditScreen(
+                        uiState = addressEditUiState,
                         onBack = { outerBackStack.removeLastOrNull() },
                     )
                 }
