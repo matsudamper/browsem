@@ -98,6 +98,44 @@ class AddressAutofillPromptTest {
     }
 
     @Test
+    fun focusingMdnAutocompleteMarkupShowsAddressSelectDialog() {
+        seedUserReportedAddressWithoutCountry()
+
+        val server = LocalHttpServer(
+            pages = mapOf(
+                "/$MDN_AUTOCOMPLETE_SAMPLE_FILE_NAME" to buildMdnAutocompleteSampleHtml(),
+            ),
+        )
+        httpServer = server
+        val pageUri = "http://127.0.0.1:${server.port}/$MDN_AUTOCOMPLETE_SAMPLE_FILE_NAME"
+
+        selfCheckHttp(pageUri)
+
+        applyTestPrefsAndAwaitAddressAutofillEnabled()
+        saveAndSetPref("geckoview.autocomplete.selection_dismiss_delay_ms", 60_000)
+
+        composeRule.openUrlFromUrlBar(pageUri)
+        composeRule.waitForUrlBarContains(MDN_AUTOCOMPLETE_SAMPLE_FILE_NAME, timeoutMillis = 60_000)
+
+        try {
+            composeRule.waitUntil(timeoutMillis = 60_000) {
+                composeRule
+                    .onAllNodesWithTag(BrowserTabDialogLayerTestTags.AddressSelectDialog.testTag)
+                    .fetchSemanticsNodes()
+                    .isNotEmpty()
+            }
+        } catch (e: ComposeTimeoutException) {
+            throw AssertionError(
+                "MDN autocomplete と同じマークアップで住所選択ダイアログが表示されない\n" +
+                    "現在URL=${composeRule.currentPageUrlFromUi()}\n" +
+                    "サーバ受信リクエスト=${server.requests}\n" +
+                    "--- logcat (formautofill関連) ---\n${collectFormAutofillLogcat()}",
+                e,
+            )
+        }
+    }
+
+    @Test
     fun focusingMozillaAddressFormShowsAddressSelectDialog() {
         seedMozillaSampleAddress()
 
@@ -385,37 +423,89 @@ class AddressAutofillPromptTest {
     }
 
     /**
+     * MDN の autocomplete ドキュメント「試してみましょう」と同じマークアップ。
+     * form 要素はない。苗字欄へフォーカスして選択ダイアログを誘発する。
+     */
+    private fun buildMdnAutocompleteSampleHtml(): String {
+        return """
+            <!doctype html>
+            <html lang="ja">
+              <head>
+                <meta charset="utf-8" />
+                <title>HTML デモ: autocomplete</title>
+              </head>
+              <body>
+                <label for="lastName">苗字:</label>
+                <input name="lastName" id="lastName" type="text" autocomplete="family-name" />
+
+                <label for="firstName">名前:</label>
+                <input name="firstName" id="firstName" type="text" autocomplete="given-name" />
+
+                <label for="email">メールアドレス:</label>
+                <input name="email" id="email" type="email" autocomplete="off" />
+                <script>
+                  window.addEventListener('load', () => {
+                    setTimeout(() => {
+                      document.getElementById('lastName').focus();
+                    }, 2000);
+                  });
+                </script>
+              </body>
+            </html>
+        """.trimIndent()
+    }
+
+    /**
      * MDN ライブサンプルの苗字欄をクリックする。
      *
      * 実ページの入力は cross-origin iframe 内にあるため、ページ内 JS ではフォーカスできない。
      * 生の MotionEvent は使わず、AccessibilityNodeInfo の ACTION_CLICK / ACTION_FOCUS で
      * ユーザーが欄をタップしたのと同じフォーカスを入れる。
+     *
+     * HTML タブのコードエディタも「苗字」を含むので、ソース編集欄は除外する。
      */
     private fun clickMdnFamilyNameField(): String {
         val uiAutomation = InstrumentationRegistry.getInstrumentation().uiAutomation
         val deadline = System.currentTimeMillis() + MDN_FIELD_WAIT_MILLIS
         var lastDump = ""
+        var clickedOutputTab = false
         while (System.currentTimeMillis() < deadline) {
             val root = uiAutomation.rootInActiveWindow
             if (root != null) {
+                if (!clickedOutputTab) {
+                    clickedOutputTab = clickNodeWithText(root, OUTPUT_TAB_LABELS)
+                }
                 val dump = StringBuilder()
                 val target = findMdnFamilyNameField(root, dump)
+                    ?: findFirstEmptyContentEditText(root)
                 lastDump = dump.toString()
                 if (target != null) {
                     val viewId = target.viewIdResourceName.orEmpty()
                     val desc = target.contentDescription?.toString().orEmpty()
+                    val text = target.text?.toString().orEmpty()
                     val clicked = target.performAction(AccessibilityNodeInfo.ACTION_CLICK) ||
                         target.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
                     target.recycle()
                     root.recycle()
-                    return "clicked=$clicked viewId=$viewId desc=$desc"
+                    return "clicked=$clicked viewId=$viewId desc=$desc text=${text.take(80)} outputTab=$clickedOutputTab"
                 }
                 scrollAccessibilityNode(root)
                 root.recycle()
             }
             Thread.sleep(500)
         }
-        return "not-found dump=\n$lastDump"
+        return "not-found outputTab=$clickedOutputTab dump=\n$lastDump"
+    }
+
+    private fun clickNodeWithText(root: AccessibilityNodeInfo, labels: Set<String>): Boolean {
+        val node = findNode(root) { candidate ->
+            val text = candidate.text?.toString().orEmpty()
+            val desc = candidate.contentDescription?.toString().orEmpty()
+            labels.any { label -> text == label || desc == label }
+        } ?: return false
+        val clicked = node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+        node.recycle()
+        return clicked
     }
 
     private fun findMdnFamilyNameField(
@@ -436,17 +526,67 @@ class AddressAutofillPromptTest {
                 .append(" edit=").append(node.isEditable)
                 .append('\n')
         }
-        val isEdit = node.isEditable || cls.contains("EditText", ignoreCase = true)
-        val looksLikeFamilyName = viewId.endsWith("lastName", ignoreCase = true) ||
-            desc.contains("苗字") ||
-            text.contains("苗字") ||
-            desc.contains("family-name", ignoreCase = true)
-        if (viewId.endsWith("lastName", ignoreCase = true) || (isEdit && looksLikeFamilyName)) {
+        if (isMdnLiveFamilyNameField(node)) {
             return AccessibilityNodeInfo.obtain(node)
         }
         for (index in 0 until node.childCount) {
             val child = node.getChild(index) ?: continue
             val found = findMdnFamilyNameField(child, dump, depth + 1)
+            child.recycle()
+            if (found != null) return found
+        }
+        return null
+    }
+
+    private fun isMdnLiveFamilyNameField(node: AccessibilityNodeInfo): Boolean {
+        val viewId = node.viewIdResourceName.orEmpty()
+        val desc = node.contentDescription?.toString().orEmpty()
+        val text = node.text?.toString().orEmpty()
+        val cls = node.className?.toString().orEmpty()
+        val isEdit = node.isEditable || cls.contains("EditText", ignoreCase = true)
+        if (isSourceEditorText(text) || isSourceEditorText(desc)) return false
+        if (viewId.endsWith("lastName", ignoreCase = true)) return true
+        if (!isEdit) return false
+        return desc.contains("苗字") ||
+            desc.contains("family-name", ignoreCase = true) ||
+            (text.isEmpty() && viewId.contains("lastName", ignoreCase = true))
+    }
+
+    private fun isSourceEditorText(value: String): Boolean {
+        return value.contains("<label") ||
+            value.contains("<input") ||
+            value.contains("autocomplete=")
+    }
+
+    private fun findFirstEmptyContentEditText(node: AccessibilityNodeInfo): AccessibilityNodeInfo? {
+        val viewId = node.viewIdResourceName.orEmpty()
+        val desc = node.contentDescription?.toString().orEmpty()
+        val text = node.text?.toString().orEmpty()
+        val cls = node.className?.toString().orEmpty()
+        val isEdit = node.isEditable || cls.contains("EditText", ignoreCase = true)
+        val isChrome = viewId.contains("UrlTextInput", ignoreCase = true) ||
+            desc.contains("Address bar") ||
+            viewId.contains("toolbar", ignoreCase = true)
+        if (isEdit && !isChrome && text.isBlank() && !isSourceEditorText(text) && !isSourceEditorText(desc)) {
+            return AccessibilityNodeInfo.obtain(node)
+        }
+        for (index in 0 until node.childCount) {
+            val child = node.getChild(index) ?: continue
+            val found = findFirstEmptyContentEditText(child)
+            child.recycle()
+            if (found != null) return found
+        }
+        return null
+    }
+
+    private fun findNode(
+        node: AccessibilityNodeInfo,
+        predicate: (AccessibilityNodeInfo) -> Boolean,
+    ): AccessibilityNodeInfo? {
+        if (predicate(node)) return AccessibilityNodeInfo.obtain(node)
+        for (index in 0 until node.childCount) {
+            val child = node.getChild(index) ?: continue
+            val found = findNode(child, predicate)
             child.recycle()
             if (found != null) return found
         }
@@ -829,10 +969,12 @@ class AddressAutofillPromptTest {
         private const val ADDRESS_FORM_DONE_FILE_NAME = "done.html"
         private const val MDN_AUTOCOMPLETE_PAGE_URL =
             "https://developer.mozilla.org/ja/docs/Web/HTML/Reference/Attributes/autocomplete"
+        private const val MDN_AUTOCOMPLETE_SAMPLE_FILE_NAME = "mdn-autocomplete-sample.html"
         private const val PREF_TIMEOUT_MILLIS = 30_000L
         private const val PREF_POLL_TIMEOUT_MILLIS = 5_000L
         private const val LOGCAT_TAIL_LINES = 250
         private const val MDN_FIELD_WAIT_MILLIS = 60_000L
-        private const val ACCESSIBILITY_DUMP_MAX_LINES = 200
+        private const val ACCESSIBILITY_DUMP_MAX_LINES = 500
+        private val OUTPUT_TAB_LABELS = setOf("出力", "Output")
     }
 }
