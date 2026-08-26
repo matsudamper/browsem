@@ -38,7 +38,7 @@ import java.util.concurrent.TimeoutException
  * 住所フォーム送信時に PromptDelegate.onAddressSave が発火して保存ダイアログが表示されること、
  * 保存済み住所がある状態で GeckoView 本家の address_form.html と、
  * ユーザーが再現に使っている MDN autocomplete の実ページで
- * 選択ダイアログが表示されることを検証する。
+ * 選択ダイアログが表示され、選んだ住所がフォームへ入力されることを検証する。
  *
  * file:// ではフォーム送信が行われないことが CI の診断で判明したため、
  * ループバック HTTP サーバでページを配信する。
@@ -95,6 +95,10 @@ class AddressAutofillPromptTest {
                 e,
             )
         }
+        selectFirstSavedAddress()
+        waitUntilAddressFilled(
+            extraMessage = "MDN の実ページで住所を選んでも入力されない 苗字欄クリック=$fieldClick",
+        )
     }
 
     @Test
@@ -133,6 +137,10 @@ class AddressAutofillPromptTest {
                 e,
             )
         }
+        selectFirstSavedAddress()
+        waitUntilAddressFilled(
+            extraMessage = "MDN autocomplete と同じマークアップで住所を選んでも入力されない",
+        )
     }
 
     @Test
@@ -199,6 +207,11 @@ class AddressAutofillPromptTest {
                     e,
                 )
             }
+            selectFirstSavedAddress()
+            waitUntilAddressFilled(
+                extraMessage = "sandbox iframe 内で住所を選んでも入力されない " +
+                    "親サーバ=${parentServer.requests} 子サーバ=${contentServer.requests}",
+            )
         } finally {
             contentServer.close()
         }
@@ -240,6 +253,10 @@ class AddressAutofillPromptTest {
                 e,
             )
         }
+        selectFirstSavedAddress()
+        waitUntilAddressFilled(
+            extraMessage = "Mozilla の address_form.html で住所を選んでも入力されない",
+        )
     }
 
     @Test
@@ -287,6 +304,99 @@ class AddressAutofillPromptTest {
                 .fetchSemanticsNodes()
                 .isEmpty()
         }
+    }
+
+    private fun selectFirstSavedAddress() {
+        composeRule.waitUntil(timeoutMillis = 10_000) {
+            composeRule
+                .onAllNodesWithTag(BrowserTabDialogLayerTestTags.AddressSelectOption.testTag)
+                .fetchSemanticsNodes()
+                .isNotEmpty()
+        }
+        composeRule
+            .onAllNodesWithTag(BrowserTabDialogLayerTestTags.AddressSelectOption.testTag)[0]
+            .performClick()
+    }
+
+    private fun waitUntilAddressFilled(extraMessage: String) {
+        try {
+            composeRule.waitUntil(timeoutMillis = 30_000) {
+                pageContainsFilledAddress(FILL_FAMILY_NAME, FILL_GIVEN_NAME)
+            }
+        } catch (e: ComposeTimeoutException) {
+            throw AssertionError(
+                "$extraMessage\n" +
+                    "現在URL=${composeRule.currentPageUrlFromUi()}\n" +
+                    "editables=${collectEditableFieldTexts()}\n" +
+                    "texts=${collectAccessibilityTexts().take(80)}\n" +
+                    "--- accessibility ---\n${dumpAccessibilityTree()}\n" +
+                    "--- logcat (formautofill関連) ---\n${collectFormAutofillLogcat()}",
+                e,
+            )
+        }
+    }
+
+    private fun pageContainsFilledAddress(familyName: String, givenName: String): Boolean {
+        val texts = collectAccessibilityTexts()
+        if (texts.any { it.contains("lastName=$familyName") && it.contains("firstName=$givenName") }) {
+            return true
+        }
+        if (texts.any { it.contains("familyName=$familyName") && it.contains("givenName=$givenName") }) {
+            return true
+        }
+        val editables = collectEditableFieldTexts()
+        return editables.any { it.contains(familyName) } && editables.any { it.contains(givenName) }
+    }
+
+    private fun collectAccessibilityTexts(): List<String> {
+        val root = InstrumentationRegistry.getInstrumentation().uiAutomation.rootInActiveWindow
+            ?: return emptyList()
+        val texts = mutableListOf<String>()
+        fun walk(node: AccessibilityNodeInfo) {
+            val text = node.text?.toString().orEmpty()
+            val desc = node.contentDescription?.toString().orEmpty()
+            if (text.isNotEmpty()) texts.add(text)
+            if (desc.isNotEmpty()) texts.add(desc)
+            for (index in 0 until node.childCount) {
+                val child = node.getChild(index) ?: continue
+                walk(child)
+                child.recycle()
+            }
+        }
+        try {
+            walk(root)
+        } finally {
+            root.recycle()
+        }
+        return texts
+    }
+
+    private fun collectEditableFieldTexts(): List<String> {
+        val root = InstrumentationRegistry.getInstrumentation().uiAutomation.rootInActiveWindow
+            ?: return emptyList()
+        val texts = mutableListOf<String>()
+        fun walk(node: AccessibilityNodeInfo) {
+            val viewId = node.viewIdResourceName.orEmpty()
+            val cls = node.className?.toString().orEmpty()
+            val isChrome = viewId.contains("UrlTextInput", ignoreCase = true) ||
+                viewId.contains("toolbar", ignoreCase = true) ||
+                node.contentDescription?.toString().orEmpty().contains("Address bar")
+            val isEdit = node.isEditable || cls.contains("EditText", ignoreCase = true)
+            if (isEdit && !isChrome) {
+                texts.add(node.text?.toString().orEmpty())
+            }
+            for (index in 0 until node.childCount) {
+                val child = node.getChild(index) ?: continue
+                walk(child)
+                child.recycle()
+            }
+        }
+        try {
+            walk(root)
+        } finally {
+            root.recycle()
+        }
+        return texts
     }
 
     private fun waitForAddressSaveDialog(
@@ -407,8 +517,8 @@ class AddressAutofillPromptTest {
             repository.deleteAll()
             repository.save(
                 AddressEntity(
-                    givenName = "a",
-                    familyName = "b",
+                    givenName = FILL_GIVEN_NAME,
+                    familyName = FILL_FAMILY_NAME,
                     addressLevel1 = "c",
                     addressLevel2 = "i",
                     addressLevel3 = "2",
@@ -430,8 +540,8 @@ class AddressAutofillPromptTest {
             repository.deleteAll()
             repository.save(
                 AddressEntity(
-                    givenName = "Peter",
-                    familyName = "Parker",
+                    givenName = FILL_GIVEN_NAME,
+                    familyName = FILL_FAMILY_NAME,
                     streetAddress = "20 Ingram Street, Forest Hills Gardens, Queens",
                     postalCode = "11375",
                     country = "US",
@@ -479,8 +589,19 @@ class AddressAutofillPromptTest {
                   <input autocomplete="tel" id="tel" />
                   <input type="submit" value="Submit" />
                 </form>
+                <pre id="fill-probe"></pre>
                 <script>
+                  function reportFill() {
+                    const probe = document.getElementById('fill-probe');
+                    if (!probe) return;
+                    const given = document.getElementById('givenName');
+                    const family = document.getElementById('familyName');
+                    probe.textContent =
+                      'givenName=' + (given ? given.value : '') +
+                      ' familyName=' + (family ? family.value : '');
+                  }
                   window.addEventListener('load', () => {
+                    setInterval(reportFill, 250);
                     setTimeout(() => {
                       document.getElementById('givenName').focus();
                     }, 2000);
@@ -512,8 +633,19 @@ class AddressAutofillPromptTest {
 
                 <label for="email">メールアドレス:</label>
                 <input name="email" id="email" type="email" autocomplete="off" />
+                <pre id="fill-probe"></pre>
                 <script>
+                  function reportFill() {
+                    const probe = document.getElementById('fill-probe');
+                    if (!probe) return;
+                    const lastName = document.getElementById('lastName');
+                    const firstName = document.getElementById('firstName');
+                    probe.textContent =
+                      'lastName=' + (lastName ? lastName.value : '') +
+                      ' firstName=' + (firstName ? firstName.value : '');
+                  }
                   window.addEventListener('load', () => {
+                    setInterval(reportFill, 250);
                     setTimeout(() => {
                       document.getElementById('lastName').focus();
                     }, 2000);
@@ -821,6 +953,8 @@ class AddressAutofillPromptTest {
             "onAddressSelect",
             "onAddressFetch",
             "AddressAutofill",
+            "AddressAutofillExt",
+            "address-autofill",
         )
         // logcat は入力完了後にクリアしているため、先頭側 (送信直後) に重要なログが集まる
         return output
@@ -1101,6 +1235,8 @@ class AddressAutofillPromptTest {
         private const val LOGCAT_TAIL_LINES = 250
         private const val MDN_FIELD_WAIT_MILLIS = 60_000L
         private const val ACCESSIBILITY_DUMP_MAX_LINES = 500
+        private const val FILL_FAMILY_NAME = "YamadaFillTest"
+        private const val FILL_GIVEN_NAME = "TaroFillTest"
         private val OUTPUT_TAB_LABELS = setOf("出力", "Output", "結果", "Play")
     }
 }

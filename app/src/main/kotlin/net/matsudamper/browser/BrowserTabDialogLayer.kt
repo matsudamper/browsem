@@ -478,7 +478,9 @@ private fun AddressSelectDialog(
                                 style = MaterialTheme.typography.bodySmall,
                             )
                         },
-                        modifier = Modifier.clickable { onSelect(option) },
+                        modifier = Modifier
+                            .testTag(BrowserTabDialogLayerTestTags.AddressSelectOption.testTag)
+                            .clickable { onSelect(option) },
                         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                     )
                     if (option !== options.last()) HorizontalDivider()
@@ -525,6 +527,7 @@ sealed interface BrowserTabDialogLayerTestTags {
     val testTag get() = "${BrowserTabDialogLayerTestTags::class.java.name}#$id"
 
     data object AddressSelectDialog : BrowserTabDialogLayerTestTags { override val id = "address_select_dialog" }
+    data object AddressSelectOption : BrowserTabDialogLayerTestTags { override val id = "address_select_option" }
     data object AddressSaveDialog : BrowserTabDialogLayerTestTags { override val id = "address_save_dialog" }
     data object AddressSaveConfirmButton : BrowserTabDialogLayerTestTags { override val id = "address_save_confirm_button" }
 }
