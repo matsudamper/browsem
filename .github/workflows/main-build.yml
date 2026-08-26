@@ -81,8 +81,7 @@ jobs:
         run: |
           gh release create "${VERSION}" "${APK_PATH}" \
             --title "${VERSION}" \
-
-          Commit: ${COMMIT_URL}"
+            --notes "Commit: ${COMMIT_URL}"
 
   android-test:
     runs-on: ubuntu-latest
