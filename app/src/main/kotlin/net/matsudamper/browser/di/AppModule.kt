@@ -36,8 +36,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withContext
-import java.util.concurrent.TimeoutException
 import org.koin.android.ext.koin.androidContext
 import org.koin.androidx.workmanager.dsl.worker
 import org.koin.core.module.dsl.viewModel
@@ -46,7 +44,6 @@ import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoRuntimeSettings
 import org.mozilla.geckoview.ExperimentalGeckoViewApi
 import org.mozilla.geckoview.GeckoPreferenceController
-import org.mozilla.geckoview.GeckoResult
 
 val dataModule = module {
     single { BackupRepository(androidContext()) }
@@ -62,9 +59,9 @@ val dataModule = module {
 
 val appModule = module {
     single<GeckoRuntime> {
-        // GeckoView は all.js を含まないため addresses.enabled の既定値が false。
-        // Runtime 起動前に同期的に有効化しないと formautofill が動かない。
-        enableAddressAutofillBlocking()
+        // Gecko 起動前の pref 設定はキューされる。メインスレッドをブロックして待機すると
+        // initializeGeckoRuntime() とデッドロックするため非同期で投入する。
+        enableAddressAutofill()
         val settings = get<SettingsRepository>()
         val extensionsProcessEnabled = runBlocking {
             settings.settings.first().resolvedExtensionsProcessEnabled()
@@ -112,68 +109,33 @@ val appModule = module {
 private const val ADDRESS_AUTOFILL_ENABLED_PREF = "extensions.formautofill.addresses.enabled"
 private const val ADDRESS_AUTOFILL_CAPTURE_ENABLED_PREF = "extensions.formautofill.addresses.capture.enabled"
 private const val ADDRESS_AUTOFILL_SUPPORTED_PREF = "extensions.formautofill.addresses.supported"
-private const val ADDRESS_AUTOFILL_PREF_TIMEOUT_MILLIS = 30_000L
 
 /** GeckoView に公開設定 API がない住所自動入力を内部プリファレンスで有効にする。 */
 @OptIn(ExperimentalGeckoViewApi::class)
-private fun enableAddressAutofillBlocking() {
-    runBlocking {
-        val setResult = withContext(Dispatchers.Main) {
-            GeckoPreferenceController.setGeckoPrefs(
-                listOf(
-                    GeckoPreferenceController.SetGeckoPreference.setBoolPref(
-                        ADDRESS_AUTOFILL_ENABLED_PREF,
-                        true,
-                        GeckoPreferenceController.PREF_BRANCH_USER,
-                    ),
-                    GeckoPreferenceController.SetGeckoPreference.setBoolPref(
-                        ADDRESS_AUTOFILL_CAPTURE_ENABLED_PREF,
-                        true,
-                        GeckoPreferenceController.PREF_BRANCH_USER,
-                    ),
-                    GeckoPreferenceController.SetGeckoPreference.setStringPref(
-                        ADDRESS_AUTOFILL_SUPPORTED_PREF,
-                        "on",
-                        GeckoPreferenceController.PREF_BRANCH_USER,
-                    ),
-                ),
-            )
-        }
-        val setResults = pollGeckoResult(setResult)
-        val failed = setResults.orEmpty().filterValues { !it }.keys
-        if (failed.isNotEmpty()) {
-            Log.w("AppModule", "住所自動入力プリファレンスの設定に失敗: $failed")
-        }
-
-        val verifyResult = withContext(Dispatchers.Main) {
-            GeckoPreferenceController.getGeckoPrefs(
-                listOf(
-                    ADDRESS_AUTOFILL_ENABLED_PREF,
-                    ADDRESS_AUTOFILL_CAPTURE_ENABLED_PREF,
-                    ADDRESS_AUTOFILL_SUPPORTED_PREF,
-                ),
-            )
-        }
-        val values = pollGeckoResult(verifyResult)
-            .orEmpty()
-            .associate { it.pref to it.value }
-        val applied = values[ADDRESS_AUTOFILL_ENABLED_PREF] == true &&
-            values[ADDRESS_AUTOFILL_CAPTURE_ENABLED_PREF] == true &&
-            values[ADDRESS_AUTOFILL_SUPPORTED_PREF] == "on"
-        if (!applied) {
-            Log.w("AppModule", "住所自動入力プリファレンスが反映されていない: $values")
-        }
-    }
-}
-
-@OptIn(ExperimentalGeckoViewApi::class)
-private suspend fun <T> pollGeckoResult(result: GeckoResult<T>): T? {
-    return try {
-        withContext(Dispatchers.IO) {
-            result.poll(ADDRESS_AUTOFILL_PREF_TIMEOUT_MILLIS)
-        }
-    } catch (@Suppress("SwallowedException") e: TimeoutException) {
-        Log.w("AppModule", "住所自動入力プリファレンスの待機がタイムアウト", e)
-        null
-    }
+private fun enableAddressAutofill() {
+    GeckoPreferenceController.setGeckoPrefs(
+        listOf(
+            GeckoPreferenceController.SetGeckoPreference.setBoolPref(
+                ADDRESS_AUTOFILL_ENABLED_PREF,
+                true,
+                GeckoPreferenceController.PREF_BRANCH_USER,
+            ),
+            GeckoPreferenceController.SetGeckoPreference.setBoolPref(
+                ADDRESS_AUTOFILL_CAPTURE_ENABLED_PREF,
+                true,
+                GeckoPreferenceController.PREF_BRANCH_USER,
+            ),
+            GeckoPreferenceController.SetGeckoPreference.setStringPref(
+                ADDRESS_AUTOFILL_SUPPORTED_PREF,
+                "on",
+                GeckoPreferenceController.PREF_BRANCH_USER,
+            ),
+        ),
+    ).accept(
+        { results ->
+            val failed = results.orEmpty().filterValues { !it }.keys
+            if (failed.isNotEmpty()) Log.w("AppModule", "住所自動入力プリファレンスの設定に失敗: $failed")
+        },
+        { error -> Log.w("AppModule", "住所自動入力プリファレンスの設定に失敗", error) },
+    )
 }
