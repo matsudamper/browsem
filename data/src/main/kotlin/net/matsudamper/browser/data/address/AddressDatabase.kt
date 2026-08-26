@@ -10,6 +10,8 @@ abstract class AddressDatabase : RoomDatabase() {
     abstract fun addressDao(): AddressDao
 
     companion object {
+        const val SCHEMA_VERSION: Int = 1
+
         @Volatile
         private var instance: AddressDatabase? = null
 
@@ -21,6 +23,16 @@ abstract class AddressDatabase : RoomDatabase() {
                     "address.db",
                 ).build().also { instance = it }
             }
+        }
+
+        /** バックアップから address.db を上書き復元する直前に Room 接続を解放する */
+        fun closeInstance() {
+            val toClose = synchronized(this) {
+                val current = instance
+                instance = null
+                current
+            }
+            toClose?.close()
         }
     }
 }
