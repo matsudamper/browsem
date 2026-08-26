@@ -12,6 +12,9 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import kotlinx.coroutines.runBlocking
+import net.matsudamper.browser.data.address.AddressEntity
+import net.matsudamper.browser.data.address.AddressRepository
 import org.junit.After
 import org.junit.Assert.fail
 import org.junit.Rule
@@ -31,8 +34,8 @@ import java.util.concurrent.TimeoutException
  * GeckoView の住所フォーム自動入力 (formautofill) が実際に動作することを確認するテスト。
  *
  * AppModule で有効化した extensions.formautofill.addresses.capture.enabled により、
- * 住所フォーム送信時に PromptDelegate.onAddressSave が発火して保存ダイアログが表示されることを検証する。
- * 保存ボタン押下でダイアログが閉じることも合わせて確認する。
+ * 住所フォーム送信時に PromptDelegate.onAddressSave が発火して保存ダイアログが表示されること、
+ * 保存済み住所がある状態で住所フィールドにフォーカスしたときに選択ダイアログが表示されることを検証する。
  * フォームへの値の投入と送信はページ内 JavaScript で行うため、Web コンテンツへの直接操作は行わない。
  *
  * file:// ではフォーム送信が行われないことが CI の診断で判明したため、
@@ -46,12 +49,55 @@ class AddressAutofillPromptTest {
 
     private var httpServer: LocalHttpServer? = null
     private val savedPrefs = mutableListOf<SavedPref>()
+    private var seededAddresses = false
 
     @After
     fun tearDown() {
         restoreSavedPrefs()
+        if (seededAddresses) {
+            clearSeededAddresses()
+            seededAddresses = false
+        }
         httpServer?.close()
         httpServer = null
+    }
+
+    @Test
+    fun focusingAddressFieldShowsAddressSelectDialog() {
+        seedSavedAddress()
+
+        val server = LocalHttpServer(
+            pages = mapOf(
+                "/$ADDRESS_SELECT_FORM_FILE_NAME" to buildAddressSelectFormHtml(),
+            ),
+        )
+        httpServer = server
+        val pageUri = "http://127.0.0.1:${server.port}/$ADDRESS_SELECT_FORM_FILE_NAME"
+
+        selfCheckHttp(pageUri)
+
+        applyTestPrefsAndAwaitAddressAutofillEnabled()
+        saveAndSetPref("geckoview.autocomplete.selection_dismiss_delay_ms", 60_000)
+
+        composeRule.openUrlFromUrlBar(pageUri)
+        composeRule.waitForUrlBarContains(ADDRESS_SELECT_FORM_FILE_NAME, timeoutMillis = 60_000)
+
+        try {
+            composeRule.waitUntil(timeoutMillis = 60_000) {
+                composeRule
+                    .onAllNodesWithTag(BrowserTabDialogLayerTestTags.AddressSelectDialog.testTag)
+                    .fetchSemanticsNodes()
+                    .isNotEmpty()
+            }
+        } catch (e: ComposeTimeoutException) {
+            throw AssertionError(
+                "住所選択ダイアログが表示されない\n" +
+                    "現在URL=${composeRule.currentPageUrlFromUi()}\n" +
+                    "サーバ受信リクエスト=${server.requests}\n" +
+                    "--- logcat (formautofill関連) ---\n${collectFormAutofillLogcat()}",
+                e,
+            )
+        }
     }
 
     @Test
@@ -206,7 +252,69 @@ class AddressAutofillPromptTest {
         "devtools.console.stdout.content" -> false
         "network.lna.enabled" -> true
         "network.lna.blocking" -> true
+        "geckoview.autocomplete.selection_dismiss_delay_ms" -> 0
         else -> null
+    }
+
+    private fun seedSavedAddress() {
+        val repository = AddressRepository(
+            InstrumentationRegistry.getInstrumentation().targetContext,
+        )
+        runBlocking {
+            repository.deleteAll()
+            repository.save(
+                AddressEntity(
+                    givenName = "Taro",
+                    familyName = "Yamada",
+                    streetAddress = "1-2-3 Example St",
+                    postalCode = "1000001",
+                    country = "JP",
+                ),
+            )
+        }
+        seededAddresses = true
+    }
+
+    private fun clearSeededAddresses() {
+        val repository = AddressRepository(
+            InstrumentationRegistry.getInstrumentation().targetContext,
+        )
+        runBlocking {
+            repository.deleteAll()
+        }
+    }
+
+    /**
+     * GeckoView 本家の address_form.html と同様の最小フォーム。
+     * load 後に given-name へフォーカスして onAddressSelect を誘発する。
+     */
+    private fun buildAddressSelectFormHtml(): String {
+        return """
+            <!doctype html>
+            <html lang="en">
+              <head>
+                <meta charset="utf-8" />
+                <title>Address Select Test</title>
+              </head>
+              <body>
+                <form>
+                  <input autocomplete="name" id="name" />
+                  <input autocomplete="given-name" id="givenName" />
+                  <input autocomplete="family-name" id="familyName" />
+                  <input autocomplete="street-address" id="streetAddress" />
+                  <input autocomplete="postal-code" id="postalCode" />
+                  <input autocomplete="country" id="country" />
+                </form>
+                <script>
+                  window.addEventListener('load', () => {
+                    setTimeout(() => {
+                      document.getElementById('givenName').focus();
+                    }, 2000);
+                  });
+                </script>
+              </body>
+            </html>
+        """.trimIndent()
     }
 
     /**
@@ -549,6 +657,7 @@ class AddressAutofillPromptTest {
 
     private companion object {
         private const val ADDRESS_FORM_FILE_NAME = "address-form.html"
+        private const val ADDRESS_SELECT_FORM_FILE_NAME = "address-select-form.html"
         private const val ADDRESS_FORM_DONE_FILE_NAME = "done.html"
         private const val PREF_TIMEOUT_MILLIS = 30_000L
         private const val PREF_POLL_TIMEOUT_MILLIS = 5_000L
