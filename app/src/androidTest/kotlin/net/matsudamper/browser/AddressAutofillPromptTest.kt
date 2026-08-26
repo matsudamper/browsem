@@ -35,7 +35,8 @@ import java.util.concurrent.TimeoutException
  *
  * AppModule で有効化した extensions.formautofill.addresses.capture.enabled により、
  * 住所フォーム送信時に PromptDelegate.onAddressSave が発火して保存ダイアログが表示されること、
- * 保存済み住所がある状態で住所フィールドにフォーカスしたときに選択ダイアログが表示されることを検証する。
+ * 保存済み住所がある状態で GeckoView 本家の address_form.html の住所フィールドに
+ * フォーカスしたときに選択ダイアログが表示されることを検証する。
  * フォームへの値の投入と送信はページ内 JavaScript で行うため、Web コンテンツへの直接操作は行わない。
  *
  * file:// ではフォーム送信が行われないことが CI の診断で判明したため、
@@ -63,12 +64,12 @@ class AddressAutofillPromptTest {
     }
 
     @Test
-    fun focusingAddressFieldShowsAddressSelectDialog() {
-        seedSavedAddress()
+    fun focusingMozillaAddressFormShowsAddressSelectDialog() {
+        seedMozillaSampleAddress()
 
         val server = LocalHttpServer(
             pages = mapOf(
-                "/$ADDRESS_SELECT_FORM_FILE_NAME" to buildAddressSelectFormHtml(),
+                "/$ADDRESS_SELECT_FORM_FILE_NAME" to buildMozillaAddressFormHtml(),
             ),
         )
         httpServer = server
@@ -91,7 +92,7 @@ class AddressAutofillPromptTest {
             }
         } catch (e: ComposeTimeoutException) {
             throw AssertionError(
-                "住所選択ダイアログが表示されない\n" +
+                "Mozilla の address_form.html で住所選択ダイアログが表示されない\n" +
                     "現在URL=${composeRule.currentPageUrlFromUi()}\n" +
                     "サーバ受信リクエスト=${server.requests}\n" +
                     "--- logcat (formautofill関連) ---\n${collectFormAutofillLogcat()}",
@@ -256,7 +257,7 @@ class AddressAutofillPromptTest {
         else -> null
     }
 
-    private fun seedSavedAddress() {
+    private fun seedMozillaSampleAddress() {
         val repository = AddressRepository(
             InstrumentationRegistry.getInstrumentation().targetContext,
         )
@@ -264,11 +265,13 @@ class AddressAutofillPromptTest {
             repository.deleteAll()
             repository.save(
                 AddressEntity(
-                    givenName = "Taro",
-                    familyName = "Yamada",
-                    streetAddress = "1-2-3 Example St",
-                    postalCode = "1000001",
-                    country = "JP",
+                    givenName = "Peter",
+                    familyName = "Parker",
+                    streetAddress = "20 Ingram Street, Forest Hills Gardens, Queens",
+                    postalCode = "11375",
+                    country = "US",
+                    email = "spiderman@newyork.com",
+                    tel = "+1 180090021",
                 ),
             )
         }
@@ -285,25 +288,31 @@ class AddressAutofillPromptTest {
     }
 
     /**
-     * GeckoView 本家の address_form.html と同様の最小フォーム。
-     * load 後に given-name へフォーカスして onAddressSelect を誘発する。
+     * GeckoView 本家 AutocompleteTest が使う address_form.html そのもの。
+     * https://github.com/mozilla-firefox/firefox/blob/main/mobile/android/geckoview/src/androidTest/assets/www/address_form.html
+     *
+     * 本家テストは evaluateJS で #givenName にフォーカスする。ここではページ内 JS で同じ操作をする。
      */
-    private fun buildAddressSelectFormHtml(): String {
+    private fun buildMozillaAddressFormHtml(): String {
         return """
-            <!doctype html>
-            <html lang="en">
+            <html>
               <head>
                 <meta charset="utf-8" />
-                <title>Address Select Test</title>
+                <title>Address form</title>
               </head>
               <body>
                 <form>
                   <input autocomplete="name" id="name" />
                   <input autocomplete="given-name" id="givenName" />
+                  <input autocomplete="additional-name" id="additionalName" />
                   <input autocomplete="family-name" id="familyName" />
                   <input autocomplete="street-address" id="streetAddress" />
-                  <input autocomplete="postal-code" id="postalCode" />
                   <input autocomplete="country" id="country" />
+                  <input autocomplete="postal-code" id="postalCode" />
+                  <input autocomplete="organization" id="organization" />
+                  <input autocomplete="email" id="email" />
+                  <input autocomplete="tel" id="tel" />
+                  <input type="submit" value="Submit" />
                 </form>
                 <script>
                   window.addEventListener('load', () => {
@@ -657,7 +666,7 @@ class AddressAutofillPromptTest {
 
     private companion object {
         private const val ADDRESS_FORM_FILE_NAME = "address-form.html"
-        private const val ADDRESS_SELECT_FORM_FILE_NAME = "address-select-form.html"
+        private const val ADDRESS_SELECT_FORM_FILE_NAME = "address_form.html"
         private const val ADDRESS_FORM_DONE_FILE_NAME = "done.html"
         private const val PREF_TIMEOUT_MILLIS = 30_000L
         private const val PREF_POLL_TIMEOUT_MILLIS = 5_000L
