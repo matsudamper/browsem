@@ -5,6 +5,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imeNestedScroll
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -22,6 +24,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import net.matsudamper.browser.resources.R as ResourcesR
 
 sealed interface AddressEditScreenTestTags {
@@ -33,7 +36,7 @@ sealed interface AddressEditScreenTestTags {
     data object SaveButton : AddressEditScreenTestTags { override val id = "save_button" }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun AddressEditScreen(
     uiState: AddressEditScreenUiState,
@@ -65,11 +68,14 @@ fun AddressEditScreen(
             )
         },
     ) { paddingValues ->
+        val scrollState = rememberScrollState()
         Column(
             modifier = Modifier
                 .padding(paddingValues)
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState())
+                .verticalScroll(scrollState)
+                .imeNestedScroll()
+                .imePadding()
                 .padding(horizontal = 16.dp, vertical = 8.dp),
         ) {
             SettingSection(title = "氏名") {
@@ -153,6 +159,8 @@ fun AddressEditScreen(
                     onValueChange = uiState.callbacks::onEmailChange,
                 )
             }
+
+            Spacer(Modifier.height(16.dp))
         }
     }
 }
