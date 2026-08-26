@@ -27,7 +27,7 @@ import org.mozilla.geckoview.GeckoSession
  */
 @Stable
 internal class PromptDialogState(
-    private val coroutineScope: CoroutineScope,
+    internal val coroutineScope: CoroutineScope,
 ) {
 
     // --- Alert (window.alert()) ---
@@ -72,6 +72,8 @@ internal class PromptDialogState(
 
     var pendingAddressSelectPrompt by mutableStateOf<GeckoSession.PromptDelegate.AutocompleteRequest<Autocomplete.AddressSelectOption>?>(null)
     var pendingAddressSelectResult by mutableStateOf<GeckoResult<GeckoSession.PromptDelegate.PromptResponse>?>(null)
+    var pendingAutofillAddressOptions by mutableStateOf<List<Autocomplete.AddressSelectOption>?>(null)
+    private var pendingAutofillFill: ((Autocomplete.Address) -> Unit)? = null
     var pendingAddressSaveAddress by mutableStateOf<Autocomplete.Address?>(null)
     var pendingAddressSavePrompt by mutableStateOf<GeckoSession.PromptDelegate.AutocompleteRequest<Autocomplete.AddressSaveOption>?>(null)
     var pendingAddressSaveResult by mutableStateOf<GeckoResult<GeckoSession.PromptDelegate.PromptResponse>?>(null)
@@ -317,17 +319,40 @@ internal class PromptDialogState(
     }
 
     fun confirmAddressSelect(option: Autocomplete.AddressSelectOption) {
-        val prompt = pendingAddressSelectPrompt ?: return
-        pendingAddressSelectResult?.complete(prompt.confirm(option))
-        pendingAddressSelectPrompt = null
-        pendingAddressSelectResult = null
+        val prompt = pendingAddressSelectPrompt
+        if (prompt != null) {
+            pendingAddressSelectResult?.complete(prompt.confirm(option))
+            pendingAddressSelectPrompt = null
+            pendingAddressSelectResult = null
+            return
+        }
+        pendingAutofillFill?.invoke(option.value)
+        clearAutofillAddressSelect()
     }
 
     fun dismissAddressSelect() {
-        val prompt = pendingAddressSelectPrompt ?: return
-        pendingAddressSelectResult?.complete(prompt.dismiss())
-        pendingAddressSelectPrompt = null
-        pendingAddressSelectResult = null
+        val prompt = pendingAddressSelectPrompt
+        if (prompt != null) {
+            pendingAddressSelectResult?.complete(prompt.dismiss())
+            pendingAddressSelectPrompt = null
+            pendingAddressSelectResult = null
+            return
+        }
+        clearAutofillAddressSelect()
+    }
+
+    fun showAutofillAddressSelect(
+        options: List<Autocomplete.AddressSelectOption>,
+        onFill: (Autocomplete.Address) -> Unit,
+    ) {
+        if (pendingAddressSelectPrompt != null || options.isEmpty()) return
+        pendingAutofillAddressOptions = options
+        pendingAutofillFill = onFill
+    }
+
+    private fun clearAutofillAddressSelect() {
+        pendingAutofillAddressOptions = null
+        pendingAutofillFill = null
     }
 
     fun confirmAddressSave() {
@@ -475,6 +500,7 @@ internal class PromptDialogState(
                         },
                 )
                 if (prompt.options.isEmpty()) return GeckoResult.fromValue(prompt.dismiss())
+                clearAutofillAddressSelect()
                 return GeckoResult<GeckoSession.PromptDelegate.PromptResponse>().also {
                     pendingAddressSelectPrompt = prompt
                     pendingAddressSelectResult = it

@@ -430,6 +430,12 @@ internal fun BrowserTabDialogLayer(
             onSelect = dialogState::confirmAddressSelect,
             onDismiss = dialogState::dismissAddressSelect,
         )
+    } ?: dialogState.pendingAutofillAddressOptions?.let { options ->
+        AddressSelectDialog(
+            options = options,
+            onSelect = dialogState::confirmAddressSelect,
+            onDismiss = dialogState::dismissAddressSelect,
+        )
     }
 
     dialogState.pendingAddressSaveAddress?.let { address ->

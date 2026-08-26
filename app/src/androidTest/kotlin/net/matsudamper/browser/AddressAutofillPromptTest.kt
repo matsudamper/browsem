@@ -790,6 +790,7 @@ class AddressAutofillPromptTest {
             "delegateSelection",
             "onAddressSelect",
             "onAddressFetch",
+            "AddressAutofill",
         )
         // logcat は入力完了後にクリアしているため、先頭側 (送信直後) に重要なログが集まる
         return output
