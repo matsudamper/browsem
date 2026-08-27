@@ -1,8 +1,12 @@
 package net.matsudamper.browser.ui.settings
 
+import androidx.compose.runtime.Stable
+
+@Stable
 data class AddressEditScreenUiState(
     val callbacks: Callbacks,
     val isNew: Boolean,
+    val isLoading: Boolean,
     val givenName: String,
     val additionalName: String,
     val familyName: String,
