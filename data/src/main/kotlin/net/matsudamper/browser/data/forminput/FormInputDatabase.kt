@@ -4,13 +4,25 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.migration.Migration
 
-@Database(entities = [FormFieldValueEntity::class], version = 1, exportSchema = true)
+@Database(
+    entities = [
+        FormFieldValueEntity::class,
+        FormInputPreferenceEntity::class,
+    ],
+    version = 2,
+    exportSchema = true,
+)
 abstract class FormInputDatabase : RoomDatabase() {
     abstract fun formInputDao(): FormInputDao
 
     companion object {
-        const val SCHEMA_VERSION: Int = 1
+        const val SCHEMA_VERSION: Int = 2
+
+        val ALL_MIGRATIONS: Array<Migration> = arrayOf(
+            FORM_INPUT_DATABASE_MIGRATION_1_2,
+        )
 
         @Volatile
         private var instance: FormInputDatabase? = null
@@ -21,7 +33,10 @@ abstract class FormInputDatabase : RoomDatabase() {
                     context.applicationContext,
                     FormInputDatabase::class.java,
                     "form_input.db",
-                ).build().also { instance = it }
+                )
+                    .addMigrations(*ALL_MIGRATIONS)
+                    .build()
+                    .also { instance = it }
             }
         }
 
