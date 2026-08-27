@@ -473,11 +473,7 @@ internal class PromptDialogState(
             ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse> {
                 Log.i(
                     "PromptDialogState",
-                    "onAddressSelect options=${prompt.options.size} kind=$focusedAutofillKind " +
-                        prompt.options.joinToString { option ->
-                            val address = option.value
-                            "name=${address.name} family=${address.familyName} country=${address.country}"
-                        },
+                    "onAddressSelect options=${prompt.options.size} kind=$focusedAutofillKind",
                 )
                 if (prompt.options.isEmpty()) return GeckoResult.fromValue(prompt.dismiss())
                 onAddressSelectOptions?.invoke(prompt.options.toList())
