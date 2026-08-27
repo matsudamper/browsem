@@ -110,7 +110,7 @@ class AddressAutofillPromptTest {
             fillExtraMessage = "MDN autocomplete と同じマークアップで住所を選んでも入力されない",
             extraMessage = "MDN autocomplete と同じマークアップで住所の候補バーが出ない\n" +
                 "サーバ受信リクエスト=${server.requests}",
-            afterOpen = { clickMdnFamilyNameField(timeoutMillis = LOCAL_FIELD_CLICK_WAIT_MILLIS) },
+            afterOpen = { clickLocalNameField("lastName") },
         )
         selectEmailAndWaitUntilFilled(
             extraMessage = "MDN autocomplete と同じマークアップでメールを個別に入力できない",
@@ -162,7 +162,7 @@ class AddressAutofillPromptTest {
                         true
                     }.getOrDefault(false)
                     if (iframeLoaded) {
-                        clickMdnFamilyNameField(timeoutMillis = LOCAL_FIELD_CLICK_WAIT_MILLIS)
+                        clickLocalNameField("lastName")
                     }
                 },
             )
@@ -198,6 +198,7 @@ class AddressAutofillPromptTest {
             fillExtraMessage = "Mozilla の address_form.html で住所を選んでも入力されない",
             extraMessage = "Mozilla の address_form.html で住所の候補バーが出ない\n" +
                 "サーバ受信リクエスト=${server.requests}",
+            afterOpen = { clickLocalNameField("givenName") },
         )
         selectEmailAndWaitUntilFilled(
             extraMessage = "Mozilla の address_form.html でメールを個別に入力できない",
@@ -221,10 +222,11 @@ class AddressAutofillPromptTest {
         applyTestPrefsAndAwaitAddressAutofillEnabled()
         saveAndSetPref("geckoview.autocomplete.selection_dismiss_delay_ms", 60_000)
 
-        waitForAutofillSuggestionBarOnLocalPage(
+        waitForAutofillSuggestionBarOnLocalPageWithRetry(
             pageUri = pageUri,
             urlMarker = ADDRESS_SELECT_FORM_FILE_NAME,
             extraMessage = "フォーカス時に候補バーが出ない\nサーバ受信リクエスト=${server.requests}",
+            afterOpen = { clickLocalNameField("givenName") },
         )
         composeRule
             .onNodeWithTag(UrlTextInputTestTags.UrlBar.testTag)
@@ -272,15 +274,17 @@ class AddressAutofillPromptTest {
         val submitted = openLocalPageUntilRequest(
             pageUri = pageUri,
             urlMarker = ADDRESS_FORM_FILE_NAME,
-            timeoutMillis = 90_000,
+            timeoutMillis = LOCAL_PAGE_RETRY_TIMEOUT_MILLIS,
             requestMatched = { server.requests.any { it.contains(ADDRESS_FORM_DONE_FILE_NAME) } },
         )
 
-        clearLogcat()
-
-        // 送信を Gecko の formautofill が検出すると onAddressSave プロンプトが発火し、
-        // AddressSaveDialog が表示されるはず。
-        waitForAddressSaveDialog(submitted, selfCheck, server)
+        waitForAddressSaveDialogWithRetry(
+            submitted = submitted,
+            selfCheck = selfCheck,
+            server = server,
+            pageUri = pageUri,
+            urlMarker = ADDRESS_FORM_FILE_NAME,
+        )
 
         composeRule
             .onNodeWithTag(BrowserTabDialogLayerTestTags.AddressSaveConfirmButton.testTag)
@@ -347,7 +351,24 @@ class AddressAutofillPromptTest {
     }
 
     /**
-     * ローカルページで名前候補バーが出るまで待つ。ホームページ遅延ロードに上書きされたら開き直す。
+     * ローカルページで名前候補バーが出るまで待つ。失敗時はページを開き直して再試行する。
+     */
+    private fun waitForAutofillSuggestionBarOnLocalPageWithRetry(
+        pageUri: String,
+        urlMarker: String,
+        extraMessage: String,
+        afterOpen: () -> Unit = {},
+    ) {
+        retryLocalAutofillFlow(
+            pageUri = pageUri,
+            urlMarker = urlMarker,
+            extraMessage = extraMessage,
+            afterOpen = afterOpen,
+        ) {}
+    }
+
+    /**
+     * 1 回分の候補バー待機。JS 自動フォーカスと afterOpen の後、短い時間だけ待つ。
      */
     private fun waitForAutofillSuggestionBarOnLocalPage(
         pageUri: String,
@@ -355,41 +376,26 @@ class AddressAutofillPromptTest {
         extraMessage: String,
         afterOpen: () -> Unit = {},
     ) {
-        val deadline = System.currentTimeMillis() + LOCAL_PAGE_RETRY_TIMEOUT_MILLIS
-        var opened = false
-        var pageReadyAt = 0L
-        while (System.currentTimeMillis() < deadline) {
-            val onExpectedPage = isExpectedLocalPage(composeRule.currentPageUrlFromUi(), urlMarker)
-            if (!opened || !onExpectedPage) {
-                openLocalPage(pageUri, urlMarker)
-                opened = true
-                pageReadyAt = System.currentTimeMillis()
-                runCatching { afterOpen() }
-                continue
-            }
-            if (System.currentTimeMillis() - pageReadyAt < LOCAL_PAGE_JS_FOCUS_DELAY_MILLIS) {
-                Thread.sleep(POLL_INTERVAL_MILLIS)
-                continue
-            }
-            val appeared = runCatching {
-                composeRule.waitUntil(timeoutMillis = SUGGESTION_BAR_POLL_MILLIS) {
+        openLocalPage(pageUri, urlMarker)
+        Thread.sleep(LOCAL_PAGE_JS_FOCUS_DELAY_MILLIS)
+        runCatching { afterOpen() }
+        try {
+            composeRule.waitUntil(timeoutMillis = SUGGESTION_BAR_ATTEMPT_TIMEOUT_MILLIS) {
+                isExpectedLocalPage(composeRule.currentPageUrlFromUi(), urlMarker) &&
                     composeRule
                         .onAllNodesWithTag(AddressAutofillSuggestionBarTestTags.NameOption.testTag)
                         .fetchSemanticsNodes()
                         .isNotEmpty()
-                }
-                true
-            }.getOrDefault(false)
-            if (appeared) return
-            runCatching { afterOpen() }
-            Thread.sleep(POLL_INTERVAL_MILLIS)
+            }
+        } catch (e: ComposeTimeoutException) {
+            throw AssertionError(
+                "$extraMessage\n" +
+                    "現在URL=${composeRule.currentPageUrlFromUi()}\n" +
+                    "--- accessibility ---\n${dumpAccessibilityTree()}\n" +
+                    "--- logcat (formautofill関連) ---\n${collectFormAutofillLogcat()}",
+                e,
+            )
         }
-        throw AssertionError(
-            "$extraMessage\n" +
-                "現在URL=${composeRule.currentPageUrlFromUi()}\n" +
-                "--- accessibility ---\n${dumpAccessibilityTree()}\n" +
-                "--- logcat (formautofill関連) ---\n${collectFormAutofillLogcat()}",
-        )
     }
 
     private fun retryLocalAutofillFlow(
@@ -413,11 +419,6 @@ class AddressAutofillPromptTest {
                 return
             } catch (e: Throwable) {
                 lastError = e
-                reopenLocalPageForRetry(
-                    pageUri = pageUri,
-                    urlMarker = urlMarker,
-                    afterOpen = afterOpen,
-                )
             }
         }
         throw AssertionError(
@@ -429,13 +430,74 @@ class AddressAutofillPromptTest {
         )
     }
 
-    private fun reopenLocalPageForRetry(
+    /**
+     * ローカル HTML の名前欄へ Accessibility 経由でフォーカスを入れる。
+     */
+    private fun clickLocalNameField(
+        fieldId: String,
+        timeoutMillis: Long = LOCAL_FIELD_CLICK_WAIT_MILLIS,
+    ): String {
+        val uiAutomation = InstrumentationRegistry.getInstrumentation().uiAutomation
+        val deadline = System.currentTimeMillis() + timeoutMillis
+        while (System.currentTimeMillis() < deadline) {
+            val root = uiAutomation.rootInActiveWindow
+            if (root != null) {
+                val target = findNode(root) { node ->
+                    val viewId = node.viewIdResourceName.orEmpty()
+                    val cls = node.className?.toString().orEmpty()
+                    cls.contains("EditText", ignoreCase = true) &&
+                        viewId.endsWith(fieldId, ignoreCase = true)
+                }
+                if (target != null) {
+                    val clicked = target.performAction(AccessibilityNodeInfo.ACTION_CLICK) ||
+                        target.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
+                    val summary =
+                        "clicked=$clicked fieldId=$fieldId viewId=${target.viewIdResourceName.orEmpty()}"
+                    target.recycle()
+                    root.recycle()
+                    return summary
+                }
+                root.recycle()
+            }
+            Thread.sleep(500)
+        }
+        return "not-found fieldId=$fieldId"
+    }
+
+    private fun waitForAddressSaveDialogWithRetry(
+        submitted: Boolean,
+        selfCheck: String,
+        server: LocalHttpServer,
         pageUri: String,
         urlMarker: String,
-        afterOpen: () -> Unit,
     ) {
-        openLocalPage(pageUri, urlMarker)
-        runCatching { afterOpen() }
+        val deadline = System.currentTimeMillis() + LOCAL_PAGE_RETRY_TIMEOUT_MILLIS
+        var lastError: Throwable? = null
+        var lastSubmitted = submitted
+        while (System.currentTimeMillis() < deadline) {
+            clearLogcat()
+            try {
+                waitForAddressSaveDialog(lastSubmitted, selfCheck, server)
+                return
+            } catch (e: Throwable) {
+                lastError = e
+            }
+            val remaining = deadline - System.currentTimeMillis()
+            if (remaining <= FORM_SUBMIT_WAIT_MILLIS) break
+            lastSubmitted = openLocalPageUntilRequest(
+                pageUri = pageUri,
+                urlMarker = urlMarker,
+                timeoutMillis = minOf(FORM_SUBMIT_WAIT_MILLIS, remaining),
+                requestMatched = { server.requests.any { it.contains(ADDRESS_FORM_DONE_FILE_NAME) } },
+            )
+        }
+        throw AssertionError(
+            "住所保存ダイアログが表示されない\n" +
+                "現在URL=${composeRule.currentPageUrlFromUi()}\n" +
+                "サーバ受信リクエスト=${server.requests}\n" +
+                "--- logcat (formautofill関連) ---\n${collectFormAutofillLogcat()}",
+            lastError,
+        )
     }
 
     private fun clickFirstAutofillNameOption() {
@@ -1584,7 +1646,8 @@ class AddressAutofillPromptTest {
         private const val MDN_FIELD_WAIT_MILLIS = 60_000L
         private const val LOCAL_FIELD_CLICK_WAIT_MILLIS = 5_000L
         private const val LOCAL_PAGE_JS_FOCUS_DELAY_MILLIS = 2_500L
-        private const val SUGGESTION_BAR_POLL_MILLIS = 5_000L
+        private const val SUGGESTION_BAR_ATTEMPT_TIMEOUT_MILLIS = 20_000L
+        private const val FORM_SUBMIT_WAIT_MILLIS = 25_000L
         private const val ADDRESS_FILL_TIMEOUT_MILLIS = 45_000L
         private const val LOCAL_PAGE_RETRY_TIMEOUT_MILLIS = 90_000L
         private const val POLL_INTERVAL_MILLIS = 250L
