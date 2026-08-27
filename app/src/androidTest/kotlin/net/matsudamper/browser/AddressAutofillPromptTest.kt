@@ -108,13 +108,12 @@ class AddressAutofillPromptTest {
         applyTestPrefsAndAwaitAddressAutofillEnabled()
         saveAndSetPref("geckoview.autocomplete.selection_dismiss_delay_ms", 60_000)
 
-        composeRule.openUrlFromUrlBar(pageUri)
-        composeRule.waitForUrlBarContains(MDN_AUTOCOMPLETE_SAMPLE_FILE_NAME, timeoutMillis = 60_000)
-        composeRule.waitForUrlBarNotFocused(timeoutMillis = 30_000)
-
-        selectFirstAutofillSuggestion(
+        selectFirstAutofillSuggestionOnLocalPage(
+            pageUri = pageUri,
+            urlMarker = MDN_AUTOCOMPLETE_SAMPLE_FILE_NAME,
             extraMessage = "MDN autocomplete と同じマークアップで住所の候補バーが出ない\n" +
                 "サーバ受信リクエスト=${server.requests}",
+            afterOpen = { clickMdnFamilyNameField(timeoutMillis = LOCAL_FIELD_CLICK_WAIT_MILLIS) },
         )
         waitUntilAddressFilled(
             extraMessage = "MDN autocomplete と同じマークアップで住所を選んでも入力されない",
@@ -154,27 +153,22 @@ class AddressAutofillPromptTest {
             saveAndSetPref("geckoview.autocomplete.selection_dismiss_delay_ms", 60_000)
             clearLogcat()
 
-            composeRule.openUrlFromUrlBar(pageUri)
-            composeRule.waitForUrlBarContains("iframe-parent.html", timeoutMillis = 60_000)
-            composeRule.waitForUrlBarNotFocused(timeoutMillis = 30_000)
-            try {
-                composeRule.waitUntil(timeoutMillis = 30_000) {
-                    contentServer.requests.size > contentRequestsBeforeLoad
-                }
-            } catch (e: ComposeTimeoutException) {
-                throw AssertionError(
-                    "sandbox iframe の子ページが読み込まれない\n" +
-                        "現在URL=${composeRule.currentPageUrlFromUi()}\n" +
-                        "parentCheck=$parentCheck contentCheck=$contentCheck\n" +
-                        "親サーバ=${parentServer.requests} 子サーバ=${contentServer.requests}",
-                    e,
-                )
-            }
-            clickMdnFamilyNameField()
-
-            selectFirstAutofillSuggestion(
+            selectFirstAutofillSuggestionOnLocalPage(
+                pageUri = pageUri,
+                urlMarker = "iframe-parent.html",
                 extraMessage = "sandbox iframe 内の MDN マークアップで住所の候補バーが出ない\n" +
                     "親サーバ=${parentServer.requests} 子サーバ=${contentServer.requests}",
+                afterOpen = {
+                    val iframeLoaded = runCatching {
+                        composeRule.waitUntil(timeoutMillis = 20_000) {
+                            contentServer.requests.size > contentRequestsBeforeLoad
+                        }
+                        true
+                    }.getOrDefault(false)
+                    if (iframeLoaded) {
+                        clickMdnFamilyNameField(timeoutMillis = LOCAL_FIELD_CLICK_WAIT_MILLIS)
+                    }
+                },
             )
             waitUntilAddressFilled(
                 extraMessage = "sandbox iframe 内で住所を選んでも入力されない " +
@@ -206,11 +200,9 @@ class AddressAutofillPromptTest {
         applyTestPrefsAndAwaitAddressAutofillEnabled()
         saveAndSetPref("geckoview.autocomplete.selection_dismiss_delay_ms", 60_000)
 
-        composeRule.openUrlFromUrlBar(pageUri)
-        composeRule.waitForUrlBarContains(ADDRESS_SELECT_FORM_FILE_NAME, timeoutMillis = 60_000)
-        composeRule.waitForUrlBarNotFocused(timeoutMillis = 30_000)
-
-        selectFirstAutofillSuggestion(
+        selectFirstAutofillSuggestionOnLocalPage(
+            pageUri = pageUri,
+            urlMarker = ADDRESS_SELECT_FORM_FILE_NAME,
             extraMessage = "Mozilla の address_form.html で住所の候補バーが出ない\n" +
                 "サーバ受信リクエスト=${server.requests}",
         )
@@ -239,18 +231,16 @@ class AddressAutofillPromptTest {
 
         applyTestPrefsAndAwaitAddressAutofillEnabled()
 
-        composeRule.openUrlFromUrlBar(pageUri)
-        composeRule.waitForUrlBarContains(ADDRESS_FORM_FILE_NAME, timeoutMillis = 60_000)
-        composeRule.waitForUrlBarNotFocused(timeoutMillis = 30_000)
-
         // ページは load 後にフォームへ値を投入して自動送信する (load+8秒, フォールバック+12秒)。
         // 送信先は hidden iframe (メインページは遷移しない) のため、
         // サーバが done.html リクエストを受信したことで送信完了を判定する。
-        val submitted = runCatching {
-            composeRule.waitUntil(timeoutMillis = 60_000) {
-                server.requests.any { it.contains(ADDRESS_FORM_DONE_FILE_NAME) }
-            }
-        }.isSuccess
+        // 起動時ホームページの遅延ロードがテストページを上書きしたら開き直す。
+        val submitted = openLocalPageUntilRequest(
+            pageUri = pageUri,
+            urlMarker = ADDRESS_FORM_FILE_NAME,
+            timeoutMillis = 90_000,
+            requestMatched = { server.requests.any { it.contains(ADDRESS_FORM_DONE_FILE_NAME) } },
+        )
 
         clearLogcat()
 
@@ -268,6 +258,48 @@ class AddressAutofillPromptTest {
                 .fetchSemanticsNodes()
                 .isEmpty()
         }
+    }
+
+    /**
+     * ローカルページで名前候補を選び、ホームページ遅延ロードに上書きされたら開き直す。
+     *
+     * CI では起動時タブの google.com 読み込みが遅れてコミットされ、
+     * URL バーから開いたループバックページを上書きする。
+     */
+    private fun selectFirstAutofillSuggestionOnLocalPage(
+        pageUri: String,
+        urlMarker: String,
+        extraMessage: String,
+        afterOpen: () -> Unit = {},
+    ) {
+        val deadline = System.currentTimeMillis() + LOCAL_PAGE_RETRY_TIMEOUT_MILLIS
+        var opened = false
+        while (System.currentTimeMillis() < deadline) {
+            val onExpectedPage = isExpectedLocalPage(composeRule.currentPageUrlFromUi(), urlMarker)
+            val appeared = composeRule
+                .onAllNodesWithTag(AddressAutofillSuggestionBarTestTags.NameOption.testTag)
+                .fetchSemanticsNodes()
+                .isNotEmpty()
+            if (appeared && onExpectedPage) {
+                composeRule
+                    .onAllNodesWithTag(AddressAutofillSuggestionBarTestTags.NameOption.testTag)
+                    .onFirst()
+                    .performClick()
+                return
+            }
+            if (!opened || !onExpectedPage) {
+                openLocalPage(pageUri, urlMarker)
+                opened = true
+                runCatching { afterOpen() }
+            }
+            Thread.sleep(POLL_INTERVAL_MILLIS)
+        }
+        throw AssertionError(
+            "$extraMessage\n" +
+                "現在URL=${composeRule.currentPageUrlFromUi()}\n" +
+                "--- accessibility ---\n${dumpAccessibilityTree()}\n" +
+                "--- logcat (formautofill関連) ---\n${collectFormAutofillLogcat()}",
+        )
     }
 
     private fun selectFirstAutofillSuggestion(extraMessage: String) {
@@ -305,6 +337,45 @@ class AddressAutofillPromptTest {
             .onAllNodesWithTag(optionTestTag)
             .onFirst()
             .performClick()
+    }
+
+    /**
+     * URL バーからローカルページを開き、フォーカスが外れるまで待つ。
+     */
+    private fun openLocalPage(pageUri: String, urlMarker: String) {
+        composeRule.openUrlFromUrlBar(pageUri)
+        runCatching {
+            composeRule.waitForUrlBarContains(urlMarker, timeoutMillis = 20_000)
+            composeRule.waitForUrlBarNotFocused(timeoutMillis = 15_000)
+        }
+    }
+
+    /**
+     * ローカルページを開き、ホームページに上書きされたら開き直して条件成立を待つ。
+     */
+    private fun openLocalPageUntilRequest(
+        pageUri: String,
+        urlMarker: String,
+        timeoutMillis: Long,
+        requestMatched: () -> Boolean,
+    ): Boolean {
+        val deadline = System.currentTimeMillis() + timeoutMillis
+        var opened = false
+        while (System.currentTimeMillis() < deadline) {
+            if (requestMatched()) return true
+            val onExpectedPage = isExpectedLocalPage(composeRule.currentPageUrlFromUi(), urlMarker)
+            if (!opened || !onExpectedPage) {
+                openLocalPage(pageUri, urlMarker)
+                opened = true
+            }
+            Thread.sleep(POLL_INTERVAL_MILLIS)
+        }
+        return requestMatched()
+    }
+
+    private fun isExpectedLocalPage(url: String, urlMarker: String): Boolean {
+        if (url.contains("google.com", ignoreCase = true)) return false
+        return url.contains(urlMarker)
     }
 
     private fun waitUntilAddressFilled(extraMessage: String) {
@@ -710,9 +781,11 @@ class AddressAutofillPromptTest {
      *
      * HTML タブのコードエディタも「苗字」を含むので、ソース編集欄は除外する。
      */
-    private fun clickMdnFamilyNameField(): String {
+    private fun clickMdnFamilyNameField(
+        timeoutMillis: Long = MDN_FIELD_WAIT_MILLIS,
+    ): String {
         val uiAutomation = InstrumentationRegistry.getInstrumentation().uiAutomation
-        val deadline = System.currentTimeMillis() + MDN_FIELD_WAIT_MILLIS
+        val deadline = System.currentTimeMillis() + timeoutMillis
         var lastDump = ""
         var clickedOutputTab = false
         while (System.currentTimeMillis() < deadline) {
@@ -1350,6 +1423,9 @@ class AddressAutofillPromptTest {
         private const val PREF_POLL_TIMEOUT_MILLIS = 5_000L
         private const val LOGCAT_TAIL_LINES = 250
         private const val MDN_FIELD_WAIT_MILLIS = 60_000L
+        private const val LOCAL_FIELD_CLICK_WAIT_MILLIS = 5_000L
+        private const val LOCAL_PAGE_RETRY_TIMEOUT_MILLIS = 90_000L
+        private const val POLL_INTERVAL_MILLIS = 250L
         private const val ACCESSIBILITY_DUMP_MAX_LINES = 500
         private const val FILL_FAMILY_NAME = "YamadaFillTest"
         private const val FILL_GIVEN_NAME = "TaroFillTest"
