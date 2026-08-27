@@ -75,8 +75,10 @@ private fun Modifier.toolbarMenuScrollbar(scrollState: ScrollState): Modifier = 
     }
     val scrollbarWidthPx = ToolbarMenuScrollbarWidth.toPx()
     val minThumbHeightPx = ToolbarMenuScrollbarMinThumbHeight.toPx()
+    val maxThumbHeightPx = viewportSize.toFloat()
+    val effectiveMinThumbHeightPx = minOf(minThumbHeightPx, maxThumbHeightPx)
     val thumbHeight = (viewportSize.toFloat() / contentSize * viewportSize)
-        .coerceIn(minThumbHeightPx, viewportSize.toFloat())
+        .coerceIn(effectiveMinThumbHeightPx, maxThumbHeightPx)
     val maxScroll = (contentSize - viewportSize).coerceAtLeast(1)
     val trackHeight = viewportSize - thumbHeight
     val thumbOffset = indicator.scrollOffset.toFloat() / maxScroll * trackHeight
@@ -90,17 +92,18 @@ private fun Modifier.toolbarMenuScrollbar(scrollState: ScrollState): Modifier = 
 
 /**
  * キーボード表示中にツールバーメニューが IME に隠れないよう、
- * ウィンドウ高さから IME 分を引いた値をメニューの高さ上限とする。
+ * アンカー下端から IME 上端までの高さをメニューの高さ上限とする。
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun rememberToolbarMenuMaxHeight(): Dp {
+private fun rememberToolbarMenuMaxHeight(menuAnchorBottomPx: Int): Dp {
     val density = LocalDensity.current
     val windowHeightPx = LocalWindowInfo.current.containerSize.height
     val imeBottomPx = WindowInsets.ime.getBottom(density)
     return with(density) {
         val marginPx = ToolbarMenuVerticalMargin.roundToPx()
-        val availablePx = (windowHeightPx - imeBottomPx - marginPx).coerceAtLeast(0)
+        val imeTopPx = windowHeightPx - imeBottomPx
+        val availablePx = (imeTopPx - menuAnchorBottomPx - marginPx).coerceAtLeast(0)
         availablePx.toDp()
     }
 }
@@ -109,6 +112,7 @@ private fun rememberToolbarMenuMaxHeight(): Dp {
 @Composable
 internal fun ToolbarMenu(
     visibleMenu: Boolean,
+    menuAnchorBottomPx: Int,
     onDismissRequest: () -> Unit,
     onRefresh: () -> Unit,
     onSuperRefresh: () -> Unit,
@@ -146,7 +150,7 @@ internal fun ToolbarMenu(
     onOpenDevTools: (() -> Unit)? = null,
 ) {
     val menuScrollState = rememberScrollState()
-    val menuMaxHeight = rememberToolbarMenuMaxHeight()
+    val menuMaxHeight = rememberToolbarMenuMaxHeight(menuAnchorBottomPx)
     DropdownMenu(
         expanded = visibleMenu,
         onDismissRequest = { onDismissRequest() },
