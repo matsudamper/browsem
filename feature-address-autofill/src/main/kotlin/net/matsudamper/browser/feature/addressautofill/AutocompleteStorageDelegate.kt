@@ -21,15 +21,7 @@ class AutocompleteStorageDelegate(
         coroutineScope.launch(Dispatchers.IO) {
             try {
                 val addresses = addressRepository.getAll().map { it.toGeckoAddress() }.toTypedArray()
-                Log.i(
-                    TAG,
-                    "onAddressFetch: ${addresses.size}件 " +
-                        addresses.joinToString { address ->
-                            "name=${address.name} family=${address.familyName} " +
-                                "given=${address.givenName} country=${address.country} " +
-                                "street=${address.streetAddress} postal=${address.postalCode}"
-                        },
-                )
+                Log.i(TAG, "onAddressFetch: ${addresses.size}件")
                 result.complete(addresses)
                 onAddressFetched(addresses.size)
             } catch (e: Exception) {
