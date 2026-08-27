@@ -13,10 +13,11 @@ import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import net.matsudamper.browser.data.address.AddressDatabase
 import net.matsudamper.browser.data.tab.TabDatabase
 
 /**
- * 設定 (Proto DataStore)・タブデータ (tab.db)・GeckoView プロファイル
+ * 設定 (Proto DataStore)・タブデータ (tab.db)・住所 (address.db)・GeckoView プロファイル
  * (Cookie・ログイン情報・履歴・サイト権限・サイト別設定) を zip ファイルで
  * エクスポート/インポートするリポジトリ。
  * 履歴 (browser.db 側)・ダウンロード記録は対象外。
@@ -37,8 +38,10 @@ class BackupRepository(private val context: Context) {
     ): Unit = withContext(Dispatchers.IO) {
         val progress = ProgressReporter(onProgress)
         val snapshotFile = File(context.cacheDir, "backup_tab_snapshot.db")
+        val addressSnapshotFile = File(context.cacheDir, "backup_address_snapshot.db")
         val defaultSettingsFile = File(context.cacheDir, "backup_default_settings.pb")
         snapshotFile.delete()
+        addressSnapshotFile.delete()
         defaultSettingsFile.delete()
         try {
             // WAL を含めた整合性のあるスナップショットを別ファイルに書き出す。
@@ -49,6 +52,12 @@ class BackupRepository(private val context: Context) {
             val escapedPath = snapshotFile.absolutePath.replace("'", "''")
             db.openHelper.writableDatabase.execSQL("VACUUM INTO '$escapedPath'")
             progress.report("タブデータのスナップショットを作成中…", 0.15f)
+
+            progress.report("住所データのスナップショットを作成中…", 0.18f)
+            val addressDb = AddressDatabase.getInstance(context)
+            val escapedAddressPath = addressSnapshotFile.absolutePath.replace("'", "''")
+            addressDb.openHelper.writableDatabase.execSQL("VACUUM INTO '$escapedAddressPath'")
+            progress.report("住所データのスナップショットを作成中…", 0.22f)
 
             // 新規インストール直後など、まだ DataStore が一度も書き込みを
             // 行っていない場合は本体ファイルが存在しない。その場合は
@@ -69,6 +78,8 @@ class BackupRepository(private val context: Context) {
                 writeEntry(zos, SETTINGS_ENTRY_NAME, settingsForExport)
                 progress.report("タブデータを書き出し中…", 0.35f)
                 writeEntry(zos, TAB_DB_ENTRY_NAME, snapshotFile)
+                progress.report("住所データを書き出し中…", 0.40f)
+                writeEntry(zos, ADDRESS_DB_ENTRY_NAME, addressSnapshotFile)
                 writeMozillaProfileEntries(
                     zos = zos,
                     files = mozillaProfileFiles,
@@ -92,6 +103,7 @@ class BackupRepository(private val context: Context) {
             progress.report("書き出しを完了しています…", 1f)
         } finally {
             snapshotFile.delete()
+            addressSnapshotFile.delete()
             defaultSettingsFile.delete()
         }
     }
@@ -111,8 +123,15 @@ class BackupRepository(private val context: Context) {
         val tabDbTarget = context.getDatabasePath(TAB_DB_FILE_NAME).apply {
             parentFile?.mkdirs()
         }
+        val addressDbTarget = context.getDatabasePath(ADDRESS_DB_FILE_NAME).apply {
+            parentFile?.mkdirs()
+        }
         val settingsStaging = File(settingsTarget.parentFile, "$SETTINGS_FILE_NAME.import")
         val tabDbStaging = File(tabDbTarget.parentFile, "$TAB_DB_FILE_NAME.import")
+        val addressDbStaging = File(addressDbTarget.parentFile, "$ADDRESS_DB_FILE_NAME.import").apply {
+            // 前回の失敗で残った staging が、住所なし ZIP の復元で誤って使われないようにする
+            delete()
+        }
         // GeckoView プロファイル staging はターゲットと同じ filesDir 直下に置き、
         // 同 FS 上での rename による atomic swap を可能にする。
         val mozillaTarget = mozillaDir()
@@ -188,12 +207,14 @@ class BackupRepository(private val context: Context) {
                 ?: error("バックアップに設定ファイルが含まれていません")
             val tabDbExtracted = extracted[TAB_DB_ENTRY_NAME]
                 ?: error("バックアップにタブデータが含まれていません")
+            val addressDbExtracted = extracted[ADDRESS_DB_ENTRY_NAME]
 
             // リスクのあるコピー (容量不足・I/O エラー) を先に済ませる。
             // この時点では Room は生きているので失敗しても app は通常動作に戻れる。
             progress.report("ファイルを準備中…", 0.60f)
             settingsExtracted.copyTo(settingsStaging, overwrite = true)
             tabDbExtracted.copyTo(tabDbStaging, overwrite = true)
+            addressDbExtracted?.copyTo(addressDbStaging, overwrite = true)
 
             // 新しいアプリ版で作成したバックアップを古いアプリ版で復元すると Room が起動不能に
             // なるため、close 前に staging の tab.db を読み取って互換性を確認する。
@@ -208,12 +229,23 @@ class BackupRepository(private val context: Context) {
                         "破損したバックアップか、新しいアプリ版で作成された可能性があります",
                 )
             }
+            if (addressDbExtracted != null) {
+                val addressSchemaVersion = readSchemaVersion(addressDbStaging)
+                if (addressSchemaVersion !in 1..AddressDatabase.SCHEMA_VERSION) {
+                    error(
+                        "バックアップの address.db スキーマバージョン ($addressSchemaVersion) はサポート範囲外です " +
+                            "(対応範囲: 1〜${AddressDatabase.SCHEMA_VERSION})。" +
+                            "破損したバックアップか、新しいアプリ版で作成された可能性があります",
+                    )
+                }
+            }
 
             // ステージング成功後に DB を閉じて置換に入る。
             // タブ永続化が裏で tab.db を書き続けているため、置き換え前に
             // Room の接続を完全に閉じてインフライト書き込みを止める。
             progress.report("データベースを閉じています…", 0.70f)
             TabDatabase.closeInstance()
+            AddressDatabase.closeInstance()
             dbClosed = true
 
             // close 後の失敗は強制再起動が必要 (Repository が閉じた DB 参照を持つため)
@@ -221,9 +253,14 @@ class BackupRepository(private val context: Context) {
                 // 古い WAL/SHM は新 DB と整合しないので削除する
                 File(tabDbTarget.parentFile, "$TAB_DB_FILE_NAME-shm").delete()
                 File(tabDbTarget.parentFile, "$TAB_DB_FILE_NAME-wal").delete()
+                File(addressDbTarget.parentFile, "$ADDRESS_DB_FILE_NAME-shm").delete()
+                File(addressDbTarget.parentFile, "$ADDRESS_DB_FILE_NAME-wal").delete()
                 progress.report("設定とタブデータを置き換え中…", 0.85f)
                 replaceWithStaging(settingsStaging, settingsTarget)
                 replaceWithStaging(tabDbStaging, tabDbTarget)
+                if (addressDbExtracted != null) {
+                    replaceWithStaging(addressDbStaging, addressDbTarget)
+                }
                 if (hasMozillaPayload) {
                     progress.report("プロファイルを置き換え中…", 0.95f)
                     swapMozillaProfile(mozillaStaging, mozillaTarget)
@@ -239,6 +276,7 @@ class BackupRepository(private val context: Context) {
             if (!dbClosed) {
                 settingsStaging.delete()
                 tabDbStaging.delete()
+                addressDbStaging.delete()
                 mozillaStaging.deleteRecursively()
             } else if (!mozillaReplaced) {
                 // DB は閉じた／置換済みだが mozilla 置換前に失敗したケース。
@@ -440,11 +478,17 @@ class BackupRepository(private val context: Context) {
 
         private const val SETTINGS_FILE_NAME = "browser_settings.pb"
         private const val TAB_DB_FILE_NAME = "tab.db"
+        private const val ADDRESS_DB_FILE_NAME = "address.db"
         private const val DATASTORE_DIR_NAME = "datastore"
         private const val MOZILLA_DIR_NAME = "mozilla"
         private const val SETTINGS_ENTRY_NAME = SETTINGS_FILE_NAME
         private const val TAB_DB_ENTRY_NAME = TAB_DB_FILE_NAME
-        private val ALLOWED_ROOT_ENTRY_NAMES = setOf(SETTINGS_ENTRY_NAME, TAB_DB_ENTRY_NAME)
+        private const val ADDRESS_DB_ENTRY_NAME = ADDRESS_DB_FILE_NAME
+        private val ALLOWED_ROOT_ENTRY_NAMES = setOf(
+            SETTINGS_ENTRY_NAME,
+            TAB_DB_ENTRY_NAME,
+            ADDRESS_DB_ENTRY_NAME,
+        )
 
         // GeckoView プロファイルから除外するディレクトリ名 (小文字, セグメント完全一致)。
         // キャッシュ・クラッシュレポート・SafeBrowsing 等は復元先で再生成されるため不要。

@@ -16,7 +16,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.UUID
+import net.matsudamper.browser.feature.addressautofill.AddressAutofillHost
+import net.matsudamper.browser.feature.addressautofill.AddressAutofillSuggestionItem
 import org.mozilla.geckoview.AllowOrDeny
+import org.mozilla.geckoview.Autocomplete
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
 
@@ -26,8 +29,8 @@ import org.mozilla.geckoview.GeckoSession
  */
 @Stable
 internal class PromptDialogState(
-    private val coroutineScope: CoroutineScope,
-) {
+    override val coroutineScope: CoroutineScope,
+) : AddressAutofillHost {
 
     // --- Alert (window.alert()) ---
     var pendingAlertPrompt by mutableStateOf<GeckoSession.PromptDelegate.AlertPrompt?>(null)
@@ -68,6 +71,29 @@ internal class PromptDialogState(
     // --- RepostConfirm (フォーム再送信確認) ---
     var pendingRepostConfirmPrompt by mutableStateOf<GeckoSession.PromptDelegate.RepostConfirmPrompt?>(null)
     var pendingRepostConfirmResult by mutableStateOf<GeckoResult<GeckoSession.PromptDelegate.PromptResponse>?>(null)
+
+    var pendingAddressSaveAddress by mutableStateOf<Autocomplete.Address?>(null)
+    var pendingAddressSavePrompt by mutableStateOf<GeckoSession.PromptDelegate.AutocompleteRequest<Autocomplete.AddressSaveOption>?>(null)
+    var pendingAddressSaveResult by mutableStateOf<GeckoResult<GeckoSession.PromptDelegate.PromptResponse>?>(null)
+    override var focusedAutofillKind: String? = null
+    override var onAddressSelectOptions: ((List<Autocomplete.AddressSelectOption>) -> Unit)? = null
+    var addressAutofillBar by mutableStateOf<AddressAutofillBarUiState?>(null)
+
+    override fun showAddressAutofillBar(items: List<AddressAutofillSuggestionItem>) {
+        addressAutofillBar = AddressAutofillBarUiState(
+            items = items.map { item ->
+                AddressAutofillBarUiState.Item(
+                    label = item.label,
+                    kind = item.kind,
+                    onClick = item.onClick,
+                )
+            },
+        )
+    }
+
+    override fun hideAddressAutofillBar() {
+        addressAutofillBar = null
+    }
 
     // ================================================================
     // Actions
@@ -309,6 +335,24 @@ internal class PromptDialogState(
         pendingRepostConfirmResult = null
     }
 
+    fun confirmAddressSave() {
+        val prompt = pendingAddressSavePrompt ?: return
+        pendingAddressSaveResult?.complete(prompt.options.firstOrNull()?.let(prompt::confirm) ?: prompt.dismiss())
+        clearAddressSave()
+    }
+
+    fun dismissAddressSave() {
+        val prompt = pendingAddressSavePrompt ?: return
+        pendingAddressSaveResult?.complete(prompt.dismiss())
+        clearAddressSave()
+    }
+
+    private fun clearAddressSave() {
+        pendingAddressSavePrompt = null
+        pendingAddressSaveResult = null
+        pendingAddressSaveAddress = null
+    }
+
     // ================================================================
     // Delegate 生成
     // ================================================================
@@ -421,6 +465,32 @@ internal class PromptDialogState(
             ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse> {
                 // ポップアップを許可する
                 return GeckoResult.fromValue(prompt.confirm(AllowOrDeny.ALLOW))
+            }
+
+            override fun onAddressSelect(
+                session: GeckoSession,
+                prompt: GeckoSession.PromptDelegate.AutocompleteRequest<Autocomplete.AddressSelectOption>,
+            ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse> {
+                Log.i(
+                    "PromptDialogState",
+                    "onAddressSelect options=${prompt.options.size} kind=$focusedAutofillKind",
+                )
+                if (prompt.options.isEmpty()) return GeckoResult.fromValue(prompt.dismiss())
+                onAddressSelectOptions?.invoke(prompt.options.toList())
+                return GeckoResult.fromValue(prompt.dismiss())
+            }
+
+            override fun onAddressSave(
+                session: GeckoSession,
+                prompt: GeckoSession.PromptDelegate.AutocompleteRequest<Autocomplete.AddressSaveOption>,
+            ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse> {
+                val address = prompt.options.firstOrNull()?.value
+                    ?: return GeckoResult.fromValue(prompt.dismiss())
+                return GeckoResult<GeckoSession.PromptDelegate.PromptResponse>().also {
+                    pendingAddressSaveAddress = address
+                    pendingAddressSavePrompt = prompt
+                    pendingAddressSaveResult = it
+                }
             }
         }
 }
