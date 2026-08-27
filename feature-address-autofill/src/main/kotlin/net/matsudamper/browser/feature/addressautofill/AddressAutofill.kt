@@ -123,8 +123,8 @@ class AddressAutofillCoordinator(
     fun onAddressFetch(count: Int) {
         if (count <= 0) return
         val current = synchronized(lock) {
-            if (lastFieldKind == FIELD_KIND_EMAIL) {
-                Log.i(TAG, "onAddressFetch skipped: last field is email")
+            if (lastFieldKind == FIELD_KIND_EMAIL || lastFieldKind == FIELD_KIND_OTHER) {
+                Log.i(TAG, "onAddressFetch skipped: last field is $lastFieldKind")
                 return
             }
             if (isFocusSuppressed(FIELD_KIND_ADDRESS)) {
@@ -143,7 +143,9 @@ class AddressAutofillCoordinator(
                     kind = kind,
                     shouldAbort = {
                         synchronized(lock) {
-                            lastFieldKind == FIELD_KIND_EMAIL || isFocusSuppressed(FIELD_KIND_ADDRESS)
+                            lastFieldKind == FIELD_KIND_EMAIL ||
+                                lastFieldKind == FIELD_KIND_OTHER ||
+                                isFocusSuppressed(FIELD_KIND_ADDRESS)
                         }
                     },
                     present = ::presentCompletions,
@@ -153,6 +155,18 @@ class AddressAutofillCoordinator(
     }
 
     fun onFieldFocus(kind: String) {
+        if (kind == FIELD_KIND_OTHER) {
+            val current = synchronized(lock) {
+                lastFieldKind = kind
+                showJob?.cancel()
+                showJob = null
+                attached
+            } ?: return
+            current.host.focusedAutofillKind = kind
+            current.host.hideAddressAutofillBar()
+            Log.i(TAG, "field-focus kind=other")
+            return
+        }
         if (kind != FIELD_KIND_ADDRESS && kind != FIELD_KIND_NAME && kind != FIELD_KIND_EMAIL) return
         val current = synchronized(lock) {
             if (isFocusSuppressed(kind)) {
@@ -278,6 +292,7 @@ class AddressAutofillDelegate(
             isEmailAutofillField(attributes) -> coordinator.onFieldFocus(FIELD_KIND_EMAIL)
             isNameAutofillField(attributes) -> coordinator.onFieldFocus(FIELD_KIND_NAME)
             isAddressAutofillField(attributes) -> coordinator.onFieldFocus(FIELD_KIND_ADDRESS)
+            else -> coordinator.onFieldFocus(FIELD_KIND_OTHER)
         }
     }
 
@@ -335,6 +350,7 @@ private const val FILL_FOCUS_SUPPRESS_MS = 1_500L
 const val FIELD_KIND_NAME = "name"
 const val FIELD_KIND_ADDRESS = "address"
 const val FIELD_KIND_EMAIL = "email"
+const val FIELD_KIND_OTHER = "other"
 
 fun isEmailAutofillField(attributes: Map<String, String>): Boolean {
     val inputType = attributes["type"].orEmpty()

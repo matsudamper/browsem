@@ -80,26 +80,44 @@
     });
   }
 
-  function isNameField(el) {
-    if (isEmailField(el)) return false;
-    const tokens = fieldTokens(el);
-    const nameTokens = FAMILY_NAME_TOKENS
-      .concat(GIVEN_NAME_TOKENS)
-      .concat(ADDITIONAL_NAME_TOKENS)
-      .concat(FULL_NAME_TOKENS);
-    return nameTokens.some(function (token) {
+  function autocompleteTokens(el) {
+    return tokenize(el.getAttribute('autocomplete'));
+  }
+
+  function identityTokens(el) {
+    return tokenize(el.id).concat(tokenize(el.getAttribute('name')));
+  }
+
+  function hasAnyToken(tokens, candidates) {
+    return candidates.some(function (token) {
       return tokens.indexOf(token) !== -1;
     });
   }
 
+  function isNameField(el) {
+    if (isEmailField(el)) return false;
+    // autocomplete の name は氏名。id/name の素の "name" は userName に誤爆するため対象外。
+    const nameAutocomplete = FAMILY_NAME_TOKENS
+      .concat(GIVEN_NAME_TOKENS)
+      .concat(ADDITIONAL_NAME_TOKENS)
+      .concat(FULL_NAME_TOKENS);
+    if (hasAnyToken(autocompleteTokens(el), nameAutocomplete)) return true;
+    const nameIdAliases = FAMILY_NAME_TOKENS
+      .concat(GIVEN_NAME_TOKENS)
+      .concat(ADDITIONAL_NAME_TOKENS);
+    return hasAnyToken(identityTokens(el), nameIdAliases);
+  }
+
   function isAddressField(el) {
     if (isEmailField(el)) return false;
-    const tokens = fieldTokens(el);
+    const auto = autocompleteTokens(el);
+    const identity = identityTokens(el);
     for (let i = 0; i < FIELD_MAP.length; i++) {
       if (FIELD_MAP[i].key === 'email') continue;
-      for (let j = 0; j < FIELD_MAP[i].tokens.length; j++) {
-        if (tokens.indexOf(FIELD_MAP[i].tokens[j]) !== -1) return true;
-      }
+      if (hasAnyToken(auto, FIELD_MAP[i].tokens)) return true;
+      // id/name の素の "name" は userName に誤爆するため対象外。
+      if (FIELD_MAP[i].key === 'name') continue;
+      if (hasAnyToken(identity, FIELD_MAP[i].tokens)) return true;
     }
     return false;
   }
@@ -186,7 +204,6 @@
     if (isEmailField(el)) kind = 'email';
     else if (isNameField(el)) kind = 'name';
     else if (isAddressField(el)) kind = 'address';
-    if (kind === 'other') return;
     port.postMessage({ action: 'field-focus', kind: kind });
   }, true);
 })();
