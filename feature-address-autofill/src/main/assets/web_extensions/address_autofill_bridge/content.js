@@ -174,15 +174,29 @@
     return el;
   }
 
+  function belongsToForm(el) {
+    if (!el) return false;
+    if (el.form) return true;
+    return !!(el.closest && el.closest('form'));
+  }
+
   function collectFillTargets(root) {
     const fields = [];
     if (!root) return fields;
     if (root.tagName && String(root.tagName).toUpperCase() === 'FORM') {
+      // 配送先と請求先など、無関係な form へ同じ値を書かない。
       collectFields(root, fields);
-    } else {
-      fields.push(root);
+      return fields;
     }
-    return fields;
+    // form がないページ（MDN autocomplete など）は、どの form にも属さない欄を埋める。
+    collectFields(document, fields);
+    const scoped = [];
+    for (let i = 0; i < fields.length; i++) {
+      if (!belongsToForm(fields[i])) {
+        scoped.push(fields[i]);
+      }
+    }
+    return scoped;
   }
 
   function fillAddress(address, mode) {
