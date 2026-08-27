@@ -42,9 +42,8 @@ sealed interface SiteFormInputPathsScreenTestTags {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SiteFormInputPathsScreen(
+internal fun SiteFormInputPathsScreen(
     uiState: SiteFormInputPathsScreenUiState,
-    onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Scaffold(
@@ -53,7 +52,7 @@ fun SiteFormInputPathsScreen(
             TopAppBar(
                 title = { Text("保存したフォーム入力") },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
+                    IconButton(onClick = uiState.callbacks::navigateBack) {
                         Icon(
                             painter = painterResource(ResourcesR.drawable.ic_arrow_back_24dp),
                             contentDescription = "戻る",
@@ -132,6 +131,7 @@ private fun SiteFormInputPathsScreenPreview() {
         SiteFormInputPathsScreen(
             uiState = SiteFormInputPathsScreenUiState(
                 callbacks = object : SiteFormInputPathsScreenUiState.Callbacks {
+                    override fun navigateBack() = Unit
                     override fun setPathEnabled(path: String, enabled: Boolean) = Unit
                     override fun openPath(path: String) = Unit
                 },
@@ -151,7 +151,6 @@ private fun SiteFormInputPathsScreenPreview() {
                     ),
                 ),
             ),
-            onBack = {},
         )
     }
 }

@@ -43,9 +43,8 @@ sealed interface SiteFormInputPathScreenTestTags {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SiteFormInputPathScreen(
+internal fun SiteFormInputPathScreen(
     uiState: SiteFormInputPathScreenUiState,
-    onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Scaffold(
@@ -54,7 +53,7 @@ fun SiteFormInputPathScreen(
             TopAppBar(
                 title = { Text(uiState.displayPath) },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
+                    IconButton(onClick = uiState.callbacks::navigateBack) {
                         Icon(
                             painter = painterResource(ResourcesR.drawable.ic_arrow_back_24dp),
                             contentDescription = "戻る",
@@ -233,6 +232,7 @@ private fun SiteFormInputPathScreenPreview() {
         SiteFormInputPathScreen(
             uiState = SiteFormInputPathScreenUiState(
                 callbacks = object : SiteFormInputPathScreenUiState.Callbacks {
+                    override fun navigateBack() = Unit
                     override fun setPathEnabled(enabled: Boolean) = Unit
                     override fun setFieldEnabled(fieldKey: String, enabled: Boolean) = Unit
                     override fun requestDeleteField(fieldKey: String) = Unit
@@ -261,7 +261,6 @@ private fun SiteFormInputPathScreenPreview() {
                 deleteFieldConfirm = null,
                 deletePathConfirm = false,
             ),
-            onBack = {},
         )
     }
 }

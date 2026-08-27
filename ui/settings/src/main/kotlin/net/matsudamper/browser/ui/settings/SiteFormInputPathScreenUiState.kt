@@ -21,6 +21,7 @@ data class SiteFormInputPathScreenUiState(
     )
 
     interface Callbacks {
+        fun navigateBack()
         fun setPathEnabled(enabled: Boolean)
         fun setFieldEnabled(fieldKey: String, enabled: Boolean)
         fun requestDeleteField(fieldKey: String)

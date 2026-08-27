@@ -1,5 +1,6 @@
 package net.matsudamper.browser.screen.siteforminput
 
+import androidx.compose.runtime.Stable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.channels.Channel
@@ -14,6 +15,7 @@ import net.matsudamper.browser.data.forminput.FormInputRepository
 import net.matsudamper.browser.data.forminput.displayFormInputPath
 import net.matsudamper.browser.ui.settings.SiteFormInputPathScreenUiState
 
+@Stable
 internal class SiteFormInputPathScreenViewModel(
     private val host: String,
     private val path: String,
@@ -22,6 +24,7 @@ internal class SiteFormInputPathScreenViewModel(
     val eventHandler = Channel<(Event) -> Unit>(Channel.UNLIMITED)
 
     interface Event {
+        fun navigateBack()
         fun navigateBackAfterDeleted()
     }
 
@@ -35,6 +38,10 @@ internal class SiteFormInputPathScreenViewModel(
     private val viewModelStateFlow = MutableStateFlow(ViewModelState())
 
     private val callbacks = object : SiteFormInputPathScreenUiState.Callbacks {
+        override fun navigateBack() {
+            eventHandler.trySend { it.navigateBack() }
+        }
+
         override fun setPathEnabled(enabled: Boolean) {
             viewModelScope.launch {
                 formInputRepository.setPathEnabled(host, path, enabled)

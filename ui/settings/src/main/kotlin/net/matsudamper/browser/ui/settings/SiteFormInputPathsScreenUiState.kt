@@ -17,6 +17,7 @@ data class SiteFormInputPathsScreenUiState(
     )
 
     interface Callbacks {
+        fun navigateBack()
         fun setPathEnabled(path: String, enabled: Boolean)
         fun openPath(path: String)
     }

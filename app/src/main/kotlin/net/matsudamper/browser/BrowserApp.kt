@@ -100,8 +100,8 @@ import net.matsudamper.browser.ui.settings.AddressesScreen
 import net.matsudamper.browser.ui.settings.BackupProgressScreen
 import net.matsudamper.browser.ui.settings.BackupProgressUiState
 import net.matsudamper.browser.ui.settings.SettingsScreen
-import net.matsudamper.browser.ui.settings.SiteFormInputPathScreen
-import net.matsudamper.browser.ui.settings.SiteFormInputPathsScreen
+import net.matsudamper.browser.ui.settings.SiteFormInputPathRoute
+import net.matsudamper.browser.ui.settings.SiteFormInputPathsRoute
 import net.matsudamper.browser.ui.settings.SiteSettingsScreen
 import net.matsudamper.browser.ui.tabs.TabsScreen
 import org.koin.compose.koinInject
@@ -367,6 +367,10 @@ internal fun BrowserAppShell(
                     LaunchedEffect(pathsViewModel) {
                         pathsViewModel.eventHandler.receiveAsFlow().collect { handler ->
                             handler(object : SiteFormInputPathsScreenViewModel.Event {
+                                override fun navigateBack() {
+                                    outerBackStack.removeLastOrNull()
+                                }
+
                                 override fun navigateToPath(path: String) {
                                     outerBackStack.add(
                                         AppDestination.SiteFormInputPath(
@@ -378,9 +382,8 @@ internal fun BrowserAppShell(
                             })
                         }
                     }
-                    SiteFormInputPathsScreen(
+                    SiteFormInputPathsRoute(
                         uiState = pathsUiState,
-                        onBack = { outerBackStack.removeLastOrNull() },
                     )
                 }
 
@@ -397,15 +400,18 @@ internal fun BrowserAppShell(
                     LaunchedEffect(pathViewModel) {
                         pathViewModel.eventHandler.receiveAsFlow().collect { handler ->
                             handler(object : SiteFormInputPathScreenViewModel.Event {
+                                override fun navigateBack() {
+                                    outerBackStack.removeLastOrNull()
+                                }
+
                                 override fun navigateBackAfterDeleted() {
                                     outerBackStack.removeLastOrNull()
                                 }
                             })
                         }
                     }
-                    SiteFormInputPathScreen(
+                    SiteFormInputPathRoute(
                         uiState = pathUiState,
-                        onBack = { outerBackStack.removeLastOrNull() },
                     )
                 }
 
