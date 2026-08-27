@@ -69,6 +69,7 @@ fun AddressEditScreen(
         },
     ) { paddingValues ->
         val scrollState = rememberScrollState()
+        val fieldsEnabled = !uiState.isLoading
         Column(
             modifier = Modifier
                 .padding(paddingValues)
@@ -83,18 +84,21 @@ fun AddressEditScreen(
                     label = "姓",
                     value = uiState.familyName,
                     onValueChange = uiState.callbacks::onFamilyNameChange,
+                    enabled = fieldsEnabled,
                 )
                 Spacer(Modifier.height(8.dp))
                 AddressField(
                     label = "名",
                     value = uiState.givenName,
                     onValueChange = uiState.callbacks::onGivenNameChange,
+                    enabled = fieldsEnabled,
                 )
                 Spacer(Modifier.height(8.dp))
                 AddressField(
                     label = "ミドルネーム",
                     value = uiState.additionalName,
                     onValueChange = uiState.callbacks::onAdditionalNameChange,
+                    enabled = fieldsEnabled,
                 )
             }
 
@@ -105,36 +109,42 @@ fun AddressEditScreen(
                     label = "郵便番号",
                     value = uiState.postalCode,
                     onValueChange = uiState.callbacks::onPostalCodeChange,
+                    enabled = fieldsEnabled,
                 )
                 Spacer(Modifier.height(8.dp))
                 AddressField(
                     label = "都道府県",
                     value = uiState.addressLevel1,
                     onValueChange = uiState.callbacks::onAddressLevel1Change,
+                    enabled = fieldsEnabled,
                 )
                 Spacer(Modifier.height(8.dp))
                 AddressField(
                     label = "市区町村",
                     value = uiState.addressLevel2,
                     onValueChange = uiState.callbacks::onAddressLevel2Change,
+                    enabled = fieldsEnabled,
                 )
                 Spacer(Modifier.height(8.dp))
                 AddressField(
                     label = "町名・番地以降",
                     value = uiState.addressLevel3,
                     onValueChange = uiState.callbacks::onAddressLevel3Change,
+                    enabled = fieldsEnabled,
                 )
                 Spacer(Modifier.height(8.dp))
                 AddressField(
                     label = "番地・建物名",
                     value = uiState.streetAddress,
                     onValueChange = uiState.callbacks::onStreetAddressChange,
+                    enabled = fieldsEnabled,
                 )
                 Spacer(Modifier.height(8.dp))
                 AddressField(
                     label = "国・地域コード",
                     value = uiState.country,
                     onValueChange = uiState.callbacks::onCountryChange,
+                    enabled = fieldsEnabled,
                 )
             }
 
@@ -145,18 +155,21 @@ fun AddressEditScreen(
                     label = "会社・組織",
                     value = uiState.organization,
                     onValueChange = uiState.callbacks::onOrganizationChange,
+                    enabled = fieldsEnabled,
                 )
                 Spacer(Modifier.height(8.dp))
                 AddressField(
                     label = "電話番号",
                     value = uiState.tel,
                     onValueChange = uiState.callbacks::onTelChange,
+                    enabled = fieldsEnabled,
                 )
                 Spacer(Modifier.height(8.dp))
                 AddressField(
                     label = "メールアドレス",
                     value = uiState.email,
                     onValueChange = uiState.callbacks::onEmailChange,
+                    enabled = fieldsEnabled,
                 )
             }
 
@@ -170,11 +183,13 @@ private fun AddressField(
     label: String,
     value: String,
     onValueChange: (String) -> Unit,
+    enabled: Boolean,
 ) {
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
         label = { Text(label) },
+        enabled = enabled,
         singleLine = true,
         modifier = Modifier.fillMaxWidth(),
     )
@@ -201,6 +216,7 @@ private fun PreviewAddressEditScreen() {
                     override fun onSave() = Unit
                 },
                 isNew = true,
+                isLoading = false,
                 givenName = "太郎",
                 additionalName = "",
                 familyName = "山田",

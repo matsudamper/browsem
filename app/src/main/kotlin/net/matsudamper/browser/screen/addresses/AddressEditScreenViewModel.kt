@@ -20,7 +20,9 @@ internal class AddressEditScreenViewModel(
 
     val eventHandler = Channel<(Event) -> Unit>(Channel.UNLIMITED)
 
-    private val viewModelStateFlow = MutableStateFlow(ViewModelState())
+    private val viewModelStateFlow = MutableStateFlow(
+        ViewModelState(isLoading = addressId != AddressesScreenViewModel.NEW_ADDRESS_ID),
+    )
 
     private val callbacks = object : AddressEditScreenUiState.Callbacks {
         override fun onGivenNameChange(value: String) {
@@ -108,6 +110,7 @@ internal class AddressEditScreenViewModel(
         AddressEditScreenUiState(
             callbacks = callbacks,
             isNew = addressId == AddressesScreenViewModel.NEW_ADDRESS_ID,
+            isLoading = addressId != AddressesScreenViewModel.NEW_ADDRESS_ID,
             givenName = "",
             additionalName = "",
             familyName = "",
@@ -129,6 +132,7 @@ internal class AddressEditScreenViewModel(
                     AddressEditScreenUiState(
                         callbacks = callbacks,
                         isNew = state.id == AddressesScreenViewModel.NEW_ADDRESS_ID,
+                        isLoading = state.isLoading,
                         givenName = state.givenName,
                         additionalName = state.additionalName,
                         familyName = state.familyName,
@@ -151,8 +155,12 @@ internal class AddressEditScreenViewModel(
     init {
         if (addressId != AddressesScreenViewModel.NEW_ADDRESS_ID) {
             viewModelScope.launch {
-                val entity = addressRepository.getById(addressId) ?: return@launch
-                viewModelStateFlow.value = ViewModelState.fromEntity(entity)
+                val entity = addressRepository.getById(addressId)
+                if (entity != null) {
+                    viewModelStateFlow.value = ViewModelState.fromEntity(entity)
+                } else {
+                    viewModelStateFlow.update { it.copy(isLoading = false) }
+                }
             }
         }
     }
@@ -176,9 +184,10 @@ internal class AddressEditScreenViewModel(
         val tel: String = "",
         val email: String = "",
         val isSaving: Boolean = false,
+        val isLoading: Boolean = false,
     ) {
         val canSave: Boolean
-            get() = !isSaving && listOf(
+            get() = !isSaving && !isLoading && listOf(
                 givenName,
                 additionalName,
                 familyName,
