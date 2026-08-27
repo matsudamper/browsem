@@ -7,7 +7,6 @@ import android.content.Intent
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
@@ -178,23 +177,16 @@ class MediaPrimarySelectionTest {
             return
         }
         val geckoNode = composeRule.onNodeWithTag(GeckoBrowserTabTestTags.GeckoContainer.testTag)
-        listOf<Offset?>(null, Offset(100f, 100f), Offset(200f, 200f)).forEach { offset ->
+        repeat(PLAYBACK_TAP_RETRY_COUNT) {
             confirmAutoplayPermissionIfShown()
-            if (offset == null) {
-                geckoNode.performTouchInput { click() }
-            } else {
-                geckoNode.performTouchInput { click(offset) }
-            }
+            geckoNode.performTouchInput { click() }
             composeRule.waitForIdle()
             waitUntil(timeoutMs = PLAYBACK_START_CONFIRM_TIMEOUT_MS, ::hasPlaybackStarted)?.let {
                 return
             }
         }
-        // 再生未開始のまま進むと後続の position 待ちがタイムアウトするため、
-        // 失敗時の原因切り分け用に最終状態を残す
-        println(
-            "media-primary-selection: タップ後も再生が開始されない " +
-                "state=${MediaSessionBridge.playbackState.value}",
+        throw AssertionError(
+            "タップ後も再生が開始されない state=${MediaSessionBridge.playbackState.value}",
         )
     }
 
@@ -250,6 +242,7 @@ class MediaPrimarySelectionTest {
         private const val TEST_TIMEOUT_MS = 180_000L
         private const val AUTOSTART_GRACE_PERIOD_MS = 2_000L
         private const val AUTOPLAY_DIALOG_WAIT_MS = 5_000L
+        private const val PLAYBACK_TAP_RETRY_COUNT = 10
         private const val PLAYBACK_START_CONFIRM_TIMEOUT_MS = 2_500L
         private const val FIRST_TRACK_TIMEOUT_MS = 20_000L
         private const val TRACK_SWITCH_TIMEOUT_MS = 20_000L
