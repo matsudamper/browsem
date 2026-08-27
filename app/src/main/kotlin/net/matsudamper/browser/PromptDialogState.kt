@@ -73,7 +73,9 @@ internal class PromptDialogState(
     var pendingAddressSelectPrompt by mutableStateOf<GeckoSession.PromptDelegate.AutocompleteRequest<Autocomplete.AddressSelectOption>?>(null)
     var pendingAddressSelectResult by mutableStateOf<GeckoResult<GeckoSession.PromptDelegate.PromptResponse>?>(null)
     var pendingAutofillAddressOptions by mutableStateOf<List<Autocomplete.AddressSelectOption>?>(null)
-    internal var addressFillHandler: ((Autocomplete.Address) -> Unit)? = null
+    var pendingEmailSelectOptions by mutableStateOf<List<Autocomplete.AddressSelectOption>?>(null)
+    internal var addressFillHandler: ((Autocomplete.Address, AddressAutofillFillMode) -> Unit)? = null
+    internal var focusedAutofillKind: String? = null
     var pendingAddressSaveAddress by mutableStateOf<Autocomplete.Address?>(null)
     var pendingAddressSavePrompt by mutableStateOf<GeckoSession.PromptDelegate.AutocompleteRequest<Autocomplete.AddressSaveOption>?>(null)
     var pendingAddressSaveResult by mutableStateOf<GeckoResult<GeckoSession.PromptDelegate.PromptResponse>?>(null)
@@ -321,13 +323,40 @@ internal class PromptDialogState(
     fun confirmAddressSelect(option: Autocomplete.AddressSelectOption) {
         val prompt = pendingAddressSelectPrompt
         if (prompt != null) {
-            pendingAddressSelectResult?.complete(prompt.confirm(option))
+            val addressOnly = Autocomplete.AddressSelectOption(option.value.withoutEmail())
+            pendingAddressSelectResult?.complete(prompt.confirm(addressOnly))
             pendingAddressSelectPrompt = null
             pendingAddressSelectResult = null
         }
         clearAutofillAddressSelect()
-        // Gecko 公式経路でも iframe 内は埋まらないことがあるため、選択値は常にアプリ側でも入れる
-        addressFillHandler?.invoke(option.value)
+        addressFillHandler?.invoke(option.value, AddressAutofillFillMode.Address)
+    }
+
+    fun confirmEmailSelect(option: Autocomplete.AddressSelectOption) {
+        pendingEmailSelectOptions = null
+        addressFillHandler?.invoke(option.value, AddressAutofillFillMode.Email)
+    }
+
+    fun dismissEmailSelect() {
+        pendingEmailSelectOptions = null
+    }
+
+    /**
+     * メール欄にフォーカスがあるのに住所選択が出ている場合は、
+     * Gecko の住所プロンプトを閉じてメール選択へ切り替える。
+     */
+    fun switchVisibleSelectToEmail() {
+        val geckoPrompt = pendingAddressSelectPrompt
+        val options = geckoPrompt?.options?.toList() ?: pendingAutofillAddressOptions
+        if (geckoPrompt != null) {
+            pendingAddressSelectResult?.complete(geckoPrompt.dismiss())
+            pendingAddressSelectPrompt = null
+            pendingAddressSelectResult = null
+        }
+        pendingAutofillAddressOptions = null
+        if (options != null) {
+            showAutofillEmailSelect(options)
+        }
     }
 
     fun dismissAddressSelect() {
@@ -344,12 +373,24 @@ internal class PromptDialogState(
     fun showAutofillAddressSelect(
         options: List<Autocomplete.AddressSelectOption>,
     ) {
-        if (hasVisibleAddressSelect() || options.isEmpty()) return
+        if (hasVisibleAddressSelect() || hasVisibleEmailSelect() || options.isEmpty()) return
         pendingAutofillAddressOptions = options
+    }
+
+    fun showAutofillEmailSelect(
+        options: List<Autocomplete.AddressSelectOption>,
+    ) {
+        val emails = options.filter { it.value.email.isNotBlank() }
+        if (hasVisibleAddressSelect() || hasVisibleEmailSelect() || emails.isEmpty()) return
+        pendingEmailSelectOptions = emails
     }
 
     internal fun hasVisibleAddressSelect(): Boolean {
         return pendingAddressSelectPrompt != null || pendingAutofillAddressOptions != null
+    }
+
+    internal fun hasVisibleEmailSelect(): Boolean {
+        return pendingEmailSelectOptions != null
     }
 
     private fun clearAutofillAddressSelect() {
@@ -494,13 +535,18 @@ internal class PromptDialogState(
             ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse> {
                 Log.i(
                     "PromptDialogState",
-                    "onAddressSelect options=${prompt.options.size} " +
+                    "onAddressSelect options=${prompt.options.size} kind=$focusedAutofillKind " +
                         prompt.options.joinToString { option ->
                             val address = option.value
                             "name=${address.name} family=${address.familyName} country=${address.country}"
                         },
                 )
                 if (prompt.options.isEmpty()) return GeckoResult.fromValue(prompt.dismiss())
+                if (focusedAutofillKind == "email") {
+                    pendingAutofillAddressOptions = null
+                    showAutofillEmailSelect(prompt.options.toList())
+                    return GeckoResult.fromValue(prompt.dismiss())
+                }
                 clearAutofillAddressSelect()
                 return GeckoResult<GeckoSession.PromptDelegate.PromptResponse>().also {
                     pendingAddressSelectPrompt = prompt

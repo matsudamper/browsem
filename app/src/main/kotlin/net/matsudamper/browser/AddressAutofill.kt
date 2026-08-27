@@ -1,8 +1,8 @@
 package net.matsudamper.browser
 
+import android.os.SystemClock
 import android.util.Log
 import android.util.SparseArray
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -13,16 +13,20 @@ import org.mozilla.geckoview.Autocomplete
 import org.mozilla.geckoview.Autofill
 import org.mozilla.geckoview.GeckoSession
 
+internal enum class AddressAutofillFillMode {
+    Address,
+    Email,
+}
+
 /**
  * Gecko FormAutofill はトップ文書から iframe を辿るため、shadow DOM 内の
  * cross-origin iframe（MDN の interactive-example など）では選択プロンプトを出せない。
  *
  * フォールバックは次の2経路:
  * 1. `AutocompleteStorageDelegate.onAddressFetch`（フォーカス時のフィールド検出で確実に来る）
- * 2. GeckoView Autofill の `onNodeFocus`（実タップでは来るが、a11y クリックでは来ないことがある）
+ * 2. GeckoView Autofill の `onNodeFocus` / WebExtension の focusin
  *
- * いずれも Gecko の `onAddressSelect` を優先し、来なければ同じ AddressSelectDialog を出す。
- * 選択後の入力は Autofill.Session に加えて、all_frames の WebExtension で行う。
+ * 住所欄とメール欄は別ダイアログにする。住所の選択ではメールを埋めない。
  */
 internal class AddressAutofillCoordinator(
     private val fillExtension: AddressAutofillWebExtension,
@@ -30,6 +34,9 @@ internal class AddressAutofillCoordinator(
     private val lock = Any()
     private var attached: Attached? = null
     private var showJob: Job? = null
+    private var lastFieldKind: String? = null
+    private var suppressFocusUntilElapsed: Long = 0L
+    private var suppressFocusKind: String? = null
 
     private class Attached(
         val session: GeckoSession,
@@ -45,54 +52,111 @@ internal class AddressAutofillCoordinator(
         synchronized(lock) {
             attached = Attached(session, promptDialogState, addressRepository)
             promptDialogState.addressFillHandler = ::fillSelectedAddress
+            promptDialogState.focusedAutofillKind = lastFieldKind
         }
+        fillExtension.onFieldFocus = { kind -> onFieldFocus(kind) }
         fillExtension.registerSession(session)
     }
 
     fun detach(session: GeckoSession) {
+        fillExtension.onFieldFocus = null
         fillExtension.unregisterSession(session)
         synchronized(lock) {
             if (attached?.session !== session) return
             showJob?.cancel()
             showJob = null
             attached?.promptDialogState?.addressFillHandler = null
+            attached?.promptDialogState?.focusedAutofillKind = null
             attached = null
+            lastFieldKind = null
         }
     }
 
-    private fun fillSelectedAddress(address: Autocomplete.Address) {
+    private fun fillSelectedAddress(
+        address: Autocomplete.Address,
+        mode: AddressAutofillFillMode,
+    ) {
         val current = synchronized(lock) { attached } ?: return
-        fillAddressOnSession(current.session, address)
-        fillExtension.fill(current.session, address)
+        synchronized(lock) {
+            suppressFocusUntilElapsed = SystemClock.elapsedRealtime() + FILL_FOCUS_SUPPRESS_MS
+            suppressFocusKind = when (mode) {
+                AddressAutofillFillMode.Email -> "email"
+                AddressAutofillFillMode.Address -> "address"
+            }
+        }
+        fillAddressOnSession(current.session, address, mode)
+        fillExtension.fill(current.session, address, mode)
     }
 
     fun onAddressFetch(count: Int) {
         if (count <= 0) return
-        val current = synchronized(lock) { attached } ?: run {
-            Log.i(TAG, "onAddressFetch fallback skipped: tab not attached count=$count")
-            return
-        }
-        Log.i(TAG, "onAddressFetch fallback scheduled count=$count")
+        val current = synchronized(lock) {
+            if (lastFieldKind == "email") {
+                Log.i(TAG, "onAddressFetch skipped: last field is email")
+                return
+            }
+            if (isFocusSuppressed("address")) {
+                Log.i(TAG, "onAddressFetch ignored after address fill")
+                return
+            }
+            attached
+        } ?: return
+        Log.i(TAG, "onAddressFetch schedule address fallback count=$count")
         synchronized(lock) {
             showJob?.cancel()
             showJob = current.promptDialogState.coroutineScope.launch {
                 scheduleAddressSelectFallback(
                     addressRepository = current.addressRepository,
                     promptDialogState = current.promptDialogState,
+                    isEmailFieldFocused = { synchronized(lock) { lastFieldKind == "email" } },
                 )
             }
         }
     }
+
+    fun onFieldFocus(kind: String) {
+        if (kind != "address" && kind != "email") return
+        val current = synchronized(lock) {
+            if (isFocusSuppressed(kind)) {
+                Log.i(TAG, "field-focus ignored after fill kind=$kind")
+                return
+            }
+            lastFieldKind = kind
+            attached
+        } ?: return
+        current.promptDialogState.focusedAutofillKind = kind
+        Log.i(TAG, "field-focus kind=$kind")
+        synchronized(lock) {
+            showJob?.cancel()
+            showJob = current.promptDialogState.coroutineScope.launch {
+                if (kind == "email") {
+                    current.promptDialogState.switchVisibleSelectToEmail()
+                    scheduleEmailSelectFallback(
+                        addressRepository = current.addressRepository,
+                        promptDialogState = current.promptDialogState,
+                    )
+                } else {
+                    current.promptDialogState.dismissEmailSelect()
+                    scheduleAddressSelectFallback(
+                        addressRepository = current.addressRepository,
+                        promptDialogState = current.promptDialogState,
+                        isEmailFieldFocused = { synchronized(lock) { lastFieldKind == "email" } },
+                    )
+                }
+            }
+        }
+    }
+
+    private fun isFocusSuppressed(kind: String): Boolean {
+        return SystemClock.elapsedRealtime() < suppressFocusUntilElapsed &&
+            suppressFocusKind == kind
+    }
 }
 
 internal class AddressAutofillDelegate(
-    private val addressRepository: AddressRepository,
-    private val promptDialogState: PromptDialogState,
-    private val coroutineScope: CoroutineScope,
+    private val coordinator: AddressAutofillCoordinator,
     internal val wrapped: Autofill.Delegate?,
 ) : Autofill.Delegate {
-
-    private var showJob: Job? = null
 
     override fun onSessionStart(session: GeckoSession) {
         wrapped?.onSessionStart(session)
@@ -108,7 +172,6 @@ internal class AddressAutofillDelegate(
 
     override fun onSessionCancel(session: GeckoSession) {
         wrapped?.onSessionCancel(session)
-        showJob?.cancel()
     }
 
     override fun onNodeAdd(
@@ -146,13 +209,9 @@ internal class AddressAutofillDelegate(
             TAG,
             "onNodeFocus tag=${node.tag} hint=${node.hint} attrs=$attributes id=${data.id}",
         )
-        if (!isAddressAutofillField(attributes)) return
-        showJob?.cancel()
-        showJob = coroutineScope.launch {
-            scheduleAddressSelectFallback(
-                addressRepository = addressRepository,
-                promptDialogState = promptDialogState,
-            )
+        when {
+            isEmailAutofillField(attributes) -> coordinator.onFieldFocus("email")
+            isAddressAutofillField(attributes) -> coordinator.onFieldFocus("address")
         }
     }
 
@@ -169,33 +228,58 @@ internal class AddressAutofillDelegate(
 private suspend fun scheduleAddressSelectFallback(
     addressRepository: AddressRepository,
     promptDialogState: PromptDialogState,
+    isEmailFieldFocused: () -> Boolean,
 ) {
     // Gecko の onAddressSelect が来るページではそちらを優先する
     delay(GECKO_PROMPT_WAIT_MS)
-    if (promptDialogState.hasVisibleAddressSelect()) return
+    if (isEmailFieldFocused()) return
+    if (promptDialogState.hasVisibleAddressSelect() || promptDialogState.hasVisibleEmailSelect()) return
     val addresses = withContext(Dispatchers.IO) { addressRepository.getAll() }
     if (addresses.isEmpty()) return
-    if (promptDialogState.hasVisibleAddressSelect()) return
+    if (isEmailFieldFocused()) return
+    if (promptDialogState.hasVisibleAddressSelect() || promptDialogState.hasVisibleEmailSelect()) return
     Log.i(TAG, "show fallback AddressSelectDialog count=${addresses.size}")
     promptDialogState.showAutofillAddressSelect(
         options = addresses.map { Autocomplete.AddressSelectOption(it.toGeckoAddress()) },
     )
 }
 
-internal fun fillAddressOnSession(session: GeckoSession, address: Autocomplete.Address) {
+private suspend fun scheduleEmailSelectFallback(
+    addressRepository: AddressRepository,
+    promptDialogState: PromptDialogState,
+) {
+    delay(GECKO_PROMPT_WAIT_MS)
+    if (promptDialogState.hasVisibleAddressSelect() || promptDialogState.hasVisibleEmailSelect()) return
+    val addresses = withContext(Dispatchers.IO) { addressRepository.getAll() }
+        .map { it.toGeckoAddress() }
+        .filter { it.email.isNotBlank() }
+        .distinctBy { it.email }
+    if (addresses.isEmpty()) return
+    if (promptDialogState.hasVisibleAddressSelect() || promptDialogState.hasVisibleEmailSelect()) return
+    Log.i(TAG, "show fallback EmailSelectDialog count=${addresses.size}")
+    promptDialogState.showAutofillEmailSelect(
+        options = addresses.map { Autocomplete.AddressSelectOption(it) },
+    )
+}
+
+internal fun fillAddressOnSession(
+    session: GeckoSession,
+    address: Autocomplete.Address,
+    mode: AddressAutofillFillMode,
+) {
     val autofillSession = session.autofillSession
     val root = autofillSession.root
     val values = SparseArray<CharSequence>()
     fun walk(node: Autofill.Node) {
         val nodeData = autofillSession.dataFor(node)
-        val value = resolveAddressAutofillValue(node.attributes, address)
+        val value = resolveAddressAutofillValue(node.attributes, address, mode)
         if (value != null && value.isNotEmpty()) {
             values.put(nodeData.id, value)
         }
         node.children.forEach { walk(it) }
     }
     walk(root)
-    Log.i(TAG, "autofill values=${values.size()}")
+    Log.i(TAG, "autofill mode=$mode values=${values.size()}")
     if (values.size() > 0) {
         autofillSession.autofill(values)
     }
@@ -203,8 +287,17 @@ internal fun fillAddressOnSession(session: GeckoSession, address: Autocomplete.A
 
 private const val TAG = "AddressAutofill"
 private const val GECKO_PROMPT_WAIT_MS = 400L
+private const val FILL_FOCUS_SUPPRESS_MS = 1_500L
+
+internal fun isEmailAutofillField(attributes: Map<String, String>): Boolean {
+    val inputType = attributes["type"].orEmpty()
+    if (inputType.equals("email", ignoreCase = true)) return true
+    val tokens = addressAutofillTokens(attributes)
+    return tokens.any { it in EMAIL_TOKENS }
+}
 
 internal fun isAddressAutofillField(attributes: Map<String, String>): Boolean {
+    if (isEmailAutofillField(attributes)) return false
     val autocompleteTokens = attributes["autocomplete"]
         .orEmpty()
         .lowercase()
@@ -220,7 +313,12 @@ internal fun isAddressAutofillField(attributes: Map<String, String>): Boolean {
 internal fun resolveAddressAutofillValue(
     attributes: Map<String, String>,
     address: Autocomplete.Address,
+    mode: AddressAutofillFillMode = AddressAutofillFillMode.Address,
 ): String? {
+    if (mode == AddressAutofillFillMode.Email) {
+        return if (isEmailAutofillField(attributes)) address.email else null
+    }
+    if (isEmailAutofillField(attributes)) return null
     val tokens = addressAutofillTokens(attributes)
     return when {
         tokens.any { it in FAMILY_NAME_TOKENS } -> address.familyName
@@ -235,7 +333,6 @@ internal fun resolveAddressAutofillValue(
         tokens.any { it in POSTAL_TOKENS } -> address.postalCode
         tokens.any { it in COUNTRY_TOKENS } -> address.country
         tokens.any { it in TEL_TOKENS } -> address.tel
-        tokens.any { it in EMAIL_TOKENS } -> address.email
         else -> null
     }
 }
@@ -305,4 +402,23 @@ private val ADDRESS_ID_ALIAS_TOKENS = FAMILY_NAME_TOKENS +
     POSTAL_TOKENS +
     COUNTRY_TOKENS +
     TEL_TOKENS
+
+internal fun Autocomplete.Address.withoutEmail(): Autocomplete.Address {
+    return Autocomplete.Address.Builder()
+        .guid(guid)
+        .name(name)
+        .givenName(givenName)
+        .additionalName(additionalName)
+        .familyName(familyName)
+        .organization(organization)
+        .streetAddress(streetAddress)
+        .addressLevel1(addressLevel1)
+        .addressLevel2(addressLevel2)
+        .addressLevel3(addressLevel3)
+        .postalCode(postalCode)
+        .country(country)
+        .tel(tel)
+        .email("")
+        .build()
+}
 

@@ -1,4 +1,4 @@
-// 住所選択ダイアログで選んだ値を、このフレーム内の住所欄へ入れる。
+// 住所選択とメール選択は別経路。名前欄の選択でメールを埋めない。
 // Gecko FormAutofill は shadow DOM 内 iframe を埋められないため、
 // all_frames のコンテンツスクリプトから直接 value を書く。
 (function () {
@@ -60,13 +60,36 @@
       .concat(tokenize(el.getAttribute('autofillhint')));
   }
 
-  function shouldSkipField(el) {
+  function isNonValueField(el) {
     const type = (el.getAttribute('type') || '').toLowerCase();
-    if (type === 'hidden' || type === 'submit' || type === 'button' || type === 'reset' || type === 'checkbox' || type === 'radio') {
-      return true;
-    }
+    return type === 'hidden' || type === 'submit' || type === 'button' ||
+      type === 'reset' || type === 'checkbox' || type === 'radio';
+  }
+
+  function hasAutocompleteOff(el) {
     const autocomplete = (el.getAttribute('autocomplete') || '').toLowerCase().trim();
     return autocomplete === 'off' || autocomplete === 'new-password';
+  }
+
+  function isEmailField(el) {
+    const type = (el.getAttribute('type') || '').toLowerCase();
+    if (type === 'email') return true;
+    const tokens = fieldTokens(el);
+    return EMAIL_TOKENS.some(function (token) {
+      return tokens.indexOf(token) !== -1;
+    });
+  }
+
+  function isAddressField(el) {
+    if (isEmailField(el)) return false;
+    const tokens = fieldTokens(el);
+    for (let i = 0; i < FIELD_MAP.length; i++) {
+      if (FIELD_MAP[i].key === 'email') continue;
+      for (let j = 0; j < FIELD_MAP[i].tokens.length; j++) {
+        if (tokens.indexOf(FIELD_MAP[i].tokens[j]) !== -1) return true;
+      }
+    }
+    return false;
   }
 
   function resolveValue(el, address) {
@@ -112,26 +135,45 @@
     }
   }
 
-  function fillAddress(address) {
+  function fillAddress(address, mode) {
     if (!address) return 0;
+    const fillMode = mode === 'email' ? 'email' : 'address';
     const fields = [];
     collectFields(document, fields);
     let filled = 0;
     for (let i = 0; i < fields.length; i++) {
       const el = fields[i];
-      if (shouldSkipField(el)) continue;
-      const value = resolveValue(el, address);
+      if (isNonValueField(el)) continue;
+      if (fillMode === 'email') {
+        if (!isEmailField(el)) continue;
+      } else {
+        if (isEmailField(el)) continue;
+        if (hasAutocompleteOff(el)) continue;
+      }
+      const value = fillMode === 'email' ? (address.email || '') : resolveValue(el, address);
       if (!value) continue;
       setFieldValue(el, value);
       filled += 1;
     }
-    console.log('address-autofill: filled=' + filled + ' href=' + location.href);
+    console.log('address-autofill: mode=' + fillMode + ' filled=' + filled + ' href=' + location.href);
     return filled;
   }
 
   const port = browser.runtime.connectNative('addressAutofillBridge');
   port.onMessage.addListener(function (message) {
     if (!message || message.action !== 'fill') return;
-    fillAddress(message.address);
+    fillAddress(message.address, message.mode);
   });
+
+  document.addEventListener('focusin', function (event) {
+    const el = event.target;
+    if (!el || !el.tagName) return;
+    const tag = String(el.tagName).toUpperCase();
+    if (tag !== 'INPUT' && tag !== 'TEXTAREA' && tag !== 'SELECT') return;
+    let kind = 'other';
+    if (isEmailField(el)) kind = 'email';
+    else if (isAddressField(el)) kind = 'address';
+    if (kind === 'other') return;
+    port.postMessage({ action: 'field-focus', kind: kind });
+  }, true);
 })();

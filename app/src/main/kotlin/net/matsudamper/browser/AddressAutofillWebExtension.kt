@@ -28,6 +28,9 @@ internal class AddressAutofillWebExtension {
     private val delegatedSessions: MutableSet<GeckoSession> =
         Collections.newSetFromMap(ConcurrentHashMap())
 
+    @Volatile
+    var onFieldFocus: ((String) -> Unit)? = null
+
     fun install(runtime: GeckoRuntime) {
         Log.d(TAG, "install() 開始: uri=$EXTENSION_URI")
         runtime.webExtensionController
@@ -60,8 +63,12 @@ internal class AddressAutofillWebExtension {
         }
     }
 
-    fun fill(session: GeckoSession, address: Autocomplete.Address) {
-        val message = address.toFillMessage()
+    fun fill(
+        session: GeckoSession,
+        address: Autocomplete.Address,
+        mode: AddressAutofillFillMode,
+    ) {
+        val message = address.toFillMessage(mode)
         pendingFills[session] = PendingFill(
             message = message,
             untilElapsedRealtime = SystemClock.elapsedRealtime() + FILL_RETRY_WINDOW_MS,
@@ -108,7 +115,12 @@ internal class AddressAutofillWebExtension {
                             .onFailure { error -> Log.w(TAG, "pending fill 送信に失敗", error) }
                     }
                     port.setDelegate(object : WebExtension.PortDelegate {
-                        override fun onPortMessage(message: Any, port: WebExtension.Port) = Unit
+                        override fun onPortMessage(message: Any, port: WebExtension.Port) {
+                            val json = message as? JSONObject ?: return
+                            if (json.optString("action") != "field-focus") return
+                            val kind = json.optString("kind")
+                            mainHandler.post { onFieldFocus?.invoke(kind) }
+                        }
 
                         override fun onDisconnect(port: WebExtension.Port) {
                             sessionPorts[session]?.remove(connectedPort)
@@ -134,10 +146,15 @@ internal class AddressAutofillWebExtension {
     }
 }
 
-internal fun Autocomplete.Address.toFillMessage(): JSONObject {
+internal fun Autocomplete.Address.toFillMessage(mode: AddressAutofillFillMode): JSONObject {
     val address = this
+    val modeValue = when (mode) {
+        AddressAutofillFillMode.Email -> "email"
+        AddressAutofillFillMode.Address -> "address"
+    }
     return JSONObject().apply {
         put("action", "fill")
+        put("mode", modeValue)
         put(
             "address",
             JSONObject().apply {
@@ -153,7 +170,14 @@ internal fun Autocomplete.Address.toFillMessage(): JSONObject {
                 put("postalCode", address.postalCode.orEmpty())
                 put("country", address.country.orEmpty())
                 put("tel", address.tel.orEmpty())
-                put("email", address.email.orEmpty())
+                put(
+                    "email",
+                    if (mode == AddressAutofillFillMode.Email) {
+                        address.email.orEmpty()
+                    } else {
+                        ""
+                    },
+                )
             },
         )
     }
