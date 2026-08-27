@@ -99,6 +99,9 @@ class AddressAutofillPromptTest {
         waitUntilAddressFilled(
             extraMessage = "MDN の実ページで住所を選んでも入力されない 苗字欄クリック=$fieldClick",
         )
+        selectEmailAndWaitUntilFilled(
+            extraMessage = "MDN の実ページでメールを個別に入力できない 苗字欄クリック=$fieldClick",
+        )
     }
 
     @Test
@@ -140,6 +143,9 @@ class AddressAutofillPromptTest {
         selectFirstSavedAddress()
         waitUntilAddressFilled(
             extraMessage = "MDN autocomplete と同じマークアップで住所を選んでも入力されない",
+        )
+        selectEmailAndWaitUntilFilled(
+            extraMessage = "MDN autocomplete と同じマークアップでメールを個別に入力できない",
         )
     }
 
@@ -212,6 +218,10 @@ class AddressAutofillPromptTest {
                 extraMessage = "sandbox iframe 内で住所を選んでも入力されない " +
                     "親サーバ=${parentServer.requests} 子サーバ=${contentServer.requests}",
             )
+            selectEmailAndWaitUntilFilled(
+                extraMessage = "sandbox iframe 内でメールを個別に入力できない " +
+                    "親サーバ=${parentServer.requests} 子サーバ=${contentServer.requests}",
+            )
         } finally {
             contentServer.close()
         }
@@ -256,6 +266,9 @@ class AddressAutofillPromptTest {
         selectFirstSavedAddress()
         waitUntilAddressFilled(
             extraMessage = "Mozilla の address_form.html で住所を選んでも入力されない",
+        )
+        selectEmailAndWaitUntilFilled(
+            extraMessage = "Mozilla の address_form.html でメールを個別に入力できない",
         )
     }
 
@@ -321,11 +334,60 @@ class AddressAutofillPromptTest {
     private fun waitUntilAddressFilled(extraMessage: String) {
         try {
             composeRule.waitUntil(timeoutMillis = 30_000) {
-                pageContainsFilledAddress(FILL_FAMILY_NAME, FILL_GIVEN_NAME)
+                pageContainsFilledAddress(FILL_FAMILY_NAME, FILL_GIVEN_NAME) &&
+                    !pageContainsFilledEmail()
             }
         } catch (e: ComposeTimeoutException) {
             throw AssertionError(
                 "$extraMessage\n" +
+                    "現在URL=${composeRule.currentPageUrlFromUi()}\n" +
+                    "editables=${collectEditableFieldTexts()}\n" +
+                    "texts=${collectAccessibilityTexts().take(80)}\n" +
+                    "--- accessibility ---\n${dumpAccessibilityTree()}\n" +
+                    "--- logcat (formautofill関連) ---\n${collectFormAutofillLogcat()}",
+                e,
+            )
+        }
+    }
+
+    private fun selectEmailAndWaitUntilFilled(extraMessage: String) {
+        val fieldClick = clickMdnEmailField()
+        try {
+            composeRule.waitUntil(timeoutMillis = 30_000) {
+                composeRule
+                    .onAllNodesWithTag(BrowserTabDialogLayerTestTags.EmailSelectDialog.testTag)
+                    .fetchSemanticsNodes()
+                    .isNotEmpty()
+            }
+        } catch (e: ComposeTimeoutException) {
+            throw AssertionError(
+                "$extraMessage (メール選択ダイアログが出ない)\n" +
+                    "メール欄クリック=$fieldClick\n" +
+                    "現在URL=${composeRule.currentPageUrlFromUi()}\n" +
+                    "editables=${collectEditableFieldTexts()}\n" +
+                    "--- accessibility ---\n${dumpAccessibilityTree()}\n" +
+                    "--- logcat (formautofill関連) ---\n${collectFormAutofillLogcat()}",
+                e,
+            )
+        }
+        composeRule.waitUntil(timeoutMillis = 10_000) {
+            composeRule
+                .onAllNodesWithTag(BrowserTabDialogLayerTestTags.EmailSelectOption.testTag)
+                .fetchSemanticsNodes()
+                .isNotEmpty()
+        }
+        composeRule
+            .onAllNodesWithTag(BrowserTabDialogLayerTestTags.EmailSelectOption.testTag)[0]
+            .performClick()
+        try {
+            composeRule.waitUntil(timeoutMillis = 30_000) {
+                pageContainsFilledEmail() &&
+                    pageContainsFilledAddress(FILL_FAMILY_NAME, FILL_GIVEN_NAME)
+            }
+        } catch (e: ComposeTimeoutException) {
+            throw AssertionError(
+                "$extraMessage (メールが入力されない)\n" +
+                    "メール欄クリック=$fieldClick\n" +
                     "現在URL=${composeRule.currentPageUrlFromUi()}\n" +
                     "editables=${collectEditableFieldTexts()}\n" +
                     "texts=${collectAccessibilityTexts().take(80)}\n" +
@@ -346,6 +408,12 @@ class AddressAutofillPromptTest {
         }
         val editables = collectEditableFieldTexts()
         return editables.any { it.contains(familyName) } && editables.any { it.contains(givenName) }
+    }
+
+    private fun pageContainsFilledEmail(): Boolean {
+        val texts = collectAccessibilityTexts()
+        if (texts.any { it.contains("email=$FILL_EMAIL") }) return true
+        return collectEditableFieldTexts().any { it.contains(FILL_EMAIL) }
     }
 
     private fun collectAccessibilityTexts(): List<String> {
@@ -525,7 +593,7 @@ class AddressAutofillPromptTest {
                     streetAddress = "p",
                     postalCode = "2222222",
                     tel = "09011111111",
-                    email = "let@h.com",
+                    email = FILL_EMAIL,
                 ),
             )
         }
@@ -545,7 +613,7 @@ class AddressAutofillPromptTest {
                     streetAddress = "20 Ingram Street, Forest Hills Gardens, Queens",
                     postalCode = "11375",
                     country = "US",
-                    email = "spiderman@newyork.com",
+                    email = FILL_EMAIL,
                     tel = "+1 180090021",
                 ),
             )
@@ -596,9 +664,11 @@ class AddressAutofillPromptTest {
                     if (!probe) return;
                     const given = document.getElementById('givenName');
                     const family = document.getElementById('familyName');
+                    const email = document.getElementById('email');
                     probe.textContent =
                       'givenName=' + (given ? given.value : '') +
-                      ' familyName=' + (family ? family.value : '');
+                      ' familyName=' + (family ? family.value : '') +
+                      ' email=' + (email ? email.value : '');
                   }
                   window.addEventListener('load', () => {
                     setInterval(reportFill, 250);
@@ -640,9 +710,11 @@ class AddressAutofillPromptTest {
                     if (!probe) return;
                     const lastName = document.getElementById('lastName');
                     const firstName = document.getElementById('firstName');
+                    const email = document.getElementById('email');
                     probe.textContent =
                       'lastName=' + (lastName ? lastName.value : '') +
-                      ' firstName=' + (firstName ? firstName.value : '');
+                      ' firstName=' + (firstName ? firstName.value : '') +
+                      ' email=' + (email ? email.value : '');
                   }
                   window.addEventListener('load', () => {
                     setInterval(reportFill, 250);
@@ -700,6 +772,41 @@ class AddressAutofillPromptTest {
                 val dump = StringBuilder()
                 val target = findMdnFamilyNameField(root, dump)
                     ?: if (clickedOutputTab) findFirstEmptyContentEditText(root) else null
+                lastDump = dump.toString()
+                if (target != null) {
+                    val viewId = target.viewIdResourceName.orEmpty()
+                    val desc = target.contentDescription?.toString().orEmpty()
+                    val text = target.text?.toString().orEmpty()
+                    val clicked = target.performAction(AccessibilityNodeInfo.ACTION_CLICK) ||
+                        target.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
+                    val summary =
+                        "clicked=$clicked cls=${target.className} viewId=$viewId desc=$desc " +
+                            "text=${text.take(80)} edit=${target.isEditable} outputTab=$clickedOutputTab"
+                    target.recycle()
+                    root.recycle()
+                    return summary
+                }
+                scrollAccessibilityNode(root)
+                root.recycle()
+            }
+            Thread.sleep(500)
+        }
+        return "not-found outputTab=$clickedOutputTab dump=\n$lastDump"
+    }
+
+    private fun clickMdnEmailField(): String {
+        val uiAutomation = InstrumentationRegistry.getInstrumentation().uiAutomation
+        val deadline = System.currentTimeMillis() + MDN_FIELD_WAIT_MILLIS
+        var lastDump = ""
+        var clickedOutputTab = false
+        while (System.currentTimeMillis() < deadline) {
+            val root = uiAutomation.rootInActiveWindow
+            if (root != null) {
+                if (!clickedOutputTab) {
+                    clickedOutputTab = clickNodeWithText(root, OUTPUT_TAB_LABELS)
+                }
+                val dump = StringBuilder()
+                val target = findMdnEmailField(root, dump)
                 lastDump = dump.toString()
                 if (target != null) {
                     val viewId = target.viewIdResourceName.orEmpty()
@@ -786,6 +893,62 @@ class AddressAutofillPromptTest {
             text.isBlank()
     }
 
+    private fun findMdnEmailField(
+        node: AccessibilityNodeInfo,
+        dump: StringBuilder,
+        depth: Int = 0,
+    ): AccessibilityNodeInfo? {
+        val viewId = node.viewIdResourceName.orEmpty()
+        val desc = node.contentDescription?.toString().orEmpty()
+        val text = node.text?.toString().orEmpty()
+        val cls = node.className?.toString().orEmpty()
+        if (dump.lines().size < ACCESSIBILITY_DUMP_MAX_LINES) {
+            val interesting = node.isEditable ||
+                cls.contains("EditText", ignoreCase = true) ||
+                viewId.contains("email", ignoreCase = true) ||
+                text.contains("メール") ||
+                desc.contains("メール") ||
+                text.contains("email", ignoreCase = true) ||
+                desc.contains("email", ignoreCase = true)
+            if (interesting) {
+                dump.append("  ".repeat(depth.coerceAtMost(16)))
+                    .append(cls.substringAfterLast('.'))
+                    .append(" id=").append(viewId)
+                    .append(" text=").append(text.take(40))
+                    .append(" desc=").append(desc.take(40))
+                    .append(" edit=").append(node.isEditable)
+                    .append('\n')
+            }
+        }
+        if (isMdnLiveEmailField(node)) {
+            return AccessibilityNodeInfo.obtain(node)
+        }
+        for (index in 0 until node.childCount) {
+            val child = node.getChild(index) ?: continue
+            val found = findMdnEmailField(child, dump, depth + 1)
+            child.recycle()
+            if (found != null) return found
+        }
+        return null
+    }
+
+    private fun isMdnLiveEmailField(node: AccessibilityNodeInfo): Boolean {
+        val viewId = node.viewIdResourceName.orEmpty()
+        val desc = node.contentDescription?.toString().orEmpty()
+        val text = node.text?.toString().orEmpty()
+        val hint = node.hintText?.toString().orEmpty()
+        val cls = node.className?.toString().orEmpty()
+        if (!cls.contains("EditText", ignoreCase = true)) return false
+        if (isSourceEditorText(text) || isSourceEditorText(desc) || isSourceEditorText(hint)) return false
+        return viewId.contains("email", ignoreCase = true) ||
+            desc.contains("メール") ||
+            desc.contains("e-mail", ignoreCase = true) ||
+            desc.contains("email", ignoreCase = true) ||
+            hint.contains("メール") ||
+            hint.contains("e-mail", ignoreCase = true) ||
+            hint.contains("email", ignoreCase = true)
+    }
+
     private fun isSourceEditorText(value: String): Boolean {
         return value.contains("<label") ||
             value.contains("<input") ||
@@ -843,6 +1006,7 @@ class AddressAutofillPromptTest {
             ?: return "(rootInActiveWindow=null)"
         val dump = StringBuilder()
         findMdnFamilyNameField(root, dump)
+        findMdnEmailField(root, dump)
         root.recycle()
         return dump.toString()
     }
@@ -1237,6 +1401,7 @@ class AddressAutofillPromptTest {
         private const val ACCESSIBILITY_DUMP_MAX_LINES = 500
         private const val FILL_FAMILY_NAME = "YamadaFillTest"
         private const val FILL_GIVEN_NAME = "TaroFillTest"
+        private const val FILL_EMAIL = "fill-test@example.com"
         private val OUTPUT_TAB_LABELS = setOf("出力", "Output", "結果", "Play")
     }
 }
