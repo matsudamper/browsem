@@ -1,8 +1,6 @@
 package net.matsudamper.browser
 
 import android.os.ParcelFileDescriptor
-import android.view.View
-import android.view.ViewGroup
 import android.view.accessibility.AccessibilityNodeInfo
 import androidx.annotation.OptIn
 import androidx.compose.ui.semantics.SemanticsNode
@@ -11,6 +9,7 @@ import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -40,7 +39,7 @@ import java.util.concurrent.TimeoutException
  * 住所フォーム送信時に PromptDelegate.onAddressSave が発火して保存ダイアログが表示されること、
  * 保存済み住所がある状態で GeckoView 本家の address_form.html と、
  * ユーザーが再現に使っている MDN autocomplete の実ページで
- * IME 補完から選んだ住所がフォームへ入力されることを検証する。
+ * IME 直上の候補バーから選んだ住所がフォームへ入力されることを検証する。
  *
  * file:// ではフォーム送信が行われないことが CI の診断で判明したため、
  * ループバック HTTP サーバでページを配信する。
@@ -80,8 +79,8 @@ class AddressAutofillPromptTest {
 
         val fieldClick = clickMdnFamilyNameField()
 
-        selectFirstImeCompletion(
-            extraMessage = "MDN の実ページで住所のIME補完が出ない\n" +
+        selectFirstAutofillSuggestion(
+            extraMessage = "MDN の実ページで住所の候補バーが出ない\n" +
                 "苗字欄クリック=$fieldClick",
         )
         waitUntilAddressFilled(
@@ -112,8 +111,8 @@ class AddressAutofillPromptTest {
         composeRule.openUrlFromUrlBar(pageUri)
         composeRule.waitForUrlBarContains(MDN_AUTOCOMPLETE_SAMPLE_FILE_NAME, timeoutMillis = 60_000)
 
-        selectFirstImeCompletion(
-            extraMessage = "MDN autocomplete と同じマークアップで住所のIME補完が出ない\n" +
+        selectFirstAutofillSuggestion(
+            extraMessage = "MDN autocomplete と同じマークアップで住所の候補バーが出ない\n" +
                 "サーバ受信リクエスト=${server.requests}",
         )
         waitUntilAddressFilled(
@@ -172,8 +171,8 @@ class AddressAutofillPromptTest {
             }
             clickMdnFamilyNameField()
 
-            selectFirstImeCompletion(
-                extraMessage = "sandbox iframe 内の MDN マークアップで住所のIME補完が出ない\n" +
+            selectFirstAutofillSuggestion(
+                extraMessage = "sandbox iframe 内の MDN マークアップで住所の候補バーが出ない\n" +
                     "親サーバ=${parentServer.requests} 子サーバ=${contentServer.requests}",
             )
             waitUntilAddressFilled(
@@ -209,8 +208,8 @@ class AddressAutofillPromptTest {
         composeRule.openUrlFromUrlBar(pageUri)
         composeRule.waitForUrlBarContains(ADDRESS_SELECT_FORM_FILE_NAME, timeoutMillis = 60_000)
 
-        selectFirstImeCompletion(
-            extraMessage = "Mozilla の address_form.html で住所のIME補完が出ない\n" +
+        selectFirstAutofillSuggestion(
+            extraMessage = "Mozilla の address_form.html で住所の候補バーが出ない\n" +
                 "サーバ受信リクエスト=${server.requests}",
         )
         waitUntilAddressFilled(
@@ -268,46 +267,27 @@ class AddressAutofillPromptTest {
         }
     }
 
-    private fun selectFirstImeCompletion(extraMessage: String) {
+    private fun selectFirstAutofillSuggestion(extraMessage: String) {
         try {
             composeRule.waitUntil(timeoutMillis = 30_000) {
-                findAddressAutofillGeckoView()?.displayedCompletionCount()?.let { it > 0 } == true
+                composeRule
+                    .onAllNodesWithTag(AddressAutofillSuggestionBarTestTags.Option.testTag)
+                    .fetchSemanticsNodes()
+                    .isNotEmpty()
             }
         } catch (e: ComposeTimeoutException) {
             throw AssertionError(
                 "$extraMessage\n" +
                     "現在URL=${composeRule.currentPageUrlFromUi()}\n" +
-                    "geckoView=${findAddressAutofillGeckoView()}\n" +
                     "--- accessibility ---\n${dumpAccessibilityTree()}\n" +
                     "--- logcat (formautofill関連) ---\n${collectFormAutofillLogcat()}",
                 e,
             )
         }
-        var picked = false
-        // runOnUiThread は UI スレッドへ post するだけで完了を待たない。
-        // 選択前にアサートすると picked=false のまま落ちる。
-        InstrumentationRegistry.getInstrumentation().runOnMainSync {
-            picked = findAddressAutofillGeckoView()?.pickCompletionAt(0) == true
-        }
-        if (!picked) {
-            throw AssertionError(
-                "$extraMessage (IME補完を選べない)\n" +
-                    "completions=${findAddressAutofillGeckoView()?.displayedCompletionCount()}",
-            )
-        }
-    }
-
-    private fun findAddressAutofillGeckoView(): AddressAutofillGeckoView? {
-        return composeRule.activity.window.decorView.findAddressAutofillGeckoView()
-    }
-
-    private fun View.findAddressAutofillGeckoView(): AddressAutofillGeckoView? {
-        if (this is AddressAutofillGeckoView) return this
-        if (this !is ViewGroup) return null
-        for (index in 0 until childCount) {
-            getChildAt(index).findAddressAutofillGeckoView()?.let { return it }
-        }
-        return null
+        composeRule
+            .onAllNodesWithTag(AddressAutofillSuggestionBarTestTags.Option.testTag)
+            .onFirst()
+            .performClick()
     }
 
     private fun waitUntilAddressFilled(extraMessage: String) {
@@ -331,8 +311,8 @@ class AddressAutofillPromptTest {
 
     private fun selectEmailAndWaitUntilFilled(extraMessage: String) {
         val fieldClick = clickMdnEmailField()
-        selectFirstImeCompletion(
-            extraMessage = "$extraMessage (メールのIME補完が出ない)\nメール欄クリック=$fieldClick",
+        selectFirstAutofillSuggestion(
+            extraMessage = "$extraMessage (メールの候補バーが出ない)\nメール欄クリック=$fieldClick",
         )
         try {
             composeRule.waitUntil(timeoutMillis = 30_000) {
