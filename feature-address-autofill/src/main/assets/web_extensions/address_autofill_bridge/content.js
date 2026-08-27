@@ -1,0 +1,259 @@
+// 住所選択とメール選択は別経路。名前欄の選択でメールを埋めない。
+// Gecko FormAutofill は shadow DOM 内 iframe を埋められないため、
+// all_frames のコンテンツスクリプトから直接 value を書く。
+(function () {
+  'use strict';
+
+  const FAMILY_NAME_TOKENS = ['family-name', 'familyname', 'lastname', 'last-name'];
+  const GIVEN_NAME_TOKENS = ['given-name', 'givenname', 'firstname', 'first-name'];
+  const ADDITIONAL_NAME_TOKENS = ['additional-name', 'additionalname', 'middlename', 'middle-name'];
+  const FULL_NAME_TOKENS = ['name'];
+  const ORGANIZATION_TOKENS = ['organization', 'org', 'company'];
+  const STREET_ADDRESS_TOKENS = ['street-address', 'streetaddress'];
+  const ADDRESS_LINE1_TOKENS = ['address-line1', 'addressline1'];
+  const ADDRESS_LINE2_TOKENS = ['address-line2', 'addressline2'];
+  const ADDRESS_LINE3_TOKENS = ['address-line3', 'addressline3'];
+  const ADDRESS_LEVEL1_TOKENS = ['address-level1', 'addresslevel1', 'state', 'province'];
+  const ADDRESS_LEVEL2_TOKENS = ['address-level2', 'addresslevel2', 'city'];
+  const ADDRESS_LEVEL3_TOKENS = ['address-level3', 'addresslevel3'];
+  const POSTAL_TOKENS = ['postal-code', 'postalcode', 'zip', 'zipcode', 'postcode'];
+  const COUNTRY_TOKENS = ['country', 'country-name', 'countryname'];
+  const TEL_TOKENS = ['tel', 'telephone', 'phone'];
+  const EMAIL_TOKENS = ['email'];
+
+  const FIELD_MAP = [
+    { tokens: FAMILY_NAME_TOKENS, key: 'familyName' },
+    { tokens: GIVEN_NAME_TOKENS, key: 'givenName' },
+    { tokens: ADDITIONAL_NAME_TOKENS, key: 'additionalName' },
+    { tokens: FULL_NAME_TOKENS, key: 'name' },
+    { tokens: ORGANIZATION_TOKENS, key: 'organization' },
+    { tokens: STREET_ADDRESS_TOKENS.concat(ADDRESS_LINE1_TOKENS), key: 'streetAddress' },
+    { tokens: ADDRESS_LINE2_TOKENS.concat(ADDRESS_LINE3_TOKENS), key: '' },
+    { tokens: ADDRESS_LEVEL1_TOKENS, key: 'addressLevel1' },
+    { tokens: ADDRESS_LEVEL2_TOKENS, key: 'addressLevel2' },
+    { tokens: ADDRESS_LEVEL3_TOKENS, key: 'addressLevel3' },
+    { tokens: POSTAL_TOKENS, key: 'postalCode' },
+    { tokens: COUNTRY_TOKENS, key: 'country' },
+    { tokens: TEL_TOKENS, key: 'tel' },
+    { tokens: EMAIL_TOKENS, key: 'email' },
+  ];
+
+  function tokenize(value) {
+    if (!value) return [];
+    const text = String(value);
+    const lower = text.toLowerCase();
+    const delimited = lower.split(/[\s_]+/).filter(Boolean);
+    const camel = text.split(/(?<=[a-z0-9])(?=[A-Z])/).map(function (part) {
+      return part.toLowerCase();
+    }).filter(Boolean);
+    return delimited.concat(camel, [lower]).map(function (token) {
+      return token.replace(/_/g, '-');
+    });
+  }
+
+  function fieldTokens(el) {
+    return tokenize(el.getAttribute('autocomplete'))
+      .concat(tokenize(el.id))
+      .concat(tokenize(el.getAttribute('name')))
+      .concat(tokenize(el.getAttribute('autofillhint')));
+  }
+
+  function isNonValueField(el) {
+    const type = (el.getAttribute('type') || '').toLowerCase();
+    return type === 'hidden' || type === 'submit' || type === 'button' ||
+      type === 'reset' || type === 'checkbox' || type === 'radio';
+  }
+
+  function hasAutocompleteOff(el) {
+    const autocomplete = (el.getAttribute('autocomplete') || '').toLowerCase().trim();
+    return autocomplete === 'off' || autocomplete === 'new-password';
+  }
+
+  function isEmailField(el) {
+    const type = (el.getAttribute('type') || '').toLowerCase();
+    if (type === 'email') return true;
+    const tokens = fieldTokens(el);
+    return EMAIL_TOKENS.some(function (token) {
+      return tokens.indexOf(token) !== -1;
+    });
+  }
+
+  function autocompleteTokens(el) {
+    return tokenize(el.getAttribute('autocomplete'));
+  }
+
+  function identityTokens(el) {
+    return tokenize(el.id).concat(tokenize(el.getAttribute('name')));
+  }
+
+  function hasAnyToken(tokens, candidates) {
+    return candidates.some(function (token) {
+      return tokens.indexOf(token) !== -1;
+    });
+  }
+
+  function isNameField(el) {
+    if (isEmailField(el)) return false;
+    // autocomplete の name は氏名。id/name の素の "name" は userName に誤爆するため対象外。
+    const nameAutocomplete = FAMILY_NAME_TOKENS
+      .concat(GIVEN_NAME_TOKENS)
+      .concat(ADDITIONAL_NAME_TOKENS)
+      .concat(FULL_NAME_TOKENS);
+    if (hasAnyToken(autocompleteTokens(el), nameAutocomplete)) return true;
+    const nameIdAliases = FAMILY_NAME_TOKENS
+      .concat(GIVEN_NAME_TOKENS)
+      .concat(ADDITIONAL_NAME_TOKENS);
+    return hasAnyToken(identityTokens(el), nameIdAliases);
+  }
+
+  function isAddressField(el) {
+    if (isEmailField(el)) return false;
+    const auto = autocompleteTokens(el);
+    const identity = identityTokens(el);
+    for (let i = 0; i < FIELD_MAP.length; i++) {
+      if (FIELD_MAP[i].key === 'email') continue;
+      if (hasAnyToken(auto, FIELD_MAP[i].tokens)) return true;
+      // id/name の素の "name" は userName に誤爆するため対象外。
+      if (FIELD_MAP[i].key === 'name') continue;
+      if (hasAnyToken(identity, FIELD_MAP[i].tokens)) return true;
+    }
+    return false;
+  }
+
+  function resolveValue(el, address) {
+    const tokens = fieldTokens(el);
+    for (let i = 0; i < FIELD_MAP.length; i++) {
+      const entry = FIELD_MAP[i];
+      for (let j = 0; j < entry.tokens.length; j++) {
+        if (tokens.indexOf(entry.tokens[j]) !== -1) {
+          if (!entry.key) return null;
+          const value = address[entry.key];
+          return value == null ? '' : String(value);
+        }
+      }
+    }
+    return null;
+  }
+
+  function setFieldValue(el, value) {
+    const proto = el instanceof HTMLTextAreaElement
+      ? HTMLTextAreaElement.prototype
+      : el instanceof HTMLSelectElement
+        ? HTMLSelectElement.prototype
+        : HTMLInputElement.prototype;
+    const descriptor = Object.getOwnPropertyDescriptor(proto, 'value');
+    if (descriptor && descriptor.set) {
+      descriptor.set.call(el, value);
+    } else {
+      el.value = value;
+    }
+    el.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+    el.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
+  }
+
+  function collectFields(root, out) {
+    const nodes = root.querySelectorAll('input, textarea, select');
+    for (let i = 0; i < nodes.length; i++) {
+      out.push(nodes[i]);
+    }
+    const all = root.querySelectorAll('*');
+    for (let i = 0; i < all.length; i++) {
+      if (all[i].shadowRoot) {
+        collectFields(all[i].shadowRoot, out);
+      }
+    }
+  }
+
+  let focusedFillRoot = null;
+
+  function resolveFillRoot(el) {
+    if (!el || !el.isConnected) return null;
+    if (el.form) return el.form;
+    const closest = el.closest && el.closest('form');
+    if (closest) return closest;
+    return el;
+  }
+
+  function belongsToForm(el) {
+    if (!el) return false;
+    if (el.form) return true;
+    return !!(el.closest && el.closest('form'));
+  }
+
+  function collectFillTargets(root) {
+    const fields = [];
+    if (!root) return fields;
+    if (root.tagName && String(root.tagName).toUpperCase() === 'FORM') {
+      // 配送先と請求先など、無関係な form へ同じ値を書かない。
+      collectFields(root, fields);
+      return fields;
+    }
+    // form がないページ（MDN autocomplete など）は、どの form にも属さない欄を埋める。
+    collectFields(document, fields);
+    const scoped = [];
+    for (let i = 0; i < fields.length; i++) {
+      if (!belongsToForm(fields[i])) {
+        scoped.push(fields[i]);
+      }
+    }
+    return scoped;
+  }
+
+  function fillAddress(address, mode) {
+    if (!address) return 0;
+    const fillMode = mode === 'email' ? 'email' : 'address';
+    const root = focusedFillRoot && focusedFillRoot.isConnected ? focusedFillRoot : null;
+    if (!root) return 0;
+    const fields = collectFillTargets(root);
+    let filled = 0;
+    for (let i = 0; i < fields.length; i++) {
+      const el = fields[i];
+      if (isNonValueField(el)) continue;
+      if (fillMode === 'email') {
+        if (!isEmailField(el)) continue;
+      } else {
+        if (isEmailField(el)) continue;
+        if (hasAutocompleteOff(el)) continue;
+      }
+      const value = fillMode === 'email' ? (address.email || '') : resolveValue(el, address);
+      if (!value) continue;
+      setFieldValue(el, value);
+      filled += 1;
+    }
+    console.log('address-autofill: mode=' + fillMode + ' filled=' + filled + ' href=' + location.href);
+    return filled;
+  }
+
+  const port = browser.runtime.connectNative('addressAutofillBridge');
+  port.onMessage.addListener(function (message) {
+    if (!message || message.action !== 'fill') return;
+    fillAddress(message.address, message.mode);
+  });
+
+  function isEditableFormControl(el) {
+    if (!el || !el.tagName) return false;
+    const tag = String(el.tagName).toUpperCase();
+    return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+  }
+
+  document.addEventListener('focusin', function (event) {
+    const el = event.target;
+    if (!isEditableFormControl(el)) return;
+    let kind = 'other';
+    if (isEmailField(el)) kind = 'email';
+    else if (isNameField(el)) kind = 'name';
+    else if (isAddressField(el)) kind = 'address';
+    focusedFillRoot = resolveFillRoot(el);
+    port.postMessage({ action: 'field-focus', kind: kind });
+  }, true);
+
+  // ページの空領域タップでは次の focusin が来ないため、入力欄の focusout で閉じる。
+  // 次が別の input なら focusin 側に任せる。バータップ時は relatedTarget が input ではない。
+  document.addEventListener('focusout', function (event) {
+    const el = event.target;
+    if (!isEditableFormControl(el)) return;
+    const next = event.relatedTarget;
+    if (isEditableFormControl(next)) return;
+    port.postMessage({ action: 'field-blur' });
+  }, true);
+})();

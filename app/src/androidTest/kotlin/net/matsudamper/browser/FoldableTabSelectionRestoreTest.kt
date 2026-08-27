@@ -54,15 +54,9 @@ class FoldableTabSelectionRestoreTest {
         composeRule.waitForUrlBarContains(SECOND_PAGE_FILE, timeoutMillis = 60_000)
         composeRule.waitForUrlBarNotFocused()
 
-        openTabsScreen()
-        composeRule.waitUntil(timeoutMillis = 10.seconds.inWholeMilliseconds) {
-            composeRule.onNode(hasTestTag(TabsScreenTestTags.TabItem(0).testTag))
-                .isDisplayed()
-        }
-        composeRule.onNode(hasTestTag(TabsScreenTestTags.TabItem(0).testTag)).performClick()
-        composeRule.waitForIdle()
-        waitForBrowserScreen()
-        composeRule.waitForUrlBarContains(FIRST_PAGE_FILE, timeoutMillis = 30_000)
+        // 前のテストのタブが残っていると index 0 はホームページのことがある。
+        // 先に開いた first-tab を URL で選んでから構成変更する。
+        selectTabShowing(FIRST_PAGE_FILE)
 
         composeRule.activityRule.scenario.recreate()
         waitForBrowserScreen()
@@ -119,10 +113,44 @@ class FoldableTabSelectionRestoreTest {
         composeRule.waitForTabsScreenLoaded()
     }
 
+    private fun selectTabShowing(urlMarker: String) {
+        repeat(MAX_TAB_SCAN_COUNT) { index ->
+            openTabsScreen()
+            val tabMatcher = hasTestTag(TabsScreenTestTags.TabItem(index).testTag)
+            val visible = runCatching {
+                composeRule.waitUntil(timeoutMillis = 2_000) {
+                    composeRule.onNode(tabMatcher).isDisplayed()
+                }
+                true
+            }.getOrDefault(false)
+            if (!visible) {
+                throw AssertionError(
+                    "first-tab のタブが見つからない marker=$urlMarker " +
+                        "scanned=$index url=${composeRule.currentPageUrlFromUi()}",
+                )
+            }
+            composeRule.onNode(tabMatcher).performClick()
+            composeRule.waitForIdle()
+            waitForBrowserScreen()
+            val matched = runCatching {
+                composeRule.waitUntil(timeoutMillis = 5_000) {
+                    composeRule.currentPageUrlFromUi().contains(urlMarker)
+                }
+                true
+            }.getOrDefault(false)
+            if (matched) return
+        }
+        throw AssertionError(
+            "first-tab のタブが見つからない marker=$urlMarker " +
+                "url=${composeRule.currentPageUrlFromUi()}",
+        )
+    }
+
     private companion object {
         private const val LOCAL_DIR_NAME = "foldable-tab-restore"
         private const val FIRST_PAGE_FILE = "first-tab.html"
         private const val SECOND_PAGE_FILE = "second-tab.html"
+        private const val MAX_TAB_SCAN_COUNT = 8
 
         private fun pageHtml(title: String): String = """
             <!doctype html>

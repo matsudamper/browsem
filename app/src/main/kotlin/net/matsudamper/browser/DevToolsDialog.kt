@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -41,14 +42,21 @@ internal fun DevToolsDialog(
         title = { Text("開発者ツール") },
         text = {
             Column {
-                // 押すとフォーカス中の input id をコピーする
+                // 押すとフォーカス中のinput idをコピーする
                 ListItem(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable(enabled = focusedId != null, onClick = onCopyFocusedInputId)
                         .testTag(DevToolsDialogTestTags.FocusedInputId.testTag),
                     colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                    headlineContent = { Text("フォーカス中の input id をコピー") },
+                    headlineContent = { Text("フォーカス中のinput idをコピー") },
+                    supportingContent = {
+                        Text(
+                            text = focusedId ?: "なし",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    },
                 )
                 // 押すとページが行った通信の一覧を開く
                 ListItem(
