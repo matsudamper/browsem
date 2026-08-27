@@ -403,7 +403,10 @@ fun resolveAddressAutofillValue(
         tokens.any { it in ADDITIONAL_NAME_TOKENS } -> address.additionalName
         tokens.any { it in FULL_NAME_TOKENS } -> address.name
         tokens.any { it in ORGANIZATION_TOKENS } -> address.organization
-        tokens.any { it in STREET_TOKENS } -> address.streetAddress
+        tokens.any { it in STREET_ADDRESS_TOKENS } -> address.streetAddress
+        tokens.any { it in ADDRESS_LINE1_TOKENS } -> address.streetAddress
+        tokens.any { it in ADDRESS_LINE2_TOKENS } -> null
+        tokens.any { it in ADDRESS_LINE3_TOKENS } -> null
         tokens.any { it in ADDRESS_LEVEL1_TOKENS } -> address.addressLevel1
         tokens.any { it in ADDRESS_LEVEL2_TOKENS } -> address.addressLevel2
         tokens.any { it in ADDRESS_LEVEL3_TOKENS } -> address.addressLevel3
@@ -440,13 +443,14 @@ private val GIVEN_NAME_TOKENS = setOf("given-name", "givenname", "firstname", "f
 private val ADDITIONAL_NAME_TOKENS = setOf("additional-name", "additionalname", "middlename", "middle-name")
 private val FULL_NAME_TOKENS = setOf("name")
 private val ORGANIZATION_TOKENS = setOf("organization", "org", "company")
-private val STREET_TOKENS = setOf(
-    "street-address",
-    "streetaddress",
-    "address-line1",
-    "address-line2",
-    "address-line3",
-)
+private val STREET_ADDRESS_TOKENS = setOf("street-address", "streetaddress")
+private val ADDRESS_LINE1_TOKENS = setOf("address-line1", "addressline1")
+private val ADDRESS_LINE2_TOKENS = setOf("address-line2", "addressline2")
+private val ADDRESS_LINE3_TOKENS = setOf("address-line3", "addressline3")
+private val STREET_FIELD_TOKENS = STREET_ADDRESS_TOKENS +
+    ADDRESS_LINE1_TOKENS +
+    ADDRESS_LINE2_TOKENS +
+    ADDRESS_LINE3_TOKENS
 private val ADDRESS_LEVEL1_TOKENS = setOf("address-level1", "addresslevel1", "state", "province")
 private val ADDRESS_LEVEL2_TOKENS = setOf("address-level2", "addresslevel2", "city")
 private val ADDRESS_LEVEL3_TOKENS = setOf("address-level3", "addresslevel3")
@@ -496,7 +500,7 @@ private val ADDRESS_AUTOCOMPLETE_TOKENS = FAMILY_NAME_TOKENS +
     ADDITIONAL_NAME_TOKENS +
     FULL_NAME_TOKENS +
     ORGANIZATION_TOKENS +
-    STREET_TOKENS +
+    STREET_FIELD_TOKENS +
     ADDRESS_LEVEL1_TOKENS +
     ADDRESS_LEVEL2_TOKENS +
     ADDRESS_LEVEL3_TOKENS +
@@ -508,7 +512,7 @@ private val ADDRESS_ID_ALIAS_TOKENS = FAMILY_NAME_TOKENS +
     GIVEN_NAME_TOKENS +
     ADDITIONAL_NAME_TOKENS +
     ORGANIZATION_TOKENS +
-    STREET_TOKENS +
+    STREET_FIELD_TOKENS +
     ADDRESS_LEVEL1_TOKENS +
     ADDRESS_LEVEL2_TOKENS +
     ADDRESS_LEVEL3_TOKENS +

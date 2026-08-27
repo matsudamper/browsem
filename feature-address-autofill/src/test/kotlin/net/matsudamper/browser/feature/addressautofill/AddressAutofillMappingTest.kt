@@ -52,6 +52,27 @@ class AddressAutofillMappingTest {
     }
 
     @Test
+    fun addressLine1GetsStreetAddressButLaterLinesDoNot() {
+        val withStreet = Autocomplete.Address.Builder()
+            .streetAddress("東京都渋谷区1-2-3")
+            .build()
+        assertEquals(
+            "東京都渋谷区1-2-3",
+            resolveAddressAutofillValue(mapOf("autocomplete" to "street-address"), withStreet),
+        )
+        assertEquals(
+            "東京都渋谷区1-2-3",
+            resolveAddressAutofillValue(mapOf("autocomplete" to "address-line1"), withStreet),
+        )
+        assertNull(
+            resolveAddressAutofillValue(mapOf("autocomplete" to "address-line2"), withStreet),
+        )
+        assertNull(
+            resolveAddressAutofillValue(mapOf("autocomplete" to "address-line3"), withStreet),
+        )
+    }
+
+    @Test
     fun lastNameIdMapsToFamilyName() {
         assertEquals(
             "YamadaFillTest",

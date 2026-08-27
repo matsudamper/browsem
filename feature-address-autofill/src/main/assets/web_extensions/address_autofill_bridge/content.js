@@ -9,13 +9,10 @@
   const ADDITIONAL_NAME_TOKENS = ['additional-name', 'additionalname', 'middlename', 'middle-name'];
   const FULL_NAME_TOKENS = ['name'];
   const ORGANIZATION_TOKENS = ['organization', 'org', 'company'];
-  const STREET_TOKENS = [
-    'street-address',
-    'streetaddress',
-    'address-line1',
-    'address-line2',
-    'address-line3',
-  ];
+  const STREET_ADDRESS_TOKENS = ['street-address', 'streetaddress'];
+  const ADDRESS_LINE1_TOKENS = ['address-line1', 'addressline1'];
+  const ADDRESS_LINE2_TOKENS = ['address-line2', 'addressline2'];
+  const ADDRESS_LINE3_TOKENS = ['address-line3', 'addressline3'];
   const ADDRESS_LEVEL1_TOKENS = ['address-level1', 'addresslevel1', 'state', 'province'];
   const ADDRESS_LEVEL2_TOKENS = ['address-level2', 'addresslevel2', 'city'];
   const ADDRESS_LEVEL3_TOKENS = ['address-level3', 'addresslevel3'];
@@ -30,7 +27,8 @@
     { tokens: ADDITIONAL_NAME_TOKENS, key: 'additionalName' },
     { tokens: FULL_NAME_TOKENS, key: 'name' },
     { tokens: ORGANIZATION_TOKENS, key: 'organization' },
-    { tokens: STREET_TOKENS, key: 'streetAddress' },
+    { tokens: STREET_ADDRESS_TOKENS.concat(ADDRESS_LINE1_TOKENS), key: 'streetAddress' },
+    { tokens: ADDRESS_LINE2_TOKENS.concat(ADDRESS_LINE3_TOKENS), key: '' },
     { tokens: ADDRESS_LEVEL1_TOKENS, key: 'addressLevel1' },
     { tokens: ADDRESS_LEVEL2_TOKENS, key: 'addressLevel2' },
     { tokens: ADDRESS_LEVEL3_TOKENS, key: 'addressLevel3' },
@@ -128,6 +126,7 @@
       const entry = FIELD_MAP[i];
       for (let j = 0; j < entry.tokens.length; j++) {
         if (tokens.indexOf(entry.tokens[j]) !== -1) {
+          if (!entry.key) return null;
           const value = address[entry.key];
           return value == null ? '' : String(value);
         }
