@@ -1,6 +1,8 @@
 package net.matsudamper.browser
 
 import android.os.ParcelFileDescriptor
+import android.view.View
+import android.view.ViewGroup
 import android.view.accessibility.AccessibilityNodeInfo
 import androidx.annotation.OptIn
 import androidx.compose.ui.semantics.SemanticsNode
@@ -38,7 +40,7 @@ import java.util.concurrent.TimeoutException
  * 住所フォーム送信時に PromptDelegate.onAddressSave が発火して保存ダイアログが表示されること、
  * 保存済み住所がある状態で GeckoView 本家の address_form.html と、
  * ユーザーが再現に使っている MDN autocomplete の実ページで
- * 選択ダイアログが表示され、選んだ住所がフォームへ入力されることを検証する。
+ * IME 補完から選んだ住所がフォームへ入力されることを検証する。
  *
  * file:// ではフォーム送信が行われないことが CI の診断で判明したため、
  * ループバック HTTP サーバでページを配信する。
@@ -78,24 +80,10 @@ class AddressAutofillPromptTest {
 
         val fieldClick = clickMdnFamilyNameField()
 
-        try {
-            composeRule.waitUntil(timeoutMillis = 60_000) {
-                composeRule
-                    .onAllNodesWithTag(BrowserTabDialogLayerTestTags.AddressSelectDialog.testTag)
-                    .fetchSemanticsNodes()
-                    .isNotEmpty()
-            }
-        } catch (e: ComposeTimeoutException) {
-            throw AssertionError(
-                "MDN の実ページで住所選択ダイアログが表示されない\n" +
-                    "現在URL=${composeRule.currentPageUrlFromUi()}\n" +
-                    "苗字欄クリック=$fieldClick\n" +
-                    "--- accessibility ---\n${dumpAccessibilityTree()}\n" +
-                    "--- logcat (formautofill関連) ---\n${collectFormAutofillLogcat()}",
-                e,
-            )
-        }
-        selectFirstSavedAddress()
+        selectFirstImeCompletion(
+            extraMessage = "MDN の実ページで住所のIME補完が出ない\n" +
+                "苗字欄クリック=$fieldClick",
+        )
         waitUntilAddressFilled(
             extraMessage = "MDN の実ページで住所を選んでも入力されない 苗字欄クリック=$fieldClick",
         )
@@ -124,23 +112,10 @@ class AddressAutofillPromptTest {
         composeRule.openUrlFromUrlBar(pageUri)
         composeRule.waitForUrlBarContains(MDN_AUTOCOMPLETE_SAMPLE_FILE_NAME, timeoutMillis = 60_000)
 
-        try {
-            composeRule.waitUntil(timeoutMillis = 60_000) {
-                composeRule
-                    .onAllNodesWithTag(BrowserTabDialogLayerTestTags.AddressSelectDialog.testTag)
-                    .fetchSemanticsNodes()
-                    .isNotEmpty()
-            }
-        } catch (e: ComposeTimeoutException) {
-            throw AssertionError(
-                "MDN autocomplete と同じマークアップで住所選択ダイアログが表示されない\n" +
-                    "現在URL=${composeRule.currentPageUrlFromUi()}\n" +
-                    "サーバ受信リクエスト=${server.requests}\n" +
-                    "--- logcat (formautofill関連) ---\n${collectFormAutofillLogcat()}",
-                e,
-            )
-        }
-        selectFirstSavedAddress()
+        selectFirstImeCompletion(
+            extraMessage = "MDN autocomplete と同じマークアップで住所のIME補完が出ない\n" +
+                "サーバ受信リクエスト=${server.requests}",
+        )
         waitUntilAddressFilled(
             extraMessage = "MDN autocomplete と同じマークアップで住所を選んでも入力されない",
         )
@@ -197,23 +172,10 @@ class AddressAutofillPromptTest {
             }
             clickMdnFamilyNameField()
 
-            try {
-                composeRule.waitUntil(timeoutMillis = 60_000) {
-                    composeRule
-                        .onAllNodesWithTag(BrowserTabDialogLayerTestTags.AddressSelectDialog.testTag)
-                        .fetchSemanticsNodes()
-                        .isNotEmpty()
-                }
-            } catch (e: ComposeTimeoutException) {
-                throw AssertionError(
-                    "sandbox iframe 内の MDN マークアップで住所選択ダイアログが表示されない\n" +
-                        "現在URL=${composeRule.currentPageUrlFromUi()}\n" +
-                        "親サーバ=${parentServer.requests} 子サーバ=${contentServer.requests}\n" +
-                        "--- logcat (formautofill関連) ---\n${collectFormAutofillLogcat()}",
-                    e,
-                )
-            }
-            selectFirstSavedAddress()
+            selectFirstImeCompletion(
+                extraMessage = "sandbox iframe 内の MDN マークアップで住所のIME補完が出ない\n" +
+                    "親サーバ=${parentServer.requests} 子サーバ=${contentServer.requests}",
+            )
             waitUntilAddressFilled(
                 extraMessage = "sandbox iframe 内で住所を選んでも入力されない " +
                     "親サーバ=${parentServer.requests} 子サーバ=${contentServer.requests}",
@@ -247,23 +209,10 @@ class AddressAutofillPromptTest {
         composeRule.openUrlFromUrlBar(pageUri)
         composeRule.waitForUrlBarContains(ADDRESS_SELECT_FORM_FILE_NAME, timeoutMillis = 60_000)
 
-        try {
-            composeRule.waitUntil(timeoutMillis = 60_000) {
-                composeRule
-                    .onAllNodesWithTag(BrowserTabDialogLayerTestTags.AddressSelectDialog.testTag)
-                    .fetchSemanticsNodes()
-                    .isNotEmpty()
-            }
-        } catch (e: ComposeTimeoutException) {
-            throw AssertionError(
-                "Mozilla の address_form.html で住所選択ダイアログが表示されない\n" +
-                    "現在URL=${composeRule.currentPageUrlFromUi()}\n" +
-                    "サーバ受信リクエスト=${server.requests}\n" +
-                    "--- logcat (formautofill関連) ---\n${collectFormAutofillLogcat()}",
-                e,
-            )
-        }
-        selectFirstSavedAddress()
+        selectFirstImeCompletion(
+            extraMessage = "Mozilla の address_form.html で住所のIME補完が出ない\n" +
+                "サーバ受信リクエスト=${server.requests}",
+        )
         waitUntilAddressFilled(
             extraMessage = "Mozilla の address_form.html で住所を選んでも入力されない",
         )
@@ -319,16 +268,44 @@ class AddressAutofillPromptTest {
         }
     }
 
-    private fun selectFirstSavedAddress() {
-        composeRule.waitUntil(timeoutMillis = 10_000) {
-            composeRule
-                .onAllNodesWithTag(BrowserTabDialogLayerTestTags.AddressSelectOption.testTag)
-                .fetchSemanticsNodes()
-                .isNotEmpty()
+    private fun selectFirstImeCompletion(extraMessage: String) {
+        try {
+            composeRule.waitUntil(timeoutMillis = 30_000) {
+                findAddressAutofillGeckoView()?.displayedCompletionCount()?.let { it > 0 } == true
+            }
+        } catch (e: ComposeTimeoutException) {
+            throw AssertionError(
+                "$extraMessage\n" +
+                    "現在URL=${composeRule.currentPageUrlFromUi()}\n" +
+                    "geckoView=${findAddressAutofillGeckoView()}\n" +
+                    "--- accessibility ---\n${dumpAccessibilityTree()}\n" +
+                    "--- logcat (formautofill関連) ---\n${collectFormAutofillLogcat()}",
+                e,
+            )
         }
-        composeRule
-            .onAllNodesWithTag(BrowserTabDialogLayerTestTags.AddressSelectOption.testTag)[0]
-            .performClick()
+        var picked = false
+        composeRule.activity.runOnUiThread {
+            picked = findAddressAutofillGeckoView()?.pickCompletionAt(0) == true
+        }
+        if (!picked) {
+            throw AssertionError(
+                "$extraMessage (IME補完を選べない)\n" +
+                    "completions=${findAddressAutofillGeckoView()?.displayedCompletionCount()}",
+            )
+        }
+    }
+
+    private fun findAddressAutofillGeckoView(): AddressAutofillGeckoView? {
+        return composeRule.activity.window.decorView.findAddressAutofillGeckoView()
+    }
+
+    private fun View.findAddressAutofillGeckoView(): AddressAutofillGeckoView? {
+        if (this is AddressAutofillGeckoView) return this
+        if (this !is ViewGroup) return null
+        for (index in 0 until childCount) {
+            getChildAt(index).findAddressAutofillGeckoView()?.let { return it }
+        }
+        return null
     }
 
     private fun waitUntilAddressFilled(extraMessage: String) {
@@ -352,33 +329,9 @@ class AddressAutofillPromptTest {
 
     private fun selectEmailAndWaitUntilFilled(extraMessage: String) {
         val fieldClick = clickMdnEmailField()
-        try {
-            composeRule.waitUntil(timeoutMillis = 30_000) {
-                composeRule
-                    .onAllNodesWithTag(BrowserTabDialogLayerTestTags.EmailSelectDialog.testTag)
-                    .fetchSemanticsNodes()
-                    .isNotEmpty()
-            }
-        } catch (e: ComposeTimeoutException) {
-            throw AssertionError(
-                "$extraMessage (メール選択ダイアログが出ない)\n" +
-                    "メール欄クリック=$fieldClick\n" +
-                    "現在URL=${composeRule.currentPageUrlFromUi()}\n" +
-                    "editables=${collectEditableFieldTexts()}\n" +
-                    "--- accessibility ---\n${dumpAccessibilityTree()}\n" +
-                    "--- logcat (formautofill関連) ---\n${collectFormAutofillLogcat()}",
-                e,
-            )
-        }
-        composeRule.waitUntil(timeoutMillis = 10_000) {
-            composeRule
-                .onAllNodesWithTag(BrowserTabDialogLayerTestTags.EmailSelectOption.testTag)
-                .fetchSemanticsNodes()
-                .isNotEmpty()
-        }
-        composeRule
-            .onAllNodesWithTag(BrowserTabDialogLayerTestTags.EmailSelectOption.testTag)[0]
-            .performClick()
+        selectFirstImeCompletion(
+            extraMessage = "$extraMessage (メールのIME補完が出ない)\nメール欄クリック=$fieldClick",
+        )
         try {
             composeRule.waitUntil(timeoutMillis = 30_000) {
                 pageContainsFilledEmail() &&

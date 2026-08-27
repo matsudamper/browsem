@@ -104,6 +104,18 @@ class AddressAutofillMappingTest {
     }
 
     @Test
+    fun addressCompletionTextUsesNameOrEmail() {
+        assertEquals(
+            "YamadaFillTest TaroFillTest",
+            addressCompletionText(address, AddressAutofillFillMode.Address),
+        )
+        assertEquals(
+            "fill-test@example.com",
+            addressCompletionText(address, AddressAutofillFillMode.Email),
+        )
+    }
+
+    @Test
     fun withoutEmailClearsEmailOnly() {
         val stripped = address.withoutEmail()
         assertEquals("YamadaFillTest", stripped.familyName)
