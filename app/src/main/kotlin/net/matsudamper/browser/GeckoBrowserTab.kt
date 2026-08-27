@@ -84,6 +84,7 @@ import net.matsudamper.browser.feature.addressautofill.AddressAutofillDelegate
 import net.matsudamper.browser.feature.twittershare.TwitterShareWebExtension
 import net.matsudamper.browser.feature.viewportscale.ViewportScaleWebExtension
 import net.matsudamper.browser.translate.TranslationPriorityLanguage
+import net.matsudamper.browser.ui.common.findActivity
 import net.matsudamper.browser.ui.common.resolveBrowserToolbarColors
 import net.matsudamper.browser.ui.browser.UrlBarSuggestionsUiState
 import org.koin.compose.koinInject
@@ -191,7 +192,7 @@ internal fun GeckoBrowserTab(
     val view = LocalView.current
     if (!view.isInEditMode) {
         SideEffect {
-            val window = (view.context as Activity).window
+            val window = view.findActivity()?.window ?: return@SideEffect
             WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars =
                 toolbarColors.isBrightBackground
         }
@@ -201,7 +202,7 @@ internal fun GeckoBrowserTab(
     if (!view.isInEditMode) {
         DisposableEffect(state.isFullScreen) {
             if (!state.isFullScreen) return@DisposableEffect onDispose {}
-            val window = (view.context as Activity).window
+            val window = view.findActivity()?.window ?: return@DisposableEffect onDispose {}
             val controller = WindowCompat.getInsetsController(window, view)
             controller.hide(WindowInsetsCompat.Type.systemBars())
             controller.systemBarsBehavior =
@@ -790,7 +791,10 @@ internal fun GeckoBrowserTab(
 
     // テキスト選択メニューにカスタムアクション（検索/開く）を追加
     DisposableEffect(session, enableTabUi, searchTemplate) {
-        val activity = context as Activity
+        val activity = context.findActivity()
+        if (activity == null) {
+            return@DisposableEffect onDispose {}
+        }
         val delegate = object : BasicSelectionActionDelegate(activity) {
             override fun onCreateActionMode(mode: ActionMode, menu: Menu): Boolean {
                 val result = super.onCreateActionMode(mode, menu)
