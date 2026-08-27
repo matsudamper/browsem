@@ -1,4 +1,4 @@
-package net.matsudamper.browser
+package net.matsudamper.browser.feature.addressautofill
 
 import net.matsudamper.browser.data.address.AddressEntity
 import org.junit.Assert.assertEquals

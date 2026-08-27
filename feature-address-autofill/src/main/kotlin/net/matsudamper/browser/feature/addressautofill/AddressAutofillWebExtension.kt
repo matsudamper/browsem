@@ -1,4 +1,4 @@
-package net.matsudamper.browser
+package net.matsudamper.browser.feature.addressautofill
 
 import android.os.Handler
 import android.os.Looper
@@ -18,7 +18,7 @@ import java.util.concurrent.ConcurrentHashMap
  * Gecko FormAutofill と Autofill.Session は shadow DOM 内の cross-origin iframe
  * を埋められないため、all_frames のコンテンツスクリプトへ fill メッセージを送る。
  */
-internal class AddressAutofillWebExtension {
+class AddressAutofillWebExtension {
     private var extension: WebExtension? = null
     private val mainHandler = Handler(Looper.getMainLooper())
     private val sessionPorts = ConcurrentHashMap<GeckoSession, MutableSet<WebExtension.Port>>()
@@ -158,7 +158,7 @@ internal class AddressAutofillWebExtension {
     }
 }
 
-internal fun Autocomplete.Address.toFillMessage(mode: AddressAutofillFillMode): JSONObject {
+fun Autocomplete.Address.toFillMessage(mode: AddressAutofillFillMode): JSONObject {
     val address = this
     val modeValue = when (mode) {
         AddressAutofillFillMode.Email -> "email"

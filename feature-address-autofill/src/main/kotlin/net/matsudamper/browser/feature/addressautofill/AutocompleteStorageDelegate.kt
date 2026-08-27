@@ -1,4 +1,4 @@
-package net.matsudamper.browser
+package net.matsudamper.browser.feature.addressautofill
 
 import android.util.Log
 import kotlinx.coroutines.CoroutineScope
@@ -77,7 +77,7 @@ class AutocompleteStorageDelegate(
     }
 }
 
-internal fun AddressEntity.toGeckoAddress(): Autocomplete.Address {
+fun AddressEntity.toGeckoAddress(): Autocomplete.Address {
     // GeckoViewAutocomplete.Address.isValid() は name ?? givenName で判定する。
     // name が空文字だと givenName があっても候補から除外され、選択ダイアログが出ない。
     return Autocomplete.Address.Builder()
@@ -98,7 +98,7 @@ internal fun AddressEntity.toGeckoAddress(): Autocomplete.Address {
         .build()
 }
 
-internal fun AddressEntity.toGeckoFullName(): String {
+fun AddressEntity.toGeckoFullName(): String {
     return listOf(givenName, additionalName, familyName)
         .filter { it.isNotEmpty() }
         .joinToString(" ")
@@ -108,12 +108,12 @@ internal fun AddressEntity.toGeckoFullName(): String {
  * Gecko は addresses.supported=detect のとき、country が空のレコードを候補から除外する。
  * 設定画面では国を空のまま保存できるため、未入力なら端末ロケールの国を使う。
  */
-internal fun AddressEntity.toGeckoCountry(): String {
+fun AddressEntity.toGeckoCountry(): String {
     if (country.isNotBlank()) return country
     return Locale.getDefault().country.ifBlank { "JP" }
 }
 
-internal fun Autocomplete.Address.toEntity(): AddressEntity {
+fun Autocomplete.Address.toEntity(): AddressEntity {
     val existingId = guid?.toLongOrNull() ?: 0L
     return AddressEntity(
         id = existingId,

@@ -24,6 +24,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import net.matsudamper.browser.data.ThemeMode
+import net.matsudamper.browser.feature.addressautofill.AddressAutofillSuggestionKind
 import net.matsudamper.browser.ui.common.BrowserTheme
 
 /**

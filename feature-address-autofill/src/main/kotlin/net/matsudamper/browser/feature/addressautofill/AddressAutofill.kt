@@ -1,4 +1,4 @@
-package net.matsudamper.browser
+package net.matsudamper.browser.feature.addressautofill
 
 import android.os.SystemClock
 import android.util.Log
@@ -13,19 +13,19 @@ import org.mozilla.geckoview.Autocomplete
 import org.mozilla.geckoview.Autofill
 import org.mozilla.geckoview.GeckoSession
 
-internal enum class AddressAutofillFillMode {
+enum class AddressAutofillFillMode {
     Address,
     Email,
 }
 
 /** 候補バーに出す文言。フォーカス中の欄の種類に合わせる。 */
-internal enum class AddressAutofillSuggestionKind {
+enum class AddressAutofillSuggestionKind {
     Name,
     Address,
     Email,
 }
 
-internal fun AddressAutofillSuggestionKind.toFillMode(): AddressAutofillFillMode {
+fun AddressAutofillSuggestionKind.toFillMode(): AddressAutofillFillMode {
     return when (this) {
         AddressAutofillSuggestionKind.Email -> AddressAutofillFillMode.Email
         AddressAutofillSuggestionKind.Name,
@@ -34,7 +34,7 @@ internal fun AddressAutofillSuggestionKind.toFillMode(): AddressAutofillFillMode
     }
 }
 
-internal fun suggestionKindFromFieldKind(kind: String?): AddressAutofillSuggestionKind {
+fun suggestionKindFromFieldKind(kind: String?): AddressAutofillSuggestionKind {
     return when (kind) {
         FIELD_KIND_EMAIL -> AddressAutofillSuggestionKind.Email
         FIELD_KIND_NAME -> AddressAutofillSuggestionKind.Name
@@ -53,7 +53,7 @@ internal fun suggestionKindFromFieldKind(kind: String?): AddressAutofillSuggesti
  * 候補は IME 直上の独自バーで出す。Gboard などは displayCompletions を出さない。
  * 入力済みでも出し、選択で上書きする。住所の選択ではメールを埋めない。
  */
-internal class AddressAutofillCoordinator(
+class AddressAutofillCoordinator(
     private val fillExtension: AddressAutofillWebExtension,
 ) {
     private val lock = Any()
@@ -65,19 +65,19 @@ internal class AddressAutofillCoordinator(
 
     private class Attached(
         val session: GeckoSession,
-        val promptDialogState: PromptDialogState,
+        val host: AddressAutofillHost,
         val addressRepository: AddressRepository,
     )
 
     fun attach(
         session: GeckoSession,
-        promptDialogState: PromptDialogState,
+        host: AddressAutofillHost,
         addressRepository: AddressRepository,
     ) {
         synchronized(lock) {
-            attached = Attached(session, promptDialogState, addressRepository)
-            promptDialogState.focusedAutofillKind = lastFieldKind
-            promptDialogState.onAddressSelectOptions = { options ->
+            attached = Attached(session, host, addressRepository)
+            host.focusedAutofillKind = lastFieldKind
+            host.onAddressSelectOptions = { options ->
                 val kind = suggestionKindFromFieldKind(synchronized(lock) { lastFieldKind })
                 presentCompletions(options.map { it.value }, kind)
             }
@@ -93,9 +93,9 @@ internal class AddressAutofillCoordinator(
             if (attached?.session !== session) return
             showJob?.cancel()
             showJob = null
-            attached?.promptDialogState?.focusedAutofillKind = null
-            attached?.promptDialogState?.onAddressSelectOptions = null
-            attached?.promptDialogState?.addressAutofillBar = null
+            attached?.host?.focusedAutofillKind = null
+            attached?.host?.onAddressSelectOptions = null
+            attached?.host?.hideAddressAutofillBar()
             attached = null
             lastFieldKind = null
         }
@@ -115,7 +115,7 @@ internal class AddressAutofillCoordinator(
             }
             attached
         } ?: return
-        current.promptDialogState.addressAutofillBar = null
+        current.host.hideAddressAutofillBar()
         fillAddressOnSession(current.session, address, mode)
         fillExtension.fill(current.session, address, mode)
     }
@@ -137,7 +137,7 @@ internal class AddressAutofillCoordinator(
         val kind = suggestionKindFromFieldKind(synchronized(lock) { lastFieldKind })
         synchronized(lock) {
             showJob?.cancel()
-            showJob = current.promptDialogState.coroutineScope.launch {
+            showJob = current.host.coroutineScope.launch {
                 scheduleSuggestionBar(
                     addressRepository = current.addressRepository,
                     kind = kind,
@@ -162,12 +162,12 @@ internal class AddressAutofillCoordinator(
             lastFieldKind = kind
             attached
         } ?: return
-        current.promptDialogState.focusedAutofillKind = kind
+        current.host.focusedAutofillKind = kind
         Log.i(TAG, "field-focus kind=$kind")
         val suggestionKind = suggestionKindFromFieldKind(kind)
         synchronized(lock) {
             showJob?.cancel()
-            showJob = current.promptDialogState.coroutineScope.launch {
+            showJob = current.host.coroutineScope.launch {
                 scheduleSuggestionBar(
                     addressRepository = current.addressRepository,
                     kind = suggestionKind,
@@ -197,7 +197,7 @@ internal class AddressAutofillCoordinator(
             if (label.isBlank()) {
                 null
             } else {
-                AddressAutofillBarUiState.Item(
+                AddressAutofillSuggestionItem(
                     label = label,
                     kind = kind,
                     onClick = { fillSelectedAddress(address, fillMode) },
@@ -205,9 +205,8 @@ internal class AddressAutofillCoordinator(
             }
         }
         if (items.isEmpty()) return
-        val uiState = AddressAutofillBarUiState(items = items)
-        Log.i(TAG, "suggestion bar kind=$kind count=${uiState.items.size}")
-        current.promptDialogState.addressAutofillBar = uiState
+        Log.i(TAG, "suggestion bar kind=$kind count=${items.size}")
+        current.host.showAddressAutofillBar(items)
     }
 
     private fun isFocusSuppressed(kind: String): Boolean {
@@ -219,9 +218,9 @@ internal class AddressAutofillCoordinator(
     }
 }
 
-internal class AddressAutofillDelegate(
+class AddressAutofillDelegate(
     private val coordinator: AddressAutofillCoordinator,
-    internal val wrapped: Autofill.Delegate?,
+    val wrapped: Autofill.Delegate?,
 ) : Autofill.Delegate {
 
     override fun onSessionStart(session: GeckoSession) {
@@ -307,7 +306,7 @@ private suspend fun scheduleSuggestionBar(
     present(addresses, kind)
 }
 
-internal fun fillAddressOnSession(
+fun fillAddressOnSession(
     session: GeckoSession,
     address: Autocomplete.Address,
     mode: AddressAutofillFillMode,
@@ -333,18 +332,18 @@ internal fun fillAddressOnSession(
 private const val TAG = "AddressAutofill"
 private const val IME_READY_WAIT_MS = 150L
 private const val FILL_FOCUS_SUPPRESS_MS = 1_500L
-internal const val FIELD_KIND_NAME = "name"
-internal const val FIELD_KIND_ADDRESS = "address"
-internal const val FIELD_KIND_EMAIL = "email"
+const val FIELD_KIND_NAME = "name"
+const val FIELD_KIND_ADDRESS = "address"
+const val FIELD_KIND_EMAIL = "email"
 
-internal fun isEmailAutofillField(attributes: Map<String, String>): Boolean {
+fun isEmailAutofillField(attributes: Map<String, String>): Boolean {
     val inputType = attributes["type"].orEmpty()
     if (inputType.equals("email", ignoreCase = true)) return true
     val tokens = addressAutofillTokens(attributes)
     return tokens.any { it in EMAIL_TOKENS }
 }
 
-internal fun isNameAutofillField(attributes: Map<String, String>): Boolean {
+fun isNameAutofillField(attributes: Map<String, String>): Boolean {
     if (isEmailAutofillField(attributes)) return false
     val autocompleteTokens = attributes["autocomplete"]
         .orEmpty()
@@ -358,7 +357,7 @@ internal fun isNameAutofillField(attributes: Map<String, String>): Boolean {
     return identityTokens.any { it in NAME_ID_ALIAS_TOKENS }
 }
 
-internal fun isAddressAutofillField(attributes: Map<String, String>): Boolean {
+fun isAddressAutofillField(attributes: Map<String, String>): Boolean {
     if (isEmailAutofillField(attributes)) return false
     val autocompleteTokens = attributes["autocomplete"]
         .orEmpty()
@@ -372,7 +371,7 @@ internal fun isAddressAutofillField(attributes: Map<String, String>): Boolean {
     return identityTokens.any { it in ADDRESS_ID_ALIAS_TOKENS }
 }
 
-internal fun resolveAddressAutofillValue(
+fun resolveAddressAutofillValue(
     attributes: Map<String, String>,
     address: Autocomplete.Address,
     mode: AddressAutofillFillMode = AddressAutofillFillMode.Address,
@@ -399,7 +398,7 @@ internal fun resolveAddressAutofillValue(
     }
 }
 
-internal fun addressAutofillTokens(attributes: Map<String, String>): Set<String> {
+fun addressAutofillTokens(attributes: Map<String, String>): Set<String> {
     val raw = listOfNotNull(
         attributes["autocomplete"],
         attributes["id"],
@@ -409,7 +408,7 @@ internal fun addressAutofillTokens(attributes: Map<String, String>): Set<String>
     return raw.flatMap { value -> tokenizeAutofillAttribute(value) }.toSet()
 }
 
-internal fun tokenizeAutofillAttribute(value: String): List<String> {
+fun tokenizeAutofillAttribute(value: String): List<String> {
     val lower = value.lowercase()
     val delimited = lower.split(Regex("[\\s_]+")).filter { it.isNotEmpty() }
     val camel = value.split(Regex("(?<=[a-z0-9])(?=[A-Z])"))
@@ -440,7 +439,7 @@ private val COUNTRY_TOKENS = setOf("country", "country-name", "countryname")
 private val TEL_TOKENS = setOf("tel", "telephone", "phone")
 private val EMAIL_TOKENS = setOf("email")
 
-internal fun addressCompletionText(
+fun addressCompletionText(
     address: Autocomplete.Address,
     kind: AddressAutofillSuggestionKind,
 ): String {
@@ -453,11 +452,11 @@ internal fun addressCompletionText(
     }
 }
 
-internal fun addressDisplayName(address: Autocomplete.Address): String {
+fun addressDisplayName(address: Autocomplete.Address): String {
     return "${address.familyName} ${address.givenName}".trim().ifEmpty { address.name }
 }
 
-internal fun addressDisplayAddress(address: Autocomplete.Address): String {
+fun addressDisplayAddress(address: Autocomplete.Address): String {
     return buildList {
         if (address.postalCode.isNotEmpty()) add("〒${address.postalCode}")
         if (address.addressLevel1.isNotEmpty()) add(address.addressLevel1)
@@ -501,7 +500,7 @@ private val ADDRESS_ID_ALIAS_TOKENS = FAMILY_NAME_TOKENS +
     COUNTRY_TOKENS +
     TEL_TOKENS
 
-internal fun Autocomplete.Address.withoutEmail(): Autocomplete.Address {
+fun Autocomplete.Address.withoutEmail(): Autocomplete.Address {
     return Autocomplete.Address.Builder()
         .guid(guid)
         .name(name)
@@ -519,4 +518,3 @@ internal fun Autocomplete.Address.withoutEmail(): Autocomplete.Address {
         .email("")
         .build()
 }
-

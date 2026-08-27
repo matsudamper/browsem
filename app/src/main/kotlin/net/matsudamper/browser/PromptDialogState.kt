@@ -16,6 +16,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.UUID
+import net.matsudamper.browser.feature.addressautofill.AddressAutofillHost
+import net.matsudamper.browser.feature.addressautofill.AddressAutofillSuggestionItem
 import org.mozilla.geckoview.AllowOrDeny
 import org.mozilla.geckoview.Autocomplete
 import org.mozilla.geckoview.GeckoResult
@@ -27,8 +29,8 @@ import org.mozilla.geckoview.GeckoSession
  */
 @Stable
 internal class PromptDialogState(
-    internal val coroutineScope: CoroutineScope,
-) {
+    override val coroutineScope: CoroutineScope,
+) : AddressAutofillHost {
 
     // --- Alert (window.alert()) ---
     var pendingAlertPrompt by mutableStateOf<GeckoSession.PromptDelegate.AlertPrompt?>(null)
@@ -73,9 +75,25 @@ internal class PromptDialogState(
     var pendingAddressSaveAddress by mutableStateOf<Autocomplete.Address?>(null)
     var pendingAddressSavePrompt by mutableStateOf<GeckoSession.PromptDelegate.AutocompleteRequest<Autocomplete.AddressSaveOption>?>(null)
     var pendingAddressSaveResult by mutableStateOf<GeckoResult<GeckoSession.PromptDelegate.PromptResponse>?>(null)
-    internal var focusedAutofillKind: String? = null
-    internal var onAddressSelectOptions: ((List<Autocomplete.AddressSelectOption>) -> Unit)? = null
+    override var focusedAutofillKind: String? = null
+    override var onAddressSelectOptions: ((List<Autocomplete.AddressSelectOption>) -> Unit)? = null
     var addressAutofillBar by mutableStateOf<AddressAutofillBarUiState?>(null)
+
+    override fun showAddressAutofillBar(items: List<AddressAutofillSuggestionItem>) {
+        addressAutofillBar = AddressAutofillBarUiState(
+            items = items.map { item ->
+                AddressAutofillBarUiState.Item(
+                    label = item.label,
+                    kind = item.kind,
+                    onClick = item.onClick,
+                )
+            },
+        )
+    }
+
+    override fun hideAddressAutofillBar() {
+        addressAutofillBar = null
+    }
 
     // ================================================================
     // Actions

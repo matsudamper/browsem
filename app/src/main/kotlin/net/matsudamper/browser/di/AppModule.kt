@@ -3,9 +3,9 @@ package net.matsudamper.browser.di
 import android.util.Log
 import androidx.annotation.OptIn
 import mozilla.components.lib.publicsuffixlist.PublicSuffixList
-import net.matsudamper.browser.AddressAutofillCoordinator
-import net.matsudamper.browser.AddressAutofillWebExtension
-import net.matsudamper.browser.AutocompleteStorageDelegate
+import net.matsudamper.browser.feature.addressautofill.AddressAutofillCoordinator
+import net.matsudamper.browser.feature.addressautofill.AddressAutofillWebExtension
+import net.matsudamper.browser.feature.addressautofill.AutocompleteStorageDelegate
 import net.matsudamper.browser.BrowserViewModel
 import net.matsudamper.browser.allowUnsignedExtensions
 import net.matsudamper.browser.feature.devtools.DevToolsWebExtension

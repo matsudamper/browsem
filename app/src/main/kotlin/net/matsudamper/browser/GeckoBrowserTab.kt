@@ -79,6 +79,8 @@ import net.matsudamper.browser.feature.mocklocation.MockLocationWebExtension
 import net.matsudamper.browser.feature.networklog.NetworkLogWebExtension
 import net.matsudamper.browser.feature.themecolor.ThemeColorWebExtension
 import net.matsudamper.browser.data.address.AddressRepository
+import net.matsudamper.browser.feature.addressautofill.AddressAutofillCoordinator
+import net.matsudamper.browser.feature.addressautofill.AddressAutofillDelegate
 import net.matsudamper.browser.feature.twittershare.TwitterShareWebExtension
 import net.matsudamper.browser.feature.viewportscale.ViewportScaleWebExtension
 import net.matsudamper.browser.translate.TranslationPriorityLanguage
@@ -732,7 +734,7 @@ internal fun GeckoBrowserTab(
         session.autofillDelegate = addressAutofillDelegate
         addressAutofillCoordinator.attach(
             session = session,
-            promptDialogState = dialogState,
+            host = dialogState,
             addressRepository = addressRepository,
         )
         // MediaSession の初回イベントを取りこぼさないよう、ページ読み込み前に delegate を設定する。
