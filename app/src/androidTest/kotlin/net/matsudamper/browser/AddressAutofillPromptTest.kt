@@ -107,6 +107,7 @@ class AddressAutofillPromptTest {
         selectFirstAutofillSuggestionOnLocalPageAndWaitFilled(
             pageUri = pageUri,
             urlMarker = MDN_AUTOCOMPLETE_SAMPLE_FILE_NAME,
+            nameFieldId = "lastName",
             fillExtraMessage = "MDN autocomplete と同じマークアップで住所を選んでも入力されない",
             extraMessage = "MDN autocomplete と同じマークアップで住所の候補バーが出ない\n" +
                 "サーバ受信リクエスト=${server.requests}",
@@ -150,6 +151,7 @@ class AddressAutofillPromptTest {
             selectFirstAutofillSuggestionOnLocalPageAndWaitFilled(
                 pageUri = pageUri,
                 urlMarker = "iframe-parent.html",
+                nameFieldId = null,
                 fillExtraMessage = "sandbox iframe 内で住所を選んでも入力されない " +
                     "親サーバ=${parentServer.requests} 子サーバ=${contentServer.requests}",
                 extraMessage = "sandbox iframe 内の MDN マークアップで住所の候補バーが出ない\n" +
@@ -195,6 +197,7 @@ class AddressAutofillPromptTest {
         selectFirstAutofillSuggestionOnLocalPageAndWaitFilled(
             pageUri = pageUri,
             urlMarker = ADDRESS_SELECT_FORM_FILE_NAME,
+            nameFieldId = "givenName",
             fillExtraMessage = "Mozilla の address_form.html で住所を選んでも入力されない",
             extraMessage = "Mozilla の address_form.html で住所の候補バーが出ない\n" +
                 "サーバ受信リクエスト=${server.requests}",
@@ -225,6 +228,7 @@ class AddressAutofillPromptTest {
         waitForAutofillSuggestionBarOnLocalPageWithRetry(
             pageUri = pageUri,
             urlMarker = ADDRESS_SELECT_FORM_FILE_NAME,
+            nameFieldId = "givenName",
             extraMessage = "フォーカス時に候補バーが出ない\nサーバ受信リクエスト=${server.requests}",
             afterOpen = { clickLocalNameField("givenName") },
         )
@@ -307,12 +311,14 @@ class AddressAutofillPromptTest {
         urlMarker: String,
         fillExtraMessage: String,
         extraMessage: String,
+        nameFieldId: String? = null,
         afterOpen: () -> Unit = {},
     ) {
         retryLocalAutofillFlow(
             pageUri = pageUri,
             urlMarker = urlMarker,
             extraMessage = extraMessage,
+            nameFieldId = nameFieldId,
             afterOpen = afterOpen,
         ) {
             clickFirstAutofillNameOption()
@@ -357,35 +363,45 @@ class AddressAutofillPromptTest {
         pageUri: String,
         urlMarker: String,
         extraMessage: String,
+        nameFieldId: String? = null,
         afterOpen: () -> Unit = {},
     ) {
         retryLocalAutofillFlow(
             pageUri = pageUri,
             urlMarker = urlMarker,
             extraMessage = extraMessage,
+            nameFieldId = nameFieldId,
             afterOpen = afterOpen,
         ) {}
     }
 
     /**
-     * 1 回分の候補バー待機。JS 自動フォーカスと afterOpen の後、短い時間だけ待つ。
+     * 1 回分の候補バー待機。ページ表示と名前欄の出現を待って afterOpen を実行し、
+     * 候補バーが出るまでタイムアウト付きで待つ。
      */
     private fun waitForAutofillSuggestionBarOnLocalPage(
         pageUri: String,
         urlMarker: String,
         extraMessage: String,
+        nameFieldId: String? = null,
         afterOpen: () -> Unit = {},
     ) {
         openLocalPage(pageUri, urlMarker)
-        Thread.sleep(LOCAL_PAGE_JS_FOCUS_DELAY_MILLIS)
-        runCatching { afterOpen() }
+        var afterOpenDone = false
         try {
             composeRule.waitUntil(timeoutMillis = SUGGESTION_BAR_ATTEMPT_TIMEOUT_MILLIS) {
-                isExpectedLocalPage(composeRule.currentPageUrlFromUi(), urlMarker) &&
-                    composeRule
-                        .onAllNodesWithTag(AddressAutofillSuggestionBarTestTags.NameOption.testTag)
-                        .fetchSemanticsNodes()
-                        .isNotEmpty()
+                if (!isExpectedLocalPage(composeRule.currentPageUrlFromUi(), urlMarker)) {
+                    afterOpenDone = false
+                    return@waitUntil false
+                }
+                if (!afterOpenDone && (nameFieldId == null || isLocalNameFieldVisible(nameFieldId))) {
+                    runCatching { afterOpen() }
+                    afterOpenDone = true
+                }
+                composeRule
+                    .onAllNodesWithTag(AddressAutofillSuggestionBarTestTags.NameOption.testTag)
+                    .fetchSemanticsNodes()
+                    .isNotEmpty()
             }
         } catch (e: ComposeTimeoutException) {
             throw AssertionError(
@@ -402,6 +418,7 @@ class AddressAutofillPromptTest {
         pageUri: String,
         urlMarker: String,
         extraMessage: String,
+        nameFieldId: String? = null,
         afterOpen: () -> Unit = {},
         action: () -> Unit,
     ) {
@@ -413,6 +430,7 @@ class AddressAutofillPromptTest {
                     pageUri = pageUri,
                     urlMarker = urlMarker,
                     extraMessage = extraMessage,
+                    nameFieldId = nameFieldId,
                     afterOpen = afterOpen,
                 )
                 action()
@@ -430,6 +448,23 @@ class AddressAutofillPromptTest {
         )
     }
 
+    private fun isLocalNameFieldVisible(fieldId: String): Boolean {
+        val root = InstrumentationRegistry.getInstrumentation().uiAutomation.rootInActiveWindow
+            ?: return false
+        try {
+            val target = findNode(root) { node ->
+                val viewId = node.viewIdResourceName.orEmpty()
+                val cls = node.className?.toString().orEmpty()
+                cls.contains("EditText", ignoreCase = true) &&
+                    viewId.endsWith(fieldId, ignoreCase = true)
+            }
+            target?.recycle()
+            return target != null
+        } finally {
+            root.recycle()
+        }
+    }
+
     /**
      * ローカル HTML の名前欄へ Accessibility 経由でフォーカスを入れる。
      */
@@ -438,30 +473,35 @@ class AddressAutofillPromptTest {
         timeoutMillis: Long = LOCAL_FIELD_CLICK_WAIT_MILLIS,
     ): String {
         val uiAutomation = InstrumentationRegistry.getInstrumentation().uiAutomation
-        val deadline = System.currentTimeMillis() + timeoutMillis
-        while (System.currentTimeMillis() < deadline) {
-            val root = uiAutomation.rootInActiveWindow
-            if (root != null) {
-                val target = findNode(root) { node ->
-                    val viewId = node.viewIdResourceName.orEmpty()
-                    val cls = node.className?.toString().orEmpty()
-                    cls.contains("EditText", ignoreCase = true) &&
-                        viewId.endsWith(fieldId, ignoreCase = true)
-                }
-                if (target != null) {
-                    val clicked = target.performAction(AccessibilityNodeInfo.ACTION_CLICK) ||
-                        target.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
-                    val summary =
-                        "clicked=$clicked fieldId=$fieldId viewId=${target.viewIdResourceName.orEmpty()}"
-                    target.recycle()
+        var result = "not-found fieldId=$fieldId"
+        try {
+            composeRule.waitUntil(timeoutMillis = timeoutMillis) {
+                val root = uiAutomation.rootInActiveWindow ?: return@waitUntil false
+                try {
+                    val target = findNode(root) { node ->
+                        val viewId = node.viewIdResourceName.orEmpty()
+                        val cls = node.className?.toString().orEmpty()
+                        cls.contains("EditText", ignoreCase = true) &&
+                            viewId.endsWith(fieldId, ignoreCase = true)
+                    }
+                    if (target == null) {
+                        false
+                    } else {
+                        val clicked = target.performAction(AccessibilityNodeInfo.ACTION_CLICK) ||
+                            target.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
+                        result =
+                            "clicked=$clicked fieldId=$fieldId viewId=${target.viewIdResourceName.orEmpty()}"
+                        target.recycle()
+                        true
+                    }
+                } finally {
                     root.recycle()
-                    return summary
                 }
-                root.recycle()
             }
-            Thread.sleep(500)
+        } catch (@Suppress("SwallowedException") e: ComposeTimeoutException) {
+            // result は not-found のまま
         }
-        return "not-found fieldId=$fieldId"
+        return result
     }
 
     private fun waitForAddressSaveDialogWithRetry(
@@ -573,18 +613,24 @@ class AddressAutofillPromptTest {
         timeoutMillis: Long,
         requestMatched: () -> Boolean,
     ): Boolean {
-        val deadline = System.currentTimeMillis() + timeoutMillis
         var opened = false
-        while (System.currentTimeMillis() < deadline) {
-            if (requestMatched()) return true
-            val onExpectedPage = isExpectedLocalPage(composeRule.currentPageUrlFromUi(), urlMarker)
-            if (!opened || !onExpectedPage) {
-                openLocalPage(pageUri, urlMarker)
-                opened = true
+        return try {
+            composeRule.waitUntil(timeoutMillis = timeoutMillis) {
+                if (requestMatched()) {
+                    true
+                } else {
+                    val onExpectedPage = isExpectedLocalPage(composeRule.currentPageUrlFromUi(), urlMarker)
+                    if (!opened || !onExpectedPage) {
+                        openLocalPage(pageUri, urlMarker)
+                        opened = true
+                    }
+                    false
+                }
             }
-            Thread.sleep(POLL_INTERVAL_MILLIS)
+            true
+        } catch (@Suppress("SwallowedException") e: ComposeTimeoutException) {
+            requestMatched()
         }
-        return requestMatched()
     }
 
     private fun isExpectedLocalPage(url: String, urlMarker: String): Boolean {
@@ -1006,73 +1052,83 @@ class AddressAutofillPromptTest {
         timeoutMillis: Long = MDN_FIELD_WAIT_MILLIS,
     ): String {
         val uiAutomation = InstrumentationRegistry.getInstrumentation().uiAutomation
-        val deadline = System.currentTimeMillis() + timeoutMillis
         var lastDump = ""
         var clickedOutputTab = false
-        while (System.currentTimeMillis() < deadline) {
-            val root = uiAutomation.rootInActiveWindow
-            if (root != null) {
-                if (!clickedOutputTab) {
-                    clickedOutputTab = clickNodeWithText(root, OUTPUT_TAB_LABELS)
-                }
-                val dump = StringBuilder()
-                val target = findMdnFamilyNameField(root, dump)
-                    ?: if (clickedOutputTab) findFirstEmptyContentEditText(root) else null
-                lastDump = dump.toString()
-                if (target != null) {
-                    val viewId = target.viewIdResourceName.orEmpty()
-                    val desc = target.contentDescription?.toString().orEmpty()
-                    val text = target.text?.toString().orEmpty()
-                    val clicked = target.performAction(AccessibilityNodeInfo.ACTION_CLICK) ||
-                        target.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
-                    val summary =
-                        "clicked=$clicked cls=${target.className} viewId=$viewId desc=$desc " +
-                            "text=${text.take(80)} edit=${target.isEditable} outputTab=$clickedOutputTab"
-                    target.recycle()
+        var result = "not-found outputTab=false dump="
+        try {
+            composeRule.waitUntil(timeoutMillis = timeoutMillis) {
+                val root = uiAutomation.rootInActiveWindow ?: return@waitUntil false
+                try {
+                    if (!clickedOutputTab) {
+                        clickedOutputTab = clickNodeWithText(root, OUTPUT_TAB_LABELS)
+                    }
+                    val dump = StringBuilder()
+                    val target = findMdnFamilyNameField(root, dump)
+                        ?: if (clickedOutputTab) findFirstEmptyContentEditText(root) else null
+                    lastDump = dump.toString()
+                    if (target == null) {
+                        scrollAccessibilityNode(root)
+                        false
+                    } else {
+                        val viewId = target.viewIdResourceName.orEmpty()
+                        val desc = target.contentDescription?.toString().orEmpty()
+                        val text = target.text?.toString().orEmpty()
+                        val clicked = target.performAction(AccessibilityNodeInfo.ACTION_CLICK) ||
+                            target.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
+                        result =
+                            "clicked=$clicked cls=${target.className} viewId=$viewId desc=$desc " +
+                                "text=${text.take(80)} edit=${target.isEditable} outputTab=$clickedOutputTab"
+                        target.recycle()
+                        true
+                    }
+                } finally {
                     root.recycle()
-                    return summary
                 }
-                scrollAccessibilityNode(root)
-                root.recycle()
             }
-            Thread.sleep(500)
+        } catch (@Suppress("SwallowedException") e: ComposeTimeoutException) {
+            result = "not-found outputTab=$clickedOutputTab dump=\n$lastDump"
         }
-        return "not-found outputTab=$clickedOutputTab dump=\n$lastDump"
+        return result
     }
 
     private fun clickMdnEmailField(): String {
         val uiAutomation = InstrumentationRegistry.getInstrumentation().uiAutomation
-        val deadline = System.currentTimeMillis() + MDN_FIELD_WAIT_MILLIS
         var lastDump = ""
         var clickedOutputTab = false
-        while (System.currentTimeMillis() < deadline) {
-            val root = uiAutomation.rootInActiveWindow
-            if (root != null) {
-                if (!clickedOutputTab) {
-                    clickedOutputTab = clickNodeWithText(root, OUTPUT_TAB_LABELS)
-                }
-                val dump = StringBuilder()
-                val target = findMdnEmailField(root, dump)
-                lastDump = dump.toString()
-                if (target != null) {
-                    val viewId = target.viewIdResourceName.orEmpty()
-                    val desc = target.contentDescription?.toString().orEmpty()
-                    val text = target.text?.toString().orEmpty()
-                    val clicked = target.performAction(AccessibilityNodeInfo.ACTION_CLICK) ||
-                        target.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
-                    val summary =
-                        "clicked=$clicked cls=${target.className} viewId=$viewId desc=$desc " +
-                            "text=${text.take(80)} edit=${target.isEditable} outputTab=$clickedOutputTab"
-                    target.recycle()
+        var result = "not-found outputTab=false dump="
+        try {
+            composeRule.waitUntil(timeoutMillis = MDN_FIELD_WAIT_MILLIS) {
+                val root = uiAutomation.rootInActiveWindow ?: return@waitUntil false
+                try {
+                    if (!clickedOutputTab) {
+                        clickedOutputTab = clickNodeWithText(root, OUTPUT_TAB_LABELS)
+                    }
+                    val dump = StringBuilder()
+                    val target = findMdnEmailField(root, dump)
+                    lastDump = dump.toString()
+                    if (target == null) {
+                        scrollAccessibilityNode(root)
+                        false
+                    } else {
+                        val viewId = target.viewIdResourceName.orEmpty()
+                        val desc = target.contentDescription?.toString().orEmpty()
+                        val text = target.text?.toString().orEmpty()
+                        val clicked = target.performAction(AccessibilityNodeInfo.ACTION_CLICK) ||
+                            target.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
+                        result =
+                            "clicked=$clicked cls=${target.className} viewId=$viewId desc=$desc " +
+                                "text=${text.take(80)} edit=${target.isEditable} outputTab=$clickedOutputTab"
+                        target.recycle()
+                        true
+                    }
+                } finally {
                     root.recycle()
-                    return summary
                 }
-                scrollAccessibilityNode(root)
-                root.recycle()
             }
-            Thread.sleep(500)
+        } catch (@Suppress("SwallowedException") e: ComposeTimeoutException) {
+            result = "not-found outputTab=$clickedOutputTab dump=\n$lastDump"
         }
-        return "not-found outputTab=$clickedOutputTab dump=\n$lastDump"
+        return result
     }
 
     private fun clickNodeWithText(root: AccessibilityNodeInfo, labels: Set<String>): Boolean {
@@ -1399,8 +1455,25 @@ class AddressAutofillPromptTest {
             saveAndSetPref("extensions.formautofill.addresses.supported", "on")
         }
 
-        val deadline = System.currentTimeMillis() + PREF_TIMEOUT_MILLIS
-        while (true) {
+        try {
+            composeRule.waitUntil(timeoutMillis = PREF_TIMEOUT_MILLIS) {
+                val prefs = awaitGeckoResult {
+                    GeckoPreferenceController.getGeckoPrefs(
+                        listOf(
+                            "extensions.formautofill.addresses.enabled",
+                            "extensions.formautofill.addresses.capture.enabled",
+                            "extensions.formautofill.addresses.supported",
+                        ),
+                    )
+                }
+                val values = prefs.orEmpty().associate { it.pref to it.value }
+                val enabled = values["extensions.formautofill.addresses.enabled"] == true &&
+                    values["extensions.formautofill.addresses.capture.enabled"] == true
+                val supportedOk = !forceAddressSupportedOn ||
+                    values["extensions.formautofill.addresses.supported"] == "on"
+                enabled && supportedOk
+            }
+        } catch (e: ComposeTimeoutException) {
             val prefs = awaitGeckoResult {
                 GeckoPreferenceController.getGeckoPrefs(
                     listOf(
@@ -1411,15 +1484,7 @@ class AddressAutofillPromptTest {
                 )
             }
             val values = prefs.orEmpty().associate { it.pref to it.value }
-            val enabled = values["extensions.formautofill.addresses.enabled"] == true &&
-                values["extensions.formautofill.addresses.capture.enabled"] == true
-            val supportedOk = !forceAddressSupportedOn ||
-                values["extensions.formautofill.addresses.supported"] == "on"
-            if (enabled && supportedOk) return
-            if (System.currentTimeMillis() > deadline) {
-                fail("住所自動入力プリファレンスが適用されていない: $values")
-            }
-            Thread.sleep(500)
+            fail("住所自動入力プリファレンスが適用されていない: $values")
         }
     }
 
@@ -1645,12 +1710,10 @@ class AddressAutofillPromptTest {
         private const val LOGCAT_TAIL_LINES = 250
         private const val MDN_FIELD_WAIT_MILLIS = 60_000L
         private const val LOCAL_FIELD_CLICK_WAIT_MILLIS = 5_000L
-        private const val LOCAL_PAGE_JS_FOCUS_DELAY_MILLIS = 2_500L
         private const val SUGGESTION_BAR_ATTEMPT_TIMEOUT_MILLIS = 20_000L
         private const val FORM_SUBMIT_WAIT_MILLIS = 25_000L
         private const val ADDRESS_FILL_TIMEOUT_MILLIS = 45_000L
         private const val LOCAL_PAGE_RETRY_TIMEOUT_MILLIS = 90_000L
-        private const val POLL_INTERVAL_MILLIS = 250L
         private const val ACCESSIBILITY_DUMP_MAX_LINES = 500
         private const val FILL_FAMILY_NAME = "YamadaFillTest"
         private const val FILL_GIVEN_NAME = "TaroFillTest"
