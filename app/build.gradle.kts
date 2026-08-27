@@ -145,6 +145,7 @@ dependencies {
     implementation(libs.kotlinx.coroutines.play.services)
     implementation(project(":browser-engine-gecko"))
     implementation(project(":feature-address-autofill"))
+    implementation(project(":feature-form-input-autofill"))
     implementation(project(":feature-browser"))
     implementation(project(":feature-dev-tools"))
     implementation(project(":feature-find-in-page"))
