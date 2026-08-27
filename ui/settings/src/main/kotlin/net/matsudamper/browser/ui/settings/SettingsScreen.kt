@@ -65,6 +65,7 @@ fun SettingsScreen(
     uiState: SettingsScreenUiState,
     onOpenExtensions: () -> Unit,
     onOpenHistory: () -> Unit,
+    onOpenAddresses: () -> Unit,
     onOpenReleases: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
@@ -339,7 +340,7 @@ fun SettingsScreen(
             SettingSection(title = "バックアップ") {
                 Column {
                     Text(
-                        text = "設定・タブ・タブグループ・Cookie・ログイン情報・履歴 (Gecko 側)・" +
+                        text = "設定・タブ・タブグループ・住所・Cookie・ログイン情報・履歴 (Gecko 側)・" +
                             "サイト権限・サイト別設定を zip ファイルにエクスポート/インポートします。" +
                             "キャッシュ・ダウンロード記録・閲覧履歴 (アプリ側 DB) は対象外です。",
                         style = MaterialTheme.typography.bodyMedium,
@@ -406,6 +407,17 @@ fun SettingsScreen(
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text("インストール済み拡張機能を管理")
+                }
+            }
+
+            Spacer(Modifier.height(betweenPadding))
+
+            SettingSection(title = "住所") {
+                TextButton(
+                    onClick = onOpenAddresses,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("保存された住所を管理")
                 }
             }
 
@@ -649,6 +661,7 @@ private fun SettingsScreenPreviewContent(showDefaultBrowserBanner: Boolean) {
             ),
             onOpenExtensions = {},
             onOpenHistory = {},
+            onOpenAddresses = {},
             onOpenReleases = {},
             onBack = {},
         )

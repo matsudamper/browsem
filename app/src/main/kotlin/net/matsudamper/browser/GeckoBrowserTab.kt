@@ -55,6 +55,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
@@ -77,6 +78,9 @@ import net.matsudamper.browser.feature.findinpage.FindInPageWebExtension
 import net.matsudamper.browser.feature.mocklocation.MockLocationWebExtension
 import net.matsudamper.browser.feature.networklog.NetworkLogWebExtension
 import net.matsudamper.browser.feature.themecolor.ThemeColorWebExtension
+import net.matsudamper.browser.data.address.AddressRepository
+import net.matsudamper.browser.feature.addressautofill.AddressAutofillCoordinator
+import net.matsudamper.browser.feature.addressautofill.AddressAutofillDelegate
 import net.matsudamper.browser.feature.twittershare.TwitterShareWebExtension
 import net.matsudamper.browser.feature.viewportscale.ViewportScaleWebExtension
 import net.matsudamper.browser.translate.TranslationPriorityLanguage
@@ -128,6 +132,8 @@ internal fun GeckoBrowserTab(
 ) {
     val context = LocalContext.current
     val findInPageWebExtension: FindInPageWebExtension = koinInject()
+    val addressRepository: AddressRepository = koinInject()
+    val addressAutofillCoordinator: AddressAutofillCoordinator = koinInject()
     // URLバーフォーカス時にクリップボードから読み取ったURL
     var clipboardUrl by remember { mutableStateOf<String?>(null) }
     // タブ履歴BottomSheetの表示状態
@@ -702,7 +708,7 @@ internal fun GeckoBrowserTab(
         }
     }
 
-    DisposableEffect(session, state, browserTab, mediaWebExtension) {
+    DisposableEffect(session, state, browserTab, mediaWebExtension, addressRepository, addressAutofillCoordinator) {
         browserTab.attachSessionCallbacks(
             callbacks = state,
             onOpenNewSessionRequest = { uri ->
@@ -716,16 +722,33 @@ internal fun GeckoBrowserTab(
         )
         val promptDelegate = dialogState.createPromptDelegate()
         val mediaSessionDelegate = GeckoMediaSessionDelegate(mediaWebExtension)
+        val previousAutofillDelegate =
+            (session.autofillDelegate as? AddressAutofillDelegate)?.wrapped
+                ?: session.autofillDelegate
+        val addressAutofillDelegate = AddressAutofillDelegate(
+            coordinator = addressAutofillCoordinator,
+            wrapped = previousAutofillDelegate,
+        )
 
         session.promptDelegate = promptDelegate
+        session.autofillDelegate = addressAutofillDelegate
+        addressAutofillCoordinator.attach(
+            session = session,
+            host = dialogState,
+            addressRepository = addressRepository,
+        )
         // MediaSession の初回イベントを取りこぼさないよう、ページ読み込み前に delegate を設定する。
         session.mediaSessionDelegate = mediaSessionDelegate
 
         browserSessionLifecycleController.restoreSession(browserTab)
 
         onDispose {
+            addressAutofillCoordinator.detach(session)
             browserTab.detachSessionCallbacks()
             session.promptDelegate = null
+            if (session.autofillDelegate === addressAutofillDelegate) {
+                session.autofillDelegate = previousAutofillDelegate
+            }
             if (session.mediaSessionDelegate === mediaSessionDelegate
                 && !mediaWebExtension.shouldKeepSessionAttached(session)
             ) {
@@ -1096,6 +1119,23 @@ internal fun GeckoBrowserTab(
                 },
                 modifier = Modifier.fillMaxSize(),
             )
+
+            val autofillBar = dialogState.addressAutofillBar
+            if (
+                autofillBar != null &&
+                autofillBar.items.isNotEmpty() &&
+                !state.isUrlInputFocused &&
+                !state.showFindInPage &&
+                !state.isFullScreen
+            ) {
+                // Column に imePadding があるため、GeckoView 領域の下端が IME の直上になる。
+                AddressAutofillSuggestionBar(
+                    uiState = autofillBar,
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth(),
+                )
+            }
         }
         BrowserTabDialogLayer(
             state = state,
