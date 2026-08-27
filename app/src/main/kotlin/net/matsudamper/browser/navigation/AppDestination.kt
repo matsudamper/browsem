@@ -28,6 +28,12 @@ sealed interface AppDestination : NavKey, java.io.Serializable {
     data object Downloads : AppDestination, java.io.Serializable
 
     @Serializable
+    data object Addresses : AppDestination, java.io.Serializable
+
+    @Serializable
+    data class AddressEdit(val addressId: Long) : AppDestination, java.io.Serializable
+
+    @Serializable
     data class BackupProgress(val isImport: Boolean) : AppDestination, java.io.Serializable
 }
 
