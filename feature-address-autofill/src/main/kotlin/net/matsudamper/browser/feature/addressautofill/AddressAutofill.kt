@@ -94,6 +94,7 @@ class AddressAutofillCoordinator(
         }
         fillExtension.onFieldFocus = { kind -> onFieldFocus(kind) }
         fillExtension.onFieldBlur = { onFieldBlur() }
+        fillExtension.onFocusPortDisconnected = { onFocusPortDisconnected() }
         fillExtension.registerSession(session)
     }
 
@@ -103,6 +104,7 @@ class AddressAutofillCoordinator(
             if (attached?.session !== session) return
             fillExtension.onFieldFocus = null
             fillExtension.onFieldBlur = null
+            fillExtension.onFocusPortDisconnected = null
             showJob?.cancel()
             showJob = null
             hideJob?.cancel()
@@ -248,6 +250,25 @@ class AddressAutofillCoordinator(
         Log.i(TAG, "field-blur schedule hide")
     }
 
+    /**
+     * フォーカス中フレームのドキュメントが破棄されたとき。
+     * 遷移後のページに古い候補バーを残さない。
+     */
+    fun onFocusPortDisconnected() {
+        val current = synchronized(lock) {
+            showJob?.cancel()
+            showJob = null
+            hideJob?.cancel()
+            hideJob = null
+            lastFieldKind = FIELD_KIND_OTHER
+            focusGeneration += 1
+            attached
+        } ?: return
+        current.host.focusedAutofillKind = FIELD_KIND_OTHER
+        current.host.hideAddressAutofillBar()
+        Log.i(TAG, "focus port disconnected")
+    }
+
     private fun presentCompletions(
         addresses: List<Autocomplete.Address>,
         kind: AddressAutofillSuggestionKind,
@@ -270,7 +291,10 @@ class AddressAutofillCoordinator(
                 )
             }
         }
-        if (items.isEmpty()) return
+        if (items.isEmpty()) {
+            current.host.hideAddressAutofillBar()
+            return
+        }
         Log.i(TAG, "suggestion bar kind=$kind count=${items.size}")
         current.host.showAddressAutofillBar(items)
     }

@@ -77,6 +77,30 @@ class AddressAutofillCoordinatorTest {
     }
 
     @Test
+    fun メールのない住所ではメール欄の候補バーを閉じる() = runTest {
+        val env = createEnv(
+            address = SAMPLE_ADDRESS.copy(email = ""),
+        )
+        showNameSuggestions(env)
+
+        env.coordinator.onFieldFocus(FIELD_KIND_EMAIL)
+        advanceTimeBy(ADDRESS_AUTOFILL_IME_READY_WAIT_MS)
+        advanceUntilIdle()
+        assertFalse(env.host.isBarVisible)
+    }
+
+    @Test
+    fun フォーカス中ポート切断で候補バーを閉じる() = runTest {
+        val env = createEnv()
+        showNameSuggestions(env)
+
+        env.coordinator.onFocusPortDisconnected()
+        runCurrent()
+        assertFalse(env.host.isBarVisible)
+        assertEquals(FIELD_KIND_OTHER, env.host.focusedAutofillKind)
+    }
+
+    @Test
     fun 非住所欄フォーカスでは候補バーを即閉じる() = runTest {
         val env = createEnv()
         showNameSuggestions(env)
@@ -87,11 +111,13 @@ class AddressAutofillCoordinatorTest {
         assertEquals(FIELD_KIND_OTHER, env.host.focusedAutofillKind)
     }
 
-    private fun TestScope.createEnv(): TestEnv {
+    private fun TestScope.createEnv(
+        address: AddressEntity = SAMPLE_ADDRESS,
+    ): TestEnv {
         val dispatcher = StandardTestDispatcher(testScheduler)
         val host = FakeHost(this)
         val repository = mockk<AddressRepository>()
-        coEvery { repository.getAll() } returns listOf(SAMPLE_ADDRESS)
+        coEvery { repository.getAll() } returns listOf(address)
         val coordinator = AddressAutofillCoordinator(
             fillExtension = mockk(relaxed = true),
             ioDispatcher = dispatcher,

@@ -39,6 +39,9 @@ class AddressAutofillWebExtension {
     @Volatile
     var onFieldBlur: (() -> Unit)? = null
 
+    @Volatile
+    var onFocusPortDisconnected: (() -> Unit)? = null
+
     fun install(runtime: GeckoRuntime) {
         Log.d(TAG, "install() 開始: uri=$EXTENSION_URI")
         runtime.webExtensionController
@@ -164,6 +167,7 @@ class AddressAutofillWebExtension {
                             sessionPorts[session]?.remove(connectedPort)
                             if (lastFocusPorts[session] === connectedPort) {
                                 lastFocusPorts.remove(session)
+                                mainHandler.post { onFocusPortDisconnected?.invoke() }
                             }
                         }
                     })
