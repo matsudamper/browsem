@@ -900,7 +900,7 @@ private fun MainBrowserContent(
                                 onLongClickUrl = {},
                                 tabCount = tabCount,
                                 onOpenTabs = {},
-                                toolbarMenu = {},
+                                toolbarMenu = { _ -> },
                                 gestureState = null,
                                 updateVisibleMenu = {},
                                 canGoForward = false,
