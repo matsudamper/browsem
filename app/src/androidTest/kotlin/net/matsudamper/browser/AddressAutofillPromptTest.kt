@@ -466,11 +466,12 @@ class AddressAutofillPromptTest {
             }
             val remaining = deadline - System.currentTimeMillis()
             if (remaining <= FORM_SUBMIT_WAIT_MILLIS) break
+            val doneRequestsBeforeRetry = countDoneRequests(server)
             lastSubmitted = openLocalPageUntilRequest(
                 pageUri = pageUri,
                 urlMarker = urlMarker,
                 timeoutMillis = minOf(FORM_SUBMIT_WAIT_MILLIS, remaining),
-                requestMatched = { server.requests.any { it.contains(ADDRESS_FORM_DONE_FILE_NAME) } },
+                requestMatched = { countDoneRequests(server) > doneRequestsBeforeRetry },
             )
         }
         throw AssertionError(
@@ -480,6 +481,10 @@ class AddressAutofillPromptTest {
                 "--- logcat (formautofill関連) ---\n${collectFormAutofillLogcat()}",
             lastError,
         )
+    }
+
+    private fun countDoneRequests(server: LocalHttpServer): Int {
+        return server.requests.count { it.contains(ADDRESS_FORM_DONE_FILE_NAME) }
     }
 
     private fun clickFirstAutofillNameOption() {
@@ -497,16 +502,24 @@ class AddressAutofillPromptTest {
         )
     }
 
-    private fun selectEmailAutofillSuggestion(extraMessage: String) {
+    private fun selectEmailAutofillSuggestion(
+        extraMessage: String,
+        timeoutMillis: Long = SUGGESTION_SELECT_TIMEOUT_MILLIS,
+    ) {
         selectAutofillSuggestion(
             optionTestTag = AddressAutofillSuggestionBarTestTags.EmailOption.testTag,
             extraMessage = extraMessage,
+            timeoutMillis = timeoutMillis,
         )
     }
 
-    private fun selectAutofillSuggestion(optionTestTag: String, extraMessage: String) {
+    private fun selectAutofillSuggestion(
+        optionTestTag: String,
+        extraMessage: String,
+        timeoutMillis: Long = SUGGESTION_SELECT_TIMEOUT_MILLIS,
+    ) {
         try {
-            composeRule.waitUntil(timeoutMillis = 30_000) {
+            composeRule.waitUntil(timeoutMillis = timeoutMillis) {
                 composeRule
                     .onAllNodesWithTag(optionTestTag)
                     .fetchSemanticsNodes()
@@ -596,19 +609,36 @@ class AddressAutofillPromptTest {
         val deadline = System.currentTimeMillis() + LOCAL_PAGE_RETRY_TIMEOUT_MILLIS
         var lastError: Throwable? = null
         while (System.currentTimeMillis() < deadline) {
-            val fieldClick = clickMdnEmailField()
+            val remaining = deadline - System.currentTimeMillis()
+            if (remaining < EMAIL_FILL_ATTEMPT_MIN_MILLIS) break
+            val fieldClick = clickMdnEmailField(
+                timeoutMillis = minOf(LOCAL_FIELD_CLICK_WAIT_MILLIS, remaining / 2),
+            )
+            val remainingAfterClick = deadline - System.currentTimeMillis()
+            if (remainingAfterClick < EMAIL_FILL_ATTEMPT_MIN_MILLIS) {
+                lastError = AssertionError("$extraMessage (メール欄クリック=$fieldClick)")
+                break
+            }
             try {
                 selectEmailAutofillSuggestion(
                     extraMessage = "$extraMessage (メールの候補バーが出ない)\nメール欄クリック=$fieldClick",
+                    timeoutMillis = minOf(SUGGESTION_SELECT_TIMEOUT_MILLIS, remainingAfterClick / 2),
                 )
-                composeRule.waitUntil(timeoutMillis = ADDRESS_FILL_TIMEOUT_MILLIS) {
+                val remainingAfterSuggest = deadline - System.currentTimeMillis()
+                composeRule.waitUntil(
+                    timeoutMillis = minOf(ADDRESS_FILL_TIMEOUT_MILLIS, remainingAfterSuggest),
+                ) {
                     pageContainsFilledEmail() &&
                         pageContainsFilledAddress(FILL_FAMILY_NAME, FILL_GIVEN_NAME)
                 }
                 composeRule.waitForIdle()
                 return
             } catch (e: Throwable) {
-                lastError = if (e is AssertionError || e is ComposeTimeoutException) e else AssertionError(extraMessage, e)
+                lastError = if (e is AssertionError || e is ComposeTimeoutException) {
+                    e
+                } else {
+                    AssertionError(extraMessage, e)
+                }
             }
         }
         throw AssertionError(
@@ -1645,6 +1675,8 @@ class AddressAutofillPromptTest {
         private const val MDN_FIELD_WAIT_MILLIS = 60_000L
         private const val LOCAL_FIELD_CLICK_WAIT_MILLIS = 5_000L
         private const val FORM_SUBMIT_WAIT_MILLIS = 25_000L
+        private const val SUGGESTION_SELECT_TIMEOUT_MILLIS = 15_000L
+        private const val EMAIL_FILL_ATTEMPT_MIN_MILLIS = 5_000L
         private const val ADDRESS_FILL_TIMEOUT_MILLIS = 45_000L
         private const val LOCAL_PAGE_RETRY_TIMEOUT_MILLIS = 90_000L
         private const val ACCESSIBILITY_DUMP_MAX_LINES = 500
