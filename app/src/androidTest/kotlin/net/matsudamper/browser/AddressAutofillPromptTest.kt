@@ -1055,13 +1055,15 @@ class AddressAutofillPromptTest {
         return result
     }
 
-    private fun clickMdnEmailField(): String {
+    private fun clickMdnEmailField(
+        timeoutMillis: Long = MDN_FIELD_WAIT_MILLIS,
+    ): String {
         val uiAutomation = InstrumentationRegistry.getInstrumentation().uiAutomation
         var lastDump = ""
         var clickedOutputTab = false
         var result = "not-found outputTab=false dump="
         try {
-            composeRule.waitUntil(timeoutMillis = MDN_FIELD_WAIT_MILLIS) {
+            composeRule.waitUntil(timeoutMillis = timeoutMillis) {
                 val root = uiAutomation.rootInActiveWindow ?: return@waitUntil false
                 try {
                     if (!clickedOutputTab) {
