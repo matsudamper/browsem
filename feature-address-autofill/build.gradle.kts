@@ -6,7 +6,10 @@ android {
     namespace = "net.matsudamper.browser.feature.addressautofill"
 
     testOptions {
-        unitTests.isReturnDefaultValues = true
+        unitTests {
+            isReturnDefaultValues = true
+            isIncludeAndroidResources = true
+        }
     }
 }
 
@@ -16,4 +19,5 @@ dependencies {
     implementation(project(":data"))
 
     testImplementation(libs.junit4)
+    testImplementation(libs.robolectric)
 }
