@@ -75,6 +75,7 @@ internal class PromptDialogState(
     var pendingAddressSaveResult by mutableStateOf<GeckoResult<GeckoSession.PromptDelegate.PromptResponse>?>(null)
     internal var focusedAutofillKind: String? = null
     internal var onAddressSelectOptions: ((List<Autocomplete.AddressSelectOption>) -> Unit)? = null
+    var addressAutofillBar by mutableStateOf<AddressAutofillBarUiState?>(null)
 
     // ================================================================
     // Actions

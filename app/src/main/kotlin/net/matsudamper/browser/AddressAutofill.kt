@@ -3,7 +3,6 @@ package net.matsudamper.browser
 import android.os.SystemClock
 import android.util.Log
 import android.util.SparseArray
-import android.view.inputmethod.CompletionInfo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -27,8 +26,8 @@ internal enum class AddressAutofillFillMode {
  * 1. `AutocompleteStorageDelegate.onAddressFetch`（フォーカス時のフィールド検出で確実に来る）
  * 2. GeckoView Autofill の `onNodeFocus` / WebExtension の focusin
  *
- * 候補はダイアログではなく IME の displayCompletions で出す。
- * 住所の選択ではメールを埋めない。
+ * 候補は IME 直上の独自バーで出す。Gboard などは displayCompletions を出さない。
+ * 入力済みでも出し、選択で上書きする。住所の選択ではメールを埋めない。
  */
 internal class AddressAutofillCoordinator(
     private val fillExtension: AddressAutofillWebExtension,
@@ -39,29 +38,20 @@ internal class AddressAutofillCoordinator(
     private var lastFieldKind: String? = null
     private var suppressFocusUntilElapsed: Long = 0L
     private var suppressFocusKind: String? = null
-    private var completionItems: List<CompletionItem> = emptyList()
 
     private class Attached(
         val session: GeckoSession,
         val promptDialogState: PromptDialogState,
         val addressRepository: AddressRepository,
-        val geckoView: AddressAutofillGeckoView?,
-    )
-
-    private class CompletionItem(
-        val address: Autocomplete.Address,
-        val mode: AddressAutofillFillMode,
     )
 
     fun attach(
         session: GeckoSession,
         promptDialogState: PromptDialogState,
         addressRepository: AddressRepository,
-        geckoView: AddressAutofillGeckoView?,
     ) {
         synchronized(lock) {
-            attached?.geckoView?.onCompletionPicked = null
-            attached = Attached(session, promptDialogState, addressRepository, geckoView)
+            attached = Attached(session, promptDialogState, addressRepository)
             promptDialogState.focusedAutofillKind = lastFieldKind
             promptDialogState.onAddressSelectOptions = { options ->
                 val mode = if (synchronized(lock) { lastFieldKind } == "email") {
@@ -71,7 +61,6 @@ internal class AddressAutofillCoordinator(
                 }
                 presentCompletions(options.map { it.value }, mode)
             }
-            geckoView?.onCompletionPicked = ::onCompletionPicked
         }
         fillExtension.onFieldFocus = { kind -> onFieldFocus(kind) }
         fillExtension.registerSession(session)
@@ -84,13 +73,11 @@ internal class AddressAutofillCoordinator(
             if (attached?.session !== session) return
             showJob?.cancel()
             showJob = null
-            attached?.geckoView?.onCompletionPicked = null
-            attached?.geckoView?.clearCompletions()
             attached?.promptDialogState?.focusedAutofillKind = null
             attached?.promptDialogState?.onAddressSelectOptions = null
+            attached?.promptDialogState?.addressAutofillBar = null
             attached = null
             lastFieldKind = null
-            completionItems = emptyList()
         }
     }
 
@@ -98,20 +85,17 @@ internal class AddressAutofillCoordinator(
         address: Autocomplete.Address,
         mode: AddressAutofillFillMode,
     ) {
-        val current = synchronized(lock) { attached } ?: return
-        synchronized(lock) {
+        val current = synchronized(lock) {
             suppressFocusUntilElapsed = SystemClock.elapsedRealtime() + FILL_FOCUS_SUPPRESS_MS
             suppressFocusKind = when (mode) {
                 AddressAutofillFillMode.Email -> "email"
                 AddressAutofillFillMode.Address -> "address"
             }
-        }
+            attached
+        } ?: return
+        current.promptDialogState.addressAutofillBar = null
         fillAddressOnSession(current.session, address, mode)
         fillExtension.fill(current.session, address, mode)
-        synchronized(lock) {
-            attached?.geckoView?.clearCompletions()
-            completionItems = emptyList()
-        }
     }
 
     fun onAddressFetch(count: Int) {
@@ -127,11 +111,11 @@ internal class AddressAutofillCoordinator(
             }
             attached
         } ?: return
-        Log.i(TAG, "onAddressFetch schedule IME completions count=$count")
+        Log.i(TAG, "onAddressFetch schedule suggestion bar count=$count")
         synchronized(lock) {
             showJob?.cancel()
             showJob = current.promptDialogState.coroutineScope.launch {
-                scheduleImeCompletions(
+                scheduleSuggestionBar(
                     addressRepository = current.addressRepository,
                     mode = AddressAutofillFillMode.Address,
                     shouldAbort = { synchronized(lock) { lastFieldKind == "email" } },
@@ -161,7 +145,7 @@ internal class AddressAutofillCoordinator(
         synchronized(lock) {
             showJob?.cancel()
             showJob = current.promptDialogState.coroutineScope.launch {
-                scheduleImeCompletions(
+                scheduleSuggestionBar(
                     addressRepository = current.addressRepository,
                     mode = mode,
                     shouldAbort = { synchronized(lock) { lastFieldKind != kind } },
@@ -171,37 +155,28 @@ internal class AddressAutofillCoordinator(
         }
     }
 
-    private fun onCompletionPicked(index: Int) {
-        val current = synchronized(lock) { attached } ?: return
-        current.promptDialogState.coroutineScope.launch {
-            val item = synchronized(lock) { completionItems.getOrNull(index) } ?: return@launch
-            fillSelectedAddress(item.address, item.mode)
-        }
-    }
-
     private fun presentCompletions(
         addresses: List<Autocomplete.Address>,
         mode: AddressAutofillFillMode,
     ) {
-        val view = synchronized(lock) { attached?.geckoView } ?: run {
-            Log.w(TAG, "IME completions skipped: geckoView is null")
-            return
-        }
+        val current = synchronized(lock) { attached } ?: return
         val items = if (mode == AddressAutofillFillMode.Email) {
             addresses.filter { it.email.isNotBlank() }.distinctBy { it.email }
         } else {
             addresses
         }
         if (items.isEmpty()) return
-        val completions = items.mapIndexed { index, address ->
-            val text = addressCompletionText(address, mode)
-            CompletionInfo(index.toLong(), index, text, text)
-        }
-        synchronized(lock) {
-            completionItems = items.map { CompletionItem(it, mode) }
-        }
-        Log.i(TAG, "displayCompletions mode=$mode count=${completions.size}")
-        view.showCompletions(completions)
+        val uiState = AddressAutofillBarUiState(
+            items = items.map { address ->
+                AddressAutofillBarUiState.Item(
+                    label = addressCompletionText(address, mode),
+                    supportingText = addressSuggestionSupportingText(address, mode),
+                    onClick = { fillSelectedAddress(address, mode) },
+                )
+            },
+        )
+        Log.i(TAG, "suggestion bar mode=$mode count=${uiState.items.size}")
+        current.promptDialogState.addressAutofillBar = uiState
     }
 
     private fun isFocusSuppressed(kind: String): Boolean {
@@ -278,11 +253,11 @@ internal class AddressAutofillDelegate(
         data: Autofill.NodeData,
     ) {
         wrapped?.onNodeBlur(session, node, data)
-        // IME 補完を出す途中で blur しても候補は消さない
+        // バーをタップすると Gecko 側は blur するため、blur では候補を消さない
     }
 }
 
-private suspend fun scheduleImeCompletions(
+private suspend fun scheduleSuggestionBar(
     addressRepository: AddressRepository,
     mode: AddressAutofillFillMode,
     shouldAbort: () -> Boolean,
@@ -421,6 +396,23 @@ internal fun addressCompletionText(
         address.email
     } else {
         "${address.familyName} ${address.givenName}".trim().ifEmpty { address.name }
+    }
+}
+
+internal fun addressSuggestionSupportingText(
+    address: Autocomplete.Address,
+    mode: AddressAutofillFillMode,
+): String {
+    return if (mode == AddressAutofillFillMode.Email) {
+        "${address.familyName} ${address.givenName}".trim()
+    } else {
+        buildList {
+            if (address.postalCode.isNotEmpty()) add("〒${address.postalCode}")
+            if (address.addressLevel1.isNotEmpty()) add(address.addressLevel1)
+            if (address.addressLevel2.isNotEmpty()) add(address.addressLevel2)
+            if (address.addressLevel3.isNotEmpty()) add(address.addressLevel3)
+            if (address.streetAddress.isNotEmpty()) add(address.streetAddress)
+        }.joinToString(" ")
     }
 }
 

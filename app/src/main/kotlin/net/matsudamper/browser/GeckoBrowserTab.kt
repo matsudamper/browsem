@@ -55,6 +55,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
@@ -705,7 +706,7 @@ internal fun GeckoBrowserTab(
         }
     }
 
-    DisposableEffect(session, state, browserTab, mediaWebExtension, addressRepository, addressAutofillCoordinator, geckoView) {
+    DisposableEffect(session, state, browserTab, mediaWebExtension, addressRepository, addressAutofillCoordinator) {
         browserTab.attachSessionCallbacks(
             callbacks = state,
             onOpenNewSessionRequest = { uri ->
@@ -733,7 +734,6 @@ internal fun GeckoBrowserTab(
             session = session,
             promptDialogState = dialogState,
             addressRepository = addressRepository,
-            geckoView = geckoView as? AddressAutofillGeckoView,
         )
         // MediaSession の初回イベントを取りこぼさないよう、ページ読み込み前に delegate を設定する。
         session.mediaSessionDelegate = mediaSessionDelegate
@@ -1117,6 +1117,23 @@ internal fun GeckoBrowserTab(
                 },
                 modifier = Modifier.fillMaxSize(),
             )
+
+            val autofillBar = dialogState.addressAutofillBar
+            if (
+                autofillBar != null &&
+                autofillBar.items.isNotEmpty() &&
+                !state.isUrlInputFocused &&
+                !state.showFindInPage &&
+                !state.isFullScreen
+            ) {
+                // Column に imePadding があるため、GeckoView 領域の下端が IME の直上になる。
+                AddressAutofillSuggestionBar(
+                    uiState = autofillBar,
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth(),
+                )
+            }
         }
         BrowserTabDialogLayer(
             state = state,

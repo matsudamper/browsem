@@ -116,6 +116,27 @@ class AddressAutofillMappingTest {
     }
 
     @Test
+    fun addressSuggestionSupportingTextUsesAddressOrName() {
+        val withAddress = Autocomplete.Address.Builder()
+            .familyName("YamadaFillTest")
+            .givenName("TaroFillTest")
+            .email("fill-test@example.com")
+            .postalCode("100-0001")
+            .addressLevel1("東京都")
+            .addressLevel2("千代田区")
+            .streetAddress("千代田1-1")
+            .build()
+        assertEquals(
+            "〒100-0001 東京都 千代田区 千代田1-1",
+            addressSuggestionSupportingText(withAddress, AddressAutofillFillMode.Address),
+        )
+        assertEquals(
+            "YamadaFillTest TaroFillTest",
+            addressSuggestionSupportingText(withAddress, AddressAutofillFillMode.Email),
+        )
+    }
+
+    @Test
     fun withoutEmailClearsEmailOnly() {
         val stripped = address.withoutEmail()
         assertEquals("YamadaFillTest", stripped.familyName)
