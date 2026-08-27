@@ -5,6 +5,8 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
@@ -121,22 +123,27 @@ sealed interface AddressAutofillSuggestionBarTestTags {
 @Composable
 private fun PreviewAddressAutofillSuggestionBar() {
     BrowserTheme(themeMode = ThemeMode.THEME_SYSTEM) {
-        AddressAutofillSuggestionBar(
-            uiState = AddressAutofillBarUiState(
-                items = listOf(
-                    AddressAutofillBarUiState.Item(
-                        label = "山田 太郎",
-                        supportingText = "〒100-0001 東京都千代田区 千代田1-1",
-                        onClick = {},
-                    ),
-                    AddressAutofillBarUiState.Item(
-                        label = "佐藤 花子",
-                        supportingText = "〒150-0001 東京都渋谷区",
-                        onClick = {},
+        Box(modifier = Modifier.fillMaxSize()) {
+            AddressAutofillSuggestionBar(
+                uiState = AddressAutofillBarUiState(
+                    items = listOf(
+                        AddressAutofillBarUiState.Item(
+                            label = "山田 太郎",
+                            supportingText = "〒100-0001 東京都千代田区 千代田1-1",
+                            onClick = {},
+                        ),
+                        AddressAutofillBarUiState.Item(
+                            label = "佐藤 花子",
+                            supportingText = "〒150-0001 東京都渋谷区",
+                            onClick = {},
+                        ),
                     ),
                 ),
-            ),
-        )
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth(),
+            )
+        }
     }
 }
 
@@ -144,16 +151,21 @@ private fun PreviewAddressAutofillSuggestionBar() {
 @Composable
 private fun PreviewAddressAutofillSuggestionBarEmail() {
     BrowserTheme(themeMode = ThemeMode.THEME_SYSTEM) {
-        AddressAutofillSuggestionBar(
-            uiState = AddressAutofillBarUiState(
-                items = listOf(
-                    AddressAutofillBarUiState.Item(
-                        label = "taro@example.com",
-                        supportingText = "山田 太郎",
-                        onClick = {},
+        Box(modifier = Modifier.fillMaxSize()) {
+            AddressAutofillSuggestionBar(
+                uiState = AddressAutofillBarUiState(
+                    items = listOf(
+                        AddressAutofillBarUiState.Item(
+                            label = "taro@example.com",
+                            supportingText = "山田 太郎",
+                            onClick = {},
+                        ),
                     ),
                 ),
-            ),
-        )
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth(),
+            )
+        }
     }
 }
