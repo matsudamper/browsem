@@ -107,7 +107,6 @@ class AddressAutofillPromptTest {
         selectFirstAutofillSuggestionOnLocalPageAndWaitFilled(
             pageUri = pageUri,
             urlMarker = MDN_AUTOCOMPLETE_SAMPLE_FILE_NAME,
-            nameFieldId = "lastName",
             fillExtraMessage = "MDN autocomplete と同じマークアップで住所を選んでも入力されない",
             extraMessage = "MDN autocomplete と同じマークアップで住所の候補バーが出ない\n" +
                 "サーバ受信リクエスト=${server.requests}",
@@ -151,7 +150,6 @@ class AddressAutofillPromptTest {
             selectFirstAutofillSuggestionOnLocalPageAndWaitFilled(
                 pageUri = pageUri,
                 urlMarker = "iframe-parent.html",
-                nameFieldId = null,
                 fillExtraMessage = "sandbox iframe 内で住所を選んでも入力されない " +
                     "親サーバ=${parentServer.requests} 子サーバ=${contentServer.requests}",
                 extraMessage = "sandbox iframe 内の MDN マークアップで住所の候補バーが出ない\n" +
@@ -197,7 +195,6 @@ class AddressAutofillPromptTest {
         selectFirstAutofillSuggestionOnLocalPageAndWaitFilled(
             pageUri = pageUri,
             urlMarker = ADDRESS_SELECT_FORM_FILE_NAME,
-            nameFieldId = "givenName",
             fillExtraMessage = "Mozilla の address_form.html で住所を選んでも入力されない",
             extraMessage = "Mozilla の address_form.html で住所の候補バーが出ない\n" +
                 "サーバ受信リクエスト=${server.requests}",
@@ -225,10 +222,9 @@ class AddressAutofillPromptTest {
         applyTestPrefsAndAwaitAddressAutofillEnabled()
         saveAndSetPref("geckoview.autocomplete.selection_dismiss_delay_ms", 60_000)
 
-        waitForAutofillSuggestionBarOnLocalPageWithRetry(
+        waitForAutofillSuggestionBarOnLocalPage(
             pageUri = pageUri,
             urlMarker = ADDRESS_SELECT_FORM_FILE_NAME,
-            nameFieldId = "givenName",
             extraMessage = "フォーカス時に候補バーが出ない\nサーバ受信リクエスト=${server.requests}",
             afterOpen = { clickLocalNameField("givenName") },
         )
@@ -282,6 +278,8 @@ class AddressAutofillPromptTest {
             requestMatched = { server.requests.any { it.contains(ADDRESS_FORM_DONE_FILE_NAME) } },
         )
 
+        clearLogcat()
+
         waitForAddressSaveDialogWithRetry(
             submitted = submitted,
             selfCheck = selfCheck,
@@ -311,19 +309,32 @@ class AddressAutofillPromptTest {
         urlMarker: String,
         fillExtraMessage: String,
         extraMessage: String,
-        nameFieldId: String? = null,
         afterOpen: () -> Unit = {},
     ) {
-        retryLocalAutofillFlow(
-            pageUri = pageUri,
-            urlMarker = urlMarker,
-            extraMessage = extraMessage,
-            nameFieldId = nameFieldId,
-            afterOpen = afterOpen,
-        ) {
-            clickFirstAutofillNameOption()
-            waitUntilAddressFilled(extraMessage = fillExtraMessage)
+        val deadline = System.currentTimeMillis() + LOCAL_PAGE_RETRY_TIMEOUT_MILLIS
+        var lastError: Throwable? = null
+        while (System.currentTimeMillis() < deadline) {
+            try {
+                waitForAutofillSuggestionBarOnLocalPage(
+                    pageUri = pageUri,
+                    urlMarker = urlMarker,
+                    extraMessage = extraMessage,
+                    afterOpen = afterOpen,
+                )
+                clickFirstAutofillNameOption()
+                waitUntilAddressFilled(extraMessage = fillExtraMessage)
+                return
+            } catch (e: Throwable) {
+                lastError = e
+            }
         }
+        throw AssertionError(
+            "$extraMessage\n" +
+                "現在URL=${composeRule.currentPageUrlFromUi()}\n" +
+                "--- accessibility ---\n${dumpAccessibilityTree()}\n" +
+                "--- logcat (formautofill関連) ---\n${collectFormAutofillLogcat()}",
+            lastError,
+        )
     }
 
     /**
@@ -357,51 +368,33 @@ class AddressAutofillPromptTest {
     }
 
     /**
-     * ローカルページで名前候補バーが出るまで待つ。失敗時はページを開き直して再試行する。
-     */
-    private fun waitForAutofillSuggestionBarOnLocalPageWithRetry(
-        pageUri: String,
-        urlMarker: String,
-        extraMessage: String,
-        nameFieldId: String? = null,
-        afterOpen: () -> Unit = {},
-    ) {
-        retryLocalAutofillFlow(
-            pageUri = pageUri,
-            urlMarker = urlMarker,
-            extraMessage = extraMessage,
-            nameFieldId = nameFieldId,
-            afterOpen = afterOpen,
-        ) {}
-    }
-
-    /**
-     * 1 回分の候補バー待機。ページ表示と名前欄の出現を待って afterOpen を実行し、
-     * 候補バーが出るまでタイムアウト付きで待つ。
+     * ローカルページで名前候補バーが出るまで待つ。ホームページ遅延ロードに上書きされたら開き直す。
      */
     private fun waitForAutofillSuggestionBarOnLocalPage(
         pageUri: String,
         urlMarker: String,
         extraMessage: String,
-        nameFieldId: String? = null,
         afterOpen: () -> Unit = {},
     ) {
-        openLocalPage(pageUri, urlMarker)
-        var afterOpenDone = false
+        var opened = false
         try {
-            composeRule.waitUntil(timeoutMillis = SUGGESTION_BAR_ATTEMPT_TIMEOUT_MILLIS) {
-                if (!isExpectedLocalPage(composeRule.currentPageUrlFromUi(), urlMarker)) {
-                    afterOpenDone = false
-                    return@waitUntil false
-                }
-                if (!afterOpenDone && (nameFieldId == null || isLocalNameFieldVisible(nameFieldId))) {
-                    runCatching { afterOpen() }
-                    afterOpenDone = true
-                }
-                composeRule
+            composeRule.waitUntil(timeoutMillis = LOCAL_PAGE_RETRY_TIMEOUT_MILLIS) {
+                val onExpectedPage = isExpectedLocalPage(composeRule.currentPageUrlFromUi(), urlMarker)
+                val appeared = composeRule
                     .onAllNodesWithTag(AddressAutofillSuggestionBarTestTags.NameOption.testTag)
                     .fetchSemanticsNodes()
                     .isNotEmpty()
+                if (appeared && onExpectedPage) {
+                    return@waitUntil true
+                }
+                if (!opened || !onExpectedPage) {
+                    openLocalPage(pageUri, urlMarker)
+                    opened = true
+                    runCatching { afterOpen() }
+                } else if (!appeared) {
+                    runCatching { afterOpen() }
+                }
+                false
             }
         } catch (e: ComposeTimeoutException) {
             throw AssertionError(
@@ -411,57 +404,6 @@ class AddressAutofillPromptTest {
                     "--- logcat (formautofill関連) ---\n${collectFormAutofillLogcat()}",
                 e,
             )
-        }
-    }
-
-    private fun retryLocalAutofillFlow(
-        pageUri: String,
-        urlMarker: String,
-        extraMessage: String,
-        nameFieldId: String? = null,
-        afterOpen: () -> Unit = {},
-        action: () -> Unit,
-    ) {
-        val deadline = System.currentTimeMillis() + LOCAL_PAGE_RETRY_TIMEOUT_MILLIS
-        var lastError: Throwable? = null
-        while (System.currentTimeMillis() < deadline) {
-            try {
-                waitForAutofillSuggestionBarOnLocalPage(
-                    pageUri = pageUri,
-                    urlMarker = urlMarker,
-                    extraMessage = extraMessage,
-                    nameFieldId = nameFieldId,
-                    afterOpen = afterOpen,
-                )
-                action()
-                return
-            } catch (e: Throwable) {
-                lastError = e
-            }
-        }
-        throw AssertionError(
-            "$extraMessage\n" +
-                "現在URL=${composeRule.currentPageUrlFromUi()}\n" +
-                "--- accessibility ---\n${dumpAccessibilityTree()}\n" +
-                "--- logcat (formautofill関連) ---\n${collectFormAutofillLogcat()}",
-            lastError,
-        )
-    }
-
-    private fun isLocalNameFieldVisible(fieldId: String): Boolean {
-        val root = InstrumentationRegistry.getInstrumentation().uiAutomation.rootInActiveWindow
-            ?: return false
-        try {
-            val target = findNode(root) { node ->
-                val viewId = node.viewIdResourceName.orEmpty()
-                val cls = node.className?.toString().orEmpty()
-                cls.contains("EditText", ignoreCase = true) &&
-                    viewId.endsWith(fieldId, ignoreCase = true)
-            }
-            target?.recycle()
-            return target != null
-        } finally {
-            root.recycle()
         }
     }
 
@@ -586,21 +528,13 @@ class AddressAutofillPromptTest {
     }
 
     /**
-     * View Intent を優先してローカルページを開き、フォーカスが外れるまで待つ。
+     * URL バーからローカルページを開き、フォーカスが外れるまで待つ。
      */
     private fun openLocalPage(pageUri: String, urlMarker: String) {
-        val openedByIntent = runCatching {
-            composeRule.openUrlViaViewIntent(pageUri)
+        composeRule.openUrlFromUrlBar(pageUri)
+        runCatching {
             composeRule.waitForUrlBarContains(urlMarker, timeoutMillis = 20_000)
             composeRule.waitForUrlBarNotFocused(timeoutMillis = 15_000)
-            true
-        }.getOrDefault(false)
-        if (!openedByIntent) {
-            composeRule.openUrlFromUrlBar(pageUri)
-            runCatching {
-                composeRule.waitForUrlBarContains(urlMarker, timeoutMillis = 20_000)
-                composeRule.waitForUrlBarNotFocused(timeoutMillis = 15_000)
-            }
         }
     }
 
@@ -1710,7 +1644,6 @@ class AddressAutofillPromptTest {
         private const val LOGCAT_TAIL_LINES = 250
         private const val MDN_FIELD_WAIT_MILLIS = 60_000L
         private const val LOCAL_FIELD_CLICK_WAIT_MILLIS = 5_000L
-        private const val SUGGESTION_BAR_ATTEMPT_TIMEOUT_MILLIS = 20_000L
         private const val FORM_SUBMIT_WAIT_MILLIS = 25_000L
         private const val ADDRESS_FILL_TIMEOUT_MILLIS = 45_000L
         private const val LOCAL_PAGE_RETRY_TIMEOUT_MILLIS = 90_000L
