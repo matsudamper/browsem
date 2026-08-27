@@ -104,19 +104,15 @@ class AddressAutofillMappingTest {
     }
 
     @Test
-    fun addressCompletionTextUsesNameOrEmail() {
-        assertEquals(
-            "YamadaFillTest TaroFillTest",
-            addressCompletionText(address, AddressAutofillFillMode.Address),
-        )
-        assertEquals(
-            "fill-test@example.com",
-            addressCompletionText(address, AddressAutofillFillMode.Email),
-        )
+    fun lastNameIdIsNameField() {
+        assertTrue(isNameAutofillField(mapOf("id" to "lastName")))
+        assertTrue(isNameAutofillField(mapOf("autocomplete" to "shipping family-name")))
+        assertFalse(isNameAutofillField(mapOf("autocomplete" to "street-address")))
+        assertFalse(isNameAutofillField(mapOf("id" to "userName")))
     }
 
     @Test
-    fun addressSuggestionSupportingTextUsesAddressOrName() {
+    fun addressCompletionTextUsesFieldKind() {
         val withAddress = Autocomplete.Address.Builder()
             .familyName("YamadaFillTest")
             .givenName("TaroFillTest")
@@ -127,12 +123,16 @@ class AddressAutofillMappingTest {
             .streetAddress("千代田1-1")
             .build()
         assertEquals(
-            "〒100-0001 東京都 千代田区 千代田1-1",
-            addressSuggestionSupportingText(withAddress, AddressAutofillFillMode.Address),
+            "YamadaFillTest TaroFillTest",
+            addressCompletionText(withAddress, AddressAutofillSuggestionKind.Name),
         )
         assertEquals(
-            "YamadaFillTest TaroFillTest",
-            addressSuggestionSupportingText(withAddress, AddressAutofillFillMode.Email),
+            "〒100-0001 東京都 千代田区 千代田1-1",
+            addressCompletionText(withAddress, AddressAutofillSuggestionKind.Address),
+        )
+        assertEquals(
+            "fill-test@example.com",
+            addressCompletionText(withAddress, AddressAutofillSuggestionKind.Email),
         )
     }
 
