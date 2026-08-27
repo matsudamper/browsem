@@ -194,15 +194,29 @@
     fillAddress(message.address, message.mode);
   });
 
+  function isEditableFormControl(el) {
+    if (!el || !el.tagName) return false;
+    const tag = String(el.tagName).toUpperCase();
+    return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+  }
+
   document.addEventListener('focusin', function (event) {
     const el = event.target;
-    if (!el || !el.tagName) return;
-    const tag = String(el.tagName).toUpperCase();
-    if (tag !== 'INPUT' && tag !== 'TEXTAREA' && tag !== 'SELECT') return;
+    if (!isEditableFormControl(el)) return;
     let kind = 'other';
     if (isEmailField(el)) kind = 'email';
     else if (isNameField(el)) kind = 'name';
     else if (isAddressField(el)) kind = 'address';
     port.postMessage({ action: 'field-focus', kind: kind });
+  }, true);
+
+  // ページの空領域タップでは次の focusin が来ないため、入力欄の focusout で閉じる。
+  // 次が別の input なら focusin 側に任せる。バータップ時は relatedTarget が input ではない。
+  document.addEventListener('focusout', function (event) {
+    const el = event.target;
+    if (!isEditableFormControl(el)) return;
+    const next = event.relatedTarget;
+    if (isEditableFormControl(next)) return;
+    port.postMessage({ action: 'field-blur' });
   }, true);
 })();
