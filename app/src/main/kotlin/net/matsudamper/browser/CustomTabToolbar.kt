@@ -18,6 +18,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -25,10 +26,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import kotlin.math.roundToInt
 import net.matsudamper.browser.resources.R as ResourcesR
 
 internal sealed interface CustomTabToolbarTestTags {
@@ -74,6 +78,7 @@ internal fun CustomTabToolbar(
     showHome: Boolean = false,
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
+    var menuAnchorBottomPx by remember { mutableIntStateOf(0) }
     val resolvedToolbarColor = toolbarColor ?: MaterialTheme.colorScheme.primaryContainer
     val toolbarContentColor = if (resolvedToolbarColor.luminance() >= 0.5f) {
         Color.Black
@@ -126,7 +131,11 @@ internal fun CustomTabToolbar(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            Box {
+            Box(
+                modifier = Modifier.onGloballyPositioned { coordinates ->
+                    menuAnchorBottomPx = coordinates.boundsInWindow().bottom.roundToInt()
+                },
+            ) {
                 IconButton(
                     modifier = Modifier.testTag(CustomTabToolbarTestTags.MenuButton.testTag),
                     onClick = { menuExpanded = true },
@@ -138,6 +147,7 @@ internal fun CustomTabToolbar(
                 }
                 ToolbarMenu(
                     visibleMenu = menuExpanded,
+                    menuAnchorBottomPx = menuAnchorBottomPx,
                     onDismissRequest = { menuExpanded = false },
                     onRefresh = onRefresh,
                     onSuperRefresh = onSuperRefresh,

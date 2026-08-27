@@ -60,6 +60,8 @@ import androidx.compose.ui.layout.Measurable
 import androidx.compose.ui.layout.MeasurePolicy
 import androidx.compose.ui.layout.MeasureResult
 import androidx.compose.ui.layout.MeasureScope
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
@@ -79,6 +81,7 @@ import net.matsudamper.browser.ui.common.BrowserTheme
 import net.matsudamper.browser.ui.common.resolveBrowserToolbarColors
 import net.matsudamper.browser.ui.common.toArgbHex
 import net.matsudamper.browser.resources.R as ResourcesR
+import kotlin.math.roundToInt
 
 @Composable
 internal fun BrowserToolBar(
@@ -170,9 +173,10 @@ internal fun BrowserToolBar(
         updateVisibleMenu = {
             visibleMenu = it
         },
-        toolbarMenu = {
+        toolbarMenu = { menuAnchorBottomPx ->
             ToolbarMenu(
                 visibleMenu = visibleMenu,
+                menuAnchorBottomPx = menuAnchorBottomPx,
                 onDismissRequest = { visibleMenu = false },
                 onRefresh = onRefresh,
                 onSuperRefresh = onSuperRefresh,
@@ -276,9 +280,10 @@ internal fun BrowserToolbar(
     onLongPressHistory: () -> Unit,
     modifier: Modifier = Modifier,
     showTabButton: Boolean = true,
-    toolbarMenu: @Composable () -> Unit,
+    toolbarMenu: @Composable (menuAnchorBottomPx: Int) -> Unit,
 ) {
     var heightCache by remember { mutableIntStateOf(0) }
+    var menuAnchorBottomPx by remember { mutableIntStateOf(0) }
 
     val toolbarColors = resolveBrowserToolbarColors(
         toolbarColor = toolbarColor,
@@ -520,15 +525,21 @@ internal fun BrowserToolbar(
                             )
                         }
                     }
-                    IconButton(
-                        modifier = Modifier.testTag(BrowserToolbarTestTags.MenuButton.testTag),
-                        onClick = { updateVisibleMenu(true) },
+                    Box(
+                        modifier = Modifier.onGloballyPositioned { coordinates ->
+                            menuAnchorBottomPx = coordinates.boundsInWindow().bottom.roundToInt()
+                        },
                     ) {
-                        Icon(
-                            painter = painterResource(ResourcesR.drawable.ic_more_vert_24dp),
-                            contentDescription = "Menu",
-                        )
-                        toolbarMenu()
+                        IconButton(
+                            modifier = Modifier.testTag(BrowserToolbarTestTags.MenuButton.testTag),
+                            onClick = { updateVisibleMenu(true) },
+                        ) {
+                            Icon(
+                                painter = painterResource(ResourcesR.drawable.ic_more_vert_24dp),
+                                contentDescription = "Menu",
+                            )
+                        }
+                        toolbarMenu(menuAnchorBottomPx)
                     }
                 }
             }
