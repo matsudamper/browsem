@@ -17,11 +17,15 @@ import java.util.concurrent.ConcurrentHashMap
  * 住所欄へ値を入れるビルトイン WebExtension。
  * Gecko FormAutofill と Autofill.Session は shadow DOM 内の cross-origin iframe
  * を埋められないため、all_frames のコンテンツスクリプトへ fill メッセージを送る。
+ *
+ * fill は field-focus を送ったポート（フォーカス中フレーム）にだけ送る。
+ * 別 iframe や遷移後の新規ドキュメントへ個人情報を配らない。
  */
 class AddressAutofillWebExtension {
     private var extension: WebExtension? = null
     private val mainHandler = Handler(Looper.getMainLooper())
     private val sessionPorts = ConcurrentHashMap<GeckoSession, MutableSet<WebExtension.Port>>()
+    private val lastFocusPorts = ConcurrentHashMap<GeckoSession, WebExtension.Port>()
     private val pendingFills = ConcurrentHashMap<GeckoSession, PendingFill>()
     private val fillRetryRunnables = ConcurrentHashMap<GeckoSession, MutableList<Runnable>>()
     private val attachedSessions: MutableSet<GeckoSession> =
@@ -58,6 +62,7 @@ class AddressAutofillWebExtension {
         attachedSessions.remove(session)
         delegatedSessions.remove(session)
         sessionPorts.remove(session)
+        lastFocusPorts.remove(session)
         pendingFills.remove(session)
         fillRetryRunnables.remove(session)?.forEach { runnable ->
             mainHandler.removeCallbacks(runnable)
@@ -73,34 +78,38 @@ class AddressAutofillWebExtension {
         mode: AddressAutofillFillMode,
     ) {
         val message = address.toFillMessage(mode)
+        val target = lastFocusPorts[session]
         pendingFills[session] = PendingFill(
             message = message,
             untilElapsedRealtime = SystemClock.elapsedRealtime() + FILL_RETRY_WINDOW_MS,
+            targetUrl = target?.sender?.url,
         )
         fillRetryRunnables.remove(session)?.forEach { runnable ->
             mainHandler.removeCallbacks(runnable)
         }
-        postFill(session, message)
+        if (target == null) {
+            Log.w(TAG, "fill: フォーカス中のポートがない")
+            return
+        }
+        postFill(target, message)
         val retries = mutableListOf<Runnable>()
         listOf(250L, 1_000L).forEach { delayMs ->
-            val retry = Runnable { postFill(session, message) }
+            val retry = Runnable {
+                val current = lastFocusPorts[session]
+                if (current === target) {
+                    postFill(target, message)
+                }
+            }
             retries.add(retry)
             mainHandler.postDelayed(retry, delayMs)
         }
         fillRetryRunnables[session] = retries
     }
 
-    private fun postFill(session: GeckoSession, message: JSONObject) {
-        val ports = sessionPorts[session].orEmpty()
-        Log.i(TAG, "fill ports=${ports.size}")
-        if (ports.isEmpty()) {
-            Log.w(TAG, "fill: ポート未接続")
-            return
-        }
-        ports.forEach { port ->
-            runCatching { port.postMessage(message) }
-                .onFailure { error -> Log.w(TAG, "fill 送信に失敗", error) }
-        }
+    private fun postFill(port: WebExtension.Port, message: JSONObject) {
+        Log.i(TAG, "fill url=${port.sender.url}")
+        runCatching { port.postMessage(message) }
+            .onFailure { error -> Log.w(TAG, "fill 送信に失敗", error) }
     }
 
     private fun attachSessionDelegate(session: GeckoSession, ext: WebExtension) {
@@ -122,7 +131,14 @@ class AddressAutofillWebExtension {
                         .add(port)
                     val connectedPort = port
                     val pending = pendingFills[session]
-                    if (pending != null && SystemClock.elapsedRealtime() < pending.untilElapsedRealtime) {
+                    val senderUrl = port.sender.url
+                    if (
+                        pending != null &&
+                        SystemClock.elapsedRealtime() < pending.untilElapsedRealtime &&
+                        pending.targetUrl != null &&
+                        senderUrl == pending.targetUrl
+                    ) {
+                        lastFocusPorts[session] = port
                         runCatching { port.postMessage(pending.message) }
                             .onFailure { error -> Log.w(TAG, "pending fill 送信に失敗", error) }
                     }
@@ -131,11 +147,15 @@ class AddressAutofillWebExtension {
                             val json = message as? JSONObject ?: return
                             if (json.optString("action") != "field-focus") return
                             val kind = json.optString("kind")
+                            lastFocusPorts[session] = port
                             mainHandler.post { onFieldFocus?.invoke(kind) }
                         }
 
                         override fun onDisconnect(port: WebExtension.Port) {
                             sessionPorts[session]?.remove(connectedPort)
+                            if (lastFocusPorts[session] === connectedPort) {
+                                lastFocusPorts.remove(session)
+                            }
                         }
                     })
                 }
@@ -147,6 +167,7 @@ class AddressAutofillWebExtension {
     private class PendingFill(
         val message: JSONObject,
         val untilElapsedRealtime: Long,
+        val targetUrl: String?,
     )
 
     companion object {
