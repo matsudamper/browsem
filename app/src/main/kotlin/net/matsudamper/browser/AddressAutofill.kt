@@ -18,6 +18,30 @@ internal enum class AddressAutofillFillMode {
     Email,
 }
 
+/** 候補バーに出す文言。フォーカス中の欄の種類に合わせる。 */
+internal enum class AddressAutofillSuggestionKind {
+    Name,
+    Address,
+    Email,
+}
+
+internal fun AddressAutofillSuggestionKind.toFillMode(): AddressAutofillFillMode {
+    return when (this) {
+        AddressAutofillSuggestionKind.Email -> AddressAutofillFillMode.Email
+        AddressAutofillSuggestionKind.Name,
+        AddressAutofillSuggestionKind.Address,
+        -> AddressAutofillFillMode.Address
+    }
+}
+
+internal fun suggestionKindFromFieldKind(kind: String?): AddressAutofillSuggestionKind {
+    return when (kind) {
+        FIELD_KIND_EMAIL -> AddressAutofillSuggestionKind.Email
+        FIELD_KIND_NAME -> AddressAutofillSuggestionKind.Name
+        else -> AddressAutofillSuggestionKind.Address
+    }
+}
+
 /**
  * Gecko FormAutofill はトップ文書から iframe を辿るため、shadow DOM 内の
  * cross-origin iframe（MDN の interactive-example など）では選択プロンプトを出せない。
@@ -54,12 +78,8 @@ internal class AddressAutofillCoordinator(
             attached = Attached(session, promptDialogState, addressRepository)
             promptDialogState.focusedAutofillKind = lastFieldKind
             promptDialogState.onAddressSelectOptions = { options ->
-                val mode = if (synchronized(lock) { lastFieldKind } == "email") {
-                    AddressAutofillFillMode.Email
-                } else {
-                    AddressAutofillFillMode.Address
-                }
-                presentCompletions(options.map { it.value }, mode)
+                val kind = suggestionKindFromFieldKind(synchronized(lock) { lastFieldKind })
+                presentCompletions(options.map { it.value }, kind)
             }
         }
         fillExtension.onFieldFocus = { kind -> onFieldFocus(kind) }
@@ -88,8 +108,8 @@ internal class AddressAutofillCoordinator(
         val current = synchronized(lock) {
             suppressFocusUntilElapsed = SystemClock.elapsedRealtime() + FILL_FOCUS_SUPPRESS_MS
             suppressFocusKind = when (mode) {
-                AddressAutofillFillMode.Email -> "email"
-                AddressAutofillFillMode.Address -> "address"
+                AddressAutofillFillMode.Email -> FIELD_KIND_EMAIL
+                AddressAutofillFillMode.Address -> FIELD_KIND_ADDRESS
             }
             attached
         } ?: return
@@ -101,24 +121,25 @@ internal class AddressAutofillCoordinator(
     fun onAddressFetch(count: Int) {
         if (count <= 0) return
         val current = synchronized(lock) {
-            if (lastFieldKind == "email") {
+            if (lastFieldKind == FIELD_KIND_EMAIL) {
                 Log.i(TAG, "onAddressFetch skipped: last field is email")
                 return
             }
-            if (isFocusSuppressed("address")) {
+            if (isFocusSuppressed(FIELD_KIND_ADDRESS)) {
                 Log.i(TAG, "onAddressFetch ignored after address fill")
                 return
             }
             attached
         } ?: return
         Log.i(TAG, "onAddressFetch schedule suggestion bar count=$count")
+        val kind = suggestionKindFromFieldKind(synchronized(lock) { lastFieldKind })
         synchronized(lock) {
             showJob?.cancel()
             showJob = current.promptDialogState.coroutineScope.launch {
                 scheduleSuggestionBar(
                     addressRepository = current.addressRepository,
-                    mode = AddressAutofillFillMode.Address,
-                    shouldAbort = { synchronized(lock) { lastFieldKind == "email" } },
+                    kind = kind,
+                    shouldAbort = { synchronized(lock) { lastFieldKind == FIELD_KIND_EMAIL } },
                     present = ::presentCompletions,
                 )
             }
@@ -126,7 +147,7 @@ internal class AddressAutofillCoordinator(
     }
 
     fun onFieldFocus(kind: String) {
-        if (kind != "address" && kind != "email") return
+        if (kind != FIELD_KIND_ADDRESS && kind != FIELD_KIND_NAME && kind != FIELD_KIND_EMAIL) return
         val current = synchronized(lock) {
             if (isFocusSuppressed(kind)) {
                 Log.i(TAG, "field-focus ignored after fill kind=$kind")
@@ -137,17 +158,13 @@ internal class AddressAutofillCoordinator(
         } ?: return
         current.promptDialogState.focusedAutofillKind = kind
         Log.i(TAG, "field-focus kind=$kind")
-        val mode = if (kind == "email") {
-            AddressAutofillFillMode.Email
-        } else {
-            AddressAutofillFillMode.Address
-        }
+        val suggestionKind = suggestionKindFromFieldKind(kind)
         synchronized(lock) {
             showJob?.cancel()
             showJob = current.promptDialogState.coroutineScope.launch {
                 scheduleSuggestionBar(
                     addressRepository = current.addressRepository,
-                    mode = mode,
+                    kind = suggestionKind,
                     shouldAbort = { synchronized(lock) { lastFieldKind != kind } },
                     present = ::presentCompletions,
                 )
@@ -157,31 +174,37 @@ internal class AddressAutofillCoordinator(
 
     private fun presentCompletions(
         addresses: List<Autocomplete.Address>,
-        mode: AddressAutofillFillMode,
+        kind: AddressAutofillSuggestionKind,
     ) {
         val current = synchronized(lock) { attached } ?: return
-        val items = if (mode == AddressAutofillFillMode.Email) {
+        val fillMode = kind.toFillMode()
+        val items = if (kind == AddressAutofillSuggestionKind.Email) {
             addresses.filter { it.email.isNotBlank() }.distinctBy { it.email }
         } else {
             addresses
+        }.mapNotNull { address ->
+            val label = addressCompletionText(address, kind)
+            if (label.isBlank()) {
+                null
+            } else {
+                AddressAutofillBarUiState.Item(
+                    label = label,
+                    onClick = { fillSelectedAddress(address, fillMode) },
+                )
+            }
         }
         if (items.isEmpty()) return
-        val uiState = AddressAutofillBarUiState(
-            items = items.map { address ->
-                AddressAutofillBarUiState.Item(
-                    label = addressCompletionText(address, mode),
-                    supportingText = addressSuggestionSupportingText(address, mode),
-                    onClick = { fillSelectedAddress(address, mode) },
-                )
-            },
-        )
-        Log.i(TAG, "suggestion bar mode=$mode count=${uiState.items.size}")
+        val uiState = AddressAutofillBarUiState(items = items)
+        Log.i(TAG, "suggestion bar kind=$kind count=${uiState.items.size}")
         current.promptDialogState.addressAutofillBar = uiState
     }
 
     private fun isFocusSuppressed(kind: String): Boolean {
-        return SystemClock.elapsedRealtime() < suppressFocusUntilElapsed &&
-            suppressFocusKind == kind
+        if (SystemClock.elapsedRealtime() >= suppressFocusUntilElapsed) return false
+        return when (suppressFocusKind) {
+            FIELD_KIND_EMAIL -> kind == FIELD_KIND_EMAIL
+            else -> kind == FIELD_KIND_ADDRESS || kind == FIELD_KIND_NAME
+        }
     }
 }
 
@@ -242,8 +265,9 @@ internal class AddressAutofillDelegate(
             "onNodeFocus tag=${node.tag} hint=${node.hint} attrs=$attributes id=${data.id}",
         )
         when {
-            isEmailAutofillField(attributes) -> coordinator.onFieldFocus("email")
-            isAddressAutofillField(attributes) -> coordinator.onFieldFocus("address")
+            isEmailAutofillField(attributes) -> coordinator.onFieldFocus(FIELD_KIND_EMAIL)
+            isNameAutofillField(attributes) -> coordinator.onFieldFocus(FIELD_KIND_NAME)
+            isAddressAutofillField(attributes) -> coordinator.onFieldFocus(FIELD_KIND_ADDRESS)
         }
     }
 
@@ -259,9 +283,9 @@ internal class AddressAutofillDelegate(
 
 private suspend fun scheduleSuggestionBar(
     addressRepository: AddressRepository,
-    mode: AddressAutofillFillMode,
+    kind: AddressAutofillSuggestionKind,
     shouldAbort: () -> Boolean,
-    present: (List<Autocomplete.Address>, AddressAutofillFillMode) -> Unit,
+    present: (List<Autocomplete.Address>, AddressAutofillSuggestionKind) -> Unit,
 ) {
     delay(IME_READY_WAIT_MS)
     if (shouldAbort()) return
@@ -269,7 +293,7 @@ private suspend fun scheduleSuggestionBar(
         .map { it.toGeckoAddress() }
     if (addresses.isEmpty()) return
     if (shouldAbort()) return
-    present(addresses, mode)
+    present(addresses, kind)
 }
 
 internal fun fillAddressOnSession(
@@ -298,12 +322,29 @@ internal fun fillAddressOnSession(
 private const val TAG = "AddressAutofill"
 private const val IME_READY_WAIT_MS = 150L
 private const val FILL_FOCUS_SUPPRESS_MS = 1_500L
+internal const val FIELD_KIND_NAME = "name"
+internal const val FIELD_KIND_ADDRESS = "address"
+internal const val FIELD_KIND_EMAIL = "email"
 
 internal fun isEmailAutofillField(attributes: Map<String, String>): Boolean {
     val inputType = attributes["type"].orEmpty()
     if (inputType.equals("email", ignoreCase = true)) return true
     val tokens = addressAutofillTokens(attributes)
     return tokens.any { it in EMAIL_TOKENS }
+}
+
+internal fun isNameAutofillField(attributes: Map<String, String>): Boolean {
+    if (isEmailAutofillField(attributes)) return false
+    val autocompleteTokens = attributes["autocomplete"]
+        .orEmpty()
+        .lowercase()
+        .split(Regex("\\s+"))
+        .filter { it.isNotEmpty() }
+    if (autocompleteTokens.any { it in NAME_AUTOCOMPLETE_TOKENS }) return true
+    val identityTokens = listOfNotNull(attributes["id"], attributes["name"])
+        .flatMap { tokenizeAutofillAttribute(it) }
+        .toSet()
+    return identityTokens.any { it in NAME_ID_ALIAS_TOKENS }
 }
 
 internal fun isAddressAutofillField(attributes: Map<String, String>): Boolean {
@@ -390,31 +431,39 @@ private val EMAIL_TOKENS = setOf("email")
 
 internal fun addressCompletionText(
     address: Autocomplete.Address,
-    mode: AddressAutofillFillMode,
+    kind: AddressAutofillSuggestionKind,
 ): String {
-    return if (mode == AddressAutofillFillMode.Email) {
-        address.email
-    } else {
-        "${address.familyName} ${address.givenName}".trim().ifEmpty { address.name }
+    return when (kind) {
+        AddressAutofillSuggestionKind.Email -> address.email
+        AddressAutofillSuggestionKind.Name -> addressDisplayName(address)
+        AddressAutofillSuggestionKind.Address -> {
+            addressDisplayAddress(address).ifEmpty { addressDisplayName(address) }
+        }
     }
 }
 
-internal fun addressSuggestionSupportingText(
-    address: Autocomplete.Address,
-    mode: AddressAutofillFillMode,
-): String {
-    return if (mode == AddressAutofillFillMode.Email) {
-        "${address.familyName} ${address.givenName}".trim()
-    } else {
-        buildList {
-            if (address.postalCode.isNotEmpty()) add("〒${address.postalCode}")
-            if (address.addressLevel1.isNotEmpty()) add(address.addressLevel1)
-            if (address.addressLevel2.isNotEmpty()) add(address.addressLevel2)
-            if (address.addressLevel3.isNotEmpty()) add(address.addressLevel3)
-            if (address.streetAddress.isNotEmpty()) add(address.streetAddress)
-        }.joinToString(" ")
-    }
+internal fun addressDisplayName(address: Autocomplete.Address): String {
+    return "${address.familyName} ${address.givenName}".trim().ifEmpty { address.name }
 }
+
+internal fun addressDisplayAddress(address: Autocomplete.Address): String {
+    return buildList {
+        if (address.postalCode.isNotEmpty()) add("〒${address.postalCode}")
+        if (address.addressLevel1.isNotEmpty()) add(address.addressLevel1)
+        if (address.addressLevel2.isNotEmpty()) add(address.addressLevel2)
+        if (address.addressLevel3.isNotEmpty()) add(address.addressLevel3)
+        if (address.streetAddress.isNotEmpty()) add(address.streetAddress)
+    }.joinToString(" ")
+}
+
+private val NAME_AUTOCOMPLETE_TOKENS = FAMILY_NAME_TOKENS +
+    GIVEN_NAME_TOKENS +
+    ADDITIONAL_NAME_TOKENS +
+    FULL_NAME_TOKENS
+
+private val NAME_ID_ALIAS_TOKENS = FAMILY_NAME_TOKENS +
+    GIVEN_NAME_TOKENS +
+    ADDITIONAL_NAME_TOKENS
 
 private val ADDRESS_AUTOCOMPLETE_TOKENS = FAMILY_NAME_TOKENS +
     GIVEN_NAME_TOKENS +

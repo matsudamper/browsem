@@ -80,6 +80,18 @@
     });
   }
 
+  function isNameField(el) {
+    if (isEmailField(el)) return false;
+    const tokens = fieldTokens(el);
+    const nameTokens = FAMILY_NAME_TOKENS
+      .concat(GIVEN_NAME_TOKENS)
+      .concat(ADDITIONAL_NAME_TOKENS)
+      .concat(FULL_NAME_TOKENS);
+    return nameTokens.some(function (token) {
+      return tokens.indexOf(token) !== -1;
+    });
+  }
+
   function isAddressField(el) {
     if (isEmailField(el)) return false;
     const tokens = fieldTokens(el);
@@ -172,6 +184,7 @@
     if (tag !== 'INPUT' && tag !== 'TEXTAREA' && tag !== 'SELECT') return;
     let kind = 'other';
     if (isEmailField(el)) kind = 'email';
+    else if (isNameField(el)) kind = 'name';
     else if (isAddressField(el)) kind = 'address';
     if (kind === 'other') return;
     port.postMessage({ action: 'field-focus', kind: kind });

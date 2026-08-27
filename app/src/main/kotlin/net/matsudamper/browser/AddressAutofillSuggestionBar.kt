@@ -1,18 +1,17 @@
 package net.matsudamper.browser
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -28,7 +27,7 @@ import net.matsudamper.browser.data.ThemeMode
 import net.matsudamper.browser.ui.common.BrowserTheme
 
 /**
- * IME 直上に出す住所・メールの候補。
+ * IME 直上に出す住所・名前・メールの候補。
  * 表示とクリックは [AddressAutofillBarUiState] 経由。
  */
 @Stable
@@ -38,10 +37,12 @@ internal data class AddressAutofillBarUiState(
     @Stable
     data class Item(
         val label: String,
-        val supportingText: String,
         val onClick: () -> Unit,
     )
 }
+
+private val SuggestionButtonMaxWidth = 280.dp
+private val SuggestionButtonTextMaxWidth = 256.dp
 
 @Composable
 internal fun AddressAutofillSuggestionBar(
@@ -63,46 +64,32 @@ internal fun AddressAutofillSuggestionBar(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             uiState.items.forEach { item ->
-                AddressAutofillSuggestionChip(item = item)
+                AddressAutofillSuggestionButton(item = item)
             }
         }
     }
 }
 
 @Composable
-private fun AddressAutofillSuggestionChip(
+private fun AddressAutofillSuggestionButton(
     item: AddressAutofillBarUiState.Item,
 ) {
-    Surface(
+    OutlinedButton(
+        onClick = item.onClick,
         modifier = Modifier
-            .widthIn(max = 280.dp)
+            .widthIn(max = SuggestionButtonMaxWidth)
             .testTag(AddressAutofillSuggestionBarTestTags.Option.testTag)
-            .clickable(onClick = item.onClick)
             // Gecko の入力フォーカスと IME を奪わない
             .focusProperties { canFocus = false },
-        shape = RoundedCornerShape(8.dp),
-        color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 1.dp,
+        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
     ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-        ) {
-            Text(
-                text = item.label,
-                style = MaterialTheme.typography.bodyMedium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            if (item.supportingText.isNotEmpty()) {
-                Text(
-                    text = item.supportingText,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-        }
+        Text(
+            text = item.label,
+            style = MaterialTheme.typography.bodyMedium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.widthIn(max = SuggestionButtonTextMaxWidth),
+        )
     }
 }
 
@@ -129,12 +116,36 @@ private fun PreviewAddressAutofillSuggestionBar() {
                     items = listOf(
                         AddressAutofillBarUiState.Item(
                             label = "山田 太郎",
-                            supportingText = "〒100-0001 東京都千代田区 千代田1-1",
                             onClick = {},
                         ),
                         AddressAutofillBarUiState.Item(
                             label = "佐藤 花子",
-                            supportingText = "〒150-0001 東京都渋谷区",
+                            onClick = {},
+                        ),
+                    ),
+                ),
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth(),
+            )
+        }
+    }
+}
+
+@Preview(name = "AddressAutofillSuggestionBarAddress")
+@Composable
+private fun PreviewAddressAutofillSuggestionBarAddress() {
+    BrowserTheme(themeMode = ThemeMode.THEME_SYSTEM) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            AddressAutofillSuggestionBar(
+                uiState = AddressAutofillBarUiState(
+                    items = listOf(
+                        AddressAutofillBarUiState.Item(
+                            label = "〒100-0001 東京都千代田区 千代田1-1",
+                            onClick = {},
+                        ),
+                        AddressAutofillBarUiState.Item(
+                            label = "〒150-0001 東京都渋谷区神宮前1-1-1",
                             onClick = {},
                         ),
                     ),
@@ -157,7 +168,6 @@ private fun PreviewAddressAutofillSuggestionBarEmail() {
                     items = listOf(
                         AddressAutofillBarUiState.Item(
                             label = "taro@example.com",
-                            supportingText = "山田 太郎",
                             onClick = {},
                         ),
                     ),
