@@ -35,7 +35,7 @@ class FormInputAutofillCoordinatorTest {
     @Test
     fun fieldFocusShowsSavedSuggestions() = runTest {
         val env = createEnv(this)
-        env.extension.onFieldFocus?.invoke("comment", "https://example.com/form")
+        env.extension.dispatchFieldFocus(env.session, "comment", "https://example.com/form")
         advanceTimeBy(imeReadyWaitMs)
         runCurrent()
 
@@ -48,7 +48,8 @@ class FormInputAutofillCoordinatorTest {
     @Test
     fun formSubmitSavesFields() = runTest {
         val env = createEnv(this)
-        env.extension.onFormSubmit?.invoke(
+        env.extension.dispatchFormSubmit(
+            env.session,
             "https://example.com/form",
             listOf(FormInputFieldMessage(fieldKey = "comment", value = "hello")),
         )
@@ -65,15 +66,51 @@ class FormInputAutofillCoordinatorTest {
     @Test
     fun fieldBlurHidesBar() = runTest {
         val env = createEnv(this)
-        env.extension.onFieldFocus?.invoke("comment", "https://example.com/form")
+        env.extension.dispatchFieldFocus(env.session, "comment", "https://example.com/form")
         advanceTimeBy(imeReadyWaitMs)
         runCurrent()
         assertTrue(env.host.isBarVisible)
 
-        env.extension.onFieldBlur?.invoke()
+        env.extension.dispatchFieldBlur(env.session)
         advanceTimeBy(blurHideWaitMs)
         runCurrent()
         assertFalse(env.host.isBarVisible)
+    }
+
+    @Test
+    fun detachDoesNotBreakOtherSessionListener() = runTest {
+        val dispatcher = StandardTestDispatcher(this.testScheduler)
+        val scope = CoroutineScope(SupervisorJob() + dispatcher)
+        val repository = mockk<FormInputRepository>(relaxed = true)
+        val extension = FormInputAutofillWebExtension()
+        val mainHost = RecordingHost(scope)
+        val popupHost = RecordingHost(scope)
+        val mainCoordinator = FormInputAutofillCoordinator(
+            fillExtension = extension,
+            ioDispatcher = dispatcher,
+        )
+        val popupCoordinator = FormInputAutofillCoordinator(
+            fillExtension = extension,
+            ioDispatcher = dispatcher,
+        )
+        val mainSession = GeckoSession()
+        val popupSession = GeckoSession()
+        coEvery {
+            repository.getSuggestions(
+                pageKey = FormInputPageKey(host = "example.com", path = "/form"),
+                fieldKey = "comment",
+            )
+        } returns listOf("saved value")
+
+        mainCoordinator.attach(mainSession, mainHost, repository)
+        popupCoordinator.attach(popupSession, popupHost, repository)
+        popupCoordinator.detach(popupSession)
+
+        extension.dispatchFieldFocus(mainSession, "comment", "https://example.com/form")
+        advanceTimeBy(imeReadyWaitMs)
+        runCurrent()
+
+        assertTrue(mainHost.isBarVisible)
     }
 
     private fun createEnv(scope: TestScope): TestEnv {
@@ -94,11 +131,12 @@ class FormInputAutofillCoordinatorTest {
         )
         val session = GeckoSession()
         coordinator.attach(session, host, repository)
-        return TestEnv(extension, host, repository, coordinator)
+        return TestEnv(extension, session, host, repository, coordinator)
     }
 
     private class TestEnv(
         val extension: FormInputAutofillWebExtension,
+        val session: GeckoSession,
         val host: RecordingHost,
         val repository: FormInputRepository,
         val coordinator: FormInputAutofillCoordinator,

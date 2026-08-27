@@ -67,7 +67,7 @@ val appModule = module {
     single { AddressAutofillWebExtension() }
     single { FormInputAutofillWebExtension() }
     single { AddressAutofillCoordinator(get()) }
-    single { FormInputAutofillCoordinator(get()) }
+    factory { FormInputAutofillCoordinator(get()) }
     single<GeckoRuntime> {
         // Gecko 起動前の pref 設定はキューされる。メインスレッドをブロックして待機すると
         // initializeGeckoRuntime() とデッドロックするため非同期で投入する。

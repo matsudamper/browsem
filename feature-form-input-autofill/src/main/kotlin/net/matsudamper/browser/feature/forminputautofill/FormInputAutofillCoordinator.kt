@@ -53,25 +53,32 @@ class FormInputAutofillCoordinator(
             hideJob = null
             attached = Attached(session, host, formInputRepository)
         }
-        fillExtension.onFieldFocus = { fieldKey, pageUrl ->
-            onFieldFocus(fieldKey, pageUrl)
-        }
-        fillExtension.onFieldBlur = { onFieldBlur() }
-        fillExtension.onFormSubmit = { pageUrl, fields ->
-            onFormSubmit(pageUrl, fields)
-        }
-        fillExtension.onFocusPortDisconnected = { onFocusPortDisconnected() }
-        fillExtension.registerSession(session)
+        fillExtension.registerSession(
+            session,
+            object : FormInputAutofillWebExtension.SessionListener {
+                override fun onFieldFocus(fieldKey: String, pageUrl: String) {
+                    handleFieldFocus(fieldKey, pageUrl)
+                }
+
+                override fun onFieldBlur() {
+                    handleFieldBlur()
+                }
+
+                override fun onFormSubmit(pageUrl: String, fields: List<FormInputFieldMessage>) {
+                    handleFormSubmit(pageUrl, fields)
+                }
+
+                override fun onFocusPortDisconnected() {
+                    handleFocusPortDisconnected()
+                }
+            },
+        )
     }
 
     fun detach(session: GeckoSession) {
         fillExtension.unregisterSession(session)
         synchronized(lock) {
             if (attached?.session !== session) return
-            fillExtension.onFieldFocus = null
-            fillExtension.onFieldBlur = null
-            fillExtension.onFormSubmit = null
-            fillExtension.onFocusPortDisconnected = null
             showJob?.cancel()
             showJob = null
             hideJob?.cancel()
@@ -84,7 +91,7 @@ class FormInputAutofillCoordinator(
         }
     }
 
-    private fun onFieldFocus(fieldKey: String, pageUrl: String) {
+    private fun handleFieldFocus(fieldKey: String, pageUrl: String) {
         val pageKey = parseFormInputPageKey(pageUrl) ?: return
         if (fieldKey.isBlank()) return
         if (isFocusSuppressed(fieldKey)) {
@@ -126,7 +133,7 @@ class FormInputAutofillCoordinator(
         }
     }
 
-    private fun onFormSubmit(pageUrl: String, fields: List<FormInputFieldMessage>) {
+    private fun handleFormSubmit(pageUrl: String, fields: List<FormInputFieldMessage>) {
         val pageKey = parseFormInputPageKey(pageUrl) ?: return
         val current = synchronized(lock) { attached } ?: return
         if (fields.isEmpty()) return
@@ -143,7 +150,7 @@ class FormInputAutofillCoordinator(
         }
     }
 
-    fun onFieldBlur() {
+    private fun handleFieldBlur() {
         synchronized(lock) {
             val current = attached ?: return
             showJob?.cancel()
@@ -163,7 +170,7 @@ class FormInputAutofillCoordinator(
         }
     }
 
-    fun onFocusPortDisconnected() {
+    private fun handleFocusPortDisconnected() {
         synchronized(lock) {
             showJob?.cancel()
             showJob = null

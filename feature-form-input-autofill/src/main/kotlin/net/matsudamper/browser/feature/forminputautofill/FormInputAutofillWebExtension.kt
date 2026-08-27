@@ -21,22 +21,18 @@ class FormInputAutofillWebExtension {
     private val mainHandler = Handler(Looper.getMainLooper())
     private val sessionPorts = ConcurrentHashMap<GeckoSession, MutableSet<WebExtension.Port>>()
     private val lastFocusPorts = ConcurrentHashMap<GeckoSession, WebExtension.Port>()
+    private val sessionListeners = ConcurrentHashMap<GeckoSession, SessionListener>()
     private val attachedSessions: MutableSet<GeckoSession> =
         Collections.newSetFromMap(ConcurrentHashMap())
     private val delegatedSessions: MutableSet<GeckoSession> =
         Collections.newSetFromMap(ConcurrentHashMap())
 
-    @Volatile
-    var onFieldFocus: ((String, String) -> Unit)? = null
-
-    @Volatile
-    var onFieldBlur: (() -> Unit)? = null
-
-    @Volatile
-    var onFormSubmit: ((String, List<FormInputFieldMessage>) -> Unit)? = null
-
-    @Volatile
-    var onFocusPortDisconnected: (() -> Unit)? = null
+    interface SessionListener {
+        fun onFieldFocus(fieldKey: String, pageUrl: String)
+        fun onFieldBlur()
+        fun onFormSubmit(pageUrl: String, fields: List<FormInputFieldMessage>)
+        fun onFocusPortDisconnected()
+    }
 
     fun install(runtime: GeckoRuntime) {
         runtime.webExtensionController
@@ -53,12 +49,14 @@ class FormInputAutofillWebExtension {
             )
     }
 
-    fun registerSession(session: GeckoSession) {
+    fun registerSession(session: GeckoSession, listener: SessionListener) {
+        sessionListeners[session] = listener
         attachedSessions.add(session)
         extension?.also { ext -> attachSessionDelegate(session, ext) }
     }
 
     fun unregisterSession(session: GeckoSession) {
+        sessionListeners.remove(session)
         attachedSessions.remove(session)
         delegatedSessions.remove(session)
         sessionPorts.remove(session)
@@ -99,23 +97,24 @@ class FormInputAutofillWebExtension {
                     port.setDelegate(object : WebExtension.PortDelegate {
                         override fun onPortMessage(message: Any, port: WebExtension.Port) {
                             val json = message as? JSONObject ?: return
+                            val listener = sessionListeners[session] ?: return
                             when (json.optString("action")) {
                                 "field-focus" -> {
                                     val fieldKey = json.optString("fieldKey")
                                     val pageUrl = json.optString("pageUrl")
                                     lastFocusPorts[session] = port
                                     mainHandler.post {
-                                        onFieldFocus?.invoke(fieldKey, pageUrl)
+                                        listener.onFieldFocus(fieldKey, pageUrl)
                                     }
                                 }
                                 "field-blur" -> {
-                                    mainHandler.post { onFieldBlur?.invoke() }
+                                    mainHandler.post { listener.onFieldBlur() }
                                 }
                                 "form-submit" -> {
                                     val pageUrl = json.optString("pageUrl")
                                     val fields = parseFields(json.optJSONArray("fields"))
                                     mainHandler.post {
-                                        onFormSubmit?.invoke(pageUrl, fields)
+                                        listener.onFormSubmit(pageUrl, fields)
                                     }
                                 }
                             }
@@ -125,7 +124,10 @@ class FormInputAutofillWebExtension {
                             sessionPorts[session]?.remove(connectedPort)
                             if (lastFocusPorts[session] === connectedPort) {
                                 lastFocusPorts.remove(session)
-                                mainHandler.post { onFocusPortDisconnected?.invoke() }
+                                val listener = sessionListeners[session]
+                                if (listener != null) {
+                                    mainHandler.post { listener.onFocusPortDisconnected() }
+                                }
                             }
                         }
                     })
@@ -146,6 +148,22 @@ class FormInputAutofillWebExtension {
             result.add(FormInputFieldMessage(fieldKey = fieldKey, value = value))
         }
         return result
+    }
+
+    internal fun dispatchFieldFocus(session: GeckoSession, fieldKey: String, pageUrl: String) {
+        sessionListeners[session]?.onFieldFocus(fieldKey, pageUrl)
+    }
+
+    internal fun dispatchFieldBlur(session: GeckoSession) {
+        sessionListeners[session]?.onFieldBlur()
+    }
+
+    internal fun dispatchFormSubmit(
+        session: GeckoSession,
+        pageUrl: String,
+        fields: List<FormInputFieldMessage>,
+    ) {
+        sessionListeners[session]?.onFormSubmit(pageUrl, fields)
     }
 
     companion object {

@@ -18,7 +18,13 @@
   const POSTAL_TOKENS = ['postal-code', 'postalcode', 'zip', 'zipcode', 'postcode'];
   const COUNTRY_TOKENS = ['country', 'country-name', 'countryname'];
   const TEL_TOKENS = ['tel', 'telephone', 'phone'];
-  const EMAIL_TOKENS = ['email'];
+  const EMAIL_TOKENS = ['email', 'e-mail'];
+  const CREDIT_CARD_TOKENS = [
+    'cc-number', 'ccnumber', 'cc-exp', 'ccexp', 'cc-exp-month', 'ccexpmonth',
+    'cc-exp-year', 'ccexyear', 'cc-csc', 'cccsc', 'cc-name', 'ccname',
+    'cc-type', 'cctype', 'cc', 'creditcard', 'credit-card',
+  ];
+  const GENERIC_SENSITIVE_IDENTIFIERS = ['name', 'address'];
 
   const ADDRESS_FIELD_MAP = [
     { tokens: FAMILY_NAME_TOKENS, key: 'familyName' },
@@ -66,7 +72,9 @@
 
   function hasAutocompleteOff(el) {
     const autocomplete = (el.getAttribute('autocomplete') || '').toLowerCase().trim();
-    return autocomplete === 'off' || autocomplete === 'new-password';
+    return autocomplete === 'off' ||
+      autocomplete === 'new-password' ||
+      autocomplete === 'current-password';
   }
 
   function isEmailField(el) {
@@ -105,6 +113,20 @@
     return hasAnyToken(identityTokens(el), nameIdAliases);
   }
 
+  function isCreditCardField(el) {
+    const auto = autocompleteTokens(el);
+    const identity = identityTokens(el);
+    return hasAnyToken(auto, CREDIT_CARD_TOKENS) || hasAnyToken(identity, CREDIT_CARD_TOKENS);
+  }
+
+  function isGenericSensitiveIdentity(el) {
+    const id = (el.id || '').trim().toLowerCase();
+    const name = (el.getAttribute('name') || '').trim().toLowerCase();
+    return GENERIC_SENSITIVE_IDENTIFIERS.some(function (identifier) {
+      return id === identifier || name === identifier;
+    });
+  }
+
   function isAddressField(el) {
     if (isEmailField(el)) return false;
     const auto = autocompleteTokens(el);
@@ -119,7 +141,11 @@
   }
 
   function isExcludedAutofillField(el) {
-    return isEmailField(el) || isNameField(el) || isAddressField(el);
+    return isEmailField(el) ||
+      isNameField(el) ||
+      isAddressField(el) ||
+      isCreditCardField(el) ||
+      isGenericSensitiveIdentity(el);
   }
 
   function isTargetField(el) {
