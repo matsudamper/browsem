@@ -110,6 +110,7 @@ class AddressAutofillPromptTest {
 
         composeRule.openUrlFromUrlBar(pageUri)
         composeRule.waitForUrlBarContains(MDN_AUTOCOMPLETE_SAMPLE_FILE_NAME, timeoutMillis = 60_000)
+        composeRule.waitForUrlBarNotFocused(timeoutMillis = 30_000)
 
         selectFirstAutofillSuggestion(
             extraMessage = "MDN autocomplete と同じマークアップで住所の候補バーが出ない\n" +
@@ -207,6 +208,7 @@ class AddressAutofillPromptTest {
 
         composeRule.openUrlFromUrlBar(pageUri)
         composeRule.waitForUrlBarContains(ADDRESS_SELECT_FORM_FILE_NAME, timeoutMillis = 60_000)
+        composeRule.waitForUrlBarNotFocused(timeoutMillis = 30_000)
 
         selectFirstAutofillSuggestion(
             extraMessage = "Mozilla の address_form.html で住所の候補バーが出ない\n" +
@@ -239,6 +241,7 @@ class AddressAutofillPromptTest {
 
         composeRule.openUrlFromUrlBar(pageUri)
         composeRule.waitForUrlBarContains(ADDRESS_FORM_FILE_NAME, timeoutMillis = 60_000)
+        composeRule.waitForUrlBarNotFocused(timeoutMillis = 30_000)
 
         // ページは load 後にフォームへ値を投入して自動送信する (load+8秒, フォールバック+12秒)。
         // 送信先は hidden iframe (メインページは遷移しない) のため、
@@ -268,10 +271,24 @@ class AddressAutofillPromptTest {
     }
 
     private fun selectFirstAutofillSuggestion(extraMessage: String) {
+        selectAutofillSuggestion(
+            optionTestTag = AddressAutofillSuggestionBarTestTags.NameOption.testTag,
+            extraMessage = extraMessage,
+        )
+    }
+
+    private fun selectEmailAutofillSuggestion(extraMessage: String) {
+        selectAutofillSuggestion(
+            optionTestTag = AddressAutofillSuggestionBarTestTags.EmailOption.testTag,
+            extraMessage = extraMessage,
+        )
+    }
+
+    private fun selectAutofillSuggestion(optionTestTag: String, extraMessage: String) {
         try {
             composeRule.waitUntil(timeoutMillis = 30_000) {
                 composeRule
-                    .onAllNodesWithTag(AddressAutofillSuggestionBarTestTags.Option.testTag)
+                    .onAllNodesWithTag(optionTestTag)
                     .fetchSemanticsNodes()
                     .isNotEmpty()
             }
@@ -285,7 +302,7 @@ class AddressAutofillPromptTest {
             )
         }
         composeRule
-            .onAllNodesWithTag(AddressAutofillSuggestionBarTestTags.Option.testTag)
+            .onAllNodesWithTag(optionTestTag)
             .onFirst()
             .performClick()
     }
@@ -311,7 +328,7 @@ class AddressAutofillPromptTest {
 
     private fun selectEmailAndWaitUntilFilled(extraMessage: String) {
         val fieldClick = clickMdnEmailField()
-        selectFirstAutofillSuggestion(
+        selectEmailAutofillSuggestion(
             extraMessage = "$extraMessage (メールの候補バーが出ない)\nメール欄クリック=$fieldClick",
         )
         try {
