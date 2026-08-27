@@ -7,12 +7,17 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -26,24 +31,88 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import net.matsudamper.browser.data.ThemeMode
 import net.matsudamper.browser.ui.common.BrowserTheme
 import net.matsudamper.browser.resources.R as ResourcesR
 
+/** DropdownMenu の上下マージン。Material3 の MenuVerticalMargin と同値 */
+private val ToolbarMenuVerticalMargin = 48.dp
+
+private val ToolbarMenuScrollbarWidth = 3.dp
+private val ToolbarMenuScrollbarColor = Color(0xFFBDBDBD)
+private val ToolbarMenuScrollbarMinThumbHeight = 24.dp
+
+/**
+ * スクロール可能なときだけ右端に薄いグレーのスクロールバーを常時表示する。
+ * verticalScroll より前にチェーンすること。
+ */
+private fun Modifier.toolbarMenuScrollbar(scrollState: ScrollState): Modifier = drawWithContent {
+    drawContent()
+    val indicator = scrollState.scrollIndicatorState ?: return@drawWithContent
+    val contentSize = indicator.contentSize
+    val viewportSize = indicator.viewportSize
+    if (contentSize <= viewportSize || viewportSize <= 0) {
+        return@drawWithContent
+    }
+    val scrollbarWidthPx = ToolbarMenuScrollbarWidth.toPx()
+    val minThumbHeightPx = ToolbarMenuScrollbarMinThumbHeight.toPx()
+    val maxThumbHeightPx = viewportSize.toFloat()
+    val effectiveMinThumbHeightPx = minOf(minThumbHeightPx, maxThumbHeightPx)
+    val thumbHeight = (viewportSize.toFloat() / contentSize * viewportSize)
+        .coerceIn(effectiveMinThumbHeightPx, maxThumbHeightPx)
+    val maxScroll = (contentSize - viewportSize).coerceAtLeast(1)
+    val trackHeight = viewportSize - thumbHeight
+    val thumbOffset = indicator.scrollOffset.toFloat() / maxScroll * trackHeight
+    drawRoundRect(
+        color = ToolbarMenuScrollbarColor,
+        topLeft = Offset(x = size.width - scrollbarWidthPx, y = thumbOffset),
+        size = Size(width = scrollbarWidthPx, height = thumbHeight),
+        cornerRadius = CornerRadius(scrollbarWidthPx / 2f),
+    )
+}
+
+/**
+ * キーボード表示中にツールバーメニューが IME に隠れないよう、
+ * アンカー下端から IME 上端までの高さをメニューの高さ上限とする。
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun rememberToolbarMenuMaxHeight(menuAnchorBottomPx: Int): Dp {
+    val density = LocalDensity.current
+    val windowHeightPx = LocalWindowInfo.current.containerSize.height
+    val imeBottomPx = WindowInsets.ime.getBottom(density)
+    return with(density) {
+        val marginPx = ToolbarMenuVerticalMargin.roundToPx()
+        val imeTopPx = windowHeightPx - imeBottomPx
+        val availablePx = (imeTopPx - menuAnchorBottomPx - marginPx).coerceAtLeast(0)
+        availablePx.toDp()
+    }
+}
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun ToolbarMenu(
     visibleMenu: Boolean,
+    menuAnchorBottomPx: Int,
     onDismissRequest: () -> Unit,
     onRefresh: () -> Unit,
     onSuperRefresh: () -> Unit,
@@ -80,9 +149,15 @@ internal fun ToolbarMenu(
     onOpenDownloads: (() -> Unit)? = null,
     onOpenDevTools: (() -> Unit)? = null,
 ) {
+    val menuScrollState = rememberScrollState()
+    val menuMaxHeight = rememberToolbarMenuMaxHeight(menuAnchorBottomPx)
     DropdownMenu(
         expanded = visibleMenu,
-        onDismissRequest = { onDismissRequest() }
+        onDismissRequest = { onDismissRequest() },
+        modifier = Modifier
+            .heightIn(max = menuMaxHeight)
+            .toolbarMenuScrollbar(menuScrollState),
+        scrollState = menuScrollState,
     ) {
         ToolbarMenuContent(
             onDismissRequest = onDismissRequest,
@@ -668,6 +743,118 @@ private fun PreviewToolbarMenuContentWebApp() {
                 onOpenSiteSettings = {},
                 onOpenDownloads = null,
                 onOpenDevTools = null,
+            )
+        }
+    }
+}
+
+@Preview(name = "ToolbarMenuConstrainedHeight")
+@Preview(name = "ToolbarMenuConstrainedHeightDark", uiMode = Configuration.UI_MODE_NIGHT_YES)
+@Composable
+private fun PreviewToolbarMenuContentConstrainedHeight() {
+    BrowserTheme(themeMode = ThemeMode.THEME_SYSTEM) {
+        val scrollState = rememberScrollState()
+        // キーボード表示時と同様に縦方向の表示領域が狭い状態を再現する
+        Surface(
+            modifier = Modifier
+                .width(280.dp)
+                .heightIn(max = 320.dp)
+                .toolbarMenuScrollbar(scrollState)
+                .verticalScroll(scrollState),
+        ) {
+            ToolbarMenuContent(
+                onDismissRequest = {},
+                onRefresh = {},
+                onSuperRefresh = {},
+                onHome = {},
+                onForward = {},
+                canGoForward = true,
+                onBack = {},
+                canGoBack = true,
+                onLongPressHistory = {},
+                isPcMode = false,
+                onPcModeToggle = {},
+                showInstallExtensionItem = true,
+                onInstallExtension = {},
+                onTranslatePage = {},
+                onShare = {},
+                onFindInPage = {},
+                onOpenSettings = {},
+                onAddToHomeScreen = {},
+                pageZoomPercent = 100,
+                onPageZoomIn = {},
+                onPageZoomOut = {},
+                onResetPageZoom = {},
+                extensionActions = emptyList(),
+                extensionActionScrollState = null,
+                onExtensionActionClick = {},
+                onExtensionActionMove = { _, _ -> },
+                onExtensionActionMoveEnd = {},
+                onExtensionActionMoveCancel = {},
+                showOpenSettings = true,
+                showAddToHomeScreen = true,
+                showHome = true,
+                onOpenInBrowser = null,
+                onOpenSiteSettings = {},
+                onOpenDownloads = {},
+                onOpenDevTools = {},
+            )
+        }
+    }
+}
+
+@Preview(name = "ToolbarMenuConstrainedHeightScrolled")
+@Preview(name = "ToolbarMenuConstrainedHeightScrolledDark", uiMode = Configuration.UI_MODE_NIGHT_YES)
+@Composable
+private fun PreviewToolbarMenuContentConstrainedHeightScrolled() {
+    BrowserTheme(themeMode = ThemeMode.THEME_SYSTEM) {
+        val scrollState = rememberScrollState()
+        LaunchedEffect(Unit) {
+            scrollState.scrollTo(scrollState.maxValue)
+        }
+        Surface(
+            modifier = Modifier
+                .width(280.dp)
+                .heightIn(max = 320.dp)
+                .toolbarMenuScrollbar(scrollState)
+                .verticalScroll(scrollState),
+        ) {
+            ToolbarMenuContent(
+                onDismissRequest = {},
+                onRefresh = {},
+                onSuperRefresh = {},
+                onHome = {},
+                onForward = {},
+                canGoForward = true,
+                onBack = {},
+                canGoBack = true,
+                onLongPressHistory = {},
+                isPcMode = false,
+                onPcModeToggle = {},
+                showInstallExtensionItem = true,
+                onInstallExtension = {},
+                onTranslatePage = {},
+                onShare = {},
+                onFindInPage = {},
+                onOpenSettings = {},
+                onAddToHomeScreen = {},
+                pageZoomPercent = 100,
+                onPageZoomIn = {},
+                onPageZoomOut = {},
+                onResetPageZoom = {},
+                extensionActions = emptyList(),
+                extensionActionScrollState = null,
+                onExtensionActionClick = {},
+                onExtensionActionMove = { _, _ -> },
+                onExtensionActionMoveEnd = {},
+                onExtensionActionMoveCancel = {},
+                showOpenSettings = true,
+                showAddToHomeScreen = true,
+                showHome = true,
+                onOpenInBrowser = null,
+                onOpenSiteSettings = {},
+                onOpenDownloads = {},
+                onOpenDevTools = {},
             )
         }
     }
