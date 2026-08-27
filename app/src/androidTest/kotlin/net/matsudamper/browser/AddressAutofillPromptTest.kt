@@ -284,7 +284,9 @@ class AddressAutofillPromptTest {
             )
         }
         var picked = false
-        composeRule.activity.runOnUiThread {
+        // runOnUiThread は UI スレッドへ post するだけで完了を待たない。
+        // 選択前にアサートすると picked=false のまま落ちる。
+        InstrumentationRegistry.getInstrumentation().runOnMainSync {
             picked = findAddressAutofillGeckoView()?.pickCompletionAt(0) == true
         }
         if (!picked) {
