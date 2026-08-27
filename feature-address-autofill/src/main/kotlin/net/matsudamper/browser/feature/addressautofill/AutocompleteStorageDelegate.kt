@@ -115,11 +115,19 @@ fun AddressEntity.toGeckoCountry(): String {
 
 fun Autocomplete.Address.toEntity(): AddressEntity {
     val existingId = guid?.toLongOrNull() ?: 0L
+    val given = givenName.orEmpty()
+    val additional = additionalName.orEmpty()
+    val family = familyName.orEmpty()
+    val resolvedGiven = if (given.isBlank() && additional.isBlank() && family.isBlank()) {
+        name.orEmpty()
+    } else {
+        given
+    }
     return AddressEntity(
         id = existingId,
-        givenName = givenName,
-        additionalName = additionalName,
-        familyName = familyName,
+        givenName = resolvedGiven,
+        additionalName = additional,
+        familyName = family,
         organization = organization,
         streetAddress = streetAddress,
         addressLevel1 = addressLevel1,

@@ -4,6 +4,7 @@ import net.matsudamper.browser.data.address.AddressEntity
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.mozilla.geckoview.Autocomplete
 
 class AutocompleteAddressMappingTest {
 
@@ -43,5 +44,16 @@ class AutocompleteAddressMappingTest {
         ).toGeckoAddress()
 
         assertTrue(gecko.country.isNotBlank())
+    }
+
+    @Test
+    fun toEntityFallsBackToNameWhenComponentsAreBlank() {
+        val entity = Autocomplete.Address.Builder()
+            .name("山田 太郎")
+            .build()
+            .toEntity()
+        assertEquals("山田 太郎", entity.givenName)
+        assertEquals("", entity.familyName)
+        assertEquals("", entity.additionalName)
     }
 }
