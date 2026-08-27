@@ -27,6 +27,30 @@ class AutocompleteAddressMappingTest {
     }
 
     @Test
+    fun toGeckoFullNameUsesFamilyNameFirstForJapan() {
+        assertEquals(
+            "山田 太郎",
+            AddressEntity(
+                givenName = "太郎",
+                familyName = "山田",
+                country = "JP",
+            ).toGeckoFullName(),
+        )
+    }
+
+    @Test
+    fun toGeckoFullNameUsesGivenNameFirstForUs() {
+        assertEquals(
+            "Peter Parker",
+            AddressEntity(
+                givenName = "Peter",
+                familyName = "Parker",
+                country = "US",
+            ).toGeckoFullName(),
+        )
+    }
+
+    @Test
     fun toGeckoFullNameUsesFamilyNameWhenGivenNameIsEmpty() {
         assertEquals(
             "山田",

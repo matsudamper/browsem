@@ -91,9 +91,13 @@ fun AddressEntity.toGeckoAddress(): Autocomplete.Address {
 }
 
 fun AddressEntity.toGeckoFullName(): String {
-    return listOf(givenName, additionalName, familyName)
-        .filter { it.isNotEmpty() }
-        .joinToString(" ")
+    val familyFirst = toGeckoCountry().equals("JP", ignoreCase = true)
+    val parts = if (familyFirst) {
+        listOf(familyName, givenName, additionalName)
+    } else {
+        listOf(givenName, additionalName, familyName)
+    }
+    return parts.filter { it.isNotEmpty() }.joinToString(" ")
 }
 
 /**
