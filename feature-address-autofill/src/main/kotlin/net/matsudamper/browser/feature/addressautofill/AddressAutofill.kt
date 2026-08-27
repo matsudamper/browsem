@@ -5,6 +5,7 @@ import android.os.Looper
 import android.os.SystemClock
 import android.util.Log
 import android.util.SparseArray
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -57,11 +58,14 @@ fun suggestionKindFromFieldKind(kind: String?): AddressAutofillSuggestionKind {
  */
 class AddressAutofillCoordinator(
     private val fillExtension: AddressAutofillWebExtension,
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) {
     private val lock = Any()
     private var attached: Attached? = null
     private var showJob: Job? = null
+    private var hideJob: Job? = null
     private var lastFieldKind: String? = null
+    private var focusGeneration: Int = 0
     private var suppressFocusUntilElapsed: Long = 0L
     private var suppressFocusKind: String? = null
 
@@ -77,6 +81,10 @@ class AddressAutofillCoordinator(
         addressRepository: AddressRepository,
     ) {
         synchronized(lock) {
+            showJob?.cancel()
+            showJob = null
+            hideJob?.cancel()
+            hideJob = null
             attached = Attached(session, host, addressRepository)
             host.focusedAutofillKind = lastFieldKind
             host.onAddressSelectOptions = { options ->
@@ -85,6 +93,7 @@ class AddressAutofillCoordinator(
             }
         }
         fillExtension.onFieldFocus = { kind -> onFieldFocus(kind) }
+        fillExtension.onFieldBlur = { onFieldBlur() }
         fillExtension.registerSession(session)
     }
 
@@ -93,8 +102,12 @@ class AddressAutofillCoordinator(
         synchronized(lock) {
             if (attached?.session !== session) return
             fillExtension.onFieldFocus = null
+            fillExtension.onFieldBlur = null
             showJob?.cancel()
             showJob = null
+            hideJob?.cancel()
+            hideJob = null
+            focusGeneration += 1
             attached?.host?.focusedAutofillKind = null
             attached?.host?.onAddressSelectOptions = null
             attached?.host?.hideAddressAutofillBar()
@@ -110,6 +123,9 @@ class AddressAutofillCoordinator(
         val current = synchronized(lock) {
             showJob?.cancel()
             showJob = null
+            hideJob?.cancel()
+            hideJob = null
+            focusGeneration += 1
             suppressFocusUntilElapsed = SystemClock.elapsedRealtime() + FILL_FOCUS_SUPPRESS_MS
             suppressFocusKind = when (mode) {
                 AddressAutofillFillMode.Email -> FIELD_KIND_EMAIL
@@ -151,6 +167,7 @@ class AddressAutofillCoordinator(
                         }
                     },
                     present = ::presentCompletions,
+                    ioDispatcher = ioDispatcher,
                 )
             }
         }
@@ -160,8 +177,11 @@ class AddressAutofillCoordinator(
         if (kind == FIELD_KIND_OTHER) {
             val current = synchronized(lock) {
                 lastFieldKind = kind
+                focusGeneration += 1
                 showJob?.cancel()
                 showJob = null
+                hideJob?.cancel()
+                hideJob = null
                 attached
             } ?: return
             current.host.focusedAutofillKind = kind
@@ -176,6 +196,9 @@ class AddressAutofillCoordinator(
                 return
             }
             lastFieldKind = kind
+            focusGeneration += 1
+            hideJob?.cancel()
+            hideJob = null
             attached
         } ?: return
         current.host.focusedAutofillKind = kind
@@ -193,9 +216,36 @@ class AddressAutofillCoordinator(
                         }
                     },
                     present = ::presentCompletions,
+                    ioDispatcher = ioDispatcher,
                 )
             }
         }
+    }
+
+    /**
+     * 入力欄からフォーカスが外れたときに候補バーを閉じる。
+     * バーをタップすると Gecko 側は先に blur するため、即消しせず短時間待ってから消す。
+     * 待ち時間内に候補タップや再フォーカスがあれば hide を取り消す。
+     */
+    fun onFieldBlur() {
+        synchronized(lock) {
+            val current = attached ?: return
+            showJob?.cancel()
+            showJob = null
+            lastFieldKind = FIELD_KIND_OTHER
+            val generation = focusGeneration
+            hideJob?.cancel()
+            hideJob = current.host.coroutineScope.launch {
+                delay(ADDRESS_AUTOFILL_BLUR_HIDE_WAIT_MS)
+                val host = synchronized(lock) {
+                    if (focusGeneration != generation) return@launch
+                    attached?.host
+                } ?: return@launch
+                host.focusedAutofillKind = FIELD_KIND_OTHER
+                host.hideAddressAutofillBar()
+            }
+        }
+        Log.i(TAG, "field-blur schedule hide")
     }
 
     private fun presentCompletions(
@@ -308,7 +358,8 @@ class AddressAutofillDelegate(
         data: Autofill.NodeData,
     ) {
         wrapped?.onNodeBlur(session, node, data)
-        // バーをタップすると Gecko 側は blur するため、blur では候補を消さない
+        // バーをタップすると Gecko 側は blur するため、即消しせず Coordinator 側で遅延 hide する
+        mainHandler.post { coordinator.onFieldBlur() }
     }
 }
 
@@ -317,10 +368,11 @@ private suspend fun scheduleSuggestionBar(
     kind: AddressAutofillSuggestionKind,
     shouldAbort: () -> Boolean,
     present: (List<Autocomplete.Address>, AddressAutofillSuggestionKind) -> Unit,
+    ioDispatcher: CoroutineDispatcher,
 ) {
-    delay(IME_READY_WAIT_MS)
+    delay(ADDRESS_AUTOFILL_IME_READY_WAIT_MS)
     if (shouldAbort()) return
-    val addresses = withContext(Dispatchers.IO) { addressRepository.getAll() }
+    val addresses = withContext(ioDispatcher) { addressRepository.getAll() }
         .map { it.toGeckoAddress() }
     if (addresses.isEmpty()) return
     if (shouldAbort()) return
@@ -351,7 +403,8 @@ fun fillAddressOnSession(
 }
 
 private const val TAG = "AddressAutofill"
-private const val IME_READY_WAIT_MS = 150L
+internal const val ADDRESS_AUTOFILL_IME_READY_WAIT_MS = 150L
+internal const val ADDRESS_AUTOFILL_BLUR_HIDE_WAIT_MS = 300L
 private const val FILL_FOCUS_SUPPRESS_MS = 1_500L
 const val FIELD_KIND_NAME = "name"
 const val FIELD_KIND_ADDRESS = "address"

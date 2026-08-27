@@ -36,6 +36,9 @@ class AddressAutofillWebExtension {
     @Volatile
     var onFieldFocus: ((String) -> Unit)? = null
 
+    @Volatile
+    var onFieldBlur: (() -> Unit)? = null
+
     fun install(runtime: GeckoRuntime) {
         Log.d(TAG, "install() 開始: uri=$EXTENSION_URI")
         runtime.webExtensionController
@@ -145,10 +148,16 @@ class AddressAutofillWebExtension {
                     port.setDelegate(object : WebExtension.PortDelegate {
                         override fun onPortMessage(message: Any, port: WebExtension.Port) {
                             val json = message as? JSONObject ?: return
-                            if (json.optString("action") != "field-focus") return
-                            val kind = json.optString("kind")
-                            lastFocusPorts[session] = port
-                            mainHandler.post { onFieldFocus?.invoke(kind) }
+                            when (json.optString("action")) {
+                                "field-focus" -> {
+                                    val kind = json.optString("kind")
+                                    lastFocusPorts[session] = port
+                                    mainHandler.post { onFieldFocus?.invoke(kind) }
+                                }
+                                "field-blur" -> {
+                                    mainHandler.post { onFieldBlur?.invoke() }
+                                }
+                            }
                         }
 
                         override fun onDisconnect(port: WebExtension.Port) {
