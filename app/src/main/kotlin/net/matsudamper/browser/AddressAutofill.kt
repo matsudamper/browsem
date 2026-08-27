@@ -106,6 +106,8 @@ internal class AddressAutofillCoordinator(
         mode: AddressAutofillFillMode,
     ) {
         val current = synchronized(lock) {
+            showJob?.cancel()
+            showJob = null
             suppressFocusUntilElapsed = SystemClock.elapsedRealtime() + FILL_FOCUS_SUPPRESS_MS
             suppressFocusKind = when (mode) {
                 AddressAutofillFillMode.Email -> FIELD_KIND_EMAIL
@@ -139,7 +141,11 @@ internal class AddressAutofillCoordinator(
                 scheduleSuggestionBar(
                     addressRepository = current.addressRepository,
                     kind = kind,
-                    shouldAbort = { synchronized(lock) { lastFieldKind == FIELD_KIND_EMAIL } },
+                    shouldAbort = {
+                        synchronized(lock) {
+                            lastFieldKind == FIELD_KIND_EMAIL || isFocusSuppressed(FIELD_KIND_ADDRESS)
+                        }
+                    },
                     present = ::presentCompletions,
                 )
             }
@@ -165,7 +171,11 @@ internal class AddressAutofillCoordinator(
                 scheduleSuggestionBar(
                     addressRepository = current.addressRepository,
                     kind = suggestionKind,
-                    shouldAbort = { synchronized(lock) { lastFieldKind != kind } },
+                    shouldAbort = {
+                        synchronized(lock) {
+                            lastFieldKind != kind || isFocusSuppressed(kind)
+                        }
+                    },
                     present = ::presentCompletions,
                 )
             }
@@ -189,6 +199,7 @@ internal class AddressAutofillCoordinator(
             } else {
                 AddressAutofillBarUiState.Item(
                     label = label,
+                    kind = kind,
                     onClick = { fillSelectedAddress(address, fillMode) },
                 )
             }

@@ -23,6 +23,7 @@ internal class AddressAutofillWebExtension {
     private val mainHandler = Handler(Looper.getMainLooper())
     private val sessionPorts = ConcurrentHashMap<GeckoSession, MutableSet<WebExtension.Port>>()
     private val pendingFills = ConcurrentHashMap<GeckoSession, PendingFill>()
+    private val fillRetryRunnables = ConcurrentHashMap<GeckoSession, MutableList<Runnable>>()
     private val attachedSessions: MutableSet<GeckoSession> =
         Collections.newSetFromMap(ConcurrentHashMap())
     private val delegatedSessions: MutableSet<GeckoSession> =
@@ -58,6 +59,9 @@ internal class AddressAutofillWebExtension {
         delegatedSessions.remove(session)
         sessionPorts.remove(session)
         pendingFills.remove(session)
+        fillRetryRunnables.remove(session)?.forEach { runnable ->
+            mainHandler.removeCallbacks(runnable)
+        }
         extension?.let { ext ->
             session.webExtensionController.setMessageDelegate(ext, null, NATIVE_APP_ID)
         }
@@ -73,9 +77,17 @@ internal class AddressAutofillWebExtension {
             message = message,
             untilElapsedRealtime = SystemClock.elapsedRealtime() + FILL_RETRY_WINDOW_MS,
         )
+        fillRetryRunnables.remove(session)?.forEach { runnable ->
+            mainHandler.removeCallbacks(runnable)
+        }
         postFill(session, message)
-        mainHandler.postDelayed({ postFill(session, message) }, 250)
-        mainHandler.postDelayed({ postFill(session, message) }, 1_000)
+        val retries = mutableListOf<Runnable>()
+        listOf(250L, 1_000L).forEach { delayMs ->
+            val retry = Runnable { postFill(session, message) }
+            retries.add(retry)
+            mainHandler.postDelayed(retry, delayMs)
+        }
+        fillRetryRunnables[session] = retries
     }
 
     private fun postFill(session: GeckoSession, message: JSONObject) {

@@ -37,6 +37,7 @@ internal data class AddressAutofillBarUiState(
     @Stable
     data class Item(
         val label: String,
+        val kind: AddressAutofillSuggestionKind,
         val onClick: () -> Unit,
     )
 }
@@ -78,7 +79,7 @@ private fun AddressAutofillSuggestionButton(
         onClick = item.onClick,
         modifier = Modifier
             .widthIn(max = SuggestionButtonMaxWidth)
-            .testTag(AddressAutofillSuggestionBarTestTags.Option.testTag)
+            .testTag(item.kind.optionTestTag)
             // Gecko の入力フォーカスと IME を奪わない
             .focusProperties { canFocus = false },
         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
@@ -104,7 +105,26 @@ sealed interface AddressAutofillSuggestionBarTestTags {
     data object Option : AddressAutofillSuggestionBarTestTags {
         override val id = "address_autofill_suggestion_option"
     }
+
+    data object NameOption : AddressAutofillSuggestionBarTestTags {
+        override val id = "address_autofill_suggestion_option_name"
+    }
+
+    data object AddressOption : AddressAutofillSuggestionBarTestTags {
+        override val id = "address_autofill_suggestion_option_address"
+    }
+
+    data object EmailOption : AddressAutofillSuggestionBarTestTags {
+        override val id = "address_autofill_suggestion_option_email"
+    }
 }
+
+internal val AddressAutofillSuggestionKind.optionTestTag: String
+    get() = when (this) {
+        AddressAutofillSuggestionKind.Name -> AddressAutofillSuggestionBarTestTags.NameOption.testTag
+        AddressAutofillSuggestionKind.Address -> AddressAutofillSuggestionBarTestTags.AddressOption.testTag
+        AddressAutofillSuggestionKind.Email -> AddressAutofillSuggestionBarTestTags.EmailOption.testTag
+    }
 
 @Preview(name = "AddressAutofillSuggestionBar")
 @Composable
@@ -116,10 +136,12 @@ private fun PreviewAddressAutofillSuggestionBar() {
                     items = listOf(
                         AddressAutofillBarUiState.Item(
                             label = "山田 太郎",
+                            kind = AddressAutofillSuggestionKind.Name,
                             onClick = {},
                         ),
                         AddressAutofillBarUiState.Item(
                             label = "佐藤 花子",
+                            kind = AddressAutofillSuggestionKind.Name,
                             onClick = {},
                         ),
                     ),
@@ -142,10 +164,12 @@ private fun PreviewAddressAutofillSuggestionBarAddress() {
                     items = listOf(
                         AddressAutofillBarUiState.Item(
                             label = "〒100-0001 東京都千代田区 千代田1-1",
+                            kind = AddressAutofillSuggestionKind.Address,
                             onClick = {},
                         ),
                         AddressAutofillBarUiState.Item(
                             label = "〒150-0001 東京都渋谷区神宮前1-1-1",
+                            kind = AddressAutofillSuggestionKind.Address,
                             onClick = {},
                         ),
                     ),
@@ -168,6 +192,7 @@ private fun PreviewAddressAutofillSuggestionBarEmail() {
                     items = listOf(
                         AddressAutofillBarUiState.Item(
                             label = "taro@example.com",
+                            kind = AddressAutofillSuggestionKind.Email,
                             onClick = {},
                         ),
                     ),
