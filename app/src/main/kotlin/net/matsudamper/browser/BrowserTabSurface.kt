@@ -85,7 +85,7 @@ internal fun BrowserContentHost(
                     val touchSlop = ViewConfiguration.get(context).scaledTouchSlop
                     var gestureDownX = 0f
                     var gestureDownY = 0f
-                    val gecko = GeckoView(context).also { geckoView ->
+                    val gecko = AddressAutofillGeckoView(context).also { geckoView ->
                         geckoView.id = id
                         geckoView.isNestedScrollingEnabled = true
                         geckoView.setAutofillEnabled(true)

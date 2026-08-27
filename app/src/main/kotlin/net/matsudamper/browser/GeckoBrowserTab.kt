@@ -705,7 +705,7 @@ internal fun GeckoBrowserTab(
         }
     }
 
-    DisposableEffect(session, state, browserTab, mediaWebExtension, addressRepository, addressAutofillCoordinator) {
+    DisposableEffect(session, state, browserTab, mediaWebExtension, addressRepository, addressAutofillCoordinator, geckoView) {
         browserTab.attachSessionCallbacks(
             callbacks = state,
             onOpenNewSessionRequest = { uri ->
@@ -733,6 +733,7 @@ internal fun GeckoBrowserTab(
             session = session,
             promptDialogState = dialogState,
             addressRepository = addressRepository,
+            geckoView = geckoView as? AddressAutofillGeckoView,
         )
         // MediaSession の初回イベントを取りこぼさないよう、ページ読み込み前に delegate を設定する。
         session.mediaSessionDelegate = mediaSessionDelegate

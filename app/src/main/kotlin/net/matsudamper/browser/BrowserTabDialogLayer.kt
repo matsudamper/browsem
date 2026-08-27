@@ -424,28 +424,6 @@ internal fun BrowserTabDialogLayer(
         )
     }
 
-    dialogState.pendingAddressSelectPrompt?.let { prompt ->
-        AddressSelectDialog(
-            options = prompt.options.toList(),
-            onSelect = dialogState::confirmAddressSelect,
-            onDismiss = dialogState::dismissAddressSelect,
-        )
-    } ?: dialogState.pendingAutofillAddressOptions?.let { options ->
-        AddressSelectDialog(
-            options = options,
-            onSelect = dialogState::confirmAddressSelect,
-            onDismiss = dialogState::dismissAddressSelect,
-        )
-    }
-
-    dialogState.pendingEmailSelectOptions?.let { options ->
-        EmailSelectDialog(
-            options = options,
-            onSelect = dialogState::confirmEmailSelect,
-            onDismiss = dialogState::dismissEmailSelect,
-        )
-    }
-
     dialogState.pendingAddressSaveAddress?.let { address ->
         AddressSaveDialog(
             address = address,
@@ -453,98 +431,6 @@ internal fun BrowserTabDialogLayer(
             onDismiss = dialogState::dismissAddressSave,
         )
     }
-}
-
-@Composable
-private fun AddressSelectDialog(
-    options: List<Autocomplete.AddressSelectOption>,
-    onSelect: (Autocomplete.AddressSelectOption) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    AlertDialog(
-        modifier = Modifier.testTag(BrowserTabDialogLayerTestTags.AddressSelectDialog.testTag),
-        onDismissRequest = onDismiss,
-        title = { Text("住所を選択") },
-        text = {
-            LazyColumn {
-                items(options) { option ->
-                    val address = option.value
-                    ListItem(
-                        headlineContent = {
-                            Text(
-                                text = "${address.familyName} ${address.givenName}".trim()
-                                    .ifEmpty { address.organization },
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        },
-                        supportingContent = {
-                            Text(
-                                text = buildAddressDisplayText(address, includeEmail = false),
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis,
-                                style = MaterialTheme.typography.bodySmall,
-                            )
-                        },
-                        modifier = Modifier
-                            .testTag(BrowserTabDialogLayerTestTags.AddressSelectOption.testTag)
-                            .clickable { onSelect(option) },
-                        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                    )
-                    if (option !== options.last()) HorizontalDivider()
-                }
-            }
-        },
-        confirmButton = {},
-        dismissButton = { TextButton(onClick = onDismiss) { Text("キャンセル") } },
-    )
-}
-
-@Composable
-private fun EmailSelectDialog(
-    options: List<Autocomplete.AddressSelectOption>,
-    onSelect: (Autocomplete.AddressSelectOption) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    AlertDialog(
-        modifier = Modifier.testTag(BrowserTabDialogLayerTestTags.EmailSelectDialog.testTag),
-        onDismissRequest = onDismiss,
-        title = { Text("メールアドレスを選択") },
-        text = {
-            LazyColumn {
-                items(options) { option ->
-                    val address = option.value
-                    ListItem(
-                        headlineContent = {
-                            Text(
-                                text = address.email,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        },
-                        supportingContent = {
-                            val name = "${address.familyName} ${address.givenName}".trim()
-                            if (name.isNotEmpty()) {
-                                Text(
-                                    text = name,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    style = MaterialTheme.typography.bodySmall,
-                                )
-                            }
-                        },
-                        modifier = Modifier
-                            .testTag(BrowserTabDialogLayerTestTags.EmailSelectOption.testTag)
-                            .clickable { onSelect(option) },
-                        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                    )
-                    if (option !== options.last()) HorizontalDivider()
-                }
-            }
-        },
-        confirmButton = {},
-        dismissButton = { TextButton(onClick = onDismiss) { Text("キャンセル") } },
-    )
 }
 
 @Composable
@@ -581,10 +467,6 @@ sealed interface BrowserTabDialogLayerTestTags {
     val id: String
     val testTag get() = "${BrowserTabDialogLayerTestTags::class.java.name}#$id"
 
-    data object AddressSelectDialog : BrowserTabDialogLayerTestTags { override val id = "address_select_dialog" }
-    data object AddressSelectOption : BrowserTabDialogLayerTestTags { override val id = "address_select_option" }
-    data object EmailSelectDialog : BrowserTabDialogLayerTestTags { override val id = "email_select_dialog" }
-    data object EmailSelectOption : BrowserTabDialogLayerTestTags { override val id = "email_select_option" }
     data object AddressSaveDialog : BrowserTabDialogLayerTestTags { override val id = "address_save_dialog" }
     data object AddressSaveConfirmButton : BrowserTabDialogLayerTestTags { override val id = "address_save_confirm_button" }
 }
@@ -1300,26 +1182,6 @@ private fun PreviewAutoplayPermissionDialog() {
             onAllow = {},
             onAllowOnce = {},
             onDeny = {},
-            onDismiss = {},
-        )
-    }
-}
-
-@Preview(name = "EmailSelectDialog")
-@Composable
-private fun PreviewEmailSelectDialog() {
-    BrowserTheme(themeMode = ThemeMode.THEME_SYSTEM) {
-        EmailSelectDialog(
-            options = listOf(
-                Autocomplete.AddressSelectOption(
-                    Autocomplete.Address.Builder()
-                        .familyName("山田")
-                        .givenName("太郎")
-                        .email("taro@example.com")
-                        .build(),
-                ),
-            ),
-            onSelect = {},
             onDismiss = {},
         )
     }
