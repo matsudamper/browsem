@@ -87,10 +87,10 @@ class AddressAutofillCoordinator(
     }
 
     fun detach(session: GeckoSession) {
-        fillExtension.onFieldFocus = null
         fillExtension.unregisterSession(session)
         synchronized(lock) {
             if (attached?.session !== session) return
+            fillExtension.onFieldFocus = null
             showJob?.cancel()
             showJob = null
             attached?.host?.focusedAutofillKind = null
