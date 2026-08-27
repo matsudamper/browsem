@@ -85,7 +85,10 @@ import net.matsudamper.browser.screen.addresses.AddressEditScreenViewModel
 import net.matsudamper.browser.screen.addresses.AddressesScreenViewModel
 import net.matsudamper.browser.screen.history.HistoryScreenViewModel
 import net.matsudamper.browser.screen.settings.SettingsScreenViewModel
+import net.matsudamper.browser.screen.siteforminput.SiteFormInputPathScreenViewModel
+import net.matsudamper.browser.screen.siteforminput.SiteFormInputPathsScreenViewModel
 import net.matsudamper.browser.screen.sitesettings.SiteSettingsScreenViewModel
+import net.matsudamper.browser.data.forminput.FormInputRepository
 import net.matsudamper.browser.screen.tab.TabsScreenViewModel
 import net.matsudamper.browser.ui.browser.BrowserScreen
 import net.matsudamper.browser.ui.common.BrowserTheme
@@ -97,6 +100,8 @@ import net.matsudamper.browser.ui.settings.AddressesScreen
 import net.matsudamper.browser.ui.settings.BackupProgressScreen
 import net.matsudamper.browser.ui.settings.BackupProgressUiState
 import net.matsudamper.browser.ui.settings.SettingsScreen
+import net.matsudamper.browser.ui.settings.SiteFormInputPathScreen
+import net.matsudamper.browser.ui.settings.SiteFormInputPathsScreen
 import net.matsudamper.browser.ui.settings.SiteSettingsScreen
 import net.matsudamper.browser.ui.tabs.TabsScreen
 import org.koin.compose.koinInject
@@ -305,12 +310,14 @@ internal fun BrowserAppShell(
 
                 is AppDestination.SiteSettings -> navEntry(key) {
                     val siteSettingsRepository: SiteSettingsRepository = koinInject()
+                    val formInputRepository: FormInputRepository = koinInject()
                     val geckoRuntime: GeckoRuntime = koinInject()
                     val publicSuffixList: PublicSuffixList = koinInject()
                     val siteSettingsViewModel = composeViewModel(initializer = {
                         SiteSettingsScreenViewModel(
                             host = key.host,
                             siteSettingsRepository = siteSettingsRepository,
+                            formInputRepository = formInputRepository,
                             geckoRuntime = geckoRuntime,
                             publicSuffixList = publicSuffixList,
                             securityInfo = key.tabId
@@ -334,12 +341,70 @@ internal fun BrowserAppShell(
                                         ),
                                     )
                                 }
+
+                                override fun navigateToSavedFormInputs() {
+                                    outerBackStack.add(AppDestination.SiteFormInputPaths(host = key.host))
+                                }
                             })
                         }
                     }
                     val siteSettingsUiState by siteSettingsViewModel.uiState.collectAsState()
                     SiteSettingsScreen(
                         uiState = siteSettingsUiState,
+                        onBack = { outerBackStack.removeLastOrNull() },
+                    )
+                }
+
+                is AppDestination.SiteFormInputPaths -> navEntry(key) {
+                    val formInputRepository: FormInputRepository = koinInject()
+                    val pathsViewModel = composeViewModel(initializer = {
+                        SiteFormInputPathsScreenViewModel(
+                            host = key.host,
+                            formInputRepository = formInputRepository,
+                        )
+                    })
+                    val pathsUiState by pathsViewModel.uiState.collectAsState()
+                    LaunchedEffect(pathsViewModel) {
+                        pathsViewModel.eventHandler.receiveAsFlow().collect { handler ->
+                            handler(object : SiteFormInputPathsScreenViewModel.Event {
+                                override fun navigateToPath(path: String) {
+                                    outerBackStack.add(
+                                        AppDestination.SiteFormInputPath(
+                                            host = key.host,
+                                            path = path,
+                                        ),
+                                    )
+                                }
+                            })
+                        }
+                    }
+                    SiteFormInputPathsScreen(
+                        uiState = pathsUiState,
+                        onBack = { outerBackStack.removeLastOrNull() },
+                    )
+                }
+
+                is AppDestination.SiteFormInputPath -> navEntry(key) {
+                    val formInputRepository: FormInputRepository = koinInject()
+                    val pathViewModel = composeViewModel(initializer = {
+                        SiteFormInputPathScreenViewModel(
+                            host = key.host,
+                            path = key.path,
+                            formInputRepository = formInputRepository,
+                        )
+                    })
+                    val pathUiState by pathViewModel.uiState.collectAsState()
+                    LaunchedEffect(pathViewModel) {
+                        pathViewModel.eventHandler.receiveAsFlow().collect { handler ->
+                            handler(object : SiteFormInputPathScreenViewModel.Event {
+                                override fun navigateBackAfterDeleted() {
+                                    outerBackStack.removeLastOrNull()
+                                }
+                            })
+                        }
+                    }
+                    SiteFormInputPathScreen(
+                        uiState = pathUiState,
                         onBack = { outerBackStack.removeLastOrNull() },
                     )
                 }
