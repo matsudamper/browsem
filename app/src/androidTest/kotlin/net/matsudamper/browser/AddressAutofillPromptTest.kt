@@ -215,6 +215,49 @@ class AddressAutofillPromptTest {
     }
 
     @Test
+    fun blurringAddressFieldHidesSuggestionBar() {
+        seedUserReportedAddressWithoutCountry()
+
+        val server = LocalHttpServer(
+            pages = mapOf(
+                "/$BLUR_SUGGEST_FILE_NAME" to buildBlurSuggestHtml(),
+            ),
+        )
+        httpServer = server
+        val pageUri = "http://127.0.0.1:${server.port}/$BLUR_SUGGEST_FILE_NAME"
+
+        selfCheckHttp(pageUri)
+
+        applyTestPrefsAndAwaitAddressAutofillEnabled()
+        saveAndSetPref("geckoview.autocomplete.selection_dismiss_delay_ms", 60_000)
+
+        waitForAutofillSuggestionBarOnLocalPage(
+            pageUri = pageUri,
+            urlMarker = BLUR_SUGGEST_FILE_NAME,
+            extraMessage = "フォーカス時に候補バーが出ない\nサーバ受信リクエスト=${server.requests}",
+            afterOpen = { clickFirstContentEditText() },
+        )
+        val blurred = clickBlurFieldButton()
+        try {
+            composeRule.waitUntil(timeoutMillis = 15_000) {
+                composeRule
+                    .onAllNodesWithTag(AddressAutofillSuggestionBarTestTags.Bar.testTag)
+                    .fetchSemanticsNodes()
+                    .isEmpty()
+            }
+        } catch (e: ComposeTimeoutException) {
+            throw AssertionError(
+                "フォーカスを外しても候補バーが消えない\n" +
+                    "blur=$blurred\n" +
+                    "現在URL=${composeRule.currentPageUrlFromUi()}\n" +
+                    "--- accessibility ---\n${dumpAccessibilityTree()}\n" +
+                    "--- logcat (formautofill関連) ---\n${collectFormAutofillLogcat()}",
+                e,
+            )
+        }
+    }
+
+    @Test
     fun submittingAddressFormShowsAddressSaveDialog() {
         val server = LocalHttpServer(
             pages = mapOf(
@@ -272,6 +315,27 @@ class AddressAutofillPromptTest {
         extraMessage: String,
         afterOpen: () -> Unit = {},
     ) {
+        waitForAutofillSuggestionBarOnLocalPage(
+            pageUri = pageUri,
+            urlMarker = urlMarker,
+            extraMessage = extraMessage,
+            afterOpen = afterOpen,
+        )
+        composeRule
+            .onAllNodesWithTag(AddressAutofillSuggestionBarTestTags.NameOption.testTag)
+            .onFirst()
+            .performClick()
+    }
+
+    /**
+     * ローカルページで名前候補バーが出るまで待つ。ホームページ遅延ロードに上書きされたら開き直す。
+     */
+    private fun waitForAutofillSuggestionBarOnLocalPage(
+        pageUri: String,
+        urlMarker: String,
+        extraMessage: String,
+        afterOpen: () -> Unit = {},
+    ) {
         val deadline = System.currentTimeMillis() + LOCAL_PAGE_RETRY_TIMEOUT_MILLIS
         var opened = false
         while (System.currentTimeMillis() < deadline) {
@@ -281,10 +345,6 @@ class AddressAutofillPromptTest {
                 .fetchSemanticsNodes()
                 .isNotEmpty()
             if (appeared && onExpectedPage) {
-                composeRule
-                    .onAllNodesWithTag(AddressAutofillSuggestionBarTestTags.NameOption.testTag)
-                    .onFirst()
-                    .performClick()
                 return
             }
             if (!opened || !onExpectedPage) {
@@ -772,6 +832,47 @@ class AddressAutofillPromptTest {
         """.trimIndent()
     }
 
+    private fun clickFirstContentEditText(
+        timeoutMillis: Long = LOCAL_FIELD_CLICK_WAIT_MILLIS,
+    ): String {
+        val uiAutomation = InstrumentationRegistry.getInstrumentation().uiAutomation
+        val deadline = System.currentTimeMillis() + timeoutMillis
+        while (System.currentTimeMillis() < deadline) {
+            val root = uiAutomation.rootInActiveWindow
+            if (root != null) {
+                val target = findFirstEmptyContentEditText(root)
+                if (target != null) {
+                    val clicked = target.performAction(AccessibilityNodeInfo.ACTION_CLICK) ||
+                        target.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
+                    val summary = "clicked=$clicked cls=${target.className}"
+                    target.recycle()
+                    root.recycle()
+                    return summary
+                }
+                root.recycle()
+            }
+            Thread.sleep(500)
+        }
+        return "not-found"
+    }
+
+    private fun clickBlurFieldButton(
+        timeoutMillis: Long = LOCAL_FIELD_CLICK_WAIT_MILLIS,
+    ): String {
+        val uiAutomation = InstrumentationRegistry.getInstrumentation().uiAutomation
+        val deadline = System.currentTimeMillis() + timeoutMillis
+        while (System.currentTimeMillis() < deadline) {
+            val root = uiAutomation.rootInActiveWindow
+            if (root != null) {
+                val clicked = clickNodeWithText(root, setOf(BLUR_FIELD_BUTTON_LABEL))
+                root.recycle()
+                if (clicked) return "clicked"
+            }
+            Thread.sleep(500)
+        }
+        return "not-found"
+    }
+
     /**
      * MDN ライブサンプルの苗字欄をクリックする。
      *
@@ -1222,6 +1323,44 @@ class AddressAutofillPromptTest {
     }
 
     /**
+     * 名前欄フォーカス後に空領域相当の blur を起こすテストページ。
+     * ボタンは mousedown で preventDefault し、自身へフォーカスを移さずに input.blur() する。
+     */
+    private fun buildBlurSuggestHtml(): String {
+        return """
+            <!doctype html>
+            <html lang="en">
+              <head>
+                <meta charset="utf-8" />
+                <title>Blur Suggest Test</title>
+              </head>
+              <body>
+                <form>
+                  <label for="given-name">Given name</label>
+                  <input id="given-name" name="given-name" autocomplete="given-name" autofocus />
+                  <button id="blur-field" type="button">$BLUR_FIELD_BUTTON_LABEL</button>
+                </form>
+                <script>
+                  const input = document.getElementById('given-name');
+                  const button = document.getElementById('blur-field');
+                  function blurWithoutTakingFocus() {
+                    input.blur();
+                  }
+                  button.addEventListener('mousedown', function (event) {
+                    event.preventDefault();
+                    blurWithoutTakingFocus();
+                  });
+                  button.addEventListener('click', function () {
+                    blurWithoutTakingFocus();
+                  });
+                  input.focus();
+                </script>
+              </body>
+            </html>
+        """.trimIndent()
+    }
+
+    /**
      * 住所フォームのテストページ。
      *
      * formautofill の対象判定はロケール・地域に依存するため、確実に対象となる US 形式の住所を使う。
@@ -1419,6 +1558,8 @@ class AddressAutofillPromptTest {
         private const val MDN_AUTOCOMPLETE_PAGE_URL =
             "https://developer.mozilla.org/ja/docs/Web/HTML/Reference/Attributes/autocomplete"
         private const val MDN_AUTOCOMPLETE_SAMPLE_FILE_NAME = "mdn-autocomplete-sample.html"
+        private const val BLUR_SUGGEST_FILE_NAME = "blur-suggest.html"
+        private const val BLUR_FIELD_BUTTON_LABEL = "blur-field"
         private const val PREF_TIMEOUT_MILLIS = 30_000L
         private const val PREF_POLL_TIMEOUT_MILLIS = 5_000L
         private const val LOGCAT_TAIL_LINES = 250
