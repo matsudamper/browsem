@@ -1,5 +1,7 @@
 package net.matsudamper.browser.feature.addressautofill
 
+import android.os.Handler
+import android.os.Looper
 import android.os.SystemClock
 import android.util.Log
 import android.util.SparseArray
@@ -236,6 +238,7 @@ class AddressAutofillDelegate(
     private val coordinator: AddressAutofillCoordinator,
     val wrapped: Autofill.Delegate?,
 ) : Autofill.Delegate {
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     override fun onSessionStart(session: GeckoSession) {
         wrapped?.onSessionStart(session)
@@ -288,12 +291,15 @@ class AddressAutofillDelegate(
             TAG,
             "onNodeFocus tag=${node.tag} hint=${node.hint} attrs=$attributes id=${data.id}",
         )
-        when {
-            isEmailAutofillField(attributes) -> coordinator.onFieldFocus(FIELD_KIND_EMAIL)
-            isNameAutofillField(attributes) -> coordinator.onFieldFocus(FIELD_KIND_NAME)
-            isAddressAutofillField(attributes) -> coordinator.onFieldFocus(FIELD_KIND_ADDRESS)
-            else -> coordinator.onFieldFocus(FIELD_KIND_OTHER)
+        val kind = when {
+            isEmailAutofillField(attributes) -> FIELD_KIND_EMAIL
+            isNameAutofillField(attributes) -> FIELD_KIND_NAME
+            isAddressAutofillField(attributes) -> FIELD_KIND_ADDRESS
+            else -> FIELD_KIND_OTHER
         }
+        // Gecko の Autofill 通知はメインスレッドではないことがある。
+        // 候補バーは Compose 状態なので、ここでメインへ載せる。
+        mainHandler.post { coordinator.onFieldFocus(kind) }
     }
 
     override fun onNodeBlur(
