@@ -69,6 +69,15 @@ interface FormInputDao {
 
     @Query(
         """
+        SELECT * FROM form_field_value
+        WHERE host = :host AND path = :path
+        ORDER BY createdAt DESC
+        """,
+    )
+    fun observeValuesForPath(host: String, path: String): Flow<List<FormFieldValueEntity>>
+
+    @Query(
+        """
         SELECT COUNT(DISTINCT fieldKey) FROM form_field_value
         WHERE host = :host AND path = :path
         """,

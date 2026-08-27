@@ -67,4 +67,38 @@ class FormInputPreferenceTest {
 
         assertEquals(0, repository.observeSavedPathCount("example.com").first())
     }
+
+    @Test
+    fun deleteLastFieldRemovesPathPreference() = runBlocking {
+        val page = FormInputPageKey(host = "example.com", path = "/form")
+        repository.setPathEnabled("example.com", "/form", enabled = false)
+        repository.saveFields(
+            pageKey = page,
+            fields = listOf(FormFieldEntry(fieldKey = "comment", value = "hello")),
+        )
+        repository.deleteField("example.com", "/form", "comment")
+
+        assertTrue(repository.getPathEnabled("example.com", "/form"))
+    }
+
+    @Test
+    fun observeSavedFieldsUpdatesWhenValueAdded() = runBlocking {
+        val page = FormInputPageKey(host = "example.com", path = "/form")
+        repository.saveFields(
+            pageKey = page,
+            fields = listOf(FormFieldEntry(fieldKey = "comment", value = "first")),
+        )
+        assertEquals(
+            listOf("first"),
+            repository.observeSavedFields("example.com", "/form").first().single().values,
+        )
+        repository.saveFields(
+            pageKey = page,
+            fields = listOf(FormFieldEntry(fieldKey = "comment", value = "second")),
+        )
+        assertEquals(
+            listOf("second", "first"),
+            repository.observeSavedFields("example.com", "/form").first().single().values,
+        )
+    }
 }

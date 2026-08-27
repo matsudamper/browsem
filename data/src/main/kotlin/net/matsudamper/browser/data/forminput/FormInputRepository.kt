@@ -5,7 +5,6 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.mapLatest
 
 class FormInputRepository(context: Context) {
     private val dao = FormInputDatabase.getInstance(context).formInputDao()
@@ -35,28 +34,27 @@ class FormInputRepository(context: Context) {
         return combine(
             dao.observeDistinctFieldKeys(host, path),
             dao.observePreferencesForPath(host, path),
-        ) { fieldKeys, preferences ->
+            dao.observeValuesForPath(host, path),
+        ) { fieldKeys, preferences, values ->
             val pathEnabled = resolvePathEnabled(preferences)
             val fieldPreferences = preferences.associate { it.fieldKey to it.enabled }
             fieldKeys.map { fieldKey ->
+                val previewValues = values
+                    .asSequence()
+                    .filter { it.fieldKey == fieldKey && it.value.isNotBlank() }
+                    .groupBy { it.value }
+                    .map { (_, entries) -> entries.maxBy { it.createdAt } }
+                    .sortedByDescending { it.createdAt }
+                    .take(FIELD_VALUE_PREVIEW_LIMIT)
+                    .map { it.value }
+                    .toList()
                 SavedFormFieldInfo(
                     fieldKey = fieldKey,
-                    values = emptyList(),
+                    values = previewValues,
                     enabled = pathEnabled && (fieldPreferences[fieldKey] ?: true),
                 )
             }
-        }.distinctUntilChanged().mapLatest { fields ->
-            fields.map { field ->
-                field.copy(
-                    values = dao.getDistinctValuesForField(
-                        host = host,
-                        path = path,
-                        fieldKey = field.fieldKey,
-                        limit = FIELD_VALUE_PREVIEW_LIMIT,
-                    ),
-                )
-            }
-        }
+        }.distinctUntilChanged()
     }
 
     fun observePathEnabled(host: String, path: String): Flow<Boolean> {
@@ -133,6 +131,9 @@ class FormInputRepository(context: Context) {
     suspend fun deleteField(host: String, path: String, fieldKey: String) {
         dao.deleteValuesForField(host, path, fieldKey)
         dao.deletePreferenceForField(host, path, fieldKey)
+        if (dao.countFieldsForPath(host, path) == 0) {
+            dao.deletePreferencesForPath(host, path)
+        }
     }
 
     suspend fun deleteAll() {
