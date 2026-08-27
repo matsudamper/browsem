@@ -164,11 +164,33 @@
     }
   }
 
+  let focusedFillRoot = null;
+
+  function resolveFillRoot(el) {
+    if (!el || !el.isConnected) return null;
+    if (el.form) return el.form;
+    const closest = el.closest && el.closest('form');
+    if (closest) return closest;
+    return el;
+  }
+
+  function collectFillTargets(root) {
+    const fields = [];
+    if (!root) return fields;
+    if (root.tagName && String(root.tagName).toUpperCase() === 'FORM') {
+      collectFields(root, fields);
+    } else {
+      fields.push(root);
+    }
+    return fields;
+  }
+
   function fillAddress(address, mode) {
     if (!address) return 0;
     const fillMode = mode === 'email' ? 'email' : 'address';
-    const fields = [];
-    collectFields(document, fields);
+    const root = focusedFillRoot && focusedFillRoot.isConnected ? focusedFillRoot : null;
+    if (!root) return 0;
+    const fields = collectFillTargets(root);
     let filled = 0;
     for (let i = 0; i < fields.length; i++) {
       const el = fields[i];
@@ -207,6 +229,7 @@
     if (isEmailField(el)) kind = 'email';
     else if (isNameField(el)) kind = 'name';
     else if (isAddressField(el)) kind = 'address';
+    focusedFillRoot = resolveFillRoot(el);
     port.postMessage({ action: 'field-focus', kind: kind });
   }, true);
 
