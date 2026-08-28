@@ -30,8 +30,18 @@ class FormInputRepositoryTest {
 
     @Test
     fun suggestionsMatchHostAndPathExactly() = runBlocking {
-        val page = FormInputPageKey(host = "example.com", path = "/form")
-        val otherPath = FormInputPageKey(host = "example.com", path = "/other")
+        val page = FormInputPageKey(
+            scheme = "https",
+            host = "example.com",
+            port = 443,
+            path = "/form",
+        )
+        val otherPath = FormInputPageKey(
+            scheme = "https",
+            host = "example.com",
+            port = 443,
+            path = "/other",
+        )
         repository.saveFields(
             pageKey = page,
             fields = listOf(FormFieldEntry(fieldKey = "comment", value = "hello")),
@@ -53,7 +63,12 @@ class FormInputRepositoryTest {
 
     @Test
     fun suggestionsAreDistinctAndOrderedByRecency() = runBlocking {
-        val page = FormInputPageKey(host = "example.com", path = "/form")
+        val page = FormInputPageKey(
+            scheme = "https",
+            host = "example.com",
+            port = 443,
+            path = "/form",
+        )
         repository.saveFields(
             pageKey = page,
             fields = listOf(FormFieldEntry(fieldKey = "title", value = "first")),
@@ -70,6 +85,53 @@ class FormInputRepositoryTest {
         assertEquals(
             listOf("first", "second"),
             repository.getSuggestions(pageKey = page, fieldKey = "title"),
+        )
+    }
+
+    @Test
+    fun differentOriginsDoNotShareSuggestions() = runBlocking {
+        val httpsPage = FormInputPageKey(
+            scheme = "https",
+            host = "example.com",
+            port = 443,
+            path = "/form",
+        )
+        val httpPage = FormInputPageKey(
+            scheme = "http",
+            host = "example.com",
+            port = 80,
+            path = "/form",
+        )
+        val customPortPage = FormInputPageKey(
+            scheme = "https",
+            host = "example.com",
+            port = 8443,
+            path = "/form",
+        )
+        repository.saveFields(
+            pageKey = httpsPage,
+            fields = listOf(FormFieldEntry(fieldKey = "comment", value = "secure")),
+        )
+        repository.saveFields(
+            pageKey = httpPage,
+            fields = listOf(FormFieldEntry(fieldKey = "comment", value = "plain")),
+        )
+        repository.saveFields(
+            pageKey = customPortPage,
+            fields = listOf(FormFieldEntry(fieldKey = "comment", value = "custom")),
+        )
+
+        assertEquals(
+            listOf("secure"),
+            repository.getSuggestions(pageKey = httpsPage, fieldKey = "comment"),
+        )
+        assertEquals(
+            listOf("plain"),
+            repository.getSuggestions(pageKey = httpPage, fieldKey = "comment"),
+        )
+        assertEquals(
+            listOf("custom"),
+            repository.getSuggestions(pageKey = customPortPage, fieldKey = "comment"),
         )
     }
 }

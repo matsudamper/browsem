@@ -45,6 +45,41 @@ class FormInputDatabaseMigrationTest {
         }
     }
 
+    @Test
+    fun migrate2To3AddsOriginColumns() {
+        helper.createDatabase(TEST_DB, 2).apply {
+            execSQL(
+                "INSERT INTO form_field_value (host, path, fieldKey, value, createdAt) " +
+                    "VALUES ('example.com', '/form', 'comment', 'hello', 1000)",
+            )
+            execSQL(
+                "INSERT INTO form_input_preference (host, path, fieldKey, enabled) " +
+                    "VALUES ('example.com', '/form', '', 0)",
+            )
+            close()
+        }
+
+        helper.runMigrationsAndValidate(TEST_DB, 3, true, *FormInputDatabase.ALL_MIGRATIONS).use { db ->
+            db.query(
+                "SELECT scheme, port, value FROM form_field_value WHERE host = 'example.com' AND path = '/form'",
+            ).use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertEquals("https", cursor.getString(0))
+                assertEquals(443, cursor.getInt(1))
+                assertEquals("hello", cursor.getString(2))
+            }
+            db.query(
+                "SELECT scheme, port, enabled FROM form_input_preference " +
+                    "WHERE host = 'example.com' AND path = '/form'",
+            ).use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertEquals("https", cursor.getString(0))
+                assertEquals(443, cursor.getInt(1))
+                assertEquals(0, cursor.getInt(2))
+            }
+        }
+    }
+
     companion object {
         private const val TEST_DB = "form-input-migration-test"
     }

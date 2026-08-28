@@ -8,10 +8,12 @@ import androidx.room.Entity
  */
 @Entity(
     tableName = "form_input_preference",
-    primaryKeys = ["host", "path", "fieldKey"],
+    primaryKeys = ["scheme", "host", "port", "path", "fieldKey"],
 )
 data class FormInputPreferenceEntity(
+    val scheme: String,
     val host: String,
+    val port: Int,
     val path: String,
     val fieldKey: String,
     val enabled: Boolean,

@@ -32,65 +32,95 @@ class FormInputPreferenceTest {
 
     @Test
     fun disabledPathDoesNotSaveOrSuggest() = runBlocking {
-        val page = FormInputPageKey(host = "example.com", path = "/form")
-        repository.setPathEnabled("example.com", "/form", enabled = false)
+        val page = FormInputPageKey(
+            scheme = "https",
+            host = "example.com",
+            port = 443,
+            path = "/form",
+        )
+        val origin = page.origin()
+        repository.setPathEnabled(origin, "/form", enabled = false)
         repository.saveFields(
             pageKey = page,
             fields = listOf(FormFieldEntry(fieldKey = "comment", value = "hello")),
         )
 
         assertTrue(repository.getSuggestions(pageKey = page, fieldKey = "comment").isEmpty())
-        assertEquals(0, repository.observeSavedPathCount("example.com").first())
+        assertEquals(0, repository.observeSavedPathCount(origin).first())
     }
 
     @Test
     fun disabledFieldDoesNotSaveOrSuggest() = runBlocking {
-        val page = FormInputPageKey(host = "example.com", path = "/form")
-        repository.setFieldEnabled("example.com", "/form", "comment", enabled = false)
+        val page = FormInputPageKey(
+            scheme = "https",
+            host = "example.com",
+            port = 443,
+            path = "/form",
+        )
+        val origin = page.origin()
+        repository.setFieldEnabled(origin, "/form", "comment", enabled = false)
         repository.saveFields(
             pageKey = page,
             fields = listOf(FormFieldEntry(fieldKey = "comment", value = "hello")),
         )
 
         assertTrue(repository.getSuggestions(pageKey = page, fieldKey = "comment").isEmpty())
-        assertTrue(repository.observeSavedFields("example.com", "/form").first().isEmpty())
+        assertTrue(repository.observeSavedFields(origin, "/form").first().isEmpty())
     }
 
     @Test
     fun deletePathRemovesSavedData() = runBlocking {
-        val page = FormInputPageKey(host = "example.com", path = "/form")
+        val page = FormInputPageKey(
+            scheme = "https",
+            host = "example.com",
+            port = 443,
+            path = "/form",
+        )
+        val origin = page.origin()
         repository.saveFields(
             pageKey = page,
             fields = listOf(FormFieldEntry(fieldKey = "comment", value = "hello")),
         )
-        repository.deletePath("example.com", "/form")
+        repository.deletePath(origin, "/form")
 
-        assertEquals(0, repository.observeSavedPathCount("example.com").first())
+        assertEquals(0, repository.observeSavedPathCount(origin).first())
     }
 
     @Test
     fun deleteLastFieldRemovesPathPreference() = runBlocking {
-        val page = FormInputPageKey(host = "example.com", path = "/form")
-        repository.setPathEnabled("example.com", "/form", enabled = false)
+        val page = FormInputPageKey(
+            scheme = "https",
+            host = "example.com",
+            port = 443,
+            path = "/form",
+        )
+        val origin = page.origin()
+        repository.setPathEnabled(origin, "/form", enabled = false)
         repository.saveFields(
             pageKey = page,
             fields = listOf(FormFieldEntry(fieldKey = "comment", value = "hello")),
         )
-        repository.deleteField("example.com", "/form", "comment")
+        repository.deleteField(origin, "/form", "comment")
 
-        assertTrue(repository.getPathEnabled("example.com", "/form"))
+        assertTrue(repository.getPathEnabled(origin, "/form"))
     }
 
     @Test
     fun observeSavedFieldsUpdatesWhenValueAdded() = runBlocking {
-        val page = FormInputPageKey(host = "example.com", path = "/form")
+        val page = FormInputPageKey(
+            scheme = "https",
+            host = "example.com",
+            port = 443,
+            path = "/form",
+        )
+        val origin = page.origin()
         repository.saveFields(
             pageKey = page,
             fields = listOf(FormFieldEntry(fieldKey = "comment", value = "first")),
         )
         assertEquals(
             listOf("first"),
-            repository.observeSavedFields("example.com", "/form").first().single().values,
+            repository.observeSavedFields(origin, "/form").first().single().values,
         )
         repository.saveFields(
             pageKey = page,
@@ -98,7 +128,46 @@ class FormInputPreferenceTest {
         )
         assertEquals(
             listOf("second", "first"),
-            repository.observeSavedFields("example.com", "/form").first().single().values,
+            repository.observeSavedFields(origin, "/form").first().single().values,
+        )
+    }
+
+    @Test
+    fun preferencesAreIsolatedByOrigin() = runBlocking {
+        val httpsOrigin = FormInputOrigin(scheme = "https", host = "example.com", port = 443)
+        val httpOrigin = FormInputOrigin(scheme = "http", host = "example.com", port = 80)
+        repository.setPathEnabled(httpsOrigin, "/form", enabled = false)
+        repository.saveFields(
+            pageKey = FormInputPageKey(
+                scheme = "http",
+                host = "example.com",
+                port = 80,
+                path = "/form",
+            ),
+            fields = listOf(FormFieldEntry(fieldKey = "comment", value = "plain")),
+        )
+
+        assertTrue(
+            repository.getSuggestions(
+                pageKey = FormInputPageKey(
+                    scheme = "http",
+                    host = "example.com",
+                    port = 80,
+                    path = "/form",
+                ),
+                fieldKey = "comment",
+            ).isNotEmpty(),
+        )
+        assertTrue(
+            repository.getSuggestions(
+                pageKey = FormInputPageKey(
+                    scheme = "https",
+                    host = "example.com",
+                    port = 443,
+                    path = "/form",
+                ),
+                fieldKey = "comment",
+            ).isEmpty(),
         )
     }
 }

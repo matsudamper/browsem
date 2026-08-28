@@ -57,7 +57,12 @@ class FormInputAutofillCoordinatorTest {
 
         coVerify {
             env.repository.saveFields(
-                pageKey = FormInputPageKey(host = "example.com", path = "/form"),
+                pageKey = FormInputPageKey(
+                    scheme = "https",
+                    host = "example.com",
+                    port = 443,
+                    path = "/form",
+                ),
                 fields = listOf(FormFieldEntry(fieldKey = "comment", value = "hello")),
             )
         }
@@ -97,7 +102,12 @@ class FormInputAutofillCoordinatorTest {
         val popupSession = GeckoSession()
         coEvery {
             repository.getSuggestions(
-                pageKey = FormInputPageKey(host = "example.com", path = "/form"),
+                pageKey = FormInputPageKey(
+                    scheme = "https",
+                    host = "example.com",
+                    port = 443,
+                    path = "/form",
+                ),
                 fieldKey = "comment",
             )
         } returns listOf("saved value")
@@ -119,7 +129,12 @@ class FormInputAutofillCoordinatorTest {
         val repository = mockk<FormInputRepository>(relaxed = true)
         coEvery {
             repository.getSuggestions(
-                pageKey = FormInputPageKey(host = "example.com", path = "/form"),
+                pageKey = FormInputPageKey(
+                    scheme = "https",
+                    host = "example.com",
+                    port = 443,
+                    path = "/form",
+                ),
                 fieldKey = "comment",
             )
         } returns listOf("saved value")
