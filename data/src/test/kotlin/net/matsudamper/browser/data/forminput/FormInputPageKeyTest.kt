@@ -92,6 +92,20 @@ class FormInputPageKeyTest {
     }
 
     @Test
+    fun parseSonyBankLoginPath() {
+        val key = parseFormInputPageKey("https://sonybank.jp/pages/db/dbca0100/input/")
+        assertEquals(
+            FormInputPageKey(
+                scheme = "https",
+                host = "sonybank.jp",
+                port = 443,
+                path = "/pages/db/dbca0100/input/",
+            ),
+            key,
+        )
+    }
+
+    @Test
     fun aboutBlankReturnsNull() {
         assertNull(parseFormInputPageKey("about:blank"))
     }

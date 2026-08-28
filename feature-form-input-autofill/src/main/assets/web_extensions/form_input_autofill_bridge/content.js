@@ -239,6 +239,66 @@
     return el;
   }
 
+  function collectDocumentTargetFields(root) {
+    const fields = [];
+    collectFields(root || document, fields);
+    const seen = new Set();
+    const result = [];
+    for (let i = 0; i < fields.length; i++) {
+      const el = fields[i];
+      if (seen.has(el)) continue;
+      seen.add(el);
+      if (!isTargetField(el)) continue;
+      const key = fieldKey(el);
+      if (!key) continue;
+      const value = fieldValue(el);
+      if (isEmptyFieldValue(value)) continue;
+      result.push({ fieldKey: key, value: value });
+    }
+    return result;
+  }
+
+  function postFieldsSaved(fields) {
+    if (fields.length === 0) return;
+    port.postMessage({
+      action: 'form-submit',
+      pageUrl: location.href,
+      fields: fields,
+    });
+  }
+
+  function saveFieldIfTarget(el) {
+    if (!isTargetField(el)) return;
+    const key = fieldKey(el);
+    if (!key) return;
+    const value = fieldValue(el);
+    if (isEmptyFieldValue(value)) return;
+    postFieldsSaved([{ fieldKey: key, value: value }]);
+  }
+
+  const SUBMIT_LIKE_BUTTON_TEXTS = [
+    'ログイン', 'login', 'sign in', 'signin', '送信', '確認', '次へ', 'next', 'submit', '登録',
+  ];
+
+  function isSubmitLikeButton(el) {
+    if (!el || !el.tagName) return false;
+    const tag = String(el.tagName).toUpperCase();
+    if (tag === 'INPUT') {
+      const type = (el.getAttribute('type') || '').toLowerCase();
+      return type === 'submit';
+    }
+    if (tag !== 'BUTTON') return false;
+    const type = (el.getAttribute('type') || '').toLowerCase();
+    if (type === 'submit') return true;
+    if (type === 'button' || type === '') {
+      const text = (el.textContent || '').trim().toLowerCase();
+      return SUBMIT_LIKE_BUTTON_TEXTS.some(function (token) {
+        return text.indexOf(token) !== -1;
+      });
+    }
+    return false;
+  }
+
   function collectFormFields(form) {
     const fields = [];
     if (!form) return fields;
@@ -330,6 +390,7 @@
     if (!isEditableFormControl(el)) return;
     const leavingEl = el;
     setTimeout(function () {
+      saveFieldIfTarget(leavingEl);
       const active = deepActiveElement();
       if (isEditableFormControl(active) && isTargetField(active)) return;
       if (focusedElement === leavingEl) {
@@ -341,14 +402,25 @@
   }, true);
 
   function postFormSubmit(form) {
-    const fields = collectFormFields(form);
-    if (fields.length === 0) return;
-    port.postMessage({
-      action: 'form-submit',
-      pageUrl: location.href,
-      fields: fields,
-    });
+    postFieldsSaved(collectFormFields(form));
   }
+
+  document.addEventListener('click', function (event) {
+    const path = event.composedPath();
+    let button = null;
+    for (let i = 0; i < path.length; i++) {
+      const node = path[i];
+      if (node instanceof Element && isSubmitLikeButton(node)) {
+        button = node;
+        break;
+      }
+    }
+    if (!button) return;
+    setTimeout(function () {
+      if (button.form) return;
+      postFieldsSaved(collectDocumentTargetFields(document));
+    }, 0);
+  }, true);
 
   document.addEventListener('formdata', function (event) {
     const form = event.target;
