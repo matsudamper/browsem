@@ -88,7 +88,9 @@ import net.matsudamper.browser.screen.settings.SettingsScreenViewModel
 import net.matsudamper.browser.screen.siteforminput.SiteFormInputPathScreenViewModel
 import net.matsudamper.browser.screen.siteforminput.SiteFormInputPathsScreenViewModel
 import net.matsudamper.browser.screen.sitesettings.SiteSettingsScreenViewModel
+import net.matsudamper.browser.data.forminput.FormInputOrigin
 import net.matsudamper.browser.data.forminput.FormInputRepository
+import net.matsudamper.browser.data.forminput.parseFormInputPageKey
 import net.matsudamper.browser.screen.tab.TabsScreenViewModel
 import net.matsudamper.browser.ui.browser.BrowserScreen
 import net.matsudamper.browser.ui.common.BrowserTheme
@@ -313,9 +315,17 @@ internal fun BrowserAppShell(
                     val formInputRepository: FormInputRepository = koinInject()
                     val geckoRuntime: GeckoRuntime = koinInject()
                     val publicSuffixList: PublicSuffixList = koinInject()
+                    val formInputOrigin = remember(key) {
+                        key.tabId
+                            ?.let { browserTabController.findTab(it)?.currentUrl }
+                            ?.let { parseFormInputPageKey(it) }
+                            ?.let { FormInputOrigin(it.scheme, it.host, it.port) }
+                            ?: FormInputOrigin(scheme = "https", host = key.host, port = 443)
+                    }
                     val siteSettingsViewModel = composeViewModel(initializer = {
                         SiteSettingsScreenViewModel(
                             host = key.host,
+                            formInputOrigin = formInputOrigin,
                             siteSettingsRepository = siteSettingsRepository,
                             formInputRepository = formInputRepository,
                             geckoRuntime = geckoRuntime,
@@ -343,7 +353,13 @@ internal fun BrowserAppShell(
                                 }
 
                                 override fun navigateToSavedFormInputs() {
-                                    outerBackStack.add(AppDestination.SiteFormInputPaths(host = key.host))
+                                    outerBackStack.add(
+                                        AppDestination.SiteFormInputPaths(
+                                            scheme = formInputOrigin.scheme,
+                                            host = formInputOrigin.host,
+                                            port = formInputOrigin.port,
+                                        ),
+                                    )
                                 }
                             })
                         }
@@ -357,9 +373,14 @@ internal fun BrowserAppShell(
 
                 is AppDestination.SiteFormInputPaths -> navEntry(key) {
                     val formInputRepository: FormInputRepository = koinInject()
+                    val origin = FormInputOrigin(
+                        scheme = key.scheme,
+                        host = key.host,
+                        port = key.port,
+                    )
                     val pathsViewModel = composeViewModel(initializer = {
                         SiteFormInputPathsScreenViewModel(
-                            host = key.host,
+                            origin = origin,
                             formInputRepository = formInputRepository,
                         )
                     })
@@ -374,7 +395,9 @@ internal fun BrowserAppShell(
                                 override fun navigateToPath(path: String) {
                                     outerBackStack.add(
                                         AppDestination.SiteFormInputPath(
+                                            scheme = key.scheme,
                                             host = key.host,
+                                            port = key.port,
                                             path = path,
                                         ),
                                     )
@@ -389,9 +412,14 @@ internal fun BrowserAppShell(
 
                 is AppDestination.SiteFormInputPath -> navEntry(key) {
                     val formInputRepository: FormInputRepository = koinInject()
+                    val origin = FormInputOrigin(
+                        scheme = key.scheme,
+                        host = key.host,
+                        port = key.port,
+                    )
                     val pathViewModel = composeViewModel(initializer = {
                         SiteFormInputPathScreenViewModel(
-                            host = key.host,
+                            origin = origin,
                             path = key.path,
                             formInputRepository = formInputRepository,
                         )

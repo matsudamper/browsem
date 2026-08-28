@@ -242,7 +242,7 @@ private fun SiteFormInputPathScreenPreview() {
                     override fun confirmDeletePath() = Unit
                     override fun dismissDeletePathConfirm() = Unit
                 },
-                host = "example.com",
+                displayOrigin = "https://example.com",
                 path = "/contact",
                 displayPath = "/contact",
                 pathEnabled = true,

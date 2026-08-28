@@ -19,6 +19,7 @@ import net.matsudamper.browser.awaitGecko
 import net.matsudamper.browser.data.SiteGeolocationState
 import net.matsudamper.browser.data.SitePermissionState
 import net.matsudamper.browser.data.SiteSettingsRepository
+import net.matsudamper.browser.data.forminput.FormInputOrigin
 import net.matsudamper.browser.data.forminput.FormInputRepository
 import net.matsudamper.browser.ui.settings.SiteSettingsScreenUiState
 import org.mozilla.geckoview.GeckoRuntime
@@ -26,6 +27,7 @@ import org.mozilla.geckoview.StorageController
 
 internal class SiteSettingsScreenViewModel(
     private val host: String,
+    private val formInputOrigin: FormInputOrigin,
     private val siteSettingsRepository: SiteSettingsRepository,
     private val formInputRepository: FormInputRepository,
     private val geckoRuntime: GeckoRuntime,
@@ -125,7 +127,7 @@ internal class SiteSettingsScreenViewModel(
 
     val uiState: StateFlow<SiteSettingsScreenUiState> = uiStateFlow.also {
         viewModelScope.launch {
-            formInputRepository.observeSavedPathCount(host).collectLatest { count ->
+            formInputRepository.observeSavedPathCount(formInputOrigin).collectLatest { count ->
                 uiStateFlow.update { it.copy(savedFormInputPathCount = count) }
             }
         }

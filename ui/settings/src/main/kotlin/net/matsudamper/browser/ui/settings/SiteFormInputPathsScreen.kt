@@ -79,7 +79,7 @@ internal fun SiteFormInputPathsScreen(
             ) {
                 item {
                     Text(
-                        text = uiState.host,
+                        text = uiState.displayOrigin,
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
@@ -135,7 +135,7 @@ private fun SiteFormInputPathsScreenPreview() {
                     override fun setPathEnabled(path: String, enabled: Boolean) = Unit
                     override fun openPath(path: String) = Unit
                 },
-                host = "example.com",
+                displayOrigin = "https://example.com",
                 paths = listOf(
                     SiteFormInputPathsScreenUiState.PathEntry(
                         path = "/contact",

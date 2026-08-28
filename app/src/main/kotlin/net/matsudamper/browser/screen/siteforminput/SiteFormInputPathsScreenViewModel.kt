@@ -10,13 +10,15 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import net.matsudamper.browser.data.forminput.FormInputOrigin
+import net.matsudamper.browser.data.forminput.displayFormInputOrigin
 import net.matsudamper.browser.data.forminput.FormInputRepository
 import net.matsudamper.browser.data.forminput.displayFormInputPath
 import net.matsudamper.browser.ui.settings.SiteFormInputPathsScreenUiState
 
 @Stable
 internal class SiteFormInputPathsScreenViewModel(
-    private val host: String,
+    private val origin: FormInputOrigin,
     private val formInputRepository: FormInputRepository,
 ) : ViewModel() {
     val eventHandler = Channel<(Event) -> Unit>(Channel.UNLIMITED)
@@ -33,7 +35,7 @@ internal class SiteFormInputPathsScreenViewModel(
 
         override fun setPathEnabled(path: String, enabled: Boolean) {
             viewModelScope.launch {
-                formInputRepository.setPathEnabled(host, path, enabled)
+                formInputRepository.setPathEnabled(origin, path, enabled)
             }
         }
 
@@ -45,14 +47,14 @@ internal class SiteFormInputPathsScreenViewModel(
     private val uiStateFlow = MutableStateFlow(
         SiteFormInputPathsScreenUiState(
             callbacks = callbacks,
-            host = host,
+            displayOrigin = displayFormInputOrigin(origin),
             paths = emptyList(),
         ),
     )
 
     val uiState: StateFlow<SiteFormInputPathsScreenUiState> = uiStateFlow.also {
         viewModelScope.launch {
-            formInputRepository.observeSavedPaths(host).collectLatest { paths ->
+            formInputRepository.observeSavedPaths(origin).collectLatest { paths ->
                 uiStateFlow.update { state ->
                     state.copy(
                         paths = paths.map { path ->
