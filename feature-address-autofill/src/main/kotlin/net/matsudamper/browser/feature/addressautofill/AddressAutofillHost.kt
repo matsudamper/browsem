@@ -10,6 +10,7 @@ import org.mozilla.geckoview.Autocomplete
 interface AddressAutofillHost {
     var focusedAutofillKind: String?
     var onAddressSelectOptions: ((List<Autocomplete.AddressSelectOption>) -> Unit)?
+    var autofillBarHideGeneration: Int
     val coroutineScope: CoroutineScope
 
     fun showAddressAutofillBar(items: List<AddressAutofillSuggestionItem>)

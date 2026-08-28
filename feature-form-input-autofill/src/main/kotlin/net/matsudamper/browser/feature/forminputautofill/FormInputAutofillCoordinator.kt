@@ -99,6 +99,11 @@ class FormInputAutofillCoordinator(
             return
         }
         val current = synchronized(lock) {
+            val host = attached?.host
+            if (host != null) {
+                host.autofillBarHideGeneration += 1
+                host.hideAddressAutofillBar()
+            }
             lastFieldKey = fieldKey
             lastPageKey = pageKey
             focusGeneration += 1
@@ -157,12 +162,12 @@ class FormInputAutofillCoordinator(
             showJob = null
             lastFieldKey = null
             lastPageKey = null
-            val generation = focusGeneration
+            val hideGeneration = current.host.autofillBarHideGeneration
             hideJob?.cancel()
             hideJob = current.host.coroutineScope.launch {
                 delay(FORM_INPUT_BLUR_HIDE_WAIT_MS)
                 val host = synchronized(lock) {
-                    if (focusGeneration != generation) return@launch
+                    if (attached?.host?.autofillBarHideGeneration != hideGeneration) return@launch
                     attached?.host
                 } ?: return@launch
                 host.hideAddressAutofillBar()
@@ -242,7 +247,10 @@ class FormInputAutofillCoordinator(
         val values = withContext(ioDispatcher) {
             repository.getSuggestions(pageKey = pageKey, fieldKey = fieldKey)
         }
-        if (values.isEmpty()) return
+        if (values.isEmpty()) {
+            synchronized(lock) { attached?.host?.hideAddressAutofillBar() }
+            return
+        }
         if (shouldAbort()) return
         present(values)
     }

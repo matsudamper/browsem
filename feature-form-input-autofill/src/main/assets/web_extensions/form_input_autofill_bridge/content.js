@@ -24,7 +24,9 @@
     'cc-exp-year', 'ccexyear', 'cc-csc', 'cccsc', 'cc-name', 'ccname',
     'cc-type', 'cctype', 'cc', 'creditcard', 'credit-card',
   ];
-  const GENERIC_SENSITIVE_IDENTIFIERS = ['name', 'address'];
+  const GENERIC_SENSITIVE_IDENTIFIERS = ['name', 'address', 'fullname', 'full-name', 'full_name'];
+  const PASSWORD_TOKENS = ['password', 'passwd', 'pwd', 'pass', 'current-password', 'new-password'];
+  const ONE_TIME_CODE_TOKENS = ['one-time-code', 'onetimecode', 'otp', 'totp', 'sms-otp'];
 
   const ADDRESS_FIELD_MAP = [
     { tokens: FAMILY_NAME_TOKENS, key: 'familyName' },
@@ -70,11 +72,31 @@
       type === 'password' || type === 'file';
   }
 
+  function isDisabledField(el) {
+    return Boolean(el.disabled);
+  }
+
   function hasAutocompleteOff(el) {
+    const tokens = autocompleteTokens(el);
+    if (hasAnyToken(tokens, PASSWORD_TOKENS)) return true;
     const autocomplete = (el.getAttribute('autocomplete') || '').toLowerCase().trim();
-    return autocomplete === 'off' ||
-      autocomplete === 'new-password' ||
-      autocomplete === 'current-password';
+    if (autocomplete === 'off') return true;
+    const form = el.form;
+    if (form) {
+      const formAutocomplete = (form.getAttribute('autocomplete') || '').toLowerCase().trim();
+      if (formAutocomplete === 'off') return true;
+    }
+    return false;
+  }
+
+  function isPasswordField(el) {
+    const tokens = fieldTokens(el);
+    return hasAnyToken(tokens, PASSWORD_TOKENS);
+  }
+
+  function isOneTimeCodeField(el) {
+    const tokens = fieldTokens(el);
+    return hasAnyToken(tokens, ONE_TIME_CODE_TOKENS);
   }
 
   function isEmailField(el) {
@@ -124,7 +146,7 @@
     const name = (el.getAttribute('name') || '').trim().toLowerCase();
     return GENERIC_SENSITIVE_IDENTIFIERS.some(function (identifier) {
       return id === identifier || name === identifier;
-    });
+    }) || hasAnyToken(identityTokens(el), GENERIC_SENSITIVE_IDENTIFIERS);
   }
 
   function isAddressField(el) {
@@ -145,6 +167,8 @@
       isNameField(el) ||
       isAddressField(el) ||
       isCreditCardField(el) ||
+      isPasswordField(el) ||
+      isOneTimeCodeField(el) ||
       isGenericSensitiveIdentity(el);
   }
 
@@ -152,6 +176,7 @@
     if (!el || !el.tagName) return false;
     const tag = String(el.tagName).toUpperCase();
     if (tag !== 'INPUT' && tag !== 'TEXTAREA' && tag !== 'SELECT') return false;
+    if (isDisabledField(el)) return false;
     if (isNonValueField(el)) return false;
     if (hasAutocompleteOff(el)) return false;
     if (isExcludedAutofillField(el)) return false;
@@ -228,7 +253,7 @@
   function pagePath() {
     const path = location.pathname || '';
     if (!path || path === '/') return '';
-    return path.replace(/\/$/, '');
+    return path;
   }
 
   let focusedFieldKey = '';
