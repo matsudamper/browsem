@@ -193,9 +193,13 @@
 
   function fieldValue(el) {
     if (el instanceof HTMLSelectElement) {
-      return (el.value || '').trim();
+      return el.value || '';
     }
-    return String(el.value || '').trim();
+    return String(el.value || '');
+  }
+
+  function isEmptyFieldValue(value) {
+    return value.trim() === '';
   }
 
   function setFieldValue(el, value) {
@@ -238,14 +242,27 @@
   function collectFormFields(form) {
     const fields = [];
     if (!form) return fields;
+    if (form.elements) {
+      for (let i = 0; i < form.elements.length; i++) {
+        const el = form.elements[i];
+        if (isEditableFormControl(el)) {
+          fields.push(el);
+        }
+      }
+    }
     collectFields(form, fields);
+    const seen = new Set();
     const result = [];
     for (let i = 0; i < fields.length; i++) {
       const el = fields[i];
+      if (seen.has(el)) continue;
+      seen.add(el);
       if (!isTargetField(el)) continue;
       const key = fieldKey(el);
       if (!key) continue;
-      result.push({ fieldKey: key, value: fieldValue(el) });
+      const value = fieldValue(el);
+      if (isEmptyFieldValue(value)) continue;
+      result.push({ fieldKey: key, value: value });
     }
     return result;
   }
@@ -275,8 +292,27 @@
     return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
   }
 
+  function eventTargetElement(event) {
+    const path = event.composedPath();
+    for (let i = 0; i < path.length; i++) {
+      const node = path[i];
+      if (node instanceof Element && isEditableFormControl(node)) {
+        return node;
+      }
+    }
+    return event.target;
+  }
+
+  function deepActiveElement() {
+    let el = document.activeElement;
+    while (el && el.shadowRoot && el.shadowRoot.activeElement) {
+      el = el.shadowRoot.activeElement;
+    }
+    return el;
+  }
+
   document.addEventListener('focusin', function (event) {
-    const el = event.target;
+    const el = eventTargetElement(event);
     if (!isEditableFormControl(el) || !isTargetField(el)) return;
     const key = fieldKey(el);
     if (!key) return;
@@ -290,20 +326,21 @@
   }, true);
 
   document.addEventListener('focusout', function (event) {
-    const el = event.target;
+    const el = eventTargetElement(event);
     if (!isEditableFormControl(el)) return;
-    const next = event.relatedTarget;
-    if (isEditableFormControl(next) && isTargetField(next)) return;
-    if (focusedElement === el) {
-      focusedElement = null;
-      focusedFieldKey = '';
-    }
-    port.postMessage({ action: 'field-blur' });
+    const leavingEl = el;
+    setTimeout(function () {
+      const active = deepActiveElement();
+      if (isEditableFormControl(active) && isTargetField(active)) return;
+      if (focusedElement === leavingEl) {
+        focusedElement = null;
+        focusedFieldKey = '';
+      }
+      port.postMessage({ action: 'field-blur' });
+    }, 0);
   }, true);
 
-  document.addEventListener('submit', function (event) {
-    const form = event.target;
-    if (!form || !form.tagName || String(form.tagName).toUpperCase() !== 'FORM') return;
+  function postFormSubmit(form) {
     const fields = collectFormFields(form);
     if (fields.length === 0) return;
     port.postMessage({
@@ -311,5 +348,11 @@
       pageUrl: location.href,
       fields: fields,
     });
+  }
+
+  document.addEventListener('formdata', function (event) {
+    const form = event.target;
+    if (!form || !form.tagName || String(form.tagName).toUpperCase() !== 'FORM') return;
+    postFormSubmit(form);
   }, true);
 })();
