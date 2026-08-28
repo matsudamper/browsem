@@ -315,13 +315,11 @@ internal fun BrowserAppShell(
                     val formInputRepository: FormInputRepository = koinInject()
                     val geckoRuntime: GeckoRuntime = koinInject()
                     val publicSuffixList: PublicSuffixList = koinInject()
-                    val formInputOrigin = remember(key) {
-                        key.tabId
-                            ?.let { browserTabController.findTab(it)?.currentUrl }
-                            ?.let { parseFormInputPageKey(it) }
-                            ?.let { FormInputOrigin(it.scheme, it.host, it.port) }
-                            ?: FormInputOrigin(scheme = "https", host = key.host, port = 443)
-                    }
+                    val formInputOrigin = FormInputOrigin(
+                        scheme = key.scheme,
+                        host = key.host,
+                        port = key.port,
+                    )
                     val siteSettingsViewModel = composeViewModel(initializer = {
                         SiteSettingsScreenViewModel(
                             host = key.host,
@@ -706,8 +704,16 @@ internal class OuterNavActions(private val backStack: MutableList<NavKey>) {
      * 現在のページのホストでサイト設定を開く。ホストを取り出せない URL（about: など）では何もしない。
      */
     fun openSiteSettings(currentUrl: String, tabId: String?) {
-        val host = extractSiteHost(currentUrl) ?: return
-        add(AppDestination.SiteSettings(host = host, tabId = tabId))
+        val pageKey = parseFormInputPageKey(currentUrl)
+        val host = extractSiteHost(currentUrl) ?: pageKey?.host ?: return
+        add(
+            AppDestination.SiteSettings(
+                host = host,
+                scheme = pageKey?.scheme ?: "https",
+                port = pageKey?.port ?: 443,
+                tabId = tabId,
+            ),
+        )
     }
 }
 

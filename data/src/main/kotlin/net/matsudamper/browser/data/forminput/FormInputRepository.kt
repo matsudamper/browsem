@@ -106,17 +106,45 @@ class FormInputRepository(context: Context) {
         fields.forEach { field ->
             if (field.fieldKey.isBlank() || field.value.isBlank()) return@forEach
             if (!isFieldEnabled(origin, pageKey.path, field.fieldKey)) return@forEach
-            dao.insert(
-                FormFieldValueEntity(
+            val touched = dao.touchValue(
+                scheme = pageKey.scheme,
+                host = pageKey.host,
+                port = pageKey.port,
+                path = pageKey.path,
+                fieldKey = field.fieldKey,
+                value = field.value,
+                createdAt = now,
+            )
+            if (touched == 0) {
+                dao.insert(
+                    FormFieldValueEntity(
+                        scheme = pageKey.scheme,
+                        host = pageKey.host,
+                        port = pageKey.port,
+                        path = pageKey.path,
+                        fieldKey = field.fieldKey,
+                        value = field.value,
+                        createdAt = now,
+                    ),
+                )
+            }
+            val overflow = dao.countValueRowsForField(
+                scheme = pageKey.scheme,
+                host = pageKey.host,
+                port = pageKey.port,
+                path = pageKey.path,
+                fieldKey = field.fieldKey,
+            ) - MAX_FIELD_VALUE_ROWS
+            if (overflow > 0) {
+                dao.deleteOldestValuesForField(
                     scheme = pageKey.scheme,
                     host = pageKey.host,
                     port = pageKey.port,
                     path = pageKey.path,
                     fieldKey = field.fieldKey,
-                    value = field.value,
-                    createdAt = now,
-                ),
-            )
+                    limit = overflow,
+                )
+            }
         }
     }
 
@@ -248,6 +276,7 @@ class FormInputRepository(context: Context) {
     companion object {
         const val SUGGESTION_LIMIT: Int = 5
         const val FIELD_VALUE_PREVIEW_LIMIT: Int = 3
+        const val MAX_FIELD_VALUE_ROWS: Int = 50
     }
 }
 

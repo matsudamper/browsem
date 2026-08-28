@@ -16,7 +16,12 @@ sealed interface AppDestination : NavKey, java.io.Serializable {
     data object Settings : AppDestination, java.io.Serializable
 
     @Serializable
-    data class SiteSettings(val host: String, val tabId: String? = null) : AppDestination, java.io.Serializable
+    data class SiteSettings(
+        val host: String,
+        val scheme: String = "https",
+        val port: Int = 443,
+        val tabId: String? = null,
+    ) : AppDestination, java.io.Serializable
 
     @Serializable
     data class SiteFormInputPaths(

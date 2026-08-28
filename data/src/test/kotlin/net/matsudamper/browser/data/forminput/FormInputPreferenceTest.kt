@@ -170,4 +170,38 @@ class FormInputPreferenceTest {
             ).isEmpty(),
         )
     }
+
+    @Test
+    fun saveFieldsTouchesDuplicateValueAndCapsRowCount() = runBlocking {
+        val page = FormInputPageKey(
+            scheme = "https",
+            host = "example.com",
+            port = 443,
+            path = "/form",
+        )
+        repeat(FormInputRepository.MAX_FIELD_VALUE_ROWS + 5) { index ->
+            repository.saveFields(
+                pageKey = page,
+                fields = listOf(FormFieldEntry(fieldKey = "query", value = "value$index")),
+            )
+        }
+        repository.saveFields(
+            pageKey = page,
+            fields = listOf(FormFieldEntry(fieldKey = "query", value = "value0")),
+        )
+        assertEquals(
+            listOf("value0"),
+            repository.getSuggestions(pageKey = page, fieldKey = "query", limit = 1),
+        )
+        assertEquals(
+            FormInputRepository.MAX_FIELD_VALUE_ROWS,
+            FormInputDatabase.getInstance(context).formInputDao().countValueRowsForField(
+                scheme = "https",
+                host = "example.com",
+                port = 443,
+                path = "/form",
+                fieldKey = "query",
+            ),
+        )
+    }
 }
