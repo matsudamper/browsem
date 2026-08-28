@@ -78,7 +78,7 @@ class AddressAutofillPromptTest {
         composeRule.waitForUrlBarNotFocused(timeoutMillis = 30_000)
 
         selectFirstAutofillSuggestionAndWaitFilled(
-            fieldFocus = { clickMdnFamilyNameField() },
+            fieldFocus = { timeout -> clickMdnFamilyNameField(timeoutMillis = timeout) },
             barExtraMessage = "MDN の実ページで住所の候補バーが出ない",
             fillExtraMessage = "MDN の実ページで住所を選んでも入力されない",
         )
@@ -110,7 +110,7 @@ class AddressAutofillPromptTest {
             fillExtraMessage = "MDN autocomplete と同じマークアップで住所を選んでも入力されない",
             extraMessage = "MDN autocomplete と同じマークアップで住所の候補バーが出ない\n" +
                 "サーバ受信リクエスト=${server.requests}",
-            afterOpen = { clickLocalNameField("lastName") },
+            afterOpen = { timeout -> clickMdnFamilyNameField(timeoutMillis = timeout) },
         )
         selectEmailAndWaitUntilFilled(
             extraMessage = "MDN autocomplete と同じマークアップでメールを個別に入力できない",
@@ -154,15 +154,15 @@ class AddressAutofillPromptTest {
                     "親サーバ=${parentServer.requests} 子サーバ=${contentServer.requests}",
                 extraMessage = "sandbox iframe 内の MDN マークアップで住所の候補バーが出ない\n" +
                     "親サーバ=${parentServer.requests} 子サーバ=${contentServer.requests}",
-                afterOpen = {
+                afterOpen = { timeout ->
                     val iframeLoaded = runCatching {
-                        composeRule.waitUntil(timeoutMillis = 20_000) {
+                        composeRule.waitUntil(timeoutMillis = minOf(20_000, timeout)) {
                             contentServer.requests.size > contentRequestsBeforeLoad
                         }
                         true
                     }.getOrDefault(false)
                     if (iframeLoaded) {
-                        clickLocalNameField("lastName")
+                        clickMdnFamilyNameField(timeoutMillis = timeout)
                     }
                 },
             )
@@ -198,7 +198,6 @@ class AddressAutofillPromptTest {
             fillExtraMessage = "Mozilla の address_form.html で住所を選んでも入力されない",
             extraMessage = "Mozilla の address_form.html で住所の候補バーが出ない\n" +
                 "サーバ受信リクエスト=${server.requests}",
-            afterOpen = { clickLocalNameField("givenName") },
         )
         selectEmailAndWaitUntilFilled(
             extraMessage = "Mozilla の address_form.html でメールを個別に入力できない",
@@ -226,7 +225,6 @@ class AddressAutofillPromptTest {
             pageUri = pageUri,
             urlMarker = ADDRESS_SELECT_FORM_FILE_NAME,
             extraMessage = "フォーカス時に候補バーが出ない\nサーバ受信リクエスト=${server.requests}",
-            afterOpen = { clickLocalNameField("givenName") },
         )
         composeRule
             .onNodeWithTag(UrlTextInputTestTags.UrlBar.testTag)
@@ -309,20 +307,34 @@ class AddressAutofillPromptTest {
         urlMarker: String,
         fillExtraMessage: String,
         extraMessage: String,
-        afterOpen: () -> Unit = {},
+        afterOpen: (Long) -> Unit = {},
     ) {
         val deadline = System.currentTimeMillis() + LOCAL_PAGE_RETRY_TIMEOUT_MILLIS
         var lastError: Throwable? = null
         while (System.currentTimeMillis() < deadline) {
+            val remaining = deadline - System.currentTimeMillis()
+            if (remaining < RETRY_ATTEMPT_MIN_MILLIS) break
+            val barWaitTimeout = minOf(SUGGESTION_BAR_WAIT_ATTEMPT_MILLIS, remaining / 3)
+            val fieldFocusTimeout = minOf(LOCAL_FIELD_CLICK_WAIT_MILLIS, remaining / 3)
             try {
                 waitForAutofillSuggestionBarOnLocalPage(
                     pageUri = pageUri,
                     urlMarker = urlMarker,
                     extraMessage = extraMessage,
+                    timeoutMillis = barWaitTimeout,
+                    fieldFocusTimeoutMillis = fieldFocusTimeout,
                     afterOpen = afterOpen,
                 )
+                val remainingAfterBar = deadline - System.currentTimeMillis()
+                if (remainingAfterBar < RETRY_ATTEMPT_MIN_MILLIS) {
+                    lastError = AssertionError(fillExtraMessage)
+                    break
+                }
                 clickFirstAutofillNameOption()
-                waitUntilAddressFilled(extraMessage = fillExtraMessage)
+                waitUntilAddressFilled(
+                    extraMessage = fillExtraMessage,
+                    timeoutMillis = minOf(ADDRESS_FILL_TIMEOUT_MILLIS, remainingAfterBar),
+                )
                 return
             } catch (e: Throwable) {
                 lastError = e
@@ -341,20 +353,30 @@ class AddressAutofillPromptTest {
      * MDN 実ページで名前候補を選び、入力完了まで待つ。
      */
     private fun selectFirstAutofillSuggestionAndWaitFilled(
-        fieldFocus: () -> String,
+        fieldFocus: (Long) -> String,
         barExtraMessage: String,
         fillExtraMessage: String,
     ) {
         val deadline = System.currentTimeMillis() + LOCAL_PAGE_RETRY_TIMEOUT_MILLIS
         var lastError: Throwable? = null
         while (System.currentTimeMillis() < deadline) {
-            val fieldClick = fieldFocus()
+            val remaining = deadline - System.currentTimeMillis()
+            if (remaining < RETRY_ATTEMPT_MIN_MILLIS) break
+            val fieldClick = fieldFocus(minOf(LOCAL_FIELD_CLICK_WAIT_MILLIS, remaining / 2))
+            val remainingAfterClick = deadline - System.currentTimeMillis()
+            if (remainingAfterClick < RETRY_ATTEMPT_MIN_MILLIS) {
+                lastError = AssertionError("$fillExtraMessage 苗字欄クリック=$fieldClick")
+                break
+            }
             try {
                 selectFirstAutofillSuggestion(
                     extraMessage = "$barExtraMessage\n苗字欄クリック=$fieldClick",
+                    timeoutMillis = minOf(SUGGESTION_SELECT_TIMEOUT_MILLIS, remainingAfterClick / 2),
                 )
+                val remainingAfterSuggest = deadline - System.currentTimeMillis()
                 waitUntilAddressFilled(
                     extraMessage = "$fillExtraMessage 苗字欄クリック=$fieldClick",
+                    timeoutMillis = minOf(ADDRESS_FILL_TIMEOUT_MILLIS, remainingAfterSuggest),
                 )
                 return
             } catch (e: Throwable) {
@@ -374,11 +396,13 @@ class AddressAutofillPromptTest {
         pageUri: String,
         urlMarker: String,
         extraMessage: String,
-        afterOpen: () -> Unit = {},
+        timeoutMillis: Long = LOCAL_PAGE_RETRY_TIMEOUT_MILLIS,
+        fieldFocusTimeoutMillis: Long = LOCAL_FIELD_CLICK_WAIT_MILLIS,
+        afterOpen: (Long) -> Unit = {},
     ) {
         var opened = false
         try {
-            composeRule.waitUntil(timeoutMillis = LOCAL_PAGE_RETRY_TIMEOUT_MILLIS) {
+            composeRule.waitUntil(timeoutMillis = timeoutMillis) {
                 val onExpectedPage = isExpectedLocalPage(composeRule.currentPageUrlFromUi(), urlMarker)
                 val appeared = composeRule
                     .onAllNodesWithTag(AddressAutofillSuggestionBarTestTags.NameOption.testTag)
@@ -390,9 +414,9 @@ class AddressAutofillPromptTest {
                 if (!opened || !onExpectedPage) {
                     openLocalPage(pageUri, urlMarker)
                     opened = true
-                    runCatching { afterOpen() }
+                    runCatching { afterOpen(fieldFocusTimeoutMillis) }
                 } else if (!appeared) {
-                    runCatching { afterOpen() }
+                    runCatching { afterOpen(fieldFocusTimeoutMillis) }
                 }
                 false
             }
@@ -405,45 +429,6 @@ class AddressAutofillPromptTest {
                 e,
             )
         }
-    }
-
-    /**
-     * ローカル HTML の名前欄へ Accessibility 経由でフォーカスを入れる。
-     */
-    private fun clickLocalNameField(
-        fieldId: String,
-        timeoutMillis: Long = LOCAL_FIELD_CLICK_WAIT_MILLIS,
-    ): String {
-        val uiAutomation = InstrumentationRegistry.getInstrumentation().uiAutomation
-        var result = "not-found fieldId=$fieldId"
-        try {
-            composeRule.waitUntil(timeoutMillis = timeoutMillis) {
-                val root = uiAutomation.rootInActiveWindow ?: return@waitUntil false
-                try {
-                    val target = findNode(root) { node ->
-                        val viewId = node.viewIdResourceName.orEmpty()
-                        val cls = node.className?.toString().orEmpty()
-                        cls.contains("EditText", ignoreCase = true) &&
-                            viewId.endsWith(fieldId, ignoreCase = true)
-                    }
-                    if (target == null) {
-                        false
-                    } else {
-                        val clicked = target.performAction(AccessibilityNodeInfo.ACTION_CLICK) ||
-                            target.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
-                        result =
-                            "clicked=$clicked fieldId=$fieldId viewId=${target.viewIdResourceName.orEmpty()}"
-                        target.recycle()
-                        true
-                    }
-                } finally {
-                    root.recycle()
-                }
-            }
-        } catch (@Suppress("SwallowedException") e: ComposeTimeoutException) {
-            // result は not-found のまま
-        }
-        return result
     }
 
     private fun waitForAddressSaveDialogWithRetry(
@@ -495,10 +480,14 @@ class AddressAutofillPromptTest {
         composeRule.waitForIdle()
     }
 
-    private fun selectFirstAutofillSuggestion(extraMessage: String) {
+    private fun selectFirstAutofillSuggestion(
+        extraMessage: String,
+        timeoutMillis: Long = SUGGESTION_SELECT_TIMEOUT_MILLIS,
+    ) {
         selectAutofillSuggestion(
             optionTestTag = AddressAutofillSuggestionBarTestTags.NameOption.testTag,
             extraMessage = extraMessage,
+            timeoutMillis = timeoutMillis,
         )
     }
 
@@ -585,9 +574,12 @@ class AddressAutofillPromptTest {
         return url.contains(urlMarker)
     }
 
-    private fun waitUntilAddressFilled(extraMessage: String) {
+    private fun waitUntilAddressFilled(
+        extraMessage: String,
+        timeoutMillis: Long = ADDRESS_FILL_TIMEOUT_MILLIS,
+    ) {
         try {
-            composeRule.waitUntil(timeoutMillis = ADDRESS_FILL_TIMEOUT_MILLIS) {
+            composeRule.waitUntil(timeoutMillis = timeoutMillis) {
                 pageContainsFilledAddress(FILL_FAMILY_NAME, FILL_GIVEN_NAME) &&
                     !pageContainsFilledEmail()
             }
@@ -610,12 +602,12 @@ class AddressAutofillPromptTest {
         var lastError: Throwable? = null
         while (System.currentTimeMillis() < deadline) {
             val remaining = deadline - System.currentTimeMillis()
-            if (remaining < EMAIL_FILL_ATTEMPT_MIN_MILLIS) break
+            if (remaining < RETRY_ATTEMPT_MIN_MILLIS) break
             val fieldClick = clickMdnEmailField(
                 timeoutMillis = minOf(LOCAL_FIELD_CLICK_WAIT_MILLIS, remaining / 2),
             )
             val remainingAfterClick = deadline - System.currentTimeMillis()
-            if (remainingAfterClick < EMAIL_FILL_ATTEMPT_MIN_MILLIS) {
+            if (remainingAfterClick < RETRY_ATTEMPT_MIN_MILLIS) {
                 lastError = AssertionError("$extraMessage (メール欄クリック=$fieldClick)")
                 break
             }
@@ -1677,8 +1669,9 @@ class AddressAutofillPromptTest {
         private const val MDN_FIELD_WAIT_MILLIS = 60_000L
         private const val LOCAL_FIELD_CLICK_WAIT_MILLIS = 5_000L
         private const val FORM_SUBMIT_WAIT_MILLIS = 25_000L
+        private const val SUGGESTION_BAR_WAIT_ATTEMPT_MILLIS = 30_000L
         private const val SUGGESTION_SELECT_TIMEOUT_MILLIS = 15_000L
-        private const val EMAIL_FILL_ATTEMPT_MIN_MILLIS = 5_000L
+        private const val RETRY_ATTEMPT_MIN_MILLIS = 5_000L
         private const val ADDRESS_FILL_TIMEOUT_MILLIS = 45_000L
         private const val LOCAL_PAGE_RETRY_TIMEOUT_MILLIS = 90_000L
         private const val ACCESSIBILITY_DUMP_MAX_LINES = 500
