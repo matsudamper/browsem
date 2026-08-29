@@ -66,6 +66,7 @@ fun SettingsScreen(
     onOpenExtensions: () -> Unit,
     onOpenHistory: () -> Unit,
     onOpenAddresses: () -> Unit,
+    onOpenCrashLogs: () -> Unit,
     onOpenReleases: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
@@ -466,6 +467,17 @@ fun SettingsScreen(
 
             Spacer(Modifier.height(betweenPadding))
 
+            SettingSection(title = "クラッシュログ") {
+                TextButton(
+                    onClick = onOpenCrashLogs,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("クラッシュログを確認")
+                }
+            }
+
+            Spacer(Modifier.height(betweenPadding))
+
             SettingSection(title = "リリース") {
                 TextButton(
                     onClick = onOpenReleases,
@@ -696,6 +708,7 @@ private fun SettingsScreenPreviewContent(showDefaultBrowserBanner: Boolean) {
             onOpenExtensions = {},
             onOpenHistory = {},
             onOpenAddresses = {},
+            onOpenCrashLogs = {},
             onOpenReleases = {},
             onBack = {},
         )

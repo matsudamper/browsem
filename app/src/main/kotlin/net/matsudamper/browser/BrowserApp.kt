@@ -2,8 +2,12 @@ package net.matsudamper.browser
 
 import android.Manifest
 import android.app.Application
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.widget.Toast
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
@@ -71,6 +75,7 @@ import net.matsudamper.browser.data.SiteSettingsRepository
 import net.matsudamper.browser.data.TabGroupId
 import net.matsudamper.browser.data.TabGroupRepository
 import net.matsudamper.browser.data.extractSiteHost
+import net.matsudamper.browser.data.crashlog.CrashLogRepository
 import net.matsudamper.browser.data.history.HistoryRepository
 import net.matsudamper.browser.data.websuggestion.WebSuggestionRepository
 import net.matsudamper.browser.navigation.AppDestination
@@ -83,6 +88,8 @@ import net.matsudamper.browser.screen.extensions.ExtensionsScreenViewModel
 import net.matsudamper.browser.data.address.AddressRepository
 import net.matsudamper.browser.screen.addresses.AddressEditScreenViewModel
 import net.matsudamper.browser.screen.addresses.AddressesScreenViewModel
+import net.matsudamper.browser.screen.crashlog.CrashLogDetailScreenViewModel
+import net.matsudamper.browser.screen.crashlog.CrashLogsScreenViewModel
 import net.matsudamper.browser.screen.history.HistoryScreenViewModel
 import net.matsudamper.browser.screen.settings.SettingsScreenViewModel
 import net.matsudamper.browser.screen.siteforminput.SiteFormInputFieldScreenViewModel
@@ -98,6 +105,8 @@ import net.matsudamper.browser.ui.common.BrowserTheme
 import net.matsudamper.browser.ui.downloads.DownloadManagementScreen
 import net.matsudamper.browser.ui.extensions.ExtensionsScreen
 import net.matsudamper.browser.ui.history.HistoryScreen
+import net.matsudamper.browser.ui.settings.CrashLogDetailRoute
+import net.matsudamper.browser.ui.settings.CrashLogsRoute
 import net.matsudamper.browser.ui.settings.AddressEditScreen
 import net.matsudamper.browser.ui.settings.AddressesScreen
 import net.matsudamper.browser.ui.settings.BackupProgressScreen
@@ -297,6 +306,7 @@ internal fun BrowserAppShell(
                             onOpenExtensions = { outerBackStack.add(AppDestination.Extensions) },
                             onOpenHistory = { outerBackStack.add(AppDestination.History) },
                             onOpenAddresses = { outerBackStack.add(AppDestination.Addresses) },
+                            onOpenCrashLogs = { outerBackStack.add(AppDestination.CrashLogs) },
                             onOpenReleases = {
                                 context.startActivity(
                                     Intent(
@@ -533,6 +543,56 @@ internal fun BrowserAppShell(
                     }
                     AddressesScreen(
                         uiState = addressesUiState,
+                        onBack = { outerBackStack.removeLastOrNull() },
+                    )
+                }
+
+                AppDestination.CrashLogs -> navEntry(key) {
+                    val crashLogRepository: CrashLogRepository = koinInject()
+                    val crashLogsViewModel = composeViewModel(initializer = {
+                        CrashLogsScreenViewModel(crashLogRepository)
+                    })
+                    val crashLogsUiState by crashLogsViewModel.uiState.collectAsState()
+                    LaunchedEffect(crashLogsViewModel) {
+                        crashLogsViewModel.eventHandler.receiveAsFlow().collect {
+                            it(object : CrashLogsScreenViewModel.Event {
+                                override fun navigateToDetail(crashLogId: Long) {
+                                    outerBackStack.add(AppDestination.CrashLogDetail(crashLogId = crashLogId))
+                                }
+                            })
+                        }
+                    }
+                    CrashLogsRoute(
+                        uiState = crashLogsUiState,
+                        onBack = { outerBackStack.removeLastOrNull() },
+                    )
+                }
+
+                is AppDestination.CrashLogDetail -> navEntry(key) {
+                    val crashLogRepository: CrashLogRepository = koinInject()
+                    val crashLogDetailViewModel = composeViewModel(initializer = {
+                        CrashLogDetailScreenViewModel(
+                            crashLogRepository = crashLogRepository,
+                            crashLogId = key.crashLogId,
+                        )
+                    })
+                    val crashLogDetailUiState by crashLogDetailViewModel.uiState.collectAsState()
+                    LaunchedEffect(crashLogDetailViewModel) {
+                        crashLogDetailViewModel.eventHandler.receiveAsFlow().collect {
+                            it(object : CrashLogDetailScreenViewModel.Event {
+                                override fun copyToClipboard(text: String) {
+                                    copyTextToClipboard(
+                                        context = context,
+                                        label = "crash log",
+                                        text = text,
+                                        message = "クラッシュログをコピーしました",
+                                    )
+                                }
+                            })
+                        }
+                    }
+                    CrashLogDetailRoute(
+                        uiState = crashLogDetailUiState,
                         onBack = { outerBackStack.removeLastOrNull() },
                     )
                 }
@@ -1162,6 +1222,17 @@ private const val GITHUB_RELEASES_URL = "https://github.com/matsudamper/browsem/
 private fun buildBackupFileName(): String {
     val formatter = java.text.SimpleDateFormat("yyyyMMdd-HHmmss", java.util.Locale.US)
     return "browsem-backup-${formatter.format(java.util.Date())}.${BackupRepository.FILE_EXTENSION}"
+}
+
+private fun copyTextToClipboard(
+    context: Context,
+    label: String,
+    text: String,
+    message: String,
+) {
+    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+    clipboard.setPrimaryClip(ClipData.newPlainText(label, text))
+    Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
 }
 
 internal fun navEntry(
