@@ -266,7 +266,6 @@ class MainActivity : ComponentActivity() {
             launchCustomTabActivity(intent, finishCurrentTask = true)
             return
         }
-        setIntent(intent)
         if (intent.action == DownloadWorker.ACTION_OPEN_DOWNLOADS) {
             handleOpenDownloadsIntent(intent)
             return
