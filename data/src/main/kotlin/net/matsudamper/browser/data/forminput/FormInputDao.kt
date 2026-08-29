@@ -104,6 +104,23 @@ interface FormInputDao {
 
     @Query(
         """
+        SELECT value FROM form_field_value
+        WHERE scheme = :scheme AND host = :host AND port = :port
+          AND path = :path AND fieldKey = :fieldKey AND value != ''
+        GROUP BY value
+        ORDER BY MAX(createdAt) DESC
+        """,
+    )
+    fun observeDistinctValuesForField(
+        scheme: String,
+        host: String,
+        port: Int,
+        path: String,
+        fieldKey: String,
+    ): Flow<List<String>>
+
+    @Query(
+        """
         SELECT COUNT(DISTINCT fieldKey) FROM form_field_value
         WHERE scheme = :scheme AND host = :host AND port = :port AND path = :path
         """,
@@ -168,6 +185,22 @@ interface FormInputDao {
         port: Int,
         path: String,
         fieldKey: String,
+    )
+
+    @Query(
+        """
+        DELETE FROM form_field_value
+        WHERE scheme = :scheme AND host = :host AND port = :port
+          AND path = :path AND fieldKey = :fieldKey AND value = :value
+        """,
+    )
+    suspend fun deleteValueForField(
+        scheme: String,
+        host: String,
+        port: Int,
+        path: String,
+        fieldKey: String,
+        value: String,
     )
 
     @Query(

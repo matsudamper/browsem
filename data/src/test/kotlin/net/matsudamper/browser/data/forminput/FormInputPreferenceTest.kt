@@ -119,16 +119,44 @@ class FormInputPreferenceTest {
             fields = listOf(FormFieldEntry(fieldKey = "comment", value = "first")),
         )
         assertEquals(
-            listOf("first"),
-            repository.observeSavedFields(origin, "/form").first().single().values,
+            1,
+            repository.observeSavedFields(origin, "/form").first().single().valueCount,
         )
         repository.saveFields(
             pageKey = page,
             fields = listOf(FormFieldEntry(fieldKey = "comment", value = "second")),
         )
         assertEquals(
-            listOf("second", "first"),
-            repository.observeSavedFields(origin, "/form").first().single().values,
+            2,
+            repository.observeSavedFields(origin, "/form").first().single().valueCount,
+        )
+    }
+
+    @Test
+    fun deleteValueRemovesSingleSavedValue() = runBlocking {
+        val page = FormInputPageKey(
+            scheme = "https",
+            host = "example.com",
+            port = 443,
+            path = "/form",
+        )
+        val origin = page.origin()
+        repository.saveFields(
+            pageKey = page,
+            fields = listOf(
+                FormFieldEntry(fieldKey = "comment", value = "first"),
+                FormFieldEntry(fieldKey = "comment", value = "second"),
+            ),
+        )
+        repository.deleteValue(origin, "/form", "comment", "first")
+
+        assertEquals(
+            listOf("second"),
+            repository.observeSavedValues(origin, "/form", "comment").first(),
+        )
+        assertEquals(
+            1,
+            repository.observeSavedFields(origin, "/form").first().single().valueCount,
         )
     }
 
