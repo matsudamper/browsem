@@ -85,7 +85,13 @@ import net.matsudamper.browser.screen.addresses.AddressEditScreenViewModel
 import net.matsudamper.browser.screen.addresses.AddressesScreenViewModel
 import net.matsudamper.browser.screen.history.HistoryScreenViewModel
 import net.matsudamper.browser.screen.settings.SettingsScreenViewModel
+import net.matsudamper.browser.screen.siteforminput.SiteFormInputFieldScreenViewModel
+import net.matsudamper.browser.screen.siteforminput.SiteFormInputPathScreenViewModel
+import net.matsudamper.browser.screen.siteforminput.SiteFormInputPathsScreenViewModel
 import net.matsudamper.browser.screen.sitesettings.SiteSettingsScreenViewModel
+import net.matsudamper.browser.data.forminput.FormInputOrigin
+import net.matsudamper.browser.data.forminput.FormInputRepository
+import net.matsudamper.browser.data.forminput.parseFormInputPageKey
 import net.matsudamper.browser.screen.tab.TabsScreenViewModel
 import net.matsudamper.browser.ui.browser.BrowserScreen
 import net.matsudamper.browser.ui.common.BrowserTheme
@@ -97,6 +103,9 @@ import net.matsudamper.browser.ui.settings.AddressesScreen
 import net.matsudamper.browser.ui.settings.BackupProgressScreen
 import net.matsudamper.browser.ui.settings.BackupProgressUiState
 import net.matsudamper.browser.ui.settings.SettingsScreen
+import net.matsudamper.browser.ui.settings.SiteFormInputFieldRoute
+import net.matsudamper.browser.ui.settings.SiteFormInputPathRoute
+import net.matsudamper.browser.ui.settings.SiteFormInputPathsRoute
 import net.matsudamper.browser.ui.settings.SiteSettingsScreen
 import net.matsudamper.browser.ui.tabs.TabsScreen
 import org.koin.compose.koinInject
@@ -305,12 +314,20 @@ internal fun BrowserAppShell(
 
                 is AppDestination.SiteSettings -> navEntry(key) {
                     val siteSettingsRepository: SiteSettingsRepository = koinInject()
+                    val formInputRepository: FormInputRepository = koinInject()
                     val geckoRuntime: GeckoRuntime = koinInject()
                     val publicSuffixList: PublicSuffixList = koinInject()
+                    val formInputOrigin = FormInputOrigin(
+                        scheme = key.scheme,
+                        host = key.host,
+                        port = key.port,
+                    )
                     val siteSettingsViewModel = composeViewModel(initializer = {
                         SiteSettingsScreenViewModel(
                             host = key.host,
+                            formInputOrigin = formInputOrigin,
                             siteSettingsRepository = siteSettingsRepository,
+                            formInputRepository = formInputRepository,
                             geckoRuntime = geckoRuntime,
                             publicSuffixList = publicSuffixList,
                             securityInfo = key.tabId
@@ -334,6 +351,16 @@ internal fun BrowserAppShell(
                                         ),
                                     )
                                 }
+
+                                override fun navigateToSavedFormInputs() {
+                                    outerBackStack.add(
+                                        AppDestination.SiteFormInputPaths(
+                                            scheme = formInputOrigin.scheme,
+                                            host = formInputOrigin.host,
+                                            port = formInputOrigin.port,
+                                        ),
+                                    )
+                                }
                             })
                         }
                     }
@@ -341,6 +368,124 @@ internal fun BrowserAppShell(
                     SiteSettingsScreen(
                         uiState = siteSettingsUiState,
                         onBack = { outerBackStack.removeLastOrNull() },
+                    )
+                }
+
+                is AppDestination.SiteFormInputPaths -> navEntry(key) {
+                    val formInputRepository: FormInputRepository = koinInject()
+                    val origin = FormInputOrigin(
+                        scheme = key.scheme,
+                        host = key.host,
+                        port = key.port,
+                    )
+                    val pathsViewModel = composeViewModel(initializer = {
+                        SiteFormInputPathsScreenViewModel(
+                            origin = origin,
+                            formInputRepository = formInputRepository,
+                        )
+                    })
+                    val pathsUiState by pathsViewModel.uiState.collectAsState()
+                    LaunchedEffect(pathsViewModel) {
+                        pathsViewModel.eventHandler.receiveAsFlow().collect { handler ->
+                            handler(object : SiteFormInputPathsScreenViewModel.Event {
+                                override fun navigateBack() {
+                                    outerBackStack.removeLastOrNull()
+                                }
+
+                                override fun navigateToPath(path: String) {
+                                    outerBackStack.add(
+                                        AppDestination.SiteFormInputPath(
+                                            scheme = key.scheme,
+                                            host = key.host,
+                                            port = key.port,
+                                            path = path,
+                                        ),
+                                    )
+                                }
+                            })
+                        }
+                    }
+                    SiteFormInputPathsRoute(
+                        uiState = pathsUiState,
+                    )
+                }
+
+                is AppDestination.SiteFormInputPath -> navEntry(key) {
+                    val formInputRepository: FormInputRepository = koinInject()
+                    val origin = FormInputOrigin(
+                        scheme = key.scheme,
+                        host = key.host,
+                        port = key.port,
+                    )
+                    val pathViewModel = composeViewModel(initializer = {
+                        SiteFormInputPathScreenViewModel(
+                            origin = origin,
+                            path = key.path,
+                            formInputRepository = formInputRepository,
+                        )
+                    })
+                    val pathUiState by pathViewModel.uiState.collectAsState()
+                    LaunchedEffect(pathViewModel) {
+                        pathViewModel.eventHandler.receiveAsFlow().collect { handler ->
+                            handler(object : SiteFormInputPathScreenViewModel.Event {
+                                override fun navigateBack() {
+                                    outerBackStack.removeLastOrNull()
+                                }
+
+                                override fun navigateBackAfterDeleted() {
+                                    outerBackStack.removeLastOrNull()
+                                }
+
+                                override fun navigateToField(fieldKey: String) {
+                                    outerBackStack.add(
+                                        AppDestination.SiteFormInputField(
+                                            scheme = key.scheme,
+                                            host = key.host,
+                                            port = key.port,
+                                            path = key.path,
+                                            fieldKey = fieldKey,
+                                        ),
+                                    )
+                                }
+                            })
+                        }
+                    }
+                    SiteFormInputPathRoute(
+                        uiState = pathUiState,
+                    )
+                }
+
+                is AppDestination.SiteFormInputField -> navEntry(key) {
+                    val formInputRepository: FormInputRepository = koinInject()
+                    val origin = FormInputOrigin(
+                        scheme = key.scheme,
+                        host = key.host,
+                        port = key.port,
+                    )
+                    val fieldViewModel = composeViewModel(initializer = {
+                        SiteFormInputFieldScreenViewModel(
+                            origin = origin,
+                            path = key.path,
+                            fieldKey = key.fieldKey,
+                            formInputRepository = formInputRepository,
+                        )
+                    })
+                    val fieldUiState by fieldViewModel.uiState.collectAsState()
+                    LaunchedEffect(fieldViewModel) {
+                        fieldViewModel.eventHandler.receiveAsFlow().collect { handler ->
+                            handler(object : SiteFormInputFieldScreenViewModel.Event {
+                                override fun navigateBack() {
+                                    outerBackStack.removeLastOrNull()
+                                }
+
+                                override fun navigateBackAfterDeleted() {
+                                    outerBackStack.removeLastOrNull()
+                                }
+                            })
+                        }
+                    }
+                    SiteFormInputFieldRoute(
+                        uiState = fieldUiState,
                     )
                 }
 
@@ -607,8 +752,16 @@ internal class OuterNavActions(private val backStack: MutableList<NavKey>) {
      * 現在のページのホストでサイト設定を開く。ホストを取り出せない URL（about: など）では何もしない。
      */
     fun openSiteSettings(currentUrl: String, tabId: String?) {
-        val host = extractSiteHost(currentUrl) ?: return
-        add(AppDestination.SiteSettings(host = host, tabId = tabId))
+        val pageKey = parseFormInputPageKey(currentUrl)
+        val host = extractSiteHost(currentUrl) ?: pageKey?.host ?: return
+        add(
+            AppDestination.SiteSettings(
+                host = host,
+                scheme = pageKey?.scheme ?: "https",
+                port = pageKey?.port ?: 443,
+                tabId = tabId,
+            ),
+        )
     }
 }
 

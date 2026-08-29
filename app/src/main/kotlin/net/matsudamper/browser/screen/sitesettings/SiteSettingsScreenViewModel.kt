@@ -19,13 +19,17 @@ import net.matsudamper.browser.awaitGecko
 import net.matsudamper.browser.data.SiteGeolocationState
 import net.matsudamper.browser.data.SitePermissionState
 import net.matsudamper.browser.data.SiteSettingsRepository
+import net.matsudamper.browser.data.forminput.FormInputOrigin
+import net.matsudamper.browser.data.forminput.FormInputRepository
 import net.matsudamper.browser.ui.settings.SiteSettingsScreenUiState
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.StorageController
 
 internal class SiteSettingsScreenViewModel(
     private val host: String,
+    private val formInputOrigin: FormInputOrigin,
     private val siteSettingsRepository: SiteSettingsRepository,
+    private val formInputRepository: FormInputRepository,
     private val geckoRuntime: GeckoRuntime,
     private val publicSuffixList: PublicSuffixList,
     securityInfo: TabSecurityInfo?,
@@ -36,6 +40,8 @@ internal class SiteSettingsScreenViewModel(
     interface Event {
         /** OS の位置情報権限を要求する。結果は onLocationPermissionResult で受け取る */
         fun onRequestLocationPermission()
+
+        fun navigateToSavedFormInputs()
     }
 
     // 権限要求の多重発行を防ぐ in-flight フラグ
@@ -72,6 +78,10 @@ internal class SiteSettingsScreenViewModel(
 
         override fun consumeClearDataResultMessage() {
             uiStateFlow.update { it.copy(clearDataResultMessage = null) }
+        }
+
+        override fun openSavedFormInputs() {
+            eventHandler.trySend { it.navigateToSavedFormInputs() }
         }
 
         override fun setGeolocationState(state: SiteGeolocationState) {
@@ -111,10 +121,16 @@ internal class SiteSettingsScreenViewModel(
             tlsCertificate = createTlsCertificateUiState(securityInfo),
             clearDataConfirmDialog = null,
             clearDataResultMessage = null,
+            savedFormInputPathCount = 0,
         ),
     )
 
     val uiState: StateFlow<SiteSettingsScreenUiState> = uiStateFlow.also {
+        viewModelScope.launch {
+            formInputRepository.observeSavedPathCount(formInputOrigin).collectLatest { count ->
+                uiStateFlow.update { it.copy(savedFormInputPathCount = count) }
+            }
+        }
         viewModelScope.launch {
             siteSettingsRepository.requestedMicrophonePermission(host).collectLatest { permission ->
                 uiStateFlow.update { it.copy(microphonePermission = permission) }
