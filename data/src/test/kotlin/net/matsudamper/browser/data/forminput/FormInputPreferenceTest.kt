@@ -165,6 +165,27 @@ class FormInputPreferenceTest {
     }
 
     @Test
+    fun deleteLastValueKeepsFieldEnabled() = runBlocking {
+        val page = FormInputPageKey(
+            scheme = "https",
+            host = "example.com",
+            port = 443,
+            path = "/form",
+        )
+        val origin = page.origin()
+        repository.setFieldEnabled(origin, "/form", "comment", enabled = true)
+        repository.saveFields(
+            pageKey = page,
+            fields = listOf(FormFieldEntry(fieldKey = "comment", value = "only")),
+        )
+
+        repository.deleteValue(origin, "/form", "comment", "only")
+
+        assertTrue(repository.getFieldEnabled(origin, "/form", "comment"))
+        assertTrue(repository.observeSavedValues(origin, "/form", "comment").first().isEmpty())
+    }
+
+    @Test
     fun preferencesAreIsolatedByOrigin() = runBlocking {
         val httpsOrigin = FormInputOrigin(scheme = "https", host = "example.com", port = 443)
         val httpOrigin = FormInputOrigin(scheme = "http", host = "example.com", port = 80)

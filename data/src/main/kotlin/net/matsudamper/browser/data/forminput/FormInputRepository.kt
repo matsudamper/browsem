@@ -308,23 +308,6 @@ class FormInputRepository(context: Context) {
             fieldKey = fieldKey,
             value = value,
         )
-        if (dao.countValueRowsForField(
-                scheme = origin.scheme,
-                host = origin.host,
-                port = origin.port,
-                path = path,
-                fieldKey = fieldKey,
-            ) == 0
-        ) {
-            dao.deletePreferenceForField(
-                scheme = origin.scheme,
-                host = origin.host,
-                port = origin.port,
-                path = path,
-                fieldKey = fieldKey,
-            )
-            cleanupPathPreferencesIfEmpty(origin, path)
-        }
     }
 
     suspend fun deleteAll() {
