@@ -31,6 +31,7 @@ import net.matsudamper.browser.data.TabGroupRepositoryImpl
 import net.matsudamper.browser.data.TabRepository
 import net.matsudamper.browser.data.forminput.FormInputRepository
 import net.matsudamper.browser.data.download.DownloadRepository
+import net.matsudamper.browser.data.crashlog.CrashLogRepository
 import net.matsudamper.browser.data.history.HistoryRepository
 import net.matsudamper.browser.data.resolvedExtensionsProcessEnabled
 import net.matsudamper.browser.data.websuggestion.HttpWebSuggestionRepository
@@ -60,6 +61,7 @@ val dataModule = module {
     single { DownloadRepository(androidContext()) }
     single { AddressRepository(androidContext()) }
     single { FormInputRepository(androidContext()) }
+    single { CrashLogRepository(androidContext()) }
     single<WebSuggestionRepository> { HttpWebSuggestionRepository() }
 }
 
