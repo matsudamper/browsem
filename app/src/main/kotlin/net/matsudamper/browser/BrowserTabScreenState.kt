@@ -688,21 +688,13 @@ internal class BrowserTabScreenState(
     }
 
     // viewport meta を書き換えてページ全体のズームを適用する
-    // percent=100 のときは width=device-width に戻す
     private fun injectViewportZoom(percent: Int) {
-        val viewportContent = if (percent == 100) {
-            "width=device-width,initial-scale=1"
-        } else {
-            val screenWidthDp = (context.resources.displayMetrics.widthPixels / context.resources.displayMetrics.density).toInt()
-            val viewportWidth = screenWidthDp * 100 / percent
-            "width=$viewportWidth,initial-scale=1"
-        }
-        val script = "javascript:void((function(){" +
-            "var c='$viewportContent';" +
-            "var m=document.querySelector('meta[name=\"viewport\"]');" +
-            "if(!m){m=document.createElement('meta');m.name='viewport';document.head.appendChild(m);}" +
-            "m.content=c;" +
-            "})())"
+        val screenWidthDp = (context.resources.displayMetrics.widthPixels / context.resources.displayMetrics.density).toInt()
+        val viewportContent = viewportContentForPageZoom(screenWidthDp, percent)
+        val script = buildViewportZoomInjectionScript(
+            viewportContent = viewportContent,
+            persistAcrossDomChanges = percent != 100,
+        )
         session.loadUri(script)
     }
 
@@ -1297,6 +1289,10 @@ internal class BrowserTabScreenState(
             // SPA 遷移（pushState / 同一ドキュメント内 history 移動）では
             // onPageStart / onPageStop が発火しないため両フラグを復帰させる
             markRenderingDone()
+            // onPageStop が発火しないため、ここでズームを再適用する
+            if (shouldReapplyPageZoomOnSpaLocationChange(pageZoomPercent, wasFullPageLoad)) {
+                injectViewportZoom(pageZoomPercent)
+            }
         }
         currentPageUrl = url
         if (!isUrlInputFocused) {

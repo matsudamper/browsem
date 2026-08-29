@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SPA Zoom Test</title>
+</head>
+<body>
+  <button id="nav-btn">SPA Navigate</button>
+  <script>
+    function updateWidthQuery() {
+      const url = new URL(window.location.href);
+      url.searchParams.set("w", String(window.innerWidth));
+      history.replaceState(null, "", url.toString());
+    }
+    window.addEventListener("load", updateWidthQuery);
+    document.getElementById("nav-btn").addEventListener("click", function () {
+      // SPA 遷移時に viewport をデフォルトへ戻す（実サイトでよくあるパターン）
+      const meta = document.querySelector('meta[name="viewport"]');
+      if (meta) meta.content = "width=device-width,initial-scale=1";
+      const url = new URL(window.location.href);
+      url.hash = "route2";
+      history.pushState(null, "", url.toString());
+      setTimeout(updateWidthQuery, 50);
+    });
+  </script>
+</body>
+</html>

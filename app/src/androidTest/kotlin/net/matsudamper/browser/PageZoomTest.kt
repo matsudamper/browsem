@@ -137,6 +137,35 @@ class PageZoomTest {
     }
 
     /**
+     * SPA 遷移後もページズームが維持されることを確認する。
+     */
+    @Test
+    fun pageZoomPersistedAfterSpaNavigation() {
+        val spaPageUri = prepareLocalSpaZoomPageUri()
+        composeRule.openUrlFromUrlBar(spaPageUri)
+        composeRule.waitForUrlBarContains(SPA_NAV_FILE_NAME, timeoutMillis = 60_000)
+        composeRule.waitForUrlBarNotFocused()
+
+        val baselineWidth = waitForViewportWidthInUrl(timeoutMillis = 30_000)
+        openPageZoomMenuAndSet200Percent()
+        val zoomedWidth = waitForViewportWidthInUrl(timeoutMillis = 30_000)
+        assertTrue(
+            "200%ズーム後に viewport 幅が縮小されていない: baseline=$baselineWidth zoomed=$zoomedWidth",
+            zoomedWidth < baselineWidth * 0.75,
+        )
+
+        composeRule.onNodeWithText("SPA Navigate").performClick()
+        composeRule.waitUntil(timeoutMillis = 30_000) {
+            composeRule.currentPageUrlFromUi().contains("#route2")
+        }
+        val widthAfterSpaNav = waitForViewportWidthInUrl(timeoutMillis = 30_000)
+        assertTrue(
+            "SPA遷移後にズームが解除された: zoomed=$zoomedWidth afterSpa=$widthAfterSpaNav baseline=$baselineWidth",
+            widthAfterSpaNav < baselineWidth * 0.75,
+        )
+    }
+
+    /**
      * ズーム後に再読み込みしても、ページズーム表示値が維持されることを確認する。
      */
     @Test
@@ -248,6 +277,33 @@ class PageZoomTest {
         return destination.toURI().toString()
     }
 
+    private fun prepareLocalSpaZoomPageUri(): String {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val targetContext = instrumentation.targetContext
+        val destinationDir = File(targetContext.cacheDir, ZOOM_DIR_NAME).apply { mkdirs() }
+        val assetManager = instrumentation.context.assets
+        val destination = File(destinationDir, SPA_NAV_FILE_NAME)
+        assetManager.open("$ZOOM_ASSET_DIR/$SPA_NAV_FILE_NAME").use { input ->
+            destination.outputStream().use { output ->
+                input.copyTo(output)
+            }
+        }
+        return destination.toURI().toString()
+    }
+
+    private fun waitForViewportWidthInUrl(timeoutMillis: Long): Int {
+        var width: Int? = null
+        composeRule.waitUntil(timeoutMillis = timeoutMillis) {
+            width = viewportWidthFromUrl(composeRule.currentPageUrlFromUi())
+            width != null
+        }
+        return width ?: error("URL から viewport 幅を取得できない")
+    }
+
+    private fun viewportWidthFromUrl(url: String): Int? {
+        return Regex("[?&]w=(\\d+)").find(url)?.groupValues?.get(1)?.toIntOrNull()
+    }
+
     private fun pressSystemBack() {
         composeRule.runOnIdle {
             composeRule.activity.onBackPressedDispatcher.onBackPressed()
@@ -258,5 +314,6 @@ class PageZoomTest {
         private const val ZOOM_ASSET_DIR = "test-zoom"
         private const val ZOOM_DIR_NAME = "test-zoom"
         private const val ZOOM_INDEX_FILE_NAME = "index.html"
+        private const val SPA_NAV_FILE_NAME = "spa-nav.html"
     }
 }
