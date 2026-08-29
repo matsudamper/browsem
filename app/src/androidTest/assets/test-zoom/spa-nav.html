@@ -15,9 +15,20 @@
       history.pushState(null, "", url.toString());
     }
 
+    function getEffectiveViewportWidth() {
+      const metas = Array.from(document.querySelectorAll('meta[name="viewport"]'));
+      for (let i = metas.length - 1; i >= 0; i--) {
+        const match = metas[i].content.match(/width=(\d+)/);
+        if (match) {
+          return parseInt(match[1], 10);
+        }
+      }
+      return window.innerWidth;
+    }
+
     function reportViewportWidth() {
       pushUrl((url) => {
-        url.searchParams.set("w", String(window.innerWidth));
+        url.searchParams.set("w", String(getEffectiveViewportWidth()));
         if (!url.searchParams.has("route")) {
           url.searchParams.set("route", "home");
         }
@@ -26,8 +37,16 @@
 
     window.addEventListener("load", reportViewportWidth);
     window.addEventListener("resize", reportViewportWidth);
-    // 一部環境で resize が遅延するため、念のため定期更新する
+    // viewport meta の差し替えは resize を発火しないことがある
     setInterval(reportViewportWidth, 500);
+    if (document.head) {
+      new MutationObserver(reportViewportWidth).observe(document.head, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ["content", "name"],
+      });
+    }
 
     document.getElementById("nav-btn").addEventListener("click", function () {
       // SPA 遷移時に新しい viewport meta を追加する（実サイトでよくあるパターン）

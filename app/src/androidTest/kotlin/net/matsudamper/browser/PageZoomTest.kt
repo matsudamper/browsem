@@ -160,6 +160,8 @@ class PageZoomTest {
 
         val baselineWidth = waitForViewportWidthInUrl(timeoutMillis = 30_000)
         openPageZoomMenuAndSet200Percent()
+        closeMenuFromToolbar()
+        composeRule.waitForUrlBarNotFocused()
         val zoomedWidth = waitForViewportWidthBelow(
             maxWidth = (baselineWidth * 0.75).toInt(),
             excludeWidth = baselineWidth,
@@ -244,6 +246,13 @@ class PageZoomTest {
 
     private fun openMenuFromToolbar() {
         ensureBrowserScreen()
+        composeRule.onNode(
+            hasTestTag(BrowserToolbarTestTags.MenuButton.testTag)
+                .and(hasParent(hasTestTag(BrowserToolbarTestTags.Toolbar.testTag)))
+        ).performClick()
+    }
+
+    private fun closeMenuFromToolbar() {
         composeRule.onNode(
             hasTestTag(BrowserToolbarTestTags.MenuButton.testTag)
                 .and(hasParent(hasTestTag(BrowserToolbarTestTags.Toolbar.testTag)))
