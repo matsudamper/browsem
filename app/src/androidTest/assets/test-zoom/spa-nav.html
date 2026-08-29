@@ -7,20 +7,20 @@
 <body>
   <button id="nav-btn">SPA Navigate</button>
   <script>
-    function updateWidthQuery() {
-      const url = new URL(window.location.href);
-      url.searchParams.set("w", String(window.innerWidth));
-      history.replaceState(null, "", url.toString());
+    function reportViewportWidth() {
+      const width = window.innerWidth;
+      const route = window.location.hash.includes("route2") ? "route2" : "home";
+      history.replaceState(null, "", "#" + route + "/w=" + width);
     }
-    window.addEventListener("load", updateWidthQuery);
+    window.addEventListener("load", reportViewportWidth);
+    window.addEventListener("resize", reportViewportWidth);
+    setInterval(reportViewportWidth, 500);
     document.getElementById("nav-btn").addEventListener("click", function () {
       // SPA 遷移時に viewport をデフォルトへ戻す（実サイトでよくあるパターン）
       const meta = document.querySelector('meta[name="viewport"]');
       if (meta) meta.content = "width=device-width,initial-scale=1";
-      const url = new URL(window.location.href);
-      url.hash = "route2";
-      history.pushState(null, "", url.toString());
-      setTimeout(updateWidthQuery, 50);
+      history.pushState(null, "", "#route2");
+      setTimeout(reportViewportWidth, 50);
     });
   </script>
 </body>

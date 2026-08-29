@@ -301,7 +301,7 @@ class PageZoomTest {
     }
 
     private fun viewportWidthFromUrl(url: String): Int? {
-        return Regex("[?&]w=(\\d+)").find(url)?.groupValues?.get(1)?.toIntOrNull()
+        return Regex("w=(\\d+)").find(url)?.groupValues?.get(1)?.toIntOrNull()
     }
 
     private fun pressSystemBack() {
