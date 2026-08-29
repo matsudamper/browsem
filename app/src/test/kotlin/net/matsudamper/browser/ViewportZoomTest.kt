@@ -61,7 +61,7 @@ class ViewportZoomTest {
         )
         assertTrue(script.startsWith("javascript:void("))
         assertTrue(script.contains("width=200,initial-scale=1"))
-        assertTrue(script.contains("MutationObserver"))
+        assertTrue(script.contains("new MutationObserver"))
     }
 
     @Test
@@ -71,6 +71,6 @@ class ViewportZoomTest {
             persistAcrossDomChanges = false,
         )
         assertTrue(script.contains("disconnect()"))
-        assertFalse(script.contains("MutationObserver"))
+        assertFalse(script.contains("new MutationObserver"))
     }
 }

@@ -34,16 +34,27 @@ internal fun buildViewportZoomInjectionScript(
     viewportContent: String,
     persistAcrossDomChanges: Boolean,
 ): String {
-    val persistFlag = if (persistAcrossDomChanges) "true" else "false"
-    val scriptBody = "(function(){" +
-        "var c='$viewportContent';" +
-        "var persist=$persistFlag;" +
-        "function apply(){" +
+    val scriptBody = if (persistAcrossDomChanges) {
+        buildPersistentViewportZoomScriptBody(viewportContent)
+    } else {
+        buildResetViewportZoomScriptBody(viewportContent)
+    }
+    return "javascript:void($scriptBody)"
+}
+
+private fun buildApplyViewportZoomFunction(): String {
+    return "function apply(){" +
         "var m=document.querySelector('meta[name=\"viewport\"]');" +
         "if(!m){m=document.createElement('meta');m.name='viewport';" +
         "(document.head||document.documentElement).appendChild(m);}" +
         "if(m.content!==c){m.content=c;}" +
-        "}" +
+        "}"
+}
+
+private fun buildResetViewportZoomScriptBody(viewportContent: String): String {
+    return "(function(){" +
+        "var c='$viewportContent';" +
+        buildApplyViewportZoomFunction() +
         "function disconnect(){" +
         "if(window.__browserViewportZoomObserver){" +
         "window.__browserViewportZoomObserver.disconnect();" +
@@ -54,7 +65,19 @@ internal fun buildViewportZoomInjectionScript(
         "requestAnimationFrame(apply);" +
         "setTimeout(apply,0);" +
         "setTimeout(apply,100);" +
-        "if(!persist){disconnect();window.__browserViewportZoomContent=null;return;}" +
+        "disconnect();" +
+        "window.__browserViewportZoomContent=null;" +
+        "})()"
+}
+
+private fun buildPersistentViewportZoomScriptBody(viewportContent: String): String {
+    return "(function(){" +
+        "var c='$viewportContent';" +
+        buildApplyViewportZoomFunction() +
+        "apply();" +
+        "requestAnimationFrame(apply);" +
+        "setTimeout(apply,0);" +
+        "setTimeout(apply,100);" +
         "window.__browserViewportZoomContent=c;" +
         "if(!window.__browserViewportZoomObserver&&document.head){" +
         "window.__browserViewportZoomObserver=new MutationObserver(function(){" +
@@ -65,5 +88,4 @@ internal fun buildViewportZoomInjectionScript(
         "{childList:true,subtree:true,attributes:true,attributeFilter:['content','name']});" +
         "}" +
         "})()"
-    return "javascript:void($scriptBody)"
 }
