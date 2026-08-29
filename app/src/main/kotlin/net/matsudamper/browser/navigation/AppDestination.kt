@@ -16,7 +16,12 @@ sealed interface AppDestination : NavKey, java.io.Serializable {
     data object Settings : AppDestination, java.io.Serializable
 
     @Serializable
-    data class SiteSettings(val host: String, val tabId: String? = null) : AppDestination, java.io.Serializable
+    data class SiteSettings(
+        val host: String,
+        val scheme: String = "https",
+        val port: Int = 443,
+        val tabId: String? = null,
+    ) : AppDestination, java.io.Serializable
 
     @Serializable
     data class SiteFormInputPaths(
@@ -34,6 +39,15 @@ sealed interface AppDestination : NavKey, java.io.Serializable {
     ) : AppDestination
 
     @Serializable
+    data class SiteFormInputField(
+        val scheme: String,
+        val host: String,
+        val port: Int,
+        val path: String,
+        val fieldKey: String,
+    ) : AppDestination
+
+    @Serializable
     data object Extensions : AppDestination, java.io.Serializable
 
     @Serializable
@@ -44,6 +58,12 @@ sealed interface AppDestination : NavKey, java.io.Serializable {
 
     @Serializable
     data object Addresses : AppDestination, java.io.Serializable
+
+    @Serializable
+    data object CrashLogs : AppDestination, java.io.Serializable
+
+    @Serializable
+    data class CrashLogDetail(val crashLogId: Long) : AppDestination, java.io.Serializable
 
     @Serializable
     data class AddressEdit(val addressId: Long) : AppDestination, java.io.Serializable

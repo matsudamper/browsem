@@ -104,6 +104,23 @@ interface FormInputDao {
 
     @Query(
         """
+        SELECT value FROM form_field_value
+        WHERE scheme = :scheme AND host = :host AND port = :port
+          AND path = :path AND fieldKey = :fieldKey AND value != ''
+        GROUP BY value
+        ORDER BY MAX(createdAt) DESC
+        """,
+    )
+    fun observeDistinctValuesForField(
+        scheme: String,
+        host: String,
+        port: Int,
+        path: String,
+        fieldKey: String,
+    ): Flow<List<String>>
+
+    @Query(
+        """
         SELECT COUNT(DISTINCT fieldKey) FROM form_field_value
         WHERE scheme = :scheme AND host = :host AND port = :port AND path = :path
         """,
@@ -172,6 +189,22 @@ interface FormInputDao {
 
     @Query(
         """
+        DELETE FROM form_field_value
+        WHERE scheme = :scheme AND host = :host AND port = :port
+          AND path = :path AND fieldKey = :fieldKey AND value = :value
+        """,
+    )
+    suspend fun deleteValueForField(
+        scheme: String,
+        host: String,
+        port: Int,
+        path: String,
+        fieldKey: String,
+        value: String,
+    )
+
+    @Query(
+        """
         DELETE FROM form_input_preference
         WHERE scheme = :scheme AND host = :host AND port = :port AND path = :path
         """,
@@ -196,6 +229,60 @@ interface FormInputDao {
         port: Int,
         path: String,
         fieldKey: String,
+    )
+
+    @Query(
+        """
+        UPDATE form_field_value
+        SET createdAt = :createdAt
+        WHERE scheme = :scheme AND host = :host AND port = :port
+          AND path = :path AND fieldKey = :fieldKey AND value = :value
+        """,
+    )
+    suspend fun touchValue(
+        scheme: String,
+        host: String,
+        port: Int,
+        path: String,
+        fieldKey: String,
+        value: String,
+        createdAt: Long,
+    ): Int
+
+    @Query(
+        """
+        SELECT COUNT(*) FROM form_field_value
+        WHERE scheme = :scheme AND host = :host AND port = :port
+          AND path = :path AND fieldKey = :fieldKey
+        """,
+    )
+    suspend fun countValueRowsForField(
+        scheme: String,
+        host: String,
+        port: Int,
+        path: String,
+        fieldKey: String,
+    ): Int
+
+    @Query(
+        """
+        DELETE FROM form_field_value
+        WHERE id IN (
+            SELECT id FROM form_field_value
+            WHERE scheme = :scheme AND host = :host AND port = :port
+              AND path = :path AND fieldKey = :fieldKey
+            ORDER BY createdAt ASC
+            LIMIT :limit
+        )
+        """,
+    )
+    suspend fun deleteOldestValuesForField(
+        scheme: String,
+        host: String,
+        port: Int,
+        path: String,
+        fieldKey: String,
+        limit: Int,
     )
 
     @Query("DELETE FROM form_field_value")

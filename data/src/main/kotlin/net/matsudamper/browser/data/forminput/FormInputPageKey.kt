@@ -36,7 +36,7 @@ fun parseFormInputPageKey(url: String): FormInputPageKey? {
     val rawPath = uri.encodedPath.orEmpty()
     val path = when {
         rawPath.isEmpty() || rawPath == "/" -> ""
-        else -> rawPath.removeSuffix("/")
+        else -> rawPath
     }
     return FormInputPageKey(scheme = scheme, host = host, port = port, path = path)
 }

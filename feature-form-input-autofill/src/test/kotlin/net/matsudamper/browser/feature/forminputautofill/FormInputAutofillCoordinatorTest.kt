@@ -191,6 +191,7 @@ class FormInputAutofillCoordinatorTest {
     ) : FormInputAutofillHost {
         override var focusedAutofillKind: String? = null
         override var onAddressSelectOptions: ((List<Autocomplete.AddressSelectOption>) -> Unit)? = null
+        override var autofillBarHideGeneration: Int = 0
         var shownItems: List<AddressAutofillSuggestionItem> = emptyList()
         var isBarVisible: Boolean = false
         var saveDialogRequest: FormInputSaveDialogRequest? = null

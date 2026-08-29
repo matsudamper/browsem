@@ -18,11 +18,16 @@ class FormInputPageKeyTest {
     }
 
     @Test
-    fun parsePathWithoutTrailingSlash() {
-        val key = parseFormInputPageKey("https://example.com/foo/bar/")
+    fun parsePathKeepsTrailingSlash() {
+        val withoutSlash = parseFormInputPageKey("https://example.com/foo/bar")
+        val withSlash = parseFormInputPageKey("https://example.com/foo/bar/")
         assertEquals(
             FormInputPageKey(scheme = "https", host = "example.com", port = 443, path = "/foo/bar"),
-            key,
+            withoutSlash,
+        )
+        assertEquals(
+            FormInputPageKey(scheme = "https", host = "example.com", port = 443, path = "/foo/bar/"),
+            withSlash,
         )
     }
 
@@ -83,6 +88,20 @@ class FormInputPageKeyTest {
         assertEquals(
             FormInputPageKey(scheme = "https", host = "example.com", port = 8443, path = "/form"),
             customPort,
+        )
+    }
+
+    @Test
+    fun parseSonyBankLoginPath() {
+        val key = parseFormInputPageKey("https://sonybank.jp/pages/db/dbca0100/input/")
+        assertEquals(
+            FormInputPageKey(
+                scheme = "https",
+                host = "sonybank.jp",
+                port = 443,
+                path = "/pages/db/dbca0100/input/",
+            ),
+            key,
         )
     }
 

@@ -32,6 +32,7 @@ import net.matsudamper.browser.data.TabRepository
 import net.matsudamper.browser.data.ThemeMode
 import net.matsudamper.browser.data.TranslationProvider
 import net.matsudamper.browser.data.resolvedBrowserSettings
+import net.matsudamper.browser.data.resolvedInputAutoZoomEnabled
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoSession
 import java.util.UUID
@@ -121,6 +122,14 @@ internal class BrowserViewModel(
                 .distinctUntilChanged()
                 .collect { enableThirdPartyCa ->
                     runtime.settings.setEnterpriseRootsEnabled(enableThirdPartyCa)
+                }
+        }
+        viewModelScope.launch {
+            settingsRepository.settings
+                .map { settings -> settings.resolvedInputAutoZoomEnabled() }
+                .distinctUntilChanged()
+                .collect { inputAutoZoomEnabled ->
+                    runtime.settings.setInputAutoZoomEnabled(inputAutoZoomEnabled)
                 }
         }
         // アプリ起動時に位置情報設定（モック座標・サイトごとの扱い）を拡張機能へ反映する。

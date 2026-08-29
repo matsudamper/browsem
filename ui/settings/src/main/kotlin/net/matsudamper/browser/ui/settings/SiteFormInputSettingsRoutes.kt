@@ -24,3 +24,14 @@ fun SiteFormInputPathRoute(
         modifier = modifier,
     )
 }
+
+@Composable
+fun SiteFormInputFieldRoute(
+    uiState: SiteFormInputFieldScreenUiState,
+    modifier: Modifier = Modifier,
+) {
+    SiteFormInputFieldScreen(
+        uiState = uiState,
+        modifier = modifier,
+    )
+}

@@ -123,7 +123,7 @@ class FormInputPreferenceTest {
         )
         assertEquals(
             listOf("first"),
-            repository.observeSavedFields(origin, "/form").first().single().values,
+            repository.observeSavedFields(origin, "/form").first().single().previewValues,
         )
         repository.saveFields(
             pageKey = page,
@@ -131,7 +131,36 @@ class FormInputPreferenceTest {
         )
         assertEquals(
             listOf("second", "first"),
-            repository.observeSavedFields(origin, "/form").first().single().values,
+            repository.observeSavedFields(origin, "/form").first().single().previewValues,
+        )
+    }
+
+    @Test
+    fun deleteValueRemovesSingleSavedValue() = runBlocking {
+        val page = FormInputPageKey(
+            scheme = "https",
+            host = "example.com",
+            port = 443,
+            path = "/form",
+        )
+        val origin = page.origin()
+        repository.setFieldEnabled(origin, "/form", "comment", enabled = true)
+        repository.saveFields(
+            pageKey = page,
+            fields = listOf(
+                FormFieldEntry(fieldKey = "comment", value = "first"),
+                FormFieldEntry(fieldKey = "comment", value = "second"),
+            ),
+        )
+        repository.deleteValue(origin, "/form", "comment", "first")
+
+        assertEquals(
+            listOf("second"),
+            repository.observeSavedValues(origin, "/form", "comment").first(),
+        )
+        assertEquals(
+            1,
+            repository.observeSavedFields(origin, "/form").first().single().previewValues.size,
         )
     }
 
@@ -172,6 +201,41 @@ class FormInputPreferenceTest {
                 ),
                 fieldKey = "comment",
             ).isEmpty(),
+        )
+    }
+
+    @Test
+    fun saveFieldsTouchesDuplicateValueAndCapsRowCount() = runBlocking {
+        val page = FormInputPageKey(
+            scheme = "https",
+            host = "example.com",
+            port = 443,
+            path = "/form",
+        )
+        repository.setFieldEnabled(page.origin(), page.path, "query", enabled = true)
+        repeat(FormInputRepository.MAX_FIELD_VALUE_ROWS + 5) { index ->
+            repository.saveFields(
+                pageKey = page,
+                fields = listOf(FormFieldEntry(fieldKey = "query", value = "value$index")),
+            )
+        }
+        repository.saveFields(
+            pageKey = page,
+            fields = listOf(FormFieldEntry(fieldKey = "query", value = "value0")),
+        )
+        assertEquals(
+            listOf("value0"),
+            repository.getSuggestions(pageKey = page, fieldKey = "query", limit = 1),
+        )
+        assertEquals(
+            FormInputRepository.MAX_FIELD_VALUE_ROWS,
+            FormInputDatabase.getInstance(context).formInputDao().countValueRowsForField(
+                scheme = "https",
+                host = "example.com",
+                port = 443,
+                path = "/form",
+                fieldKey = "query",
+            ),
         )
     }
 }

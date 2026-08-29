@@ -46,7 +46,7 @@ class FormInputDatabaseMigrationTest {
     }
 
     @Test
-    fun migrate2To3AddsOriginColumns() {
+    fun migrate2To3DropsLegacyData() {
         helper.createDatabase(TEST_DB, 2).apply {
             execSQL(
                 "INSERT INTO form_field_value (host, path, fieldKey, value, createdAt) " +
@@ -60,22 +60,24 @@ class FormInputDatabaseMigrationTest {
         }
 
         helper.runMigrationsAndValidate(TEST_DB, 3, true, *FormInputDatabase.ALL_MIGRATIONS).use { db ->
-            db.query(
-                "SELECT scheme, port, value FROM form_field_value WHERE host = 'example.com' AND path = '/form'",
-            ).use { cursor ->
+            db.query("SELECT COUNT(*) FROM form_field_value").use { cursor ->
                 assertTrue(cursor.moveToFirst())
-                assertEquals("https", cursor.getString(0))
-                assertEquals(443, cursor.getInt(1))
-                assertEquals("hello", cursor.getString(2))
+                assertEquals(0, cursor.getInt(0))
             }
+            db.query("SELECT COUNT(*) FROM form_input_preference").use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertEquals(0, cursor.getInt(0))
+            }
+            db.execSQL(
+                "INSERT INTO form_field_value " +
+                    "(scheme, host, port, path, fieldKey, value, createdAt) " +
+                    "VALUES ('http', 'example.com', 80, '/form', 'comment', 'plain', 2000)",
+            )
             db.query(
-                "SELECT scheme, port, enabled FROM form_input_preference " +
-                    "WHERE host = 'example.com' AND path = '/form'",
+                "SELECT value FROM form_field_value WHERE scheme = 'http' AND port = 80",
             ).use { cursor ->
                 assertTrue(cursor.moveToFirst())
-                assertEquals("https", cursor.getString(0))
-                assertEquals(443, cursor.getInt(1))
-                assertEquals(0, cursor.getInt(2))
+                assertEquals("plain", cursor.getString(0))
             }
         }
     }
