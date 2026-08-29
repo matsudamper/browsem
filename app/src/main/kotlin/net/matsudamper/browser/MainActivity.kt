@@ -322,7 +322,7 @@ class MainActivity : ComponentActivity() {
         super.onSaveInstanceState(outState)
         // 処理済み deeplink URL を保存して設定変更後の重複タブ作成を防ぐ
         lastProcessedDeepLinkUrl?.let { outState.putString(KEY_PROCESSED_DEEPLINK_URL, it) }
-        // setIntent で消費済みの場合のみ保存。プロセスキル後は AMS が元 Intent を渡すため必要。
+        // 通知用 action を消費済みの場合のみ保存。プロセスキル後は AMS が元 Intent を渡すため必要。
         if (intent.action != DownloadWorker.ACTION_OPEN_DOWNLOADS) {
             outState.putBoolean(KEY_OPEN_DOWNLOADS_CONSUMED, true)
         }
@@ -334,16 +334,19 @@ class MainActivity : ComponentActivity() {
 
     private fun handleOpenDownloadsIntent(intent: Intent) {
         openDownloadsChannel.trySend(intent.getStringExtra(DownloadWorker.EXTRA_WORKER_ID))
-        consumeOpenDownloadsIntent()
+        consumeOpenDownloadsIntent(intent)
     }
 
-  private fun consumeOpenDownloadsIntent() {
-        setIntent(
-            Intent(this, MainActivity::class.java).apply {
-                action = Intent.ACTION_MAIN
-                addCategory(Intent.CATEGORY_LAUNCHER)
-            },
-        )
+    /**
+     * 起動 Intent を使い回し、ダウンロード通知用の action / extra だけ消費する。
+     */
+    private fun consumeOpenDownloadsIntent(intent: Intent) {
+        intent.action = Intent.ACTION_MAIN
+        intent.removeExtra(DownloadWorker.EXTRA_WORKER_ID)
+        if (!intent.hasCategory(Intent.CATEGORY_LAUNCHER)) {
+            intent.addCategory(Intent.CATEGORY_LAUNCHER)
+        }
+        setIntent(intent)
     }
 
     override fun onResume() {
