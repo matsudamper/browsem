@@ -31,6 +31,11 @@ class FormInputAutofillWebExtension {
         fun onFieldFocus(fieldKey: String, pageUrl: String)
         fun onFieldBlur()
         fun onFormSubmit(pageUrl: String, fields: List<FormInputFieldMessage>)
+        fun onFieldLongPress(
+            fieldKey: String,
+            pageUrl: String,
+            fields: List<FormInputFieldMessage>,
+        )
         fun onFocusPortDisconnected()
     }
 
@@ -117,6 +122,14 @@ class FormInputAutofillWebExtension {
                                         listener.onFormSubmit(pageUrl, fields)
                                     }
                                 }
+                                "field-long-press" -> {
+                                    val fieldKey = json.optString("fieldKey")
+                                    val pageUrl = json.optString("pageUrl")
+                                    val fields = parseFields(json.optJSONArray("fields"))
+                                    mainHandler.post {
+                                        listener.onFieldLongPress(fieldKey, pageUrl, fields)
+                                    }
+                                }
                             }
                         }
 
@@ -164,6 +177,15 @@ class FormInputAutofillWebExtension {
         fields: List<FormInputFieldMessage>,
     ) {
         sessionListeners[session]?.onFormSubmit(pageUrl, fields)
+    }
+
+    internal fun dispatchFieldLongPress(
+        session: GeckoSession,
+        fieldKey: String,
+        pageUrl: String,
+        fields: List<FormInputFieldMessage>,
+    ) {
+        sessionListeners[session]?.onFieldLongPress(fieldKey, pageUrl, fields)
     }
 
     companion object {

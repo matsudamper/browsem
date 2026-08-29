@@ -287,4 +287,22 @@
       fields: fields,
     });
   }, true);
+
+  document.addEventListener('contextmenu', function (event) {
+    const el = event.target;
+    if (!isEditableFormControl(el) || !isTargetField(el)) return;
+    const key = fieldKey(el);
+    if (!key) return;
+    const root = resolveFillRoot(el);
+    const fields = collectFormFields(root);
+    if (fields.length === 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    port.postMessage({
+      action: 'field-long-press',
+      fieldKey: key,
+      pageUrl: location.href,
+      fields: fields,
+    });
+  }, true);
 })();

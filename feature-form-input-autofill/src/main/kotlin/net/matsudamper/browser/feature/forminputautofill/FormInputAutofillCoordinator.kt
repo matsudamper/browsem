@@ -37,13 +37,13 @@ class FormInputAutofillCoordinator(
 
     private class Attached(
         val session: GeckoSession,
-        val host: AddressAutofillHost,
+        val host: FormInputAutofillHost,
         val formInputRepository: FormInputRepository,
     )
 
     fun attach(
         session: GeckoSession,
-        host: AddressAutofillHost,
+        host: FormInputAutofillHost,
         formInputRepository: FormInputRepository,
     ) {
         synchronized(lock) {
@@ -66,6 +66,14 @@ class FormInputAutofillCoordinator(
 
                 override fun onFormSubmit(pageUrl: String, fields: List<FormInputFieldMessage>) {
                     handleFormSubmit(pageUrl, fields)
+                }
+
+                override fun onFieldLongPress(
+                    fieldKey: String,
+                    pageUrl: String,
+                    fields: List<FormInputFieldMessage>,
+                ) {
+                    handleFieldLongPress(fieldKey, pageUrl, fields)
                 }
 
                 override fun onFocusPortDisconnected() {
@@ -146,6 +154,63 @@ class FormInputAutofillCoordinator(
                 Log.i(TAG, "form-submit saved host=${pageKey.host} path=${pageKey.path} count=${fields.size}")
             }.onFailure { error ->
                 Log.w(TAG, "form-submit save failed", error)
+            }
+        }
+    }
+
+    private fun handleFieldLongPress(
+        fieldKey: String,
+        pageUrl: String,
+        fields: List<FormInputFieldMessage>,
+    ) {
+        val pageKey = parseFormInputPageKey(pageUrl) ?: return
+        if (fieldKey.isBlank() || fields.isEmpty()) return
+        val current = synchronized(lock) { attached } ?: return
+        current.host.coroutineScope.launch(ioDispatcher) {
+            val origin = pageKey.origin()
+            val options = fields.mapNotNull { field ->
+                if (field.fieldKey.isBlank()) return@mapNotNull null
+                val enabled = current.formInputRepository.getFieldEnabled(
+                    origin = origin,
+                    path = pageKey.path,
+                    fieldKey = field.fieldKey,
+                )
+                FormInputSaveFieldOption(
+                    fieldKey = field.fieldKey,
+                    value = field.value,
+                    initiallySelected = enabled || field.fieldKey == fieldKey,
+                )
+            }
+            if (options.isEmpty()) return@launch
+            withContext(Dispatchers.Main) {
+                current.host.showFormInputSaveDialog(
+                    FormInputSaveDialogRequest(
+                        pageKey = pageKey,
+                        fields = options,
+                        onConfirm = { selectedFieldKeys ->
+                            current.host.dismissFormInputSaveDialog()
+                            current.host.coroutineScope.launch(ioDispatcher) {
+                                runCatching {
+                                    current.formInputRepository.enableFieldsAndSave(
+                                        pageKey = pageKey,
+                                        fields = fields.map {
+                                            FormFieldEntry(fieldKey = it.fieldKey, value = it.value)
+                                        },
+                                        enabledFieldKeys = selectedFieldKeys,
+                                    )
+                                    Log.i(
+                                        TAG,
+                                        "field-long-press saved host=${pageKey.host} path=${pageKey.path} " +
+                                            "count=${selectedFieldKeys.size}",
+                                    )
+                                }.onFailure { error ->
+                                    Log.w(TAG, "field-long-press save failed", error)
+                                }
+                            }
+                        },
+                        onDismiss = {},
+                    ),
+                )
             }
         }
     }

@@ -18,6 +18,8 @@ import java.io.File
 import java.util.UUID
 import net.matsudamper.browser.feature.addressautofill.AddressAutofillHost
 import net.matsudamper.browser.feature.addressautofill.AddressAutofillSuggestionItem
+import net.matsudamper.browser.feature.forminputautofill.FormInputAutofillHost
+import net.matsudamper.browser.feature.forminputautofill.FormInputSaveDialogRequest
 import org.mozilla.geckoview.AllowOrDeny
 import org.mozilla.geckoview.Autocomplete
 import org.mozilla.geckoview.GeckoResult
@@ -30,7 +32,7 @@ import org.mozilla.geckoview.GeckoSession
 @Stable
 internal class PromptDialogState(
     override val coroutineScope: CoroutineScope,
-) : AddressAutofillHost {
+) : FormInputAutofillHost {
 
     // --- Alert (window.alert()) ---
     var pendingAlertPrompt by mutableStateOf<GeckoSession.PromptDelegate.AlertPrompt?>(null)
@@ -78,6 +80,7 @@ internal class PromptDialogState(
     override var focusedAutofillKind: String? = null
     override var onAddressSelectOptions: ((List<Autocomplete.AddressSelectOption>) -> Unit)? = null
     var addressAutofillBar by mutableStateOf<AddressAutofillBarUiState?>(null)
+    var pendingFormInputSaveDialog by mutableStateOf<FormInputSaveDialogRequest?>(null)
 
     override fun showAddressAutofillBar(items: List<AddressAutofillSuggestionItem>) {
         addressAutofillBar = AddressAutofillBarUiState(
@@ -93,6 +96,21 @@ internal class PromptDialogState(
 
     override fun hideAddressAutofillBar() {
         addressAutofillBar = null
+    }
+
+    override fun showFormInputSaveDialog(request: FormInputSaveDialogRequest) {
+        pendingFormInputSaveDialog = request
+    }
+
+    override fun dismissFormInputSaveDialog() {
+        pendingFormInputSaveDialog?.onDismiss?.invoke()
+        pendingFormInputSaveDialog = null
+    }
+
+    fun confirmFormInputSave(selectedFieldKeys: Set<String>) {
+        val request = pendingFormInputSaveDialog ?: return
+        request.onConfirm(selectedFieldKeys)
+        pendingFormInputSaveDialog = null
     }
 
     // ================================================================
