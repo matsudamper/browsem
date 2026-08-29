@@ -149,6 +149,7 @@ class AddressAutofillCoordinatorTest {
         override var focusedAutofillKind: String? = null
         override var onAddressSelectOptions:
             ((List<Autocomplete.AddressSelectOption>) -> Unit)? = null
+        override var autofillBarHideGeneration: Int = 0
         var shownItems: List<AddressAutofillSuggestionItem>? = null
             private set
         var hideCount: Int = 0

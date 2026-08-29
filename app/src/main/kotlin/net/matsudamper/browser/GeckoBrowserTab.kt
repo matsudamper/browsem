@@ -79,6 +79,8 @@ import net.matsudamper.browser.feature.mocklocation.MockLocationWebExtension
 import net.matsudamper.browser.feature.networklog.NetworkLogWebExtension
 import net.matsudamper.browser.feature.themecolor.ThemeColorWebExtension
 import net.matsudamper.browser.data.address.AddressRepository
+import net.matsudamper.browser.data.forminput.FormInputRepository
+import net.matsudamper.browser.feature.forminputautofill.FormInputAutofillCoordinator
 import net.matsudamper.browser.feature.addressautofill.AddressAutofillCoordinator
 import net.matsudamper.browser.feature.addressautofill.AddressAutofillDelegate
 import net.matsudamper.browser.feature.twittershare.TwitterShareWebExtension
@@ -134,7 +136,9 @@ internal fun GeckoBrowserTab(
     val context = LocalContext.current
     val findInPageWebExtension: FindInPageWebExtension = koinInject()
     val addressRepository: AddressRepository = koinInject()
+    val formInputRepository: FormInputRepository = koinInject()
     val addressAutofillCoordinator: AddressAutofillCoordinator = koinInject()
+    val formInputAutofillCoordinator: FormInputAutofillCoordinator = koinInject()
     // URLバーフォーカス時にクリップボードから読み取ったURL
     var clipboardUrl by remember { mutableStateOf<String?>(null) }
     // タブ履歴BottomSheetの表示状態
@@ -709,7 +713,16 @@ internal fun GeckoBrowserTab(
         }
     }
 
-    DisposableEffect(session, state, browserTab, mediaWebExtension, addressRepository, addressAutofillCoordinator) {
+    DisposableEffect(
+        session,
+        state,
+        browserTab,
+        mediaWebExtension,
+        addressRepository,
+        formInputRepository,
+        addressAutofillCoordinator,
+        formInputAutofillCoordinator,
+    ) {
         browserTab.attachSessionCallbacks(
             callbacks = state,
             onOpenNewSessionRequest = { uri ->
@@ -738,6 +751,11 @@ internal fun GeckoBrowserTab(
             host = dialogState,
             addressRepository = addressRepository,
         )
+        formInputAutofillCoordinator.attach(
+            session = session,
+            host = dialogState,
+            formInputRepository = formInputRepository,
+        )
         // MediaSession の初回イベントを取りこぼさないよう、ページ読み込み前に delegate を設定する。
         session.mediaSessionDelegate = mediaSessionDelegate
 
@@ -745,6 +763,7 @@ internal fun GeckoBrowserTab(
 
         onDispose {
             addressAutofillCoordinator.detach(session)
+            formInputAutofillCoordinator.detach(session)
             browserTab.detachSessionCallbacks()
             session.promptDelegate = null
             if (session.autofillDelegate === addressAutofillDelegate) {
