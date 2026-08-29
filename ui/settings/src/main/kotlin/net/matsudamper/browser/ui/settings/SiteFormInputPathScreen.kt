@@ -26,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import net.matsudamper.browser.resources.R as ResourcesR
@@ -183,7 +184,13 @@ private fun SiteFormInputFieldListItem(
         modifier = modifier.clickable(onClick = onOpen),
         headlineContent = { Text(field.fieldKey) },
         supportingContent = {
-            Text("${field.valueCount} 件の値")
+            if (field.previewText.isNotBlank()) {
+                Text(
+                    text = field.previewText,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         },
         trailingContent = {
             Switch(
@@ -216,12 +223,12 @@ private fun SiteFormInputPathScreenPreview() {
                 fields = listOf(
                     SiteFormInputPathScreenUiState.FieldEntry(
                         fieldKey = "comment",
-                        valueCount = 2,
+                        previewText = "以前のコメント/別のコメント",
                         enabled = true,
                     ),
                     SiteFormInputPathScreenUiState.FieldEntry(
                         fieldKey = "subject",
-                        valueCount = 1,
+                        previewText = "お問い合わせ",
                         enabled = false,
                     ),
                 ),

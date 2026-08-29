@@ -65,17 +65,20 @@ class FormInputRepository(context: Context) {
         ) { fieldKeys, preferences, values ->
             val pathEnabled = resolvePathEnabled(preferences)
             val fieldPreferences = preferences.associate { it.fieldKey to it.enabled }
-            val valueCounts = values
+            val valuePreviews = values
                 .asSequence()
                 .filter { it.value.isNotBlank() }
                 .groupBy { it.fieldKey }
-                .mapValues { (_, entries) ->
-                    entries.map { it.value }.distinct().size
-                }
             fieldKeys.map { fieldKey ->
+                val previewValues = valuePreviews[fieldKey]
+                    .orEmpty()
+                    .groupBy { it.value }
+                    .map { (_, entries) -> entries.maxBy { it.createdAt } }
+                    .sortedByDescending { it.createdAt }
+                    .map { it.value }
                 SavedFormFieldInfo(
                     fieldKey = fieldKey,
-                    valueCount = valueCounts[fieldKey] ?: 0,
+                    previewValues = previewValues,
                     enabled = pathEnabled && (fieldPreferences[fieldKey] ?: true),
                 )
             }
@@ -359,7 +362,7 @@ data class SavedFormPathInfo(
 
 data class SavedFormFieldInfo(
     val fieldKey: String,
-    val valueCount: Int,
+    val previewValues: List<String>,
     val enabled: Boolean,
 )
 

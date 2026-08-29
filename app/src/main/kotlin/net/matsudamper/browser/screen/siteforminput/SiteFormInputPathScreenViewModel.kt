@@ -101,7 +101,7 @@ internal class SiteFormInputPathScreenViewModel(
                     fields = fields.map { field ->
                         SiteFormInputPathScreenUiState.FieldEntry(
                             fieldKey = field.fieldKey,
-                            valueCount = field.valueCount,
+                            previewText = field.previewValues.joinToString("/"),
                             enabled = field.enabled,
                         )
                     },

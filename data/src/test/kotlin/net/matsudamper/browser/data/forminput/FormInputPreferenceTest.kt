@@ -119,16 +119,16 @@ class FormInputPreferenceTest {
             fields = listOf(FormFieldEntry(fieldKey = "comment", value = "first")),
         )
         assertEquals(
-            1,
-            repository.observeSavedFields(origin, "/form").first().single().valueCount,
+            listOf("first"),
+            repository.observeSavedFields(origin, "/form").first().single().previewValues,
         )
         repository.saveFields(
             pageKey = page,
             fields = listOf(FormFieldEntry(fieldKey = "comment", value = "second")),
         )
         assertEquals(
-            2,
-            repository.observeSavedFields(origin, "/form").first().single().valueCount,
+            listOf("second", "first"),
+            repository.observeSavedFields(origin, "/form").first().single().previewValues,
         )
     }
 
@@ -156,7 +156,7 @@ class FormInputPreferenceTest {
         )
         assertEquals(
             1,
-            repository.observeSavedFields(origin, "/form").first().single().valueCount,
+            repository.observeSavedFields(origin, "/form").first().single().previewValues.size,
         )
     }
 

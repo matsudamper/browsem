@@ -15,7 +15,7 @@ data class SiteFormInputPathScreenUiState(
     @Stable
     data class FieldEntry(
         val fieldKey: String,
-        val valueCount: Int,
+        val previewText: String,
         val enabled: Boolean,
     )
 
