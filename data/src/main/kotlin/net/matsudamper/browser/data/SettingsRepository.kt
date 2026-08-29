@@ -48,6 +48,13 @@ class SettingsRepository(context: Context) {
                         clearExtensionsEnabled()
                     }
                 }
+                .apply {
+                    if (settings.hasInputAutoZoomEnabled()) {
+                        setInputAutoZoomEnabled(settings.inputAutoZoomEnabled)
+                    } else {
+                        clearInputAutoZoomEnabled()
+                    }
+                }
                 .build()
         }
     }
@@ -132,6 +139,14 @@ class SettingsRepository(context: Context) {
         }
     }
 
+    suspend fun setInputAutoZoomEnabled(enabled: Boolean) {
+        dataStore.updateData { current ->
+            current.toBuilder()
+                .setInputAutoZoomEnabled(enabled)
+                .build()
+        }
+    }
+
     /** ツールバーメニューに並べる拡張機能アイコンの表示順を保存する */
     suspend fun setExtensionActionOrder(extensionIds: List<String>) {
         dataStore.updateData { current ->
@@ -201,5 +216,13 @@ fun BrowserSettings.resolvedEnableWebSuggestions(): Boolean {
         enableWebSuggestions
     } else {
         false
+    }
+}
+
+fun BrowserSettings.resolvedInputAutoZoomEnabled(): Boolean {
+    return if (hasInputAutoZoomEnabled()) {
+        inputAutoZoomEnabled
+    } else {
+        true
     }
 }

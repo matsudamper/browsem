@@ -17,6 +17,7 @@ data class SettingsScreenUiState(
     val translationProvider: TranslationProvider,
     val enableThirdPartyCa: Boolean,
     val enableWebSuggestions: Boolean,
+    val inputAutoZoomEnabled: Boolean,
     val extensionsProcessEnabled: Boolean,
     val mockLocationInput: String,
     val mockLocationInputError: String?,
@@ -35,6 +36,7 @@ data class SettingsScreenUiState(
         fun setTranslationProvider(provider: TranslationProvider)
         fun setEnableThirdPartyCa(enabled: Boolean)
         fun setEnableWebSuggestions(enabled: Boolean)
+        fun setInputAutoZoomEnabled(enabled: Boolean)
         fun setExtensionsProcessEnabled(enabled: Boolean)
         fun confirmExtensionsProcessRestart()
         fun dismissExtensionsProcessRestartDialog()
