@@ -19,6 +19,7 @@ import net.matsudamper.browser.data.ThemeMode
 import net.matsudamper.browser.data.TranslationProvider
 import net.matsudamper.browser.data.resolvedEnableWebSuggestions
 import net.matsudamper.browser.data.resolvedExtensionsProcessEnabled
+import net.matsudamper.browser.data.resolvedInputAutoZoomEnabled
 import net.matsudamper.browser.ui.settings.SettingsScreenUiState
 
 internal class SettingsScreenViewModel(
@@ -63,6 +64,10 @@ internal class SettingsScreenViewModel(
 
         override fun setEnableWebSuggestions(enabled: Boolean) {
             viewModelScope.launch { settingsRepository.setEnableWebSuggestions(enabled) }
+        }
+
+        override fun setInputAutoZoomEnabled(enabled: Boolean) {
+            viewModelScope.launch { settingsRepository.setInputAutoZoomEnabled(enabled) }
         }
 
         override fun setExtensionsProcessEnabled(enabled: Boolean) {
@@ -264,6 +269,7 @@ private fun BrowserSettings.toUiState(
         translationProvider = translationProvider,
         enableThirdPartyCa = enableThirdPartyCa,
         enableWebSuggestions = resolvedEnableWebSuggestions(),
+        inputAutoZoomEnabled = resolvedInputAutoZoomEnabled(),
         extensionsProcessEnabled = resolvedExtensionsProcessEnabled(),
         mockLocationInput = mockLocationInput,
         mockLocationInputError = validateMockLocationInput(mockLocationInput),

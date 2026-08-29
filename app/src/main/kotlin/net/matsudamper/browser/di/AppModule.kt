@@ -33,6 +33,7 @@ import net.matsudamper.browser.data.forminput.FormInputRepository
 import net.matsudamper.browser.data.download.DownloadRepository
 import net.matsudamper.browser.data.history.HistoryRepository
 import net.matsudamper.browser.data.resolvedExtensionsProcessEnabled
+import net.matsudamper.browser.data.resolvedInputAutoZoomEnabled
 import net.matsudamper.browser.data.websuggestion.HttpWebSuggestionRepository
 import net.matsudamper.browser.data.websuggestion.WebSuggestionRepository
 import net.matsudamper.browser.feature.media.MediaWebExtension
@@ -73,13 +74,16 @@ val appModule = module {
         // initializeGeckoRuntime() とデッドロックするため非同期で投入する。
         enableAddressAutofill()
         val settings = get<SettingsRepository>()
-        val extensionsProcessEnabled = runBlocking {
-            settings.settings.first().resolvedExtensionsProcessEnabled()
+        val browserSettings = runBlocking {
+            settings.settings.first()
         }
+        val extensionsProcessEnabled = browserSettings.resolvedExtensionsProcessEnabled()
+        val inputAutoZoomEnabled = browserSettings.resolvedInputAutoZoomEnabled()
         GeckoRuntime.create(
             androidContext(),
             GeckoRuntimeSettings.Builder()
                 .forceUserScalableEnabled(true)
+                .inputAutoZoomEnabled(inputAutoZoomEnabled)
                 .extensionsProcessEnabled(extensionsProcessEnabled)
                 .build()
         ).also {

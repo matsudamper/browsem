@@ -223,6 +223,38 @@ fun SettingsScreen(
 
             Spacer(Modifier.height(betweenPadding))
 
+            SettingSection(title = "閲覧") {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .toggleable(
+                            value = uiState.inputAutoZoomEnabled,
+                            role = Role.Switch,
+                            onValueChange = uiState.callbacks::setInputAutoZoomEnabled,
+                        )
+                        .padding(vertical = 4.dp),
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "入力欄フォーカス時に自動ズーム",
+                            style = MaterialTheme.typography.bodyLarge,
+                        )
+                        Text(
+                            text = "フォームの入力欄をタップしたときにページを拡大します",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(
+                        checked = uiState.inputAutoZoomEnabled,
+                        onCheckedChange = null,
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(betweenPadding))
+
             SettingSection(title = "テーマ") {
                 Column(Modifier.selectableGroup()) {
                     SettingsRadioOption(
@@ -633,6 +665,7 @@ private fun SettingsScreenPreviewContent(showDefaultBrowserBanner: Boolean) {
                     override fun setTranslationProvider(provider: TranslationProvider) = Unit
                     override fun setEnableThirdPartyCa(enabled: Boolean) = Unit
                     override fun setEnableWebSuggestions(enabled: Boolean) = Unit
+                    override fun setInputAutoZoomEnabled(enabled: Boolean) = Unit
                     override fun setExtensionsProcessEnabled(enabled: Boolean) = Unit
                     override fun confirmExtensionsProcessRestart() = Unit
                     override fun dismissExtensionsProcessRestartDialog() = Unit
@@ -652,6 +685,7 @@ private fun SettingsScreenPreviewContent(showDefaultBrowserBanner: Boolean) {
                 translationProvider = TranslationProvider.TRANSLATION_PROVIDER_GECKO,
                 enableThirdPartyCa = false,
                 enableWebSuggestions = false,
+                inputAutoZoomEnabled = true,
                 extensionsProcessEnabled = true,
                 mockLocationInput = "35.685175,139.752797",
                 mockLocationInputError = null,
