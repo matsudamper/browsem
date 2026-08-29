@@ -482,7 +482,7 @@ private fun FormInputSaveDialog(
     AlertDialog(
         modifier = Modifier.testTag(BrowserTabDialogLayerTestTags.FormInputSaveDialog.testTag),
         onDismissRequest = onDismiss,
-        title = { Text("この入力欄を保存しますか？") },
+        title = { Text("この入力欄を保存するようにしますか？") },
         text = {
             Column {
                 Text(fieldKey, style = MaterialTheme.typography.bodyLarge)
