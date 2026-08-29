@@ -1,5 +1,6 @@
 package net.matsudamper.browser
 
+import android.view.accessibility.AccessibilityNodeInfo
 import androidx.compose.ui.test.hasParent
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.isDisplayed
@@ -13,6 +14,7 @@ import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import net.matsudamper.browser.ui.tabs.TabsScreenTestTags
+import org.junit.After
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -28,6 +30,14 @@ import java.io.File
 class PageZoomTest {
     @get:Rule
     val composeRule = createAndroidComposeRule<MainActivity>()
+
+    private var localHttpServer: LocalHttpServer? = null
+
+    @After
+    fun tearDown() {
+        localHttpServer?.close()
+        localHttpServer = null
+    }
 
     /**
      * 初期状態でページズームが100%であることを確認する。
@@ -132,6 +142,45 @@ class PageZoomTest {
         assertTrue(
             "200% が表示されていない",
             composeRule.onAllNodesWithText("200%").fetchSemanticsNodes().isNotEmpty(),
+        )
+    }
+
+    /**
+     * SPA 遷移後もページズームが維持されることを確認する。
+     *
+     * pushState による URL 更新は file:// では GeckoView の onLocationChange が
+     * 発火しないため、ループバック HTTP サーバーからページを配信する。
+     */
+    @Test
+    fun pageZoomPersistedAfterSpaNavigation() {
+        val spaPageUrl = startSpaZoomPageServer()
+        composeRule.openUrlFromUrlBar(spaPageUrl)
+        composeRule.waitForUrlBarContains(SPA_NAV_FILE_NAME, timeoutMillis = 60_000)
+        composeRule.waitForUrlBarNotFocused()
+
+        val baselineWidth = waitForViewportWidthInUrl(timeoutMillis = 30_000)
+        openPageZoomMenuAndSet200Percent()
+        val zoomedWidth = waitForViewportWidthBelow(
+            maxWidth = (baselineWidth * 0.75).toInt(),
+            excludeWidth = baselineWidth,
+            timeoutMillis = 30_000,
+        )
+        assertTrue(
+            "200%ズーム後に viewport 幅が縮小されていない: baseline=$baselineWidth zoomed=$zoomedWidth",
+            zoomedWidth < baselineWidth * 0.75,
+        )
+
+        clickSpaNavigateButton()
+        composeRule.waitUntil(timeoutMillis = 30_000) {
+            composeRule.currentPageUrlFromUi().contains("route=route2")
+        }
+        val widthAfterSpaNav = waitForViewportWidthBelow(
+            maxWidth = (baselineWidth * 0.75).toInt(),
+            timeoutMillis = 30_000,
+        )
+        assertTrue(
+            "SPA遷移後にズームが解除された: zoomed=$zoomedWidth afterSpa=$widthAfterSpaNav baseline=$baselineWidth",
+            widthAfterSpaNav < baselineWidth * 0.75,
         )
     }
 
@@ -247,6 +296,89 @@ class PageZoomTest {
         return destination.toURI().toString()
     }
 
+    /**
+     * SPA ズーム検証用 HTML をループバック HTTP サーバーから配信する。
+     */
+    private fun startSpaZoomPageServer(): String {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val targetContext = instrumentation.targetContext
+        val destinationDir = File(targetContext.cacheDir, ZOOM_DIR_NAME).apply { mkdirs() }
+        val assetManager = instrumentation.context.assets
+        val destination = File(destinationDir, SPA_NAV_FILE_NAME)
+        assetManager.open("$ZOOM_ASSET_DIR/$SPA_NAV_FILE_NAME").use { input ->
+            destination.outputStream().use { output ->
+                input.copyTo(output)
+            }
+        }
+        val server = LocalHttpServer(destinationDir)
+        localHttpServer = server
+        return server.url(SPA_NAV_FILE_NAME)
+    }
+
+    private fun waitForViewportWidthInUrl(timeoutMillis: Long): Int {
+        var width: Int? = null
+        composeRule.waitUntil(timeoutMillis = timeoutMillis) {
+            width = viewportWidthFromUrl(composeRule.currentPageUrlFromUi())
+            width != null
+        }
+        return width ?: error("URL から viewport 幅を取得できない")
+    }
+
+    private fun waitForViewportWidthBelow(
+        maxWidth: Int,
+        timeoutMillis: Long,
+        excludeWidth: Int? = null,
+    ): Int {
+        var width: Int? = null
+        composeRule.waitUntil(timeoutMillis = timeoutMillis) {
+            val current = viewportWidthFromUrl(composeRule.currentPageUrlFromUi()) ?: return@waitUntil false
+            if (excludeWidth != null && current == excludeWidth) return@waitUntil false
+            if (current >= maxWidth) return@waitUntil false
+            width = current
+            true
+        }
+        return width ?: error("URL から期待する viewport 幅を取得できない max=$maxWidth exclude=$excludeWidth")
+    }
+
+    /**
+     * GeckoView 内の SPA 遷移ボタンをアクセシビリティ経由でクリックする。
+     */
+    private fun clickSpaNavigateButton(timeoutMillis: Long = 30_000) {
+        val uiAutomation = InstrumentationRegistry.getInstrumentation().uiAutomation
+        composeRule.waitUntil(timeoutMillis = timeoutMillis) {
+            val root = uiAutomation.rootInActiveWindow ?: return@waitUntil false
+            try {
+                val target = findAccessibilityNode(root) { node ->
+                    node.contentDescription?.toString() == SPA_NAV_BUTTON_LABEL ||
+                        node.viewIdResourceName?.endsWith(SPA_NAV_BUTTON_ID) == true
+                } ?: return@waitUntil false
+                val clicked = target.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                target.recycle()
+                clicked
+            } finally {
+                root.recycle()
+            }
+        }
+    }
+
+    private fun findAccessibilityNode(
+        node: AccessibilityNodeInfo,
+        predicate: (AccessibilityNodeInfo) -> Boolean,
+    ): AccessibilityNodeInfo? {
+        if (predicate(node)) return AccessibilityNodeInfo.obtain(node)
+        for (index in 0 until node.childCount) {
+            val child = node.getChild(index) ?: continue
+            val found = findAccessibilityNode(child, predicate)
+            child.recycle()
+            if (found != null) return found
+        }
+        return null
+    }
+
+    private fun viewportWidthFromUrl(url: String): Int? {
+        return Regex("[?&]w=(\\d+)").find(url)?.groupValues?.get(1)?.toIntOrNull()
+    }
+
     private fun pressSystemBack() {
         composeRule.runOnIdle {
             composeRule.activity.onBackPressedDispatcher.onBackPressed()
@@ -257,5 +389,8 @@ class PageZoomTest {
         private const val ZOOM_ASSET_DIR = "test-zoom"
         private const val ZOOM_DIR_NAME = "test-zoom"
         private const val ZOOM_INDEX_FILE_NAME = "index.html"
+        private const val SPA_NAV_FILE_NAME = "spa-nav.html"
+        private const val SPA_NAV_BUTTON_ID = "nav-btn"
+        private const val SPA_NAV_BUTTON_LABEL = "spa-navigate"
     }
 }
