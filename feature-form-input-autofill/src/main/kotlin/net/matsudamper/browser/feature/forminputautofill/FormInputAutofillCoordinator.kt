@@ -173,7 +173,9 @@ class FormInputAutofillCoordinator(
         val current = synchronized(lock) { attached } ?: return
         current.host.coroutineScope.launch(ioDispatcher) {
             val origin = pageKey.origin()
-            val options = fields.mapNotNull { field ->
+            val options = fields
+                .distinctBy { it.fieldKey }
+                .mapNotNull { field ->
                 if (field.fieldKey.isBlank()) return@mapNotNull null
                 val enabled = current.formInputRepository.getFieldEnabled(
                     origin = origin,

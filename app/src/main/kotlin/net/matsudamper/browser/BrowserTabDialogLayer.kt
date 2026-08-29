@@ -524,7 +524,6 @@ private fun FormInputSaveDialog(
         confirmButton = {
             TextButton(
                 onClick = { onSave(selectedKeys) },
-                enabled = selectedKeys.isNotEmpty(),
                 modifier = Modifier.testTag(BrowserTabDialogLayerTestTags.FormInputSaveConfirmButton.testTag),
             ) {
                 Text("保存")
@@ -1279,6 +1278,50 @@ private fun PreviewAddressSaveDialog() {
                 .tel("090-1234-5678")
                 .email("taro@example.com")
                 .build(),
+            onSave = {},
+            onDismiss = {},
+        )
+    }
+}
+
+@Preview(name = "FormInputSaveDialog")
+@Composable
+private fun PreviewFormInputSaveDialog() {
+    BrowserTheme(themeMode = ThemeMode.THEME_SYSTEM) {
+        FormInputSaveDialog(
+            fields = listOf(
+                FormInputSaveFieldOption(
+                    fieldKey = "comment",
+                    value = "hello",
+                    initiallySelected = true,
+                ),
+                FormInputSaveFieldOption(
+                    fieldKey = "title",
+                    value = "",
+                    initiallySelected = false,
+                ),
+            ),
+            onSave = {},
+            onDismiss = {},
+        )
+    }
+}
+
+@Preview(name = "FormInputSaveDialogManyFields")
+@Composable
+private fun PreviewFormInputSaveDialogManyFields() {
+    BrowserTheme(themeMode = ThemeMode.THEME_SYSTEM) {
+        FormInputSaveDialog(
+            fields = listOf(
+                FormInputSaveFieldOption("brchNum", "001", true),
+                FormInputSaveFieldOption("accountNum", "1234567", true),
+                FormInputSaveFieldOption(
+                    fieldKey = "memo",
+                    value = "とても長いメモテキストが入っている場合の表示確認用サンプル値です",
+                    initiallySelected = false,
+                ),
+                FormInputSaveFieldOption("query", "search", false),
+            ),
             onSave = {},
             onDismiss = {},
         )
