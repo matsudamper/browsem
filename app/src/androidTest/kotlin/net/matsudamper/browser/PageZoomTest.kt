@@ -1,5 +1,6 @@
 package net.matsudamper.browser
 
+import android.view.accessibility.AccessibilityNodeInfo
 import androidx.compose.ui.test.hasParent
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.isDisplayed
@@ -148,17 +149,24 @@ class PageZoomTest {
 
         val baselineWidth = waitForViewportWidthInUrl(timeoutMillis = 30_000)
         openPageZoomMenuAndSet200Percent()
-        val zoomedWidth = waitForViewportWidthInUrl(timeoutMillis = 30_000)
+        val zoomedWidth = waitForViewportWidthBelow(
+            maxWidth = (baselineWidth * 0.75).toInt(),
+            excludeWidth = baselineWidth,
+            timeoutMillis = 30_000,
+        )
         assertTrue(
             "200%ズーム後に viewport 幅が縮小されていない: baseline=$baselineWidth zoomed=$zoomedWidth",
             zoomedWidth < baselineWidth * 0.75,
         )
 
-        composeRule.onNodeWithText("SPA Navigate").performClick()
+        clickSpaNavigateButton()
         composeRule.waitUntil(timeoutMillis = 30_000) {
             composeRule.currentPageUrlFromUi().contains("#route2")
         }
-        val widthAfterSpaNav = waitForViewportWidthInUrl(timeoutMillis = 30_000)
+        val widthAfterSpaNav = waitForViewportWidthBelow(
+            maxWidth = (baselineWidth * 0.75).toInt(),
+            timeoutMillis = 30_000,
+        )
         assertTrue(
             "SPA遷移後にズームが解除された: zoomed=$zoomedWidth afterSpa=$widthAfterSpaNav baseline=$baselineWidth",
             widthAfterSpaNav < baselineWidth * 0.75,
@@ -300,6 +308,57 @@ class PageZoomTest {
         return width ?: error("URL から viewport 幅を取得できない")
     }
 
+    private fun waitForViewportWidthBelow(
+        maxWidth: Int,
+        timeoutMillis: Long,
+        excludeWidth: Int? = null,
+    ): Int {
+        var width: Int? = null
+        composeRule.waitUntil(timeoutMillis = timeoutMillis) {
+            val current = viewportWidthFromUrl(composeRule.currentPageUrlFromUi()) ?: return@waitUntil false
+            if (excludeWidth != null && current == excludeWidth) return@waitUntil false
+            if (current >= maxWidth) return@waitUntil false
+            width = current
+            true
+        }
+        return width ?: error("URL から期待する viewport 幅を取得できない max=$maxWidth exclude=$excludeWidth")
+    }
+
+    /**
+     * GeckoView 内の SPA 遷移ボタンをアクセシビリティ経由でクリックする。
+     */
+    private fun clickSpaNavigateButton(timeoutMillis: Long = 30_000) {
+        val uiAutomation = InstrumentationRegistry.getInstrumentation().uiAutomation
+        composeRule.waitUntil(timeoutMillis = timeoutMillis) {
+            val root = uiAutomation.rootInActiveWindow ?: return@waitUntil false
+            try {
+                val target = findAccessibilityNode(root) { node ->
+                    node.contentDescription?.toString() == SPA_NAV_BUTTON_LABEL ||
+                        node.viewIdResourceName?.endsWith(SPA_NAV_BUTTON_ID) == true
+                } ?: return@waitUntil false
+                val clicked = target.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                target.recycle()
+                clicked
+            } finally {
+                root.recycle()
+            }
+        }
+    }
+
+    private fun findAccessibilityNode(
+        node: AccessibilityNodeInfo,
+        predicate: (AccessibilityNodeInfo) -> Boolean,
+    ): AccessibilityNodeInfo? {
+        if (predicate(node)) return AccessibilityNodeInfo.obtain(node)
+        for (index in 0 until node.childCount) {
+            val child = node.getChild(index) ?: continue
+            val found = findAccessibilityNode(child, predicate)
+            child.recycle()
+            if (found != null) return found
+        }
+        return null
+    }
+
     private fun viewportWidthFromUrl(url: String): Int? {
         return Regex("w=(\\d+)").find(url)?.groupValues?.get(1)?.toIntOrNull()
     }
@@ -315,5 +374,7 @@ class PageZoomTest {
         private const val ZOOM_DIR_NAME = "test-zoom"
         private const val ZOOM_INDEX_FILE_NAME = "index.html"
         private const val SPA_NAV_FILE_NAME = "spa-nav.html"
+        private const val SPA_NAV_BUTTON_ID = "nav-btn"
+        private const val SPA_NAV_BUTTON_LABEL = "spa-navigate"
     }
 }
