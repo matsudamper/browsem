@@ -138,11 +138,16 @@ class MainActivity : ComponentActivity() {
 
         // GeckoRuntime に依存しない Intent 処理を先に実行する。
         // チャネルはバッファ付きなので BrowserApp の composition 開始後に消費される。
-        if (intent.action == DownloadWorker.ACTION_OPEN_DOWNLOADS &&
-            !isOpenDownloadsIntentConsumed(savedInstanceState)
-        ) {
-            handleOpenDownloadsIntent(intent)
-        } else {
+        val openDownloadsConsumed = isOpenDownloadsIntentConsumed(savedInstanceState)
+        when {
+            OpenDownloadsIntentPolicy.shouldClearRestoredIntent(intent.action, openDownloadsConsumed) -> {
+                consumeOpenDownloadsIntent(intent)
+            }
+            OpenDownloadsIntentPolicy.shouldDispatch(intent.action, openDownloadsConsumed) -> {
+                dispatchOpenDownloadsIntent(intent)
+            }
+        }
+        if (intent.action != DownloadWorker.ACTION_OPEN_DOWNLOADS) {
             val url = intent.dataString
             if (url != null && url != lastProcessedDeepLinkUrl) {
                 val result = createNewTabChannel.trySend(
@@ -173,6 +178,7 @@ class MainActivity : ComponentActivity() {
                         viewModel = browserViewModel,
                         newTabUrlFlow = newTabUrlFlow,
                         openDownloadsFlow = openDownloadsFlow,
+                        onOpenDownloadsRequestConsumed = ::markOpenDownloadsIntentConsumed,
                         onInstallExtensionRequest = { pageUrl ->
                             extensionInstaller.installFromCurrentPage(pageUrl)
                         },
@@ -267,7 +273,7 @@ class MainActivity : ComponentActivity() {
             return
         }
         if (intent.action == DownloadWorker.ACTION_OPEN_DOWNLOADS) {
-            handleOpenDownloadsIntent(intent)
+            dispatchOpenDownloadsIntent(intent)
             return
         }
         val url = intent.dataString
@@ -322,7 +328,7 @@ class MainActivity : ComponentActivity() {
         // 処理済み deeplink URL を保存して設定変更後の重複タブ作成を防ぐ
         lastProcessedDeepLinkUrl?.let { outState.putString(KEY_PROCESSED_DEEPLINK_URL, it) }
         // 通知用 action を消費済みの場合のみ保存。プロセスキル後は AMS が元 Intent を渡すため必要。
-        if (intent.action != DownloadWorker.ACTION_OPEN_DOWNLOADS) {
+        if (OpenDownloadsIntentPolicy.isConsumed(intent.action)) {
             outState.putBoolean(KEY_OPEN_DOWNLOADS_CONSUMED, true)
         }
     }
@@ -331,8 +337,12 @@ class MainActivity : ComponentActivity() {
         return savedInstanceState?.getBoolean(KEY_OPEN_DOWNLOADS_CONSUMED, false) == true
     }
 
-    private fun handleOpenDownloadsIntent(intent: Intent) {
+    private fun dispatchOpenDownloadsIntent(intent: Intent) {
         openDownloadsChannel.trySend(intent.getStringExtra(DownloadWorker.EXTRA_WORKER_ID))
+    }
+
+    /** UI がダウンロード画面への遷移を処理した後に Intent を消費する。 */
+    internal fun markOpenDownloadsIntentConsumed() {
         consumeOpenDownloadsIntent(intent)
     }
 

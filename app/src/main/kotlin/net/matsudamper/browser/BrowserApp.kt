@@ -129,6 +129,7 @@ internal fun BrowserApp(
     viewModel: BrowserViewModel,
     newTabUrlFlow: Flow<NewTabRequest>,
     openDownloadsFlow: Flow<String?>,
+    onOpenDownloadsRequestConsumed: () -> Unit,
     onInstallExtensionRequest: (String) -> Unit,
     onRequestDownloadNotificationPermission: suspend () -> Unit,
 ) {
@@ -151,6 +152,7 @@ internal fun BrowserApp(
                 browserSessionLifecycleController = viewModel.browserSessionLifecycleController,
                 runtime = viewModel.runtime,
                 openDownloadsFlow = openDownloadsFlow,
+                onOpenDownloadsRequestConsumed = onOpenDownloadsRequestConsumed,
                 onNavigateToUrl = { url ->
                     val tabId = UUID.randomUUID().toString()
                     val newTab = viewModel.browserTabController.createAndAppendTab(
@@ -192,6 +194,7 @@ internal fun BrowserAppShell(
     browserSessionLifecycleController: BrowserSessionLifecycleController,
     runtime: GeckoRuntime,
     openDownloadsFlow: Flow<String?>? = null,
+    onOpenDownloadsRequestConsumed: (() -> Unit)? = null,
     onNavigateToUrl: (suspend (url: String) -> Unit)? = null,
     rootContent: @Composable (outerNavActions: OuterNavActions) -> Unit,
 ) {
@@ -215,6 +218,7 @@ internal fun BrowserAppShell(
                     val removeCount = outerBackStack.lastIndex - existingIndex
                     repeat(removeCount) { outerBackStack.removeLastOrNull() }
                 }
+                onOpenDownloadsRequestConsumed?.invoke()
             }.launchIn(this)
         }
     }
