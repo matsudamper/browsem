@@ -56,7 +56,6 @@ import java.util.Locale
 import java.util.TimeZone
 import net.matsudamper.browser.data.ThemeMode
 import net.matsudamper.browser.data.download.DownloadRecordStatus
-import net.matsudamper.browser.feature.forminputautofill.FormInputSaveFieldOption
 import net.matsudamper.browser.ui.common.BrowserTheme
 import org.mozilla.geckoview.Autocomplete
 import org.mozilla.geckoview.GeckoSession
@@ -435,7 +434,8 @@ internal fun BrowserTabDialogLayer(
 
     dialogState.pendingFormInputSaveDialog?.let { request ->
         FormInputSaveDialog(
-            fields = request.fields,
+            fieldKey = request.fieldKey,
+            value = request.value,
             onSave = dialogState::confirmFormInputSave,
             onDismiss = dialogState::dismissFormInputSaveDialog,
         )
@@ -474,59 +474,30 @@ private fun AddressSaveDialog(
 
 @Composable
 private fun FormInputSaveDialog(
-    fields: List<FormInputSaveFieldOption>,
-    onSave: (Set<String>) -> Unit,
+    fieldKey: String,
+    value: String,
+    onSave: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    var selectedKeys by remember(fields) {
-        mutableStateOf(fields.filter { it.initiallySelected }.map { it.fieldKey }.toSet())
-    }
     AlertDialog(
         modifier = Modifier.testTag(BrowserTabDialogLayerTestTags.FormInputSaveDialog.testTag),
         onDismissRequest = onDismiss,
-        title = { Text("保存する入力欄") },
+        title = { Text("この入力欄を保存しますか？") },
         text = {
-            LazyColumn {
-                items(fields, key = { it.fieldKey }) { field ->
-                    val checked = field.fieldKey in selectedKeys
-                    ListItem(
-                        headlineContent = { Text(field.fieldKey) },
-                        supportingContent = {
-                            Text(
-                                text = field.value.ifBlank { "(空)" },
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        },
-                        leadingContent = {
-                            Checkbox(
-                                checked = checked,
-                                onCheckedChange = { enabled ->
-                                    selectedKeys = if (enabled) {
-                                        selectedKeys + field.fieldKey
-                                    } else {
-                                        selectedKeys - field.fieldKey
-                                    }
-                                },
-                            )
-                        },
-                        modifier = Modifier.clickable {
-                            selectedKeys = if (checked) {
-                                selectedKeys - field.fieldKey
-                            } else {
-                                selectedKeys + field.fieldKey
-                            }
-                        },
-                        colors = ListItemDefaults.colors(
-                            containerColor = Color.Transparent,
-                        ),
-                    )
-                }
+            Column {
+                Text(fieldKey, style = MaterialTheme.typography.bodyLarge)
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = value.ifBlank { "(空)" },
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
         },
         confirmButton = {
             TextButton(
-                onClick = { onSave(selectedKeys) },
+                onClick = onSave,
                 modifier = Modifier.testTag(BrowserTabDialogLayerTestTags.FormInputSaveConfirmButton.testTag),
             ) {
                 Text("保存")
@@ -1292,39 +1263,21 @@ private fun PreviewAddressSaveDialog() {
 private fun PreviewFormInputSaveDialog() {
     BrowserTheme(themeMode = ThemeMode.THEME_SYSTEM) {
         FormInputSaveDialog(
-            fields = listOf(
-                FormInputSaveFieldOption(
-                    fieldKey = "comment",
-                    value = "hello",
-                    initiallySelected = true,
-                ),
-                FormInputSaveFieldOption(
-                    fieldKey = "title",
-                    value = "",
-                    initiallySelected = false,
-                ),
-            ),
+            fieldKey = "comment",
+            value = "hello",
             onSave = {},
             onDismiss = {},
         )
     }
 }
 
-@Preview(name = "FormInputSaveDialogManyFields")
+@Preview(name = "FormInputSaveDialogEmptyValue")
 @Composable
-private fun PreviewFormInputSaveDialogManyFields() {
+private fun PreviewFormInputSaveDialogEmptyValue() {
     BrowserTheme(themeMode = ThemeMode.THEME_SYSTEM) {
         FormInputSaveDialog(
-            fields = listOf(
-                FormInputSaveFieldOption("brchNum", "001", true),
-                FormInputSaveFieldOption("accountNum", "1234567", true),
-                FormInputSaveFieldOption(
-                    fieldKey = "memo",
-                    value = "とても長いメモテキストが入っている場合の表示確認用サンプル値です",
-                    initiallySelected = false,
-                ),
-                FormInputSaveFieldOption("query", "search", false),
-            ),
+            fieldKey = "title",
+            value = "",
             onSave = {},
             onDismiss = {},
         )

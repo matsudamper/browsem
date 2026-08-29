@@ -108,9 +108,9 @@ internal class PromptDialogState(
         pendingFormInputSaveDialog = null
     }
 
-    fun confirmFormInputSave(selectedFieldKeys: Set<String>) {
+    fun confirmFormInputSave() {
         val request = pendingFormInputSaveDialog ?: return
-        request.onConfirm(selectedFieldKeys)
+        request.onConfirm()
         pendingFormInputSaveDialog = null
     }
 

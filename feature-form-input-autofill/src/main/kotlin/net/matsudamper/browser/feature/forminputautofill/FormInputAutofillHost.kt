@@ -14,13 +14,8 @@ interface FormInputAutofillHost : AddressAutofillHost {
 
 data class FormInputSaveDialogRequest(
     val pageKey: FormInputPageKey,
-    val fields: List<FormInputSaveFieldOption>,
-    val onConfirm: (selectedFieldKeys: Set<String>) -> Unit,
-    val onDismiss: () -> Unit,
-)
-
-data class FormInputSaveFieldOption(
     val fieldKey: String,
     val value: String,
-    val initiallySelected: Boolean,
+    val onConfirm: () -> Unit,
+    val onDismiss: () -> Unit,
 )

@@ -72,12 +72,24 @@ class FormInputAutofillCoordinatorTest {
     @Test
     fun fieldLongPressShowsSaveDialog() = runTest {
         val env = createEnv(this)
-        coEvery {
-            env.repository.getFieldEnabled(any(), any(), "comment")
-        } returns false
-        coEvery {
-            env.repository.getFieldEnabled(any(), any(), "title")
-        } returns true
+
+        env.extension.dispatchFieldLongPress(
+            env.session,
+            fieldKey = "comment",
+            pageUrl = "https://example.com/form",
+            fields = listOf(
+                FormInputFieldMessage(fieldKey = "comment", value = "hello"),
+            ),
+        )
+        runCurrent()
+
+        assertEquals("comment", env.host.saveDialogRequest?.fieldKey)
+        assertEquals("hello", env.host.saveDialogRequest?.value)
+    }
+
+    @Test
+    fun fieldLongPressUsesPressedFieldWhenMultipleFieldsAreSent() = runTest {
+        val env = createEnv(this)
 
         env.extension.dispatchFieldLongPress(
             env.session,
@@ -90,29 +102,8 @@ class FormInputAutofillCoordinatorTest {
         )
         runCurrent()
 
-        assertEquals(2, env.host.saveDialogRequest?.fields?.size)
-        assertTrue(env.host.saveDialogRequest?.fields?.any { it.fieldKey == "comment" && it.initiallySelected } == true)
-        assertTrue(env.host.saveDialogRequest?.fields?.any { it.fieldKey == "title" && it.initiallySelected } == true)
-    }
-
-    @Test
-    fun fieldLongPressDeduplicatesDuplicateFieldKeys() = runTest {
-        val env = createEnv(this)
-        coEvery { env.repository.getFieldEnabled(any(), any(), "comment") } returns false
-
-        env.extension.dispatchFieldLongPress(
-            env.session,
-            fieldKey = "comment",
-            pageUrl = "https://example.com/form",
-            fields = listOf(
-                FormInputFieldMessage(fieldKey = "comment", value = "first"),
-                FormInputFieldMessage(fieldKey = "comment", value = "second"),
-            ),
-        )
-        runCurrent()
-
-        assertEquals(1, env.host.saveDialogRequest?.fields?.size)
-        assertEquals("first", env.host.saveDialogRequest?.fields?.single()?.value)
+        assertEquals("comment", env.host.saveDialogRequest?.fieldKey)
+        assertEquals("hello", env.host.saveDialogRequest?.value)
     }
 
     @Test

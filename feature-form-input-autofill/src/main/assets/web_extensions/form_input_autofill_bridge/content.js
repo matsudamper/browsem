@@ -231,14 +231,6 @@
     }
   }
 
-  function resolveFillRoot(el) {
-    if (!el || !el.isConnected) return null;
-    if (el.form) return el.form;
-    const closest = el.closest && el.closest('form');
-    if (closest) return closest;
-    return el;
-  }
-
   function collectDocumentTargetFields(root) {
     const fields = [];
     collectFields(root || document, fields);
@@ -328,37 +320,6 @@
       const value = fieldValue(el);
       if (isEmptyFieldValue(value)) continue;
       result.push({ fieldKey: key, value: value });
-    }
-    return result;
-  }
-
-  function collectFormFieldsForPrompt(root) {
-    const fields = [];
-    if (!root) return fields;
-    if (isEditableFormControl(root)) {
-      fields.push(root);
-    }
-    if (root.elements) {
-      for (let i = 0; i < root.elements.length; i++) {
-        const el = root.elements[i];
-        if (isEditableFormControl(el)) {
-          fields.push(el);
-        }
-      }
-    }
-    collectFields(root, fields);
-    const seenElement = new Set();
-    const seenKeys = new Set();
-    const result = [];
-    for (let i = 0; i < fields.length; i++) {
-      const el = fields[i];
-      if (seenElement.has(el)) continue;
-      seenElement.add(el);
-      if (!isTargetField(el)) continue;
-      const key = fieldKey(el);
-      if (!key || seenKeys.has(key)) continue;
-      seenKeys.add(key);
-      result.push({ fieldKey: key, value: fieldValue(el) });
     }
     return result;
   }
@@ -469,16 +430,13 @@
     if (!isEditableFormControl(el) || !isTargetField(el)) return;
     const key = fieldKey(el);
     if (!key) return;
-    const root = resolveFillRoot(el);
-    const fields = collectFormFieldsForPrompt(root);
-    if (fields.length === 0) return;
     event.preventDefault();
     event.stopPropagation();
     port.postMessage({
       action: 'field-long-press',
       fieldKey: key,
       pageUrl: location.href,
-      fields: fields,
+      fields: [{ fieldKey: key, value: fieldValue(el) }],
     });
   }, true);
 })();

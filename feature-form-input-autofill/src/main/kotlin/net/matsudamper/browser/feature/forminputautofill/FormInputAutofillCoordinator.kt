@@ -171,44 +171,35 @@ class FormInputAutofillCoordinator(
         val pageKey = parseFormInputPageKey(pageUrl) ?: return
         if (fieldKey.isBlank() || fields.isEmpty()) return
         val current = synchronized(lock) { attached } ?: return
+        val pressedField = fields
+            .firstOrNull { it.fieldKey == fieldKey }
+            ?: fields.distinctBy { it.fieldKey }.firstOrNull { it.fieldKey.isNotBlank() }
+            ?: return
         current.host.coroutineScope.launch(ioDispatcher) {
-            val origin = pageKey.origin()
-            val options = fields
-                .distinctBy { it.fieldKey }
-                .mapNotNull { field ->
-                if (field.fieldKey.isBlank()) return@mapNotNull null
-                val enabled = current.formInputRepository.getFieldEnabled(
-                    origin = origin,
-                    path = pageKey.path,
-                    fieldKey = field.fieldKey,
-                )
-                FormInputSaveFieldOption(
-                    fieldKey = field.fieldKey,
-                    value = field.value,
-                    initiallySelected = enabled || field.fieldKey == fieldKey,
-                )
-            }
-            if (options.isEmpty()) return@launch
             withContext(Dispatchers.Main) {
                 current.host.showFormInputSaveDialog(
                     FormInputSaveDialogRequest(
                         pageKey = pageKey,
-                        fields = options,
-                        onConfirm = { selectedFieldKeys ->
+                        fieldKey = pressedField.fieldKey,
+                        value = pressedField.value,
+                        onConfirm = {
                             current.host.dismissFormInputSaveDialog()
                             current.host.coroutineScope.launch(ioDispatcher) {
                                 runCatching {
                                     current.formInputRepository.enableFieldsAndSave(
                                         pageKey = pageKey,
-                                        fields = fields.map {
-                                            FormFieldEntry(fieldKey = it.fieldKey, value = it.value)
-                                        },
-                                        enabledFieldKeys = selectedFieldKeys,
+                                        fields = listOf(
+                                            FormFieldEntry(
+                                                fieldKey = pressedField.fieldKey,
+                                                value = pressedField.value,
+                                            ),
+                                        ),
+                                        enabledFieldKeys = setOf(pressedField.fieldKey),
                                     )
                                     Log.i(
                                         TAG,
                                         "field-long-press saved host=${pageKey.host} path=${pageKey.path} " +
-                                            "count=${selectedFieldKeys.size}",
+                                            "field=${pressedField.fieldKey}",
                                     )
                                 }.onFailure { error ->
                                     Log.w(TAG, "field-long-press save failed", error)
