@@ -105,8 +105,8 @@ import net.matsudamper.browser.ui.common.BrowserTheme
 import net.matsudamper.browser.ui.downloads.DownloadManagementScreen
 import net.matsudamper.browser.ui.extensions.ExtensionsScreen
 import net.matsudamper.browser.ui.history.HistoryScreen
-import net.matsudamper.browser.ui.settings.CrashLogDetailScreen
-import net.matsudamper.browser.ui.settings.CrashLogsScreen
+import net.matsudamper.browser.ui.settings.CrashLogDetailRoute
+import net.matsudamper.browser.ui.settings.CrashLogsRoute
 import net.matsudamper.browser.ui.settings.AddressEditScreen
 import net.matsudamper.browser.ui.settings.AddressesScreen
 import net.matsudamper.browser.ui.settings.BackupProgressScreen
@@ -562,7 +562,7 @@ internal fun BrowserAppShell(
                             })
                         }
                     }
-                    CrashLogsScreen(
+                    CrashLogsRoute(
                         uiState = crashLogsUiState,
                         onBack = { outerBackStack.removeLastOrNull() },
                     )
@@ -591,7 +591,7 @@ internal fun BrowserAppShell(
                             })
                         }
                     }
-                    CrashLogDetailScreen(
+                    CrashLogDetailRoute(
                         uiState = crashLogDetailUiState,
                         onBack = { outerBackStack.removeLastOrNull() },
                     )

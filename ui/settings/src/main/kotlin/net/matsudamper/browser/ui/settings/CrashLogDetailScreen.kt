@@ -42,7 +42,7 @@ sealed interface CrashLogDetailScreenTestTags {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CrashLogDetailScreen(
+internal fun CrashLogDetailScreen(
     uiState: CrashLogDetailScreenUiState,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,

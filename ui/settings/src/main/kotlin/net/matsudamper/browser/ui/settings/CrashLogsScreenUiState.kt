@@ -6,6 +6,7 @@ import net.matsudamper.browser.data.crashlog.CrashLogListItem
 @Stable
 data class CrashLogsScreenUiState(
     val callbacks: Callbacks,
+    val isLoading: Boolean,
     val entries: List<CrashLogListItem>,
     val showDeleteAllDialog: Boolean,
 ) {

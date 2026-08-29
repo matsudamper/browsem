@@ -43,6 +43,7 @@ internal class CrashLogsScreenViewModel(
     val uiState: StateFlow<CrashLogsScreenUiState> = MutableStateFlow(
         CrashLogsScreenUiState(
             callbacks = callbacks,
+            isLoading = true,
             entries = emptyList(),
             showDeleteAllDialog = false,
         ),
@@ -52,6 +53,7 @@ internal class CrashLogsScreenViewModel(
                 uiStateFlow.update {
                     CrashLogsScreenUiState(
                         callbacks = callbacks,
+                        isLoading = state.isLoading,
                         entries = state.entries,
                         showDeleteAllDialog = state.showDeleteAllDialog,
                     )
@@ -63,7 +65,7 @@ internal class CrashLogsScreenViewModel(
     init {
         viewModelScope.launch {
             crashLogRepository.observeAllSummaries().collect { entries ->
-                viewModelStateFlow.update { it.copy(entries = entries) }
+                viewModelStateFlow.update { it.copy(entries = entries, isLoading = false) }
             }
         }
     }
@@ -73,6 +75,7 @@ internal class CrashLogsScreenViewModel(
     }
 
     data class ViewModelState(
+        val isLoading: Boolean = true,
         val entries: List<CrashLogListItem> = emptyList(),
         val showDeleteAllDialog: Boolean = false,
     )

@@ -1,12 +1,14 @@
 package net.matsudamper.browser.ui.settings
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -18,6 +20,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -44,7 +47,7 @@ sealed interface CrashLogsScreenTestTags {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CrashLogsScreen(
+internal fun CrashLogsScreen(
     uiState: CrashLogsScreenUiState,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
@@ -72,28 +75,43 @@ fun CrashLogsScreen(
             )
         },
     ) { paddingValues ->
-        if (uiState.entries.isEmpty()) {
-            Text(
-                text = "保存されたクラッシュログはありません",
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier
-                    .padding(paddingValues)
-                    .padding(16.dp),
-            )
-        } else {
-            val dateFormat = remember { SimpleDateFormat("yyyy/MM/dd HH:mm", Locale.getDefault()) }
-            LazyColumn(
-                modifier = Modifier
-                    .padding(paddingValues)
-                    .fillMaxSize(),
-            ) {
-                items(uiState.entries, key = { it.id }) { entry ->
-                    CrashLogSummaryListItem(
-                        entry = entry,
-                        dateFormat = dateFormat,
-                        onClick = { uiState.callbacks.onClickEntry(entry.id) },
-                    )
+        when {
+            uiState.isLoading -> {
+                Box(
+                    modifier = Modifier
+                        .padding(paddingValues)
+                        .fillMaxSize(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    CircularProgressIndicator()
+                }
+            }
+
+            uiState.entries.isEmpty() -> {
+                Text(
+                    text = "保存されたクラッシュログはありません",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier
+                        .padding(paddingValues)
+                        .padding(16.dp),
+                )
+            }
+
+            else -> {
+                val dateFormat = remember { SimpleDateFormat("yyyy/MM/dd HH:mm", Locale.getDefault()) }
+                LazyColumn(
+                    modifier = Modifier
+                        .padding(paddingValues)
+                        .fillMaxSize(),
+                ) {
+                    items(uiState.entries, key = { it.id }) { entry ->
+                        CrashLogSummaryListItem(
+                            entry = entry,
+                            dateFormat = dateFormat,
+                            onClick = { uiState.callbacks.onClickEntry(entry.id) },
+                        )
+                    }
                 }
             }
         }
@@ -156,6 +174,7 @@ private fun PreviewCrashLogsScreen() {
                 override fun onConfirmDeleteAll() = Unit
                 override fun onDismissDeleteAllDialog() = Unit
             },
+            isLoading = false,
             entries = listOf(
                 CrashLogListItem(
                     id = 1,
@@ -180,6 +199,7 @@ private fun PreviewCrashLogsScreenEmpty() {
                 override fun onConfirmDeleteAll() = Unit
                 override fun onDismissDeleteAllDialog() = Unit
             },
+            isLoading = false,
             entries = emptyList(),
             showDeleteAllDialog = false,
         ),
