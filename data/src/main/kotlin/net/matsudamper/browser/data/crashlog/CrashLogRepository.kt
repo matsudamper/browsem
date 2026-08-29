@@ -7,7 +7,7 @@ class CrashLogRepository(context: Context) {
     private val db = CrashLogDatabase.getInstance(context)
     private val dao = db.crashLogDao()
 
-    fun observeAll(): Flow<List<CrashLogEntity>> = dao.observeAll()
+    fun observeAllSummaries(): Flow<List<CrashLogListItem>> = dao.observeAllSummaries()
 
     suspend fun getById(id: Long): CrashLogEntity? = dao.getById(id)
 

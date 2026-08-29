@@ -1,11 +1,13 @@
 package net.matsudamper.browser.ui.settings
 
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -16,6 +18,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -70,47 +73,61 @@ fun CrashLogDetailScreen(
             )
         },
     ) { paddingValues ->
-        if (entry == null) {
-            Text(
-                text = "クラッシュログが見つかりません",
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier
-                    .padding(paddingValues)
-                    .padding(16.dp),
-            )
-            return@Scaffold
-        }
+        when {
+            uiState.isLoading -> {
+                Box(
+                    modifier = Modifier
+                        .padding(paddingValues)
+                        .fillMaxSize(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    CircularProgressIndicator()
+                }
+            }
 
-        Column(
-            modifier = Modifier
-                .padding(paddingValues)
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(16.dp),
-        ) {
-            Text(
-                text = dateFormat.format(Date(entry.occurredAt)),
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Text(
-                text = entry.title,
-                style = MaterialTheme.typography.titleMedium,
-                maxLines = 3,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 8.dp),
-            )
-            Text(
-                text = entry.body,
-                style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier
-                    .testTag(CrashLogDetailScreenTestTags.Body.testTag)
-                    .fillMaxWidth()
-                    .padding(top = 16.dp),
-            )
+            entry == null -> {
+                Text(
+                    text = "クラッシュログが見つかりません",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier
+                        .padding(paddingValues)
+                        .padding(16.dp),
+                )
+            }
+
+            else -> {
+                Column(
+                    modifier = Modifier
+                        .padding(paddingValues)
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                        .padding(16.dp),
+                ) {
+                    Text(
+                        text = dateFormat.format(Date(entry.occurredAt)),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        text = entry.title,
+                        style = MaterialTheme.typography.titleMedium,
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp),
+                    )
+                    Text(
+                        text = entry.body,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier
+                            .testTag(CrashLogDetailScreenTestTags.Body.testTag)
+                            .fillMaxWidth()
+                            .padding(top = 16.dp),
+                    )
+                }
+            }
         }
     }
 }
@@ -123,6 +140,7 @@ private fun PreviewCrashLogDetailScreen() {
             callbacks = object : CrashLogDetailScreenUiState.Callbacks {
                 override fun onClickCopyBody() = Unit
             },
+            isLoading = false,
             entry = CrashLogEntity(
                 id = 1,
                 occurredAt = 1_700_000_000_000,

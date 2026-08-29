@@ -9,7 +9,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import net.matsudamper.browser.data.crashlog.CrashLogEntity
+import net.matsudamper.browser.data.crashlog.CrashLogListItem
 import net.matsudamper.browser.data.crashlog.CrashLogRepository
 import net.matsudamper.browser.ui.settings.CrashLogsScreenUiState
 
@@ -62,7 +62,7 @@ internal class CrashLogsScreenViewModel(
 
     init {
         viewModelScope.launch {
-            crashLogRepository.observeAll().collect { entries ->
+            crashLogRepository.observeAllSummaries().collect { entries ->
                 viewModelStateFlow.update { it.copy(entries = entries) }
             }
         }
@@ -73,7 +73,7 @@ internal class CrashLogsScreenViewModel(
     }
 
     data class ViewModelState(
-        val entries: List<CrashLogEntity> = emptyList(),
+        val entries: List<CrashLogListItem> = emptyList(),
         val showDeleteAllDialog: Boolean = false,
     )
 }

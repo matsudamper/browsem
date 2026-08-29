@@ -24,7 +24,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import net.matsudamper.browser.data.crashlog.CrashLogEntity
+import net.matsudamper.browser.data.crashlog.CrashLogListItem
 import net.matsudamper.browser.resources.R as ResourcesR
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -89,7 +89,7 @@ fun CrashLogsScreen(
                     .fillMaxSize(),
             ) {
                 items(uiState.entries, key = { it.id }) { entry ->
-                    CrashLogListItem(
+                    CrashLogSummaryListItem(
                         entry = entry,
                         dateFormat = dateFormat,
                         onClick = { uiState.callbacks.onClickEntry(entry.id) },
@@ -119,8 +119,8 @@ fun CrashLogsScreen(
 }
 
 @Composable
-private fun CrashLogListItem(
-    entry: CrashLogEntity,
+private fun CrashLogSummaryListItem(
+    entry: CrashLogListItem,
     dateFormat: SimpleDateFormat,
     onClick: () -> Unit,
 ) {
@@ -157,11 +157,10 @@ private fun PreviewCrashLogsScreen() {
                 override fun onDismissDeleteAllDialog() = Unit
             },
             entries = listOf(
-                CrashLogEntity(
+                CrashLogListItem(
                     id = 1,
                     occurredAt = 1_700_000_000_000,
                     title = "java.lang.RuntimeException: Something went wrong in the browser",
-                    body = "stack trace",
                 ),
             ),
             showDeleteAllDialog = false,

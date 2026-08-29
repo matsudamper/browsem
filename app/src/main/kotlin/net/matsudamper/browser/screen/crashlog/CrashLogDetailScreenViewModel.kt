@@ -29,6 +29,7 @@ internal class CrashLogDetailScreenViewModel(
     val uiState: StateFlow<CrashLogDetailScreenUiState> = MutableStateFlow(
         CrashLogDetailScreenUiState(
             callbacks = callbacks,
+            isLoading = true,
             entry = null,
         ),
     ).also { uiStateFlow ->
@@ -37,6 +38,7 @@ internal class CrashLogDetailScreenViewModel(
             uiStateFlow.update {
                 CrashLogDetailScreenUiState(
                     callbacks = callbacks,
+                    isLoading = false,
                     entry = entry,
                 )
             }

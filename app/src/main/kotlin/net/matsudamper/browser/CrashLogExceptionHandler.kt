@@ -15,10 +15,11 @@ class CrashLogExceptionHandler(
     override fun uncaughtException(thread: Thread, throwable: Throwable) {
         try {
             CrashLogRepository(context).saveCrashSync(thread, throwable)
-        } catch (error: Exception) {
+        } catch (error: Throwable) {
             Log.e(TAG, "クラッシュログの保存に失敗", error)
+        } finally {
+            defaultHandler?.uncaughtException(thread, throwable)
         }
-        defaultHandler?.uncaughtException(thread, throwable)
     }
 
     companion object {
