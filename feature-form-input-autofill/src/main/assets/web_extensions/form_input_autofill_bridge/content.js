@@ -234,17 +234,19 @@
   function collectDocumentTargetFields(root) {
     const fields = [];
     collectFields(root || document, fields);
-    const seen = new Set();
+    const seenElement = new Set();
+    const seenKeys = new Set();
     const result = [];
     for (let i = 0; i < fields.length; i++) {
       const el = fields[i];
-      if (seen.has(el)) continue;
-      seen.add(el);
+      if (seenElement.has(el)) continue;
+      seenElement.add(el);
       if (!isTargetField(el)) continue;
       const key = fieldKey(el);
-      if (!key) continue;
+      if (!key || seenKeys.has(key)) continue;
       const value = fieldValue(el);
       if (isEmptyFieldValue(value)) continue;
+      seenKeys.add(key);
       result.push({ fieldKey: key, value: value });
     }
     return result;
@@ -316,9 +318,9 @@
       if (!isTargetField(el)) continue;
       const key = fieldKey(el);
       if (!key || seenKeys.has(key)) continue;
-      seenKeys.add(key);
       const value = fieldValue(el);
       if (isEmptyFieldValue(value)) continue;
+      seenKeys.add(key);
       result.push({ fieldKey: key, value: value });
     }
     return result;
@@ -426,7 +428,7 @@
   }, true);
 
   document.addEventListener('contextmenu', function (event) {
-    const el = event.target;
+    const el = eventTargetElement(event);
     if (!isEditableFormControl(el) || !isTargetField(el)) return;
     const key = fieldKey(el);
     if (!key) return;
