@@ -517,6 +517,9 @@ private fun FormInputSaveDialog(
                                 selectedKeys + field.fieldKey
                             }
                         },
+                        colors = ListItemDefaults.colors(
+                            containerColor = Color.Transparent,
+                        ),
                     )
                 }
             }
