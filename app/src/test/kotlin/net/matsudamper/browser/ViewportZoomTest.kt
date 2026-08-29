@@ -92,6 +92,25 @@ class ViewportZoomTest {
     }
 
     @Test
+    fun injectionScriptUpdatesAllViewportMetaTags() {
+        val script = buildViewportZoomInjectionScript(
+            viewportContent = "width=200,initial-scale=1",
+            persistAcrossDomChanges = true,
+        )
+        assertTrue(script.contains("querySelectorAll('meta[name=\"viewport\"]')"))
+    }
+
+    @Test
+    fun persistentInjectionScriptSchedulesDelayedReapply() {
+        val script = buildViewportZoomInjectionScript(
+            viewportContent = "width=200,initial-scale=1",
+            persistAcrossDomChanges = true,
+        )
+        assertTrue(script.contains("setTimeout(applyFromGlobal,300)"))
+        assertTrue(script.contains("setTimeout(applyFromGlobal,500)"))
+    }
+
+    @Test
     fun persistentInjectionScriptUpdatesGlobalBeforeApplying() {
         val firstScript = buildViewportZoomInjectionScript(
             viewportContent = "width=200,initial-scale=1",

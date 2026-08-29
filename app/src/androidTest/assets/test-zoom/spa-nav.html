@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SPA Zoom Test</title>
+</head>
+<body>
+  <button id="nav-btn">SPA Navigate</button>
+  <script>
+    function reportViewportWidth() {
+      const width = window.innerWidth;
+      const route = window.location.hash.includes("route2") ? "route2" : "home";
+      history.replaceState(null, "", "#" + route + "/w=" + width);
+    }
+    window.addEventListener("load", reportViewportWidth);
+    window.addEventListener("resize", reportViewportWidth);
+    document.getElementById("nav-btn").addEventListener("click", function () {
+      // SPA 遷移時に新しい viewport meta を追加する（実サイトでよくあるパターン）
+      const meta = document.createElement("meta");
+      meta.name = "viewport";
+      meta.content = "width=device-width,initial-scale=1";
+      document.head.appendChild(meta);
+      history.pushState(null, "", "#route2");
+      setTimeout(reportViewportWidth, 50);
+    });
+  </script>
+</body>
+</html>
