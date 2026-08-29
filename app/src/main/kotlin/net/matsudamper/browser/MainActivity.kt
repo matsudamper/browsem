@@ -341,11 +341,8 @@ class MainActivity : ComponentActivity() {
      * 起動 Intent を使い回し、ダウンロード通知用の action / extra だけ消費する。
      */
     private fun consumeOpenDownloadsIntent(intent: Intent) {
-        intent.action = Intent.ACTION_MAIN
         intent.removeExtra(DownloadWorker.EXTRA_WORKER_ID)
-        if (!intent.hasCategory(Intent.CATEGORY_LAUNCHER)) {
-            intent.addCategory(Intent.CATEGORY_LAUNCHER)
-        }
+        intent.action = null
         setIntent(intent)
     }
 
