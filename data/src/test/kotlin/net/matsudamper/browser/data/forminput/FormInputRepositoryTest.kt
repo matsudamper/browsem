@@ -5,6 +5,7 @@ import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -178,5 +179,24 @@ class FormInputRepositoryTest {
         assertEquals(listOf("hello"), repository.getSuggestions(pageKey = page, fieldKey = "comment"))
         assertTrue(repository.getFieldEnabled(page.origin(), page.path, "comment"))
         assertTrue(repository.getFieldEnabled(page.origin(), page.path, "title"))
+    }
+
+    @Test
+    fun enableFieldsAndSaveWithEmptySelectionDisablesFields() = runBlocking {
+        val page = FormInputPageKey(
+            scheme = "https",
+            host = "example.com",
+            port = 443,
+            path = "/form",
+        )
+        repository.setFieldEnabled(page.origin(), page.path, "comment", enabled = true)
+        repository.enableFieldsAndSave(
+            pageKey = page,
+            fields = listOf(FormFieldEntry(fieldKey = "comment", value = "hello")),
+            enabledFieldKeys = emptySet(),
+        )
+
+        assertFalse(repository.getFieldEnabled(page.origin(), page.path, "comment"))
+        assertTrue(repository.getSuggestions(pageKey = page, fieldKey = "comment").isEmpty())
     }
 }

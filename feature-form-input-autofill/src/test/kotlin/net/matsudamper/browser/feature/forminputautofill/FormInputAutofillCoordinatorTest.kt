@@ -96,6 +96,26 @@ class FormInputAutofillCoordinatorTest {
     }
 
     @Test
+    fun fieldLongPressDeduplicatesDuplicateFieldKeys() = runTest {
+        val env = createEnv(this)
+        coEvery { env.repository.getFieldEnabled(any(), any(), "comment") } returns false
+
+        env.extension.dispatchFieldLongPress(
+            env.session,
+            fieldKey = "comment",
+            pageUrl = "https://example.com/form",
+            fields = listOf(
+                FormInputFieldMessage(fieldKey = "comment", value = "first"),
+                FormInputFieldMessage(fieldKey = "comment", value = "second"),
+            ),
+        )
+        runCurrent()
+
+        assertEquals(1, env.host.saveDialogRequest?.fields?.size)
+        assertEquals("first", env.host.saveDialogRequest?.fields?.single()?.value)
+    }
+
+    @Test
     fun fieldBlurHidesBar() = runTest {
         val env = createEnv(this)
         env.extension.dispatchFieldFocus(env.session, "comment", "https://example.com/form")
