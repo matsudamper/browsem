@@ -302,6 +302,9 @@
   function collectFormFields(form) {
     const fields = [];
     if (!form) return fields;
+    if (isEditableFormControl(form)) {
+      fields.push(form);
+    }
     if (form.elements) {
       for (let i = 0; i < form.elements.length; i++) {
         const el = form.elements[i];
@@ -311,18 +314,51 @@
       }
     }
     collectFields(form, fields);
-    const seen = new Set();
+    const seenElement = new Set();
+    const seenKeys = new Set();
     const result = [];
     for (let i = 0; i < fields.length; i++) {
       const el = fields[i];
-      if (seen.has(el)) continue;
-      seen.add(el);
+      if (seenElement.has(el)) continue;
+      seenElement.add(el);
       if (!isTargetField(el)) continue;
       const key = fieldKey(el);
-      if (!key) continue;
+      if (!key || seenKeys.has(key)) continue;
+      seenKeys.add(key);
       const value = fieldValue(el);
       if (isEmptyFieldValue(value)) continue;
       result.push({ fieldKey: key, value: value });
+    }
+    return result;
+  }
+
+  function collectFormFieldsForPrompt(root) {
+    const fields = [];
+    if (!root) return fields;
+    if (isEditableFormControl(root)) {
+      fields.push(root);
+    }
+    if (root.elements) {
+      for (let i = 0; i < root.elements.length; i++) {
+        const el = root.elements[i];
+        if (isEditableFormControl(el)) {
+          fields.push(el);
+        }
+      }
+    }
+    collectFields(root, fields);
+    const seenElement = new Set();
+    const seenKeys = new Set();
+    const result = [];
+    for (let i = 0; i < fields.length; i++) {
+      const el = fields[i];
+      if (seenElement.has(el)) continue;
+      seenElement.add(el);
+      if (!isTargetField(el)) continue;
+      const key = fieldKey(el);
+      if (!key || seenKeys.has(key)) continue;
+      seenKeys.add(key);
+      result.push({ fieldKey: key, value: fieldValue(el) });
     }
     return result;
   }
@@ -434,7 +470,7 @@
     const key = fieldKey(el);
     if (!key) return;
     const root = resolveFillRoot(el);
-    const fields = collectFormFields(root);
+    const fields = collectFormFieldsForPrompt(root);
     if (fields.length === 0) return;
     event.preventDefault();
     event.stopPropagation();
