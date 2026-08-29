@@ -23,6 +23,8 @@ data class SiteSettingsScreenUiState(
     val clearDataConfirmDialog: ClearDataType?,
     /** 削除完了スナックバーのメッセージ。表示後に consumeClearDataResultMessage で消費する */
     val clearDataResultMessage: String?,
+    /** 保存されたフォーム入力の path 数。0 のときは項目を表示しない */
+    val savedFormInputPathCount: Int,
 ) {
     @Stable
     sealed interface TlsCertificate {
@@ -52,5 +54,6 @@ data class SiteSettingsScreenUiState(
         fun confirmClearData()
         fun dismissClearDataConfirm()
         fun consumeClearDataResultMessage()
+        fun openSavedFormInputs()
     }
 }

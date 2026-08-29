@@ -3,9 +3,12 @@ package net.matsudamper.browser.di
 import android.util.Log
 import androidx.annotation.OptIn
 import mozilla.components.lib.publicsuffixlist.PublicSuffixList
+import net.matsudamper.browser.feature.forminputautofill.FormInputAutofillCoordinator
+import net.matsudamper.browser.feature.forminputautofill.FormInputAutofillWebExtension
 import net.matsudamper.browser.feature.addressautofill.AddressAutofillCoordinator
 import net.matsudamper.browser.feature.addressautofill.AddressAutofillWebExtension
 import net.matsudamper.browser.feature.addressautofill.AutocompleteStorageDelegate
+import net.matsudamper.browser.data.address.AddressRepository
 import net.matsudamper.browser.BrowserViewModel
 import net.matsudamper.browser.allowUnsignedExtensions
 import net.matsudamper.browser.feature.devtools.DevToolsWebExtension
@@ -26,7 +29,7 @@ import net.matsudamper.browser.data.SiteSettingsRepository
 import net.matsudamper.browser.data.TabGroupRepository
 import net.matsudamper.browser.data.TabGroupRepositoryImpl
 import net.matsudamper.browser.data.TabRepository
-import net.matsudamper.browser.data.address.AddressRepository
+import net.matsudamper.browser.data.forminput.FormInputRepository
 import net.matsudamper.browser.data.download.DownloadRepository
 import net.matsudamper.browser.data.history.HistoryRepository
 import net.matsudamper.browser.data.resolvedExtensionsProcessEnabled
@@ -56,12 +59,15 @@ val dataModule = module {
     single { HistoryRepository(androidContext()) }
     single { DownloadRepository(androidContext()) }
     single { AddressRepository(androidContext()) }
+    single { FormInputRepository(androidContext()) }
     single<WebSuggestionRepository> { HttpWebSuggestionRepository() }
 }
 
 val appModule = module {
     single { AddressAutofillWebExtension() }
+    single { FormInputAutofillWebExtension() }
     single { AddressAutofillCoordinator(get()) }
+    factory { FormInputAutofillCoordinator(get()) }
     single<GeckoRuntime> {
         // Gecko 起動前の pref 設定はキューされる。メインスレッドをブロックして待機すると
         // initializeGeckoRuntime() とデッドロックするため非同期で投入する。
@@ -78,6 +84,7 @@ val appModule = module {
                 .build()
         ).also {
             get<AddressAutofillWebExtension>().install(it)
+            get<FormInputAutofillWebExtension>().install(it)
             val addressAutofillCoordinator = get<AddressAutofillCoordinator>()
             it.autocompleteStorageDelegate = AutocompleteStorageDelegate(
                 addressRepository = get(),
