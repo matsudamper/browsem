@@ -161,7 +161,7 @@ class PageZoomTest {
 
         clickSpaNavigateButton()
         composeRule.waitUntil(timeoutMillis = 30_000) {
-            composeRule.currentPageUrlFromUi().contains("#route2")
+            composeRule.currentPageUrlFromUi().contains("route=route2")
         }
         val widthAfterSpaNav = waitForViewportWidthBelow(
             maxWidth = (baselineWidth * 0.75).toInt(),
@@ -360,7 +360,7 @@ class PageZoomTest {
     }
 
     private fun viewportWidthFromUrl(url: String): Int? {
-        return Regex("w=(\\d+)").find(url)?.groupValues?.get(1)?.toIntOrNull()
+        return Regex("[?&]w=(\\d+)").find(url)?.groupValues?.get(1)?.toIntOrNull()
     }
 
     private fun pressSystemBack() {

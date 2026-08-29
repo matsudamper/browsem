@@ -7,20 +7,37 @@
 <body>
   <button id="nav-btn" aria-label="spa-navigate">SPA Navigate</button>
   <script>
-    function reportViewportWidth() {
-      const width = window.innerWidth;
-      const route = window.location.hash.includes("route2") ? "route2" : "home";
-      history.replaceState(null, "", "#" + route + "/w=" + width);
+    function pushUrl(update) {
+      const url = new URL(window.location.href);
+      update(url);
+      // replaceState では GeckoView の onLocationChange が発火せず、
+      // instrumentation テストが URL バーから viewport 幅を読めない。
+      history.pushState(null, "", url.toString());
     }
+
+    function reportViewportWidth() {
+      pushUrl((url) => {
+        url.searchParams.set("w", String(window.innerWidth));
+        if (!url.searchParams.has("route")) {
+          url.searchParams.set("route", "home");
+        }
+      });
+    }
+
     window.addEventListener("load", reportViewportWidth);
     window.addEventListener("resize", reportViewportWidth);
+    // 一部環境で resize が遅延するため、念のため定期更新する
+    setInterval(reportViewportWidth, 500);
+
     document.getElementById("nav-btn").addEventListener("click", function () {
       // SPA 遷移時に新しい viewport meta を追加する（実サイトでよくあるパターン）
       const meta = document.createElement("meta");
       meta.name = "viewport";
       meta.content = "width=device-width,initial-scale=1";
       document.head.appendChild(meta);
-      history.pushState(null, "", "#route2");
+      pushUrl((url) => {
+        url.searchParams.set("route", "route2");
+      });
       setTimeout(reportViewportWidth, 50);
     });
   </script>
