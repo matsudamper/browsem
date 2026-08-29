@@ -78,7 +78,7 @@ class FormInputRepository(context: Context) {
                 SavedFormFieldInfo(
                     fieldKey = fieldKey,
                     values = previewValues,
-                    enabled = pathEnabled && (fieldPreferences[fieldKey] ?: true),
+                    enabled = pathEnabled && (fieldPreferences[fieldKey] ?: false),
                 )
             }
         }.distinctUntilChanged()
@@ -170,6 +170,44 @@ class FormInputRepository(context: Context) {
         )
     }
 
+    suspend fun getFieldEnabled(
+        origin: FormInputOrigin,
+        path: String,
+        fieldKey: String,
+    ): Boolean {
+        return isFieldEnabled(origin, path, fieldKey)
+    }
+
+    /**
+     * 長押しダイアログで選択された field を有効化し、値があれば保存する。
+     */
+    suspend fun enableFieldsAndSave(
+        pageKey: FormInputPageKey,
+        fields: List<FormFieldEntry>,
+        enabledFieldKeys: Set<String>,
+    ) {
+        val origin = pageKey.origin()
+        if (!isPathEnabled(origin, pageKey.path)) return
+        val now = System.currentTimeMillis()
+        fields.forEach { field ->
+            if (field.fieldKey.isBlank()) return@forEach
+            val enabled = field.fieldKey in enabledFieldKeys
+            setFieldEnabled(origin, pageKey.path, field.fieldKey, enabled)
+            if (!enabled || field.value.isBlank()) return@forEach
+            dao.insert(
+                FormFieldValueEntity(
+                    scheme = pageKey.scheme,
+                    host = pageKey.host,
+                    port = pageKey.port,
+                    path = pageKey.path,
+                    fieldKey = field.fieldKey,
+                    value = field.value,
+                    createdAt = now,
+                ),
+            )
+        }
+    }
+
     suspend fun deletePath(origin: FormInputOrigin, path: String) {
         dao.deleteValuesForPath(
             scheme = origin.scheme,
@@ -242,7 +280,7 @@ class FormInputRepository(context: Context) {
             port = origin.port,
             path = path,
             fieldKey = fieldKey,
-        ) ?: true
+        ) ?: false
     }
 
     companion object {

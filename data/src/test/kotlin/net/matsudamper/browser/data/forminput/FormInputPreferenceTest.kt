@@ -77,6 +77,7 @@ class FormInputPreferenceTest {
             path = "/form",
         )
         val origin = page.origin()
+        repository.setFieldEnabled(origin, "/form", "comment", enabled = true)
         repository.saveFields(
             pageKey = page,
             fields = listOf(FormFieldEntry(fieldKey = "comment", value = "hello")),
@@ -95,6 +96,7 @@ class FormInputPreferenceTest {
             path = "/form",
         )
         val origin = page.origin()
+        repository.setFieldEnabled(origin, "/form", "comment", enabled = true)
         repository.setPathEnabled(origin, "/form", enabled = false)
         repository.saveFields(
             pageKey = page,
@@ -114,6 +116,7 @@ class FormInputPreferenceTest {
             path = "/form",
         )
         val origin = page.origin()
+        repository.setFieldEnabled(origin, "/form", "comment", enabled = true)
         repository.saveFields(
             pageKey = page,
             fields = listOf(FormFieldEntry(fieldKey = "comment", value = "first")),
@@ -137,6 +140,7 @@ class FormInputPreferenceTest {
         val httpsOrigin = FormInputOrigin(scheme = "https", host = "example.com", port = 443)
         val httpOrigin = FormInputOrigin(scheme = "http", host = "example.com", port = 80)
         repository.setPathEnabled(httpsOrigin, "/form", enabled = false)
+        repository.setFieldEnabled(httpOrigin, "/form", "comment", enabled = true)
         repository.saveFields(
             pageKey = FormInputPageKey(
                 scheme = "http",
