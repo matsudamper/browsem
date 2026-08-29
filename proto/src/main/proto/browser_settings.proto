@@ -46,4 +46,6 @@ message BrowserSettings {
   repeated string extension_action_order = 16;
   // 拡張機能全体の有効/無効 (オフ時は APP ソースで無効化し、個別の USER 設定は保持する)
   optional bool extensions_enabled = 17;
+  // 入力欄フォーカス時の自動ズーム (Gecko pref: formhelper.autozoom)
+  optional bool input_auto_zoom_enabled = 18;
 }
