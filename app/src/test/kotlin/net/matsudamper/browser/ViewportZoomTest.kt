@@ -72,5 +72,37 @@ class ViewportZoomTest {
         )
         assertTrue(script.contains("disconnect()"))
         assertFalse(script.contains("new MutationObserver"))
+        val nullIndex = script.indexOf("window.__browserViewportZoomContent=null")
+        val applyCallIndex = script.indexOf("applyDirect(c);")
+        assertTrue(
+            "リセット時はグローバル状態を先にクリアする",
+            nullIndex in 0 until applyCallIndex,
+        )
+    }
+
+    @Test
+    fun persistentInjectionScriptReadsCurrentGlobalZoomContent() {
+        val script = buildViewportZoomInjectionScript(
+            viewportContent = "width=200,initial-scale=1",
+            persistAcrossDomChanges = true,
+        )
+        assertTrue(script.contains("var c=window.__browserViewportZoomContent"))
+        assertTrue(script.contains("requestAnimationFrame(applyFromGlobal)"))
+        assertTrue(script.contains("setTimeout(applyFromGlobal,0)"))
+    }
+
+    @Test
+    fun persistentInjectionScriptUpdatesGlobalBeforeApplying() {
+        val firstScript = buildViewportZoomInjectionScript(
+            viewportContent = "width=200,initial-scale=1",
+            persistAcrossDomChanges = true,
+        )
+        val secondScript = buildViewportZoomInjectionScript(
+            viewportContent = "width=267,initial-scale=1",
+            persistAcrossDomChanges = true,
+        )
+        assertTrue(firstScript.contains("window.__browserViewportZoomContent='width=200,initial-scale=1'"))
+        assertTrue(secondScript.contains("window.__browserViewportZoomContent='width=267,initial-scale=1'"))
+        assertTrue(secondScript.contains("applyFromGlobal()"))
     }
 }
