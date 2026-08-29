@@ -1,6 +1,6 @@
 package net.matsudamper.browser
 
-import android.view.accessibility.AccessibilityNodeInfo
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasParent
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.isDisplayed
@@ -11,6 +11,8 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.percentOffset
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import net.matsudamper.browser.ui.tabs.TabsScreenTestTags
@@ -173,9 +175,6 @@ class PageZoomTest {
         )
 
         clickSpaNavigateButton()
-        composeRule.waitUntil(timeoutMillis = 30_000) {
-            composeRule.currentPageUrlFromUi().contains("route=route2")
-        }
         val widthAfterSpaNav = waitForViewportWidthBelow(
             maxWidth = (baselineWidth * 0.75).toInt(),
             timeoutMillis = 30_000,
@@ -350,38 +349,20 @@ class PageZoomTest {
     }
 
     /**
-     * GeckoView 内の SPA 遷移ボタンをアクセシビリティ経由でクリックする。
+     * GeckoView 内の SPA 遷移ボタンをタップする。
+     *
+     * HTML ボタンは Compose セマンティクスに載らないため、GeckoContainer 上部を
+     * タップする。MediaPrimarySelectionTest と同様に performTouchInput を使う。
      */
     private fun clickSpaNavigateButton(timeoutMillis: Long = 30_000) {
-        val uiAutomation = InstrumentationRegistry.getInstrumentation().uiAutomation
+        val geckoNode = composeRule.onNodeWithTag(GeckoBrowserTabTestTags.GeckoContainer.testTag)
         composeRule.waitUntil(timeoutMillis = timeoutMillis) {
-            val root = uiAutomation.rootInActiveWindow ?: return@waitUntil false
-            try {
-                val target = findAccessibilityNode(root) { node ->
-                    node.contentDescription?.toString() == SPA_NAV_BUTTON_LABEL ||
-                        node.viewIdResourceName?.endsWith(SPA_NAV_BUTTON_ID) == true
-                } ?: return@waitUntil false
-                val clicked = target.performAction(AccessibilityNodeInfo.ACTION_CLICK)
-                target.recycle()
-                clicked
-            } finally {
-                root.recycle()
+            geckoNode.performTouchInput {
+                click(percentOffset(0.5f, 0.15f))
             }
+            composeRule.waitForIdle()
+            composeRule.currentPageUrlFromUi().contains("route=route2")
         }
-    }
-
-    private fun findAccessibilityNode(
-        node: AccessibilityNodeInfo,
-        predicate: (AccessibilityNodeInfo) -> Boolean,
-    ): AccessibilityNodeInfo? {
-        if (predicate(node)) return AccessibilityNodeInfo.obtain(node)
-        for (index in 0 until node.childCount) {
-            val child = node.getChild(index) ?: continue
-            val found = findAccessibilityNode(child, predicate)
-            child.recycle()
-            if (found != null) return found
-        }
-        return null
     }
 
     private fun viewportWidthFromUrl(url: String): Int? {
@@ -399,7 +380,5 @@ class PageZoomTest {
         private const val ZOOM_DIR_NAME = "test-zoom"
         private const val ZOOM_INDEX_FILE_NAME = "index.html"
         private const val SPA_NAV_FILE_NAME = "spa-nav.html"
-        private const val SPA_NAV_BUTTON_ID = "nav-btn"
-        private const val SPA_NAV_BUTTON_LABEL = "spa-navigate"
     }
 }
