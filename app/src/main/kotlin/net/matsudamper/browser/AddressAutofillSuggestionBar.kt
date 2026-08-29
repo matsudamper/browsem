@@ -118,6 +118,10 @@ sealed interface AddressAutofillSuggestionBarTestTags {
     data object EmailOption : AddressAutofillSuggestionBarTestTags {
         override val id = "address_autofill_suggestion_option_email"
     }
+
+    data object FormFieldOption : AddressAutofillSuggestionBarTestTags {
+        override val id = "address_autofill_suggestion_option_form_field"
+    }
 }
 
 internal val AddressAutofillSuggestionKind.optionTestTag: String
@@ -125,6 +129,7 @@ internal val AddressAutofillSuggestionKind.optionTestTag: String
         AddressAutofillSuggestionKind.Name -> AddressAutofillSuggestionBarTestTags.NameOption.testTag
         AddressAutofillSuggestionKind.Address -> AddressAutofillSuggestionBarTestTags.AddressOption.testTag
         AddressAutofillSuggestionKind.Email -> AddressAutofillSuggestionBarTestTags.EmailOption.testTag
+        AddressAutofillSuggestionKind.FormField -> AddressAutofillSuggestionBarTestTags.FormFieldOption.testTag
     }
 
 @Preview(name = "AddressAutofillSuggestionBar")
@@ -171,6 +176,29 @@ private fun PreviewAddressAutofillSuggestionBarAddress() {
                         AddressAutofillBarUiState.Item(
                             label = "〒150-0001 東京都渋谷区神宮前1-1-1",
                             kind = AddressAutofillSuggestionKind.Address,
+                            onClick = {},
+                        ),
+                    ),
+                ),
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth(),
+            )
+        }
+    }
+}
+
+@Preview(name = "AddressAutofillSuggestionBarFormField")
+@Composable
+private fun PreviewAddressAutofillSuggestionBarFormField() {
+    BrowserTheme(themeMode = ThemeMode.THEME_SYSTEM) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            AddressAutofillSuggestionBar(
+                uiState = AddressAutofillBarUiState(
+                    items = listOf(
+                        AddressAutofillBarUiState.Item(
+                            label = "以前のコメント",
+                            kind = AddressAutofillSuggestionKind.FormField,
                             onClick = {},
                         ),
                     ),

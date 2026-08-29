@@ -254,6 +254,18 @@ fun SiteSettingsScreen(
 
             Spacer(Modifier.height(12.dp))
 
+            if (uiState.savedFormInputPathCount > 0) {
+                SettingSection(title = "保存したフォーム入力") {
+                    TextButton(
+                        onClick = uiState.callbacks::openSavedFormInputs,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("${uiState.savedFormInputPathCount} 件のパスを管理")
+                    }
+                }
+                Spacer(Modifier.height(12.dp))
+            }
+
             SettingSection(title = "データの削除") {
                 TextButton(
                     onClick = {
@@ -363,9 +375,31 @@ private val previewCallbacks = object : SiteSettingsScreenUiState.Callbacks {
     override fun confirmClearData() = Unit
     override fun dismissClearDataConfirm() = Unit
     override fun consumeClearDataResultMessage() = Unit
+    override fun openSavedFormInputs() = Unit
 }
 
 // 証明書・位置情報・マイク・音声の自動再生・データ削除をすべて含むため、見切れないよう縦を広げて Preview する
+@Preview(showBackground = true)
+@Composable
+private fun SiteSettingsScreenWithFormInputPreview() {
+    MaterialTheme {
+        SiteSettingsScreen(
+            uiState = SiteSettingsScreenUiState(
+                callbacks = previewCallbacks,
+                host = "www.example.com",
+                microphonePermission = null,
+                geolocationState = null,
+                autoplayPermission = null,
+                tlsCertificate = null,
+                clearDataConfirmDialog = null,
+                clearDataResultMessage = null,
+                savedFormInputPathCount = 2,
+            ),
+            onBack = {},
+        )
+    }
+}
+
 @Preview(showBackground = true, heightDp = 1400)
 @Composable
 private fun SiteSettingsScreenPreview() {
@@ -387,6 +421,7 @@ private fun SiteSettingsScreenPreview() {
                 ),
                 clearDataConfirmDialog = null,
                 clearDataResultMessage = null,
+                savedFormInputPathCount = 0,
             ),
             onBack = {},
         )
@@ -407,6 +442,7 @@ private fun SiteSettingsScreenGeolocationOnlyPreview() {
                 tlsCertificate = SiteSettingsScreenUiState.TlsCertificate.Insecure,
                 clearDataConfirmDialog = null,
                 clearDataResultMessage = null,
+                savedFormInputPathCount = 0,
             ),
             onBack = {},
         )
@@ -428,6 +464,7 @@ private fun SiteSettingsScreenAutoplayOnlyPreview() {
                 tlsCertificate = SiteSettingsScreenUiState.TlsCertificate.Insecure,
                 clearDataConfirmDialog = null,
                 clearDataResultMessage = null,
+                savedFormInputPathCount = 0,
             ),
             onBack = {},
         )
@@ -449,6 +486,7 @@ private fun SiteSettingsScreenShortContentPreview() {
                 tlsCertificate = SiteSettingsScreenUiState.TlsCertificate.Insecure,
                 clearDataConfirmDialog = null,
                 clearDataResultMessage = null,
+                savedFormInputPathCount = 0,
             ),
             onBack = {},
         )
@@ -470,6 +508,7 @@ private fun SiteSettingsScreenLandscapePreview() {
                 tlsCertificate = SiteSettingsScreenUiState.TlsCertificate.Insecure,
                 clearDataConfirmDialog = null,
                 clearDataResultMessage = null,
+                savedFormInputPathCount = 0,
             ),
             onBack = {},
         )
@@ -490,6 +529,7 @@ private fun SiteSettingsScreenNoRequestedPermissionPreview() {
                 tlsCertificate = null,
                 clearDataConfirmDialog = null,
                 clearDataResultMessage = null,
+                savedFormInputPathCount = 0,
             ),
             onBack = {},
         )
@@ -542,6 +582,7 @@ private fun SiteSettingsScreenClearCookieConfirmPreview() {
                 tlsCertificate = null,
                 clearDataConfirmDialog = SiteSettingsScreenUiState.ClearDataType.Cookie,
                 clearDataResultMessage = null,
+                savedFormInputPathCount = 0,
             ),
             onBack = {},
         )

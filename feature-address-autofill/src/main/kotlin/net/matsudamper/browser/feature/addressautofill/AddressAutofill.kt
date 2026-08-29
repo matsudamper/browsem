@@ -26,6 +26,8 @@ enum class AddressAutofillSuggestionKind {
     Name,
     Address,
     Email,
+    /** ページ固有のフォーム入力候補（住所等とは別経路） */
+    FormField,
 }
 
 fun AddressAutofillSuggestionKind.toFillMode(): AddressAutofillFillMode {
@@ -33,6 +35,7 @@ fun AddressAutofillSuggestionKind.toFillMode(): AddressAutofillFillMode {
         AddressAutofillSuggestionKind.Email -> AddressAutofillFillMode.Email
         AddressAutofillSuggestionKind.Name,
         AddressAutofillSuggestionKind.Address,
+        AddressAutofillSuggestionKind.FormField,
         -> AddressAutofillFillMode.Address
     }
 }
@@ -178,6 +181,7 @@ class AddressAutofillCoordinator(
     fun onFieldFocus(kind: String) {
         if (kind == FIELD_KIND_OTHER) {
             val current = synchronized(lock) {
+                attached?.host?.autofillBarHideGeneration += 1
                 lastFieldKind = kind
                 focusGeneration += 1
                 showJob?.cancel()
@@ -193,6 +197,7 @@ class AddressAutofillCoordinator(
         }
         if (kind != FIELD_KIND_ADDRESS && kind != FIELD_KIND_NAME && kind != FIELD_KIND_EMAIL) return
         val current = synchronized(lock) {
+            attached?.host?.autofillBarHideGeneration += 1
             if (isFocusSuppressed(kind)) {
                 Log.i(TAG, "field-focus ignored after fill kind=$kind")
                 return
@@ -235,12 +240,12 @@ class AddressAutofillCoordinator(
             showJob?.cancel()
             showJob = null
             lastFieldKind = FIELD_KIND_OTHER
-            val generation = focusGeneration
+            val hideGeneration = current.host.autofillBarHideGeneration
             hideJob?.cancel()
             hideJob = current.host.coroutineScope.launch {
                 delay(ADDRESS_AUTOFILL_BLUR_HIDE_WAIT_MS)
                 val host = synchronized(lock) {
-                    if (focusGeneration != generation) return@launch
+                    if (attached?.host?.autofillBarHideGeneration != hideGeneration) return@launch
                     attached?.host
                 } ?: return@launch
                 host.focusedAutofillKind = FIELD_KIND_OTHER
@@ -552,6 +557,7 @@ fun addressCompletionText(
         AddressAutofillSuggestionKind.Address -> {
             addressDisplayAddress(address).ifEmpty { addressDisplayName(address) }
         }
+        AddressAutofillSuggestionKind.FormField -> ""
     }
 }
 
