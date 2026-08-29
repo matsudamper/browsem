@@ -10,6 +10,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
@@ -18,6 +19,7 @@ import net.matsudamper.browser.data.forminput.FormInputPageKey
 import net.matsudamper.browser.data.forminput.FormInputRepository
 import net.matsudamper.browser.feature.addressautofill.AddressAutofillSuggestionItem
 import net.matsudamper.browser.feature.addressautofill.AddressAutofillSuggestionKind
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -32,6 +34,11 @@ import org.robolectric.RobolectricTestRunner
 class FormInputAutofillCoordinatorTest {
     private val imeReadyWaitMs = 150L
     private val blurHideWaitMs = 300L
+
+    @After
+    fun tearDown() {
+        Dispatchers.resetMain()
+    }
 
     @Test
     fun fieldFocusShowsSavedSuggestions() = runTest {
