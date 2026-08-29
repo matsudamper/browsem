@@ -1289,9 +1289,13 @@ internal class BrowserTabScreenState(
             // SPA 遷移（pushState / 同一ドキュメント内 history 移動）では
             // onPageStart / onPageStop が発火しないため両フラグを復帰させる
             markRenderingDone()
-            // onPageStop が発火しないため、ここでズームを再適用する
+            // onPageStop が発火しないため、ここでズームを再適用する。
+            // onLocationChange コールバック内から同期的に loadUri すると注入が失敗することがあるため遅延する。
             if (shouldReapplyPageZoomOnSpaLocationChange(pageZoomPercent, wasFullPageLoad)) {
-                injectViewportZoom(pageZoomPercent)
+                val zoomToApply = pageZoomPercent
+                coroutineScope.launch {
+                    injectViewportZoom(zoomToApply)
+                }
             }
         }
         currentPageUrl = url
