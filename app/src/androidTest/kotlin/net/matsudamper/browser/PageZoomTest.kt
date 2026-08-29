@@ -15,6 +15,8 @@ import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.percentOffset
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.test.uiautomator.By
+import androidx.test.uiautomator.UiDevice
 import net.matsudamper.browser.ui.tabs.TabsScreenTestTags
 import org.junit.After
 import org.junit.Assert.assertTrue
@@ -351,14 +353,21 @@ class PageZoomTest {
     /**
      * GeckoView 内の SPA 遷移ボタンをタップする。
      *
-     * HTML ボタンは Compose セマンティクスに載らないため、GeckoContainer 上部を
-     * タップする。MediaPrimarySelectionTest と同様に performTouchInput を使う。
+     * HTML ボタンは Compose セマンティクスに載らない。spa-nav.html は透明な全画面
+     * ボタンを重ねているため、GeckoContainer へのタップで遷移できる。
      */
     private fun clickSpaNavigateButton(timeoutMillis: Long = 30_000) {
+        val uiDevice = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
         val geckoNode = composeRule.onNodeWithTag(GeckoBrowserTabTestTags.GeckoContainer.testTag)
         composeRule.waitUntil(timeoutMillis = timeoutMillis) {
-            geckoNode.performTouchInput {
-                click(percentOffset(0.5f, 0.15f))
+            val button = uiDevice.findObject(By.text("SPA Navigate"))
+                ?: uiDevice.findObject(By.desc("spa-navigate"))
+            if (button != null) {
+                button.click()
+            } else {
+                geckoNode.performTouchInput {
+                    click(percentOffset(0.5f, 0.5f))
+                }
             }
             composeRule.waitForIdle()
             composeRule.currentPageUrlFromUi().contains("route=route2")
