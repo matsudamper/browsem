@@ -85,6 +85,7 @@ import net.matsudamper.browser.screen.addresses.AddressEditScreenViewModel
 import net.matsudamper.browser.screen.addresses.AddressesScreenViewModel
 import net.matsudamper.browser.screen.history.HistoryScreenViewModel
 import net.matsudamper.browser.screen.settings.SettingsScreenViewModel
+import net.matsudamper.browser.screen.siteforminput.SiteFormInputFieldScreenViewModel
 import net.matsudamper.browser.screen.siteforminput.SiteFormInputPathScreenViewModel
 import net.matsudamper.browser.screen.siteforminput.SiteFormInputPathsScreenViewModel
 import net.matsudamper.browser.screen.sitesettings.SiteSettingsScreenViewModel
@@ -102,6 +103,7 @@ import net.matsudamper.browser.ui.settings.AddressesScreen
 import net.matsudamper.browser.ui.settings.BackupProgressScreen
 import net.matsudamper.browser.ui.settings.BackupProgressUiState
 import net.matsudamper.browser.ui.settings.SettingsScreen
+import net.matsudamper.browser.ui.settings.SiteFormInputFieldRoute
 import net.matsudamper.browser.ui.settings.SiteFormInputPathRoute
 import net.matsudamper.browser.ui.settings.SiteFormInputPathsRoute
 import net.matsudamper.browser.ui.settings.SiteSettingsScreen
@@ -433,11 +435,57 @@ internal fun BrowserAppShell(
                                 override fun navigateBackAfterDeleted() {
                                     outerBackStack.removeLastOrNull()
                                 }
+
+                                override fun navigateToField(fieldKey: String) {
+                                    outerBackStack.add(
+                                        AppDestination.SiteFormInputField(
+                                            scheme = key.scheme,
+                                            host = key.host,
+                                            port = key.port,
+                                            path = key.path,
+                                            fieldKey = fieldKey,
+                                        ),
+                                    )
+                                }
                             })
                         }
                     }
                     SiteFormInputPathRoute(
                         uiState = pathUiState,
+                    )
+                }
+
+                is AppDestination.SiteFormInputField -> navEntry(key) {
+                    val formInputRepository: FormInputRepository = koinInject()
+                    val origin = FormInputOrigin(
+                        scheme = key.scheme,
+                        host = key.host,
+                        port = key.port,
+                    )
+                    val fieldViewModel = composeViewModel(initializer = {
+                        SiteFormInputFieldScreenViewModel(
+                            origin = origin,
+                            path = key.path,
+                            fieldKey = key.fieldKey,
+                            formInputRepository = formInputRepository,
+                        )
+                    })
+                    val fieldUiState by fieldViewModel.uiState.collectAsState()
+                    LaunchedEffect(fieldViewModel) {
+                        fieldViewModel.eventHandler.receiveAsFlow().collect { handler ->
+                            handler(object : SiteFormInputFieldScreenViewModel.Event {
+                                override fun navigateBack() {
+                                    outerBackStack.removeLastOrNull()
+                                }
+
+                                override fun navigateBackAfterDeleted() {
+                                    outerBackStack.removeLastOrNull()
+                                }
+                            })
+                        }
+                    }
+                    SiteFormInputFieldRoute(
+                        uiState = fieldUiState,
                     )
                 }
 

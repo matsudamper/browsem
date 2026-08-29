@@ -7,13 +7,13 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import net.matsudamper.browser.data.forminput.FormInputOrigin
-import net.matsudamper.browser.data.forminput.displayFormInputOrigin
 import net.matsudamper.browser.data.forminput.FormInputRepository
+import net.matsudamper.browser.data.forminput.displayFormInputOrigin
 import net.matsudamper.browser.data.forminput.displayFormInputPath
 import net.matsudamper.browser.ui.settings.SiteFormInputPathScreenUiState
 
@@ -28,12 +28,10 @@ internal class SiteFormInputPathScreenViewModel(
     interface Event {
         fun navigateBack()
         fun navigateBackAfterDeleted()
+        fun navigateToField(fieldKey: String)
     }
 
     private data class ViewModelState(
-        val pathEnabled: Boolean = true,
-        val fields: List<SiteFormInputPathScreenUiState.FieldEntry> = emptyList(),
-        val deleteFieldConfirm: String? = null,
         val deletePathConfirm: Boolean = false,
     )
 
@@ -56,20 +54,8 @@ internal class SiteFormInputPathScreenViewModel(
             }
         }
 
-        override fun requestDeleteField(fieldKey: String) {
-            viewModelStateFlow.update { it.copy(deleteFieldConfirm = fieldKey) }
-        }
-
-        override fun confirmDeleteField() {
-            val fieldKey = viewModelStateFlow.value.deleteFieldConfirm ?: return
-            viewModelStateFlow.update { it.copy(deleteFieldConfirm = null) }
-            viewModelScope.launch {
-                formInputRepository.deleteField(origin, path, fieldKey)
-            }
-        }
-
-        override fun dismissDeleteFieldConfirm() {
-            viewModelStateFlow.update { it.copy(deleteFieldConfirm = null) }
+        override fun openField(fieldKey: String) {
+            eventHandler.trySend { it.navigateToField(fieldKey) }
         }
 
         override fun requestDeletePath() {
@@ -97,7 +83,6 @@ internal class SiteFormInputPathScreenViewModel(
             displayPath = displayFormInputPath(path),
             pathEnabled = true,
             fields = emptyList(),
-            deleteFieldConfirm = null,
             deletePathConfirm = false,
         ),
     ).also { uiStateFlow ->
@@ -116,11 +101,10 @@ internal class SiteFormInputPathScreenViewModel(
                     fields = fields.map { field ->
                         SiteFormInputPathScreenUiState.FieldEntry(
                             fieldKey = field.fieldKey,
-                            previewText = field.values.joinToString(" / "),
+                            valueCount = field.valueCount,
                             enabled = field.enabled,
                         )
                     },
-                    deleteFieldConfirm = dialogState.deleteFieldConfirm,
                     deletePathConfirm = dialogState.deletePathConfirm,
                 )
             }.collectLatest { state ->

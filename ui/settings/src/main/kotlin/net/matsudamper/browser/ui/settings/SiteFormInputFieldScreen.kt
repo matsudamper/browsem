@@ -1,6 +1,5 @@
 package net.matsudamper.browser.ui.settings
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -26,32 +25,33 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import net.matsudamper.browser.resources.R as ResourcesR
 
-sealed interface SiteFormInputPathScreenTestTags {
+sealed interface SiteFormInputFieldScreenTestTags {
     val id: String
-    val testTag get() = "${SiteFormInputPathScreenTestTags::class.java.name}#$id"
+    val testTag get() = "${SiteFormInputFieldScreenTestTags::class.java.name}#$id"
 
-    data object Root : SiteFormInputPathScreenTestTags { override val id = "root" }
+    data object Root : SiteFormInputFieldScreenTestTags { override val id = "root" }
 
-    data class FieldEntry(val fieldKey: String) : SiteFormInputPathScreenTestTags {
-        override val id = "field_$fieldKey"
+    data class ValueEntry(val value: String) : SiteFormInputFieldScreenTestTags {
+        override val id = "value_${value.hashCode()}"
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun SiteFormInputPathScreen(
-    uiState: SiteFormInputPathScreenUiState,
+internal fun SiteFormInputFieldScreen(
+    uiState: SiteFormInputFieldScreenUiState,
     modifier: Modifier = Modifier,
 ) {
     Scaffold(
-        modifier = modifier.testTag(SiteFormInputPathScreenTestTags.Root.testTag),
+        modifier = modifier.testTag(SiteFormInputFieldScreenTestTags.Root.testTag),
         topBar = {
             TopAppBar(
-                title = { Text(uiState.displayPath) },
+                title = { Text(uiState.fieldKey) },
                 navigationIcon = {
                     IconButton(onClick = uiState.callbacks::navigateBack) {
                         Icon(
@@ -69,15 +69,24 @@ internal fun SiteFormInputPathScreen(
                 .fillMaxSize(),
         ) {
             item {
-                SettingSection(title = "このパス") {
+                Text(
+                    text = "${uiState.displayOrigin}${uiState.displayPath}",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                )
+            }
+
+            item {
+                SettingSection(title = "このフィールド") {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier
                             .fillMaxWidth()
                             .toggleable(
-                                value = uiState.pathEnabled,
+                                value = uiState.fieldEnabled,
                                 role = Role.Switch,
-                                onValueChange = uiState.callbacks::setPathEnabled,
+                                onValueChange = uiState.callbacks::setFieldEnabled,
                             )
                             .padding(vertical = 4.dp),
                     ) {
@@ -87,13 +96,13 @@ internal fun SiteFormInputPathScreen(
                                 style = MaterialTheme.typography.bodyLarge,
                             )
                             Text(
-                                text = "このパスでのフォーム入力の自動保存と候補表示",
+                                text = "このフィールドの自動保存と候補表示",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
                         Switch(
-                            checked = uiState.pathEnabled,
+                            checked = uiState.fieldEnabled,
                             onCheckedChange = null,
                         )
                     }
@@ -102,31 +111,28 @@ internal fun SiteFormInputPathScreen(
 
             item {
                 Text(
-                    text = "フィールド",
+                    text = "保存した値",
                     style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
                 )
             }
 
-            if (uiState.fields.isEmpty()) {
+            if (uiState.values.isEmpty()) {
                 item {
                     Text(
-                        text = "保存されたフィールドはありません",
+                        text = "保存された値はありません",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                     )
                 }
             } else {
-                items(uiState.fields, key = { it.fieldKey }) { field ->
-                    SiteFormInputFieldListItem(
-                        field = field,
-                        onOpen = { uiState.callbacks.openField(field.fieldKey) },
-                        onToggle = { enabled ->
-                            uiState.callbacks.setFieldEnabled(field.fieldKey, enabled)
-                        },
+                items(uiState.values, key = { it }) { value ->
+                    SiteFormInputValueListItem(
+                        value = value,
+                        onDelete = { uiState.callbacks.requestDeleteValue(value) },
                         modifier = Modifier.testTag(
-                            SiteFormInputPathScreenTestTags.FieldEntry(field.fieldKey).testTag,
+                            SiteFormInputFieldScreenTestTags.ValueEntry(value).testTag,
                         ),
                     )
                 }
@@ -134,13 +140,13 @@ internal fun SiteFormInputPathScreen(
 
             item {
                 TextButton(
-                    onClick = uiState.callbacks::requestDeletePath,
+                    onClick = uiState.callbacks::requestDeleteField,
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 8.dp, vertical = 16.dp),
                 ) {
                     Text(
-                        text = "このパスの保存データをすべて削除",
+                        text = "このフィールドの保存データをすべて削除",
                         color = MaterialTheme.colorScheme.error,
                     )
                 }
@@ -148,23 +154,43 @@ internal fun SiteFormInputPathScreen(
         }
     }
 
-    val deletePathConfirm = uiState.deletePathConfirm
-    if (deletePathConfirm) {
+    val deleteValue = uiState.deleteValueConfirm
+    if (deleteValue != null) {
         AlertDialog(
-            onDismissRequest = uiState.callbacks::dismissDeletePathConfirm,
-            title = { Text("パスのデータを削除") },
+            onDismissRequest = uiState.callbacks::dismissDeleteValueConfirm,
+            title = { Text("値を削除") },
             text = {
-                Text(
-                    "「${uiState.displayPath}」の保存データをすべて削除しますか？この操作は取り消せません。",
-                )
+                Text("この保存値を削除しますか？この操作は取り消せません。")
             },
             confirmButton = {
-                TextButton(onClick = uiState.callbacks::confirmDeletePath) {
+                TextButton(onClick = uiState.callbacks::confirmDeleteValue) {
                     Text("削除", color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
-                TextButton(onClick = uiState.callbacks::dismissDeletePathConfirm) {
+                TextButton(onClick = uiState.callbacks::dismissDeleteValueConfirm) {
+                    Text("キャンセル")
+                }
+            },
+        )
+    }
+
+    if (uiState.deleteFieldConfirm) {
+        AlertDialog(
+            onDismissRequest = uiState.callbacks::dismissDeleteFieldConfirm,
+            title = { Text("フィールドのデータを削除") },
+            text = {
+                Text(
+                    "「${uiState.fieldKey}」の保存データをすべて削除しますか？この操作は取り消せません。",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = uiState.callbacks::confirmDeleteField) {
+                    Text("削除", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = uiState.callbacks::dismissDeleteFieldConfirm) {
                     Text("キャンセル")
                 }
             },
@@ -173,59 +199,52 @@ internal fun SiteFormInputPathScreen(
 }
 
 @Composable
-private fun SiteFormInputFieldListItem(
-    field: SiteFormInputPathScreenUiState.FieldEntry,
-    onOpen: () -> Unit,
-    onToggle: (Boolean) -> Unit,
+private fun SiteFormInputValueListItem(
+    value: String,
+    onDelete: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     ListItem(
-        modifier = modifier.clickable(onClick = onOpen),
-        headlineContent = { Text(field.fieldKey) },
-        supportingContent = {
-            Text("${field.valueCount} 件の値")
+        modifier = modifier,
+        headlineContent = {
+            Text(
+                text = value,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis,
+            )
         },
         trailingContent = {
-            Switch(
-                checked = field.enabled,
-                onCheckedChange = onToggle,
-            )
+            TextButton(onClick = onDelete) {
+                Text("削除", color = MaterialTheme.colorScheme.error)
+            }
         },
     )
 }
 
 @Preview(showBackground = true, heightDp = 700)
 @Composable
-private fun SiteFormInputPathScreenPreview() {
+private fun SiteFormInputFieldScreenPreview() {
     MaterialTheme {
-        SiteFormInputPathScreen(
-            uiState = SiteFormInputPathScreenUiState(
-                callbacks = object : SiteFormInputPathScreenUiState.Callbacks {
+        SiteFormInputFieldScreen(
+            uiState = SiteFormInputFieldScreenUiState(
+                callbacks = object : SiteFormInputFieldScreenUiState.Callbacks {
                     override fun navigateBack() = Unit
-                    override fun setPathEnabled(enabled: Boolean) = Unit
-                    override fun setFieldEnabled(fieldKey: String, enabled: Boolean) = Unit
-                    override fun openField(fieldKey: String) = Unit
-                    override fun requestDeletePath() = Unit
-                    override fun confirmDeletePath() = Unit
-                    override fun dismissDeletePathConfirm() = Unit
+                    override fun setFieldEnabled(enabled: Boolean) = Unit
+                    override fun requestDeleteValue(value: String) = Unit
+                    override fun confirmDeleteValue() = Unit
+                    override fun dismissDeleteValueConfirm() = Unit
+                    override fun requestDeleteField() = Unit
+                    override fun confirmDeleteField() = Unit
+                    override fun dismissDeleteFieldConfirm() = Unit
                 },
                 displayOrigin = "https://example.com",
                 path = "/contact",
                 displayPath = "/contact",
-                pathEnabled = true,
-                fields = listOf(
-                    SiteFormInputPathScreenUiState.FieldEntry(
-                        fieldKey = "comment",
-                        valueCount = 2,
-                        enabled = true,
-                    ),
-                    SiteFormInputPathScreenUiState.FieldEntry(
-                        fieldKey = "subject",
-                        valueCount = 1,
-                        enabled = false,
-                    ),
-                ),
-                deletePathConfirm = false,
+                fieldKey = "brcNum",
+                fieldEnabled = true,
+                values = listOf("001", "002", "003"),
+                deleteValueConfirm = null,
+                deleteFieldConfirm = false,
             ),
         )
     }

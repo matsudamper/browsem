@@ -39,6 +39,15 @@ sealed interface AppDestination : NavKey, java.io.Serializable {
     ) : AppDestination
 
     @Serializable
+    data class SiteFormInputField(
+        val scheme: String,
+        val host: String,
+        val port: Int,
+        val path: String,
+        val fieldKey: String,
+    ) : AppDestination
+
+    @Serializable
     data object Extensions : AppDestination, java.io.Serializable
 
     @Serializable
