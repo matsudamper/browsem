@@ -17,6 +17,7 @@ class BrowserApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        CrashLogExceptionHandler.install(this)
         cleanFilePromptsCache()
         startKoin {
             androidContext(this@BrowserApplication)

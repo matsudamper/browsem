@@ -79,4 +79,18 @@ class WebSuggestionRepositoryTest {
 
         assertEquals(false, settings.resolvedEnableWebSuggestions())
     }
+
+    @Test
+    fun inputAutoZoomDefaultsToEnabledWhenUnset() {
+        assertEquals(true, BrowserSettings.getDefaultInstance().resolvedInputAutoZoomEnabled())
+    }
+
+    @Test
+    fun explicitFalseDisablesInputAutoZoom() {
+        val settings = BrowserSettings.newBuilder()
+            .setInputAutoZoomEnabled(false)
+            .build()
+
+        assertEquals(false, settings.resolvedInputAutoZoomEnabled())
+    }
 }
