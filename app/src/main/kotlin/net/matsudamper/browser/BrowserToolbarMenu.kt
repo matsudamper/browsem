@@ -137,7 +137,6 @@ internal fun ToolbarMenu(
     onResetPageZoom: () -> Unit,
     extensionActions: List<WebExtensionActionController.ActionUiState> = emptyList(),
     extensionActionScrollState: ScrollState? = null,
-    onExtensionActionClick: (String) -> Unit = {},
     onExtensionActionMove: (fromIndex: Int, toIndex: Int) -> Unit = { _, _ -> },
     onExtensionActionMoveEnd: () -> Unit = {},
     onExtensionActionMoveCancel: () -> Unit = {},
@@ -184,7 +183,6 @@ internal fun ToolbarMenu(
             onResetPageZoom = onResetPageZoom,
             extensionActions = extensionActions,
             extensionActionScrollState = extensionActionScrollState,
-            onExtensionActionClick = onExtensionActionClick,
             onExtensionActionMove = onExtensionActionMove,
             onExtensionActionMoveEnd = onExtensionActionMoveEnd,
             onExtensionActionMoveCancel = onExtensionActionMoveCancel,
@@ -226,7 +224,6 @@ private fun ToolbarMenuContent(
     onResetPageZoom: () -> Unit,
     extensionActions: List<WebExtensionActionController.ActionUiState>,
     extensionActionScrollState: ScrollState?,
-    onExtensionActionClick: (String) -> Unit,
     onExtensionActionMove: (fromIndex: Int, toIndex: Int) -> Unit,
     onExtensionActionMoveEnd: () -> Unit,
     onExtensionActionMoveCancel: () -> Unit,
@@ -461,12 +458,13 @@ private fun ToolbarMenuContent(
         if (extensionActions.isNotEmpty() && extensionActionScrollState != null) {
             HorizontalDivider()
             ExtensionActionRow(
-                actions = extensionActions,
-                scrollState = extensionActionScrollState,
-                onActionClick = { extensionId ->
-                    onDismissRequest()
-                    onExtensionActionClick(extensionId)
+                actions = extensionActions.map { action ->
+                    action.copy(onClick = {
+                        onDismissRequest()
+                        action.onClick()
+                    })
                 },
+                scrollState = extensionActionScrollState,
                 onActionMove = onExtensionActionMove,
                 onActionMoveEnd = onExtensionActionMoveEnd,
                 onActionMoveCancel = onExtensionActionMoveCancel,
@@ -682,10 +680,10 @@ private fun PreviewToolbarMenuContent() {
                         icon = null,
                         badgeText = if (index == 0) "3" else null,
                         isEnabled = index != 1,
+                        onClick = {},
                     )
                 },
                 extensionActionScrollState = ScrollState(initial = 0),
-                onExtensionActionClick = {},
                 onExtensionActionMove = { _, _ -> },
                 onExtensionActionMoveEnd = {},
                 onExtensionActionMoveCancel = {},
@@ -732,7 +730,6 @@ private fun PreviewToolbarMenuContentWebApp() {
                 onResetPageZoom = {},
                 extensionActions = emptyList(),
                 extensionActionScrollState = null,
-                onExtensionActionClick = {},
                 onExtensionActionMove = { _, _ -> },
                 onExtensionActionMoveEnd = {},
                 onExtensionActionMoveCancel = {},
@@ -787,7 +784,6 @@ private fun PreviewToolbarMenuContentConstrainedHeight() {
                 onResetPageZoom = {},
                 extensionActions = emptyList(),
                 extensionActionScrollState = null,
-                onExtensionActionClick = {},
                 onExtensionActionMove = { _, _ -> },
                 onExtensionActionMoveEnd = {},
                 onExtensionActionMoveCancel = {},
@@ -844,7 +840,6 @@ private fun PreviewToolbarMenuContentConstrainedHeightScrolled() {
                 onResetPageZoom = {},
                 extensionActions = emptyList(),
                 extensionActionScrollState = null,
-                onExtensionActionClick = {},
                 onExtensionActionMove = { _, _ -> },
                 onExtensionActionMoveEnd = {},
                 onExtensionActionMoveCancel = {},

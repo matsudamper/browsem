@@ -33,6 +33,7 @@ class WebExtensionActionController(private val runtime: GeckoRuntime) {
         val badgeText: String?,
         /** そのタブで機能するか。false ならグレー表示で操作できない */
         val isEnabled: Boolean,
+        val onClick: () -> Unit,
     )
 
     /** 拡張機能のポップアップ (browser_action の default_popup) の表示要求 */
@@ -174,7 +175,10 @@ class WebExtensionActionController(private val runtime: GeckoRuntime) {
      * ページ遷移中は一時的に無効になるアクションがあり、一覧から取り除いてしまうと
      * アイコンの位置がずれて点滅して見えるため、並びは保ったままグレー表示にする。
      */
-    fun actions(session: GeckoSession): List<ActionUiState> {
+    fun actions(
+        session: GeckoSession,
+        onActionClick: (extensionId: String) -> Unit,
+    ): List<ActionUiState> {
         val overrides = sessionActions[session]
         return extensions.values.mapNotNull { extension ->
             val resolved = resolveAction(extension.id, overrides) ?: return@mapNotNull null
@@ -188,6 +192,7 @@ class WebExtensionActionController(private val runtime: GeckoRuntime) {
                 badgeText = action.badgeText?.takeIf { it.isNotBlank() },
                 // enabled は未指定 (null) のとき有効扱い。pageAction は show() 済みのみ有効
                 isEnabled = action.enabled != false,
+                onClick = { onActionClick(extension.id) },
             )
         }.sortedBy { it.title.lowercase() }
     }

@@ -80,7 +80,6 @@ private val AUTO_SCROLL_STEP = 4.dp
 internal fun ExtensionActionRow(
     actions: List<WebExtensionActionController.ActionUiState>,
     scrollState: ScrollState,
-    onActionClick: (String) -> Unit,
     onActionMove: (fromIndex: Int, toIndex: Int) -> Unit,
     onActionMoveEnd: () -> Unit,
     onActionMoveCancel: () -> Unit,
@@ -91,7 +90,6 @@ internal fun ExtensionActionRow(
     val autoScrollEdgePx = with(density) { AUTO_SCROLL_EDGE.toPx() }
     val autoScrollStepPx = with(density) { AUTO_SCROLL_STEP.toPx() }
     val latestActions by rememberUpdatedState(actions)
-    val latestOnActionClick by rememberUpdatedState(onActionClick)
     val latestOnActionMove by rememberUpdatedState(onActionMove)
     val latestOnActionMoveEnd by rememberUpdatedState(onActionMoveEnd)
     val latestOnActionMoveCancel by rememberUpdatedState(onActionMoveCancel)
@@ -171,7 +169,7 @@ internal fun ExtensionActionRow(
                             val action = latestActions[index]
                             // グレー表示のアクションはそのタブで機能しないため反応させない
                             if (!action.isEnabled) return@detectTapGestures
-                            latestOnActionClick(action.extensionId)
+                            action.onClick()
                         },
                     )
                 }
@@ -207,7 +205,6 @@ internal fun ExtensionActionRow(
                 val isDragging = index == draggingIndex
                 ExtensionActionItem(
                     action = action,
-                    onActionClick = { latestOnActionClick(action.extensionId) },
                     modifier = Modifier
                         .zIndex(if (isDragging) 1f else 0f)
                         .graphicsLayer {
@@ -228,7 +225,6 @@ private const val DRAG_SCALE = 1.2f
 @Composable
 private fun ExtensionActionItem(
     action: WebExtensionActionController.ActionUiState,
-    onActionClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Box(
@@ -242,7 +238,7 @@ private fun ExtensionActionItem(
                 role = Role.Button
                 if (action.isEnabled) {
                     onClick(label = action.title) {
-                        onActionClick()
+                        action.onClick()
                         true
                     }
                 } else {
@@ -369,10 +365,10 @@ private fun PreviewExtensionActionRow() {
                         badgeText = if (index == 0) "12" else null,
                         // そのタブで機能しないアクションはグレー表示になる
                         isEnabled = index % 3 != 1,
+                        onClick = {},
                     )
                 },
                 scrollState = ScrollState(0),
-                onActionClick = {},
                 onActionMove = { _, _ -> },
                 onActionMoveEnd = {},
                 onActionMoveCancel = {},

@@ -530,7 +530,7 @@ internal class BrowserTabScreenState(
     /** このタブに対して有効な拡張機能アクションを、ユーザーが決めた並び順で返す */
     val extensionActions: List<WebExtensionActionController.ActionUiState>
         get() = sortByExtensionActionOrder(
-            items = webExtensionActionController.actions(session),
+            items = webExtensionActionController.actions(session, ::onExtensionActionClick),
             order = draggingExtensionActionOrder ?: extensionActionOrder,
             idOf = { it.extensionId },
         )
