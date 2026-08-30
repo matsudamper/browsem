@@ -85,6 +85,7 @@ internal fun GroupTabGrid(
         // ラムダ差し替えでは再起動しないため、最新のラムダを参照できるようにしておく。
         val currentOnTabDropped by rememberUpdatedState(onTabDropped)
         val currentOnTabLongPressWithoutDrag by rememberUpdatedState(onTabLongPressWithoutDrag)
+        val currentTabs by rememberUpdatedState(tabs)
         var gridBoundsInRoot by remember { mutableStateOf(Rect.Zero) }
         val density = LocalDensity.current
         val floatingActionButtonBottomPadding = remember(
@@ -141,7 +142,7 @@ internal fun GroupTabGrid(
                     val handleEnd: () -> Unit = {
                         val result = dragDropState.endDrag()
                         val tabId = result?.key as? String
-                        val tab = tabId?.let { id -> tabs.firstOrNull { it.id == id } }
+                        val tab = tabId?.let { id -> currentTabs.firstOrNull { it.id == id } }
                         if (result != null && tab != null) {
                             val shouldShowMenu = !result.didReorder &&
                                     result.releasedInsideGrid &&
