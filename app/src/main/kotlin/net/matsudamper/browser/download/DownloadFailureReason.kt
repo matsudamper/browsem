@@ -22,8 +22,11 @@ object DownloadFailureReason {
                 "通信が途中で切断されました (${DownloadByteFormat.format(error.totalRead)} / " +
                     "${DownloadByteFormat.format(error.expectedLength)})"
             }
+
             is UnknownHostException -> "サーバーに接続できませんでした"
+
             is SocketTimeoutException, is InterruptedIOException -> "通信がタイムアウトしました"
+
             else -> error.readableMessage() ?: UNKNOWN
         }
     }

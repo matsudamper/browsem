@@ -53,14 +53,14 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.window.DialogProperties
 import kotlinx.coroutines.flow.distinctUntilChanged
 import net.matsudamper.browser.data.ThemeMode
-import net.matsudamper.browser.ui.common.BrowserTheme
 import net.matsudamper.browser.resources.R as ResourcesR
+import net.matsudamper.browser.ui.common.BrowserTheme
 
 /**
  * ネットワークログを全画面ダイアログで表示する。
@@ -381,7 +381,9 @@ private fun StatusBadge(
 ) {
     val color = when (statusKind) {
         NetworkLogUiState.StatusKind.Success -> MaterialTheme.colorScheme.primary
+
         NetworkLogUiState.StatusKind.Redirect -> MaterialTheme.colorScheme.tertiary
+
         NetworkLogUiState.StatusKind.ClientError,
         NetworkLogUiState.StatusKind.ServerError,
         NetworkLogUiState.StatusKind.Failed,
@@ -612,16 +614,36 @@ sealed interface NetworkLogScreenTestTags {
     val id: String
     val testTag get() = "${NetworkLogScreenTestTags::class.java.name}#$id"
 
-    object Screen : NetworkLogScreenTestTags { override val id = "screen" }
-    object SearchField : NetworkLogScreenTestTags { override val id = "search_field" }
-    object ClearButton : NetworkLogScreenTestTags { override val id = "clear_button" }
-    object Entry : NetworkLogScreenTestTags { override val id = "entry" }
-    object Detail : NetworkLogScreenTestTags { override val id = "detail" }
-    object DetailBackButton : NetworkLogScreenTestTags { override val id = "detail_back_button" }
-    object ImagePreview : NetworkLogScreenTestTags { override val id = "image_preview" }
-    object Thumbnail : NetworkLogScreenTestTags { override val id = "thumbnail" }
-    object SaveImageButton : NetworkLogScreenTestTags { override val id = "save_image_button" }
-    object TextPreview : NetworkLogScreenTestTags { override val id = "text_preview" }
+    object Screen : NetworkLogScreenTestTags {
+        override val id = "screen"
+    }
+    object SearchField : NetworkLogScreenTestTags {
+        override val id = "search_field"
+    }
+    object ClearButton : NetworkLogScreenTestTags {
+        override val id = "clear_button"
+    }
+    object Entry : NetworkLogScreenTestTags {
+        override val id = "entry"
+    }
+    object Detail : NetworkLogScreenTestTags {
+        override val id = "detail"
+    }
+    object DetailBackButton : NetworkLogScreenTestTags {
+        override val id = "detail_back_button"
+    }
+    object ImagePreview : NetworkLogScreenTestTags {
+        override val id = "image_preview"
+    }
+    object Thumbnail : NetworkLogScreenTestTags {
+        override val id = "thumbnail"
+    }
+    object SaveImageButton : NetworkLogScreenTestTags {
+        override val id = "save_image_button"
+    }
+    object TextPreview : NetworkLogScreenTestTags {
+        override val id = "text_preview"
+    }
 }
 
 private object PreviewNetworkLogCallbacks : NetworkLogUiState.Callbacks {

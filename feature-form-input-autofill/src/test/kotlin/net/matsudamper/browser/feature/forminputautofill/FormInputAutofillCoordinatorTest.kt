@@ -1,9 +1,5 @@
 package net.matsudamper.browser.feature.forminputautofill
 
-import io.mockk.coEvery
-import io.mockk.coVerify
-import io.mockk.every
-import io.mockk.mockk
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -15,6 +11,10 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
+import io.mockk.coEvery
+import io.mockk.coVerify
+import io.mockk.every
+import io.mockk.mockk
 import net.matsudamper.browser.data.forminput.FormFieldEntry
 import net.matsudamper.browser.data.forminput.FormInputPageKey
 import net.matsudamper.browser.data.forminput.FormInputRepository

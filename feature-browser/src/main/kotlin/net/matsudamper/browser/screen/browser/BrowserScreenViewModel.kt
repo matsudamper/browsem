@@ -16,10 +16,10 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import net.matsudamper.browser.BrowserTab
+import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.TabGroupData
 import net.matsudamper.browser.data.TabGroupRepository
 import net.matsudamper.browser.data.history.HistoryRepository
-import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.tab.TabGroupAssignment
 import net.matsudamper.browser.data.websuggestion.WebSuggestionRepository
 import net.matsudamper.browser.ui.browser.BrowserScreenUiState

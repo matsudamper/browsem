@@ -1,7 +1,5 @@
 package net.matsudamper.browser.feature.addressautofill
 
-import io.mockk.coEvery
-import io.mockk.mockk
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -10,6 +8,8 @@ import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import io.mockk.coEvery
+import io.mockk.mockk
 import net.matsudamper.browser.data.address.AddressEntity
 import net.matsudamper.browser.data.address.AddressRepository
 import org.junit.Assert.assertEquals

@@ -18,21 +18,20 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.pager.PagerState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.ui.res.painterResource
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.Stable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
@@ -47,6 +46,7 @@ import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
@@ -56,9 +56,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.round
 import androidx.compose.ui.unit.toOffset
 import androidx.compose.ui.zIndex
-import net.matsudamper.browser.data.TabGroupData
 import kotlin.math.abs
-
+import net.matsudamper.browser.data.TabGroupData
 
 /** タブシェイプ：上辺のみ角丸の矩形 */
 private val TabShape = RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp)
@@ -517,7 +516,9 @@ internal fun findGroupDropTargetIndex(
     val sorted = slots.sortedBy { it.left }
     val target = when {
         centerX < sorted.first().left -> sorted.first()
+
         centerX > sorted.last().right -> sorted.last()
+
         else -> sorted.firstOrNull { centerX >= it.left && centerX <= it.right }
             // スロット間に隙間がある場合は最も近いスロットを選ぶ
             ?: sorted.minByOrNull { minOf(abs(centerX - it.left), abs(centerX - it.right)) }
@@ -587,6 +588,7 @@ private fun GroupBookmarkTab(
                 .graphicsLayer {
                     shadowElevation = when {
                         isDropTarget -> with(density) { 12.dp.toPx() }
+
                         else -> {
                             val minShadow = with(density) { 2.dp.toPx() }
                             val maxShadow = with(density) { 8.dp.toPx() }

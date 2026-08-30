@@ -46,8 +46,8 @@ class TabsScreenViewModelTest {
     // -----------------------------------------------------------------------
 
     private class FakeTabStore : TabStore {
-        private val _state = MutableStateFlow(TabStoreState())
-        override val tabStoreState: StateFlow<TabStoreState> = _state
+        private val _tabStoreState = MutableStateFlow(TabStoreState())
+        override val tabStoreState: StateFlow<TabStoreState> = _tabStoreState
 
         // 記録用
         val closedTabIds = mutableListOf<String>()
@@ -62,7 +62,7 @@ class TabsScreenViewModelTest {
 
         override fun closeTabWithUndo(tabId: String, nextSelectedTabId: String?): String? {
             confirmClosedTab()
-            val state = _state.value
+            val state = _tabStoreState.value
             val index = state.tabs.indexOfFirst { it.id == tabId }
             if (index < 0) return state.selectedTabId
             closedTabIds += tabId
@@ -73,19 +73,19 @@ class TabsScreenViewModelTest {
                 } else {
                     state.selectedTabId
                 }
-            _state.update { s ->
+            _tabStoreState.update { s ->
                 s.copy(
                     tabs = s.tabs.filterNot { it.id == tabId },
                     selectedTabId = resolvedNext,
                 )
             }
-            return _state.value.selectedTabId
+            return _tabStoreState.value.selectedTabId
         }
 
         override fun undoCloseTab(): String? {
             val (tab, index) = detachedTab ?: return null
             detachedTab = null
-            _state.update { s ->
+            _tabStoreState.update { s ->
                 val tabs = s.tabs.toMutableList()
                 tabs.add(index.coerceIn(0, tabs.size), tab)
                 s.copy(tabs = tabs)
@@ -100,7 +100,7 @@ class TabsScreenViewModelTest {
         }
 
         override fun moveTab(fromIndex: Int, toIndex: Int) {
-            _state.update { state ->
+            _tabStoreState.update { state ->
                 val tabs = state.tabs.toMutableList()
                 tabs.add(toIndex, tabs.removeAt(fromIndex))
                 state.copy(tabs = tabs)
@@ -108,20 +108,19 @@ class TabsScreenViewModelTest {
         }
 
         fun addTab(id: String, title: String = id) {
-            _state.update { state ->
+            _tabStoreState.update { state ->
                 state.copy(tabs = state.tabs + TabSummary(id = id, title = title, url = "https://example.com"))
             }
         }
 
         fun setSelectedTabId(tabId: String?) {
-            _state.update { it.copy(selectedTabId = tabId) }
+            _tabStoreState.update { it.copy(selectedTabId = tabId) }
         }
-
     }
 
     private class FakeLaggyTabStore : TabStore {
-        private val _state = MutableStateFlow(TabStoreState())
-        override val tabStoreState: StateFlow<TabStoreState> = _state
+        private val _tabStoreState = MutableStateFlow(TabStoreState())
+        override val tabStoreState: StateFlow<TabStoreState> = _tabStoreState
 
         val moveRequests = mutableListOf<Pair<Int, Int>>()
 
@@ -130,11 +129,11 @@ class TabsScreenViewModelTest {
         }
 
         override fun closeTab(tabId: String): String? {
-            return _state.value.selectedTabId
+            return _tabStoreState.value.selectedTabId
         }
 
         override fun closeTabWithUndo(tabId: String, nextSelectedTabId: String?): String? {
-            return _state.value.selectedTabId
+            return _tabStoreState.value.selectedTabId
         }
 
         override fun undoCloseTab(): String? = null
@@ -142,7 +141,7 @@ class TabsScreenViewModelTest {
         override fun confirmClosedTab() = Unit
 
         fun addTab(id: String, title: String = id) {
-            _state.update { state ->
+            _tabStoreState.update { state ->
                 state.copy(tabs = state.tabs + TabSummary(id = id, title = title, url = "https://example.com"))
             }
         }

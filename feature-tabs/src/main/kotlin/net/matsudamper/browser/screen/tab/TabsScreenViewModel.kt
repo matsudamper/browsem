@@ -12,8 +12,8 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import net.matsudamper.browser.core.TabSelectionPolicy
 import net.matsudamper.browser.core.TabStore
-import net.matsudamper.browser.core.TabSummary
 import net.matsudamper.browser.core.TabStoreState
+import net.matsudamper.browser.core.TabSummary
 import net.matsudamper.browser.data.TabGroupData
 import net.matsudamper.browser.data.TabGroupId
 import net.matsudamper.browser.data.TabGroupRepository
@@ -21,7 +21,6 @@ import net.matsudamper.browser.data.tab.TabGroupAssignment
 import net.matsudamper.browser.ui.tabs.TabPreviewImage
 import net.matsudamper.browser.ui.tabs.TabsScreenTabData
 import net.matsudamper.browser.ui.tabs.TabsScreenUiState
-
 
 class TabsScreenViewModel(
     private val tabStore: TabStore,
@@ -105,7 +104,7 @@ class TabsScreenViewModel(
         TabsScreenUiState(
             callbacks = callbacks,
             loadingState = TabsScreenUiState.LoadingState.Loading,
-        )
+        ),
     ).also { uiStateFlow ->
         viewModelScope.launch {
             viewModelStateFlow.collectLatest { state ->
@@ -416,7 +415,10 @@ class TabsScreenViewModel(
         val newLocalOrder = currentGroups.map { g ->
             when {
                 g.id == group.id -> g.copy(isDefault = newIsDefault)
-                newIsDefault -> g.copy(isDefault = false) // 他のグループのデフォルトを解除
+
+                // 他のグループのデフォルトを解除
+                newIsDefault -> g.copy(isDefault = false)
+
                 else -> g
             }
         }

@@ -34,11 +34,11 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import kotlin.math.roundToInt
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import net.matsudamper.browser.BrowserTab
 import net.matsudamper.browser.BrowserTabController
-import kotlin.math.roundToInt
 
 @Composable
 fun BrowserScreen(
@@ -80,10 +80,8 @@ fun BrowserScreen(
         }
     }
     if (selectedTab == null) {
-        /**
-         * フォアグラウンド遷移直後に findTab が空を返すケースのフレーキー解析用ログ。
-         * 該当時間帯に UrlBar が semantics tree から消えるテスト失敗との突き合わせに使う。
-         */
+        // フォアグラウンド遷移直後に findTab が空を返すケースのフレーキー解析用ログ。
+        // 該当時間帯に UrlBar が semantics tree から消えるテスト失敗との突き合わせに使う。
         LaunchedEffect(tabId) {
             Log.d(
                 "BrowserScreen",

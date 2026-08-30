@@ -25,19 +25,23 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import net.matsudamper.browser.data.crashlog.CrashLogEntity
-import net.matsudamper.browser.resources.R as ResourcesR
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import net.matsudamper.browser.data.crashlog.CrashLogEntity
+import net.matsudamper.browser.resources.R as ResourcesR
 
 sealed interface CrashLogDetailScreenTestTags {
     val id: String
 
     val testTag get() = "${CrashLogDetailScreenTestTags::class.java.name}#$id"
 
-    data object Root : CrashLogDetailScreenTestTags { override val id = "root" }
-    data object Body : CrashLogDetailScreenTestTags { override val id = "body" }
+    data object Root : CrashLogDetailScreenTestTags {
+        override val id = "root"
+    }
+    data object Body : CrashLogDetailScreenTestTags {
+        override val id = "body"
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

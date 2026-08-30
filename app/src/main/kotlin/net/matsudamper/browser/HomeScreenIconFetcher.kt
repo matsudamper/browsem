@@ -2,11 +2,6 @@ package net.matsudamper.browser
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.runInterruptible
-import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
-import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.net.HttpURLConnection
@@ -16,6 +11,11 @@ import java.nio.charset.Charset
 import java.util.Locale
 import kotlin.math.max
 import kotlin.math.roundToInt
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runInterruptible
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
+import org.json.JSONObject
 
 internal object HomeScreenIconFetcher {
     private const val CONNECTION_TIMEOUT_MS = 2500

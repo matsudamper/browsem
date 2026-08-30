@@ -1,16 +1,15 @@
 package net.matsudamper.browser
 
-import android.content.Context
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import androidx.annotation.VisibleForTesting
 import androidx.browser.customtabs.CustomTabsSessionToken
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import org.koin.core.context.GlobalContext
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoSession
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.TimeUnit
 
 object CustomTabsWarmupStore {
     private const val MAX_SESSION_ENTRIES = 8
@@ -109,7 +108,8 @@ object CustomTabsWarmupStore {
     }
 
     @VisibleForTesting
-    fun resetForTesting() {        val sessions = synchronized(lock) {
+    fun resetForTesting() {
+        val sessions = synchronized(lock) {
             val allSessions = entries.values.mapNotNull { it.preparedSession }
             entries.clear()
             allSessions

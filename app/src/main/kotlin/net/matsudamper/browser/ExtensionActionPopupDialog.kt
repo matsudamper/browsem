@@ -14,8 +14,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -34,10 +34,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import org.mozilla.geckoview.GeckoView
 import net.matsudamper.browser.data.ThemeMode
-import net.matsudamper.browser.ui.common.BrowserTheme
 import net.matsudamper.browser.resources.R as ResourcesR
+import net.matsudamper.browser.ui.common.BrowserTheme
+import org.mozilla.geckoview.GeckoView
 
 /**
  * ポップアップ本体 (拡張機能の HTML) を表示する領域の幅の上限。
@@ -234,6 +234,10 @@ sealed interface ExtensionActionPopupDialogTestTags {
     val id: String
     val testTag get() = "${ExtensionActionPopupDialogTestTags::class.java.name}#$id"
 
-    object Dialog : ExtensionActionPopupDialogTestTags { override val id = "extension_popup_dialog" }
-    object CloseButton : ExtensionActionPopupDialogTestTags { override val id = "extension_popup_close" }
+    object Dialog : ExtensionActionPopupDialogTestTags {
+        override val id = "extension_popup_dialog"
+    }
+    object CloseButton : ExtensionActionPopupDialogTestTags {
+        override val id = "extension_popup_close"
+    }
 }

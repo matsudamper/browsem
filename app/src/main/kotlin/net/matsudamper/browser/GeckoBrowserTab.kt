@@ -3,6 +3,7 @@ package net.matsudamper.browser
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.SystemClock
 import android.util.Log
@@ -10,8 +11,10 @@ import android.view.ActionMode
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
-import androidx.core.net.toUri
 import androidx.activity.compose.PredictiveBackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContract
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -34,12 +37,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContract
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.core.content.ContextCompat
-import android.content.pm.PackageManager
-import kotlinx.coroutines.CompletableDeferred
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -54,7 +51,6 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toArgb
@@ -62,40 +58,44 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
+import androidx.core.net.toUri
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import java.net.URLEncoder
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.withContext
 import net.matsudamper.browser.data.TranslationProvider
+import net.matsudamper.browser.data.address.AddressRepository
+import net.matsudamper.browser.data.forminput.FormInputRepository
+import net.matsudamper.browser.feature.addressautofill.AddressAutofillCoordinator
+import net.matsudamper.browser.feature.addressautofill.AddressAutofillDelegate
+import net.matsudamper.browser.feature.findinpage.FindInPageWebExtension
+import net.matsudamper.browser.feature.forminputautofill.FormInputAutofillCoordinator
 import net.matsudamper.browser.feature.media.GeckoMediaSessionDelegate
 import net.matsudamper.browser.feature.media.MediaWebExtension
-import net.matsudamper.browser.feature.findinpage.FindInPageWebExtension
 import net.matsudamper.browser.feature.mocklocation.MockLocationWebExtension
 import net.matsudamper.browser.feature.networklog.NetworkLogWebExtension
 import net.matsudamper.browser.feature.themecolor.ThemeColorWebExtension
-import net.matsudamper.browser.data.address.AddressRepository
-import net.matsudamper.browser.data.forminput.FormInputRepository
-import net.matsudamper.browser.feature.forminputautofill.FormInputAutofillCoordinator
-import net.matsudamper.browser.feature.addressautofill.AddressAutofillCoordinator
-import net.matsudamper.browser.feature.addressautofill.AddressAutofillDelegate
 import net.matsudamper.browser.feature.twittershare.TwitterShareWebExtension
 import net.matsudamper.browser.feature.viewportscale.ViewportScaleWebExtension
 import net.matsudamper.browser.translate.TranslationPriorityLanguage
+import net.matsudamper.browser.ui.browser.UrlBarSuggestionsUiState
 import net.matsudamper.browser.ui.common.findActivity
 import net.matsudamper.browser.ui.common.resolveBrowserToolbarColors
-import net.matsudamper.browser.ui.browser.UrlBarSuggestionsUiState
 import org.koin.compose.koinInject
 import org.mozilla.geckoview.BasicSelectionActionDelegate
-import org.mozilla.geckoview.GeckoSession.SelectionActionDelegate
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
+import org.mozilla.geckoview.GeckoSession.SelectionActionDelegate
 import org.mozilla.geckoview.GeckoView
-import java.net.URLEncoder
 
 @Composable
 @OptIn(ExperimentalLayoutApi::class)
@@ -152,7 +152,7 @@ internal fun GeckoBrowserTab(
         }
     }
     val requestPermissionsLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()
+        ActivityResultContracts.RequestMultiplePermissions(),
     ) { results ->
         val granted = results.filterValues { it }.keys.toTypedArray()
         pendingPermissionsRef.pending?.complete(granted)
@@ -267,6 +267,7 @@ internal fun GeckoBrowserTab(
         when (prompt.type) {
             GeckoSession.PromptDelegate.FilePrompt.Type.MULTIPLE ->
                 multipleFilesLauncher.launch(mimeTypes)
+
             else ->
                 singleFileLauncher.launch(mimeTypes)
         }
@@ -293,9 +294,7 @@ internal fun GeckoBrowserTab(
         snapshotFlow { state.capturePreviewRequestCount }
             .collectLatest { count ->
                 if (count == 0) return@collectLatest
-                /**
-                 * GeckoView.capturePixels は Main スレッド必須。
-                 */
+                // GeckoView.capturePixels は Main スレッド必須。
                 withContext(Dispatchers.Main.immediate) {
                     geckoView?.also { gv -> state.captureTabPreview(gv) }
                 }
@@ -471,6 +470,7 @@ internal fun GeckoBrowserTab(
     fun resumeFromPauseIfNeeded(gecko: GeckoView) {
         when (surfaceResumeState) {
             SurfaceResumeState.RELEASED -> restoreSurfaceIfNeeded(gecko)
+
             SurfaceResumeState.PAUSED_KEEP_SURFACE -> {
                 Log.d(
                     TAG_SURFACE_RESUME,
@@ -479,6 +479,7 @@ internal fun GeckoBrowserTab(
                 )
                 surfaceResumeState = SurfaceResumeState.ACTIVE
             }
+
             SurfaceResumeState.ACTIVE, SurfaceResumeState.WAITING_STABLE -> Unit
         }
     }
@@ -523,6 +524,7 @@ internal fun GeckoBrowserTab(
                                     " mediaKeep=${mediaWebExtension.shouldKeepSessionAttached(session)}",
                             )
                         }
+
                         target == null -> {
                             // geckoView が更新されないまま ON_PAUSE が来ると release できず、
                             // 復帰時に session 付きで surface が再作成され BLAST reject が起きる。
@@ -533,6 +535,7 @@ internal fun GeckoBrowserTab(
                                     " 復帰時にハングする可能性あり session=${session.logKey()}",
                             )
                         }
+
                         surfaceResumeState == SurfaceResumeState.ACTIVE && !currentIsImeVisible -> {
                             // IME 非表示: stale サイズ resize のハング経路を踏まないため
                             // surface を維持し、オーバーレイ表示中の白画面化を防ぐ。
@@ -548,6 +551,7 @@ internal fun GeckoBrowserTab(
                             state.captureTabPreview(target)
                             surfaceResumeState = SurfaceResumeState.PAUSED_KEEP_SURFACE
                         }
+
                         else -> {
                             // IME 表示中の ACTIVE、または WAITING_STABLE 中（前回 resume の
                             // 安定待ちが完了する前に再度 pause した場合）は従来どおり release。
@@ -570,6 +574,7 @@ internal fun GeckoBrowserTab(
                         }
                     }
                 }
+
                 Lifecycle.Event.ON_STOP -> {
                     session.flushSessionState()
                     // IME 表示中の pause は ON_PAUSE で release 済み (RELEASED)。
@@ -584,6 +589,7 @@ internal fun GeckoBrowserTab(
                             mediaWebExtension.shouldKeepSessionAttached(session) -> {
                                 state.captureTabPreview(target)
                             }
+
                             surfaceResumeState == SurfaceResumeState.PAUSED_KEEP_SURFACE -> {
                                 // IME 非表示の pause で surface を維持していたが、ON_STOP に
                                 // 到達した = 完全に不可視化した (ホームボタン等)。ここで release
@@ -604,16 +610,20 @@ internal fun GeckoBrowserTab(
                                 target.visibility = View.INVISIBLE
                                 surfaceResumeState = SurfaceResumeState.RELEASED
                             }
+
                             else -> Unit
                         }
                     }
                 }
+
                 Lifecycle.Event.ON_START -> {
                     geckoView?.also(::resumeFromPauseIfNeeded)
                 }
+
                 Lifecycle.Event.ON_RESUME -> {
                     geckoView?.also(::resumeFromPauseIfNeeded)
                 }
+
                 else -> Unit
             }
         }
@@ -766,8 +776,8 @@ internal fun GeckoBrowserTab(
             browserTab.detachSessionCallbacks()
             session.promptDelegate = null
             addressAutofillDelegate.restoreWrapped(session)
-            if (session.mediaSessionDelegate === mediaSessionDelegate
-                && !mediaWebExtension.shouldKeepSessionAttached(session)
+            if (session.mediaSessionDelegate === mediaSessionDelegate &&
+                !mediaWebExtension.shouldKeepSessionAttached(session)
             ) {
                 session.mediaSessionDelegate = null
             }
@@ -827,7 +837,8 @@ internal fun GeckoBrowserTab(
                 // コピー等の標準項目・他アプリの後にカスタム項目を末尾追加
                 val text = mSelection?.text?.trim() ?: ""
                 if (text.isNotBlank()) {
-                    val isUrl = text.startsWith("http://") || text.startsWith("https://") ||
+                    val isUrl = text.startsWith("http://") ||
+                        text.startsWith("https://") ||
                         (!text.contains(" ") && text.contains("."))
                     if (isUrl) {
                         val title = if (enableTabUi) "新しいタブで開く" else "開く"
@@ -864,6 +875,7 @@ internal fun GeckoBrowserTab(
                         mode.finish()
                         return true
                     }
+
                     MENU_ID_OPEN -> {
                         val url = if (text.startsWith("http://") || text.startsWith("https://")) {
                             text
@@ -940,8 +952,8 @@ internal fun GeckoBrowserTab(
                         // setSession のタイミングを restoreSurfaceIfNeeded 側で「サイズが安定するまで
                         // 待つ」よう制御している。
                         .imePadding()
-                }
-            )
+                },
+            ),
     ) {
         if (state.isFullScreen) {
             // フルスクリーン時はツールバー・翻訳バー・検索バーを非表示
@@ -1137,7 +1149,7 @@ internal fun GeckoBrowserTab(
                 browserTab = browserTab,
                 updateGeckoView = {
                     geckoView = it
-                }
+                },
             )
 
             BrowserTabOverlayLayer(
@@ -1279,7 +1291,7 @@ private fun TabHistoryBottomSheet(
                                 Modifier.background(MaterialTheme.colorScheme.primaryContainer)
                             } else {
                                 Modifier
-                            }
+                            },
                         )
                         .clickable { onNavigateTo(index) }
                         .padding(horizontal = 16.dp, vertical = 12.dp),
@@ -1420,7 +1432,9 @@ private class GetMultipleContentsWithMimeTypes : ActivityResultContract<Array<St
 private fun applyMimeTypes(intent: Intent, mimeTypes: Array<String>) {
     when {
         mimeTypes.isEmpty() -> intent.type = "*/*"
+
         mimeTypes.size == 1 -> intent.type = mimeTypes[0]
+
         else -> {
             intent.type = "*/*"
             intent.putExtra(Intent.EXTRA_MIME_TYPES, mimeTypes)

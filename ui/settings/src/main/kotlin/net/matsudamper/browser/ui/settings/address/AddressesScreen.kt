@@ -30,8 +30,12 @@ sealed interface AddressesScreenTestTags {
 
     val testTag get() = "${AddressesScreenTestTags::class.java.name}#$id"
 
-    data object Root : AddressesScreenTestTags { override val id = "root" }
-    data object AddButton : AddressesScreenTestTags { override val id = "add_button" }
+    data object Root : AddressesScreenTestTags {
+        override val id = "root"
+    }
+    data object AddButton : AddressesScreenTestTags {
+        override val id = "add_button"
+    }
 
     data class Entry(val addressId: Long) : AddressesScreenTestTags {
         override val id = "entry_$addressId"
@@ -157,23 +161,23 @@ private fun AddressListItem(
 @Composable
 private fun PreviewAddressesScreen() {
     AddressesScreen(
-            uiState = AddressesScreenUiState(
-                callbacks = object : AddressesScreenUiState.Callbacks {
-                    override fun onClickAdd() = Unit
-                    override fun onClickDeleteAll() = Unit
-                    override fun onConfirmDeleteAll() = Unit
-                    override fun onDismissDeleteAllDialog() = Unit
-                },
-                entries = listOf(
-                    AddressesScreenUiState.EntryItem(
-                        id = 1,
-                        displayName = "山田 太郎",
-                        displayDetail = "〒1000001 東京都千代田区千代田1-1",
-                        listener = PreviewAddressesEntryListener,
-                    ),
+        uiState = AddressesScreenUiState(
+            callbacks = object : AddressesScreenUiState.Callbacks {
+                override fun onClickAdd() = Unit
+                override fun onClickDeleteAll() = Unit
+                override fun onConfirmDeleteAll() = Unit
+                override fun onDismissDeleteAllDialog() = Unit
+            },
+            entries = listOf(
+                AddressesScreenUiState.EntryItem(
+                    id = 1,
+                    displayName = "山田 太郎",
+                    displayDetail = "〒1000001 東京都千代田区千代田1-1",
+                    listener = PreviewAddressesEntryListener,
                 ),
-                showDeleteAllDialog = false,
             ),
-            onBack = {},
-        )
+            showDeleteAllDialog = false,
+        ),
+        onBack = {},
+    )
 }

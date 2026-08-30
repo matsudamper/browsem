@@ -4,6 +4,8 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Base64
 import android.util.Log
+import java.util.Collections
+import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -14,8 +16,6 @@ import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.WebExtension
-import java.util.Collections
-import java.util.concurrent.ConcurrentHashMap
 
 /**
  * ページの通信を記録するビルトイン WebExtension。

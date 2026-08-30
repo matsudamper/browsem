@@ -39,8 +39,12 @@ internal sealed interface CustomTabToolbarTestTags {
     val id: String
     val testTag get() = "${CustomTabToolbarTestTags::class.java.name}#$id"
 
-    object Toolbar : CustomTabToolbarTestTags { override val id = "custom_tab_toolbar" }
-    object MenuButton : CustomTabToolbarTestTags { override val id = "custom_tab_menu_button" }
+    object Toolbar : CustomTabToolbarTestTags {
+        override val id = "custom_tab_toolbar"
+    }
+    object MenuButton : CustomTabToolbarTestTags {
+        override val id = "custom_tab_menu_button"
+    }
 }
 
 @Composable
@@ -101,7 +105,7 @@ internal fun CustomTabToolbar(
                 .fillMaxWidth()
                 // ステータスバー領域はSurfaceの背景色で塗りつぶし、コンテンツをその下に押し出す
                 .windowInsetsPadding(
-                    WindowInsets.statusBarsIgnoringVisibility.only(WindowInsetsSides.Top)
+                    WindowInsets.statusBarsIgnoringVisibility.only(WindowInsetsSides.Top),
                 )
                 .padding(horizontal = 4.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,

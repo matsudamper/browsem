@@ -2,7 +2,6 @@ package net.matsudamper.browser
 
 import android.app.NotificationManager
 import android.content.Context
-import android.webkit.URLUtil
 import androidx.core.app.NotificationCompat
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
@@ -12,7 +11,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import net.matsudamper.browser.data.download.DownloadRepository
 import net.matsudamper.browser.download.PendingDownloadBodyStore
-import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.WebResponse
 
 internal class GeckoDownloadManager(
@@ -50,7 +48,7 @@ internal class GeckoDownloadManager(
                     DownloadWorker.KEY_REFERRER_URL to referrerUrl,
                     DownloadWorker.KEY_NOTIFICATION_ID to notificationId,
                     DownloadWorker.KEY_STABLE_WORKER_ID to workId.toString(),
-                )
+                ),
             )
             .addTag(DownloadWorker.TAG_DOWNLOAD)
             .build()

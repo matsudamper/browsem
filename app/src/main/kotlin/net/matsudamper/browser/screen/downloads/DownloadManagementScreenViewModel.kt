@@ -17,6 +17,9 @@ import androidx.core.net.toUri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.work.WorkManager
+import java.io.File
+import java.util.Locale
+import java.util.UUID
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -32,9 +35,6 @@ import net.matsudamper.browser.data.download.DownloadRecordStatus
 import net.matsudamper.browser.data.download.DownloadRepository
 import net.matsudamper.browser.download.DownloadUrl
 import net.matsudamper.browser.ui.downloads.DownloadManagementScreenUiState
-import java.io.File
-import java.util.Locale
-import java.util.UUID
 
 internal class DownloadManagementScreenViewModel(
     application: Application,
@@ -157,13 +157,17 @@ internal class DownloadManagementScreenViewModel(
         val normalizedMimeType = mimeType?.lowercase(Locale.ROOT)
         when {
             normalizedMimeType == null -> Unit
+
             normalizedMimeType.startsWith("video/") -> {
                 return DownloadManagementScreenUiState.DownloadFileType.VIDEO
             }
+
             normalizedMimeType.startsWith("audio/") -> {
                 return DownloadManagementScreenUiState.DownloadFileType.AUDIO
             }
+
             normalizedMimeType == MIME_TYPE_PDF -> return DownloadManagementScreenUiState.DownloadFileType.PDF
+
             normalizedMimeType in ARCHIVE_MIME_TYPES -> {
                 return DownloadManagementScreenUiState.DownloadFileType.ARCHIVE
             }
@@ -233,6 +237,7 @@ internal class DownloadManagementScreenViewModel(
                     )
                 }
             }
+
             DownloadRecordStatus.FAILED -> {
                 DownloadManagementScreenUiState.DownloadStatus.Failed(
                     // blob: URL は再取得できないため、部分ファイルがあっても再開ボタンを出さない
@@ -240,6 +245,7 @@ internal class DownloadManagementScreenViewModel(
                     reason = failureReason,
                 )
             }
+
             DownloadRecordStatus.ENQUEUED -> {
                 DownloadManagementScreenUiState.DownloadStatus.InProgress(
                     progress = 0,
@@ -248,6 +254,7 @@ internal class DownloadManagementScreenViewModel(
                     isIndeterminate = true,
                 )
             }
+
             DownloadRecordStatus.RUNNING -> {
                 DownloadManagementScreenUiState.DownloadStatus.InProgress(
                     progress = progress,
@@ -256,7 +263,9 @@ internal class DownloadManagementScreenViewModel(
                     isIndeterminate = contentLength <= 0,
                 )
             }
+
             DownloadRecordStatus.CANCELLED -> DownloadManagementScreenUiState.DownloadStatus.Cancelled
+
             DownloadRecordStatus.PAUSED -> {
                 DownloadManagementScreenUiState.DownloadStatus.Paused(
                     progress = progress,

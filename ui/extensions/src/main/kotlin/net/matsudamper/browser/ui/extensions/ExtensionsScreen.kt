@@ -53,9 +53,15 @@ sealed interface ExtensionsScreenTestTags {
 
     val testTag get() = "${ExtensionsScreenTestTags::class.java.name}#$id"
 
-    object InstallFromFileButton : ExtensionsScreenTestTags { override val id = "install_from_file_button" }
-    object AllExtensionsSwitch : ExtensionsScreenTestTags { override val id = "all_extensions_switch" }
-    object SystemSectionHeader : ExtensionsScreenTestTags { override val id = "system_section_header" }
+    object InstallFromFileButton : ExtensionsScreenTestTags {
+        override val id = "install_from_file_button"
+    }
+    object AllExtensionsSwitch : ExtensionsScreenTestTags {
+        override val id = "all_extensions_switch"
+    }
+    object SystemSectionHeader : ExtensionsScreenTestTags {
+        override val id = "system_section_header"
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

@@ -42,17 +42,17 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import net.matsudamper.browser.data.ThemeMode
-import net.matsudamper.browser.ui.common.BrowserTheme
 import net.matsudamper.browser.resources.R as ResourcesR
+import net.matsudamper.browser.ui.common.BrowserTheme
 
 /** DropdownMenu の上下マージン。Material3 の MenuVerticalMargin と同値 */
 private val ToolbarMenuVerticalMargin = 48.dp
@@ -386,7 +386,7 @@ private fun ToolbarMenuContent(
                         onClick = {
                             onDismissRequest()
                             onHome()
-                        }
+                        },
                     ) {
                         Icon(
                             painter = painterResource(ResourcesR.drawable.ic_home_24dp),
@@ -461,7 +461,7 @@ private fun ToolbarMenuContent(
                         .testTag(BrowserToolbarMenuTestTags.ZoomPercentButton.testTag),
                 ) {
                     Text(
-                        text = "${pageZoomPercent}%",
+                        text = "$pageZoomPercent%",
                         textAlign = TextAlign.Center,
                         style = MaterialTheme.typography.bodyMedium,
                     )
@@ -932,14 +932,34 @@ sealed interface BrowserToolbarMenuTestTags {
     val id: String
     val testTag get() = "${BrowserToolbarMenuTestTags::class.java.name}#$id"
 
-    object ZoomLabel : BrowserToolbarMenuTestTags { override val id = "zoom_label" }
-    object ZoomPercentButton : BrowserToolbarMenuTestTags { override val id = "zoom_percent_button" }
-    object RefreshButton : BrowserToolbarMenuTestTags { override val id = "refresh_button" }
-    object FindInPageButton : BrowserToolbarMenuTestTags { override val id = "find_in_page_button" }
-    object SiteSettingsButton : BrowserToolbarMenuTestTags { override val id = "site_settings_button" }
-    object DownloadsButton : BrowserToolbarMenuTestTags { override val id = "downloads_button" }
-    object ShareButton : BrowserToolbarMenuTestTags { override val id = "share_button" }
-    object HomeButton : BrowserToolbarMenuTestTags { override val id = "home_button" }
-    object DevToolsButton : BrowserToolbarMenuTestTags { override val id = "dev_tools_button" }
-    object SettingsButton : BrowserToolbarMenuTestTags { override val id = "settings_button" }
+    object ZoomLabel : BrowserToolbarMenuTestTags {
+        override val id = "zoom_label"
+    }
+    object ZoomPercentButton : BrowserToolbarMenuTestTags {
+        override val id = "zoom_percent_button"
+    }
+    object RefreshButton : BrowserToolbarMenuTestTags {
+        override val id = "refresh_button"
+    }
+    object FindInPageButton : BrowserToolbarMenuTestTags {
+        override val id = "find_in_page_button"
+    }
+    object SiteSettingsButton : BrowserToolbarMenuTestTags {
+        override val id = "site_settings_button"
+    }
+    object DownloadsButton : BrowserToolbarMenuTestTags {
+        override val id = "downloads_button"
+    }
+    object ShareButton : BrowserToolbarMenuTestTags {
+        override val id = "share_button"
+    }
+    object HomeButton : BrowserToolbarMenuTestTags {
+        override val id = "home_button"
+    }
+    object DevToolsButton : BrowserToolbarMenuTestTags {
+        override val id = "dev_tools_button"
+    }
+    object SettingsButton : BrowserToolbarMenuTestTags {
+        override val id = "settings_button"
+    }
 }

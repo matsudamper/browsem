@@ -4,6 +4,8 @@ import android.app.Application
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import java.io.File
+import java.io.IOException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -23,8 +25,6 @@ import net.matsudamper.browser.ui.extensions.ExtensionsScreenUiState
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.WebExtension
 import org.mozilla.geckoview.WebExtensionController
-import java.io.File
-import java.io.IOException
 
 internal class ExtensionsScreenViewModel(
     application: Application,
@@ -185,7 +185,7 @@ internal class ExtensionsScreenViewModel(
             togglingId = null,
             isTogglingGlobal = false,
             isInstalling = false,
-        )
+        ),
     ).also { uiStateFlow ->
         viewModelScope.launch {
             viewModelStateFlow.collectLatest { state ->

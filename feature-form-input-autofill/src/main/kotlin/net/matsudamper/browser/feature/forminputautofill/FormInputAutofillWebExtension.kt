@@ -3,15 +3,15 @@ package net.matsudamper.browser.feature.forminputautofill
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import java.util.Collections
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
 import org.json.JSONArray
 import org.json.JSONObject
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.WebExtension
-import java.util.Collections
-import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * ページ固有フォーム入力の保存・候補表示用 WebExtension。
@@ -140,9 +140,11 @@ class FormInputAutofillWebExtension {
                                         listener.onFieldFocus(fieldKey, pageUrl)
                                     }
                                 }
+
                                 "field-blur" -> {
                                     mainHandler.post { listener.onFieldBlur() }
                                 }
+
                                 "form-submit" -> {
                                     val pageUrl = json.optString("pageUrl")
                                     val fields = parseFields(json.optJSONArray("fields"))
@@ -150,6 +152,7 @@ class FormInputAutofillWebExtension {
                                         listener.onFormSubmit(pageUrl, fields)
                                     }
                                 }
+
                                 "focused-field-response" -> {
                                     val requestId = json.optString("requestId")
                                     val callback = focusedFieldCallbacks.remove(requestId) ?: return
@@ -165,6 +168,7 @@ class FormInputAutofillWebExtension {
                                         callback(field, pageUrl.takeIf { it.isNotBlank() })
                                     }
                                 }
+
                                 "field-long-press" -> {
                                     val fieldKey = json.optString("fieldKey")
                                     val pageUrl = json.optString("pageUrl")

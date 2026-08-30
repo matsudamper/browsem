@@ -3,6 +3,7 @@ package net.matsudamper.browser
 import androidx.compose.runtime.Stable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import java.util.UUID
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
@@ -22,9 +23,6 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import net.matsudamper.browser.data.ResolvedBrowserSettings
 import net.matsudamper.browser.data.SettingsRepository
-import net.matsudamper.browser.feature.media.MediaWebExtension
-import net.matsudamper.browser.feature.mocklocation.MockLocationWebExtension
-import net.matsudamper.browser.feature.themecolor.ThemeColorWebExtension
 import net.matsudamper.browser.data.SiteGeolocationState
 import net.matsudamper.browser.data.SiteSettingsRepository
 import net.matsudamper.browser.data.TabGroupRepository
@@ -33,9 +31,11 @@ import net.matsudamper.browser.data.ThemeMode
 import net.matsudamper.browser.data.TranslationProvider
 import net.matsudamper.browser.data.resolvedBrowserSettings
 import net.matsudamper.browser.data.resolvedInputAutoZoomEnabled
+import net.matsudamper.browser.feature.media.MediaWebExtension
+import net.matsudamper.browser.feature.mocklocation.MockLocationWebExtension
+import net.matsudamper.browser.feature.themecolor.ThemeColorWebExtension
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoSession
-import java.util.UUID
 
 internal data class BrowserAppUiState(
     val themeMode: ThemeMode,
@@ -149,7 +149,7 @@ internal class BrowserViewModel(
                             latitude = resolvedLat,
                             longitude = resolvedLng,
                             siteModes = geolocationStates.mapValues { (_, state) -> state.toGeolocationMode() },
-                        )
+                        ),
                     )
                 }
         }

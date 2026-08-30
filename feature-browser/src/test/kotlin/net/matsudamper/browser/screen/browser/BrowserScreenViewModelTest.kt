@@ -1,25 +1,24 @@
 package net.matsudamper.browser.screen.browser
 
-import io.mockk.every
-import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
+import io.mockk.every
+import io.mockk.mockk
 import net.matsudamper.browser.BrowserTab
+import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.TabGroupData
 import net.matsudamper.browser.data.TabGroupId
 import net.matsudamper.browser.data.TabGroupRepository
 import net.matsudamper.browser.data.history.HistoryRepository
-import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.tab.TabGroupAssignment
 import net.matsudamper.browser.data.websuggestion.WebSuggestionRepository
 import org.junit.After
@@ -401,6 +400,7 @@ class BrowserScreenViewModelTest {
             override fun observeGroups() = MutableStateFlow<List<TabGroupData>>(
                 listOf(TabGroupData(TabGroupId("g1"), "グループ1")),
             )
+
             // 値を発行しない Flow（初回ロード未完了状態）
             override fun observeTabGroupAssignments() = flow<List<TabGroupAssignment>> {
                 awaitCancellation()

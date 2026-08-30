@@ -49,7 +49,9 @@ internal sealed interface UrlTextInputTestTags {
     val id: String
     val testTag get() = "${UrlTextInputTestTags::class.java.name}#$id"
 
-    object UrlBar : UrlTextInputTestTags { override val id = "url_bar" }
+    object UrlBar : UrlTextInputTestTags {
+        override val id = "url_bar"
+    }
 }
 
 @Composable
@@ -122,8 +124,10 @@ internal fun UrlTextInput(
                         val targetScroll = when {
                             cursorRect.right.toInt() > currentScroll + viewportWidth ->
                                 (cursorRect.right.toInt() - viewportWidth).coerceAtLeast(0)
+
                             cursorRect.left.toInt() < currentScroll ->
                                 cursorRect.left.toInt().coerceAtLeast(0)
+
                             else -> return@LaunchedEffect
                         }
                         scrollState.scrollTo(targetScroll)
@@ -143,7 +147,7 @@ internal fun UrlTextInput(
                                     Modifier.testTag(UrlTextInputTestTags.UrlBar.testTag)
                                 } else {
                                     Modifier
-                                }
+                                },
                             )
                             .onFocusChanged { currentOnFocusChanged(it.hasFocus) }
                             .semantics {
@@ -225,7 +229,7 @@ internal fun UrlDisplay(
                     Modifier.testTag(UrlTextInputTestTags.UrlBar.testTag)
                 } else {
                     Modifier
-                }
+                },
             )
             // 子 BasicText の Text セマンティクスを UrlBar ノードへ集約する。
             // テストは UrlBar ノードの Text から表示中の URL を読むため必須。

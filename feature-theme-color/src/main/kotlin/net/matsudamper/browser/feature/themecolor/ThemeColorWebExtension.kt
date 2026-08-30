@@ -4,12 +4,12 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import androidx.compose.ui.graphics.Color
+import java.util.concurrent.ConcurrentHashMap
 import org.json.JSONObject
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.WebExtension
-import java.util.concurrent.ConcurrentHashMap
 
 /**
  * theme-colorメタタグを取得するためのビルトインWebExtension。
@@ -65,7 +65,7 @@ class ThemeColorWebExtension {
                 override fun onMessage(
                     nativeApp: String,
                     message: Any,
-                    sender: WebExtension.MessageSender
+                    sender: WebExtension.MessageSender,
                 ): GeckoResult<Any>? {
                     Log.d(TAG, "Session onMessage受信: $message")
                     val json = message as? JSONObject ?: return null

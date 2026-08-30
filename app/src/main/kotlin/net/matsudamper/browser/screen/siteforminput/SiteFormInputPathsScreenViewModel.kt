@@ -11,8 +11,8 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import net.matsudamper.browser.data.forminput.FormInputOrigin
-import net.matsudamper.browser.data.forminput.displayFormInputOrigin
 import net.matsudamper.browser.data.forminput.FormInputRepository
+import net.matsudamper.browser.data.forminput.displayFormInputOrigin
 import net.matsudamper.browser.data.forminput.displayFormInputPath
 import net.matsudamper.browser.ui.settings.form.SiteFormInputPathsScreenUiState
 

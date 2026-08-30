@@ -28,6 +28,7 @@ interface BrowserSessionStateCallbacks {
         translationState: TranslationsController.SessionTranslation.TranslationState?,
     )
     fun onScrollChanged(scrollY: Int)
+
     /**
      * GeckoView のコンテンツプロセスがクラッシュ／OSに kill された直後に呼ばれる。
      * GeckoSession はこの時点で isOpen=false の使用不能状態になる。
@@ -85,13 +86,13 @@ fun createGeckoSessionDelegateBundle(
             ): GeckoResult<Int> {
                 Log.d(
                     "BrowserTabPermission",
-                    "onContentPermissionRequest: permission=${perm.permission}, uri=${perm.uri}"
+                    "onContentPermissionRequest: permission=${perm.permission}, uri=${perm.uri}",
                 )
                 if (perm.permission == GeckoSession.PermissionDelegate.PERMISSION_AUTOPLAY_INAUDIBLE) {
                     // 消音メディアは音が出ず邪魔にならないため、従来通り自動再生を許可する
                     Log.d("BrowserTabPermission", "inaudible autoplay permission allowed")
                     return GeckoResult.fromValue(
-                        GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW
+                        GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW,
                     )
                 }
                 if (perm.permission == GeckoSession.PermissionDelegate.PERMISSION_AUTOPLAY_AUDIBLE) {
@@ -136,12 +137,12 @@ fun createGeckoSessionDelegateBundle(
                 if (perm.permission == GeckoSession.PermissionDelegate.PERMISSION_DESKTOP_NOTIFICATION) {
                     Log.d("BrowserTabPermission", "desktop notification denied")
                     return GeckoResult.fromValue(
-                        GeckoSession.PermissionDelegate.ContentPermission.VALUE_DENY
+                        GeckoSession.PermissionDelegate.ContentPermission.VALUE_DENY,
                     )
                 }
                 Log.d("BrowserTabPermission", "non-notification permission prompted")
                 return GeckoResult.fromValue(
-                    GeckoSession.PermissionDelegate.ContentPermission.VALUE_PROMPT
+                    GeckoSession.PermissionDelegate.ContentPermission.VALUE_PROMPT,
                 )
             }
 
@@ -152,7 +153,7 @@ fun createGeckoSessionDelegateBundle(
             ) {
                 Log.d(
                     "BrowserTabPermission",
-                    "onAndroidPermissionsRequest: permissions=${permissions?.toList()}"
+                    "onAndroidPermissionsRequest: permissions=${permissions?.toList()}",
                 )
                 @Suppress("UNCHECKED_CAST")
                 callbacks.onAndroidPermissionsRequest(
@@ -174,7 +175,7 @@ fun createGeckoSessionDelegateBundle(
                 Log.d(
                     "BrowserTabPermission",
                     "onMediaPermissionRequest: uri=$uri, " +
-                        "video=${video?.map { it.name }}, audio=${audio?.map { it.name }}"
+                        "video=${video?.map { it.name }}, audio=${audio?.map { it.name }}",
                 )
                 val videoSource = video?.firstOrNull()
                 val audioSource = audio?.firstOrNull()
@@ -369,6 +370,7 @@ internal class BrowserTabSessionDelegateHost(
     private var cachedCanGoForward: Boolean = false
     private var cachedHistoryItems: List<HistoryStateItem> = emptyList()
     private var cachedHistoryCurrentIndex: Int = -1
+
     // UI未接続中に届いた manifest を失わないようにキャッシュする。
     // onPageStart でクリアし、attachUi 時にリプレイする。
     private var cachedWebAppManifest: JSONObject? = null
@@ -743,7 +745,7 @@ internal class BrowserTabSessionDelegateHost(
             },
             { throwable ->
                 target.completeExceptionally(
-                    throwable ?: IllegalStateException("GeckoResult が null 例外で失敗しました")
+                    throwable ?: IllegalStateException("GeckoResult が null 例外で失敗しました"),
                 )
             },
         )

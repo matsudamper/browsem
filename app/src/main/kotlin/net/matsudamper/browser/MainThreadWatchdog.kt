@@ -53,6 +53,7 @@ internal class MainThreadWatchdog {
     private companion object {
         private const val TAG = "MainThreadWatchdog"
         private const val TIMEOUT_MS = 8_000L
+
         // 起動直後は GeckoRuntime.create() 等でメインスレッドが占有されるため猶予を設ける
         private const val STARTUP_GRACE_MS = 15_000L
     }

@@ -83,7 +83,7 @@ internal fun resolveExternalAppNavigationAction(
             intent = intent,
             appName = appName,
             fallbackUrl = fallbackUrl,
-        )
+        ),
     )
 }
 
@@ -125,7 +125,7 @@ private fun resolveUnavailableAppAction(
             intent = intent,
             appName = null,
             fallbackUrl = null,
-        )
+        ),
     )
 }
 
@@ -219,7 +219,7 @@ private fun resolveHttpSchemeAction(
                 intent = intent,
                 appName = appName,
                 fallbackUrl = null,
-            )
+            ),
         )
     } else {
         ExternalAppNavigationAction.AllowInBrowser

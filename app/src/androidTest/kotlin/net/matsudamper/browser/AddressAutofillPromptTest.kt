@@ -14,6 +14,12 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import java.net.InetSocketAddress
+import java.net.ServerSocket
+import java.net.Socket
+import java.net.URL
+import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.TimeoutException
 import kotlinx.coroutines.runBlocking
 import net.matsudamper.browser.data.address.AddressEntity
 import net.matsudamper.browser.data.address.AddressRepository
@@ -25,12 +31,6 @@ import org.junit.runner.RunWith
 import org.mozilla.geckoview.ExperimentalGeckoViewApi
 import org.mozilla.geckoview.GeckoPreferenceController
 import org.mozilla.geckoview.GeckoResult
-import java.net.InetSocketAddress
-import java.net.ServerSocket
-import java.net.Socket
-import java.net.URL
-import java.util.concurrent.CopyOnWriteArrayList
-import java.util.concurrent.TimeoutException
 
 /**
  * GeckoView の住所フォーム自動入力 (formautofill) が実際に動作することを確認するテスト。
@@ -763,6 +763,7 @@ class AddressAutofillPromptTest {
                     GeckoPreferenceController.PREF_BRANCH_USER,
                 )
             }
+
             is String -> awaitGeckoResult {
                 GeckoPreferenceController.setGeckoPref(
                     name,
@@ -770,6 +771,7 @@ class AddressAutofillPromptTest {
                     GeckoPreferenceController.PREF_BRANCH_USER,
                 )
             }
+
             is Int -> awaitGeckoResult {
                 GeckoPreferenceController.setGeckoPref(
                     name,
@@ -792,6 +794,7 @@ class AddressAutofillPromptTest {
                         GeckoPreferenceController.PREF_BRANCH_USER,
                     )
                 }
+
                 is String -> awaitGeckoResult {
                     GeckoPreferenceController.setGeckoPref(
                         saved.name,
@@ -799,6 +802,7 @@ class AddressAutofillPromptTest {
                         GeckoPreferenceController.PREF_BRANCH_USER,
                     )
                 }
+
                 is Int -> awaitGeckoResult {
                     GeckoPreferenceController.setGeckoPref(
                         saved.name,
@@ -1033,7 +1037,7 @@ class AddressAutofillPromptTest {
                             target.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
                         result =
                             "clicked=$clicked cls=${target.className} viewId=$viewId desc=$desc " +
-                                "text=${text.take(80)} edit=${target.isEditable} outputTab=$clickedOutputTab"
+                            "text=${text.take(80)} edit=${target.isEditable} outputTab=$clickedOutputTab"
                         target.recycle()
                         true
                     }
@@ -1075,7 +1079,7 @@ class AddressAutofillPromptTest {
                             target.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
                         result =
                             "clicked=$clicked cls=${target.className} viewId=$viewId desc=$desc " +
-                                "text=${text.take(80)} edit=${target.isEditable} outputTab=$clickedOutputTab"
+                            "text=${text.take(80)} edit=${target.isEditable} outputTab=$clickedOutputTab"
                         target.recycle()
                         true
                     }

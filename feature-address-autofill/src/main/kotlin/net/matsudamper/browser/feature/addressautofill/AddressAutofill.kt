@@ -26,6 +26,7 @@ enum class AddressAutofillSuggestionKind {
     Name,
     Address,
     Email,
+
     /** ページ固有のフォーム入力候補（住所等とは別経路） */
     FormField,
 }
@@ -33,6 +34,7 @@ enum class AddressAutofillSuggestionKind {
 fun AddressAutofillSuggestionKind.toFillMode(): AddressAutofillFillMode {
     return when (this) {
         AddressAutofillSuggestionKind.Email -> AddressAutofillFillMode.Email
+
         AddressAutofillSuggestionKind.Name,
         AddressAutofillSuggestionKind.Address,
         AddressAutofillSuggestionKind.FormField,
@@ -585,10 +587,13 @@ fun addressCompletionText(
 ): String {
     return when (kind) {
         AddressAutofillSuggestionKind.Email -> address.email
+
         AddressAutofillSuggestionKind.Name -> addressDisplayName(address)
+
         AddressAutofillSuggestionKind.Address -> {
             addressDisplayAddress(address).ifEmpty { addressDisplayName(address) }
         }
+
         AddressAutofillSuggestionKind.FormField -> ""
     }
 }

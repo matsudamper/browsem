@@ -3,13 +3,13 @@ package net.matsudamper.browser.feature.findinpage
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import java.util.Collections
+import java.util.concurrent.ConcurrentHashMap
 import org.json.JSONObject
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.WebExtension
-import java.util.Collections
-import java.util.concurrent.ConcurrentHashMap
 
 /**
  * 正規表現対応のページ内検索を提供するビルトイン WebExtension。
@@ -91,24 +91,33 @@ class FindInPageWebExtension {
 
     /** 次のマッチへ移動する */
     fun findNext(session: GeckoSession) {
-        sendMessage(session, JSONObject().apply {
-            put("action", "next")
-        })
+        sendMessage(
+            session,
+            JSONObject().apply {
+                put("action", "next")
+            },
+        )
     }
 
     /** 前のマッチへ移動する */
     fun findPrevious(session: GeckoSession) {
-        sendMessage(session, JSONObject().apply {
-            put("action", "previous")
-        })
+        sendMessage(
+            session,
+            JSONObject().apply {
+                put("action", "previous")
+            },
+        )
     }
 
     /** ハイライトを全てクリアする */
     fun clear(session: GeckoSession) {
         activeSearchCommands.remove(session)
-        sendMessage(session, JSONObject().apply {
-            put("action", "clear")
-        })
+        sendMessage(
+            session,
+            JSONObject().apply {
+                put("action", "clear")
+            },
+        )
     }
 
     private fun sendMessage(session: GeckoSession, message: JSONObject) {

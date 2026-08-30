@@ -20,7 +20,6 @@ class BrowserSessionController internal constructor(
     val tabs: List<BrowserTab>
         get() = browserTabController.tabs
 
-
     override fun moveTab(fromIndex: Int, toIndex: Int) {
         browserTabController.moveTab(fromIndex, toIndex)
     }
@@ -45,7 +44,6 @@ class BrowserSessionController internal constructor(
         browserTabController.close()
     }
 }
-
 
 @Stable
 class BrowserSessionLifecycleController(

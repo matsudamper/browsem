@@ -10,7 +10,7 @@ class ExtensionInstallUrlTest {
     fun androidAddonPageUsesAndroidDownloadEndpoint() {
         assertEquals(
             "https://addons.mozilla.org/android/downloads/latest/adguard-adblocker/latest.xpi",
-            resolveAmoInstallUriFromPage("https://addons.mozilla.org/ja/android/addon/adguard-adblocker/")
+            resolveAmoInstallUriFromPage("https://addons.mozilla.org/ja/android/addon/adguard-adblocker/"),
         )
     }
 
@@ -18,7 +18,7 @@ class ExtensionInstallUrlTest {
     fun firefoxAddonPageUsesFirefoxDownloadEndpoint() {
         assertEquals(
             "https://addons.mozilla.org/firefox/downloads/latest/ublock-origin/latest.xpi",
-            resolveAmoInstallUriFromPage("https://addons.mozilla.org/ja/firefox/addon/ublock-origin/")
+            resolveAmoInstallUriFromPage("https://addons.mozilla.org/ja/firefox/addon/ublock-origin/"),
         )
     }
 
@@ -26,7 +26,7 @@ class ExtensionInstallUrlTest {
     fun directXpiUrlIsReturnedAsIs() {
         assertEquals(
             "https://addons.mozilla.org/firefox/downloads/file/123/example.xpi",
-            resolveAmoInstallUriFromPage("https://addons.mozilla.org/firefox/downloads/file/123/example.xpi")
+            resolveAmoInstallUriFromPage("https://addons.mozilla.org/firefox/downloads/file/123/example.xpi"),
         )
     }
 

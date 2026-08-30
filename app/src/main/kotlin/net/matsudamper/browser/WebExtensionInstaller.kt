@@ -161,11 +161,11 @@ internal class WebExtensionInstaller(
 
     fun cleanup() {
         installPromptState?.result?.completeExceptionally(
-            java.util.concurrent.CancellationException("Installer was cleaned up.")
+            java.util.concurrent.CancellationException("Installer was cleaned up."),
         )
         installPromptState = null
         permissionPromptState?.result?.completeExceptionally(
-            java.util.concurrent.CancellationException("Installer was cleaned up.")
+            java.util.concurrent.CancellationException("Installer was cleaned up."),
         )
         permissionPromptState = null
         installFailureMessage = null
@@ -258,6 +258,7 @@ internal class WebExtensionInstaller(
         val header = when (requestKind) {
             PermissionRequestKind.UPDATE ->
                 "\"$extensionName\" requests new permissions for an update."
+
             PermissionRequestKind.OPTIONAL ->
                 "\"$extensionName\" requests additional permissions."
         }

@@ -14,6 +14,7 @@ import androidx.core.app.NotificationCompat
 import androidx.work.CoroutineWorker
 import androidx.work.ForegroundInfo
 import androidx.work.WorkerParameters
+import java.io.IOException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
@@ -29,7 +30,6 @@ import net.matsudamper.browser.download.GeckoDownloadHttpClient
 import net.matsudamper.browser.download.PendingDownloadBodyStore
 import net.matsudamper.browser.download.WebResponseDownloadResponse
 import org.mozilla.geckoview.GeckoRuntime
-import java.io.IOException
 
 /**
  * WorkManagerを使った進捗通知付きダウンロードWorker。
@@ -59,7 +59,6 @@ internal class DownloadWorker(
     private var partialResultTotalRead: Long = 0L
     private var partialResultContentLength: Long = -1L
 
-
     override suspend fun doWork(): Result {
         val url = inputData.getString(KEY_URL) ?: return Result.failure()
         val referrerUrl = inputData.getString(KEY_REFERRER_URL).orEmpty()
@@ -69,7 +68,6 @@ internal class DownloadWorker(
         val partialFileUriString = inputData.getString(KEY_PARTIAL_FILE_URI)
         // 再開時でも安定したworkerIdを取得する（初回ダウンロードではid.toString()と同じ）
         stableWorkerId = inputData.getString(KEY_STABLE_WORKER_ID) ?: id.toString()
-
 
         val enqueuedAt = System.currentTimeMillis()
 
@@ -402,7 +400,23 @@ internal class DownloadWorker(
             val mimeType = DownloadMetadata.parseMimeType(response.header("Content-Type"))
             val fileName = guessDownloadFileName(urlString, response.header("Content-Disposition"), mimeType)
 
-            setForeground(createForegroundInfo(notificationId, if (contentLength > 0) (rangeStart * 100 / contentLength).toInt() else 0, contentLength <= 0, fileName, rangeStart, contentLength, stableWorkerId))
+            setForeground(
+                createForegroundInfo(
+                    notificationId,
+                    if (contentLength >
+                        0
+                    ) {
+                        (rangeStart * 100 / contentLength).toInt()
+                    } else {
+                        0
+                    },
+                    contentLength <= 0,
+                    fileName,
+                    rangeStart,
+                    contentLength,
+                    stableWorkerId,
+                ),
+            )
 
             // 部分ファイルへの追記用に IS_PENDING を確認・維持する
             val pendingValues = ContentValues().apply { put(MediaStore.Downloads.IS_PENDING, 1) }
@@ -493,8 +507,10 @@ internal class DownloadWorker(
         const val KEY_URL = "url"
         const val KEY_REFERRER_URL = "referrer_url"
         const val KEY_NOTIFICATION_ID = "notification_id"
+
         /** 再開モード: 部分ファイルのMediaStore URI */
         const val KEY_PARTIAL_FILE_URI = "partial_file_uri"
+
         /** 再開モード: 再開を開始するバイト位置 */
         const val KEY_RESUME_FROM_BYTES = "resume_from_bytes"
         const val CHANNEL_ID = "download_progress_channel"

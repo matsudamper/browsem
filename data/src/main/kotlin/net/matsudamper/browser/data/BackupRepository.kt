@@ -157,6 +157,7 @@ class BackupRepository(private val context: Context) {
                     try {
                         when {
                             entry.isDirectory -> Unit
+
                             name in ALLOWED_ROOT_ENTRY_NAMES -> {
                                 val out = File(workDir, name)
                                 out.outputStream().buffered().use { dst -> zis.copyTo(dst) }
@@ -170,6 +171,7 @@ class BackupRepository(private val context: Context) {
                                     rangeEnd = 0.55f,
                                 )
                             }
+
                             name.startsWith("$MOZILLA_DIR_NAME/") -> {
                                 val relative = name.substring(MOZILLA_DIR_NAME.length + 1)
                                 if (relative.isEmpty()) {
@@ -195,6 +197,7 @@ class BackupRepository(private val context: Context) {
                                     )
                                 }
                             }
+
                             else -> Unit
                         }
                     } finally {

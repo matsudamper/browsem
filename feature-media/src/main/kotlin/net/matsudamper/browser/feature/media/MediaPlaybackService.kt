@@ -16,17 +16,17 @@ import androidx.media3.session.DefaultMediaNotificationProvider
 import androidx.media3.session.MediaNotification
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
-import com.google.common.collect.ImmutableList
-import com.google.common.util.concurrent.Futures
-import com.google.common.util.concurrent.ListenableFuture
+import java.io.ByteArrayOutputStream
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
-import java.io.ByteArrayOutputStream
-import java.util.concurrent.atomic.AtomicBoolean
+import com.google.common.collect.ImmutableList
+import com.google.common.util.concurrent.Futures
+import com.google.common.util.concurrent.ListenableFuture
 
 /**
  * メディア再生通知を管理するフォアグラウンドサービス。
@@ -86,7 +86,7 @@ class MediaPlaybackService : MediaSessionService() {
                 override fun getNotificationChannelInfo(): MediaNotification.Provider.NotificationChannelInfo {
                     return defaultNotificationProvider.getNotificationChannelInfo()
                 }
-            }
+            },
         )
 
         // サービス起動前にonActivated()が呼ばれbridge状態にisActive=trueが反映済みのため、
@@ -251,8 +251,8 @@ private class GeckoMediaPlayer : SimpleBasePlayer(Looper.getMainLooper()) {
                         .setMediaItem(mediaItem)
                         .setMediaMetadata(metadata)
                         .setDurationUs(durationUs)
-                        .build()
-                )
+                        .build(),
+                ),
             )
             .setCurrentMediaItemIndex(0)
             .build()
@@ -281,9 +281,11 @@ private class GeckoMediaPlayer : SimpleBasePlayer(Looper.getMainLooper()) {
             Player.COMMAND_SEEK_TO_NEXT, Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM -> {
                 MediaSessionBridge.nextTrack()
             }
+
             Player.COMMAND_SEEK_TO_PREVIOUS, Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM -> {
                 MediaSessionBridge.previousTrack()
             }
+
             else -> {
                 // 秒単位に変換してGeckoViewに渡す
                 MediaSessionBridge.seekTo(positionMs / 1000.0)

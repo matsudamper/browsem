@@ -15,7 +15,7 @@ class ContextMenuGesturePolicyTest {
                 gestureMoved = false,
                 elapsedSinceGestureStartMs = 0L,
                 elapsedSinceGestureEndMs = 100_000L,
-            )
+            ),
         )
     }
 
@@ -28,7 +28,7 @@ class ContextMenuGesturePolicyTest {
                 gestureMoved = false,
                 elapsedSinceGestureStartMs = CONTEXT_MENU_MIN_TOUCH_DURATION_MS,
                 elapsedSinceGestureEndMs = 5_000L,
-            )
+            ),
         )
     }
 
@@ -41,7 +41,7 @@ class ContextMenuGesturePolicyTest {
                 gestureMoved = false,
                 elapsedSinceGestureStartMs = CONTEXT_MENU_MIN_TOUCH_DURATION_MS - 1,
                 elapsedSinceGestureEndMs = 5_000L,
-            )
+            ),
         )
     }
 
@@ -54,7 +54,7 @@ class ContextMenuGesturePolicyTest {
                 gestureMoved = true,
                 elapsedSinceGestureStartMs = 5_000L,
                 elapsedSinceGestureEndMs = 0L,
-            )
+            ),
         )
     }
 
@@ -67,7 +67,7 @@ class ContextMenuGesturePolicyTest {
                 gestureMoved = false,
                 elapsedSinceGestureStartMs = 5_000L,
                 elapsedSinceGestureEndMs = CONTEXT_MENU_TOUCH_UP_GRACE_MS,
-            )
+            ),
         )
     }
 
@@ -80,7 +80,7 @@ class ContextMenuGesturePolicyTest {
                 gestureMoved = false,
                 elapsedSinceGestureStartMs = 5_000L,
                 elapsedSinceGestureEndMs = CONTEXT_MENU_TOUCH_UP_GRACE_MS + 1,
-            )
+            ),
         )
     }
 
@@ -93,7 +93,7 @@ class ContextMenuGesturePolicyTest {
                 gestureMoved = true,
                 elapsedSinceGestureStartMs = 5_000L,
                 elapsedSinceGestureEndMs = 0L,
-            )
+            ),
         )
     }
 }

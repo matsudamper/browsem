@@ -10,11 +10,6 @@ import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.lifecycle.Lifecycle
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import org.junit.Assert.assertTrue
-import org.junit.Rule
-import org.junit.Test
-import org.junit.runner.RunWith
-import org.mozilla.geckoview.GeckoView
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.net.InetAddress
@@ -25,6 +20,11 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.math.abs
 import kotlin.math.max
+import org.junit.Assert.assertTrue
+import org.junit.Rule
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.mozilla.geckoview.GeckoView
 
 @RunWith(AndroidJUnit4::class)
 class GeckoSurfaceResumeTest {
@@ -126,23 +126,26 @@ class GeckoSurfaceResumeTest {
             try {
                 latestBitmap = captureGeckoPixels()
                 val ratio = latestBitmap.fixtureBackgroundRatio()
-                Log.d(TAG, "試行${attempt}: 背景色比率=${String.format("%.1f", ratio * 100)}%" +
-                    " (${latestBitmap.width}x${latestBitmap.height})")
+                Log.d(
+                    TAG,
+                    "試行$attempt: 背景色比率=${String.format("%.1f", ratio * 100)}%" +
+                        " (${latestBitmap.width}x${latestBitmap.height})",
+                )
                 if (ratio >= FIXTURE_BACKGROUND_RATIO_THRESHOLD) {
-                    Log.d(TAG, "背景色ピクセル確認完了 (試行${attempt}, 経過${System.currentTimeMillis() - startTime}ms)")
+                    Log.d(TAG, "背景色ピクセル確認完了 (試行$attempt, 経過${System.currentTimeMillis() - startTime}ms)")
                     return latestBitmap
                 }
             } catch (e: AssertionError) {
                 // Activity リジューム直後は GeckoView の Compositor がまだ準備できておらず
                 // capturePixels() が失敗することがある。一時的なエラーとしてリトライする。
-                Log.w(TAG, "試行${attempt}: capturePixels失敗 - ${e.message}")
+                Log.w(TAG, "試行$attempt: capturePixels失敗 - ${e.message}")
                 lastError = e
             }
             Thread.sleep(250L)
         }
         val elapsed = System.currentTimeMillis() - startTime
         error(
-            "GeckoView pixels never showed the fixture background color after ${attempt} attempts (${elapsed}ms). " +
+            "GeckoView pixels never showed the fixture background color after $attempt attempts (${elapsed}ms). " +
                 "lastBitmap=${latestBitmap?.width}x${latestBitmap?.height}, " +
                 "lastError=$lastError",
         )
