@@ -76,6 +76,10 @@
     return Boolean(el.disabled);
   }
 
+  function isReadonlyField(el) {
+    return Boolean(el.readOnly);
+  }
+
   function hasAutocompleteOff(el) {
     const tokens = autocompleteTokens(el);
     if (hasAnyToken(tokens, PASSWORD_TOKENS)) return true;
@@ -177,6 +181,7 @@
     const tag = String(el.tagName).toUpperCase();
     if (tag !== 'INPUT' && tag !== 'TEXTAREA' && tag !== 'SELECT') return false;
     if (isDisabledField(el)) return false;
+    if (isReadonlyField(el)) return false;
     if (isNonValueField(el)) return false;
     if (hasAutocompleteOff(el)) return false;
     if (isExcludedAutofillField(el)) return false;
@@ -337,12 +342,37 @@
 
   const port = browser.runtime.connectNative('formInputAutofillBridge');
   port.onMessage.addListener(function (message) {
-    if (!message || message.action !== 'fill') return;
-    const el = focusedElement;
-    if (!el || !el.isConnected) return;
-    const key = fieldKey(el);
-    if (!key || key !== message.fieldKey) return;
-    setFieldValue(el, message.value || '');
+    if (!message || !message.action) return;
+    if (message.action === 'fill') {
+      const el = focusedElement;
+      if (!el || !el.isConnected) return;
+      const key = fieldKey(el);
+      if (!key || key !== message.fieldKey) return;
+      setFieldValue(el, message.value || '');
+      return;
+    }
+    if (message.action === 'get-focused-field') {
+      const el = focusedElement;
+      const pageUrl = location.href;
+      if (!el || !el.isConnected || !isTargetField(el)) {
+        port.postMessage({
+          action: 'focused-field-response',
+          requestId: message.requestId || '',
+          fieldKey: '',
+          value: '',
+          pageUrl: pageUrl,
+        });
+        return;
+      }
+      const key = fieldKey(el);
+      port.postMessage({
+        action: 'focused-field-response',
+        requestId: message.requestId || '',
+        fieldKey: key || '',
+        value: fieldValue(el),
+        pageUrl: pageUrl,
+      });
+    }
   });
 
   function isEditableFormControl(el) {
@@ -427,18 +457,4 @@
     postFormSubmit(form);
   }, true);
 
-  document.addEventListener('contextmenu', function (event) {
-    const el = eventTargetElement(event);
-    if (!isEditableFormControl(el) || !isTargetField(el)) return;
-    const key = fieldKey(el);
-    if (!key) return;
-    event.preventDefault();
-    event.stopPropagation();
-    port.postMessage({
-      action: 'field-long-press',
-      fieldKey: key,
-      pageUrl: location.href,
-      fields: [{ fieldKey: key, value: fieldValue(el) }],
-    });
-  }, true);
 })();

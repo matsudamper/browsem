@@ -99,6 +99,19 @@ class FormInputAutofillCoordinator(
         }
     }
 
+    /**
+     * テキスト選択メニュー（コピー/ペースト等）から呼び出し、
+     * フォーカス中の入力欄を保存対象にする確認ダイアログを表示する。
+     */
+    fun requestSaveFocusedField(session: GeckoSession) {
+        val current = synchronized(lock) { attached } ?: return
+        if (current.session !== session) return
+        fillExtension.queryFocusedField(session) { field, pageUrl ->
+            if (field == null || pageUrl.isNullOrBlank()) return@queryFocusedField
+            handleFieldLongPress(field.fieldKey, pageUrl, listOf(field))
+        }
+    }
+
     private fun handleFieldFocus(fieldKey: String, pageUrl: String) {
         val pageKey = parseFormInputPageKey(pageUrl) ?: return
         if (fieldKey.isBlank()) return

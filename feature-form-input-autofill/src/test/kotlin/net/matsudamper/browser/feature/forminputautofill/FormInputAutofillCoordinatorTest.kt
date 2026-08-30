@@ -2,6 +2,7 @@ package net.matsudamper.browser.feature.forminputautofill
 
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -74,6 +75,35 @@ class FormInputAutofillCoordinatorTest {
                 fields = listOf(FormFieldEntry(fieldKey = "comment", value = "hello")),
             )
         }
+    }
+
+    @Test
+    fun requestSaveFocusedFieldShowsSaveDialog() = runTest {
+        val dispatcher = StandardTestDispatcher(this.testScheduler)
+        Dispatchers.setMain(dispatcher)
+        val scope = CoroutineScope(SupervisorJob() + dispatcher)
+        val repository = mockk<FormInputRepository>(relaxed = true)
+        val extension = mockk<FormInputAutofillWebExtension>(relaxed = true)
+        val host = RecordingHost(scope)
+        val coordinator = FormInputAutofillCoordinator(
+            fillExtension = extension,
+            ioDispatcher = dispatcher,
+        )
+        val session = GeckoSession()
+        coordinator.attach(session, host, repository)
+        every { extension.queryFocusedField(session, any()) } answers {
+            val callback = secondArg<(FormInputFieldMessage?, String?) -> Unit>()
+            callback(
+                FormInputFieldMessage(fieldKey = "comment", value = "hello"),
+                "https://example.com/form",
+            )
+        }
+
+        coordinator.requestSaveFocusedField(session)
+        runCurrent()
+
+        assertEquals("comment", host.saveDialogRequest?.fieldKey)
+        assertEquals("hello", host.saveDialogRequest?.value)
     }
 
     @Test
