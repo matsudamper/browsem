@@ -43,7 +43,7 @@ internal class DownloadManagementScreenViewModel(
     private val workManager = WorkManager.getInstance(application)
     private val downloadRepository = DownloadRepository(application)
     private val geckoDownloadManager = GeckoDownloadManager(application, downloadRepository)
-    private val callbacks = buildCallbacks()
+    private val screenCallbacks = buildScreenCallbacks()
 
     val eventHandler = Channel<(Event) -> Unit>(Channel.UNLIMITED)
 
@@ -54,7 +54,7 @@ internal class DownloadManagementScreenViewModel(
         DownloadManagementScreenUiState(
             isLoading = true,
             downloads = emptyList(),
-            callbacks = callbacks,
+            callbacks = screenCallbacks,
         ),
     ).also { uiStateFlow ->
         viewModelScope.launch {
@@ -66,20 +66,15 @@ internal class DownloadManagementScreenViewModel(
                         DownloadManagementScreenUiState(
                             isLoading = false,
                             downloads = items,
-                            callbacks = callbacks,
+                            callbacks = screenCallbacks,
                         )
                     }
                 }
         }
     }.asStateFlow()
 
-    private fun buildCallbacks() = DownloadManagementScreenUiState.Callbacks(
-        onCancel = { id -> cancelDownload(id) },
-        onPause = { id -> pauseDownload(id) },
-        onOpenFile = { fileUri -> openFile(fileUri) },
+    private fun buildScreenCallbacks() = DownloadManagementScreenUiState.Callbacks(
         onOpenDownloadsFolder = { openDownloadsFolder() },
-        onResume = { id -> resumeDownload(id) },
-        onOpenOriginPage = { url -> eventHandler.trySend { it.navigateToUrl(url) } },
         loadPreview = { fileUri -> loadPreview(fileUri) },
     )
 
@@ -278,6 +273,20 @@ internal class DownloadManagementScreenViewModel(
             status = uiStatus,
             enqueuedAt = enqueuedAt,
             originPageUrl = referrerUrl.ifBlank { null },
+            onCancel = { cancelDownload(workerId) },
+            onPause = { pauseDownload(workerId) },
+            onOpenFile = {
+                val completedUri = (uiStatus as? DownloadManagementScreenUiState.DownloadStatus.Completed)?.fileUri
+                if (completedUri != null) {
+                    openFile(completedUri)
+                }
+            },
+            onResume = { resumeDownload(workerId) },
+            onOpenOriginPage = {
+                referrerUrl.takeIf { it.isNotBlank() }?.let { url ->
+                    eventHandler.trySend { it.navigateToUrl(url) }
+                }
+            },
         )
     }
 

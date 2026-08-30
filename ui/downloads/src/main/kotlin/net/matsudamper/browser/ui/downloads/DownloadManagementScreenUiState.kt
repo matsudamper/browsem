@@ -86,19 +86,19 @@ data class DownloadManagementScreenUiState(
         val enqueuedAt: Long,
         /** ダウンロード開始時に表示していたページのURL。不明な場合は null */
         val originPageUrl: String?,
+        val onCancel: () -> Unit,
+        /** ダウンロード中のアイテムを一時停止する */
+        val onPause: () -> Unit,
+        val onOpenFile: () -> Unit,
+        /** 失敗したダウンロードを再開する */
+        val onResume: () -> Unit,
+        /** ダウンロード開始時のページを新しいタブで開く。originPageUrl が null の場合は no-op */
+        val onOpenOriginPage: () -> Unit,
     )
 
     @Stable
     data class Callbacks(
-        val onCancel: (UUID) -> Unit,
-        /** ダウンロード中のアイテムを一時停止する */
-        val onPause: (UUID) -> Unit,
-        val onOpenFile: (fileUri: String) -> Unit,
         val onOpenDownloadsFolder: () -> Unit,
-        /** 失敗したダウンロードを再開する */
-        val onResume: (UUID) -> Unit,
-        /** ダウンロード開始時のページを新しいタブで開く */
-        val onOpenOriginPage: (url: String) -> Unit,
         /** ファイル URI からプレビューを読み込む。サムネイルを取得できない場合は汎用アイコンを返す */
         val loadPreview: suspend (fileUri: String) -> Preview,
     )
