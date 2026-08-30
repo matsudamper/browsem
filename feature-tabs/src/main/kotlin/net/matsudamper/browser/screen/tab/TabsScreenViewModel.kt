@@ -416,9 +416,9 @@ class TabsScreenViewModel(
             when {
                 g.id == group.id -> g.copy(isDefault = newIsDefault)
 
+                // 他のグループのデフォルトを解除
                 newIsDefault -> g.copy(isDefault = false)
 
-                // 他のグループのデフォルトを解除
                 else -> g
             }
         }
