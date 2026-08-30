@@ -15,7 +15,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import net.matsudamper.browser.data.BackupProgress
 import net.matsudamper.browser.data.BackupRepository
-import net.matsudamper.browser.ui.settings.BackupProgressUiState
+import net.matsudamper.browser.ui.settings.backup.BackupProgressUiState
 
 @Stable
 internal class BackupProgressViewModel(

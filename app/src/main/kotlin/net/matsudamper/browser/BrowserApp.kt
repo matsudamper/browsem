@@ -12,6 +12,7 @@ import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.os.Process
+import net.matsudamper.browser.ui.settings.site.SiteSettingsScreen
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -106,17 +107,16 @@ import net.matsudamper.browser.ui.common.BrowserTheme
 import net.matsudamper.browser.ui.downloads.DownloadManagementScreen
 import net.matsudamper.browser.ui.extensions.ExtensionsScreen
 import net.matsudamper.browser.ui.history.HistoryScreen
-import net.matsudamper.browser.ui.settings.CrashLogDetailRoute
-import net.matsudamper.browser.ui.settings.CrashLogsRoute
-import net.matsudamper.browser.ui.settings.AddressEditScreen
-import net.matsudamper.browser.ui.settings.AddressesScreen
-import net.matsudamper.browser.ui.settings.BackupProgressScreen
-import net.matsudamper.browser.ui.settings.BackupProgressUiState
+import net.matsudamper.browser.ui.settings.crash.CrashLogDetailRoute
+import net.matsudamper.browser.ui.settings.crash.CrashLogsRoute
+import net.matsudamper.browser.ui.settings.address.AddressEditScreen
+import net.matsudamper.browser.ui.settings.address.AddressesScreen
+import net.matsudamper.browser.ui.settings.backup.BackupProgressScreen
+import net.matsudamper.browser.ui.settings.backup.BackupProgressUiState
 import net.matsudamper.browser.ui.settings.SettingsScreen
-import net.matsudamper.browser.ui.settings.SiteFormInputFieldRoute
-import net.matsudamper.browser.ui.settings.SiteFormInputPathRoute
-import net.matsudamper.browser.ui.settings.SiteFormInputPathsRoute
-import net.matsudamper.browser.ui.settings.SiteSettingsScreen
+import net.matsudamper.browser.ui.settings.form.SiteFormInputFieldScreen
+import net.matsudamper.browser.ui.settings.form.SiteFormInputPathScreen
+import net.matsudamper.browser.ui.settings.form.SiteFormInputPathsScreen
 import net.matsudamper.browser.ui.tabs.TabsScreen
 import org.koin.compose.koinInject
 import org.mozilla.geckoview.GeckoRuntime
@@ -421,7 +421,7 @@ internal fun BrowserAppShell(
                             })
                         }
                     }
-                    SiteFormInputPathsRoute(
+                    SiteFormInputPathsScreen(
                         uiState = pathsUiState,
                     )
                 }
@@ -466,7 +466,7 @@ internal fun BrowserAppShell(
                             })
                         }
                     }
-                    SiteFormInputPathRoute(
+                    SiteFormInputPathScreen(
                         uiState = pathUiState,
                     )
                 }
@@ -493,10 +493,14 @@ internal fun BrowserAppShell(
                                 override fun navigateBack() {
                                     outerBackStack.removeLastOrNull()
                                 }
+
+                                override fun navigateBackAfterDeleted() {
+                                    outerBackStack.removeLastOrNull()
+                                }
                             })
                         }
                     }
-                    SiteFormInputFieldRoute(
+                    SiteFormInputFieldScreen(
                         uiState = fieldUiState,
                     )
                 }
@@ -812,7 +816,10 @@ internal fun BrowserAppShell(
 
 @Stable
 internal class OuterNavActions(private val backStack: MutableList<NavKey>) {
-    fun add(destination: AppDestination) { backStack.add(destination) }
+    fun add(destination: AppDestination) {
+        backStack.add(destination)
+    }
+
     fun addIfAbsent(destination: AppDestination) {
         if (backStack.none { it == destination }) backStack.add(destination)
     }
@@ -918,6 +925,7 @@ private fun MainBrowserContent(
                         innerBackStack.firstOrNull() is BrowserNavDestination.Setup -> {
                             selectTab(tabId, null)
                         }
+
                         else -> {
                             val currentBrowserTab = innerBackStack.filterIsInstance<BrowserNavDestination.Browser>().lastOrNull()
                             if (currentBrowserTab == null || browserTabController.findTab(currentBrowserTab.tabId) == null) {

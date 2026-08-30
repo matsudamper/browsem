@@ -315,9 +315,41 @@ class AddressAutofillCoordinator(
 
 class AddressAutofillDelegate(
     private val coordinator: AddressAutofillCoordinator,
-    val wrapped: Autofill.Delegate?,
+    wrapped: Autofill.Delegate? = null,
 ) : Autofill.Delegate {
     private val mainHandler = Handler(Looper.getMainLooper())
+    var wrapped: Autofill.Delegate? = wrapped
+        private set
+
+    /** GeckoView の delegate を包み、View の再 attach 後にも Android Autofill を維持する。 */
+    fun bind(session: GeckoSession) {
+        val current = session.autofillDelegate
+        if (current !== this) {
+            wrapped = (current as? AddressAutofillDelegate)?.wrapped ?: current
+            session.autofillDelegate = this
+        }
+    }
+
+    /**
+     * GeckoView.releaseSession より先に delegate を外す。
+     *
+     * GeckoView は自身の delegate が直接設定されている場合しか解除しないため、ラップしたまま
+     * release すると、遅れて届いた onNodeAdd が session=null の GeckoView を参照してクラッシュする。
+     */
+    fun unbindBeforeViewRelease(session: GeckoSession) {
+        if (session.autofillDelegate === this) {
+            session.autofillDelegate = null
+        }
+        wrapped = null
+    }
+
+    /** Composable の破棄時は、ラップ前の delegate をセッションへ戻す。 */
+    fun restoreWrapped(session: GeckoSession) {
+        if (session.autofillDelegate === this) {
+            session.autofillDelegate = wrapped
+        }
+        wrapped = null
+    }
 
     override fun onSessionStart(session: GeckoSession) {
         wrapped?.onSessionStart(session)

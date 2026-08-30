@@ -1,4 +1,4 @@
-package net.matsudamper.browser.ui.settings
+package net.matsudamper.browser.ui.settings.site
 
 import androidx.annotation.DrawableRes
 import androidx.compose.foundation.layout.Column
@@ -40,6 +40,10 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import net.matsudamper.browser.data.SiteGeolocationState
 import net.matsudamper.browser.data.SitePermissionState
+import net.matsudamper.browser.ui.settings.CollapsibleSettingSection
+import net.matsudamper.browser.ui.settings.R
+import net.matsudamper.browser.ui.settings.SettingSection
+import net.matsudamper.browser.ui.settings.SettingsRadioOption
 import net.matsudamper.browser.resources.R as ResourcesR
 
 sealed interface SiteSettingsScreenTestTags {
@@ -110,13 +114,24 @@ fun SiteSettingsScreen(
             Spacer(Modifier.height(12.dp))
 
             if (uiState.tlsCertificate != null) {
-                CollapsibleSettingSection(title = "TLS証明書") {
+                CollapsibleSettingSection(
+                    title = "TLS証明書"
+                ) {
                     when (val certificate = uiState.tlsCertificate) {
                         is SiteSettingsScreenUiState.TlsCertificate.Available -> {
-                            CertificateInfoRow(label = "発行先", value = certificate.subjectCommonName)
+                            CertificateInfoRow(
+                                label = "発行先",
+                                value = certificate.subjectCommonName
+                            )
                             CertificateInfoRow(label = "発行者", value = certificate.issuer)
-                            CertificateInfoRow(label = "有効期間の開始", value = certificate.validFrom)
-                            CertificateInfoRow(label = "有効期間の終了", value = certificate.validUntil)
+                            CertificateInfoRow(
+                                label = "有効期間の開始",
+                                value = certificate.validFrom
+                            )
+                            CertificateInfoRow(
+                                label = "有効期間の終了",
+                                value = certificate.validUntil
+                            )
                             CertificateInfoRow(
                                 label = "SHA-256 フィンガープリント",
                                 value = certificate.sha256Fingerprint,
@@ -577,7 +592,7 @@ private fun SiteSettingsScreenTlsCertificateExpandedPreview() {
             CertificateInfoRow(
                 label = "SHA-256 フィンガープリント",
                 value = "AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99:" +
-                    "AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99",
+                        "AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99",
             )
         }
     }

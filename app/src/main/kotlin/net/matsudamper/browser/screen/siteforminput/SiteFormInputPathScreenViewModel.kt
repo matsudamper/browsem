@@ -13,9 +13,8 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import net.matsudamper.browser.data.forminput.FormInputOrigin
 import net.matsudamper.browser.data.forminput.FormInputRepository
-import net.matsudamper.browser.data.forminput.displayFormInputOrigin
 import net.matsudamper.browser.data.forminput.displayFormInputPath
-import net.matsudamper.browser.ui.settings.SiteFormInputPathScreenUiState
+import net.matsudamper.browser.ui.settings.form.SiteFormInputPathScreenUiState
 
 @Stable
 internal class SiteFormInputPathScreenViewModel(
@@ -83,7 +82,6 @@ internal class SiteFormInputPathScreenViewModel(
     val uiState: StateFlow<SiteFormInputPathScreenUiState> = MutableStateFlow(
         SiteFormInputPathScreenUiState(
             callbacks = callbacks,
-            displayOrigin = displayFormInputOrigin(origin),
             path = path,
             displayPath = displayFormInputPath(path),
             fields = emptyList(),
@@ -98,7 +96,6 @@ internal class SiteFormInputPathScreenViewModel(
             ) { fields, dialogState ->
                 SiteFormInputPathScreenUiState(
                     callbacks = callbacks,
-                    displayOrigin = displayFormInputOrigin(origin),
                     path = path,
                     displayPath = displayFormInputPath(path),
                     fields = fields.map { field ->

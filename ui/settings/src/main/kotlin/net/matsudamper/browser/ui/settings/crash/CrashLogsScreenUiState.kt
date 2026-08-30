@@ -1,4 +1,4 @@
-package net.matsudamper.browser.ui.settings
+package net.matsudamper.browser.ui.settings.crash
 
 import androidx.compose.runtime.Stable
 import net.matsudamper.browser.data.crashlog.CrashLogListItem
