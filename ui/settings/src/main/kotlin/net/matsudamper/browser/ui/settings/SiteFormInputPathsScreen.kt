@@ -1,20 +1,28 @@
 package net.matsudamper.browser.ui.settings
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.calculateEndPadding
+import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CornerSize
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
@@ -25,7 +33,9 @@ sealed interface SiteFormInputPathsScreenTestTags {
     val id: String
     val testTag get() = "${SiteFormInputPathsScreenTestTags::class.java.name}#$id"
 
-    data object Root : SiteFormInputPathsScreenTestTags { override val id = "root" }
+    data object Root : SiteFormInputPathsScreenTestTags {
+        override val id = "root"
+    }
 
     data class PathEntry(val path: String) : SiteFormInputPathsScreenTestTags {
         override val id = "path_${path.replace('/', '_')}"
@@ -54,37 +64,83 @@ internal fun SiteFormInputPathsScreen(
             )
         },
     ) { paddingValues ->
-        if (uiState.paths.isEmpty()) {
-            Text(
-                text = "保存されたフォーム入力はありません",
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier
-                    .padding(paddingValues)
-                    .padding(16.dp),
+        Column(
+            modifier = Modifier.padding(
+                top = paddingValues.calculateTopPadding(),
             )
-        } else {
-            LazyColumn(
+        ) {
+            val horizontalPadding = PaddingValues(
+                start = paddingValues.calculateStartPadding(LocalLayoutDirection.current),
+                end = paddingValues.calculateEndPadding(LocalLayoutDirection.current),
+            )
+            val itemHorizontalPadding = 16.dp
+            Text(
                 modifier = Modifier
-                    .padding(paddingValues)
-                    .fillMaxSize(),
+                    .padding(horizontalPadding)
+                    .padding(horizontal = itemHorizontalPadding, vertical = 8.dp),
+                text = uiState.displayOrigin,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                modifier = Modifier
+                    .padding(horizontalPadding)
+                    .padding(itemHorizontalPadding),
+                text = "path一覧",
+            )
+            val containerShape = MaterialTheme.shapes.extraLarge
+            Surface(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontalPadding),
+                shape = containerShape.copy(
+                    bottomEnd = CornerSize(0.dp),
+                    bottomStart = CornerSize(0.dp)
+                ),
+                color = MaterialTheme.colorScheme.surfaceVariant,
             ) {
-                item {
-                    Text(
-                        text = uiState.displayOrigin,
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                    )
-                }
-                items(uiState.paths, key = { it.path }) { entry ->
-                    SiteFormInputPathListItem(
-                        entry = entry,
-                        onOpen = { uiState.callbacks.openPath(entry.path) },
-                        modifier = Modifier.testTag(
-                            SiteFormInputPathsScreenTestTags.PathEntry(entry.path).testTag,
+                val paddingValues = PaddingValues(
+                    top = 0.dp,
+                    bottom = paddingValues.calculateBottomPadding(),
+                    start = paddingValues.calculateStartPadding(LocalLayoutDirection.current),
+                    end = paddingValues.calculateEndPadding(LocalLayoutDirection.current),
+                )
+                if (uiState.paths.isEmpty()) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            modifier = Modifier
+                                .padding(
+                                    horizontal = itemHorizontalPadding,
+                                ),
+                            text = "保存されたフォーム入力はありません",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxSize(),
+                        contentPadding = PaddingValues(
+                            bottom = paddingValues.calculateBottomPadding(),
                         ),
-                    )
+                    ) {
+                        items(uiState.paths, key = { it.path }) { entry ->
+                            SiteFormInputPathListItem(
+                                entry = entry,
+                                onOpen = { uiState.callbacks.openPath(entry.path) },
+                                modifier = Modifier
+                                    .testTag(SiteFormInputPathsScreenTestTags.PathEntry(entry.path).testTag)
+                                    .padding(
+                                        horizontal = itemHorizontalPadding,
+                                        vertical = 8.dp,
+                                    ),
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -97,18 +153,25 @@ private fun SiteFormInputPathListItem(
     onOpen: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    ListItem(
-        modifier = modifier.clickable(onClick = onOpen),
-        headlineContent = { Text(entry.displayPath) },
-        supportingContent = {
-            Text("${entry.fieldCount} 件のフィールド")
-        },
-    )
+    Column(
+        modifier = modifier.clickable {
+            onOpen()
+        }
+    ) {
+        Text(
+            text = entry.displayPath,
+            style = MaterialTheme.typography.titleMedium,
+        )
+        Text(
+            text = "${entry.fieldCount} 件のフィールド",
+            style = MaterialTheme.typography.bodySmall,
+        )
+    }
 }
 
 @Preview(showBackground = true)
 @Composable
-private fun SiteFormInputPathsScreenPreview() {
+private fun Preview() {
     MaterialTheme {
         SiteFormInputPathsScreen(
             uiState = SiteFormInputPathsScreenUiState(
@@ -129,6 +192,23 @@ private fun SiteFormInputPathsScreenPreview() {
                         fieldCount = 1,
                     ),
                 ),
+            ),
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun EmptyPreview() {
+    MaterialTheme {
+        SiteFormInputPathsScreen(
+            uiState = SiteFormInputPathsScreenUiState(
+                callbacks = object : SiteFormInputPathsScreenUiState.Callbacks {
+                    override fun navigateBack() = Unit
+                    override fun openPath(path: String) = Unit
+                },
+                displayOrigin = "https://example.com",
+                paths = listOf(),
             ),
         )
     }
