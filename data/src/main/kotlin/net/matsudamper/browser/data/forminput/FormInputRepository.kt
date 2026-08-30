@@ -247,11 +247,11 @@ class FormInputRepository(context: Context) {
         enabledFieldKeys: Set<String>,
     ) {
         val origin = pageKey.origin()
-        if (!isPathEnabled(origin, pageKey.path)) return
         fields.forEach { field ->
             if (field.fieldKey.isBlank()) return@forEach
             setFieldEnabled(origin, pageKey.path, field.fieldKey, field.fieldKey in enabledFieldKeys)
         }
+        if (!isPathEnabled(origin, pageKey.path)) return
         saveFields(
             pageKey = pageKey,
             fields = fields.filter { field ->
