@@ -1187,6 +1187,11 @@ private fun MainBrowserContent(
                                 }
 
                                 override fun selectTab(tabId: String) {
+                                    browserTabController.selectTab(tabId)
+                                    navController.replaceCurrentBrowserTab(tabId)
+                                }
+
+                                override fun openTab(tabId: String) {
                                     selectTab(tabId, null)
                                 }
 

@@ -656,6 +656,7 @@ class TabsScreenViewModelTest {
     private class RecordingEvent : TabsScreenViewModel.Event {
         val closedTabIds = mutableListOf<String>()
         val selectedTabIds = mutableListOf<String>()
+        val openedTabIds = mutableListOf<String>()
 
         override fun onTabClosed(closedTabId: String, nextSelectedTabId: String?) {
             closedTabIds += closedTabId
@@ -663,6 +664,10 @@ class TabsScreenViewModelTest {
 
         override fun selectTab(tabId: String) {
             selectedTabIds += tabId
+        }
+
+        override fun openTab(tabId: String) {
+            openedTabIds += tabId
         }
 
         override fun openNewTab(currentGroupId: TabGroupId?) = Unit
@@ -829,6 +834,30 @@ class TabsScreenViewModelTest {
             TabGroupId("g1"),
             repo.assignedTabs.lastOrNull { it.first == "tab-1" }?.second,
         )
+    }
+
+    @Test
+    fun selectingTabFromGrid_emitsOpenTab_notSelectTab() = runTest(testDispatcher) {
+        val tabStore = FakeTabStore()
+        val repo = FakeTabGroupRepository()
+        val recorder = RecordingEvent()
+
+        val group = TabGroupData(TabGroupId("g1"), "グループ1")
+        repo.setGroups(listOf(group))
+
+        tabStore.addTab("tab-1")
+        tabStore.setSelectedTabId("tab-1")
+        repo.assignTabToGroup("tab-1", group.id)
+
+        val viewModel = buildViewModel(tabStore, repo, this)
+        advanceUntilIdle()
+
+        val loaded = viewModel.uiState.value.loadingState as TabsScreenUiState.LoadingState.Loaded
+        loaded.groupedTabs.flatten().first { it.id == "tab-1" }.listener.onSelect()
+        viewModel.drainEvents(recorder)
+
+        assertEquals(listOf("tab-1"), recorder.openedTabIds)
+        assertTrue(recorder.selectedTabIds.isEmpty())
     }
 
     /**

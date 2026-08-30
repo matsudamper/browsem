@@ -162,6 +162,9 @@ class TabsScreenViewModel(
         /** タブ一覧を開いたまま、背後の Browser の選択タブだけを切り替える */
         fun selectTab(tabId: String)
 
+        /** タブ一覧からタブを選択し、ブラウザ画面へ戻る */
+        fun openTab(tabId: String)
+
         /** 現在表示中のグループに新規タブを追加する */
         fun openNewTab(currentGroupId: TabGroupId?)
     }
@@ -367,7 +370,7 @@ class TabsScreenViewModel(
             isPlaying = tab.id in playingIds,
             listener = object : TabsScreenTabData.Listener {
                 override fun onSelect() {
-                    eventHandler.trySend { it.selectTab(tab.id) }
+                    eventHandler.trySend { it.openTab(tab.id) }
                 }
 
                 override fun onClose() {
