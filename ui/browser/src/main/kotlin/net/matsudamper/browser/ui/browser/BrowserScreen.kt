@@ -116,7 +116,7 @@ fun BrowserScreen(
         // リンクから開いたタブ（opener あり）で、まだページ内を遷移しておらず
         // (canGoBack=false)、前のタブが opener 本人である場合のみ予測型バックを有効化する。
         // この状態でのバックは「タブを閉じて opener へ戻る」ため、前のタブへスライドさせる。
-        val backToOpenerEnabled = backToOpenerListener != null
+        val backToOpenerEnabled = backToOpenerListener != null && !selectedTab.canGoBack
         PredictiveBackHandler(enabled = backToOpenerEnabled) { progress ->
             try {
                 progress.collect { backEvent ->

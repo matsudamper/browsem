@@ -92,12 +92,14 @@ class BrowserScreenViewModel(
                             },
                         )
                     }
+                    // canGoBack の判定は BrowserScreen 側で selectedTab を Compose 経由で読む。
+                    // ViewModelState の更新だけでは canGoBack 単体の変化を拾えないため、
+                    // ここでは opener 関係のみでリスナーを生成する。
                     val backToOpenerListener: BrowserScreenUiState.SwipePreviewUiState.BackToOpenerListener? =
                         if (
                             previousTab != null &&
                             selectedTab?.openerTabId != null &&
-                            previousTab.tab.tabId == selectedTab.openerTabId &&
-                            selectedTab.canGoBack.not()
+                            previousTab.tab.tabId == selectedTab.openerTabId
                         ) {
                             object : BrowserScreenUiState.SwipePreviewUiState.BackToOpenerListener {
                                 override fun onBackToOpener() {
