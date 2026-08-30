@@ -912,7 +912,6 @@ private fun PreviewToolbarMenuContentLoading() {
                 onResetPageZoom = {},
                 extensionActions = emptyList(),
                 extensionActionScrollState = ScrollState(initial = 0),
-                onExtensionActionClick = {},
                 onExtensionActionMove = { _, _ -> },
                 onExtensionActionMoveEnd = {},
                 onExtensionActionMoveCancel = {},
