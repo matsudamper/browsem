@@ -46,8 +46,6 @@ fun BrowserScreen(
     homepageUrl: String,
     uiState: BrowserScreenUiState,
     browserTabController: BrowserTabController,
-    onSelectTab: (String) -> Unit,
-    onBackToOpenerTab: (tabId: String) -> Unit,
     previewHeaderContent: @Composable (modifier: Modifier, tab: BrowserTab, tabCount: Int?) -> Unit,
     browserTabContent: @Composable (
         modifier: Modifier,
@@ -60,6 +58,7 @@ fun BrowserScreen(
 ) {
     val prevTab = uiState.swipePreview.previousTab
     val nextTab = uiState.swipePreview.nextTab
+    val backToOpenerListener = uiState.swipePreview.backToOpenerListener
 
     val selectedTab = browserTabController.findTab(tabId)
     LaunchedEffect(tabId, homepageUrl, selectedTab) {
@@ -117,19 +116,14 @@ fun BrowserScreen(
         // リンクから開いたタブ（opener あり）で、まだページ内を遷移しておらず
         // (canGoBack=false)、前のタブが opener 本人である場合のみ予測型バックを有効化する。
         // この状態でのバックは「タブを閉じて opener へ戻る」ため、前のタブへスライドさせる。
-        val backToOpenerEnabled = prevTab != null &&
-            selectedTab.openerTabId != null &&
-            prevTab.tabId == selectedTab.openerTabId &&
-            !selectedTab.canGoBack
+        val backToOpenerEnabled = backToOpenerListener != null && !selectedTab.canGoBack
         PredictiveBackHandler(enabled = backToOpenerEnabled) { progress ->
             try {
-                // ジェスチャーの進捗に合わせて現在タブを右へずらし、左から opener タブを覗かせる
                 progress.collect { backEvent ->
                     swipeOffset.snapTo(pageWidthPx * backEvent.progress)
                 }
-                // コミット：opener タブを画面いっぱいまでスライドさせてから現在タブを閉じて戻る
                 swipeOffset.animateTo(pageWidthPx)
-                onBackToOpenerTab(selectedTab.tabId)
+                backToOpenerListener?.onBackToOpener()
             } catch (e: CancellationException) {
                 // キャンセル：元の位置へ戻す（handler のコルーチンは終了するため別スコープで実行）
                 coroutineScope.launch { swipeOffset.animateTo(0f) }
@@ -138,9 +132,9 @@ fun BrowserScreen(
         }
 
         // 前のタブのプレビュー画像（右スワイプ時に左から表示）
-        prevTab?.let { tab ->
+        prevTab?.let { preview ->
             TabPreviewPage(
-                tab = tab,
+                tab = preview.tab,
                 tabCount = uiState.groupTabCount,
                 previewHeaderContent = previewHeaderContent,
                 modifier = Modifier
@@ -150,9 +144,9 @@ fun BrowserScreen(
         }
 
         // 次のタブのプレビュー画像（左スワイプ時に右から表示）
-        nextTab?.let { tab ->
+        nextTab?.let { preview ->
             TabPreviewPage(
-                tab = tab,
+                tab = preview.tab,
                 tabCount = uiState.groupTabCount,
                 previewHeaderContent = previewHeaderContent,
                 modifier = Modifier
@@ -182,14 +176,14 @@ fun BrowserScreen(
                     swipeOffset.value > swipeThreshold && prevTab != null -> {
                         coroutineScope.launch {
                             swipeOffset.animateTo(pageWidthPx)
-                            onSelectTab(prevTab.tabId)
+                            prevTab.listener.onSelect()
                         }
                     }
 
                     swipeOffset.value < -swipeThreshold && nextTab != null -> {
                         coroutineScope.launch {
                             swipeOffset.animateTo(-pageWidthPx)
-                            onSelectTab(nextTab.tabId)
+                            nextTab.listener.onSelect()
                         }
                     }
 

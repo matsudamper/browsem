@@ -1079,7 +1079,6 @@ internal fun GeckoBrowserTab(
                     onResetPageZoom = state::resetPageZoom,
                     extensionActions = state.extensionActions,
                     extensionActionScrollState = state.extensionActionScrollState,
-                    onExtensionActionClick = state::onExtensionActionClick,
                     onExtensionActionMove = state::onExtensionActionMove,
                     onExtensionActionMoveEnd = state::onExtensionActionMoveEnd,
                     onExtensionActionMoveCancel = state::onExtensionActionMoveCancel,

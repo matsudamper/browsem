@@ -26,7 +26,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import net.matsudamper.browser.data.history.HistoryEntry
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -76,11 +75,7 @@ fun HistoryScreen(
 
             LazyColumn(modifier = Modifier.fillMaxSize()) {
                 items(uiState.entries, key = { it.id }) { entry ->
-                    HistoryItem(
-                        entry = entry,
-                        onClick = { uiState.callbacks.onClickEntry(entry.url) },
-                        onDelete = { uiState.callbacks.onDeleteEntry(entry.id) },
-                    )
+                    HistoryItem(entry = entry)
                 }
             }
         }
@@ -107,9 +102,7 @@ fun HistoryScreen(
 
 @Composable
 private fun HistoryItem(
-    entry: HistoryEntry,
-    onClick: () -> Unit,
-    onDelete: () -> Unit,
+    entry: HistoryScreenUiState.EntryItem,
 ) {
     val dateFormat = remember { SimpleDateFormat("yyyy/MM/dd HH:mm", Locale.getDefault()) }
 
@@ -139,13 +132,13 @@ private fun HistoryItem(
             }
         },
         trailingContent = {
-            IconButton(onClick = onDelete) {
+            IconButton(onClick = entry.listener::onDelete) {
                 Icon(
                     imageVector = Icons.Default.Close,
                     contentDescription = "削除",
                 )
             }
         },
-        modifier = Modifier.clickable(onClick = onClick),
+        modifier = Modifier.clickable(onClick = entry.listener::onClick),
     )
 }
