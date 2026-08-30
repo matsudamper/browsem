@@ -150,6 +150,7 @@ class MockLocationWebExtension {
                                         Log.w(TAG, "getConfig 応答に失敗", e)
                                     }
                                 }
+
                                 // ページが位置情報を要求したことの通知。
                                 // 「サイトの設定」画面に位置情報の項目を表示するために記録する
                                 "geolocationRequested" -> {

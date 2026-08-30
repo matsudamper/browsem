@@ -281,9 +281,11 @@ private class GeckoMediaPlayer : SimpleBasePlayer(Looper.getMainLooper()) {
             Player.COMMAND_SEEK_TO_NEXT, Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM -> {
                 MediaSessionBridge.nextTrack()
             }
+
             Player.COMMAND_SEEK_TO_PREVIOUS, Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM -> {
                 MediaSessionBridge.previousTrack()
             }
+
             else -> {
                 // 秒単位に変換してGeckoViewに渡す
                 MediaSessionBridge.seekTo(positionMs / 1000.0)

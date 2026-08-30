@@ -516,7 +516,9 @@ internal fun findGroupDropTargetIndex(
     val sorted = slots.sortedBy { it.left }
     val target = when {
         centerX < sorted.first().left -> sorted.first()
+
         centerX > sorted.last().right -> sorted.last()
+
         else -> sorted.firstOrNull { centerX >= it.left && centerX <= it.right }
             // スロット間に隙間がある場合は最も近いスロットを選ぶ
             ?: sorted.minByOrNull { minOf(abs(centerX - it.left), abs(centerX - it.right)) }
@@ -586,6 +588,7 @@ private fun GroupBookmarkTab(
                 .graphicsLayer {
                     shadowElevation = when {
                         isDropTarget -> with(density) { 12.dp.toPx() }
+
                         else -> {
                             val minShadow = with(density) { 2.dp.toPx() }
                             val maxShadow = with(density) { 8.dp.toPx() }

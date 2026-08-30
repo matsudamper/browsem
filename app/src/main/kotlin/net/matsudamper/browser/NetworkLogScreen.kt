@@ -381,7 +381,9 @@ private fun StatusBadge(
 ) {
     val color = when (statusKind) {
         NetworkLogUiState.StatusKind.Success -> MaterialTheme.colorScheme.primary
+
         NetworkLogUiState.StatusKind.Redirect -> MaterialTheme.colorScheme.tertiary
+
         NetworkLogUiState.StatusKind.ClientError,
         NetworkLogUiState.StatusKind.ServerError,
         NetworkLogUiState.StatusKind.Failed,

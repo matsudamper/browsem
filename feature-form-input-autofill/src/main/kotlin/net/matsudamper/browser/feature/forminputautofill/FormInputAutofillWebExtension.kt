@@ -140,9 +140,11 @@ class FormInputAutofillWebExtension {
                                         listener.onFieldFocus(fieldKey, pageUrl)
                                     }
                                 }
+
                                 "field-blur" -> {
                                     mainHandler.post { listener.onFieldBlur() }
                                 }
+
                                 "form-submit" -> {
                                     val pageUrl = json.optString("pageUrl")
                                     val fields = parseFields(json.optJSONArray("fields"))
@@ -150,6 +152,7 @@ class FormInputAutofillWebExtension {
                                         listener.onFormSubmit(pageUrl, fields)
                                     }
                                 }
+
                                 "focused-field-response" -> {
                                     val requestId = json.optString("requestId")
                                     val callback = focusedFieldCallbacks.remove(requestId) ?: return
@@ -165,6 +168,7 @@ class FormInputAutofillWebExtension {
                                         callback(field, pageUrl.takeIf { it.isNotBlank() })
                                     }
                                 }
+
                                 "field-long-press" -> {
                                     val fieldKey = json.optString("fieldKey")
                                     val pageUrl = json.optString("pageUrl")

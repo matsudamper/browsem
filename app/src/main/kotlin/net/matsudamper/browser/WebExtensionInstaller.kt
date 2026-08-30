@@ -258,6 +258,7 @@ internal class WebExtensionInstaller(
         val header = when (requestKind) {
             PermissionRequestKind.UPDATE ->
                 "\"$extensionName\" requests new permissions for an update."
+
             PermissionRequestKind.OPTIONAL ->
                 "\"$extensionName\" requests additional permissions."
         }

@@ -157,13 +157,17 @@ internal class DownloadManagementScreenViewModel(
         val normalizedMimeType = mimeType?.lowercase(Locale.ROOT)
         when {
             normalizedMimeType == null -> Unit
+
             normalizedMimeType.startsWith("video/") -> {
                 return DownloadManagementScreenUiState.DownloadFileType.VIDEO
             }
+
             normalizedMimeType.startsWith("audio/") -> {
                 return DownloadManagementScreenUiState.DownloadFileType.AUDIO
             }
+
             normalizedMimeType == MIME_TYPE_PDF -> return DownloadManagementScreenUiState.DownloadFileType.PDF
+
             normalizedMimeType in ARCHIVE_MIME_TYPES -> {
                 return DownloadManagementScreenUiState.DownloadFileType.ARCHIVE
             }
@@ -233,6 +237,7 @@ internal class DownloadManagementScreenViewModel(
                     )
                 }
             }
+
             DownloadRecordStatus.FAILED -> {
                 DownloadManagementScreenUiState.DownloadStatus.Failed(
                     // blob: URL は再取得できないため、部分ファイルがあっても再開ボタンを出さない
@@ -240,6 +245,7 @@ internal class DownloadManagementScreenViewModel(
                     reason = failureReason,
                 )
             }
+
             DownloadRecordStatus.ENQUEUED -> {
                 DownloadManagementScreenUiState.DownloadStatus.InProgress(
                     progress = 0,
@@ -248,6 +254,7 @@ internal class DownloadManagementScreenViewModel(
                     isIndeterminate = true,
                 )
             }
+
             DownloadRecordStatus.RUNNING -> {
                 DownloadManagementScreenUiState.DownloadStatus.InProgress(
                     progress = progress,
@@ -256,7 +263,9 @@ internal class DownloadManagementScreenViewModel(
                     isIndeterminate = contentLength <= 0,
                 )
             }
+
             DownloadRecordStatus.CANCELLED -> DownloadManagementScreenUiState.DownloadStatus.Cancelled
+
             DownloadRecordStatus.PAUSED -> {
                 DownloadManagementScreenUiState.DownloadStatus.Paused(
                     progress = progress,

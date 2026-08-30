@@ -126,6 +126,7 @@ internal fun BrowserContentHost(
                                     }
                                     true
                                 }
+
                                 MotionEvent.ACTION_POINTER_DOWN -> {
                                     gestureHadMultiTouch = true
                                     swipeRefreshScrollEnabled = false
@@ -133,6 +134,7 @@ internal fun BrowserContentHost(
                                     state.onContentTouchMoved()
                                     false
                                 }
+
                                 MotionEvent.ACTION_MOVE -> {
                                     val movedBeyondSlop =
                                         abs(event.x - gestureDownX) > touchSlop ||
@@ -142,10 +144,12 @@ internal fun BrowserContentHost(
                                     }
                                     false
                                 }
+
                                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                                     state.onContentTouchEnd()
                                     false
                                 }
+
                                 else -> false
                             }
                         }

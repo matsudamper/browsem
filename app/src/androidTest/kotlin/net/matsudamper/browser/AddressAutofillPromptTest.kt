@@ -763,6 +763,7 @@ class AddressAutofillPromptTest {
                     GeckoPreferenceController.PREF_BRANCH_USER,
                 )
             }
+
             is String -> awaitGeckoResult {
                 GeckoPreferenceController.setGeckoPref(
                     name,
@@ -770,6 +771,7 @@ class AddressAutofillPromptTest {
                     GeckoPreferenceController.PREF_BRANCH_USER,
                 )
             }
+
             is Int -> awaitGeckoResult {
                 GeckoPreferenceController.setGeckoPref(
                     name,
@@ -792,6 +794,7 @@ class AddressAutofillPromptTest {
                         GeckoPreferenceController.PREF_BRANCH_USER,
                     )
                 }
+
                 is String -> awaitGeckoResult {
                     GeckoPreferenceController.setGeckoPref(
                         saved.name,
@@ -799,6 +802,7 @@ class AddressAutofillPromptTest {
                         GeckoPreferenceController.PREF_BRANCH_USER,
                     )
                 }
+
                 is Int -> awaitGeckoResult {
                     GeckoPreferenceController.setGeckoPref(
                         saved.name,

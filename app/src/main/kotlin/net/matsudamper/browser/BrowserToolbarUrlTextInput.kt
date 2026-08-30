@@ -124,8 +124,10 @@ internal fun UrlTextInput(
                         val targetScroll = when {
                             cursorRect.right.toInt() > currentScroll + viewportWidth ->
                                 (cursorRect.right.toInt() - viewportWidth).coerceAtLeast(0)
+
                             cursorRect.left.toInt() < currentScroll ->
                                 cursorRect.left.toInt().coerceAtLeast(0)
+
                             else -> return@LaunchedEffect
                         }
                         scrollState.scrollTo(targetScroll)

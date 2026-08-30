@@ -326,6 +326,7 @@ internal fun BrowserTabDialogLayer(
                     onDismiss = dialogState::dismissDateTimePrompt,
                 )
             }
+
             GeckoSession.PromptDelegate.DateTimePrompt.Type.TIME -> {
                 TimeInputDialog(
                     defaultValue = prompt.defaultValue,
@@ -333,6 +334,7 @@ internal fun BrowserTabDialogLayer(
                     onDismiss = dialogState::dismissDateTimePrompt,
                 )
             }
+
             GeckoSession.PromptDelegate.DateTimePrompt.Type.DATETIME_LOCAL -> {
                 DateTimeLocalInputDialog(
                     defaultValue = prompt.defaultValue,
@@ -340,6 +342,7 @@ internal fun BrowserTabDialogLayer(
                     onDismiss = dialogState::dismissDateTimePrompt,
                 )
             }
+
             else -> {
                 // MONTH, WEEK: テキスト入力で対応
                 var dateTimeText by remember(prompt) { mutableStateOf(prompt.defaultValue ?: "") }
@@ -656,6 +659,7 @@ private fun ContextMenuDialog(
                             onCopyLink = onCopyLink,
                         )
                     }
+
                     is BrowserTabScreenState.ContextMenuState.Image -> {
                         ImageActionButtons(
                             srcUrl = menu.srcUrl,
@@ -665,6 +669,7 @@ private fun ContextMenuDialog(
                             onDownloadImage = onDownloadImage,
                         )
                     }
+
                     is BrowserTabScreenState.ContextMenuState.LinkWithImage -> {
                         LinkActionButtons(
                             url = menu.url,
@@ -971,6 +976,7 @@ private fun DateTimeLocalInputDialog(
                 DatePicker(state = datePickerState)
             }
         }
+
         DateTimeLocalStep.TIME -> {
             AlertDialog(
                 onDismissRequest = onDismiss,

@@ -151,6 +151,7 @@ class MainActivity : ComponentActivity() {
             ) -> {
                 consumeOpenDownloadsIntent(intent)
             }
+
             OpenDownloadsIntentPolicy.shouldDispatch(
                 intent.action,
                 openDownloadsIntentRequestId,

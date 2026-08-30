@@ -341,6 +341,7 @@ fun SiteSettingsScreen(
             SiteSettingsScreenUiState.ClearDataType.Cookie ->
                 "「${uiState.host}」のCookieとサイトデータを削除しますか？" +
                     "このサイトからログアウトされます。この操作は取り消せません。"
+
             SiteSettingsScreenUiState.ClearDataType.Cache ->
                 "「${uiState.host}」のキャッシュを削除しますか？この操作は取り消せません。"
         }
