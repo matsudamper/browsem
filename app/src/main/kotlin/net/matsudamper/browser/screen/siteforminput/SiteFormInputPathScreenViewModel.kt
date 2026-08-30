@@ -13,7 +13,6 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import net.matsudamper.browser.data.forminput.FormInputOrigin
 import net.matsudamper.browser.data.forminput.FormInputRepository
-import net.matsudamper.browser.data.forminput.displayFormInputOrigin
 import net.matsudamper.browser.data.forminput.displayFormInputPath
 import net.matsudamper.browser.ui.settings.form.SiteFormInputPathScreenUiState
 
@@ -33,7 +32,6 @@ internal class SiteFormInputPathScreenViewModel(
 
     private data class ViewModelState(
         val deletePathConfirm: Boolean = false,
-        val deleteFieldConfirm: String? = null,
     )
 
     private val viewModelStateFlow = MutableStateFlow(ViewModelState())
@@ -45,22 +43,6 @@ internal class SiteFormInputPathScreenViewModel(
 
         override fun openField(fieldKey: String) {
             eventHandler.trySend { it.navigateToField(fieldKey) }
-        }
-
-        override fun requestDeleteField(fieldKey: String) {
-            viewModelStateFlow.update { it.copy(deleteFieldConfirm = fieldKey) }
-        }
-
-        override fun confirmDeleteField() {
-            val fieldKey = viewModelStateFlow.value.deleteFieldConfirm ?: return
-            viewModelStateFlow.update { it.copy(deleteFieldConfirm = null) }
-            viewModelScope.launch {
-                formInputRepository.deleteField(origin, path, fieldKey)
-            }
-        }
-
-        override fun dismissDeleteFieldConfirm() {
-            viewModelStateFlow.update { it.copy(deleteFieldConfirm = null) }
         }
 
         override fun requestDeletePath() {
@@ -83,12 +65,10 @@ internal class SiteFormInputPathScreenViewModel(
     val uiState: StateFlow<SiteFormInputPathScreenUiState> = MutableStateFlow(
         SiteFormInputPathScreenUiState(
             callbacks = callbacks,
-            displayOrigin = displayFormInputOrigin(origin),
             path = path,
             displayPath = displayFormInputPath(path),
             fields = emptyList(),
             deletePathConfirm = false,
-            deleteFieldConfirm = null,
         ),
     ).also { uiStateFlow ->
         viewModelScope.launch {
@@ -98,7 +78,6 @@ internal class SiteFormInputPathScreenViewModel(
             ) { fields, dialogState ->
                 SiteFormInputPathScreenUiState(
                     callbacks = callbacks,
-                    displayOrigin = displayFormInputOrigin(origin),
                     path = path,
                     displayPath = displayFormInputPath(path),
                     fields = fields.map { field ->
@@ -108,7 +87,6 @@ internal class SiteFormInputPathScreenViewModel(
                         )
                     },
                     deletePathConfirm = dialogState.deletePathConfirm,
-                    deleteFieldConfirm = dialogState.deleteFieldConfirm,
                 )
             }.collectLatest { state ->
                 uiStateFlow.value = state

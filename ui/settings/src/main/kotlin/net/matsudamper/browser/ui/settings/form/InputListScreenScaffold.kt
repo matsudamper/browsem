@@ -2,9 +2,12 @@ package net.matsudamper.browser.ui.settings.form
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.CornerSize
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -16,6 +19,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.platform.LocalDensity
@@ -32,6 +36,7 @@ internal fun InputListScreenScaffold(
     listTitle: String,
     onClickBack: () -> Unit,
     modifier: Modifier = Modifier,
+    pageSubTitleAction: (@Composable () -> Unit)? = null,
     content: @Composable (PaddingValues) -> Unit,
 ) {
     Scaffold(
@@ -60,20 +65,27 @@ internal fun InputListScreenScaffold(
                 end = paddingValues.calculateEndPadding(LocalLayoutDirection.current),
             )
             val itemHorizontalPadding = 16.dp
-            Text(
+            Row(
                 modifier = Modifier
                     .padding(horizontalPadding)
                     .padding(horizontal = itemHorizontalPadding, vertical = 8.dp),
-                text = pageSubTitle,
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    modifier = Modifier.weight(1f),
+                    text = pageSubTitle,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                pageSubTitleAction?.invoke()
+            }
             Text(
                 modifier = Modifier
                     .padding(horizontalPadding)
-                    .padding(itemHorizontalPadding),
+                    .padding(horizontal = itemHorizontalPadding),
                 text = listTitle,
             )
+            Spacer(modifier = Modifier.height(8.dp))
             val containerShape = MaterialTheme.shapes.extraLarge
             Surface(
                 modifier = Modifier

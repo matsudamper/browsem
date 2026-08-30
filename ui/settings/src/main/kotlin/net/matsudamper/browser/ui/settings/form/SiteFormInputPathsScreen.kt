@@ -1,8 +1,6 @@
 package net.matsudamper.browser.ui.settings.form
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -66,45 +64,21 @@ fun SiteFormInputPathsScreen(
                 contentPadding = paddingValues,
             ) {
                 items(uiState.paths, key = { it.path }) { entry ->
-                    SiteFormInputPathListItem(
+                    SiteFormInputListItem(
                         modifier = Modifier
                             .testTag(SiteFormInputPathsScreenTestTags.PathEntry(entry.path).testTag)
                             .fillMaxWidth(),
-                        entry = entry,
-                        onOpen = { uiState.callbacks.openPath(entry.path) },
+                        title = entry.displayPath,
+                        subTitle = "${entry.fieldCount} 件のフィールド",
+                        onClick = { uiState.callbacks.openPath(entry.path) },
                         contentPadding = PaddingValues(
                             horizontal = listItemPadding,
                             vertical = 8.dp,
-                        )
+                        ),
                     )
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun SiteFormInputPathListItem(
-    entry: SiteFormInputPathsScreenUiState.PathEntry,
-    onOpen: () -> Unit,
-    contentPadding: PaddingValues,
-    modifier: Modifier = Modifier,
-) {
-    Column(
-        modifier = modifier
-            .clickable {
-                onOpen()
-            }
-            .padding(contentPadding)
-    ) {
-        Text(
-            text = entry.displayPath,
-            style = MaterialTheme.typography.titleMedium,
-        )
-        Text(
-            text = "${entry.fieldCount} 件のフィールド",
-            style = MaterialTheme.typography.bodySmall,
-        )
     }
 }
 
