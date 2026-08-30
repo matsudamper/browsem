@@ -11,52 +11,52 @@ class OpenDownloadsIntentPolicyTest {
         assertTrue(
             OpenDownloadsIntentPolicy.shouldDispatch(
                 DownloadWorker.ACTION_OPEN_DOWNLOADS,
-                intentWorkerId = "worker-1",
-                consumedWorkerId = null,
+                intentRequestId = "progress:9001",
+                consumedRequestId = null,
             ),
         )
     }
 
     @Test
-    fun `同じ worker ID を消費済みなら配信しない`() {
+    fun `同じ request ID を消費済みなら配信しない`() {
         assertFalse(
             OpenDownloadsIntentPolicy.shouldDispatch(
                 DownloadWorker.ACTION_OPEN_DOWNLOADS,
-                intentWorkerId = "worker-1",
-                consumedWorkerId = "worker-1",
+                intentRequestId = "progress:9001",
+                consumedRequestId = "progress:9001",
             ),
         )
     }
 
     @Test
-    fun `別の worker ID を消費済みでも新しい通知は配信対象`() {
+    fun `同じ worker ID でも別 request ID の通知は配信対象`() {
         assertTrue(
             OpenDownloadsIntentPolicy.shouldDispatch(
                 DownloadWorker.ACTION_OPEN_DOWNLOADS,
-                intentWorkerId = "worker-2",
-                consumedWorkerId = "worker-1",
+                intentRequestId = "complete:12345",
+                consumedRequestId = "progress:9001",
             ),
         )
     }
 
     @Test
-    fun `プロセス復元後に同じ worker ID の消費済み Intent が残っていればクリア対象`() {
+    fun `プロセス復元後に同じ request ID の消費済み Intent が残っていればクリア対象`() {
         assertTrue(
             OpenDownloadsIntentPolicy.shouldClearRestoredIntent(
                 DownloadWorker.ACTION_OPEN_DOWNLOADS,
-                intentWorkerId = "worker-1",
-                consumedWorkerId = "worker-1",
+                intentRequestId = "progress:9001",
+                consumedRequestId = "progress:9001",
             ),
         )
     }
 
     @Test
-    fun `プロセス復元後に別 worker ID の Intent はクリア対象にしない`() {
+    fun `プロセス復元後に別 request ID の Intent はクリア対象にしない`() {
         assertFalse(
             OpenDownloadsIntentPolicy.shouldClearRestoredIntent(
                 DownloadWorker.ACTION_OPEN_DOWNLOADS,
-                intentWorkerId = "worker-2",
-                consumedWorkerId = "worker-1",
+                intentRequestId = "complete:12345",
+                consumedRequestId = "progress:9001",
             ),
         )
     }
@@ -66,8 +66,8 @@ class OpenDownloadsIntentPolicyTest {
         assertFalse(
             OpenDownloadsIntentPolicy.shouldClearRestoredIntent(
                 DownloadWorker.ACTION_OPEN_DOWNLOADS,
-                intentWorkerId = "worker-1",
-                consumedWorkerId = null,
+                intentRequestId = "progress:9001",
+                consumedRequestId = null,
             ),
         )
     }

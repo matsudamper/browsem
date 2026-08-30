@@ -204,6 +204,7 @@ internal class DownloadWorker(
             action = ACTION_OPEN_DOWNLOADS
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_NEW_TASK
             putExtra(EXTRA_WORKER_ID, stableWorkerId)
+            putExtra(EXTRA_OPEN_DOWNLOADS_REQUEST_ID, "complete:$positiveHash")
         }
         val pendingIntent = PendingIntent.getActivity(
             context,
@@ -231,6 +232,7 @@ internal class DownloadWorker(
             action = ACTION_OPEN_DOWNLOADS
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_NEW_TASK
             putExtra(EXTRA_WORKER_ID, stableWorkerId)
+            putExtra(EXTRA_OPEN_DOWNLOADS_REQUEST_ID, "failure:$positiveHash")
         }
         val pendingIntent = PendingIntent.getActivity(
             context,
@@ -458,6 +460,7 @@ internal class DownloadWorker(
             action = ACTION_OPEN_DOWNLOADS
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_NEW_TASK
             putExtra(EXTRA_WORKER_ID, stableWorkerId)
+            putExtra(EXTRA_OPEN_DOWNLOADS_REQUEST_ID, "progress:$notificationId")
         }
         val pendingIntent = PendingIntent.getActivity(
             context,
@@ -509,6 +512,9 @@ internal class DownloadWorker(
 
         /** 通知タップ時にハイライト対象のダウンロードを特定するためのExtra */
         const val EXTRA_WORKER_ID = "net.matsudamper.browser.EXTRA_WORKER_ID"
+
+        /** 通知インスタンスごとに一意な要求 ID（進捗・完了・失敗を区別） */
+        const val EXTRA_OPEN_DOWNLOADS_REQUEST_ID = "net.matsudamper.browser.EXTRA_OPEN_DOWNLOADS_REQUEST_ID"
 
         /** 再開時にも安定した workerId を Worker 内で参照するための InputData キー */
         const val KEY_STABLE_WORKER_ID = "stable_worker_id"

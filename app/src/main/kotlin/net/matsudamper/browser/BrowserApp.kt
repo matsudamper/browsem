@@ -129,8 +129,8 @@ import org.mozilla.geckoview.GeckoRuntime
 internal fun BrowserApp(
     viewModel: BrowserViewModel,
     newTabUrlFlow: Flow<NewTabRequest>,
-    openDownloadsFlow: Flow<String?>,
-    onOpenDownloadsRequestConsumed: () -> Unit,
+    openDownloadsFlow: Flow<OpenDownloadsRequest>,
+    onOpenDownloadsRequestConsumed: (String) -> Unit,
     onInstallExtensionRequest: (String) -> Unit,
     onRequestDownloadNotificationPermission: suspend () -> Unit,
 ) {
@@ -194,8 +194,8 @@ internal fun BrowserAppShell(
     browserTabController: BrowserTabController,
     browserSessionLifecycleController: BrowserSessionLifecycleController,
     runtime: GeckoRuntime,
-    openDownloadsFlow: Flow<String?>? = null,
-    onOpenDownloadsRequestConsumed: (() -> Unit)? = null,
+    openDownloadsFlow: Flow<OpenDownloadsRequest>? = null,
+    onOpenDownloadsRequestConsumed: ((String) -> Unit)? = null,
     onNavigateToUrl: (suspend (url: String) -> Unit)? = null,
     rootContent: @Composable (outerNavActions: OuterNavActions) -> Unit,
 ) {
@@ -209,10 +209,12 @@ internal fun BrowserAppShell(
     // 通知タップ時にダウンロード管理画面を開く
     var pendingOpenDownloadsRequest by rememberSaveable { mutableStateOf(false) }
     var pendingHighlightWorkerId by rememberSaveable { mutableStateOf<String?>(null) }
+    var pendingOpenDownloadsRequestId by rememberSaveable { mutableStateOf<String?>(null) }
     if (openDownloadsFlow != null) {
         LaunchedEffect(openDownloadsFlow) {
-            openDownloadsFlow.onEach { workerId ->
-                pendingHighlightWorkerId = workerId
+            openDownloadsFlow.onEach { request ->
+                pendingHighlightWorkerId = request.workerId
+                pendingOpenDownloadsRequestId = request.requestId
                 pendingOpenDownloadsRequest = true
                 val existingIndex = outerBackStack.indexOfLast { it is AppDestination.Downloads }
                 if (existingIndex < 0) {
@@ -677,10 +679,12 @@ internal fun BrowserAppShell(
                     })
                     val downloadsUiState by downloadsViewModel.uiState.collectAsState()
                     var highlightItemId by remember { mutableStateOf<UUID?>(null) }
-                    LaunchedEffect(pendingOpenDownloadsRequest, pendingHighlightWorkerId) {
+                    LaunchedEffect(pendingOpenDownloadsRequest, pendingHighlightWorkerId, pendingOpenDownloadsRequestId) {
                         if (!pendingOpenDownloadsRequest) return@LaunchedEffect
                         val workerId = pendingHighlightWorkerId
+                        val requestId = pendingOpenDownloadsRequestId
                         pendingHighlightWorkerId = null
+                        pendingOpenDownloadsRequestId = null
                         pendingOpenDownloadsRequest = false
                         if (workerId != null) {
                             val id = runCatching { UUID.fromString(workerId) }.getOrNull()
@@ -688,7 +692,9 @@ internal fun BrowserAppShell(
                                 downloadsViewModel.requestHighlight(id)
                             }
                         }
-                        onOpenDownloadsRequestConsumed?.invoke()
+                        if (requestId != null) {
+                            onOpenDownloadsRequestConsumed?.invoke(requestId)
+                        }
                     }
                     LaunchedEffect(downloadsViewModel) {
                         downloadsViewModel.eventHandler.receiveAsFlow().collect {

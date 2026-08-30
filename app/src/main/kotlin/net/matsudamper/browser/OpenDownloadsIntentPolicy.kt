@@ -6,22 +6,20 @@ package net.matsudamper.browser
 internal object OpenDownloadsIntentPolicy {
     fun shouldDispatch(
         action: String?,
-        intentWorkerId: String?,
-        consumedWorkerId: String?,
+        intentRequestId: String?,
+        consumedRequestId: String?,
     ): Boolean {
         return action == DownloadWorker.ACTION_OPEN_DOWNLOADS &&
-            (consumedWorkerId == null || normalizeWorkerId(consumedWorkerId) != normalizeWorkerId(intentWorkerId))
+            (consumedRequestId == null || consumedRequestId != intentRequestId)
     }
 
     fun shouldClearRestoredIntent(
         action: String?,
-        intentWorkerId: String?,
-        consumedWorkerId: String?,
+        intentRequestId: String?,
+        consumedRequestId: String?,
     ): Boolean {
         return action == DownloadWorker.ACTION_OPEN_DOWNLOADS &&
-            consumedWorkerId != null &&
-            normalizeWorkerId(consumedWorkerId) == normalizeWorkerId(intentWorkerId)
+            consumedRequestId != null &&
+            consumedRequestId == intentRequestId
     }
-
-    private fun normalizeWorkerId(workerId: String?): String = workerId ?: ""
 }
