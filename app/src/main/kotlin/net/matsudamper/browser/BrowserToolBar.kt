@@ -116,6 +116,8 @@ internal fun BrowserToolBar(
     onResetPageZoom: () -> Unit,
     toolbarColor: Color?,
     modifier: Modifier = Modifier,
+    isPageLoading: Boolean = false,
+    onStopLoading: () -> Unit = {},
     extensionActions: List<WebExtensionActionController.ActionUiState> = emptyList(),
     extensionActionScrollState: ScrollState? = null,
     onExtensionActionMove: (fromIndex: Int, toIndex: Int) -> Unit = { _, _ -> },
@@ -159,6 +161,8 @@ internal fun BrowserToolBar(
         onBack = onBack,
         onRefresh = onRefresh,
         onSuperRefresh = onSuperRefresh,
+        isPageLoading = isPageLoading,
+        onStopLoading = onStopLoading,
         onTranslatePage = onTranslatePage,
         onLongPressHistory = onLongPressHistory,
         urlInputState = UrlInputState(
@@ -179,6 +183,8 @@ internal fun BrowserToolBar(
                 onDismissRequest = { visibleMenu = false },
                 onRefresh = onRefresh,
                 onSuperRefresh = onSuperRefresh,
+                isPageLoading = isPageLoading,
+                onStopLoading = onStopLoading,
                 onHome = onHome,
                 onForward = onForward,
                 canGoForward = canGoForward,
@@ -277,6 +283,8 @@ internal fun BrowserToolbar(
     onTranslatePage: () -> Unit,
     onLongPressHistory: () -> Unit,
     modifier: Modifier = Modifier,
+    isPageLoading: Boolean = false,
+    onStopLoading: () -> Unit = {},
     showTabButton: Boolean = true,
     toolbarMenu: @Composable (menuAnchorBottomPx: Int) -> Unit,
 ) {
@@ -402,24 +410,32 @@ internal fun BrowserToolbar(
                     }
                 }
 
-                // 更新ボタン（進むボタンの右側）: 短押しで通常更新、長押しでスーパーリフレッシュ
+                // 更新ボタン（進むボタンの右側）: ロード中は停止、通常時は短押しで更新・長押しでスーパーリフレッシュ
                 if (showRefresh) {
                     Box(
                         modifier = Modifier
                             .size(48.dp)
+                            .testTag(BrowserToolbarTestTags.RefreshButton.testTag)
                             .combinedClickable(
                                 interactionSource = remember { MutableInteractionSource() },
                                 indication = ripple(bounded = false),
                                 role = Role.Button,
-                                onLongClick = onSuperRefresh,
-                                onClick = onRefresh,
+                                onLongClick = if (isPageLoading) null else onSuperRefresh,
+                                onClick = if (isPageLoading) onStopLoading else onRefresh,
                             ),
                         contentAlignment = Alignment.Center,
                     ) {
-                        Icon(
-                            painter = painterResource(ResourcesR.drawable.ic_refresh_24dp),
-                            contentDescription = "更新",
-                        )
+                        if (isPageLoading) {
+                            Icon(
+                                painter = painterResource(ResourcesR.drawable.close_24dp),
+                                contentDescription = "読み込みを停止",
+                            )
+                        } else {
+                            Icon(
+                                painter = painterResource(ResourcesR.drawable.ic_refresh_24dp),
+                                contentDescription = "更新",
+                            )
+                        }
                     }
                 }
 
@@ -664,6 +680,10 @@ sealed class BrowserToolbarTestTags(val id: String) {
     object TranslateButton : BrowserToolbarTestTags(
         id = "translate_button",
     )
+
+    object RefreshButton : BrowserToolbarTestTags(
+        id = "refresh_button",
+    )
 }
 
 @Preview(name = "Light")
@@ -784,6 +804,49 @@ private fun PreviewWideToolbar() {
                 toolbarColor = null,
                 onRefresh = {},
                 onSuperRefresh = {},
+                onHome = {},
+                onForward = {},
+                canGoForward = true,
+                onBack = {},
+                canGoBack = false,
+                onLongPressHistory = {},
+                onTranslatePage = {},
+            )
+        }
+    }
+}
+
+@Preview(name = "WideToolbarLoading", widthDp = 600)
+@Composable
+private fun PreviewWideToolbarLoading() {
+    BrowserTheme(themeMode = net.matsudamper.browser.data.ThemeMode.THEME_SYSTEM) {
+        Column {
+            BrowserToolBar(
+                value = "https://google.com",
+                onValueChange = {},
+                onSubmit = {},
+                isFocused = false,
+                onFocusChanged = {},
+                onLongClickUrl = {},
+                showInstallExtensionItem = true,
+                onInstallExtension = {},
+                onOpenSettings = {},
+                onShare = {},
+                tabCount = 2,
+                onOpenTabs = {},
+                isPcMode = false,
+                onPcModeToggle = {},
+                onFindInPage = {},
+                onAddToHomeScreen = {},
+                pageZoomPercent = 100,
+                onPageZoomIn = {},
+                onPageZoomOut = {},
+                onResetPageZoom = {},
+                toolbarColor = null,
+                onRefresh = {},
+                onSuperRefresh = {},
+                isPageLoading = true,
+                onStopLoading = {},
                 onHome = {},
                 onForward = {},
                 canGoForward = true,
