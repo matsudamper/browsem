@@ -7,11 +7,11 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.core.net.toUri
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import kotlin.time.Duration.Companion.seconds
 import net.matsudamper.browser.ui.settings.SettingsScreenTestTags
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
-import kotlin.time.Duration.Companion.seconds
 
 /**
  * 設定画面表示中に外部 URL を受け取った場合、設定を閉じてメイン画面で URL を開くことを検証する。
