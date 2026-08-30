@@ -11,8 +11,4 @@ internal object OpenDownloadsIntentPolicy {
     fun shouldClearRestoredIntent(action: String?, consumed: Boolean): Boolean {
         return action == DownloadWorker.ACTION_OPEN_DOWNLOADS && consumed
     }
-
-    fun isConsumed(action: String?): Boolean {
-        return action != DownloadWorker.ACTION_OPEN_DOWNLOADS
-    }
 }

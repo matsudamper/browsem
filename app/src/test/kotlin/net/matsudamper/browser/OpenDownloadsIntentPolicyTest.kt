@@ -35,9 +35,4 @@ class OpenDownloadsIntentPolicyTest {
             ),
         )
     }
-
-    @Test
-    fun `action が null なら消費済み`() {
-        assertTrue(OpenDownloadsIntentPolicy.isConsumed(null))
-    }
 }

@@ -36,8 +36,9 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.Stable
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.Stable
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -206,11 +207,13 @@ internal fun BrowserAppShell(
     val context = LocalContext.current
 
     // 通知タップ時にダウンロード管理画面を開く
-    var pendingHighlightWorkerId by remember { mutableStateOf<String?>(null) }
+    var pendingOpenDownloadsRequest by rememberSaveable { mutableStateOf(false) }
+    var pendingHighlightWorkerId by rememberSaveable { mutableStateOf<String?>(null) }
     if (openDownloadsFlow != null) {
         LaunchedEffect(openDownloadsFlow) {
             openDownloadsFlow.onEach { workerId ->
                 pendingHighlightWorkerId = workerId
+                pendingOpenDownloadsRequest = true
                 val existingIndex = outerBackStack.indexOfLast { it is AppDestination.Downloads }
                 if (existingIndex < 0) {
                     outerBackStack.add(AppDestination.Downloads)
@@ -218,7 +221,6 @@ internal fun BrowserAppShell(
                     val removeCount = outerBackStack.lastIndex - existingIndex
                     repeat(removeCount) { outerBackStack.removeLastOrNull() }
                 }
-                onOpenDownloadsRequestConsumed?.invoke()
             }.launchIn(this)
         }
     }
@@ -675,11 +677,18 @@ internal fun BrowserAppShell(
                     })
                     val downloadsUiState by downloadsViewModel.uiState.collectAsState()
                     var highlightItemId by remember { mutableStateOf<UUID?>(null) }
-                    LaunchedEffect(pendingHighlightWorkerId) {
-                        val workerId = pendingHighlightWorkerId ?: return@LaunchedEffect
-                        val id = runCatching { UUID.fromString(workerId) }.getOrNull() ?: return@LaunchedEffect
+                    LaunchedEffect(pendingOpenDownloadsRequest, pendingHighlightWorkerId) {
+                        if (!pendingOpenDownloadsRequest) return@LaunchedEffect
+                        val workerId = pendingHighlightWorkerId
                         pendingHighlightWorkerId = null
-                        downloadsViewModel.requestHighlight(id)
+                        pendingOpenDownloadsRequest = false
+                        if (workerId != null) {
+                            val id = runCatching { UUID.fromString(workerId) }.getOrNull()
+                            if (id != null) {
+                                downloadsViewModel.requestHighlight(id)
+                            }
+                        }
+                        onOpenDownloadsRequestConsumed?.invoke()
                     }
                     LaunchedEffect(downloadsViewModel) {
                         downloadsViewModel.eventHandler.receiveAsFlow().collect {
