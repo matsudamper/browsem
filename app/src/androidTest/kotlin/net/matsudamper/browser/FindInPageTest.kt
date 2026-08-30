@@ -9,6 +9,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
 import net.matsudamper.browser.ui.tabs.TabsScreenTestTags
+import org.junit.After
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -24,6 +25,14 @@ import org.junit.runner.RunWith
 class FindInPageTest {
     @get:Rule
     val composeRule = createAndroidComposeRule<MainActivity>()
+
+    private var localHttpServer: LocalHttpServer? = null
+
+    @After
+    fun tearDown() {
+        localHttpServer?.close()
+        localHttpServer = null
+    }
 
     /**
      * メニューからページ内検索を開いたとき、検索入力フィールドがフォーカスを取得することを確認する。
@@ -50,8 +59,8 @@ class FindInPageTest {
     fun backButtonClosesFindInPageWithoutNavigatingBack() {
         ensureBrowserScreen()
 
-        val localPageUri = prepareLocalPageUri()
-        composeRule.openUrlFromUrlBar(localPageUri)
+        val localPageUrl = startLocalPageServer()
+        composeRule.openUrlFromUrlBar(localPageUrl)
         composeRule.waitForUrlBarContains(LOCAL_PAGE_FILE_NAME)
         composeRule.waitForUrlBarNotFocused()
 
@@ -62,7 +71,7 @@ class FindInPageTest {
         for (attempt in 1..maxAttempts) {
             // リトライ時はページが戻っている可能性があるため再遷移
             if (attempt > 1) {
-                composeRule.openUrlFromUrlBar(localPageUri)
+                composeRule.openUrlFromUrlBar(localPageUrl)
                 composeRule.waitForUrlBarContains(LOCAL_PAGE_FILE_NAME)
                 composeRule.waitForUrlBarNotFocused()
             }
@@ -108,12 +117,15 @@ class FindInPageTest {
 
     // ---- ヘルパー ----
 
-    private fun prepareLocalPageUri(): String {
+    private fun startLocalPageServer(): String {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val targetContext = instrumentation.targetContext
-        val destination = File(targetContext.cacheDir, LOCAL_PAGE_FILE_NAME)
+        val destinationDir = File(targetContext.cacheDir, LOCAL_PAGE_DIR_NAME).apply { mkdirs() }
+        val destination = File(destinationDir, LOCAL_PAGE_FILE_NAME)
         destination.writeText("<html><body><h1>Find In Page Test</h1></body></html>")
-        return destination.toURI().toString()
+        val server = LocalHttpServer(destinationDir)
+        localHttpServer = server
+        return server.url(LOCAL_PAGE_FILE_NAME)
     }
 
     private fun ensureBrowserScreen() {
@@ -183,6 +195,7 @@ class FindInPageTest {
     }
 
     companion object {
+        private const val LOCAL_PAGE_DIR_NAME = "find-in-page"
         private const val LOCAL_PAGE_FILE_NAME = "find_in_page_test.html"
     }
 }

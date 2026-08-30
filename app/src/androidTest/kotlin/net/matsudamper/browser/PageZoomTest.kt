@@ -13,6 +13,7 @@ import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import net.matsudamper.browser.ui.tabs.TabsScreenTestTags
+import org.junit.After
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -29,6 +30,14 @@ import java.io.File
 class PageZoomTest {
     @get:Rule
     val composeRule = createAndroidComposeRule<MainActivity>()
+
+    private var localHttpServer: LocalHttpServer? = null
+
+    @After
+    fun tearDown() {
+        localHttpServer?.close()
+        localHttpServer = null
+    }
 
     /**
      * 初期状態でページズームが100%であることを確認する。
@@ -125,8 +134,8 @@ class PageZoomTest {
      */
     @Test
     fun pageZoomInNarrowsViewportInnerWidth() {
-        val zoomPageUri = prepareLocalZoomPageUri()
-        composeRule.openUrlFromUrlBar(zoomPageUri)
+        val zoomPageUrl = startZoomPageServer()
+        composeRule.openUrlFromUrlBar(zoomPageUrl)
         composeRule.waitForUrlBarContains(ZOOM_INDEX_FILE_NAME, timeoutMillis = 60_000)
 
         openPageZoomMenuAndSet200Percent()
@@ -141,8 +150,8 @@ class PageZoomTest {
      */
     @Test
     fun pageZoomPersistedAfterNavigation() {
-        val zoomPageUri = prepareLocalZoomPageUri()
-        composeRule.openUrlFromUrlBar(zoomPageUri)
+        val zoomPageUrl = startZoomPageServer()
+        composeRule.openUrlFromUrlBar(zoomPageUrl)
         composeRule.waitForUrlBarContains(ZOOM_INDEX_FILE_NAME, timeoutMillis = 60_000)
         composeRule.waitForUrlBarNotFocused()
 
@@ -232,9 +241,10 @@ class PageZoomTest {
     }
 
     /**
-     * テスト用ローカル HTML をキャッシュへ展開し、file URI を返す。
+     * テスト用ローカル HTML をキャッシュへ展開し、
+     * ループバック HTTP サーバーから配信してその URL を返す。
      */
-    private fun prepareLocalZoomPageUri(): String {
+    private fun startZoomPageServer(): String {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val targetContext = instrumentation.targetContext
         val destinationDir = File(targetContext.cacheDir, ZOOM_DIR_NAME).apply { mkdirs() }
@@ -245,7 +255,9 @@ class PageZoomTest {
                 input.copyTo(output)
             }
         }
-        return destination.toURI().toString()
+        val server = LocalHttpServer(destinationDir)
+        localHttpServer = server
+        return server.url(ZOOM_INDEX_FILE_NAME)
     }
 
     private fun pressSystemBack() {
