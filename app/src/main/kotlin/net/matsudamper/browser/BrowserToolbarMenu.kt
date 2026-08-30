@@ -135,6 +135,8 @@ internal fun ToolbarMenu(
     onPageZoomIn: () -> Unit,
     onPageZoomOut: () -> Unit,
     onResetPageZoom: () -> Unit,
+    isPageLoading: Boolean = false,
+    onStopLoading: () -> Unit = {},
     extensionActions: List<WebExtensionActionController.ActionUiState> = emptyList(),
     extensionActionScrollState: ScrollState? = null,
     onExtensionActionMove: (fromIndex: Int, toIndex: Int) -> Unit = { _, _ -> },
@@ -162,6 +164,8 @@ internal fun ToolbarMenu(
             onDismissRequest = onDismissRequest,
             onRefresh = onRefresh,
             onSuperRefresh = onSuperRefresh,
+            isPageLoading = isPageLoading,
+            onStopLoading = onStopLoading,
             onHome = onHome,
             onForward = onForward,
             canGoForward = canGoForward,
@@ -233,6 +237,8 @@ private fun ToolbarMenuContent(
     onOpenInBrowser: (() -> Unit)?,
     onOpenSiteSettings: (() -> Unit)?,
     onOpenDownloads: (() -> Unit)?,
+    isPageLoading: Boolean = false,
+    onStopLoading: () -> Unit = {},
     onOpenDevTools: (() -> Unit)?,
 ) {
     Column {
@@ -319,7 +325,7 @@ private fun ToolbarMenuContent(
                 MenuColumnLabel(text = "進む")
             }
             Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                // 短押しで通常更新、長押しでキャッシュをバイパスしてスーパーリフレッシュ
+                // ロード中は停止、通常時は短押しで更新・長押しでスーパーリフレッシュ
                 androidx.compose.foundation.layout.Box(
                     modifier = Modifier
                         .testTag(BrowserToolbarMenuTestTags.RefreshButton.testTag)
@@ -327,13 +333,21 @@ private fun ToolbarMenuContent(
                             interactionSource = remember { MutableInteractionSource() },
                             indication = ripple(bounded = false),
                             role = Role.Button,
-                            onLongClick = {
-                                onDismissRequest()
-                                onSuperRefresh()
+                            onLongClick = if (isPageLoading) {
+                                null
+                            } else {
+                                {
+                                    onDismissRequest()
+                                    onSuperRefresh()
+                                }
                             },
                             onClick = {
                                 onDismissRequest()
-                                onRefresh()
+                                if (isPageLoading) {
+                                    onStopLoading()
+                                } else {
+                                    onRefresh()
+                                }
                             },
                         ),
                     contentAlignment = Alignment.Center,
@@ -343,12 +357,18 @@ private fun ToolbarMenuContent(
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(
-                            painter = painterResource(ResourcesR.drawable.ic_refresh_24dp),
+                            painter = painterResource(
+                                if (isPageLoading) {
+                                    ResourcesR.drawable.close_24dp
+                                } else {
+                                    ResourcesR.drawable.ic_refresh_24dp
+                                },
+                            ),
                             contentDescription = null,
                         )
                     }
                 }
-                MenuColumnLabel(text = "更新")
+                MenuColumnLabel(text = if (isPageLoading) "停止" else "更新")
             }
         }
         // 二段目: ホーム・共有・サイトの設定を一段目と同じ間隔で表示
@@ -844,6 +864,54 @@ private fun PreviewToolbarMenuContentConstrainedHeightScrolled() {
                 onResetPageZoom = {},
                 extensionActions = emptyList(),
                 extensionActionScrollState = null,
+                onExtensionActionMove = { _, _ -> },
+                onExtensionActionMoveEnd = {},
+                onExtensionActionMoveCancel = {},
+                showOpenSettings = true,
+                showAddToHomeScreen = true,
+                showHome = true,
+                onOpenInBrowser = null,
+                onOpenSiteSettings = {},
+                onOpenDownloads = {},
+                onOpenDevTools = {},
+            )
+        }
+    }
+}
+
+@Preview(name = "ToolbarMenuLoadingLight")
+@Preview(name = "ToolbarMenuLoadingDark", uiMode = Configuration.UI_MODE_NIGHT_YES)
+@Composable
+private fun PreviewToolbarMenuContentLoading() {
+    BrowserTheme(themeMode = ThemeMode.THEME_SYSTEM) {
+        Surface(modifier = Modifier.width(280.dp)) {
+            ToolbarMenuContent(
+                onDismissRequest = {},
+                onRefresh = {},
+                onSuperRefresh = {},
+                isPageLoading = true,
+                onStopLoading = {},
+                onHome = {},
+                onForward = {},
+                canGoForward = true,
+                onBack = {},
+                canGoBack = true,
+                onLongPressHistory = {},
+                isPcMode = false,
+                onPcModeToggle = {},
+                showInstallExtensionItem = true,
+                onInstallExtension = {},
+                onTranslatePage = {},
+                onShare = {},
+                onFindInPage = {},
+                onOpenSettings = {},
+                onAddToHomeScreen = {},
+                pageZoomPercent = 100,
+                onPageZoomIn = {},
+                onPageZoomOut = {},
+                onResetPageZoom = {},
+                extensionActions = emptyList(),
+                extensionActionScrollState = ScrollState(initial = 0),
                 onExtensionActionMove = { _, _ -> },
                 onExtensionActionMoveEnd = {},
                 onExtensionActionMoveCancel = {},

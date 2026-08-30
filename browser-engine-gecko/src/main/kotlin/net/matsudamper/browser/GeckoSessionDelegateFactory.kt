@@ -22,6 +22,7 @@ interface BrowserSessionStateCallbacks {
     fun onSessionStateChange(sessionState: GeckoSession.SessionState)
     fun onPageStart(url: String)
     fun onPageStop(success: Boolean)
+    fun onPageLoadingChanged(value: Boolean)
     fun onWebAppManifest(manifest: JSONObject)
     fun onTranslationStateChange(
         translationState: TranslationsController.SessionTranslation.TranslationState?,
@@ -371,6 +372,7 @@ internal class BrowserTabSessionDelegateHost(
     // UI未接続中に届いた manifest を失わないようにキャッシュする。
     // onPageStart でクリアし、attachUi 時にリプレイする。
     private var cachedWebAppManifest: JSONObject? = null
+    private var cachedIsPageLoading: Boolean = false
     private var cachedFullScreen: Boolean = false
 
     private val delegateBundle = createGeckoSessionDelegateBundle(
@@ -449,12 +451,24 @@ internal class BrowserTabSessionDelegateHost(
 
             override fun onPageStart(url: String) {
                 // 新しいページでは前ページの manifest を持ち越さない
-                synchronized(lock) { cachedWebAppManifest = null }
+                synchronized(lock) {
+                    cachedWebAppManifest = null
+                    cachedIsPageLoading = true
+                }
+                browserTab.isPageLoading = true
+                currentCallbacks()?.onPageLoadingChanged(true)
                 currentCallbacks()?.onPageStart(url)
             }
 
             override fun onPageStop(success: Boolean) {
+                synchronized(lock) { cachedIsPageLoading = false }
+                browserTab.isPageLoading = false
+                currentCallbacks()?.onPageLoadingChanged(false)
                 currentCallbacks()?.onPageStop(success)
+            }
+
+            override fun onPageLoadingChanged(value: Boolean) {
+                currentCallbacks()?.onPageLoadingChanged(value)
             }
 
             override fun onWebAppManifest(manifest: JSONObject) {
@@ -480,7 +494,10 @@ internal class BrowserTabSessionDelegateHost(
                 synchronized(lock) {
                     cachedCanGoBack = false
                     cachedCanGoForward = false
+                    cachedIsPageLoading = false
                 }
+                browserTab.isPageLoading = false
+                currentCallbacks()?.onPageLoadingChanged(false)
                 currentCallbacks()?.onCanGoBackChanged(false)
                 currentCallbacks()?.onCanGoForwardChanged(false)
                 currentCallbacks()?.onSessionClosedUnexpectedly()
@@ -602,6 +619,7 @@ internal class BrowserTabSessionDelegateHost(
         val historyCurrentIndex: Int
         val webAppManifest: JSONObject?
         val fullScreen: Boolean
+        val isPageLoading: Boolean
         synchronized(lock) {
             this.callbacks = callbacks
             this.onOpenNewSessionRequest = onOpenNewSessionRequest
@@ -612,11 +630,13 @@ internal class BrowserTabSessionDelegateHost(
             historyCurrentIndex = cachedHistoryCurrentIndex
             webAppManifest = cachedWebAppManifest
             fullScreen = cachedFullScreen
+            isPageLoading = cachedIsPageLoading
         }
         // GeckoSession はナビゲーション状態が変わらない限り onCanGoBack/onCanGoForward を再発火しないため、
         // キャッシュ済みの値をリプレイして UI 側の状態を同期する
         callbacks.onCanGoBackChanged(canGoBack)
         callbacks.onCanGoForwardChanged(canGoForward)
+        callbacks.onPageLoadingChanged(isPageLoading)
         // タブ内ナビゲーション履歴も同様にリプレイする
         if (historyItems.isNotEmpty()) {
             callbacks.onHistoryStateChange(historyItems, historyCurrentIndex)
@@ -648,6 +668,12 @@ internal class BrowserTabSessionDelegateHost(
             onOpenNewSessionRequest = null
             onCloseRequest = null
         }
+    }
+
+    /** stop() 等で onPageStop が発火しない場合にロード状態を解除する */
+    internal fun clearPageLoadingState() {
+        synchronized(lock) { cachedIsPageLoading = false }
+        browserTab.isPageLoading = false
     }
 
     fun failPendingRequests(cause: Throwable) {
