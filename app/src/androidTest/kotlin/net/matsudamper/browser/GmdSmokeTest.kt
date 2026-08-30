@@ -106,10 +106,10 @@ class GmdSmokeTest {
     @Test
     fun tappingUrlBarClearsInputAndShowsCurrentUrlActions() {
         ensureBrowserScreen()
-        val focusPageUri = prepareLocalFocusPageUri()
+        val focusPageUrl = startFocusPageServer()
 
         openLocalPage(
-            url = focusPageUri,
+            url = focusPageUrl,
             urlMarker = LOCAL_FOCUS_INDEX_FILE_NAME,
         )
         val currentUrl = composeRule.currentUrlBarText()
@@ -136,8 +136,6 @@ class GmdSmokeTest {
         }
 
         // CurrentUrlText の実テキストが捕捉した currentUrl と一致することを直接検証する。
-        // urlInput は送信値(file:/)、CurrentUrlText は Gecko 正規化値(file:///)になる
-        // タイミングがあり、file URL のスラッシュ表記ゆれで誤検知するため正規化して比較する。
         val displayedUrl = composeRule
             .onNodeWithTag(BrowserTabSurfaceTestTags.CurrentUrlText.testTag, useUnmergedTree = true)
             .fetchSemanticsNode()
@@ -145,8 +143,8 @@ class GmdSmokeTest {
             .joinToString(separator = "") { it.text }
         assertEquals(
             "現在URL表示が一致しない: currentUrl=\"$currentUrl\" displayedUrl=\"$displayedUrl\"",
-            normalizeFileUrl(currentUrl),
-            normalizeFileUrl(displayedUrl),
+            currentUrl,
+            displayedUrl,
         )
 
         composeRule.onNodeWithTag(BrowserTabSurfaceTestTags.RestoreUrlButton.testTag).performClick()
@@ -206,8 +204,6 @@ class GmdSmokeTest {
         composeRule.onNodeWithText(historyTitle).performClick()
 
         composeRule.waitUntil(timeoutMillis = 30_000) {
-            // file URL の表記ゆれ（file:/ と file:/// など）で誤検知しないよう、
-            // 生成した seed URL 先頭一致またはファイル名トークン一致で判定する。
             val currentUrl = composeRule.currentUrlBarText()
             currentUrl.startsWith(seededUrl) ||
                 currentUrl.contains("${HISTORY_SEED_FILE_PREFIX}_${token}")
@@ -229,10 +225,10 @@ class GmdSmokeTest {
     @Test
     fun openingUrlBarFromGeckoViewDoesNotImmediatelyCloseKeyboard() {
         ensureBrowserScreen()
-        val focusPageUri = prepareLocalFocusPageUri()
+        val focusPageUrl = startFocusPageServer()
 
         openLocalPage(
-            url = focusPageUri,
+            url = focusPageUrl,
             urlMarker = LOCAL_FOCUS_INDEX_FILE_NAME,
         )
         waitForUrlBarNotFocused()
@@ -281,10 +277,10 @@ class GmdSmokeTest {
     @Test
     fun retryOnPageLoadErrorRetriesFailedUrl() {
         ensureBrowserScreen()
-        val focusPageUri = prepareLocalFocusPageUri()
+        val focusPageUrl = startFocusPageServer()
 
         openLocalPage(
-            url = focusPageUri,
+            url = focusPageUrl,
             urlMarker = LOCAL_FOCUS_INDEX_FILE_NAME,
         )
         composeRule.openUrlFromUrlBar(PAGE_LOAD_ERROR_TEST_URL)
@@ -304,12 +300,12 @@ class GmdSmokeTest {
      * テスト用に履歴エントリを 1 件追加する。
      */
     private fun seedHistoryEntry(url: String, title: String): String {
-        val seedPageUri = prepareHistorySeedPageUri(url, title)
+        val seedPageUrl = startHistorySeedPageServer(url, title)
         openLocalPage(
-            url = seedPageUri,
+            url = seedPageUrl,
             urlMarker = HISTORY_SEED_FILE_PREFIX,
         )
-        return seedPageUri
+        return seedPageUrl
     }
 
     private fun openLocalPage(url: String, urlMarker: String) {
@@ -344,9 +340,10 @@ class GmdSmokeTest {
     }
 
     /**
-     * 履歴サジェスト用のローカルページを生成して file URI を返す。
+     * 履歴サジェスト用のローカルページを生成し、
+     * ループバック HTTP サーバーから配信してその URL を返す。
      */
-    private fun prepareHistorySeedPageUri(url: String, title: String): String {
+    private fun startHistorySeedPageServer(url: String, title: String): String {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val targetContext = instrumentation.targetContext
         val destinationDir = File(targetContext.cacheDir, HISTORY_SEED_DIR_NAME).apply { mkdirs() }
@@ -370,7 +367,9 @@ class GmdSmokeTest {
             </html>
             """.trimIndent()
         )
-        return destination.toURI().toString()
+        val server = LocalHttpServer(destinationDir)
+        localHttpServer = server
+        return server.url(fileName)
     }
 
     /**
@@ -492,9 +491,10 @@ class GmdSmokeTest {
     }
 
     /**
-     * フォーカステスト用のローカルHTMLをキャッシュへ展開し、file URI を返す。
+     * フォーカステスト用のローカルHTMLをキャッシュへ展開し、
+     * ループバック HTTP サーバーから配信してその URL を返す。
      */
-    private fun prepareLocalFocusPageUri(): String {
+    private fun startFocusPageServer(): String {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val targetContext = instrumentation.targetContext
         val destinationDir = File(targetContext.cacheDir, LOCAL_FOCUS_DIR_NAME).apply { mkdirs() }
@@ -505,7 +505,9 @@ class GmdSmokeTest {
                 input.copyTo(output)
             }
         }
-        return destination.toURI().toString()
+        val server = LocalHttpServer(destinationDir)
+        localHttpServer = server
+        return server.url(LOCAL_FOCUS_INDEX_FILE_NAME)
     }
 
     /**
@@ -552,7 +554,7 @@ class GmdSmokeTest {
     private fun waitForUrlBarText(expected: String) {
         try {
             composeRule.waitUntil(timeoutMillis = 20_000) {
-                normalizeFileUrl(composeRule.currentUrlBarText()) == normalizeFileUrl(expected)
+                composeRule.currentUrlBarText() == expected
             }
         } catch (e: androidx.compose.ui.test.ComposeTimeoutException) {
             throw AssertionError(
@@ -560,14 +562,6 @@ class GmdSmokeTest {
                 e,
             )
         }
-    }
-
-    /**
-     * file URL のスラッシュ表記ゆれ（file:/ ・ file:// ・ file:///）を file:/// に正規化する。
-     * file 以外のスキームはそのまま返す。
-     */
-    private fun normalizeFileUrl(url: String): String {
-        return url.replaceFirst(Regex("^file:/+"), "file:///")
     }
 
     /**

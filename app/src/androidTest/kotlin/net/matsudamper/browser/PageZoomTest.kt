@@ -138,8 +138,8 @@ class PageZoomTest {
      */
     @Test
     fun pageZoomInNarrowsViewportInnerWidth() {
-        val zoomPageUri = prepareLocalZoomPageUri()
-        composeRule.openUrlFromUrlBar(zoomPageUri)
+        val zoomPageUrl = startZoomPageServer()
+        composeRule.openUrlFromUrlBar(zoomPageUrl)
         composeRule.waitForUrlBarContains(ZOOM_INDEX_FILE_NAME, timeoutMillis = 60_000)
 
         openPageZoomMenuAndSet200Percent()
@@ -192,8 +192,8 @@ class PageZoomTest {
      */
     @Test
     fun pageZoomPersistedAfterNavigation() {
-        val zoomPageUri = prepareLocalZoomPageUri()
-        composeRule.openUrlFromUrlBar(zoomPageUri)
+        val zoomPageUrl = startZoomPageServer()
+        composeRule.openUrlFromUrlBar(zoomPageUrl)
         composeRule.waitForUrlBarContains(ZOOM_INDEX_FILE_NAME, timeoutMillis = 60_000)
         composeRule.waitForUrlBarNotFocused()
 
@@ -290,9 +290,10 @@ class PageZoomTest {
     }
 
     /**
-     * テスト用ローカル HTML をキャッシュへ展開し、file URI を返す。
+     * テスト用ローカル HTML をキャッシュへ展開し、
+     * ループバック HTTP サーバーから配信してその URL を返す。
      */
-    private fun prepareLocalZoomPageUri(): String {
+    private fun startZoomPageServer(): String {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val targetContext = instrumentation.targetContext
         val destinationDir = File(targetContext.cacheDir, ZOOM_DIR_NAME).apply { mkdirs() }
@@ -303,7 +304,9 @@ class PageZoomTest {
                 input.copyTo(output)
             }
         }
-        return destination.toURI().toString()
+        val server = LocalHttpServer(destinationDir)
+        localHttpServer = server
+        return server.url(ZOOM_INDEX_FILE_NAME)
     }
 
     /**
