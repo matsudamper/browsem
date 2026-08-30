@@ -32,6 +32,7 @@ internal class SiteFormInputPathScreenViewModel(
 
     private data class ViewModelState(
         val deletePathConfirm: Boolean = false,
+        val deleteFieldConfirm: String? = null,
     )
 
     private val viewModelStateFlow = MutableStateFlow(ViewModelState())
@@ -43,6 +44,22 @@ internal class SiteFormInputPathScreenViewModel(
 
         override fun openField(fieldKey: String) {
             eventHandler.trySend { it.navigateToField(fieldKey) }
+        }
+
+        override fun requestDeleteField(fieldKey: String) {
+            viewModelStateFlow.update { it.copy(deleteFieldConfirm = fieldKey) }
+        }
+
+        override fun confirmDeleteField() {
+            val fieldKey = viewModelStateFlow.value.deleteFieldConfirm ?: return
+            viewModelStateFlow.update { it.copy(deleteFieldConfirm = null) }
+            viewModelScope.launch {
+                formInputRepository.deleteField(origin, path, fieldKey)
+            }
+        }
+
+        override fun dismissDeleteFieldConfirm() {
+            viewModelStateFlow.update { it.copy(deleteFieldConfirm = null) }
         }
 
         override fun requestDeletePath() {
@@ -69,6 +86,7 @@ internal class SiteFormInputPathScreenViewModel(
             displayPath = displayFormInputPath(path),
             fields = emptyList(),
             deletePathConfirm = false,
+            deleteFieldConfirm = null,
         ),
     ).also { uiStateFlow ->
         viewModelScope.launch {
@@ -87,6 +105,7 @@ internal class SiteFormInputPathScreenViewModel(
                         )
                     },
                     deletePathConfirm = dialogState.deletePathConfirm,
+                    deleteFieldConfirm = dialogState.deleteFieldConfirm,
                 )
             }.collectLatest { state ->
                 uiStateFlow.value = state

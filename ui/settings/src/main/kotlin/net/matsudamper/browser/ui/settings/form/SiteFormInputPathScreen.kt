@@ -68,13 +68,14 @@ fun SiteFormInputPathScreen(
                 contentPadding = paddingValues,
             ) {
                 items(uiState.fields, key = { it.fieldKey }) { field ->
-                    SiteFormInputListItem(
+                    SiteFormInputDeletableListItem(
                         modifier = Modifier.testTag(
                             SiteFormInputPathScreenTestTags.FieldEntry(field.fieldKey).testTag,
                         ),
                         title = field.fieldKey,
                         subTitle = field.previewText,
                         onClick = { uiState.callbacks.openField(field.fieldKey) },
+                        onDelete = { uiState.callbacks.requestDeleteField(field.fieldKey) },
                         contentPadding = PaddingValues(
                             horizontal = 16.dp,
                             vertical = 8.dp,
@@ -107,6 +108,29 @@ fun SiteFormInputPathScreen(
             },
         )
     }
+
+    val deleteFieldKey = uiState.deleteFieldConfirm
+    if (deleteFieldKey != null) {
+        AlertDialog(
+            onDismissRequest = uiState.callbacks::dismissDeleteFieldConfirm,
+            title = { Text("idを削除") },
+            text = {
+                Text(
+                    "「$deleteFieldKey」を削除しますか？保存した値もすべて削除され、この操作は取り消せません。",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = uiState.callbacks::confirmDeleteField) {
+                    Text("削除", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = uiState.callbacks::dismissDeleteFieldConfirm) {
+                    Text("キャンセル")
+                }
+            },
+        )
+    }
 }
 
 @Preview(showBackground = true, heightDp = 700)
@@ -118,6 +142,9 @@ private fun SiteFormInputPathScreenPreview() {
                 callbacks = object : SiteFormInputPathScreenUiState.Callbacks {
                     override fun navigateBack() = Unit
                     override fun openField(fieldKey: String) = Unit
+                    override fun requestDeleteField(fieldKey: String) = Unit
+                    override fun confirmDeleteField() = Unit
+                    override fun dismissDeleteFieldConfirm() = Unit
                     override fun requestDeletePath() = Unit
                     override fun confirmDeletePath() = Unit
                     override fun dismissDeletePathConfirm() = Unit
@@ -135,6 +162,7 @@ private fun SiteFormInputPathScreenPreview() {
                     ),
                 ),
                 deletePathConfirm = false,
+                deleteFieldConfirm = null,
             ),
         )
     }

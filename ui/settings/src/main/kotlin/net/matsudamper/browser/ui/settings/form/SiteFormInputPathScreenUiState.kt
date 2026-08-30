@@ -9,6 +9,7 @@ data class SiteFormInputPathScreenUiState(
     val displayPath: String,
     val fields: List<FieldEntry>,
     val deletePathConfirm: Boolean,
+    val deleteFieldConfirm: String?,
 ) {
     @Stable
     data class FieldEntry(
@@ -19,6 +20,9 @@ data class SiteFormInputPathScreenUiState(
     interface Callbacks {
         fun navigateBack()
         fun openField(fieldKey: String)
+        fun requestDeleteField(fieldKey: String)
+        fun confirmDeleteField()
+        fun dismissDeleteFieldConfirm()
         fun requestDeletePath()
         fun confirmDeletePath()
         fun dismissDeletePathConfirm()
