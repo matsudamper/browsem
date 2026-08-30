@@ -47,9 +47,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
@@ -64,7 +64,9 @@ sealed interface SettingsScreenTestTags {
     val id: String
     val testTag get() = "${SettingsScreenTestTags::class.java.name}#$id"
 
-    data object Root : SettingsScreenTestTags { override val id = "root" }
+    data object Root : SettingsScreenTestTags {
+        override val id = "root"
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
