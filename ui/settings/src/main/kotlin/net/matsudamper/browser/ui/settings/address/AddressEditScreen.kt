@@ -1,4 +1,4 @@
-package net.matsudamper.browser.ui.settings
+package net.matsudamper.browser.ui.settings.address
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -25,6 +25,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import net.matsudamper.browser.ui.settings.SettingSection
 import net.matsudamper.browser.resources.R as ResourcesR
 
 sealed interface AddressEditScreenTestTags {

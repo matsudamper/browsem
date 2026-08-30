@@ -14,7 +14,7 @@ import net.matsudamper.browser.data.forminput.FormInputOrigin
 import net.matsudamper.browser.data.forminput.displayFormInputOrigin
 import net.matsudamper.browser.data.forminput.FormInputRepository
 import net.matsudamper.browser.data.forminput.displayFormInputPath
-import net.matsudamper.browser.ui.settings.SiteFormInputPathsScreenUiState
+import net.matsudamper.browser.ui.settings.form.SiteFormInputPathsScreenUiState
 
 @Stable
 internal class SiteFormInputPathsScreenViewModel(

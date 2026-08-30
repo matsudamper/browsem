@@ -1,4 +1,4 @@
-package net.matsudamper.browser.ui.settings
+package net.matsudamper.browser.ui.settings.crash
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column

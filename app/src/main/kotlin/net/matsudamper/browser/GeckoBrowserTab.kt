@@ -229,6 +229,9 @@ internal fun GeckoBrowserTab(
     // Surface と Session の復元状態を一元管理する state machine。
     // ON_START / ON_RESUME が重複発火しても state=ACTIVE なら即 no-op にする。
     var surfaceResumeState by remember(session) { mutableStateOf(SurfaceResumeState.ACTIVE) }
+    val addressAutofillDelegate = remember(session, addressAutofillCoordinator) {
+        AddressAutofillDelegate(coordinator = addressAutofillCoordinator)
+    }
     val resumeCoverColor = MaterialTheme.colorScheme.surface.toArgb()
     // LifecycleEventObserver は DisposableEffect のキーが変わらない限り再生成されないため、
     // ラムダ内で ON_PAUSE 時点の最新 IME 表示状態を読めるよう rememberUpdatedState で包む。
@@ -345,6 +348,7 @@ internal fun GeckoBrowserTab(
     // local function は前方参照不可なので attach → schedule → restore の順で定義する。
     fun attachSessionAfterStableSize(gecko: GeckoView) {
         gecko.setSession(session)
+        addressAutofillDelegate.bind(session)
         if (session.isOpen) {
             session.setActive(true)
         } else {
@@ -555,6 +559,7 @@ internal fun GeckoBrowserTab(
                             // best-effort capture（非同期 GeckoResult、release 後に失敗する可能性あり）。
                             state.captureTabPreview(target)
                             // surface 再作成時の自動 compositor resume を防ぐため即 detach。
+                            addressAutofillDelegate.unbindBeforeViewRelease(session)
                             target.releaseSession()
                             // releaseSession だけでは Mozilla 側に古い surface 参照が残るらしく、
                             // 復帰時の setSession 直後に GPU プロセスが kill される事象が観測された。
@@ -594,6 +599,7 @@ internal fun GeckoBrowserTab(
                                 )
                                 // 不可視になったので Mozilla の契約どおり deactivate してよい。
                                 session.setActive(false)
+                                addressAutofillDelegate.unbindBeforeViewRelease(session)
                                 target.releaseSession()
                                 target.visibility = View.INVISIBLE
                                 surfaceResumeState = SurfaceResumeState.RELEASED
@@ -737,16 +743,8 @@ internal fun GeckoBrowserTab(
         )
         val promptDelegate = dialogState.createPromptDelegate()
         val mediaSessionDelegate = GeckoMediaSessionDelegate(mediaWebExtension)
-        val previousAutofillDelegate =
-            (session.autofillDelegate as? AddressAutofillDelegate)?.wrapped
-                ?: session.autofillDelegate
-        val addressAutofillDelegate = AddressAutofillDelegate(
-            coordinator = addressAutofillCoordinator,
-            wrapped = previousAutofillDelegate,
-        )
-
         session.promptDelegate = promptDelegate
-        session.autofillDelegate = addressAutofillDelegate
+        addressAutofillDelegate.bind(session)
         addressAutofillCoordinator.attach(
             session = session,
             host = dialogState,
@@ -767,9 +765,7 @@ internal fun GeckoBrowserTab(
             formInputAutofillCoordinator.detach(session)
             browserTab.detachSessionCallbacks()
             session.promptDelegate = null
-            if (session.autofillDelegate === addressAutofillDelegate) {
-                session.autofillDelegate = previousAutofillDelegate
-            }
+            addressAutofillDelegate.restoreWrapped(session)
             if (session.mediaSessionDelegate === mediaSessionDelegate
                 && !mediaWebExtension.shouldKeepSessionAttached(session)
             ) {

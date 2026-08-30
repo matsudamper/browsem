@@ -9,7 +9,7 @@ import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import net.matsudamper.browser.ui.settings.SiteSettingsScreenTestTags
+import net.matsudamper.browser.ui.settings.site.SiteSettingsScreenTestTags
 import org.junit.Assert.assertFalse
 import org.junit.Rule
 import org.junit.Test

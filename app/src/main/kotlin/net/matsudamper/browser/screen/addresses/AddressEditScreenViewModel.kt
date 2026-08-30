@@ -11,7 +11,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import net.matsudamper.browser.data.address.AddressEntity
 import net.matsudamper.browser.data.address.AddressRepository
-import net.matsudamper.browser.ui.settings.AddressEditScreenUiState
+import net.matsudamper.browser.ui.settings.address.AddressEditScreenUiState
 
 internal class AddressEditScreenViewModel(
     private val addressRepository: AddressRepository,
