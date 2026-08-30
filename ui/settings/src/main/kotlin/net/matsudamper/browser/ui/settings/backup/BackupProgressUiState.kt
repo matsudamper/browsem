@@ -1,4 +1,4 @@
-package net.matsudamper.browser.ui.settings
+package net.matsudamper.browser.ui.settings.backup
 
 import androidx.compose.runtime.Stable
 

@@ -1,20 +1,18 @@
-package net.matsudamper.browser.ui.history
+package net.matsudamper.browser.ui.settings.address
 
 import androidx.compose.runtime.Stable
 
 @Stable
-data class HistoryScreenUiState(
+data class AddressesScreenUiState(
     val callbacks: Callbacks,
-    val searchQuery: String,
     val entries: List<EntryItem>,
     val showDeleteAllDialog: Boolean,
 ) {
     @Stable
     data class EntryItem(
         val id: Long,
-        val title: String,
-        val url: String,
-        val visitedAt: Long,
+        val displayName: String,
+        val displayDetail: String,
         val listener: Listener,
     ) {
         @Stable
@@ -25,14 +23,14 @@ data class HistoryScreenUiState(
     }
 
     interface Callbacks {
-        fun onSearchQueryChange(query: String)
+        fun onClickAdd()
         fun onClickDeleteAll()
         fun onConfirmDeleteAll()
         fun onDismissDeleteAllDialog()
     }
 }
 
-internal object PreviewHistoryEntryListener : HistoryScreenUiState.EntryItem.Listener {
+internal object PreviewAddressesEntryListener : AddressesScreenUiState.EntryItem.Listener {
     override fun onClick() = Unit
     override fun onDelete() = Unit
 }

@@ -11,7 +11,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import net.matsudamper.browser.data.crashlog.CrashLogListItem
 import net.matsudamper.browser.data.crashlog.CrashLogRepository
-import net.matsudamper.browser.ui.settings.CrashLogsScreenUiState
+import net.matsudamper.browser.ui.settings.crash.CrashLogsScreenUiState
 
 internal class CrashLogsScreenViewModel(
     private val crashLogRepository: CrashLogRepository,
@@ -22,10 +22,6 @@ internal class CrashLogsScreenViewModel(
     private val viewModelStateFlow = MutableStateFlow(ViewModelState())
 
     private val callbacks = object : CrashLogsScreenUiState.Callbacks {
-        override fun onClickEntry(id: Long) {
-            eventHandler.trySend { it.navigateToDetail(id) }
-        }
-
         override fun onClickDeleteAll() {
             viewModelStateFlow.update { it.copy(showDeleteAllDialog = true) }
         }
@@ -54,7 +50,7 @@ internal class CrashLogsScreenViewModel(
                     CrashLogsScreenUiState(
                         callbacks = callbacks,
                         isLoading = state.isLoading,
-                        entries = state.entries,
+                        entries = state.entries.map(::toEntryItem),
                         showDeleteAllDialog = state.showDeleteAllDialog,
                     )
                 }
@@ -68,6 +64,19 @@ internal class CrashLogsScreenViewModel(
                 viewModelStateFlow.update { it.copy(entries = entries, isLoading = false) }
             }
         }
+    }
+
+    private fun toEntryItem(entry: CrashLogListItem): CrashLogsScreenUiState.EntryItem {
+        return CrashLogsScreenUiState.EntryItem(
+            id = entry.id,
+            title = entry.title,
+            occurredAt = entry.occurredAt,
+            listener = object : CrashLogsScreenUiState.EntryItem.Listener {
+                override fun onClick() {
+                    eventHandler.trySend { it.navigateToDetail(entry.id) }
+                }
+            },
+        )
     }
 
     interface Event {

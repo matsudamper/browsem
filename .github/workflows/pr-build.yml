@@ -159,7 +159,7 @@ jobs:
       - name: Run Android Instrumentation Tests (Managed Device)
         run: |
           # 失敗時は失敗テストの詳細をコンソール + Job Summary へ出力し、原因調査を容易にする。
-          if ! ./gradlew :app:pixel6Api34DebugAndroidTest; then
+          if ! ./gradlew :app:pixel6Api34DebugAndroidTest -Pandroid.testoptions.manageddevices.emulator.gpu=swiftshader_indirect; then
             echo "::error::android-test が失敗しました"
             FAILURES="$(./gradlew :app:printInstrumentationFailures --console=plain 2>&1 || true)"
             echo "$FAILURES"

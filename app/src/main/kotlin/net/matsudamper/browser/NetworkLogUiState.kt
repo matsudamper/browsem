@@ -1,6 +1,7 @@
 package net.matsudamper.browser
 
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.Stable
 import androidx.compose.ui.graphics.ImageBitmap
 
 /**
@@ -37,7 +38,13 @@ internal data class NetworkLogUiState(
         val fromCache: Boolean,
         /** 画像フィルタ選択時のみ設定されるサムネイル。それ以外は null */
         val thumbnail: Thumbnail?,
-    )
+        val listener: Listener,
+    ) {
+        @Stable
+        interface Listener {
+            fun onClick()
+        }
+    }
 
     /**
      * 一覧に出す画像のサムネイル。
@@ -65,7 +72,13 @@ internal data class NetworkLogUiState(
         val label: String,
         val count: Int,
         val isSelected: Boolean,
-    )
+        val listener: Listener,
+    ) {
+        @Stable
+        interface Listener {
+            fun onClick()
+        }
+    }
 
     /** 一覧上部に出す集計 */
     @Immutable
@@ -141,9 +154,7 @@ internal data class NetworkLogUiState(
     }
 
     interface Callbacks {
-        fun onClickFilter(filter: ResourceFilter)
         fun onSearchQueryChange(query: String)
-        fun onClickEntry(id: String)
         fun onClickCloseDetail()
         fun onClickCopyUrl()
         fun onClickCopyBody()
@@ -157,4 +168,12 @@ internal data class NetworkLogUiState(
         fun onVisibleRangeChange(firstIndex: Int, lastIndex: Int)
         fun onDismiss()
     }
+}
+
+internal object PreviewNetworkLogEntryListener : NetworkLogUiState.Entry.Listener {
+    override fun onClick() = Unit
+}
+
+internal object PreviewNetworkLogFilterListener : NetworkLogUiState.Filter.Listener {
+    override fun onClick() = Unit
 }

@@ -43,7 +43,15 @@ internal class DownloadManagementScreenViewModel(
     private val workManager = WorkManager.getInstance(application)
     private val downloadRepository = DownloadRepository(application)
     private val geckoDownloadManager = GeckoDownloadManager(application, downloadRepository)
-    private val callbacks = buildCallbacks()
+    private val screenCallbacks = object : DownloadManagementScreenUiState.Callbacks {
+        override fun onOpenDownloadsFolder() {
+            openDownloadsFolder()
+        }
+
+        override suspend fun loadPreview(fileUri: String): DownloadManagementScreenUiState.Preview {
+            return this@DownloadManagementScreenViewModel.loadPreview(fileUri)
+        }
+    }
 
     val eventHandler = Channel<(Event) -> Unit>(Channel.UNLIMITED)
 
@@ -54,7 +62,7 @@ internal class DownloadManagementScreenViewModel(
         DownloadManagementScreenUiState(
             isLoading = true,
             downloads = emptyList(),
-            callbacks = callbacks,
+            callbacks = screenCallbacks,
         ),
     ).also { uiStateFlow ->
         viewModelScope.launch {
@@ -66,22 +74,12 @@ internal class DownloadManagementScreenViewModel(
                         DownloadManagementScreenUiState(
                             isLoading = false,
                             downloads = items,
-                            callbacks = callbacks,
+                            callbacks = screenCallbacks,
                         )
                     }
                 }
         }
     }.asStateFlow()
-
-    private fun buildCallbacks() = DownloadManagementScreenUiState.Callbacks(
-        onCancel = { id -> cancelDownload(id) },
-        onPause = { id -> pauseDownload(id) },
-        onOpenFile = { fileUri -> openFile(fileUri) },
-        onOpenDownloadsFolder = { openDownloadsFolder() },
-        onResume = { id -> resumeDownload(id) },
-        onOpenOriginPage = { url -> eventHandler.trySend { it.navigateToUrl(url) } },
-        loadPreview = { fileUri -> loadPreview(fileUri) },
-    )
 
     /**
      * ダウンロード済みファイルのプレビューを読み込む。
@@ -278,6 +276,32 @@ internal class DownloadManagementScreenViewModel(
             status = uiStatus,
             enqueuedAt = enqueuedAt,
             originPageUrl = referrerUrl.ifBlank { null },
+            listener = object : DownloadManagementScreenUiState.DownloadItem.Listener {
+                override fun onCancel() {
+                    cancelDownload(workerId)
+                }
+
+                override fun onPause() {
+                    pauseDownload(workerId)
+                }
+
+                override fun onOpenFile() {
+                    val completedUri = (uiStatus as? DownloadManagementScreenUiState.DownloadStatus.Completed)?.fileUri
+                    if (completedUri != null) {
+                        openFile(completedUri)
+                    }
+                }
+
+                override fun onResume() {
+                    resumeDownload(workerId)
+                }
+
+                override fun onOpenOriginPage() {
+                    referrerUrl.takeIf { it.isNotBlank() }?.let { url ->
+                        eventHandler.trySend { it.navigateToUrl(url) }
+                    }
+                }
+            },
         )
     }
 

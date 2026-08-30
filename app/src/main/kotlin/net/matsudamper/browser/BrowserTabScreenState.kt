@@ -494,6 +494,8 @@ internal class BrowserTabScreenState(
     // --- Scroll / Refresh state ---
     var visualViewportScale by mutableFloatStateOf(1f)
     var isRefreshing by mutableStateOf(false)
+    // フルページロード中かどうか。更新ボタンを停止ボタンに切り替えるために使用する。
+    var isPageLoading by mutableStateOf(browserTab.isPageLoading)
     // BrowserTab.scrollY に委譲することで、タブ切替で State が再生成されても
     // スクロール位置を保持し、復元タブでの PullToRefresh 誤発動を防ぐ。
     var scrollY: Int
@@ -530,7 +532,14 @@ internal class BrowserTabScreenState(
     /** このタブに対して有効な拡張機能アクションを、ユーザーが決めた並び順で返す */
     val extensionActions: List<WebExtensionActionController.ActionUiState>
         get() = sortByExtensionActionOrder(
-            items = webExtensionActionController.actions(session),
+            items = webExtensionActionController.actions(
+                session,
+                object : WebExtensionActionController.ActionClickHandler {
+                    override fun onActionClick(extensionId: String) {
+                        onExtensionActionClick(extensionId)
+                    }
+                },
+            ),
             order = draggingExtensionActionOrder ?: extensionActionOrder,
             idOf = { it.extensionId },
         )
@@ -586,6 +595,13 @@ internal class BrowserTabScreenState(
     fun onSuperRefresh() {
         // キャッシュをバイパスしてリロード（スーパーリフレッシュ）
         superRefreshCurrentPage()
+    }
+
+    fun onStopLoading() {
+        session.stop()
+        isRefreshing = false
+        browserTab.clearPageLoadingState()
+        isPageLoading = false
     }
 
     fun onRefreshFromSwipe() {
@@ -1408,6 +1424,11 @@ internal class BrowserTabScreenState(
     }
 
     override fun onSessionStateChange(sessionState: GeckoSession.SessionState) {
+    }
+
+    override fun onPageLoadingChanged(value: Boolean) {
+        browserTab.isPageLoading = value
+        isPageLoading = value
     }
 
     override fun onPageStart(url: String) {

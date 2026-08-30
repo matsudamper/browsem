@@ -12,6 +12,7 @@ import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.os.Process
+import net.matsudamper.browser.ui.settings.site.SiteSettingsScreen
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -36,8 +37,10 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.Stable
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.Stable
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -105,17 +108,16 @@ import net.matsudamper.browser.ui.common.BrowserTheme
 import net.matsudamper.browser.ui.downloads.DownloadManagementScreen
 import net.matsudamper.browser.ui.extensions.ExtensionsScreen
 import net.matsudamper.browser.ui.history.HistoryScreen
-import net.matsudamper.browser.ui.settings.CrashLogDetailRoute
-import net.matsudamper.browser.ui.settings.CrashLogsRoute
-import net.matsudamper.browser.ui.settings.AddressEditScreen
-import net.matsudamper.browser.ui.settings.AddressesScreen
-import net.matsudamper.browser.ui.settings.BackupProgressScreen
-import net.matsudamper.browser.ui.settings.BackupProgressUiState
+import net.matsudamper.browser.ui.settings.crash.CrashLogDetailRoute
+import net.matsudamper.browser.ui.settings.crash.CrashLogsRoute
+import net.matsudamper.browser.ui.settings.address.AddressEditScreen
+import net.matsudamper.browser.ui.settings.address.AddressesScreen
+import net.matsudamper.browser.ui.settings.backup.BackupProgressScreen
+import net.matsudamper.browser.ui.settings.backup.BackupProgressUiState
 import net.matsudamper.browser.ui.settings.SettingsScreen
-import net.matsudamper.browser.ui.settings.SiteFormInputFieldRoute
-import net.matsudamper.browser.ui.settings.SiteFormInputPathRoute
-import net.matsudamper.browser.ui.settings.SiteFormInputPathsRoute
-import net.matsudamper.browser.ui.settings.SiteSettingsScreen
+import net.matsudamper.browser.ui.settings.form.SiteFormInputFieldScreen
+import net.matsudamper.browser.ui.settings.form.SiteFormInputPathScreen
+import net.matsudamper.browser.ui.settings.form.SiteFormInputPathsScreen
 import net.matsudamper.browser.ui.tabs.TabsScreen
 import org.koin.compose.koinInject
 import org.mozilla.geckoview.GeckoRuntime
@@ -128,7 +130,8 @@ import org.mozilla.geckoview.GeckoRuntime
 internal fun BrowserApp(
     viewModel: BrowserViewModel,
     newTabUrlFlow: Flow<NewTabRequest>,
-    openDownloadsFlow: Flow<String?>,
+    openDownloadsFlow: Flow<OpenDownloadsRequest>,
+    onOpenDownloadsRequestConsumed: (String) -> Unit,
     onInstallExtensionRequest: (String) -> Unit,
     onRequestDownloadNotificationPermission: suspend () -> Unit,
 ) {
@@ -151,6 +154,7 @@ internal fun BrowserApp(
                 browserSessionLifecycleController = viewModel.browserSessionLifecycleController,
                 runtime = viewModel.runtime,
                 openDownloadsFlow = openDownloadsFlow,
+                onOpenDownloadsRequestConsumed = onOpenDownloadsRequestConsumed,
                 onNavigateToUrl = { url ->
                     val tabId = UUID.randomUUID().toString()
                     val newTab = viewModel.browserTabController.createAndAppendTab(
@@ -191,7 +195,8 @@ internal fun BrowserAppShell(
     browserTabController: BrowserTabController,
     browserSessionLifecycleController: BrowserSessionLifecycleController,
     runtime: GeckoRuntime,
-    openDownloadsFlow: Flow<String?>? = null,
+    openDownloadsFlow: Flow<OpenDownloadsRequest>? = null,
+    onOpenDownloadsRequestConsumed: ((String) -> Unit)? = null,
     onNavigateToUrl: (suspend (url: String) -> Unit)? = null,
     rootContent: @Composable (outerNavActions: OuterNavActions) -> Unit,
 ) {
@@ -203,11 +208,16 @@ internal fun BrowserAppShell(
     val context = LocalContext.current
 
     // 通知タップ時にダウンロード管理画面を開く
-    var pendingHighlightWorkerId by remember { mutableStateOf<String?>(null) }
+    var pendingOpenDownloadsRequest by rememberSaveable { mutableStateOf(false) }
+    var pendingHighlightWorkerId by rememberSaveable { mutableStateOf<String?>(null) }
+    var pendingOpenDownloadsRequestId by rememberSaveable { mutableStateOf<String?>(null) }
+    var pendingConsumeByWorkerIdEntries by rememberSaveable { mutableStateOf(listOf<Pair<String, String>>()) }
     if (openDownloadsFlow != null) {
         LaunchedEffect(openDownloadsFlow) {
-            openDownloadsFlow.onEach { workerId ->
-                pendingHighlightWorkerId = workerId
+            openDownloadsFlow.onEach { request ->
+                pendingHighlightWorkerId = request.workerId
+                pendingOpenDownloadsRequestId = request.requestId
+                pendingOpenDownloadsRequest = true
                 val existingIndex = outerBackStack.indexOfLast { it is AppDestination.Downloads }
                 if (existingIndex < 0) {
                     outerBackStack.add(AppDestination.Downloads)
@@ -415,7 +425,7 @@ internal fun BrowserAppShell(
                             })
                         }
                     }
-                    SiteFormInputPathsRoute(
+                    SiteFormInputPathsScreen(
                         uiState = pathsUiState,
                     )
                 }
@@ -460,7 +470,7 @@ internal fun BrowserAppShell(
                             })
                         }
                     }
-                    SiteFormInputPathRoute(
+                    SiteFormInputPathScreen(
                         uiState = pathUiState,
                     )
                 }
@@ -487,10 +497,14 @@ internal fun BrowserAppShell(
                                 override fun navigateBack() {
                                     outerBackStack.removeLastOrNull()
                                 }
+
+                                override fun navigateBackAfterDeleted() {
+                                    outerBackStack.removeLastOrNull()
+                                }
                             })
                         }
                     }
-                    SiteFormInputFieldRoute(
+                    SiteFormInputFieldScreen(
                         uiState = fieldUiState,
                     )
                 }
@@ -666,12 +680,43 @@ internal fun BrowserAppShell(
                         DownloadManagementScreenViewModel(context.applicationContext as Application)
                     })
                     val downloadsUiState by downloadsViewModel.uiState.collectAsState()
-                    var highlightItemId by remember { mutableStateOf<UUID?>(null) }
-                    LaunchedEffect(pendingHighlightWorkerId) {
-                        val workerId = pendingHighlightWorkerId ?: return@LaunchedEffect
-                        val id = runCatching { UUID.fromString(workerId) }.getOrNull() ?: return@LaunchedEffect
+                    val currentOnOpenDownloadsRequestConsumed by rememberUpdatedState(onOpenDownloadsRequestConsumed)
+                    var highlightItemIdString by rememberSaveable { mutableStateOf<String?>(null) }
+                    val highlightItemId = highlightItemIdString?.let { id ->
+                        runCatching { UUID.fromString(id) }.getOrNull()
+                    }
+                    DisposableEffect(Unit) {
+                        onDispose {
+                            val entries = pendingConsumeByWorkerIdEntries
+                            if (entries.isNotEmpty()) {
+                                pendingConsumeByWorkerIdEntries = emptyList()
+                                entries.forEach { (_, requestId) ->
+                                    currentOnOpenDownloadsRequestConsumed?.invoke(requestId)
+                                }
+                            }
+                        }
+                    }
+                    LaunchedEffect(pendingOpenDownloadsRequest, pendingHighlightWorkerId, pendingOpenDownloadsRequestId) {
+                        if (!pendingOpenDownloadsRequest) return@LaunchedEffect
+                        val workerId = pendingHighlightWorkerId
+                        val requestId = pendingOpenDownloadsRequestId
                         pendingHighlightWorkerId = null
-                        downloadsViewModel.requestHighlight(id)
+                        pendingOpenDownloadsRequestId = null
+                        pendingOpenDownloadsRequest = false
+                        if (workerId != null) {
+                            val id = runCatching { UUID.fromString(workerId) }.getOrNull()
+                            if (id != null) {
+                                downloadsViewModel.requestHighlight(id)
+                                if (requestId != null) {
+                                    pendingConsumeByWorkerIdEntries =
+                                        pendingConsumeByWorkerIdEntries + (workerId to requestId)
+                                }
+                                return@LaunchedEffect
+                            }
+                        }
+                        if (requestId != null) {
+                            currentOnOpenDownloadsRequestConsumed?.invoke(requestId)
+                        }
                     }
                     LaunchedEffect(downloadsViewModel) {
                         downloadsViewModel.eventHandler.receiveAsFlow().collect {
@@ -688,7 +733,7 @@ internal fun BrowserAppShell(
                                 }
 
                                 override fun highlightItem(id: UUID) {
-                                    highlightItemId = id
+                                    highlightItemIdString = id.toString()
                                 }
                             })
                         }
@@ -697,7 +742,18 @@ internal fun BrowserAppShell(
                         uiState = downloadsUiState,
                         onBack = { outerBackStack.removeLastOrNull() },
                         highlightItemId = highlightItemId,
-                        onHighlightComplete = { highlightItemId = null },
+                        onHighlightComplete = { itemId ->
+                            highlightItemIdString = null
+                            val workerId = itemId.toString()
+                            val requestId = pendingConsumeByWorkerIdEntries
+                                .firstOrNull { it.first == workerId }
+                                ?.second
+                            if (requestId != null) {
+                                pendingConsumeByWorkerIdEntries =
+                                    pendingConsumeByWorkerIdEntries.filterNot { it.first == workerId }
+                                currentOnOpenDownloadsRequestConsumed?.invoke(requestId)
+                            }
+                        },
                     )
                 }
 
@@ -799,7 +855,10 @@ internal fun BrowserAppShell(
 
 @Stable
 internal class OuterNavActions(private val backStack: MutableList<NavKey>) {
-    fun add(destination: AppDestination) { backStack.add(destination) }
+    fun add(destination: AppDestination) {
+        backStack.add(destination)
+    }
+
     fun addIfAbsent(destination: AppDestination) {
         if (backStack.none { it == destination }) backStack.add(destination)
     }
@@ -905,6 +964,7 @@ private fun MainBrowserContent(
                         innerBackStack.firstOrNull() is BrowserNavDestination.Setup -> {
                             selectTab(tabId, null)
                         }
+
                         else -> {
                             val currentBrowserTab = innerBackStack.filterIsInstance<BrowserNavDestination.Browser>().lastOrNull()
                             if (currentBrowserTab == null || browserTabController.findTab(currentBrowserTab.tabId) == null) {
@@ -1017,25 +1077,31 @@ private fun MainBrowserContent(
                         onDispose { browserScreenViewModel.close() }
                     }
                     val browserScreenUiState by browserScreenViewModel.uiState.collectAsState()
+                    LaunchedEffect(browserScreenViewModel) {
+                        browserScreenViewModel.eventHandler.receiveAsFlow().collect {
+                            it(object : BrowserScreenViewModel.Event {
+                                override fun selectTab(tabId: String) {
+                                    selectTab(tabId, null)
+                                }
+
+                                override fun backToOpenerTab(tabId: String) {
+                                    val openerTabId = browserTabController.findTab(tabId)?.openerTabId
+                                    val fallbackTabId = browserTabController.closeTab(tabId)
+                                    val targetTabId = openerTabId
+                                        ?.takeIf { browserTabController.findTab(it) != null }
+                                        ?: fallbackTabId
+                                    if (targetTabId != null) {
+                                        selectTab(targetTabId, null)
+                                    }
+                                }
+                            })
+                        }
+                    }
                     BrowserScreen(
                         tabId = key.tabId,
                         homepageUrl = uiState.homepageUrl,
                         uiState = browserScreenUiState,
                         browserTabController = browserTabController,
-                        onSelectTab = { tabId ->
-                            selectTab(tabId, null)
-                        },
-                        onBackToOpenerTab = { tabId ->
-                            // リンクから開いたタブを予測型バックで閉じ、opener タブへ戻る。
-                            val openerTabId = browserTabController.findTab(tabId)?.openerTabId
-                            val fallbackTabId = browserTabController.closeTab(tabId)
-                            val targetTabId = openerTabId
-                                ?.takeIf { browserTabController.findTab(it) != null }
-                                ?: fallbackTabId
-                            if (targetTabId != null) {
-                                selectTab(targetTabId, null)
-                            }
-                        },
                         previewHeaderContent = { modifier, tab, tabCount ->
                             BrowserToolbar(
                                 modifier = modifier,
@@ -1176,27 +1242,29 @@ private fun MainBrowserContent(
                                     browserTabController.selectTab(tabId)
                                     navController.replaceCurrentBrowserTab(tabId)
                                 }
+
+                                override fun openTab(tabId: String) {
+                                    selectTab(tabId, null)
+                                }
+
+                                override fun openNewTab(currentGroupId: TabGroupId?) {
+                                    scope.launch {
+                                        val tabId = UUID.randomUUID().toString()
+                                        if (currentGroupId != null) {
+                                            tabGroupRepository.assignTabToGroup(tabId, currentGroupId)
+                                        }
+                                        val newTab = viewModel.createTabWithHomepage(
+                                            tabId = tabId,
+                                            insertAfterSelectedTab = false,
+                                        )
+                                        selectTab(newTab.tabId, null)
+                                    }
+                                }
                             })
                         }
                     }
                     TabsScreen(
                         uiState = tabsUiState,
-                        onSelectTab = { tabId ->
-                            selectTab(tabId, null)
-                        },
-                        onOpenNewTab = { currentGroupId: TabGroupId? ->
-                            scope.launch {
-                                val tabId = UUID.randomUUID().toString()
-                                if (currentGroupId != null) {
-                                    tabGroupRepository.assignTabToGroup(tabId, currentGroupId)
-                                }
-                                val newTab = viewModel.createTabWithHomepage(
-                                    tabId = tabId,
-                                    insertAfterSelectedTab = false,
-                                )
-                                selectTab(newTab.tabId, null)
-                            }
-                        },
                         modifier = Modifier
                             .fillMaxSize()
                             .background(MaterialTheme.colorScheme.surface),

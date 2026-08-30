@@ -1,11 +1,10 @@
-package net.matsudamper.browser.ui.settings
+package net.matsudamper.browser.ui.settings.form
 
 import androidx.compose.runtime.Stable
 
 @Stable
 data class SiteFormInputPathScreenUiState(
     val callbacks: Callbacks,
-    val displayOrigin: String,
     val path: String,
     val displayPath: String,
     val fields: List<FieldEntry>,

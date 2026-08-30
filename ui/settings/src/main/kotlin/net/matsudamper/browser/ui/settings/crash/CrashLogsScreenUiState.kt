@@ -1,11 +1,11 @@
-package net.matsudamper.browser.ui.history
+package net.matsudamper.browser.ui.settings.crash
 
 import androidx.compose.runtime.Stable
 
 @Stable
-data class HistoryScreenUiState(
+data class CrashLogsScreenUiState(
     val callbacks: Callbacks,
-    val searchQuery: String,
+    val isLoading: Boolean,
     val entries: List<EntryItem>,
     val showDeleteAllDialog: Boolean,
 ) {
@@ -13,26 +13,22 @@ data class HistoryScreenUiState(
     data class EntryItem(
         val id: Long,
         val title: String,
-        val url: String,
-        val visitedAt: Long,
+        val occurredAt: Long,
         val listener: Listener,
     ) {
         @Stable
         interface Listener {
             fun onClick()
-            fun onDelete()
         }
     }
 
     interface Callbacks {
-        fun onSearchQueryChange(query: String)
         fun onClickDeleteAll()
         fun onConfirmDeleteAll()
         fun onDismissDeleteAllDialog()
     }
 }
 
-internal object PreviewHistoryEntryListener : HistoryScreenUiState.EntryItem.Listener {
+internal object PreviewCrashLogEntryListener : CrashLogsScreenUiState.EntryItem.Listener {
     override fun onClick() = Unit
-    override fun onDelete() = Unit
 }

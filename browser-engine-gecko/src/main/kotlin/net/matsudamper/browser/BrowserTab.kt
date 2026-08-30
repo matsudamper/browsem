@@ -102,6 +102,10 @@ class BrowserTab(
     // onScrollChanged が発火しないため 0 のままとなり、PullToRefresh が誤発動する。
     var scrollY: Int by mutableIntStateOf(0)
 
+    // フルページロード中かどうか。タブ切替で BrowserTabScreenState が再生成されても
+    // ロード状態を維持し、再接続時に停止ボタンを正しく表示するために使う。
+    var isPageLoading: Boolean = false
+
     // 未オープンタブのセッション復元情報を保持
     internal var pendingSessionState: String? by mutableStateOf(null)
 
@@ -185,6 +189,10 @@ class BrowserTab(
 
     fun detachSessionCallbacks() {
         sessionDelegateHost.detachUi()
+    }
+
+    fun clearPageLoadingState() {
+        sessionDelegateHost.clearPageLoadingState()
     }
 
     /** SessionState から履歴キャッシュを初期化する */
