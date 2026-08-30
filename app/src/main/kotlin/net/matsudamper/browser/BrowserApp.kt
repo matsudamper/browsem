@@ -487,10 +487,6 @@ internal fun BrowserAppShell(
                                 override fun navigateBack() {
                                     outerBackStack.removeLastOrNull()
                                 }
-
-                                override fun navigateBackAfterDeleted() {
-                                    outerBackStack.removeLastOrNull()
-                                }
                             })
                         }
                     }

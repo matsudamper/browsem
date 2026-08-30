@@ -28,12 +28,10 @@ internal class SiteFormInputFieldScreenViewModel(
 
     interface Event {
         fun navigateBack()
-        fun navigateBackAfterDeleted()
     }
 
     private data class ViewModelState(
         val deleteValueConfirm: String? = null,
-        val deleteFieldConfirm: Boolean = false,
     )
 
     private val viewModelStateFlow = MutableStateFlow(ViewModelState())
@@ -41,12 +39,6 @@ internal class SiteFormInputFieldScreenViewModel(
     private val callbacks = object : SiteFormInputFieldScreenUiState.Callbacks {
         override fun navigateBack() {
             eventHandler.trySend { it.navigateBack() }
-        }
-
-        override fun setFieldEnabled(enabled: Boolean) {
-            viewModelScope.launch {
-                formInputRepository.setFieldEnabled(origin, path, fieldKey, enabled)
-            }
         }
 
         override fun requestDeleteValue(value: String) {
@@ -64,22 +56,6 @@ internal class SiteFormInputFieldScreenViewModel(
         override fun dismissDeleteValueConfirm() {
             viewModelStateFlow.update { it.copy(deleteValueConfirm = null) }
         }
-
-        override fun requestDeleteField() {
-            viewModelStateFlow.update { it.copy(deleteFieldConfirm = true) }
-        }
-
-        override fun confirmDeleteField() {
-            viewModelStateFlow.update { it.copy(deleteFieldConfirm = false) }
-            viewModelScope.launch {
-                formInputRepository.deleteField(origin, path, fieldKey)
-                eventHandler.trySend { it.navigateBackAfterDeleted() }
-            }
-        }
-
-        override fun dismissDeleteFieldConfirm() {
-            viewModelStateFlow.update { it.copy(deleteFieldConfirm = false) }
-        }
     }
 
     val uiState: StateFlow<SiteFormInputFieldScreenUiState> = MutableStateFlow(
@@ -89,28 +65,23 @@ internal class SiteFormInputFieldScreenViewModel(
             path = path,
             displayPath = displayFormInputPath(path),
             fieldKey = fieldKey,
-            fieldEnabled = true,
             values = emptyList(),
             deleteValueConfirm = null,
-            deleteFieldConfirm = false,
         ),
     ).also { uiStateFlow ->
         viewModelScope.launch {
             combine(
                 formInputRepository.observeSavedValues(origin, path, fieldKey),
-                formInputRepository.observeFieldEnabled(origin, path, fieldKey),
                 viewModelStateFlow,
-            ) { values, fieldEnabled, dialogState ->
+            ) { values, dialogState ->
                 SiteFormInputFieldScreenUiState(
                     callbacks = callbacks,
                     displayOrigin = displayFormInputOrigin(origin),
                     path = path,
                     displayPath = displayFormInputPath(path),
                     fieldKey = fieldKey,
-                    fieldEnabled = fieldEnabled,
                     values = values,
                     deleteValueConfirm = dialogState.deleteValueConfirm,
-                    deleteFieldConfirm = dialogState.deleteFieldConfirm,
                 )
             }.collectLatest { state ->
                 uiStateFlow.value = state

@@ -37,13 +37,13 @@ class FormInputAutofillCoordinator(
 
     private class Attached(
         val session: GeckoSession,
-        val host: AddressAutofillHost,
+        val host: FormInputAutofillHost,
         val formInputRepository: FormInputRepository,
     )
 
     fun attach(
         session: GeckoSession,
-        host: AddressAutofillHost,
+        host: FormInputAutofillHost,
         formInputRepository: FormInputRepository,
     ) {
         synchronized(lock) {
@@ -68,6 +68,14 @@ class FormInputAutofillCoordinator(
                     handleFormSubmit(pageUrl, fields)
                 }
 
+                override fun onFieldLongPress(
+                    fieldKey: String,
+                    pageUrl: String,
+                    fields: List<FormInputFieldMessage>,
+                ) {
+                    handleFieldLongPress(fieldKey, pageUrl, fields)
+                }
+
                 override fun onFocusPortDisconnected() {
                     handleFocusPortDisconnected()
                 }
@@ -88,6 +96,19 @@ class FormInputAutofillCoordinator(
             attached = null
             lastFieldKey = null
             lastPageKey = null
+        }
+    }
+
+    /**
+     * テキスト選択メニュー（コピー/ペースト等）から呼び出し、
+     * フォーカス中の入力欄を保存対象にする確認ダイアログを表示する。
+     */
+    fun requestSaveFocusedField(session: GeckoSession) {
+        val current = synchronized(lock) { attached } ?: return
+        if (current.session !== session) return
+        fillExtension.queryFocusedField(session) { field, pageUrl ->
+            if (field == null || pageUrl.isNullOrBlank()) return@queryFocusedField
+            handleFieldLongPress(field.fieldKey, pageUrl, listOf(field))
         }
     }
 
@@ -151,6 +172,55 @@ class FormInputAutofillCoordinator(
                 Log.i(TAG, "form-submit saved host=${pageKey.host} path=${pageKey.path} count=${fields.size}")
             }.onFailure { error ->
                 Log.w(TAG, "form-submit save failed", error)
+            }
+        }
+    }
+
+    private fun handleFieldLongPress(
+        fieldKey: String,
+        pageUrl: String,
+        fields: List<FormInputFieldMessage>,
+    ) {
+        val pageKey = parseFormInputPageKey(pageUrl) ?: return
+        if (fieldKey.isBlank() || fields.isEmpty()) return
+        val current = synchronized(lock) { attached } ?: return
+        val pressedField = fields
+            .firstOrNull { it.fieldKey == fieldKey }
+            ?: fields.distinctBy { it.fieldKey }.firstOrNull { it.fieldKey.isNotBlank() }
+            ?: return
+        current.host.coroutineScope.launch(ioDispatcher) {
+            withContext(Dispatchers.Main) {
+                current.host.showFormInputSaveDialog(
+                    FormInputSaveDialogRequest(
+                        pageKey = pageKey,
+                        fieldKey = pressedField.fieldKey,
+                        value = pressedField.value,
+                        onConfirm = {
+                            current.host.dismissFormInputSaveDialog()
+                            current.host.coroutineScope.launch(ioDispatcher) {
+                                runCatching {
+                                    current.formInputRepository.registerFieldAndSave(
+                                        pageKey = pageKey,
+                                        fields = listOf(
+                                            FormFieldEntry(
+                                                fieldKey = pressedField.fieldKey,
+                                                value = pressedField.value,
+                                            ),
+                                        ),
+                                    )
+                                    Log.i(
+                                        TAG,
+                                        "field-long-press saved host=${pageKey.host} path=${pageKey.path} " +
+                                            "field=${pressedField.fieldKey}",
+                                    )
+                                }.onFailure { error ->
+                                    Log.w(TAG, "field-long-press save failed", error)
+                                }
+                            }
+                        },
+                        onDismiss = {},
+                    ),
+                )
             }
         }
     }

@@ -18,25 +18,15 @@ class FormInputRepository(context: Context) {
     }
 
     fun observeSavedPaths(origin: FormInputOrigin): Flow<List<SavedFormPathInfo>> {
-        return combine(
-            dao.observePathCounts(
-                scheme = origin.scheme,
-                host = origin.host,
-                port = origin.port,
-            ),
-            dao.observePreferencesForOrigin(
-                scheme = origin.scheme,
-                host = origin.host,
-                port = origin.port,
-            ),
-        ) { pathCounts, preferences ->
-            val preferencesByPath = preferences.groupBy { it.path }
+        return dao.observePathCounts(
+            scheme = origin.scheme,
+            host = origin.host,
+            port = origin.port,
+        ).map { pathCounts ->
             pathCounts.map { row ->
-                val pathPreferences = preferencesByPath[row.path].orEmpty()
                 SavedFormPathInfo(
                     path = row.path,
                     fieldCount = row.fieldCount,
-                    enabled = resolvePathEnabled(pathPreferences),
                 )
             }
         }.distinctUntilChanged()
@@ -62,26 +52,30 @@ class FormInputRepository(context: Context) {
                 port = origin.port,
                 path = path,
             ),
-        ) { fieldKeys, preferences, values ->
-            val pathEnabled = resolvePathEnabled(preferences)
-            val fieldPreferences = preferences.associate { it.fieldKey to it.enabled }
+        ) { valueFieldKeys, preferences, values ->
+            val registeredFieldKeys = preferences
+                .asSequence()
+                .filter { it.fieldKey != FORM_INPUT_PATH_SCOPE_FIELD_KEY }
+                .map { it.fieldKey }
+                .toSet()
             val valuePreviews = values
                 .asSequence()
                 .filter { it.value.isNotBlank() }
                 .groupBy { it.fieldKey }
-            fieldKeys.map { fieldKey ->
-                val previewValues = valuePreviews[fieldKey]
-                    .orEmpty()
-                    .groupBy { it.value }
-                    .map { (_, entries) -> entries.maxBy { it.createdAt } }
-                    .sortedByDescending { it.createdAt }
-                    .map { it.value }
-                SavedFormFieldInfo(
-                    fieldKey = fieldKey,
-                    previewValues = previewValues,
-                    enabled = pathEnabled && (fieldPreferences[fieldKey] ?: true),
-                )
-            }
+            (registeredFieldKeys + valueFieldKeys)
+                .sorted()
+                .map { fieldKey ->
+                    val previewValues = valuePreviews[fieldKey]
+                        .orEmpty()
+                        .groupBy { it.value }
+                        .map { (_, entries) -> entries.maxBy { it.createdAt } }
+                        .sortedByDescending { it.createdAt }
+                        .map { it.value }
+                    SavedFormFieldInfo(
+                        fieldKey = fieldKey,
+                        previewValues = previewValues,
+                    )
+                }
         }.distinctUntilChanged()
     }
 
@@ -99,45 +93,12 @@ class FormInputRepository(context: Context) {
         ).distinctUntilChanged()
     }
 
-    fun observeFieldEnabled(
-        origin: FormInputOrigin,
-        path: String,
-        fieldKey: String,
-    ): Flow<Boolean> {
-        return dao.observePreferencesForPath(
-            scheme = origin.scheme,
-            host = origin.host,
-            port = origin.port,
-            path = path,
-        ).map { preferences ->
-            val pathEnabled = resolvePathEnabled(preferences)
-            val fieldEnabled = preferences.find { it.fieldKey == fieldKey }?.enabled ?: true
-            pathEnabled && fieldEnabled
-        }.distinctUntilChanged()
-    }
-
-    fun observePathEnabled(origin: FormInputOrigin, path: String): Flow<Boolean> {
-        return dao.observePreferencesForPath(
-            scheme = origin.scheme,
-            host = origin.host,
-            port = origin.port,
-            path = path,
-        ).map { preferences ->
-            resolvePathEnabled(preferences)
-        }.distinctUntilChanged()
-    }
-
-    suspend fun getPathEnabled(origin: FormInputOrigin, path: String): Boolean {
-        return isPathEnabled(origin, path)
-    }
-
     suspend fun saveFields(pageKey: FormInputPageKey, fields: List<FormFieldEntry>) {
         val origin = pageKey.origin()
-        if (!isPathEnabled(origin, pageKey.path)) return
         val now = System.currentTimeMillis()
         fields.forEach { field ->
             if (field.fieldKey.isBlank() || field.value.isBlank()) return@forEach
-            if (!isFieldEnabled(origin, pageKey.path, field.fieldKey)) return@forEach
+            if (!isFieldRegistered(origin, pageKey.path, field.fieldKey)) return@forEach
             val touched = dao.touchValue(
                 scheme = pageKey.scheme,
                 host = pageKey.host,
@@ -187,8 +148,7 @@ class FormInputRepository(context: Context) {
     ): List<String> {
         if (fieldKey.isBlank()) return emptyList()
         val origin = pageKey.origin()
-        if (!isPathEnabled(origin, pageKey.path)) return emptyList()
-        if (!isFieldEnabled(origin, pageKey.path, fieldKey)) return emptyList()
+        if (!isFieldRegistered(origin, pageKey.path, fieldKey)) return emptyList()
         return dao.getDistinctValuesForField(
             scheme = pageKey.scheme,
             host = pageKey.host,
@@ -199,25 +159,8 @@ class FormInputRepository(context: Context) {
         )
     }
 
-    suspend fun setPathEnabled(origin: FormInputOrigin, path: String, enabled: Boolean) {
-        dao.upsertPreference(
-            FormInputPreferenceEntity(
-                scheme = origin.scheme,
-                host = origin.host,
-                port = origin.port,
-                path = path,
-                fieldKey = FORM_INPUT_PATH_SCOPE_FIELD_KEY,
-                enabled = enabled,
-            ),
-        )
-    }
-
-    suspend fun setFieldEnabled(
-        origin: FormInputOrigin,
-        path: String,
-        fieldKey: String,
-        enabled: Boolean,
-    ) {
+    suspend fun registerField(origin: FormInputOrigin, path: String, fieldKey: String) {
+        if (fieldKey.isBlank()) return
         dao.upsertPreference(
             FormInputPreferenceEntity(
                 scheme = origin.scheme,
@@ -225,8 +168,34 @@ class FormInputRepository(context: Context) {
                 port = origin.port,
                 path = path,
                 fieldKey = fieldKey,
-                enabled = enabled,
+                enabled = true,
             ),
+        )
+    }
+
+    suspend fun isFieldRegistered(
+        origin: FormInputOrigin,
+        path: String,
+        fieldKey: String,
+    ): Boolean {
+        return isFieldRegisteredInternal(origin, path, fieldKey)
+    }
+
+    /**
+     * 選択メニューから追加された field を登録し、値があれば保存する。
+     */
+    suspend fun registerFieldAndSave(
+        pageKey: FormInputPageKey,
+        fields: List<FormFieldEntry>,
+    ) {
+        val origin = pageKey.origin()
+        fields.forEach { field ->
+            if (field.fieldKey.isBlank()) return@forEach
+            registerField(origin, pageKey.path, field.fieldKey)
+        }
+        saveFields(
+            pageKey = pageKey,
+            fields = fields.filter { field -> field.value.isNotBlank() },
         )
     }
 
@@ -278,23 +247,6 @@ class FormInputRepository(context: Context) {
             fieldKey = fieldKey,
             value = value,
         )
-        if (dao.countValueRowsForField(
-                scheme = origin.scheme,
-                host = origin.host,
-                port = origin.port,
-                path = path,
-                fieldKey = fieldKey,
-            ) == 0
-        ) {
-            dao.deletePreferenceForField(
-                scheme = origin.scheme,
-                host = origin.host,
-                port = origin.port,
-                path = path,
-                fieldKey = fieldKey,
-            )
-            cleanupPathPreferencesIfEmpty(origin, path)
-        }
     }
 
     suspend fun deleteAll() {
@@ -308,39 +260,39 @@ class FormInputRepository(context: Context) {
                 host = origin.host,
                 port = origin.port,
                 path = path,
-            ) == 0
+            ) != 0
         ) {
-            dao.deletePreferencesForPath(
+            return
+        }
+        if (dao.countFieldPreferencesForPath(
                 scheme = origin.scheme,
                 host = origin.host,
                 port = origin.port,
                 path = path,
-            )
+            ) > 0
+        ) {
+            return
         }
-    }
-
-    private fun resolvePathEnabled(preferences: List<FormInputPreferenceEntity>): Boolean {
-        return preferences.find { it.fieldKey == FORM_INPUT_PATH_SCOPE_FIELD_KEY }?.enabled ?: true
-    }
-
-    private suspend fun isPathEnabled(origin: FormInputOrigin, path: String): Boolean {
-        return dao.getPreferenceEnabled(
+        dao.deletePreferencesForPath(
             scheme = origin.scheme,
             host = origin.host,
             port = origin.port,
             path = path,
-            fieldKey = FORM_INPUT_PATH_SCOPE_FIELD_KEY,
-        ) ?: true
+        )
     }
 
-    private suspend fun isFieldEnabled(origin: FormInputOrigin, path: String, fieldKey: String): Boolean {
+    private suspend fun isFieldRegisteredInternal(
+        origin: FormInputOrigin,
+        path: String,
+        fieldKey: String,
+    ): Boolean {
         return dao.getPreferenceEnabled(
             scheme = origin.scheme,
             host = origin.host,
             port = origin.port,
             path = path,
             fieldKey = fieldKey,
-        ) ?: true
+        ) != null
     }
 
     companion object {
@@ -357,13 +309,11 @@ data class FormFieldEntry(
 data class SavedFormPathInfo(
     val path: String,
     val fieldCount: Int,
-    val enabled: Boolean,
 )
 
 data class SavedFormFieldInfo(
     val fieldKey: String,
     val previewValues: List<String>,
-    val enabled: Boolean,
 )
 
 fun displayFormInputPath(path: String): String {
