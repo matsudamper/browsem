@@ -6,6 +6,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -40,6 +41,7 @@ class FormInputPreferenceTest {
         )
         val origin = page.origin()
         repository.setPathEnabled(origin, "/form", enabled = false)
+        repository.registerField(origin, "/form", "comment")
         repository.saveFields(
             pageKey = page,
             fields = listOf(FormFieldEntry(fieldKey = "comment", value = "hello")),
@@ -50,22 +52,20 @@ class FormInputPreferenceTest {
     }
 
     @Test
-    fun disabledFieldDoesNotSaveOrSuggest() = runBlocking {
+    fun unregisteredFieldDoesNotSaveOrSuggest() = runBlocking {
         val page = FormInputPageKey(
             scheme = "https",
             host = "example.com",
             port = 443,
             path = "/form",
         )
-        val origin = page.origin()
-        repository.setFieldEnabled(origin, "/form", "comment", enabled = false)
         repository.saveFields(
             pageKey = page,
             fields = listOf(FormFieldEntry(fieldKey = "comment", value = "hello")),
         )
 
         assertTrue(repository.getSuggestions(pageKey = page, fieldKey = "comment").isEmpty())
-        assertTrue(repository.observeSavedFields(origin, "/form").first().isEmpty())
+        assertTrue(repository.observeSavedFields(page.origin(), "/form").first().isEmpty())
     }
 
     @Test
@@ -77,7 +77,7 @@ class FormInputPreferenceTest {
             path = "/form",
         )
         val origin = page.origin()
-        repository.setFieldEnabled(origin, "/form", "comment", enabled = true)
+        repository.registerField(origin, "/form", "comment")
         repository.saveFields(
             pageKey = page,
             fields = listOf(FormFieldEntry(fieldKey = "comment", value = "hello")),
@@ -96,7 +96,7 @@ class FormInputPreferenceTest {
             path = "/form",
         )
         val origin = page.origin()
-        repository.setFieldEnabled(origin, "/form", "comment", enabled = true)
+        repository.registerField(origin, "/form", "comment")
         repository.setPathEnabled(origin, "/form", enabled = false)
         repository.saveFields(
             pageKey = page,
@@ -116,7 +116,7 @@ class FormInputPreferenceTest {
             path = "/form",
         )
         val origin = page.origin()
-        repository.setFieldEnabled(origin, "/form", "comment", enabled = true)
+        repository.registerField(origin, "/form", "comment")
         repository.saveFields(
             pageKey = page,
             fields = listOf(FormFieldEntry(fieldKey = "comment", value = "first")),
@@ -136,6 +136,22 @@ class FormInputPreferenceTest {
     }
 
     @Test
+    fun registeredFieldWithoutValueAppearsInSavedFields() = runBlocking {
+        val page = FormInputPageKey(
+            scheme = "https",
+            host = "example.com",
+            port = 443,
+            path = "/form",
+        )
+        val origin = page.origin()
+        repository.registerField(origin, "/form", "memo")
+
+        val fields = repository.observeSavedFields(origin, "/form").first()
+        assertEquals("memo", fields.single().fieldKey)
+        assertTrue(fields.single().previewValues.isEmpty())
+    }
+
+    @Test
     fun deleteValueRemovesSingleSavedValue() = runBlocking {
         val page = FormInputPageKey(
             scheme = "https",
@@ -144,7 +160,7 @@ class FormInputPreferenceTest {
             path = "/form",
         )
         val origin = page.origin()
-        repository.setFieldEnabled(origin, "/form", "comment", enabled = true)
+        repository.registerField(origin, "/form", "comment")
         repository.saveFields(
             pageKey = page,
             fields = listOf(
@@ -165,7 +181,7 @@ class FormInputPreferenceTest {
     }
 
     @Test
-    fun deleteLastValueKeepsFieldEnabled() = runBlocking {
+    fun deleteLastValueKeepsFieldRegistered() = runBlocking {
         val page = FormInputPageKey(
             scheme = "https",
             host = "example.com",
@@ -173,7 +189,7 @@ class FormInputPreferenceTest {
             path = "/form",
         )
         val origin = page.origin()
-        repository.setFieldEnabled(origin, "/form", "comment", enabled = true)
+        repository.registerField(origin, "/form", "comment")
         repository.saveFields(
             pageKey = page,
             fields = listOf(FormFieldEntry(fieldKey = "comment", value = "only")),
@@ -181,12 +197,12 @@ class FormInputPreferenceTest {
 
         repository.deleteValue(origin, "/form", "comment", "only")
 
-        assertTrue(repository.getFieldEnabled(origin, "/form", "comment"))
+        assertTrue(repository.isFieldRegistered(origin, "/form", "comment"))
         assertTrue(repository.observeSavedValues(origin, "/form", "comment").first().isEmpty())
     }
 
     @Test
-    fun deleteLastFieldWithValueKeepsEnabledFieldWithoutValue() = runBlocking {
+    fun deleteLastFieldWithValueKeepsRegisteredFieldWithoutValue() = runBlocking {
         val page = FormInputPageKey(
             scheme = "https",
             host = "example.com",
@@ -194,12 +210,11 @@ class FormInputPreferenceTest {
             path = "/form",
         )
         val origin = page.origin()
-        repository.enableFieldsAndSave(
+        repository.registerFieldAndSave(
             pageKey = page,
             fields = listOf(FormFieldEntry(fieldKey = "memo", value = "")),
-            enabledFieldKeys = setOf("memo"),
         )
-        repository.setFieldEnabled(origin, "/form", "comment", enabled = true)
+        repository.registerField(origin, "/form", "comment")
         repository.saveFields(
             pageKey = page,
             fields = listOf(FormFieldEntry(fieldKey = "comment", value = "hello")),
@@ -207,7 +222,7 @@ class FormInputPreferenceTest {
 
         repository.deleteField(origin, "/form", "comment")
 
-        assertTrue(repository.getFieldEnabled(origin, "/form", "memo"))
+        assertTrue(repository.isFieldRegistered(origin, "/form", "memo"))
     }
 
     @Test
@@ -215,7 +230,7 @@ class FormInputPreferenceTest {
         val httpsOrigin = FormInputOrigin(scheme = "https", host = "example.com", port = 443)
         val httpOrigin = FormInputOrigin(scheme = "http", host = "example.com", port = 80)
         repository.setPathEnabled(httpsOrigin, "/form", enabled = false)
-        repository.setFieldEnabled(httpOrigin, "/form", "comment", enabled = true)
+        repository.registerField(httpOrigin, "/form", "comment")
         repository.saveFields(
             pageKey = FormInputPageKey(
                 scheme = "http",
@@ -258,7 +273,7 @@ class FormInputPreferenceTest {
             port = 443,
             path = "/form",
         )
-        repository.setFieldEnabled(page.origin(), page.path, "query", enabled = true)
+        repository.registerField(page.origin(), page.path, "query")
         repeat(FormInputRepository.MAX_FIELD_VALUE_ROWS + 5) { index ->
             repository.saveFields(
                 pageKey = page,

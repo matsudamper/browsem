@@ -44,8 +44,8 @@ class FormInputRepositoryTest {
             port = 443,
             path = "/other",
         )
-        repository.setFieldEnabled(page.origin(), page.path, "comment", enabled = true)
-        repository.setFieldEnabled(otherPath.origin(), otherPath.path, "comment", enabled = true)
+        repository.registerField(page.origin(), page.path, "comment")
+        repository.registerField(otherPath.origin(), otherPath.path, "comment")
         repository.saveFields(
             pageKey = page,
             fields = listOf(FormFieldEntry(fieldKey = "comment", value = "hello")),
@@ -73,7 +73,7 @@ class FormInputRepositoryTest {
             port = 443,
             path = "/form",
         )
-        repository.setFieldEnabled(page.origin(), page.path, "title", enabled = true)
+        repository.registerField(page.origin(), page.path, "title")
         repository.saveFields(
             pageKey = page,
             fields = listOf(FormFieldEntry(fieldKey = "title", value = "first")),
@@ -113,9 +113,9 @@ class FormInputRepositoryTest {
             port = 8443,
             path = "/form",
         )
-        repository.setFieldEnabled(httpsPage.origin(), httpsPage.path, "comment", enabled = true)
-        repository.setFieldEnabled(httpPage.origin(), httpPage.path, "comment", enabled = true)
-        repository.setFieldEnabled(customPortPage.origin(), customPortPage.path, "comment", enabled = true)
+        repository.registerField(httpsPage.origin(), httpsPage.path, "comment")
+        repository.registerField(httpPage.origin(), httpPage.path, "comment")
+        repository.registerField(customPortPage.origin(), customPortPage.path, "comment")
         repository.saveFields(
             pageKey = httpsPage,
             fields = listOf(FormFieldEntry(fieldKey = "comment", value = "secure")),
@@ -144,7 +144,7 @@ class FormInputRepositoryTest {
     }
 
     @Test
-    fun disabledFieldByDefaultDoesNotSaveOrSuggest() = runBlocking {
+    fun unregisteredFieldDoesNotSaveOrSuggest() = runBlocking {
         val page = FormInputPageKey(
             scheme = "https",
             host = "example.com",
@@ -160,48 +160,28 @@ class FormInputRepositoryTest {
     }
 
     @Test
-    fun enableFieldsAndSaveEnablesAndPersistsValues() = runBlocking {
+    fun registerFieldAndSaveRegistersAndPersistsValues() = runBlocking {
         val page = FormInputPageKey(
             scheme = "https",
             host = "example.com",
             port = 443,
             path = "/form",
         )
-        repository.enableFieldsAndSave(
+        repository.registerFieldAndSave(
             pageKey = page,
             fields = listOf(
                 FormFieldEntry(fieldKey = "comment", value = "hello"),
                 FormFieldEntry(fieldKey = "title", value = ""),
             ),
-            enabledFieldKeys = setOf("comment", "title"),
         )
 
         assertEquals(listOf("hello"), repository.getSuggestions(pageKey = page, fieldKey = "comment"))
-        assertTrue(repository.getFieldEnabled(page.origin(), page.path, "comment"))
-        assertTrue(repository.getFieldEnabled(page.origin(), page.path, "title"))
+        assertTrue(repository.isFieldRegistered(page.origin(), page.path, "comment"))
+        assertTrue(repository.isFieldRegistered(page.origin(), page.path, "title"))
     }
 
     @Test
-    fun enableFieldsAndSaveWithEmptySelectionDisablesFields() = runBlocking {
-        val page = FormInputPageKey(
-            scheme = "https",
-            host = "example.com",
-            port = 443,
-            path = "/form",
-        )
-        repository.setFieldEnabled(page.origin(), page.path, "comment", enabled = true)
-        repository.enableFieldsAndSave(
-            pageKey = page,
-            fields = listOf(FormFieldEntry(fieldKey = "comment", value = "hello")),
-            enabledFieldKeys = emptySet(),
-        )
-
-        assertFalse(repository.getFieldEnabled(page.origin(), page.path, "comment"))
-        assertTrue(repository.getSuggestions(pageKey = page, fieldKey = "comment").isEmpty())
-    }
-
-    @Test
-    fun enableFieldsAndSaveRecordsFieldPreferenceWhenPathDisabled() = runBlocking {
+    fun registerFieldAndSaveRecordsFieldWhenPathDisabled() = runBlocking {
         val page = FormInputPageKey(
             scheme = "https",
             host = "example.com",
@@ -209,13 +189,31 @@ class FormInputRepositoryTest {
             path = "/form",
         )
         repository.setPathEnabled(page.origin(), page.path, enabled = false)
-        repository.enableFieldsAndSave(
+        repository.registerFieldAndSave(
             pageKey = page,
             fields = listOf(FormFieldEntry(fieldKey = "comment", value = "hello")),
-            enabledFieldKeys = setOf("comment"),
         )
 
-        assertTrue(repository.getFieldEnabled(page.origin(), page.path, "comment"))
+        assertTrue(repository.isFieldRegistered(page.origin(), page.path, "comment"))
+        assertTrue(repository.getSuggestions(pageKey = page, fieldKey = "comment").isEmpty())
+    }
+
+    @Test
+    fun deleteFieldRemovesRegistration() = runBlocking {
+        val page = FormInputPageKey(
+            scheme = "https",
+            host = "example.com",
+            port = 443,
+            path = "/form",
+        )
+        repository.registerFieldAndSave(
+            pageKey = page,
+            fields = listOf(FormFieldEntry(fieldKey = "comment", value = "hello")),
+        )
+
+        repository.deleteField(page.origin(), page.path, "comment")
+
+        assertFalse(repository.isFieldRegistered(page.origin(), page.path, "comment"))
         assertTrue(repository.getSuggestions(pageKey = page, fieldKey = "comment").isEmpty())
     }
 }

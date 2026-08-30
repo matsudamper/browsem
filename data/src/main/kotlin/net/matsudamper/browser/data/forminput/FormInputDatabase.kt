@@ -11,18 +11,19 @@ import androidx.room.migration.Migration
         FormFieldValueEntity::class,
         FormInputPreferenceEntity::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = true,
 )
 abstract class FormInputDatabase : RoomDatabase() {
     abstract fun formInputDao(): FormInputDao
 
     companion object {
-        const val SCHEMA_VERSION: Int = 3
+        const val SCHEMA_VERSION: Int = 4
 
         val ALL_MIGRATIONS: Array<Migration> = arrayOf(
             FORM_INPUT_DATABASE_MIGRATION_1_2,
             FORM_INPUT_DATABASE_MIGRATION_2_3,
+            FORM_INPUT_DATABASE_MIGRATION_3_4,
         )
 
         @Volatile
