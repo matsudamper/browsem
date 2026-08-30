@@ -43,11 +43,17 @@ internal fun buildViewportZoomInjectionScript(
 }
 
 private fun buildApplyViewportZoomDirectFunction(): String {
+    // SPA は既存 meta の content 変更ではなく新しい viewport meta を追加することがある。
+    // querySelector だけだと先頭要素しか更新できず、後から追加された meta が優先される。
     return "function applyDirect(c){" +
-        "var m=document.querySelector('meta[name=\"viewport\"]');" +
-        "if(!m){m=document.createElement('meta');m.name='viewport';" +
-        "(document.head||document.documentElement).appendChild(m);}" +
-        "if(m.content!==c){m.content=c;}" +
+        "var metas=document.querySelectorAll('meta[name=\"viewport\"]');" +
+        "if(metas.length===0){" +
+        "var m=document.createElement('meta');m.name='viewport';m.content=c;" +
+        "(document.head||document.documentElement).appendChild(m);" +
+        "return;}" +
+        "for(var i=0;i<metas.length;i++){" +
+        "if(metas[i].content!==c){metas[i].content=c;}" +
+        "}" +
         "}"
 }
 
@@ -92,6 +98,8 @@ private fun buildPersistentViewportZoomScriptBody(viewportContent: String): Stri
         "requestAnimationFrame(applyFromGlobal);" +
         "setTimeout(applyFromGlobal,0);" +
         "setTimeout(applyFromGlobal,100);" +
+        "setTimeout(applyFromGlobal,300);" +
+        "setTimeout(applyFromGlobal,500);" +
         "if(!window.__browserViewportZoomObserver&&document.head){" +
         "window.__browserViewportZoomObserver=new MutationObserver(function(){" +
         "applyFromGlobal();" +
