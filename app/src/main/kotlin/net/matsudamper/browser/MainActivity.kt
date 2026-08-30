@@ -62,7 +62,7 @@ class MainActivity : ComponentActivity() {
     private var webExtensionWarmUpInProgress = false
     private var webExtensionWarmUpRetryCount = 0
     private var lastProcessedDeepLinkUrl: String? = null
-    private var openDownloadsIntentConsumed = false
+    private var consumedOpenDownloadsWorkerId: String? = null
     private val createNewTabChannel = Channel<NewTabRequest>(Channel.UNLIMITED)
     private val openDownloadsChannel = Channel<String?>(Channel.CONFLATED)
 
@@ -121,7 +121,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         lastProcessedDeepLinkUrl = savedInstanceState?.getString(KEY_PROCESSED_DEEPLINK_URL)
-        openDownloadsIntentConsumed = savedInstanceState?.getBoolean(KEY_OPEN_DOWNLOADS_CONSUMED, false) == true
+        consumedOpenDownloadsWorkerId = savedInstanceState?.getString(KEY_OPEN_DOWNLOADS_CONSUMED_WORKER_ID)
         if (intent.isCustomTabLaunchIntent()) {
             launchCustomTabActivity(intent)
             finish()
@@ -140,11 +140,20 @@ class MainActivity : ComponentActivity() {
 
         // GeckoRuntime に依存しない Intent 処理を先に実行する。
         // チャネルはバッファ付きなので BrowserApp の composition 開始後に消費される。
+        val openDownloadsIntentWorkerId = intent.getStringExtra(DownloadWorker.EXTRA_WORKER_ID)
         when {
-            OpenDownloadsIntentPolicy.shouldClearRestoredIntent(intent.action, openDownloadsIntentConsumed) -> {
+            OpenDownloadsIntentPolicy.shouldClearRestoredIntent(
+                intent.action,
+                openDownloadsIntentWorkerId,
+                consumedOpenDownloadsWorkerId,
+            ) -> {
                 consumeOpenDownloadsIntent(intent)
             }
-            OpenDownloadsIntentPolicy.shouldDispatch(intent.action, openDownloadsIntentConsumed) -> {
+            OpenDownloadsIntentPolicy.shouldDispatch(
+                intent.action,
+                openDownloadsIntentWorkerId,
+                consumedOpenDownloadsWorkerId,
+            ) -> {
                 dispatchOpenDownloadsIntent(intent)
             }
         }
@@ -329,8 +338,8 @@ class MainActivity : ComponentActivity() {
         super.onSaveInstanceState(outState)
         // 処理済み deeplink URL を保存して設定変更後の重複タブ作成を防ぐ
         lastProcessedDeepLinkUrl?.let { outState.putString(KEY_PROCESSED_DEEPLINK_URL, it) }
-        if (openDownloadsIntentConsumed) {
-            outState.putBoolean(KEY_OPEN_DOWNLOADS_CONSUMED, true)
+        consumedOpenDownloadsWorkerId?.let { workerId ->
+            outState.putString(KEY_OPEN_DOWNLOADS_CONSUMED_WORKER_ID, workerId)
         }
     }
 
@@ -340,7 +349,7 @@ class MainActivity : ComponentActivity() {
 
     /** UI がダウンロード画面への遷移とハイライト要求を処理した後に Intent を消費する。 */
     internal fun markOpenDownloadsIntentConsumed() {
-        openDownloadsIntentConsumed = true
+        consumedOpenDownloadsWorkerId = intent.getStringExtra(DownloadWorker.EXTRA_WORKER_ID) ?: ""
         consumeOpenDownloadsIntent(intent)
     }
 
@@ -490,7 +499,7 @@ class MainActivity : ComponentActivity() {
         private const val EXTRA_CUSTOM_TABS_SESSION = "android.support.customtabs.extra.SESSION"
         private const val EXTRA_CUSTOM_TABS_SESSION_ID = "androidx.browser.customtabs.extra.SESSION_ID"
         private const val KEY_PROCESSED_DEEPLINK_URL = "processed_deeplink_url"
-        private const val KEY_OPEN_DOWNLOADS_CONSUMED = "open_downloads_consumed"
+        private const val KEY_OPEN_DOWNLOADS_CONSUMED_WORKER_ID = "open_downloads_consumed_worker_id"
     }
 
     private fun Intent.isCustomTabLaunchIntent(): Boolean {
