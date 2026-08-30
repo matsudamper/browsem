@@ -11,7 +11,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import net.matsudamper.browser.data.crashlog.CrashLogListItem
 import net.matsudamper.browser.data.crashlog.CrashLogRepository
-import net.matsudamper.browser.ui.settings.CrashLogsScreenUiState
+import net.matsudamper.browser.ui.settings.crash.CrashLogsScreenUiState
 
 internal class CrashLogsScreenViewModel(
     private val crashLogRepository: CrashLogRepository,

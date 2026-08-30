@@ -8,9 +8,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import net.matsudamper.browser.data.crashlog.CrashLogEntity
 import net.matsudamper.browser.data.crashlog.CrashLogRepository
-import net.matsudamper.browser.ui.settings.CrashLogDetailScreenUiState
+import net.matsudamper.browser.ui.settings.crash.CrashLogDetailScreenUiState
 
 internal class CrashLogDetailScreenViewModel(
     private val crashLogRepository: CrashLogRepository,

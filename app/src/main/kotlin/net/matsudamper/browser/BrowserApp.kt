@@ -105,8 +105,8 @@ import net.matsudamper.browser.ui.common.BrowserTheme
 import net.matsudamper.browser.ui.downloads.DownloadManagementScreen
 import net.matsudamper.browser.ui.extensions.ExtensionsScreen
 import net.matsudamper.browser.ui.history.HistoryScreen
-import net.matsudamper.browser.ui.settings.CrashLogDetailRoute
-import net.matsudamper.browser.ui.settings.CrashLogsRoute
+import net.matsudamper.browser.ui.settings.crash.CrashLogDetailRoute
+import net.matsudamper.browser.ui.settings.crash.CrashLogsRoute
 import net.matsudamper.browser.ui.settings.address.AddressEditScreen
 import net.matsudamper.browser.ui.settings.address.AddressesScreen
 import net.matsudamper.browser.ui.settings.backup.BackupProgressScreen
