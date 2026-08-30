@@ -16,13 +16,11 @@ data class SiteFormInputPathScreenUiState(
     data class FieldEntry(
         val fieldKey: String,
         val previewText: String,
-        val enabled: Boolean,
     )
 
     interface Callbacks {
         fun navigateBack()
         fun setPathEnabled(enabled: Boolean)
-        fun setFieldEnabled(fieldKey: String, enabled: Boolean)
         fun openField(fieldKey: String)
         fun requestDeletePath()
         fun confirmDeletePath()

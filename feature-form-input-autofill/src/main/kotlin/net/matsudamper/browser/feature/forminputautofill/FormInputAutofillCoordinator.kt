@@ -199,7 +199,7 @@ class FormInputAutofillCoordinator(
                             current.host.dismissFormInputSaveDialog()
                             current.host.coroutineScope.launch(ioDispatcher) {
                                 runCatching {
-                                    current.formInputRepository.enableFieldsAndSave(
+                                    current.formInputRepository.registerFieldAndSave(
                                         pageKey = pageKey,
                                         fields = listOf(
                                             FormFieldEntry(
@@ -207,7 +207,6 @@ class FormInputAutofillCoordinator(
                                                 value = pressedField.value,
                                             ),
                                         ),
-                                        enabledFieldKeys = setOf(pressedField.fieldKey),
                                     )
                                     Log.i(
                                         TAG,

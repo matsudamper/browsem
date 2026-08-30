@@ -1,13 +1,10 @@
 package net.matsudamper.browser.ui.settings
 
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -15,16 +12,13 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -78,38 +72,6 @@ internal fun SiteFormInputFieldScreen(
             }
 
             item {
-                SettingSection(title = "このフィールド") {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .toggleable(
-                                value = uiState.fieldEnabled,
-                                role = Role.Switch,
-                                onValueChange = uiState.callbacks::setFieldEnabled,
-                            )
-                            .padding(vertical = 4.dp),
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "保存とサジェスト",
-                                style = MaterialTheme.typography.bodyLarge,
-                            )
-                            Text(
-                                text = "このフィールドの自動保存と候補表示",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                        Switch(
-                            checked = uiState.fieldEnabled,
-                            onCheckedChange = null,
-                        )
-                    }
-                }
-            }
-
-            item {
                 Text(
                     text = "保存した値",
                     style = MaterialTheme.typography.titleMedium,
@@ -146,7 +108,7 @@ internal fun SiteFormInputFieldScreen(
                         .padding(horizontal = 8.dp, vertical = 16.dp),
                 ) {
                     Text(
-                        text = "このフィールドの保存データをすべて削除",
+                        text = "このフィールドを削除",
                         color = MaterialTheme.colorScheme.error,
                     )
                 }
@@ -178,10 +140,10 @@ internal fun SiteFormInputFieldScreen(
     if (uiState.deleteFieldConfirm) {
         AlertDialog(
             onDismissRequest = uiState.callbacks::dismissDeleteFieldConfirm,
-            title = { Text("フィールドのデータを削除") },
+            title = { Text("フィールドを削除") },
             text = {
                 Text(
-                    "「${uiState.fieldKey}」の保存データをすべて削除しますか？この操作は取り消せません。",
+                    "「${uiState.fieldKey}」を削除しますか？保存した値もすべて削除され、この操作は取り消せません。",
                 )
             },
             confirmButton = {
@@ -229,7 +191,6 @@ private fun SiteFormInputFieldScreenPreview() {
             uiState = SiteFormInputFieldScreenUiState(
                 callbacks = object : SiteFormInputFieldScreenUiState.Callbacks {
                     override fun navigateBack() = Unit
-                    override fun setFieldEnabled(enabled: Boolean) = Unit
                     override fun requestDeleteValue(value: String) = Unit
                     override fun confirmDeleteValue() = Unit
                     override fun dismissDeleteValueConfirm() = Unit
@@ -241,7 +202,6 @@ private fun SiteFormInputFieldScreenPreview() {
                 path = "/contact",
                 displayPath = "/contact",
                 fieldKey = "brcNum",
-                fieldEnabled = true,
                 values = listOf("001", "002", "003"),
                 deleteValueConfirm = null,
                 deleteFieldConfirm = false,

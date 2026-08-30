@@ -123,9 +123,6 @@ internal fun SiteFormInputPathScreen(
                     SiteFormInputFieldListItem(
                         field = field,
                         onOpen = { uiState.callbacks.openField(field.fieldKey) },
-                        onToggle = { enabled ->
-                            uiState.callbacks.setFieldEnabled(field.fieldKey, enabled)
-                        },
                         modifier = Modifier.testTag(
                             SiteFormInputPathScreenTestTags.FieldEntry(field.fieldKey).testTag,
                         ),
@@ -177,7 +174,6 @@ internal fun SiteFormInputPathScreen(
 private fun SiteFormInputFieldListItem(
     field: SiteFormInputPathScreenUiState.FieldEntry,
     onOpen: () -> Unit,
-    onToggle: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     ListItem(
@@ -192,12 +188,6 @@ private fun SiteFormInputFieldListItem(
                 )
             }
         },
-        trailingContent = {
-            Switch(
-                checked = field.enabled,
-                onCheckedChange = onToggle,
-            )
-        },
     )
 }
 
@@ -210,7 +200,6 @@ private fun SiteFormInputPathScreenPreview() {
                 callbacks = object : SiteFormInputPathScreenUiState.Callbacks {
                     override fun navigateBack() = Unit
                     override fun setPathEnabled(enabled: Boolean) = Unit
-                    override fun setFieldEnabled(fieldKey: String, enabled: Boolean) = Unit
                     override fun openField(fieldKey: String) = Unit
                     override fun requestDeletePath() = Unit
                     override fun confirmDeletePath() = Unit
@@ -224,12 +213,10 @@ private fun SiteFormInputPathScreenPreview() {
                     SiteFormInputPathScreenUiState.FieldEntry(
                         fieldKey = "comment",
                         previewText = "以前のコメント/別のコメント",
-                        enabled = true,
                     ),
                     SiteFormInputPathScreenUiState.FieldEntry(
                         fieldKey = "subject",
                         previewText = "お問い合わせ",
-                        enabled = false,
                     ),
                 ),
                 deletePathConfirm = false,

@@ -43,12 +43,6 @@ internal class SiteFormInputFieldScreenViewModel(
             eventHandler.trySend { it.navigateBack() }
         }
 
-        override fun setFieldEnabled(enabled: Boolean) {
-            viewModelScope.launch {
-                formInputRepository.setFieldEnabled(origin, path, fieldKey, enabled)
-            }
-        }
-
         override fun requestDeleteValue(value: String) {
             viewModelStateFlow.update { it.copy(deleteValueConfirm = value) }
         }
@@ -89,7 +83,6 @@ internal class SiteFormInputFieldScreenViewModel(
             path = path,
             displayPath = displayFormInputPath(path),
             fieldKey = fieldKey,
-            fieldEnabled = true,
             values = emptyList(),
             deleteValueConfirm = null,
             deleteFieldConfirm = false,
@@ -98,16 +91,14 @@ internal class SiteFormInputFieldScreenViewModel(
         viewModelScope.launch {
             combine(
                 formInputRepository.observeSavedValues(origin, path, fieldKey),
-                formInputRepository.observeFieldEnabled(origin, path, fieldKey),
                 viewModelStateFlow,
-            ) { values, fieldEnabled, dialogState ->
+            ) { values, dialogState ->
                 SiteFormInputFieldScreenUiState(
                     callbacks = callbacks,
                     displayOrigin = displayFormInputOrigin(origin),
                     path = path,
                     displayPath = displayFormInputPath(path),
                     fieldKey = fieldKey,
-                    fieldEnabled = fieldEnabled,
                     values = values,
                     deleteValueConfirm = dialogState.deleteValueConfirm,
                     deleteFieldConfirm = dialogState.deleteFieldConfirm,

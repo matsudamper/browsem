@@ -48,12 +48,6 @@ internal class SiteFormInputPathScreenViewModel(
             }
         }
 
-        override fun setFieldEnabled(fieldKey: String, enabled: Boolean) {
-            viewModelScope.launch {
-                formInputRepository.setFieldEnabled(origin, path, fieldKey, enabled)
-            }
-        }
-
         override fun openField(fieldKey: String) {
             eventHandler.trySend { it.navigateToField(fieldKey) }
         }
@@ -102,7 +96,6 @@ internal class SiteFormInputPathScreenViewModel(
                         SiteFormInputPathScreenUiState.FieldEntry(
                             fieldKey = field.fieldKey,
                             previewText = field.previewValues.joinToString("/"),
-                            enabled = field.enabled,
                         )
                     },
                     deletePathConfirm = dialogState.deletePathConfirm,
