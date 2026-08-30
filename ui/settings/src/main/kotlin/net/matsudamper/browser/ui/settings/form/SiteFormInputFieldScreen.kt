@@ -46,6 +46,16 @@ fun SiteFormInputFieldScreen(
         modifier = modifier.testTag(SiteFormInputFieldScreenTestTags.Root.testTag),
         onClickBack = { uiState.callbacks.navigateBack() },
         pageTitle = "保存されたid",
+        pageSubTitleAction = {
+            OutlinedButton(
+                onClick = { uiState.callbacks.requestDeleteField() },
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = MaterialTheme.colorScheme.error,
+                ),
+            ) {
+                Text("削除")
+            }
+        },
         pageSubTitle = uiState.fieldKey,
         listTitle = "保存した値",
     ) { paddingValues ->
@@ -95,6 +105,28 @@ fun SiteFormInputFieldScreen(
             },
         )
     }
+
+    if (uiState.deleteFieldConfirm) {
+        AlertDialog(
+            onDismissRequest = uiState.callbacks::dismissDeleteFieldConfirm,
+            title = { Text("idを削除") },
+            text = {
+                Text(
+                    "「${uiState.fieldKey}」を削除しますか？保存した値もすべて削除され、この操作は取り消せません。",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = uiState.callbacks::confirmDeleteField) {
+                    Text("削除", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = uiState.callbacks::dismissDeleteFieldConfirm) {
+                    Text("キャンセル")
+                }
+            },
+        )
+    }
 }
 
 @Composable
@@ -139,11 +171,15 @@ private fun SiteFormInputFieldScreenPreview() {
                     override fun requestDeleteValue(value: String) = Unit
                     override fun confirmDeleteValue() = Unit
                     override fun dismissDeleteValueConfirm() = Unit
+                    override fun requestDeleteField() = Unit
+                    override fun confirmDeleteField() = Unit
+                    override fun dismissDeleteFieldConfirm() = Unit
                 },
                 displayPath = "/contact",
                 fieldKey = "brcNum",
                 values = listOf("001", "002", "003"),
                 deleteValueConfirm = null,
+                deleteFieldConfirm = false,
             ),
         )
     }
