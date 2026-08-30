@@ -23,9 +23,6 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import net.matsudamper.browser.data.address.AddressEntity
-import net.matsudamper.browser.data.address.displayName
-import net.matsudamper.browser.data.address.displayText
 import net.matsudamper.browser.resources.R as ResourcesR
 
 sealed interface AddressesScreenTestTags {
@@ -95,8 +92,8 @@ fun AddressesScreen(
                 items(uiState.entries, key = { it.id }) { entry ->
                     AddressListItem(
                         entry = entry,
-                        onClick = { uiState.callbacks.onClickEntry(entry.id) },
-                        onDelete = { uiState.callbacks.onDeleteEntry(entry.id) },
+                        onClick = entry.onClick,
+                        onDelete = entry.onDelete,
                     )
                 }
             }
@@ -124,24 +121,23 @@ fun AddressesScreen(
 
 @Composable
 private fun AddressListItem(
-    entry: AddressEntity,
+    entry: AddressesScreenUiState.EntryItem,
     onClick: () -> Unit,
     onDelete: () -> Unit,
 ) {
     ListItem(
         headlineContent = {
             Text(
-                text = entry.displayName().ifEmpty { "（名前なし）" },
+                text = entry.displayName,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
         },
         supportingContent = {
             Column {
-                val detail = entry.displayText()
-                if (detail.isNotEmpty()) {
+                if (entry.displayDetail.isNotEmpty()) {
                     Text(
-                        text = detail,
+                        text = entry.displayDetail,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                         style = MaterialTheme.typography.bodySmall,
@@ -170,23 +166,17 @@ private fun PreviewAddressesScreen() {
             uiState = AddressesScreenUiState(
                 callbacks = object : AddressesScreenUiState.Callbacks {
                     override fun onClickAdd() = Unit
-                    override fun onClickEntry(id: Long) = Unit
-                    override fun onDeleteEntry(id: Long) = Unit
                     override fun onClickDeleteAll() = Unit
                     override fun onConfirmDeleteAll() = Unit
                     override fun onDismissDeleteAllDialog() = Unit
                 },
                 entries = listOf(
-                    AddressEntity(
+                    AddressesScreenUiState.EntryItem(
                         id = 1,
-                        familyName = "山田",
-                        givenName = "太郎",
-                        postalCode = "1000001",
-                        addressLevel1 = "東京都",
-                        addressLevel2 = "千代田区",
-                        streetAddress = "千代田1-1",
-                        tel = "0312345678",
-                        email = "taro@example.com",
+                        displayName = "山田 太郎",
+                        displayDetail = "〒1000001 東京都千代田区千代田1-1",
+                        onClick = {},
+                        onDelete = {},
                     ),
                 ),
                 showDeleteAllDialog = false,
