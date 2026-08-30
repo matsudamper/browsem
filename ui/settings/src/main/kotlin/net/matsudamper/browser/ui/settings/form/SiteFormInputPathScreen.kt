@@ -1,4 +1,4 @@
-package net.matsudamper.browser.ui.settings
+package net.matsudamper.browser.ui.settings.form
 
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -9,7 +9,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -21,6 +20,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import net.matsudamper.browser.ui.settings.FormInputDeletableListRow
 import net.matsudamper.browser.resources.R as ResourcesR
 
 sealed interface SiteFormInputPathScreenTestTags {
@@ -36,7 +36,7 @@ sealed interface SiteFormInputPathScreenTestTags {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun SiteFormInputPathScreen(
+fun SiteFormInputPathScreen(
     uiState: SiteFormInputPathScreenUiState,
     modifier: Modifier = Modifier,
 ) {

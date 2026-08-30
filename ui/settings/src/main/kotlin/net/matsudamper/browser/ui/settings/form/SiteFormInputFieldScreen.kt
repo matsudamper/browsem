@@ -1,4 +1,4 @@
-package net.matsudamper.browser.ui.settings
+package net.matsudamper.browser.ui.settings.form
 
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -20,6 +20,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import net.matsudamper.browser.ui.settings.FormInputDeletableListRow
 import net.matsudamper.browser.resources.R as ResourcesR
 
 sealed interface SiteFormInputFieldScreenTestTags {
@@ -35,7 +36,7 @@ sealed interface SiteFormInputFieldScreenTestTags {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun SiteFormInputFieldScreen(
+fun SiteFormInputFieldScreen(
     uiState: SiteFormInputFieldScreenUiState,
     modifier: Modifier = Modifier,
 ) {

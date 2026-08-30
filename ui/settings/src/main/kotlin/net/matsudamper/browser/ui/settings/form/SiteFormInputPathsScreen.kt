@@ -1,4 +1,4 @@
-package net.matsudamper.browser.ui.settings
+package net.matsudamper.browser.ui.settings.form
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -30,6 +30,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import net.matsudamper.browser.ui.settings.SiteFormInputPathsScreenUiState
 import net.matsudamper.browser.resources.R as ResourcesR
 
 sealed interface SiteFormInputPathsScreenTestTags {
@@ -47,7 +48,7 @@ sealed interface SiteFormInputPathsScreenTestTags {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun SiteFormInputPathsScreen(
+fun SiteFormInputPathsScreen(
     uiState: SiteFormInputPathsScreenUiState,
     modifier: Modifier = Modifier,
 ) {

@@ -112,10 +112,10 @@ import net.matsudamper.browser.ui.settings.AddressesScreen
 import net.matsudamper.browser.ui.settings.BackupProgressScreen
 import net.matsudamper.browser.ui.settings.BackupProgressUiState
 import net.matsudamper.browser.ui.settings.SettingsScreen
-import net.matsudamper.browser.ui.settings.SiteFormInputFieldRoute
-import net.matsudamper.browser.ui.settings.SiteFormInputPathRoute
-import net.matsudamper.browser.ui.settings.SiteFormInputPathsRoute
 import net.matsudamper.browser.ui.settings.SiteSettingsScreen
+import net.matsudamper.browser.ui.settings.form.SiteFormInputFieldScreen
+import net.matsudamper.browser.ui.settings.form.SiteFormInputPathScreen
+import net.matsudamper.browser.ui.settings.form.SiteFormInputPathsScreen
 import net.matsudamper.browser.ui.tabs.TabsScreen
 import org.koin.compose.koinInject
 import org.mozilla.geckoview.GeckoRuntime
@@ -415,7 +415,7 @@ internal fun BrowserAppShell(
                             })
                         }
                     }
-                    SiteFormInputPathsRoute(
+                    SiteFormInputPathsScreen(
                         uiState = pathsUiState,
                     )
                 }
@@ -460,7 +460,7 @@ internal fun BrowserAppShell(
                             })
                         }
                     }
-                    SiteFormInputPathRoute(
+                    SiteFormInputPathScreen(
                         uiState = pathUiState,
                     )
                 }
@@ -490,7 +490,7 @@ internal fun BrowserAppShell(
                             })
                         }
                     }
-                    SiteFormInputFieldRoute(
+                    SiteFormInputFieldScreen(
                         uiState = fieldUiState,
                     )
                 }
@@ -799,7 +799,10 @@ internal fun BrowserAppShell(
 
 @Stable
 internal class OuterNavActions(private val backStack: MutableList<NavKey>) {
-    fun add(destination: AppDestination) { backStack.add(destination) }
+    fun add(destination: AppDestination) {
+        backStack.add(destination)
+    }
+
     fun addIfAbsent(destination: AppDestination) {
         if (backStack.none { it == destination }) backStack.add(destination)
     }
@@ -905,6 +908,7 @@ private fun MainBrowserContent(
                         innerBackStack.firstOrNull() is BrowserNavDestination.Setup -> {
                             selectTab(tabId, null)
                         }
+
                         else -> {
                             val currentBrowserTab = innerBackStack.filterIsInstance<BrowserNavDestination.Browser>().lastOrNull()
                             if (currentBrowserTab == null || browserTabController.findTab(currentBrowserTab.tabId) == null) {
