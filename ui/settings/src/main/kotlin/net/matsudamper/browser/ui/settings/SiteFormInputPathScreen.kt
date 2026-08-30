@@ -1,31 +1,23 @@
 package net.matsudamper.browser.ui.settings
 
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -70,35 +62,12 @@ internal fun SiteFormInputPathScreen(
                 .fillMaxSize(),
         ) {
             item {
-                SettingSection(title = "このパス") {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .toggleable(
-                                value = uiState.pathEnabled,
-                                role = Role.Switch,
-                                onValueChange = uiState.callbacks::setPathEnabled,
-                            )
-                            .padding(vertical = 4.dp),
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "保存とサジェスト",
-                                style = MaterialTheme.typography.bodyLarge,
-                            )
-                            Text(
-                                text = "このパスでのフォーム入力の自動保存と候補表示",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                        Switch(
-                            checked = uiState.pathEnabled,
-                            onCheckedChange = null,
-                        )
-                    }
-                }
+                Text(
+                    text = uiState.displayOrigin,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                )
             }
 
             item {
@@ -123,6 +92,7 @@ internal fun SiteFormInputPathScreen(
                     SiteFormInputFieldListItem(
                         field = field,
                         onOpen = { uiState.callbacks.openField(field.fieldKey) },
+                        onDelete = { uiState.callbacks.requestDeleteField(field.fieldKey) },
                         modifier = Modifier.testTag(
                             SiteFormInputPathScreenTestTags.FieldEntry(field.fieldKey).testTag,
                         ),
@@ -131,15 +101,13 @@ internal fun SiteFormInputPathScreen(
             }
 
             item {
-                TextButton(
-                    onClick = uiState.callbacks::requestDeletePath,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 8.dp, vertical = 16.dp),
+                FormInputDeletableListRow(
+                    onDelete = uiState.callbacks::requestDeletePath,
+                    modifier = Modifier.padding(top = 8.dp),
                 ) {
                     Text(
                         text = "このパスの保存データをすべて削除",
-                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodyLarge,
                     )
                 }
             }
@@ -168,27 +136,57 @@ internal fun SiteFormInputPathScreen(
             },
         )
     }
+
+    val deleteFieldKey = uiState.deleteFieldConfirm
+    if (deleteFieldKey != null) {
+        AlertDialog(
+            onDismissRequest = uiState.callbacks::dismissDeleteFieldConfirm,
+            title = { Text("フィールドを削除") },
+            text = {
+                Text(
+                    "「$deleteFieldKey」を削除しますか？保存した値もすべて削除され、この操作は取り消せません。",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = uiState.callbacks::confirmDeleteField) {
+                    Text("削除", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = uiState.callbacks::dismissDeleteFieldConfirm) {
+                    Text("キャンセル")
+                }
+            },
+        )
+    }
 }
 
 @Composable
 private fun SiteFormInputFieldListItem(
     field: SiteFormInputPathScreenUiState.FieldEntry,
     onOpen: () -> Unit,
+    onDelete: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    ListItem(
-        modifier = modifier.clickable(onClick = onOpen),
-        headlineContent = { Text(field.fieldKey) },
-        supportingContent = {
-            if (field.previewText.isNotBlank()) {
-                Text(
-                    text = field.previewText,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-        },
-    )
+    FormInputDeletableListRow(
+        onDelete = onDelete,
+        onOpen = onOpen,
+        modifier = modifier,
+    ) {
+        Text(
+            text = field.fieldKey,
+            style = MaterialTheme.typography.bodyLarge,
+        )
+        if (field.previewText.isNotBlank()) {
+            Text(
+                text = field.previewText,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
 }
 
 @Preview(showBackground = true, heightDp = 700)
@@ -199,8 +197,10 @@ private fun SiteFormInputPathScreenPreview() {
             uiState = SiteFormInputPathScreenUiState(
                 callbacks = object : SiteFormInputPathScreenUiState.Callbacks {
                     override fun navigateBack() = Unit
-                    override fun setPathEnabled(enabled: Boolean) = Unit
                     override fun openField(fieldKey: String) = Unit
+                    override fun requestDeleteField(fieldKey: String) = Unit
+                    override fun confirmDeleteField() = Unit
+                    override fun dismissDeleteFieldConfirm() = Unit
                     override fun requestDeletePath() = Unit
                     override fun confirmDeletePath() = Unit
                     override fun dismissDeletePathConfirm() = Unit
@@ -208,7 +208,6 @@ private fun SiteFormInputPathScreenPreview() {
                 displayOrigin = "https://example.com",
                 path = "/contact",
                 displayPath = "/contact",
-                pathEnabled = true,
                 fields = listOf(
                     SiteFormInputPathScreenUiState.FieldEntry(
                         fieldKey = "comment",
@@ -220,6 +219,7 @@ private fun SiteFormInputPathScreenPreview() {
                     ),
                 ),
                 deletePathConfirm = false,
+                deleteFieldConfirm = null,
             ),
         )
     }

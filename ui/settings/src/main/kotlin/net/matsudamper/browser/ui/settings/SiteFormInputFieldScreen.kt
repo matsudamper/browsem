@@ -1,7 +1,6 @@
 package net.matsudamper.browser.ui.settings
 
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -9,7 +8,6 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -99,20 +97,6 @@ internal fun SiteFormInputFieldScreen(
                     )
                 }
             }
-
-            item {
-                TextButton(
-                    onClick = uiState.callbacks::requestDeleteField,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 8.dp, vertical = 16.dp),
-                ) {
-                    Text(
-                        text = "このフィールドを削除",
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                }
-            }
         }
     }
 
@@ -136,28 +120,6 @@ internal fun SiteFormInputFieldScreen(
             },
         )
     }
-
-    if (uiState.deleteFieldConfirm) {
-        AlertDialog(
-            onDismissRequest = uiState.callbacks::dismissDeleteFieldConfirm,
-            title = { Text("フィールドを削除") },
-            text = {
-                Text(
-                    "「${uiState.fieldKey}」を削除しますか？保存した値もすべて削除され、この操作は取り消せません。",
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = uiState.callbacks::confirmDeleteField) {
-                    Text("削除", color = MaterialTheme.colorScheme.error)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = uiState.callbacks::dismissDeleteFieldConfirm) {
-                    Text("キャンセル")
-                }
-            },
-        )
-    }
 }
 
 @Composable
@@ -166,21 +128,17 @@ private fun SiteFormInputValueListItem(
     onDelete: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    ListItem(
+    FormInputDeletableListRow(
+        onDelete = onDelete,
         modifier = modifier,
-        headlineContent = {
-            Text(
-                text = value,
-                maxLines = 3,
-                overflow = TextOverflow.Ellipsis,
-            )
-        },
-        trailingContent = {
-            TextButton(onClick = onDelete) {
-                Text("削除", color = MaterialTheme.colorScheme.error)
-            }
-        },
-    )
+    ) {
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodyLarge,
+            maxLines = 3,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
 }
 
 @Preview(showBackground = true, heightDp = 700)
@@ -194,9 +152,6 @@ private fun SiteFormInputFieldScreenPreview() {
                     override fun requestDeleteValue(value: String) = Unit
                     override fun confirmDeleteValue() = Unit
                     override fun dismissDeleteValueConfirm() = Unit
-                    override fun requestDeleteField() = Unit
-                    override fun confirmDeleteField() = Unit
-                    override fun dismissDeleteFieldConfirm() = Unit
                 },
                 displayOrigin = "https://example.com",
                 path = "/contact",
@@ -204,7 +159,6 @@ private fun SiteFormInputFieldScreenPreview() {
                 fieldKey = "brcNum",
                 values = listOf("001", "002", "003"),
                 deleteValueConfirm = null,
-                deleteFieldConfirm = false,
             ),
         )
     }

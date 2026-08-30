@@ -13,12 +13,10 @@ data class SiteFormInputPathsScreenUiState(
         val path: String,
         val displayPath: String,
         val fieldCount: Int,
-        val enabled: Boolean,
     )
 
     interface Callbacks {
         fun navigateBack()
-        fun setPathEnabled(path: String, enabled: Boolean)
         fun openPath(path: String)
     }
 }

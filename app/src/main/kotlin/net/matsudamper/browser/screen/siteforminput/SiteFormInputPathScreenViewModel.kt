@@ -33,6 +33,7 @@ internal class SiteFormInputPathScreenViewModel(
 
     private data class ViewModelState(
         val deletePathConfirm: Boolean = false,
+        val deleteFieldConfirm: String? = null,
     )
 
     private val viewModelStateFlow = MutableStateFlow(ViewModelState())
@@ -42,14 +43,24 @@ internal class SiteFormInputPathScreenViewModel(
             eventHandler.trySend { it.navigateBack() }
         }
 
-        override fun setPathEnabled(enabled: Boolean) {
+        override fun openField(fieldKey: String) {
+            eventHandler.trySend { it.navigateToField(fieldKey) }
+        }
+
+        override fun requestDeleteField(fieldKey: String) {
+            viewModelStateFlow.update { it.copy(deleteFieldConfirm = fieldKey) }
+        }
+
+        override fun confirmDeleteField() {
+            val fieldKey = viewModelStateFlow.value.deleteFieldConfirm ?: return
+            viewModelStateFlow.update { it.copy(deleteFieldConfirm = null) }
             viewModelScope.launch {
-                formInputRepository.setPathEnabled(origin, path, enabled)
+                formInputRepository.deleteField(origin, path, fieldKey)
             }
         }
 
-        override fun openField(fieldKey: String) {
-            eventHandler.trySend { it.navigateToField(fieldKey) }
+        override fun dismissDeleteFieldConfirm() {
+            viewModelStateFlow.update { it.copy(deleteFieldConfirm = null) }
         }
 
         override fun requestDeletePath() {
@@ -75,23 +86,21 @@ internal class SiteFormInputPathScreenViewModel(
             displayOrigin = displayFormInputOrigin(origin),
             path = path,
             displayPath = displayFormInputPath(path),
-            pathEnabled = true,
             fields = emptyList(),
             deletePathConfirm = false,
+            deleteFieldConfirm = null,
         ),
     ).also { uiStateFlow ->
         viewModelScope.launch {
             combine(
                 formInputRepository.observeSavedFields(origin, path),
-                formInputRepository.observePathEnabled(origin, path),
                 viewModelStateFlow,
-            ) { fields, pathEnabled, dialogState ->
+            ) { fields, dialogState ->
                 SiteFormInputPathScreenUiState(
                     callbacks = callbacks,
                     displayOrigin = displayFormInputOrigin(origin),
                     path = path,
                     displayPath = displayFormInputPath(path),
-                    pathEnabled = pathEnabled,
                     fields = fields.map { field ->
                         SiteFormInputPathScreenUiState.FieldEntry(
                             fieldKey = field.fieldKey,
@@ -99,6 +108,7 @@ internal class SiteFormInputPathScreenViewModel(
                         )
                     },
                     deletePathConfirm = dialogState.deletePathConfirm,
+                    deleteFieldConfirm = dialogState.deleteFieldConfirm,
                 )
             }.collectLatest { state ->
                 uiStateFlow.value = state

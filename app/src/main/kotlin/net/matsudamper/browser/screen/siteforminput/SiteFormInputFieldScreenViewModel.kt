@@ -28,12 +28,10 @@ internal class SiteFormInputFieldScreenViewModel(
 
     interface Event {
         fun navigateBack()
-        fun navigateBackAfterDeleted()
     }
 
     private data class ViewModelState(
         val deleteValueConfirm: String? = null,
-        val deleteFieldConfirm: Boolean = false,
     )
 
     private val viewModelStateFlow = MutableStateFlow(ViewModelState())
@@ -58,22 +56,6 @@ internal class SiteFormInputFieldScreenViewModel(
         override fun dismissDeleteValueConfirm() {
             viewModelStateFlow.update { it.copy(deleteValueConfirm = null) }
         }
-
-        override fun requestDeleteField() {
-            viewModelStateFlow.update { it.copy(deleteFieldConfirm = true) }
-        }
-
-        override fun confirmDeleteField() {
-            viewModelStateFlow.update { it.copy(deleteFieldConfirm = false) }
-            viewModelScope.launch {
-                formInputRepository.deleteField(origin, path, fieldKey)
-                eventHandler.trySend { it.navigateBackAfterDeleted() }
-            }
-        }
-
-        override fun dismissDeleteFieldConfirm() {
-            viewModelStateFlow.update { it.copy(deleteFieldConfirm = false) }
-        }
     }
 
     val uiState: StateFlow<SiteFormInputFieldScreenUiState> = MutableStateFlow(
@@ -85,7 +67,6 @@ internal class SiteFormInputFieldScreenViewModel(
             fieldKey = fieldKey,
             values = emptyList(),
             deleteValueConfirm = null,
-            deleteFieldConfirm = false,
         ),
     ).also { uiStateFlow ->
         viewModelScope.launch {
@@ -101,7 +82,6 @@ internal class SiteFormInputFieldScreenViewModel(
                     fieldKey = fieldKey,
                     values = values,
                     deleteValueConfirm = dialogState.deleteValueConfirm,
-                    deleteFieldConfirm = dialogState.deleteFieldConfirm,
                 )
             }.collectLatest { state ->
                 uiStateFlow.value = state
