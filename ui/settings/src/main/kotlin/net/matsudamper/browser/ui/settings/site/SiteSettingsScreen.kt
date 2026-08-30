@@ -1,4 +1,4 @@
-package net.matsudamper.browser.ui.settings
+package net.matsudamper.browser.ui.settings.site
 
 import androidx.annotation.DrawableRes
 import androidx.compose.foundation.layout.Column
@@ -110,13 +110,24 @@ fun SiteSettingsScreen(
             Spacer(Modifier.height(12.dp))
 
             if (uiState.tlsCertificate != null) {
-                CollapsibleSettingSection(title = "TLS証明書") {
+                _root_ide_package_.net.matsudamper.browser.ui.settings.CollapsibleSettingSection(
+                    title = "TLS証明書"
+                ) {
                     when (val certificate = uiState.tlsCertificate) {
                         is SiteSettingsScreenUiState.TlsCertificate.Available -> {
-                            CertificateInfoRow(label = "発行先", value = certificate.subjectCommonName)
+                            CertificateInfoRow(
+                                label = "発行先",
+                                value = certificate.subjectCommonName
+                            )
                             CertificateInfoRow(label = "発行者", value = certificate.issuer)
-                            CertificateInfoRow(label = "有効期間の開始", value = certificate.validFrom)
-                            CertificateInfoRow(label = "有効期間の終了", value = certificate.validUntil)
+                            CertificateInfoRow(
+                                label = "有効期間の開始",
+                                value = certificate.validFrom
+                            )
+                            CertificateInfoRow(
+                                label = "有効期間の終了",
+                                value = certificate.validUntil
+                            )
                             CertificateInfoRow(
                                 label = "SHA-256 フィンガープリント",
                                 value = certificate.sha256Fingerprint,
@@ -137,7 +148,7 @@ fun SiteSettingsScreen(
 
             // 権限は証明書・データ削除と同じく1つのコンテナにまとめ、
             // 要求が無い場合もタイトル付きセクション内に空メッセージを表示して見た目を揃える
-            SettingSection(title = "サイトが要求した権限") {
+            _root_ide_package_.net.matsudamper.browser.ui.settings.SettingSection(title = "サイトが要求した権限") {
                 val hasGeolocation = uiState.geolocationState != null
                 val hasMicrophone = uiState.microphonePermission != null
                 val hasAutoplay = uiState.autoplayPermission != null
@@ -152,10 +163,10 @@ fun SiteSettingsScreen(
                     if (hasGeolocation) {
                         PermissionGroup(
                             title = "位置情報",
-                            iconRes = R.drawable.ic_location_on,
+                            iconRes = _root_ide_package_.net.matsudamper.browser.ui.settings.R.drawable.ic_location_on,
                         ) {
                             Column(Modifier.selectableGroup()) {
-                                SettingsRadioOption(
+                                _root_ide_package_.net.matsudamper.browser.ui.settings.SettingsRadioOption(
                                     label = "モック位置情報",
                                     selected = uiState.geolocationState == SiteGeolocationState.SITE_GEOLOCATION_MOCK,
                                     onClick = {
@@ -164,7 +175,7 @@ fun SiteSettingsScreen(
                                         )
                                     },
                                 )
-                                SettingsRadioOption(
+                                _root_ide_package_.net.matsudamper.browser.ui.settings.SettingsRadioOption(
                                     label = "実際の位置情報",
                                     selected = uiState.geolocationState == SiteGeolocationState.SITE_GEOLOCATION_REAL,
                                     onClick = {
@@ -173,7 +184,7 @@ fun SiteSettingsScreen(
                                         )
                                     },
                                 )
-                                SettingsRadioOption(
+                                _root_ide_package_.net.matsudamper.browser.ui.settings.SettingsRadioOption(
                                     label = "ブロック",
                                     selected = uiState.geolocationState == SiteGeolocationState.SITE_GEOLOCATION_DENY,
                                     onClick = {
@@ -191,10 +202,10 @@ fun SiteSettingsScreen(
                         }
                         PermissionGroup(
                             title = "マイク",
-                            iconRes = R.drawable.ic_mic,
+                            iconRes = _root_ide_package_.net.matsudamper.browser.ui.settings.R.drawable.ic_mic,
                         ) {
                             Column(Modifier.selectableGroup()) {
-                                SettingsRadioOption(
+                                _root_ide_package_.net.matsudamper.browser.ui.settings.SettingsRadioOption(
                                     label = "確認する",
                                     selected = uiState.microphonePermission == SitePermissionState.SITE_PERMISSION_ASK,
                                     onClick = {
@@ -203,7 +214,7 @@ fun SiteSettingsScreen(
                                         )
                                     },
                                 )
-                                SettingsRadioOption(
+                                _root_ide_package_.net.matsudamper.browser.ui.settings.SettingsRadioOption(
                                     label = "許可",
                                     selected = uiState.microphonePermission == SitePermissionState.SITE_PERMISSION_ALLOW,
                                     onClick = {
@@ -212,7 +223,7 @@ fun SiteSettingsScreen(
                                         )
                                     },
                                 )
-                                SettingsRadioOption(
+                                _root_ide_package_.net.matsudamper.browser.ui.settings.SettingsRadioOption(
                                     label = "ブロック",
                                     selected = uiState.microphonePermission == SitePermissionState.SITE_PERMISSION_DENY,
                                     onClick = {
@@ -230,10 +241,10 @@ fun SiteSettingsScreen(
                         }
                         PermissionGroup(
                             title = "音声の自動再生",
-                            iconRes = R.drawable.ic_volume_up,
+                            iconRes = _root_ide_package_.net.matsudamper.browser.ui.settings.R.drawable.ic_volume_up,
                         ) {
                             Column(Modifier.selectableGroup()) {
-                                SettingsRadioOption(
+                                _root_ide_package_.net.matsudamper.browser.ui.settings.SettingsRadioOption(
                                     label = "確認する",
                                     selected = uiState.autoplayPermission == SitePermissionState.SITE_PERMISSION_ASK,
                                     onClick = {
@@ -242,7 +253,7 @@ fun SiteSettingsScreen(
                                         )
                                     },
                                 )
-                                SettingsRadioOption(
+                                _root_ide_package_.net.matsudamper.browser.ui.settings.SettingsRadioOption(
                                     label = "許可",
                                     selected = uiState.autoplayPermission == SitePermissionState.SITE_PERMISSION_ALLOW,
                                     onClick = {
@@ -251,7 +262,7 @@ fun SiteSettingsScreen(
                                         )
                                     },
                                 )
-                                SettingsRadioOption(
+                                _root_ide_package_.net.matsudamper.browser.ui.settings.SettingsRadioOption(
                                     label = "ブロック",
                                     selected = uiState.autoplayPermission == SitePermissionState.SITE_PERMISSION_DENY,
                                     onClick = {
@@ -269,7 +280,7 @@ fun SiteSettingsScreen(
             Spacer(Modifier.height(12.dp))
 
             if (uiState.savedFormInputPathCount > 0) {
-                SettingSection(title = "保存したフォーム入力") {
+                _root_ide_package_.net.matsudamper.browser.ui.settings.SettingSection(title = "保存したフォーム入力") {
                     TextButton(
                         onClick = uiState.callbacks::openSavedFormInputs,
                         modifier = Modifier.fillMaxWidth(),
@@ -280,7 +291,7 @@ fun SiteSettingsScreen(
                 Spacer(Modifier.height(12.dp))
             }
 
-            SettingSection(title = "データの削除") {
+            _root_ide_package_.net.matsudamper.browser.ui.settings.SettingSection(title = "データの削除") {
                 TextButton(
                     onClick = {
                         uiState.callbacks.requestClearData(
@@ -566,7 +577,7 @@ private fun SiteSettingsScreenNoRequestedPermissionPreview() {
 @Composable
 private fun SiteSettingsScreenTlsCertificateExpandedPreview() {
     MaterialTheme {
-        CollapsibleSettingSection(
+        _root_ide_package_.net.matsudamper.browser.ui.settings.CollapsibleSettingSection(
             title = "TLS証明書",
             initiallyExpanded = true,
         ) {
@@ -577,7 +588,7 @@ private fun SiteSettingsScreenTlsCertificateExpandedPreview() {
             CertificateInfoRow(
                 label = "SHA-256 フィンガープリント",
                 value = "AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99:" +
-                    "AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99",
+                        "AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99",
             )
         }
     }
@@ -587,7 +598,7 @@ private fun SiteSettingsScreenTlsCertificateExpandedPreview() {
 @Composable
 private fun SiteSettingsScreenTlsCertificateCollapsedPreview() {
     MaterialTheme {
-        CollapsibleSettingSection(title = "TLS証明書") {
+        _root_ide_package_.net.matsudamper.browser.ui.settings.CollapsibleSettingSection(title = "TLS証明書") {
             CertificateInfoRow(label = "発行先", value = "www.example.com")
             CertificateInfoRow(label = "発行者", value = "Example CA")
         }

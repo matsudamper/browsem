@@ -21,7 +21,7 @@ import net.matsudamper.browser.data.SitePermissionState
 import net.matsudamper.browser.data.SiteSettingsRepository
 import net.matsudamper.browser.data.forminput.FormInputOrigin
 import net.matsudamper.browser.data.forminput.FormInputRepository
-import net.matsudamper.browser.ui.settings.SiteSettingsScreenUiState
+import net.matsudamper.browser.ui.settings.site.SiteSettingsScreenUiState
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.StorageController
 
