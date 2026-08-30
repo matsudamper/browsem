@@ -349,10 +349,14 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun dispatchOpenDownloadsIntent(intent: Intent) {
+        val requestId = openDownloadsRequestIdFrom(intent)
+        // 同じ通知の再タップでは onNewIntent から再配信する。消費済み集合に残っていると
+        // プロセス復元時に shouldClearRestoredIntent で誤ってクリアされる。
+        consumedOpenDownloadsRequestIds.remove(requestId)
         openDownloadsChannel.trySend(
             OpenDownloadsRequest(
                 workerId = intent.getStringExtra(DownloadWorker.EXTRA_WORKER_ID),
-                requestId = openDownloadsRequestIdFrom(intent),
+                requestId = requestId,
             ),
         )
     }
