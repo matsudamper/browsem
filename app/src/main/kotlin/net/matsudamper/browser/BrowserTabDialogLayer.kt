@@ -431,6 +431,15 @@ internal fun BrowserTabDialogLayer(
             onDismiss = dialogState::dismissAddressSave,
         )
     }
+
+    dialogState.pendingFormInputSaveDialog?.let { request ->
+        FormInputSaveDialog(
+            fieldKey = request.fieldKey,
+            value = request.value,
+            onSave = dialogState::confirmFormInputSave,
+            onDismiss = dialogState::dismissFormInputSaveDialog,
+        )
+    }
 }
 
 @Composable
@@ -463,12 +472,53 @@ private fun AddressSaveDialog(
     )
 }
 
+@Composable
+private fun FormInputSaveDialog(
+    fieldKey: String,
+    value: String,
+    onSave: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        modifier = Modifier.testTag(BrowserTabDialogLayerTestTags.FormInputSaveDialog.testTag),
+        onDismissRequest = onDismiss,
+        title = { Text("この入力欄を保存するようにしますか？") },
+        text = {
+            Column {
+                Text(fieldKey, style = MaterialTheme.typography.bodyLarge)
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = value.ifBlank { "(空)" },
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = onSave,
+                modifier = Modifier.testTag(BrowserTabDialogLayerTestTags.FormInputSaveConfirmButton.testTag),
+            ) {
+                Text("保存")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("キャンセル")
+            }
+        },
+    )
+}
+
 sealed interface BrowserTabDialogLayerTestTags {
     val id: String
     val testTag get() = "${BrowserTabDialogLayerTestTags::class.java.name}#$id"
 
     data object AddressSaveDialog : BrowserTabDialogLayerTestTags { override val id = "address_save_dialog" }
     data object AddressSaveConfirmButton : BrowserTabDialogLayerTestTags { override val id = "address_save_confirm_button" }
+    data object FormInputSaveDialog : BrowserTabDialogLayerTestTags { override val id = "form_input_save_dialog" }
+    data object FormInputSaveConfirmButton : BrowserTabDialogLayerTestTags { override val id = "form_input_save_confirm_button" }
 }
 
 private fun buildAddressDisplayText(
@@ -1202,6 +1252,32 @@ private fun PreviewAddressSaveDialog() {
                 .tel("090-1234-5678")
                 .email("taro@example.com")
                 .build(),
+            onSave = {},
+            onDismiss = {},
+        )
+    }
+}
+
+@Preview(name = "FormInputSaveDialog")
+@Composable
+private fun PreviewFormInputSaveDialog() {
+    BrowserTheme(themeMode = ThemeMode.THEME_SYSTEM) {
+        FormInputSaveDialog(
+            fieldKey = "comment",
+            value = "hello",
+            onSave = {},
+            onDismiss = {},
+        )
+    }
+}
+
+@Preview(name = "FormInputSaveDialogEmptyValue")
+@Composable
+private fun PreviewFormInputSaveDialogEmptyValue() {
+    BrowserTheme(themeMode = ThemeMode.THEME_SYSTEM) {
+        FormInputSaveDialog(
+            fieldKey = "title",
+            value = "",
             onSave = {},
             onDismiss = {},
         )

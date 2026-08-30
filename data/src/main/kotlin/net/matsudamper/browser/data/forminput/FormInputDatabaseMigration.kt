@@ -59,3 +59,39 @@ internal val FORM_INPUT_DATABASE_MIGRATION_2_3 = object : Migration(2, 3) {
         )
     }
 }
+
+internal val FORM_INPUT_DATABASE_MIGRATION_3_4 = object : Migration(3, 4) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        // フィールド単位の ON/OFF を廃止し、登録済みフィールドのみ残す。
+        db.execSQL(
+            """
+            DELETE FROM form_field_value
+            WHERE NOT EXISTS (
+                SELECT 1 FROM form_input_preference
+                WHERE form_input_preference.scheme = form_field_value.scheme
+                  AND form_input_preference.host = form_field_value.host
+                  AND form_input_preference.port = form_field_value.port
+                  AND form_input_preference.path = form_field_value.path
+                  AND form_input_preference.fieldKey = form_field_value.fieldKey
+                  AND form_input_preference.fieldKey != ''
+                  AND form_input_preference.enabled != 0
+            )
+            """.trimIndent(),
+        )
+        db.execSQL(
+            "DELETE FROM form_input_preference WHERE fieldKey != '' AND enabled = 0",
+        )
+        db.execSQL(
+            "UPDATE form_input_preference SET enabled = 1 WHERE fieldKey != ''",
+        )
+    }
+}
+
+internal val FORM_INPUT_DATABASE_MIGRATION_4_5 = object : Migration(4, 5) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        // パス単位の ON/OFF を廃止し、path scope の preference を削除する。
+        db.execSQL(
+            "DELETE FROM form_input_preference WHERE fieldKey = ''",
+        )
+    }
+}
