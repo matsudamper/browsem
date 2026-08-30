@@ -220,7 +220,7 @@ private fun NetworkLogList(
             items(uiState.filters, key = { it.type }) { filter ->
                 FilterChip(
                     selected = filter.isSelected,
-                    onClick = { uiState.callbacks.onClickFilter(filter.type) },
+                    onClick = filter.onClick,
                     label = { Text("${filter.label} ${filter.count}") },
                 )
             }
@@ -272,7 +272,7 @@ private fun NetworkLogList(
                 items(uiState.entries, key = { it.id }) { entry ->
                     NetworkLogRow(
                         entry = entry,
-                        onClick = { uiState.callbacks.onClickEntry(entry.id) },
+                        onClick = entry.onClick,
                     )
                     HorizontalDivider()
                 }
@@ -625,9 +625,7 @@ sealed interface NetworkLogScreenTestTags {
 }
 
 private object PreviewNetworkLogCallbacks : NetworkLogUiState.Callbacks {
-    override fun onClickFilter(filter: NetworkLogUiState.ResourceFilter) = Unit
     override fun onSearchQueryChange(query: String) = Unit
-    override fun onClickEntry(id: String) = Unit
     override fun onClickCloseDetail() = Unit
     override fun onClickCopyUrl() = Unit
     override fun onClickCopyBody() = Unit
@@ -652,6 +650,7 @@ private fun previewEntries(): List<NetworkLogUiState.Entry> {
             durationLabel = "231 ms",
             fromCache = false,
             thumbnail = null,
+            onClick = {},
         ),
         NetworkLogUiState.Entry(
             id = "2",
@@ -665,6 +664,7 @@ private fun previewEntries(): List<NetworkLogUiState.Entry> {
             durationLabel = "1.24 s",
             fromCache = false,
             thumbnail = null,
+            onClick = {},
         ),
         NetworkLogUiState.Entry(
             id = "3",
@@ -678,6 +678,7 @@ private fun previewEntries(): List<NetworkLogUiState.Entry> {
             durationLabel = "88 ms",
             fromCache = true,
             thumbnail = null,
+            onClick = {},
         ),
         NetworkLogUiState.Entry(
             id = "4",
@@ -691,6 +692,7 @@ private fun previewEntries(): List<NetworkLogUiState.Entry> {
             durationLabel = "64 ms",
             fromCache = false,
             thumbnail = null,
+            onClick = {},
         ),
         NetworkLogUiState.Entry(
             id = "5",
@@ -704,17 +706,18 @@ private fun previewEntries(): List<NetworkLogUiState.Entry> {
             durationLabel = "12 ms",
             fromCache = false,
             thumbnail = null,
+            onClick = {},
         ),
     )
 }
 
 private fun previewFilters(): List<NetworkLogUiState.Filter> {
     return listOf(
-        NetworkLogUiState.Filter(NetworkLogUiState.ResourceFilter.All, "すべて", 5, true),
-        NetworkLogUiState.Filter(NetworkLogUiState.ResourceFilter.Document, "文書", 1, false),
-        NetworkLogUiState.Filter(NetworkLogUiState.ResourceFilter.Script, "JS", 1, false),
-        NetworkLogUiState.Filter(NetworkLogUiState.ResourceFilter.Image, "画像", 1, false),
-        NetworkLogUiState.Filter(NetworkLogUiState.ResourceFilter.Xhr, "XHR", 1, false),
+        NetworkLogUiState.Filter(NetworkLogUiState.ResourceFilter.All, "すべて", 5, true, onClick = {}),
+        NetworkLogUiState.Filter(NetworkLogUiState.ResourceFilter.Document, "文書", 1, false, onClick = {}),
+        NetworkLogUiState.Filter(NetworkLogUiState.ResourceFilter.Script, "JS", 1, false, onClick = {}),
+        NetworkLogUiState.Filter(NetworkLogUiState.ResourceFilter.Image, "画像", 1, false, onClick = {}),
+        NetworkLogUiState.Filter(NetworkLogUiState.ResourceFilter.Xhr, "XHR", 1, false, onClick = {}),
     )
 }
 
@@ -800,6 +803,7 @@ private fun previewImageEntries(): List<NetworkLogUiState.Entry> {
             durationLabel = "88 ms",
             fromCache = true,
             thumbnail = NetworkLogUiState.Thumbnail(bitmap = previewImageBitmap()),
+            onClick = {},
         ),
         NetworkLogUiState.Entry(
             id = "6",
@@ -813,6 +817,7 @@ private fun previewImageEntries(): List<NetworkLogUiState.Entry> {
             durationLabel = "31 ms",
             fromCache = false,
             thumbnail = NetworkLogUiState.Thumbnail(bitmap = previewImageBitmap()),
+            onClick = {},
         ),
         NetworkLogUiState.Entry(
             id = "7",
@@ -826,6 +831,7 @@ private fun previewImageEntries(): List<NetworkLogUiState.Entry> {
             durationLabel = "18 ms",
             fromCache = false,
             thumbnail = NetworkLogUiState.Thumbnail(bitmap = null),
+            onClick = {},
         ),
     )
 }
@@ -839,9 +845,9 @@ private fun PreviewNetworkLogScreenImageFilter() {
                 callbacks = PreviewNetworkLogCallbacks,
                 entries = previewImageEntries(),
                 filters = listOf(
-                    NetworkLogUiState.Filter(NetworkLogUiState.ResourceFilter.All, "すべて", 8, false),
-                    NetworkLogUiState.Filter(NetworkLogUiState.ResourceFilter.Image, "画像", 3, true),
-                    NetworkLogUiState.Filter(NetworkLogUiState.ResourceFilter.Script, "JS", 1, false),
+                    NetworkLogUiState.Filter(NetworkLogUiState.ResourceFilter.All, "すべて", 8, false, onClick = {}),
+                    NetworkLogUiState.Filter(NetworkLogUiState.ResourceFilter.Image, "画像", 3, true, onClick = {}),
+                    NetworkLogUiState.Filter(NetworkLogUiState.ResourceFilter.Script, "JS", 1, false, onClick = {}),
                 ),
                 searchQuery = "",
                 summary = NetworkLogUiState.Summary(countLabel = "3 件", sizeLabel = "1.2 MB"),

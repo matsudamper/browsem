@@ -37,6 +37,7 @@ internal data class NetworkLogUiState(
         val fromCache: Boolean,
         /** 画像フィルタ選択時のみ設定されるサムネイル。それ以外は null */
         val thumbnail: Thumbnail?,
+        val onClick: () -> Unit,
     )
 
     /**
@@ -65,6 +66,7 @@ internal data class NetworkLogUiState(
         val label: String,
         val count: Int,
         val isSelected: Boolean,
+        val onClick: () -> Unit,
     )
 
     /** 一覧上部に出す集計 */
@@ -141,9 +143,7 @@ internal data class NetworkLogUiState(
     }
 
     interface Callbacks {
-        fun onClickFilter(filter: ResourceFilter)
         fun onSearchQueryChange(query: String)
-        fun onClickEntry(id: String)
         fun onClickCloseDetail()
         fun onClickCopyUrl()
         fun onClickCopyBody()
