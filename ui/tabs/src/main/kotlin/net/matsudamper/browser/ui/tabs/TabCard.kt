@@ -50,10 +50,8 @@ import kotlinx.coroutines.withContext
 @Preview
 private fun PreviewTabCardShortTitle() {
     TabCard(
-        tab = TabsScreenTabData(id = "1", title = "Google", previewImage = null),
+        tab = previewTabData(id = "1", title = "Google"),
         selected = false,
-        onSelectTab = {},
-        onCloseTab = {},
         bitmapCache = LruCache(1),
         modifier = Modifier
             .width(160.dp)
@@ -65,14 +63,11 @@ private fun PreviewTabCardShortTitle() {
 @Preview
 private fun PreviewTabCardLongTitle() {
     TabCard(
-        tab = TabsScreenTabData(
+        tab = previewTabData(
             id = "2",
             title = "GitHub - matsudamper/browsem: Android Browser App",
-            previewImage = null,
         ),
         selected = false,
-        onSelectTab = {},
-        onCloseTab = {},
         bitmapCache = LruCache(1),
         modifier = Modifier
             .width(160.dp)
@@ -84,14 +79,11 @@ private fun PreviewTabCardLongTitle() {
 @Preview
 private fun PreviewTabCardVeryLongTitle() {
     TabCard(
-        tab = TabsScreenTabData(
+        tab = previewTabData(
             id = "3",
             title = "非常に長いタイトルで最大フォントでは2行に収まらず縮小が必要になるケースのサンプルテキスト",
-            previewImage = null,
         ),
         selected = false,
-        onSelectTab = {},
-        onCloseTab = {},
         bitmapCache = LruCache(1),
         modifier = Modifier
             .width(160.dp)
@@ -103,13 +95,13 @@ private fun PreviewTabCardVeryLongTitle() {
 internal fun TabCard(
     tab: TabsScreenTabData,
     selected: Boolean,
-    onSelectTab: (String) -> Unit,
-    onCloseTab: (String) -> Unit,
     bitmapCache: LruCache<TabPreviewImage, Bitmap>,
     modifier: Modifier = Modifier,
+    selectEnabled: Boolean = true,
 ) {
     Card(
-        onClick = { onSelectTab(tab.id) },
+        onClick = tab.listener::onSelect,
+        enabled = selectEnabled,
         modifier = modifier,
         border = BorderStroke(
             width = if (selected) 2.dp else 1.dp,
@@ -164,7 +156,7 @@ internal fun TabCard(
                     modifier = Modifier.weight(1f),
                 )
                 IconButton(
-                    onClick = { onCloseTab(tab.id) },
+                    onClick = tab.listener::onClose,
                     modifier = Modifier.offset { IntOffset(4, -4) },
                 ) {
                     Icon(

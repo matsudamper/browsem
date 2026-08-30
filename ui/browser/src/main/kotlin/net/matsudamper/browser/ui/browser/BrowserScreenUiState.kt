@@ -1,17 +1,37 @@
 package net.matsudamper.browser.ui.browser
 
+import androidx.compose.runtime.Stable
 import net.matsudamper.browser.BrowserTab
 
+@Stable
 data class BrowserScreenUiState(
     val urlBarSuggestions: UrlBarSuggestionsUiState,
     val swipePreview: SwipePreviewUiState = SwipePreviewUiState(),
     val groupTabCount: Int?,
     val callbacks: Callbacks,
 ) {
+    @Stable
     data class SwipePreviewUiState(
-        val previousTab: BrowserTab? = null,
-        val nextTab: BrowserTab? = null,
-    )
+        val previousTab: AdjacentTabPreview? = null,
+        val nextTab: AdjacentTabPreview? = null,
+        val backToOpenerListener: BackToOpenerListener? = null,
+    ) {
+        @Stable
+        interface BackToOpenerListener {
+            fun onBackToOpener()
+        }
+    }
+
+    @Stable
+    data class AdjacentTabPreview(
+        val tab: BrowserTab,
+        val listener: Listener,
+    ) {
+        @Stable
+        interface Listener {
+            fun onSelect()
+        }
+    }
 
     interface Callbacks {
         suspend fun onHistoryRecord(url: String, title: String): Long

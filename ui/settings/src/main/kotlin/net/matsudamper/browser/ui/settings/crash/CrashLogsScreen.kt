@@ -26,7 +26,6 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import net.matsudamper.browser.data.crashlog.CrashLogListItem
 import net.matsudamper.browser.resources.R as ResourcesR
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -108,7 +107,6 @@ internal fun CrashLogsScreen(
                         CrashLogSummaryListItem(
                             entry = entry,
                             dateFormat = dateFormat,
-                            onClick = { uiState.callbacks.onClickEntry(entry.id) },
                         )
                     }
                 }
@@ -137,9 +135,8 @@ internal fun CrashLogsScreen(
 
 @Composable
 private fun CrashLogSummaryListItem(
-    entry: CrashLogListItem,
+    entry: CrashLogsScreenUiState.EntryItem,
     dateFormat: SimpleDateFormat,
-    onClick: () -> Unit,
 ) {
     ListItem(
         headlineContent = {
@@ -158,8 +155,14 @@ private fun CrashLogSummaryListItem(
         },
         modifier = Modifier
             .testTag(CrashLogsScreenTestTags.Entry(entry.id).testTag)
-            .clickable(onClick = onClick),
+            .clickable(onClick = entry.listener::onClick),
     )
+}
+
+private val previewCallbacks = object : CrashLogsScreenUiState.Callbacks {
+    override fun onClickDeleteAll() = Unit
+    override fun onConfirmDeleteAll() = Unit
+    override fun onDismissDeleteAllDialog() = Unit
 }
 
 @Preview(showBackground = true)
@@ -167,18 +170,14 @@ private fun CrashLogSummaryListItem(
 private fun PreviewCrashLogsScreen() {
     CrashLogsScreen(
         uiState = CrashLogsScreenUiState(
-            callbacks = object : CrashLogsScreenUiState.Callbacks {
-                override fun onClickEntry(id: Long) = Unit
-                override fun onClickDeleteAll() = Unit
-                override fun onConfirmDeleteAll() = Unit
-                override fun onDismissDeleteAllDialog() = Unit
-            },
+            callbacks = previewCallbacks,
             isLoading = false,
             entries = listOf(
-                CrashLogListItem(
+                CrashLogsScreenUiState.EntryItem(
                     id = 1,
                     occurredAt = 1_700_000_000_000,
                     title = "java.lang.RuntimeException: Something went wrong in the browser",
+                    listener = PreviewCrashLogEntryListener,
                 ),
             ),
             showDeleteAllDialog = false,
@@ -192,12 +191,7 @@ private fun PreviewCrashLogsScreen() {
 private fun PreviewCrashLogsScreenEmpty() {
     CrashLogsScreen(
         uiState = CrashLogsScreenUiState(
-            callbacks = object : CrashLogsScreenUiState.Callbacks {
-                override fun onClickEntry(id: Long) = Unit
-                override fun onClickDeleteAll() = Unit
-                override fun onConfirmDeleteAll() = Unit
-                override fun onDismissDeleteAllDialog() = Unit
-            },
+            callbacks = previewCallbacks,
             isLoading = false,
             entries = emptyList(),
             showDeleteAllDialog = false,

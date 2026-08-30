@@ -27,14 +27,6 @@ internal class HistoryScreenViewModel(
             viewModelStateFlow.update { it.copy(searchQuery = query) }
         }
 
-        override fun onClickEntry(url: String) {
-            eventHandler.trySend { it.navigateToUrl(url) }
-        }
-
-        override fun onDeleteEntry(id: Long) {
-            viewModelScope.launch { historyRepository.deleteById(id) }
-        }
-
         override fun onClickDeleteAll() {
             viewModelStateFlow.update { it.copy(showDeleteAllDialog = true) }
         }
@@ -63,7 +55,7 @@ internal class HistoryScreenViewModel(
                     HistoryScreenUiState(
                         callbacks = callbacks,
                         searchQuery = state.searchQuery,
-                        entries = state.entries,
+                        entries = state.entries.map(::toEntryItem),
                         showDeleteAllDialog = state.showDeleteAllDialog,
                     )
                 }
@@ -83,6 +75,24 @@ internal class HistoryScreenViewModel(
                     viewModelStateFlow.update { it.copy(entries = entries) }
                 }
         }
+    }
+
+    private fun toEntryItem(entry: HistoryEntry): HistoryScreenUiState.EntryItem {
+        return HistoryScreenUiState.EntryItem(
+            id = entry.id,
+            title = entry.title,
+            url = entry.url,
+            visitedAt = entry.visitedAt,
+            listener = object : HistoryScreenUiState.EntryItem.Listener {
+                override fun onClick() {
+                    eventHandler.trySend { it.navigateToUrl(entry.url) }
+                }
+
+                override fun onDelete() {
+                    viewModelScope.launch { historyRepository.deleteById(entry.id) }
+                }
+            },
+        )
     }
 
     interface Event {

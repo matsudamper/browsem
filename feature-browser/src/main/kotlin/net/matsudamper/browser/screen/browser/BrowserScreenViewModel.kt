@@ -69,11 +69,52 @@ class BrowserScreenViewModel(
             viewModelStateFlow.collectLatest { state ->
                 uiStateFlow.update {
                     val adjacentTabs = state.resolveAdjacentTabs()
+                    val selectedTab = state.screenTabId?.let { tabId ->
+                        state.orderedBrowserTabs.firstOrNull { it.tabId == tabId }
+                    }
+                    val previousTab = adjacentTabs.previousTab?.let { tab ->
+                        BrowserScreenUiState.AdjacentTabPreview(
+                            tab = tab,
+                            listener = object : BrowserScreenUiState.AdjacentTabPreview.Listener {
+                                override fun onSelect() {
+                                    eventHandler.trySend { it.selectTab(tab.tabId) }
+                                }
+                            },
+                        )
+                    }
+                    val nextTab = adjacentTabs.nextTab?.let { tab ->
+                        BrowserScreenUiState.AdjacentTabPreview(
+                            tab = tab,
+                            listener = object : BrowserScreenUiState.AdjacentTabPreview.Listener {
+                                override fun onSelect() {
+                                    eventHandler.trySend { it.selectTab(tab.tabId) }
+                                }
+                            },
+                        )
+                    }
+                    // canGoBack の判定は BrowserScreen 側で selectedTab を Compose 経由で読む。
+                    // ViewModelState の更新だけでは canGoBack 単体の変化を拾えないため、
+                    // ここでは opener 関係のみでリスナーを生成する。
+                    val backToOpenerListener: BrowserScreenUiState.SwipePreviewUiState.BackToOpenerListener? =
+                        if (
+                            previousTab != null &&
+                            selectedTab?.openerTabId != null &&
+                            previousTab.tab.tabId == selectedTab.openerTabId
+                        ) {
+                            object : BrowserScreenUiState.SwipePreviewUiState.BackToOpenerListener {
+                                override fun onBackToOpener() {
+                                    eventHandler.trySend { it.backToOpenerTab(selectedTab.tabId) }
+                                }
+                            }
+                        } else {
+                            null
+                        }
                     BrowserScreenUiState(
                         urlBarSuggestions = state.urlBarSuggestions,
                         swipePreview = BrowserScreenUiState.SwipePreviewUiState(
-                            previousTab = adjacentTabs.previousTab,
-                            nextTab = adjacentTabs.nextTab,
+                            previousTab = previousTab,
+                            nextTab = nextTab,
+                            backToOpenerListener = backToOpenerListener,
                         ),
                         groupTabCount = state.resolveGroupTabCount(),
                         callbacks = callbacks,
@@ -114,7 +155,10 @@ class BrowserScreenViewModel(
         }
     }
 
-    interface Event
+    interface Event {
+        fun selectTab(tabId: String)
+        fun backToOpenerTab(tabId: String)
+    }
 }
 
 // ロード状態とデータを 1 つの値で表現する。
