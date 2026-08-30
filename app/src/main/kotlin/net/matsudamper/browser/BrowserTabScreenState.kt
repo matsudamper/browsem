@@ -491,6 +491,8 @@ internal class BrowserTabScreenState(
     // --- Scroll / Refresh state ---
     var visualViewportScale by mutableFloatStateOf(1f)
     var isRefreshing by mutableStateOf(false)
+    // フルページロード中かどうか。更新ボタンを停止ボタンに切り替えるために使用する。
+    var isPageLoading by mutableStateOf(false)
     // BrowserTab.scrollY に委譲することで、タブ切替で State が再生成されても
     // スクロール位置を保持し、復元タブでの PullToRefresh 誤発動を防ぐ。
     var scrollY: Int
@@ -583,6 +585,11 @@ internal class BrowserTabScreenState(
     fun onSuperRefresh() {
         // キャッシュをバイパスしてリロード（スーパーリフレッシュ）
         superRefreshCurrentPage()
+    }
+
+    fun onStopLoading() {
+        session.stop()
+        isRefreshing = false
     }
 
     fun onRefreshFromSwipe() {
@@ -1403,6 +1410,7 @@ internal class BrowserTabScreenState(
     }
 
     override fun onPageStart(url: String) {
+        isPageLoading = true
         clearPageLoadError()
         visualViewportScale = 1f
         // previewCaptureReady は false に戻さない。
@@ -1417,6 +1425,7 @@ internal class BrowserTabScreenState(
     }
 
     override fun onPageStop(success: Boolean) {
+        isPageLoading = false
         // ダウンロードリンク等で onLocationChange が来ない場合のフラグをクリア
         isFullPageLoadPending = false
         renderReady = true
