@@ -91,6 +91,7 @@ import net.matsudamper.browser.ui.common.resolveBrowserToolbarColors
 import net.matsudamper.browser.ui.browser.UrlBarSuggestionsUiState
 import org.koin.compose.koinInject
 import org.mozilla.geckoview.BasicSelectionActionDelegate
+import org.mozilla.geckoview.GeckoSession.SelectionActionDelegate
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.GeckoView
@@ -808,8 +809,8 @@ internal fun GeckoBrowserTab(
         scheduleInitialLoad()
     }
 
-    // テキスト選択メニューにカスタムアクション（検索/開く）を追加
-    DisposableEffect(session, enableTabUi, searchTemplate) {
+    // テキスト選択メニューにカスタムアクション（検索/開く/入力欄保存）を追加
+    DisposableEffect(session, enableTabUi, searchTemplate, formInputAutofillCoordinator) {
         val activity = context.findActivity()
         if (activity == null) {
             return@DisposableEffect onDispose {}
@@ -817,6 +818,15 @@ internal fun GeckoBrowserTab(
         val delegate = object : BasicSelectionActionDelegate(activity) {
             override fun onCreateActionMode(mode: ActionMode, menu: Menu): Boolean {
                 val result = super.onCreateActionMode(mode, menu)
+
+                val selectionFlags = mSelection?.flags ?: 0
+                val isEditableField =
+                    selectionFlags and SelectionActionDelegate.FLAG_IS_EDITABLE != 0
+                val isPasswordField =
+                    selectionFlags and SelectionActionDelegate.FLAG_IS_PASSWORD != 0
+                if (isEditableField && !isPasswordField) {
+                    menu.add(Menu.NONE, MENU_ID_SAVE_FORM_INPUT, Menu.NONE, "入力欄を保存")
+                }
 
                 // コピー等の標準項目・他アプリの後にカスタム項目を末尾追加
                 val text = mSelection?.text?.trim() ?: ""
@@ -835,6 +845,13 @@ internal fun GeckoBrowserTab(
             }
 
             override fun onActionItemClicked(mode: ActionMode, item: MenuItem): Boolean {
+                when (item.itemId) {
+                    MENU_ID_SAVE_FORM_INPUT -> {
+                        formInputAutofillCoordinator.requestSaveFocusedField(session)
+                        mode.finish()
+                        return true
+                    }
+                }
                 val text = mSelection?.text?.trim()
                     ?: return super.onActionItemClicked(mode, item)
                 when (item.itemId) {
@@ -1351,6 +1368,7 @@ private fun GeckoSession.logKey(): String = Integer.toHexString(System.identityH
 // テキスト選択メニューのカスタム項目 ID
 private const val MENU_ID_SEARCH = 0x10001
 private const val MENU_ID_OPEN = 0x10002
+private const val MENU_ID_SAVE_FORM_INPUT = 0x10003
 
 /**
  * ACTION_GET_CONTENT を使った単一ファイル選択コントラクト。

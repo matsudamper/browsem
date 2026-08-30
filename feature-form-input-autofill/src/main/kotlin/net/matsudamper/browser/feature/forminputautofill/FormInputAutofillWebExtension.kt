@@ -11,6 +11,7 @@ import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.WebExtension
 import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * ページ固有フォーム入力の保存・候補表示用 WebExtension。
@@ -26,11 +27,19 @@ class FormInputAutofillWebExtension {
         Collections.newSetFromMap(ConcurrentHashMap())
     private val delegatedSessions: MutableSet<GeckoSession> =
         Collections.newSetFromMap(ConcurrentHashMap())
+    private val focusedFieldCallbacks =
+        ConcurrentHashMap<String, (FormInputFieldMessage?, String?) -> Unit>()
+    private val focusedFieldRequestIdCounter = AtomicInteger(0)
 
     interface SessionListener {
         fun onFieldFocus(fieldKey: String, pageUrl: String)
         fun onFieldBlur()
         fun onFormSubmit(pageUrl: String, fields: List<FormInputFieldMessage>)
+        fun onFieldLongPress(
+            fieldKey: String,
+            pageUrl: String,
+            fields: List<FormInputFieldMessage>,
+        )
         fun onFocusPortDisconnected()
     }
 
@@ -77,6 +86,30 @@ class FormInputAutofillWebExtension {
             .onFailure { error -> Log.w(TAG, "fill 送信に失敗", error) }
     }
 
+    fun queryFocusedField(
+        session: GeckoSession,
+        callback: (FormInputFieldMessage?, String?) -> Unit,
+    ) {
+        val port = lastFocusPorts[session]
+            ?: sessionPorts[session]?.firstOrNull()
+        if (port == null) {
+            callback(null, null)
+            return
+        }
+        val requestId = focusedFieldRequestIdCounter.incrementAndGet().toString()
+        focusedFieldCallbacks[requestId] = callback
+        val message = JSONObject().apply {
+            put("action", "get-focused-field")
+            put("requestId", requestId)
+        }
+        runCatching { port.postMessage(message) }
+            .onFailure { error ->
+                focusedFieldCallbacks.remove(requestId)
+                Log.w(TAG, "get-focused-field 送信に失敗", error)
+                callback(null, null)
+            }
+    }
+
     private fun attachSessionDelegate(session: GeckoSession, ext: WebExtension) {
         if (!attachedSessions.contains(session)) return
         if (!delegatedSessions.add(session)) return
@@ -115,6 +148,29 @@ class FormInputAutofillWebExtension {
                                     val fields = parseFields(json.optJSONArray("fields"))
                                     mainHandler.post {
                                         listener.onFormSubmit(pageUrl, fields)
+                                    }
+                                }
+                                "focused-field-response" -> {
+                                    val requestId = json.optString("requestId")
+                                    val callback = focusedFieldCallbacks.remove(requestId) ?: return
+                                    val fieldKey = json.optString("fieldKey")
+                                    val value = json.optString("value")
+                                    val pageUrl = json.optString("pageUrl")
+                                    val field = if (fieldKey.isBlank()) {
+                                        null
+                                    } else {
+                                        FormInputFieldMessage(fieldKey = fieldKey, value = value)
+                                    }
+                                    mainHandler.post {
+                                        callback(field, pageUrl.takeIf { it.isNotBlank() })
+                                    }
+                                }
+                                "field-long-press" -> {
+                                    val fieldKey = json.optString("fieldKey")
+                                    val pageUrl = json.optString("pageUrl")
+                                    val fields = parseFields(json.optJSONArray("fields"))
+                                    mainHandler.post {
+                                        listener.onFieldLongPress(fieldKey, pageUrl, fields)
                                     }
                                 }
                             }
@@ -164,6 +220,15 @@ class FormInputAutofillWebExtension {
         fields: List<FormInputFieldMessage>,
     ) {
         sessionListeners[session]?.onFormSubmit(pageUrl, fields)
+    }
+
+    internal fun dispatchFieldLongPress(
+        session: GeckoSession,
+        fieldKey: String,
+        pageUrl: String,
+        fields: List<FormInputFieldMessage>,
+    ) {
+        sessionListeners[session]?.onFieldLongPress(fieldKey, pageUrl, fields)
     }
 
     companion object {

@@ -76,6 +76,10 @@
     return Boolean(el.disabled);
   }
 
+  function isReadonlyField(el) {
+    return Boolean(el.readOnly);
+  }
+
   function hasAutocompleteOff(el) {
     const tokens = autocompleteTokens(el);
     if (hasAnyToken(tokens, PASSWORD_TOKENS)) return true;
@@ -177,6 +181,7 @@
     const tag = String(el.tagName).toUpperCase();
     if (tag !== 'INPUT' && tag !== 'TEXTAREA' && tag !== 'SELECT') return false;
     if (isDisabledField(el)) return false;
+    if (isReadonlyField(el)) return false;
     if (isNonValueField(el)) return false;
     if (hasAutocompleteOff(el)) return false;
     if (isExcludedAutofillField(el)) return false;
@@ -231,28 +236,22 @@
     }
   }
 
-  function resolveFillRoot(el) {
-    if (!el || !el.isConnected) return null;
-    if (el.form) return el.form;
-    const closest = el.closest && el.closest('form');
-    if (closest) return closest;
-    return el;
-  }
-
   function collectDocumentTargetFields(root) {
     const fields = [];
     collectFields(root || document, fields);
-    const seen = new Set();
+    const seenElement = new Set();
+    const seenKeys = new Set();
     const result = [];
     for (let i = 0; i < fields.length; i++) {
       const el = fields[i];
-      if (seen.has(el)) continue;
-      seen.add(el);
+      if (seenElement.has(el)) continue;
+      seenElement.add(el);
       if (!isTargetField(el)) continue;
       const key = fieldKey(el);
-      if (!key) continue;
+      if (!key || seenKeys.has(key)) continue;
       const value = fieldValue(el);
       if (isEmptyFieldValue(value)) continue;
+      seenKeys.add(key);
       result.push({ fieldKey: key, value: value });
     }
     return result;
@@ -302,6 +301,9 @@
   function collectFormFields(form) {
     const fields = [];
     if (!form) return fields;
+    if (isEditableFormControl(form)) {
+      fields.push(form);
+    }
     if (form.elements) {
       for (let i = 0; i < form.elements.length; i++) {
         const el = form.elements[i];
@@ -311,17 +313,19 @@
       }
     }
     collectFields(form, fields);
-    const seen = new Set();
+    const seenElement = new Set();
+    const seenKeys = new Set();
     const result = [];
     for (let i = 0; i < fields.length; i++) {
       const el = fields[i];
-      if (seen.has(el)) continue;
-      seen.add(el);
+      if (seenElement.has(el)) continue;
+      seenElement.add(el);
       if (!isTargetField(el)) continue;
       const key = fieldKey(el);
-      if (!key) continue;
+      if (!key || seenKeys.has(key)) continue;
       const value = fieldValue(el);
       if (isEmptyFieldValue(value)) continue;
+      seenKeys.add(key);
       result.push({ fieldKey: key, value: value });
     }
     return result;
@@ -338,12 +342,37 @@
 
   const port = browser.runtime.connectNative('formInputAutofillBridge');
   port.onMessage.addListener(function (message) {
-    if (!message || message.action !== 'fill') return;
-    const el = focusedElement;
-    if (!el || !el.isConnected) return;
-    const key = fieldKey(el);
-    if (!key || key !== message.fieldKey) return;
-    setFieldValue(el, message.value || '');
+    if (!message || !message.action) return;
+    if (message.action === 'fill') {
+      const el = focusedElement;
+      if (!el || !el.isConnected) return;
+      const key = fieldKey(el);
+      if (!key || key !== message.fieldKey) return;
+      setFieldValue(el, message.value || '');
+      return;
+    }
+    if (message.action === 'get-focused-field') {
+      const el = focusedElement;
+      const pageUrl = location.href;
+      if (!el || !el.isConnected || !isTargetField(el)) {
+        port.postMessage({
+          action: 'focused-field-response',
+          requestId: message.requestId || '',
+          fieldKey: '',
+          value: '',
+          pageUrl: pageUrl,
+        });
+        return;
+      }
+      const key = fieldKey(el);
+      port.postMessage({
+        action: 'focused-field-response',
+        requestId: message.requestId || '',
+        fieldKey: key || '',
+        value: fieldValue(el),
+        pageUrl: pageUrl,
+      });
+    }
   });
 
   function isEditableFormControl(el) {
@@ -427,4 +456,5 @@
     if (!form || !form.tagName || String(form.tagName).toUpperCase() !== 'FORM') return;
     postFormSubmit(form);
   }, true);
+
 })();

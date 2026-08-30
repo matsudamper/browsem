@@ -33,12 +33,6 @@ internal class SiteFormInputPathsScreenViewModel(
             eventHandler.trySend { it.navigateBack() }
         }
 
-        override fun setPathEnabled(path: String, enabled: Boolean) {
-            viewModelScope.launch {
-                formInputRepository.setPathEnabled(origin, path, enabled)
-            }
-        }
-
         override fun openPath(path: String) {
             eventHandler.trySend { it.navigateToPath(path) }
         }
@@ -62,7 +56,6 @@ internal class SiteFormInputPathsScreenViewModel(
                                 path = path.path,
                                 displayPath = displayFormInputPath(path.path),
                                 fieldCount = path.fieldCount,
-                                enabled = path.enabled,
                             )
                         },
                     )
