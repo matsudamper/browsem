@@ -38,6 +38,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -210,7 +211,7 @@ internal fun BrowserAppShell(
     var pendingOpenDownloadsRequest by rememberSaveable { mutableStateOf(false) }
     var pendingHighlightWorkerId by rememberSaveable { mutableStateOf<String?>(null) }
     var pendingOpenDownloadsRequestId by rememberSaveable { mutableStateOf<String?>(null) }
-    var pendingConsumeOpenDownloadsRequestId by rememberSaveable { mutableStateOf<String?>(null) }
+    var pendingConsumeByWorkerIdEntries by rememberSaveable { mutableStateOf(listOf<Pair<String, String>>()) }
     if (openDownloadsFlow != null) {
         LaunchedEffect(openDownloadsFlow) {
             openDownloadsFlow.onEach { request ->
@@ -679,9 +680,21 @@ internal fun BrowserAppShell(
                         DownloadManagementScreenViewModel(context.applicationContext as Application)
                     })
                     val downloadsUiState by downloadsViewModel.uiState.collectAsState()
+                    val currentOnOpenDownloadsRequestConsumed by rememberUpdatedState(onOpenDownloadsRequestConsumed)
                     var highlightItemIdString by rememberSaveable { mutableStateOf<String?>(null) }
                     val highlightItemId = highlightItemIdString?.let { id ->
                         runCatching { UUID.fromString(id) }.getOrNull()
+                    }
+                    DisposableEffect(Unit) {
+                        onDispose {
+                            val entries = pendingConsumeByWorkerIdEntries
+                            if (entries.isNotEmpty()) {
+                                pendingConsumeByWorkerIdEntries = emptyList()
+                                entries.forEach { (_, requestId) ->
+                                    currentOnOpenDownloadsRequestConsumed?.invoke(requestId)
+                                }
+                            }
+                        }
                     }
                     LaunchedEffect(pendingOpenDownloadsRequest, pendingHighlightWorkerId, pendingOpenDownloadsRequestId) {
                         if (!pendingOpenDownloadsRequest) return@LaunchedEffect
@@ -695,13 +708,14 @@ internal fun BrowserAppShell(
                             if (id != null) {
                                 downloadsViewModel.requestHighlight(id)
                                 if (requestId != null) {
-                                    pendingConsumeOpenDownloadsRequestId = requestId
+                                    pendingConsumeByWorkerIdEntries =
+                                        pendingConsumeByWorkerIdEntries + (workerId to requestId)
                                 }
                                 return@LaunchedEffect
                             }
                         }
                         if (requestId != null) {
-                            onOpenDownloadsRequestConsumed?.invoke(requestId)
+                            currentOnOpenDownloadsRequestConsumed?.invoke(requestId)
                         }
                     }
                     LaunchedEffect(downloadsViewModel) {
@@ -728,12 +742,16 @@ internal fun BrowserAppShell(
                         uiState = downloadsUiState,
                         onBack = { outerBackStack.removeLastOrNull() },
                         highlightItemId = highlightItemId,
-                        onHighlightComplete = {
+                        onHighlightComplete = { itemId ->
                             highlightItemIdString = null
-                            val requestId = pendingConsumeOpenDownloadsRequestId
-                            pendingConsumeOpenDownloadsRequestId = null
+                            val workerId = itemId.toString()
+                            val requestId = pendingConsumeByWorkerIdEntries
+                                .firstOrNull { it.first == workerId }
+                                ?.second
                             if (requestId != null) {
-                                onOpenDownloadsRequestConsumed?.invoke(requestId)
+                                pendingConsumeByWorkerIdEntries =
+                                    pendingConsumeByWorkerIdEntries.filterNot { it.first == workerId }
+                                currentOnOpenDownloadsRequestConsumed?.invoke(requestId)
                             }
                         },
                     )
