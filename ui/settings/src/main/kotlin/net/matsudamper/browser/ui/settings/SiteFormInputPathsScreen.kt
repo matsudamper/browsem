@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -22,6 +23,8 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -125,19 +128,25 @@ internal fun SiteFormInputPathsScreen(
                         modifier = Modifier
                             .fillMaxSize(),
                         contentPadding = PaddingValues(
+                            top = with(LocalDensity.current) {
+                                containerShape.topStart.toPx(Size.Unspecified, LocalDensity.current)
+                                    .coerceAtLeast(containerShape.topStart.toPx(Size.Unspecified, LocalDensity.current))
+                                    .toDp()
+                            },
                             bottom = paddingValues.calculateBottomPadding(),
                         ),
                     ) {
                         items(uiState.paths, key = { it.path }) { entry ->
                             SiteFormInputPathListItem(
-                                entry = entry,
-                                onOpen = { uiState.callbacks.openPath(entry.path) },
                                 modifier = Modifier
                                     .testTag(SiteFormInputPathsScreenTestTags.PathEntry(entry.path).testTag)
-                                    .padding(
-                                        horizontal = itemHorizontalPadding,
-                                        vertical = 8.dp,
-                                    ),
+                                    .fillMaxWidth(),
+                                entry = entry,
+                                onOpen = { uiState.callbacks.openPath(entry.path) },
+                                contentPadding = PaddingValues(
+                                    horizontal = itemHorizontalPadding,
+                                    vertical = 8.dp,
+                                )
                             )
                         }
                     }
@@ -151,12 +160,15 @@ internal fun SiteFormInputPathsScreen(
 private fun SiteFormInputPathListItem(
     entry: SiteFormInputPathsScreenUiState.PathEntry,
     onOpen: () -> Unit,
+    contentPadding: PaddingValues,
     modifier: Modifier = Modifier,
 ) {
     Column(
-        modifier = modifier.clickable {
-            onOpen()
-        }
+        modifier = modifier
+            .clickable {
+                onOpen()
+            }
+            .padding(contentPadding)
     ) {
         Text(
             text = entry.displayPath,
