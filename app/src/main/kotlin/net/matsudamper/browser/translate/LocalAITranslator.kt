@@ -1,19 +1,19 @@
 package net.matsudamper.browser.translate
 
 import android.text.Html
+import java.net.HttpURLConnection
+import java.net.URL
+import java.util.Locale
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withContext
 import com.google.mlkit.common.model.DownloadConditions
 import com.google.mlkit.nl.languageid.LanguageIdentification
 import com.google.mlkit.nl.translate.TranslateLanguage
 import com.google.mlkit.nl.translate.Translation
 import com.google.mlkit.nl.translate.TranslatorOptions
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.tasks.await
-import kotlinx.coroutines.withContext
 import net.matsudamper.browser.resolveTranslationLanguagePair
 import org.mozilla.geckoview.GeckoSession
-import java.net.HttpURLConnection
-import java.net.URL
-import java.util.Locale
 
 class LocalAITranslator(
     private val session: GeckoSession,

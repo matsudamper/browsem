@@ -1,6 +1,7 @@
 package net.matsudamper.browser.feature.addressautofill
 
 import android.util.Log
+import java.util.Locale
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -8,7 +9,6 @@ import net.matsudamper.browser.data.address.AddressEntity
 import net.matsudamper.browser.data.address.AddressRepository
 import org.mozilla.geckoview.Autocomplete
 import org.mozilla.geckoview.GeckoResult
-import java.util.Locale
 
 class AutocompleteStorageDelegate(
     private val addressRepository: AddressRepository,

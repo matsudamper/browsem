@@ -19,7 +19,6 @@ interface HistoryDao {
     )
     fun search(query: String, limit: Int = 50): Flow<List<HistoryEntry>>
 
-
     @Query(
         "SELECT * FROM history h " +
             "WHERE (h.url LIKE '%' || :query || '%' OR h.title LIKE '%' || :query || '%') " +

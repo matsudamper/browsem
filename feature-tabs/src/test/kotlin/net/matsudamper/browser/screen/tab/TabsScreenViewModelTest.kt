@@ -116,7 +116,6 @@ class TabsScreenViewModelTest {
         fun setSelectedTabId(tabId: String?) {
             _state.update { it.copy(selectedTabId = tabId) }
         }
-
     }
 
     private class FakeLaggyTabStore : TabStore {

@@ -3,12 +3,12 @@ package net.matsudamper.browser.feature.viewportscale
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import java.util.concurrent.ConcurrentHashMap
 import org.json.JSONObject
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.WebExtension
-import java.util.concurrent.ConcurrentHashMap
 
 class ViewportScaleWebExtension {
     private var extension: WebExtension? = null
@@ -50,7 +50,7 @@ class ViewportScaleWebExtension {
                 override fun onMessage(
                     nativeApp: String,
                     message: Any,
-                    sender: WebExtension.MessageSender
+                    sender: WebExtension.MessageSender,
                 ): GeckoResult<Any>? {
                     val json = message as? JSONObject ?: return null
                     val scale = json.optDouble("scale", 1.0).toFloat()

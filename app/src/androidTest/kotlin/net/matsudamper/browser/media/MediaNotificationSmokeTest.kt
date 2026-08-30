@@ -1,7 +1,5 @@
 package net.matsudamper.browser.media
 
-import net.matsudamper.browser.feature.media.MediaPlaybackService
-import net.matsudamper.browser.feature.media.MediaSessionBridge
 import android.content.Intent
 import android.os.Handler
 import android.os.Looper
@@ -18,10 +16,15 @@ import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.Until
+import java.io.File
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import net.matsudamper.browser.AutoplayPermissionDialogTestTags
 import net.matsudamper.browser.GeckoBrowserTabTestTags
 import net.matsudamper.browser.LocalHttpServer
 import net.matsudamper.browser.MainActivity
+import net.matsudamper.browser.feature.media.MediaPlaybackService
+import net.matsudamper.browser.feature.media.MediaSessionBridge
 import net.matsudamper.browser.openUrlViaViewIntent
 import net.matsudamper.browser.waitForUrlBarContains
 import org.junit.After
@@ -30,9 +33,6 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.Timeout
 import org.junit.runner.RunWith
-import java.io.File
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.TimeUnit
 
 /**
  * メディア通知機能のスモークテスト。
@@ -202,6 +202,7 @@ class MediaNotificationSmokeTest {
         private const val TAG = "MediaNotificationSmoke"
         private const val TEST_TIMEOUT_MS = 180_000L
         private const val PAGE_LOAD_TIMEOUT_MS = 60_000L
+
         // ページロード待ちを兼ねるため、タップ試行は多め・確認間隔は短めに設定する
         private const val PLAYBACK_TAP_RETRY_COUNT = 10
         private const val PLAYBACK_START_CONFIRM_TIMEOUT_MS = 2_500L

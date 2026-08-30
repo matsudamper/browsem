@@ -161,11 +161,11 @@ internal class WebExtensionInstaller(
 
     fun cleanup() {
         installPromptState?.result?.completeExceptionally(
-            java.util.concurrent.CancellationException("Installer was cleaned up.")
+            java.util.concurrent.CancellationException("Installer was cleaned up."),
         )
         installPromptState = null
         permissionPromptState?.result?.completeExceptionally(
-            java.util.concurrent.CancellationException("Installer was cleaned up.")
+            java.util.concurrent.CancellationException("Installer was cleaned up."),
         )
         permissionPromptState = null
         installFailureMessage = null

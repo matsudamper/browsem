@@ -23,21 +23,22 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
+import java.io.ByteArrayOutputStream
+import java.net.URL
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
-import java.net.URL
-import net.matsudamper.browser.data.download.DownloadRecordStatus
+import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.SiteGeolocationState
 import net.matsudamper.browser.data.SitePermissionState
-import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.SiteSettingsRepository
 import net.matsudamper.browser.data.TranslationProvider
+import net.matsudamper.browser.data.download.DownloadRecordStatus
 import net.matsudamper.browser.data.extractSiteHost
 import net.matsudamper.browser.feature.devtools.DevToolsWebExtension
 import net.matsudamper.browser.feature.findinpage.FindInPageWebExtension
@@ -46,15 +47,12 @@ import org.json.JSONObject
 import org.koin.compose.koinInject
 import org.mozilla.geckoview.AllowOrDeny
 import org.mozilla.geckoview.GeckoResult
-import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.GeckoSessionSettings
 import org.mozilla.geckoview.GeckoView
 import org.mozilla.geckoview.TranslationsController
 import org.mozilla.geckoview.WebRequestError
 import org.mozilla.geckoview.WebResponse
-import java.io.ByteArrayOutputStream
-
 
 private const val TAG = "BrowserTabScreenState"
 
@@ -141,8 +139,10 @@ internal class BrowserTabScreenState(
 ) : BrowserSessionStateCallbacks {
     // 現在のページの履歴エントリID（タイトル更新に使用）
     private var currentHistoryEntryId: Long? = null
+
     // 履歴レコード作成前に届いたタイトルを一時保持する
     private var pendingHistoryTitle: String? = null
+
     // 遅延して返る履歴レコードIDが古い遷移に紐づくものかを判定する
     private var historyRecordSequence: Long = 0
     var homepageUrl by mutableStateOf(homepageUrl)
@@ -161,13 +161,18 @@ internal class BrowserTabScreenState(
 
     // --- Display state ---
     var isPcMode by mutableStateOf(false)
+
     // BrowserTab.themeColor に委譲することで、変更が自動的に永続化対象になる
     var toolbarColor: Color?
         get() = browserTab.themeColor?.let { Color(it) }
-        set(value) { browserTab.themeColor = value?.toArgb() }
+        set(value) {
+            browserTab.themeColor = value?.toArgb()
+        }
     private var lastPageStartUrlKey: String = normalizedBrowserPageKey(browserTab.currentUrl)
+
     // フルページロード開始フラグ（SPA の pushState 遷移と区別するため）
     private var isFullPageLoadPending: Boolean = false
+
     // onLocationChange で履歴記録をスキップする残り回数
     // goBack() / goForward() を複数回連続で呼ぶ場合にもカウンタで対応する
     private var skipHistoryRecordCount: Int = 0
@@ -184,8 +189,10 @@ internal class BrowserTabScreenState(
     var translationState by mutableStateOf(TranslationState.Idle)
     var originalPageUrlForRevert by mutableStateOf<String?>(null)
     var detectedPageLanguage by mutableStateOf<String?>(null)
+
     /** 翻訳元言語タグ（例: "en"） */
     var translationFromLanguage by mutableStateOf<String?>(null)
+
     /** 翻訳先言語タグ（例: "ja"） */
     var translationToLanguage by mutableStateOf<String?>(null)
     private var translationJob: Job? = null
@@ -196,14 +203,17 @@ internal class BrowserTabScreenState(
     var findQuery by mutableStateOf("")
     var findMatchCurrent by mutableIntStateOf(0)
     var findMatchTotal by mutableIntStateOf(0)
+
     /** 正規表現モードが有効かどうか */
     val findIsRegex: Boolean get() = findInPageState == FindInPageState.Regex
+
     /** 無効な正規表現が入力された場合のエラーメッセージ */
     var findQueryError by mutableStateOf<String?>(null)
 
     // --- 開発者ツール state ---
     var showDevTools by mutableStateOf(false)
         private set
+
     // 現在フォーカスされている入力要素の情報。フォーカスがない場合は null。
     var devToolsFocusedInput by mutableStateOf<DevToolsWebExtension.FocusedInputInfo?>(null)
 
@@ -417,6 +427,7 @@ internal class BrowserTabScreenState(
     // --- ファイルダウンロード確認ダイアログ用state ---
     var pendingDownloadResponse by mutableStateOf<WebResponse?>(null)
     var pendingExternalAppLaunch by mutableStateOf<PendingExternalAppLaunch?>(null)
+
     // 外部アプリ確認ダイアログ表示中に到着した後続の外部アプリナビゲーション。
     // ダイアログをキャンセルした場合にこちらを表示する（アプリ起動した場合は破棄する）。
     private var queuedExternalAppLaunch: PendingExternalAppLaunch? = null
@@ -438,6 +449,7 @@ internal class BrowserTabScreenState(
         val status: DownloadRecordStatus,
         val fileUri: String?,
     )
+
     // 外部アプリ確認ダイアログでキャンセルされた場合、次回のロードリクエストで外部アプリチェックをスキップする
     private var skipExternalAppCheckForNextLoad = false
 
@@ -480,7 +492,7 @@ internal class BrowserTabScreenState(
             if (field == value) return
             Log.d(
                 TAG,
-                "previewCaptureReady ${field} -> $value (tabId=${browserTab.tabId} url=$currentPageUrl)",
+                "previewCaptureReady $field -> $value (tabId=${browserTab.tabId} url=$currentPageUrl)",
             )
             field = value
         }
@@ -494,13 +506,17 @@ internal class BrowserTabScreenState(
     // --- Scroll / Refresh state ---
     var visualViewportScale by mutableFloatStateOf(1f)
     var isRefreshing by mutableStateOf(false)
+
     // フルページロード中かどうか。更新ボタンを停止ボタンに切り替えるために使用する。
     var isPageLoading by mutableStateOf(browserTab.isPageLoading)
+
     // BrowserTab.scrollY に委譲することで、タブ切替で State が再生成されても
     // スクロール位置を保持し、復元タブでの PullToRefresh 誤発動を防ぐ。
     var scrollY: Int
         get() = browserTab.scrollY
-        set(value) { browserTab.scrollY = value }
+        set(value) {
+            browserTab.scrollY = value
+        }
 
     val showInstallExtensionItem: Boolean
         get() = resolveAmoInstallUriFromPage(currentPageUrl) != null
@@ -508,9 +524,11 @@ internal class BrowserTabScreenState(
     // --- 拡張機能アクション（ツールバーメニューのアイコン行）---
     /** メニューのアイコン行の横スクロール位置。タブ内でのみ保持し、永続化はしない */
     val extensionActionScrollState = ScrollState(initial = 0)
+
     /** 表示中の拡張機能ポップアップ。null なら非表示 */
     var extensionActionPopup by mutableStateOf<WebExtensionActionController.PopupRequest?>(null)
     private var extensionActionOrder by mutableStateOf<List<String>>(emptyList())
+
     // ドラッグ中は保存済みの並び順ではなく、この一時的な並び順を使う
     private var draggingExtensionActionOrder by mutableStateOf<List<String>?>(null)
 
@@ -853,7 +871,8 @@ internal class BrowserTabScreenState(
             }
 
             TranslationState.Loading,
-            TranslationState.Translated -> {
+            TranslationState.Translated,
+            -> {
                 closeTranslationBar(revertPage = true)
             }
 
@@ -1600,7 +1619,10 @@ internal class BrowserTabScreenState(
         onGrant: () -> Unit,
         onReject: () -> Unit,
     ) {
-        val perms = permissions ?: run { onReject(); return }
+        val perms = permissions ?: run {
+            onReject()
+            return
+        }
         coroutineScope.launch {
             // OS の権限要求の前に、サイトごとのマイク許可を確認する
             if (Manifest.permission.RECORD_AUDIO in perms) {

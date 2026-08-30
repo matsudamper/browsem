@@ -42,14 +42,19 @@ data class SettingsScreenUiState(
         fun dismissExtensionsProcessRestartDialog()
         fun setMockLocationInput(input: String)
         fun openMockLocationOnMap()
+
         /** バックアップのエクスポートを要求する（確認ダイアログを表示） */
         fun requestBackupExport()
+
         /** バックアップのインポートを要求する（確認ダイアログを表示） */
         fun requestBackupImport()
+
         /** 確認ダイアログで「開始」を押した */
         fun confirmBackup()
+
         /** 確認ダイアログを閉じる */
         fun dismissBackupConfirm()
+
         /** デフォルトブラウザの設定画面を開く */
         fun openDefaultBrowserSettings()
     }

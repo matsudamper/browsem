@@ -91,11 +91,14 @@ data class DownloadManagementScreenUiState(
         @Stable
         interface Listener {
             fun onCancel()
+
             /** ダウンロード中のアイテムを一時停止する */
             fun onPause()
             fun onOpenFile()
+
             /** 失敗したダウンロードを再開する */
             fun onResume()
+
             /** ダウンロード開始時のページを新しいタブで開く。originPageUrl が null の場合は no-op */
             fun onOpenOriginPage()
         }
@@ -103,6 +106,7 @@ data class DownloadManagementScreenUiState(
 
     interface Callbacks {
         fun onOpenDownloadsFolder()
+
         /** ファイル URI からプレビューを読み込む。サムネイルを取得できない場合は汎用アイコンを返す */
         suspend fun loadPreview(fileUri: String): Preview
     }

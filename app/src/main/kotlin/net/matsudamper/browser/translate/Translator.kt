@@ -4,7 +4,7 @@ interface Translator {
     suspend fun translate(): TranslationLanguages?
 
     enum class TranslateState {
-        MODEL_DOWNLOAD
+        MODEL_DOWNLOAD,
     }
 }
 

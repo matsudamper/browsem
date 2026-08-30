@@ -36,14 +36,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTagsAsResourceId
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withLink
@@ -515,10 +515,18 @@ sealed interface BrowserTabDialogLayerTestTags {
     val id: String
     val testTag get() = "${BrowserTabDialogLayerTestTags::class.java.name}#$id"
 
-    data object AddressSaveDialog : BrowserTabDialogLayerTestTags { override val id = "address_save_dialog" }
-    data object AddressSaveConfirmButton : BrowserTabDialogLayerTestTags { override val id = "address_save_confirm_button" }
-    data object FormInputSaveDialog : BrowserTabDialogLayerTestTags { override val id = "form_input_save_dialog" }
-    data object FormInputSaveConfirmButton : BrowserTabDialogLayerTestTags { override val id = "form_input_save_confirm_button" }
+    data object AddressSaveDialog : BrowserTabDialogLayerTestTags {
+        override val id = "address_save_dialog"
+    }
+    data object AddressSaveConfirmButton : BrowserTabDialogLayerTestTags {
+        override val id = "address_save_confirm_button"
+    }
+    data object FormInputSaveDialog : BrowserTabDialogLayerTestTags {
+        override val id = "form_input_save_dialog"
+    }
+    data object FormInputSaveConfirmButton : BrowserTabDialogLayerTestTags {
+        override val id = "form_input_save_confirm_button"
+    }
 }
 
 private fun buildAddressDisplayText(
@@ -774,8 +782,10 @@ private fun AuthPromptDialog(
     onConfirm: (username: String?, password: String) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val isPasswordOnly = (prompt.authOptions.flags and
-        GeckoSession.PromptDelegate.AuthPrompt.AuthOptions.Flags.ONLY_PASSWORD) != 0
+    val isPasswordOnly = (
+        prompt.authOptions.flags and
+            GeckoSession.PromptDelegate.AuthPrompt.AuthOptions.Flags.ONLY_PASSWORD
+        ) != 0
     var username by remember(prompt) {
         mutableStateOf(prompt.authOptions.username.orEmpty())
     }
@@ -974,7 +984,7 @@ private fun DateTimeLocalInputDialog(
                             val dateMillis = datePickerState.selectedDateMillis ?: return@TextButton
                             val dateStr = formatDateMillis(dateMillis)
                             val timeStr = formatHourMinute(timePickerState.hour, timePickerState.minute)
-                            onConfirm("${dateStr}T${timeStr}")
+                            onConfirm("${dateStr}T$timeStr")
                         },
                     ) {
                         Text("OK")
@@ -1008,9 +1018,9 @@ private fun parseDateToMillis(value: String?): Long? {
         // isLenient = false で無効な日付（例: 2月30日）を例外として検出する
         val calendar = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
         calendar.isLenient = false
-        calendar.set(year, month - 1, day, 0, 0, 0)  // Calendar の月は 0 始まり
+        calendar.set(year, month - 1, day, 0, 0, 0) // Calendar の月は 0 始まり
         calendar.set(Calendar.MILLISECOND, 0)
-        calendar.timeInMillis  // isLenient = false の場合、無効な日付で例外が発生する
+        calendar.timeInMillis // isLenient = false の場合、無効な日付で例外が発生する
     }.getOrNull()
 }
 

@@ -1,16 +1,16 @@
 package net.matsudamper.browser.data.websuggestion
 
+import java.net.HttpURLConnection
+import java.net.URL
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets
+import java.util.Locale
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withContext
 import net.matsudamper.browser.data.SearchProvider
 import org.json.JSONArray
-import java.net.HttpURLConnection
-import java.net.URL
-import java.net.URLEncoder
-import java.nio.charset.StandardCharsets
-import java.util.Locale
 
 interface WebSuggestionRepository {
     suspend fun getSuggestions(

@@ -1,10 +1,11 @@
 package net.matsudamper.browser
 
+import android.util.Log
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import android.util.Log
+import java.util.UUID
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -27,7 +28,6 @@ import net.matsudamper.browser.data.PersistedTabState
 import net.matsudamper.browser.data.TabGroupRepository
 import net.matsudamper.browser.data.TabRepository
 import org.mozilla.geckoview.GeckoSession
-import java.util.UUID
 
 /**
  * @param isSinglePage Tabに依存しない。Tabの保存機能が無効化される
@@ -47,6 +47,7 @@ class BrowserTabController(
         controllerScope = controllerScope,
         isSinglePage = isSinglePage,
     )
+
     // セッション中に closeTab で閉じたタブの ID を記録する。
     // NavDisplay の遷移アニメーション中に BrowserScreen が再コンポーズされても
     // getOrCreateTab がタブを再作成しないようにするためのガード。
@@ -62,6 +63,7 @@ class BrowserTabController(
     private var detachedTab: DetachedTab? = null
     private var repositoryObservationStarted = false
     private var restoreState = RestoreState.NOT_STARTED
+
     // タブ復元完了を他のコルーチンから待機するためのシグナル（isSinglePage=true の場合は即完了）
     // 復元失敗後の再試行に備え、試行ごとに再生成する
     private var _restoreComplete = CompletableDeferred<Unit>().also {

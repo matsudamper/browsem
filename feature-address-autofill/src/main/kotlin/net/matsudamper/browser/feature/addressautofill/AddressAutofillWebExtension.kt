@@ -4,14 +4,14 @@ import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.util.Log
+import java.util.Collections
+import java.util.concurrent.ConcurrentHashMap
 import org.json.JSONObject
 import org.mozilla.geckoview.Autocomplete
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.WebExtension
-import java.util.Collections
-import java.util.concurrent.ConcurrentHashMap
 
 /**
  * 住所欄へ値を入れるビルトイン WebExtension。

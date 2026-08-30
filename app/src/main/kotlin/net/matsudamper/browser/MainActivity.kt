@@ -32,6 +32,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
+import java.util.concurrent.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.first
@@ -46,7 +47,6 @@ import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.WebExtension
-import java.util.concurrent.CancellationException
 
 class MainActivity : ComponentActivity() {
 
@@ -76,14 +76,14 @@ class MainActivity : ComponentActivity() {
     private var systemNavigationObserverCallback: Any? = null
 
     private val requestDownloadNotificationPermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestPermission()
+        ActivityResultContracts.RequestPermission(),
     ) { _ ->
         pendingDownloadNotificationPermissionDeferred?.complete(Unit)
         pendingDownloadNotificationPermissionDeferred = null
     }
 
     private val geckoActivityLauncher = registerForActivityResult(
-        ActivityResultContracts.StartIntentSenderForResult()
+        ActivityResultContracts.StartIntentSenderForResult(),
     ) { result ->
         val pendingResult = pendingActivityResult ?: return@registerForActivityResult
         pendingActivityResult = null
@@ -92,7 +92,7 @@ class MainActivity : ComponentActivity() {
             pendingResult.complete(result.data ?: Intent())
         } else {
             pendingResult.completeExceptionally(
-                CancellationException("Gecko activity cancelled. resultCode=${result.resultCode}")
+                CancellationException("Gecko activity cancelled. resultCode=${result.resultCode}"),
             )
         }
     }
@@ -100,7 +100,7 @@ class MainActivity : ComponentActivity() {
     private val activityDelegate = GeckoRuntime.ActivityDelegate { pendingIntent ->
         if (pendingActivityResult != null) {
             return@ActivityDelegate GeckoResult.fromException(
-                IllegalStateException("Another Gecko activity request is already pending.")
+                IllegalStateException("Another Gecko activity request is already pending."),
             )
         }
 
@@ -325,7 +325,9 @@ class MainActivity : ComponentActivity() {
                 this,
                 Manifest.permission.POST_NOTIFICATIONS,
             ) == PackageManager.PERMISSION_GRANTED
-        ) return
+        ) {
+            return
+        }
         pendingDownloadNotificationPermissionDeferred?.let {
             it.await()
             return
@@ -404,11 +406,11 @@ class MainActivity : ComponentActivity() {
             extensionRuntimeCoordinator.clearOnExtensionReady()
         }
         pendingActivityResult?.completeExceptionally(
-            CancellationException("Activity was destroyed before Gecko activity completed.")
+            CancellationException("Activity was destroyed before Gecko activity completed."),
         )
         pendingActivityResult = null
         pendingDownloadNotificationPermissionDeferred?.cancel(
-            CancellationException("Activity was destroyed before download notification permission completed.")
+            CancellationException("Activity was destroyed before download notification permission completed."),
         )
         pendingDownloadNotificationPermissionDeferred = null
         if (::extensionInstaller.isInitialized && runtime.getActivityDelegate() === activityDelegate) {
@@ -457,7 +459,7 @@ class MainActivity : ComponentActivity() {
                 if (!isFinishing && !isDestroyed && webExtensionWarmUpRetryCount < MAX_WARMUP_RETRIES) {
                     window.decorView.postDelayed(
                         { warmUpWebExtensionController() },
-                        1200L
+                        1200L,
                     )
                 } else if (webExtensionWarmUpRetryCount >= MAX_WARMUP_RETRIES) {
                     Log.w("MainActivity", "WebExtension warmup を ${MAX_WARMUP_RETRIES}回リトライしても失敗")
@@ -615,7 +617,7 @@ private fun InstallPromptDialog(
             TextButton(onClick = { resolveInstallPrompt(false) }) {
                 Text("Cancel")
             }
-        }
+        },
     )
 }
 
@@ -637,7 +639,7 @@ private fun PermissionPromptDialog(
             TextButton(onClick = { resolvePermissionPrompt(false) }) {
                 Text("Deny")
             }
-        }
+        },
     )
 }
 
@@ -654,6 +656,6 @@ private fun InstallFailureDialog(
             TextButton(onClick = onDismiss) {
                 Text("OK")
             }
-        }
+        },
     )
 }

@@ -2,55 +2,55 @@ package net.matsudamper.browser.di
 
 import android.util.Log
 import androidx.annotation.OptIn
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 import mozilla.components.lib.publicsuffixlist.PublicSuffixList
-import net.matsudamper.browser.feature.forminputautofill.FormInputAutofillCoordinator
-import net.matsudamper.browser.feature.forminputautofill.FormInputAutofillWebExtension
-import net.matsudamper.browser.feature.addressautofill.AddressAutofillCoordinator
-import net.matsudamper.browser.feature.addressautofill.AddressAutofillWebExtension
-import net.matsudamper.browser.feature.addressautofill.AutocompleteStorageDelegate
-import net.matsudamper.browser.data.address.AddressRepository
 import net.matsudamper.browser.BrowserViewModel
-import net.matsudamper.browser.allowUnsignedExtensions
-import net.matsudamper.browser.feature.devtools.DevToolsWebExtension
 import net.matsudamper.browser.DownloadWorker
-import net.matsudamper.browser.feature.findinpage.FindInPageWebExtension
-import net.matsudamper.browser.GeckoDownloadManager
-import net.matsudamper.browser.feature.mocklocation.MockLocationWebExtension
-import net.matsudamper.browser.feature.networklog.NetworkLogStore
-import net.matsudamper.browser.feature.networklog.NetworkLogWebExtension
-import net.matsudamper.browser.feature.themecolor.ThemeColorWebExtension
-import net.matsudamper.browser.feature.twittershare.TwitterShareWebExtension
-import net.matsudamper.browser.feature.viewportscale.ViewportScaleWebExtension
 import net.matsudamper.browser.ExtensionRuntimeCoordinator
+import net.matsudamper.browser.GeckoDownloadManager
 import net.matsudamper.browser.WebExtensionActionController
+import net.matsudamper.browser.allowUnsignedExtensions
 import net.matsudamper.browser.data.BackupRepository
 import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.SiteSettingsRepository
 import net.matsudamper.browser.data.TabGroupRepository
 import net.matsudamper.browser.data.TabGroupRepositoryImpl
 import net.matsudamper.browser.data.TabRepository
-import net.matsudamper.browser.data.forminput.FormInputRepository
-import net.matsudamper.browser.data.download.DownloadRepository
+import net.matsudamper.browser.data.address.AddressRepository
 import net.matsudamper.browser.data.crashlog.CrashLogRepository
+import net.matsudamper.browser.data.download.DownloadRepository
+import net.matsudamper.browser.data.forminput.FormInputRepository
 import net.matsudamper.browser.data.history.HistoryRepository
 import net.matsudamper.browser.data.resolvedExtensionsProcessEnabled
 import net.matsudamper.browser.data.resolvedInputAutoZoomEnabled
 import net.matsudamper.browser.data.websuggestion.HttpWebSuggestionRepository
 import net.matsudamper.browser.data.websuggestion.WebSuggestionRepository
+import net.matsudamper.browser.feature.addressautofill.AddressAutofillCoordinator
+import net.matsudamper.browser.feature.addressautofill.AddressAutofillWebExtension
+import net.matsudamper.browser.feature.addressautofill.AutocompleteStorageDelegate
+import net.matsudamper.browser.feature.devtools.DevToolsWebExtension
+import net.matsudamper.browser.feature.findinpage.FindInPageWebExtension
+import net.matsudamper.browser.feature.forminputautofill.FormInputAutofillCoordinator
+import net.matsudamper.browser.feature.forminputautofill.FormInputAutofillWebExtension
 import net.matsudamper.browser.feature.media.MediaWebExtension
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.runBlocking
+import net.matsudamper.browser.feature.mocklocation.MockLocationWebExtension
+import net.matsudamper.browser.feature.networklog.NetworkLogStore
+import net.matsudamper.browser.feature.networklog.NetworkLogWebExtension
+import net.matsudamper.browser.feature.themecolor.ThemeColorWebExtension
+import net.matsudamper.browser.feature.twittershare.TwitterShareWebExtension
+import net.matsudamper.browser.feature.viewportscale.ViewportScaleWebExtension
 import org.koin.android.ext.koin.androidContext
 import org.koin.androidx.workmanager.dsl.worker
 import org.koin.core.module.dsl.viewModel
 import org.koin.dsl.module
-import org.mozilla.geckoview.GeckoRuntime
-import org.mozilla.geckoview.GeckoRuntimeSettings
 import org.mozilla.geckoview.ExperimentalGeckoViewApi
 import org.mozilla.geckoview.GeckoPreferenceController
+import org.mozilla.geckoview.GeckoRuntime
+import org.mozilla.geckoview.GeckoRuntimeSettings
 
 val dataModule = module {
     single { BackupRepository(androidContext()) }
@@ -87,7 +87,7 @@ val appModule = module {
                 .forceUserScalableEnabled(true)
                 .inputAutoZoomEnabled(inputAutoZoomEnabled)
                 .extensionsProcessEnabled(extensionsProcessEnabled)
-                .build()
+                .build(),
         ).also {
             get<AddressAutofillWebExtension>().install(it)
             get<FormInputAutofillWebExtension>().install(it)

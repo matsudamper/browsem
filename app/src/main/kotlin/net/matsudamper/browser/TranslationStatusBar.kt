@@ -46,7 +46,8 @@ internal fun TranslationStatusBar(
 
     val backgroundColor = when (state) {
         TranslationState.Loading,
-        TranslationState.Translated -> MaterialTheme.colorScheme.secondaryContainer
+        TranslationState.Translated,
+        -> MaterialTheme.colorScheme.secondaryContainer
 
         TranslationState.Error -> MaterialTheme.colorScheme.errorContainer
         TranslationState.Idle -> return

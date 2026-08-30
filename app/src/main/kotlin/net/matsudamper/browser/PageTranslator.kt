@@ -1,5 +1,7 @@
 package net.matsudamper.browser
 
+import java.net.HttpURLConnection
+import java.net.URL
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import net.matsudamper.browser.data.TranslationProvider
@@ -8,8 +10,6 @@ import net.matsudamper.browser.translate.LocalAITranslator
 import net.matsudamper.browser.translate.TranslationLanguages
 import net.matsudamper.browser.translate.TranslationPriorityLanguage
 import org.mozilla.geckoview.GeckoSession
-import java.net.HttpURLConnection
-import java.net.URL
 
 internal class PageTranslator(
     private val session: GeckoSession,
@@ -23,7 +23,7 @@ internal class PageTranslator(
         return when (provider) {
             TranslationProvider.TRANSLATION_PROVIDER_GECKO,
             TranslationProvider.UNRECOGNIZED,
-                -> {
+            -> {
                 // 言語不明の場合はHTMLのlang属性にフォールバック、それでも不明なら優先翻訳元言語を使用
                 val rawFromLang = fromLanguage ?: fetchHtmlLang()
                 val resolvedFromLang = if (rawFromLang.isNullOrBlank() || rawFromLang == "und") {
@@ -64,6 +64,7 @@ internal class PageTranslator(
 
     companion object {
         private const val NETWORK_TIMEOUT_MS = 15_000
+
         /** lang属性の抽出に十分な読み取りサイズ */
         private const val HEAD_READ_SIZE = 4096
     }

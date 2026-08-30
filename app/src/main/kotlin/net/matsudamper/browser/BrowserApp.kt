@@ -2,17 +2,16 @@ package net.matsudamper.browser
 
 import android.Manifest
 import android.app.Application
+import android.content.ActivityNotFoundException
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
-import android.content.ActivityNotFoundException
 import android.content.Intent
-import android.widget.Toast
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.os.Process
-import net.matsudamper.browser.ui.settings.site.SiteSettingsScreen
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -33,13 +32,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.Stable
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -50,7 +49,6 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.lifecycle.viewmodel.compose.viewModel as composeViewModel
 import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
 import androidx.navigation3.runtime.NavEntry
 import androidx.navigation3.runtime.NavKey
@@ -71,53 +69,55 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
+import androidx.lifecycle.viewmodel.compose.viewModel as composeViewModel
 import mozilla.components.lib.publicsuffixlist.PublicSuffixList
 import net.matsudamper.browser.data.BackupRepository
 import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.SiteSettingsRepository
 import net.matsudamper.browser.data.TabGroupId
 import net.matsudamper.browser.data.TabGroupRepository
-import net.matsudamper.browser.data.extractSiteHost
+import net.matsudamper.browser.data.address.AddressRepository
 import net.matsudamper.browser.data.crashlog.CrashLogRepository
+import net.matsudamper.browser.data.extractSiteHost
+import net.matsudamper.browser.data.forminput.FormInputOrigin
+import net.matsudamper.browser.data.forminput.FormInputRepository
+import net.matsudamper.browser.data.forminput.parseFormInputPageKey
 import net.matsudamper.browser.data.history.HistoryRepository
 import net.matsudamper.browser.data.websuggestion.WebSuggestionRepository
 import net.matsudamper.browser.navigation.AppDestination
 import net.matsudamper.browser.navigation.BrowserNavDestination
 import net.matsudamper.browser.navigation.NavController
-import net.matsudamper.browser.screen.backup.BackupProgressViewModel
-import net.matsudamper.browser.screen.browser.BrowserScreenViewModel
-import net.matsudamper.browser.screen.downloads.DownloadManagementScreenViewModel
-import net.matsudamper.browser.screen.extensions.ExtensionsScreenViewModel
-import net.matsudamper.browser.data.address.AddressRepository
 import net.matsudamper.browser.screen.addresses.AddressEditScreenViewModel
 import net.matsudamper.browser.screen.addresses.AddressesScreenViewModel
+import net.matsudamper.browser.screen.backup.BackupProgressViewModel
+import net.matsudamper.browser.screen.browser.BrowserScreenViewModel
 import net.matsudamper.browser.screen.crashlog.CrashLogDetailScreenViewModel
 import net.matsudamper.browser.screen.crashlog.CrashLogsScreenViewModel
+import net.matsudamper.browser.screen.downloads.DownloadManagementScreenViewModel
+import net.matsudamper.browser.screen.extensions.ExtensionsScreenViewModel
 import net.matsudamper.browser.screen.history.HistoryScreenViewModel
 import net.matsudamper.browser.screen.settings.SettingsScreenViewModel
 import net.matsudamper.browser.screen.siteforminput.SiteFormInputFieldScreenViewModel
 import net.matsudamper.browser.screen.siteforminput.SiteFormInputPathScreenViewModel
 import net.matsudamper.browser.screen.siteforminput.SiteFormInputPathsScreenViewModel
 import net.matsudamper.browser.screen.sitesettings.SiteSettingsScreenViewModel
-import net.matsudamper.browser.data.forminput.FormInputOrigin
-import net.matsudamper.browser.data.forminput.FormInputRepository
-import net.matsudamper.browser.data.forminput.parseFormInputPageKey
 import net.matsudamper.browser.screen.tab.TabsScreenViewModel
 import net.matsudamper.browser.ui.browser.BrowserScreen
 import net.matsudamper.browser.ui.common.BrowserTheme
 import net.matsudamper.browser.ui.downloads.DownloadManagementScreen
 import net.matsudamper.browser.ui.extensions.ExtensionsScreen
 import net.matsudamper.browser.ui.history.HistoryScreen
-import net.matsudamper.browser.ui.settings.crash.CrashLogDetailRoute
-import net.matsudamper.browser.ui.settings.crash.CrashLogsRoute
+import net.matsudamper.browser.ui.settings.SettingsScreen
 import net.matsudamper.browser.ui.settings.address.AddressEditScreen
 import net.matsudamper.browser.ui.settings.address.AddressesScreen
 import net.matsudamper.browser.ui.settings.backup.BackupProgressScreen
 import net.matsudamper.browser.ui.settings.backup.BackupProgressUiState
-import net.matsudamper.browser.ui.settings.SettingsScreen
+import net.matsudamper.browser.ui.settings.crash.CrashLogDetailRoute
+import net.matsudamper.browser.ui.settings.crash.CrashLogsRoute
 import net.matsudamper.browser.ui.settings.form.SiteFormInputFieldScreen
 import net.matsudamper.browser.ui.settings.form.SiteFormInputPathScreen
 import net.matsudamper.browser.ui.settings.form.SiteFormInputPathsScreen
+import net.matsudamper.browser.ui.settings.site.SiteSettingsScreen
 import net.matsudamper.browser.ui.tabs.TabsScreen
 import org.koin.compose.koinInject
 import org.mozilla.geckoview.GeckoRuntime
@@ -657,7 +657,7 @@ internal fun BrowserAppShell(
                                             Uri.parse(url),
                                             context,
                                             CustomTabActivity::class.java,
-                                        )
+                                        ),
                                     )
                                 }
 

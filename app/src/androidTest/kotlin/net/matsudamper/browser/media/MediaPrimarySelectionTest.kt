@@ -1,8 +1,5 @@
 package net.matsudamper.browser.media
 
-import net.matsudamper.browser.feature.media.MediaPlaybackService
-import net.matsudamper.browser.feature.media.MediaPlaybackState
-import net.matsudamper.browser.feature.media.MediaSessionBridge
 import android.content.Intent
 import android.os.Handler
 import android.os.Looper
@@ -10,24 +7,30 @@ import android.os.SystemClock
 import android.util.Log
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.click
+import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
-import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import java.io.File
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import net.matsudamper.browser.AutoplayPermissionDialogTestTags
 import net.matsudamper.browser.BrowserToolbarTestTags
 import net.matsudamper.browser.GeckoBrowserTabTestTags
 import net.matsudamper.browser.LocalHttpServer
 import net.matsudamper.browser.MainActivity
+import net.matsudamper.browser.feature.media.MediaPlaybackService
+import net.matsudamper.browser.feature.media.MediaPlaybackState
+import net.matsudamper.browser.feature.media.MediaSessionBridge
 import net.matsudamper.browser.openUrlFromUrlBar
 import net.matsudamper.browser.openUrlViaViewIntent
+import net.matsudamper.browser.ui.tabs.TabsScreenTestTags
 import net.matsudamper.browser.waitForTabsScreenLoaded
 import net.matsudamper.browser.waitForUrlBarContains
 import net.matsudamper.browser.waitForUrlBarNotFocused
-import net.matsudamper.browser.ui.tabs.TabsScreenTestTags
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -36,9 +39,6 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.Timeout
 import org.junit.runner.RunWith
-import java.io.File
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.TimeUnit
 
 @RunWith(AndroidJUnit4::class)
 class MediaPrimarySelectionTest {

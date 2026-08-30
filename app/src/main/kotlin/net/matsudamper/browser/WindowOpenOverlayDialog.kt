@@ -35,9 +35,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import net.matsudamper.browser.data.ThemeMode
+import net.matsudamper.browser.resources.R as ResourcesR
 import net.matsudamper.browser.ui.common.BrowserTheme
 import org.mozilla.geckoview.GeckoSession
-import net.matsudamper.browser.resources.R as ResourcesR
 
 /**
  * Custom Tab / WebApp のようにタブ UI が無い画面で `window.open` を扱う。
@@ -172,6 +172,10 @@ sealed interface WindowOpenOverlayDialogTestTags {
     val id: String
     val testTag get() = "${WindowOpenOverlayDialogTestTags::class.java.name}#$id"
 
-    object Dialog : WindowOpenOverlayDialogTestTags { override val id = "window_open_overlay_dialog" }
-    object CloseButton : WindowOpenOverlayDialogTestTags { override val id = "window_open_overlay_close" }
+    object Dialog : WindowOpenOverlayDialogTestTags {
+        override val id = "window_open_overlay_dialog"
+    }
+    object CloseButton : WindowOpenOverlayDialogTestTags {
+        override val id = "window_open_overlay_close"
+    }
 }

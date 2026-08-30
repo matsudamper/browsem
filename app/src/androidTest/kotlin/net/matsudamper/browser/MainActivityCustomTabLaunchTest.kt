@@ -55,7 +55,7 @@ class MainActivityCustomTabLaunchTest {
                 putExtras(
                     Bundle().apply {
                         putBinder(EXTRA_CUSTOM_TABS_SESSION, Binder())
-                    }
+                    },
                 )
             }
 
@@ -98,7 +98,7 @@ class MainActivityCustomTabLaunchTest {
                 putExtras(
                     Bundle().apply {
                         putBinder(EXTRA_CUSTOM_TABS_SESSION, extractCallbackBinder(sessionToken))
-                    }
+                    },
                 )
             }
 

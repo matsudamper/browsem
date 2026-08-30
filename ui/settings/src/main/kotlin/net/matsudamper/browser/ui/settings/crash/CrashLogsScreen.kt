@@ -26,17 +26,19 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import net.matsudamper.browser.resources.R as ResourcesR
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import net.matsudamper.browser.resources.R as ResourcesR
 
 sealed interface CrashLogsScreenTestTags {
     val id: String
 
     val testTag get() = "${CrashLogsScreenTestTags::class.java.name}#$id"
 
-    data object Root : CrashLogsScreenTestTags { override val id = "root" }
+    data object Root : CrashLogsScreenTestTags {
+        override val id = "root"
+    }
 
     data class Entry(val crashLogId: Long) : CrashLogsScreenTestTags {
         override val id = "entry_$crashLogId"

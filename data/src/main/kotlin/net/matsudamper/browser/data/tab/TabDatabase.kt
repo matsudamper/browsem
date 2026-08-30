@@ -105,7 +105,9 @@ abstract class TabDatabase : RoomDatabase() {
 
         /** 全マイグレーション。getInstance とマイグレーションテストで共用する */
         internal fun allMigrations(sessionStateDir: File): Array<Migration> = arrayOf(
-            MIGRATION_1_2, MIGRATION_2_3, createMigration3To4(sessionStateDir),
+            MIGRATION_1_2,
+            MIGRATION_2_3,
+            createMigration3To4(sessionStateDir),
         )
 
         fun getInstance(context: Context): TabDatabase {

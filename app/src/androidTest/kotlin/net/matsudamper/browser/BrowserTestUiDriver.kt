@@ -5,14 +5,14 @@ import android.net.Uri
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.ComposeTimeoutException
+import androidx.compose.ui.test.click
+import androidx.compose.ui.test.junit4.AndroidComposeTestRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performTouchInput
-import androidx.compose.ui.test.click
-import androidx.compose.ui.test.junit4.AndroidComposeTestRule
 import net.matsudamper.browser.ui.tabs.TabsScreenTestTags
 
 internal fun AndroidComposeTestRule<*, MainActivity>.openUrlViaViewIntent(url: String) {
@@ -27,7 +27,7 @@ internal fun AndroidComposeTestRule<*, MainActivity>.openUrlViaViewIntent(url: S
                 }
                 addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
                 addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
-            }
+            },
         )
     }
     waitForIdle()

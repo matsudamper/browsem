@@ -187,20 +187,22 @@ internal class AddressEditScreenViewModel(
         val isLoading: Boolean = false,
     ) {
         val canSave: Boolean
-            get() = !isSaving && !isLoading && listOf(
-                givenName,
-                additionalName,
-                familyName,
-                organization,
-                streetAddress,
-                addressLevel1,
-                addressLevel2,
-                addressLevel3,
-                postalCode,
-                country,
-                tel,
-                email,
-            ).any { it.isNotBlank() }
+            get() = !isSaving &&
+                !isLoading &&
+                listOf(
+                    givenName,
+                    additionalName,
+                    familyName,
+                    organization,
+                    streetAddress,
+                    addressLevel1,
+                    addressLevel2,
+                    addressLevel3,
+                    postalCode,
+                    country,
+                    tel,
+                    email,
+                ).any { it.isNotBlank() }
 
         companion object {
             fun fromEntity(entity: AddressEntity): ViewModelState {

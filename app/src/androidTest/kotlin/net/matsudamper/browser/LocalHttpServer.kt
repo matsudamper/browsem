@@ -1,14 +1,14 @@
 package net.matsudamper.browser
 
+import java.io.File
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import io.ktor.server.application.install
 import io.ktor.server.cio.CIO
 import io.ktor.server.engine.embeddedServer
 import io.ktor.server.http.content.staticFiles
 import io.ktor.server.plugins.partialcontent.PartialContent
 import io.ktor.server.routing.routing
-import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withTimeout
-import java.io.File
 
 /**
  * androidTest のテスト用ページをループバック(127.0.0.1)の HTTP で配信する Ktor サーバー。

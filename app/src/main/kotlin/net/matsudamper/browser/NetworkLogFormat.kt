@@ -1,12 +1,12 @@
 package net.matsudamper.browser
 
-import net.matsudamper.browser.feature.networklog.NetworkLogEntry
-import net.matsudamper.browser.feature.networklog.NetworkResourceType
 import java.net.URI
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import net.matsudamper.browser.feature.networklog.NetworkLogEntry
+import net.matsudamper.browser.feature.networklog.NetworkResourceType
 
 /**
  * ネットワークログの表示用フォーマット。

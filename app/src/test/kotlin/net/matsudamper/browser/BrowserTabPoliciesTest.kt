@@ -12,7 +12,7 @@ class BrowserTabPoliciesTest {
             isThemeColorForCurrentPage(
                 currentPageUrl = "https://example.com/path/#section",
                 reportedUrl = "https://example.com/path",
-            )
+            ),
         )
     }
 
@@ -22,7 +22,7 @@ class BrowserTabPoliciesTest {
             isThemeColorForCurrentPage(
                 currentPageUrl = "https://example.com/path",
                 reportedUrl = "",
-            )
+            ),
         )
     }
 
@@ -32,7 +32,7 @@ class BrowserTabPoliciesTest {
             shouldResetToolbarColor(
                 fromUrl = "https://example.com/path#old",
                 toUrl = "https://example.com/path#new",
-            )
+            ),
         )
     }
 
@@ -42,7 +42,7 @@ class BrowserTabPoliciesTest {
             shouldResetToolbarColor(
                 fromUrl = "https://example.com/path",
                 toUrl = "https://example.com/other",
-            )
+            ),
         )
     }
 
@@ -54,7 +54,7 @@ class BrowserTabPoliciesTest {
                 isUrlInputFocused = true,
                 suggestionCount = 0,
                 currentPageUrl = "https://example.com",
-            )
+            ),
         )
     }
 
@@ -66,7 +66,7 @@ class BrowserTabPoliciesTest {
                 isUrlInputFocused = true,
                 suggestionCount = 2,
                 currentPageUrl = "",
-            )
+            ),
         )
     }
 
@@ -78,7 +78,7 @@ class BrowserTabPoliciesTest {
                 isUrlInputFocused = true,
                 suggestionCount = 3,
                 currentPageUrl = "https://example.com",
-            )
+            ),
         )
     }
 
@@ -95,7 +95,7 @@ class BrowserTabPoliciesTest {
                 url = "https://example.com/page-b",
                 originalPageUrlForRevert = "https://example.com/page-a",
                 isFullPageLoad = true,
-            )
+            ),
         )
     }
 
@@ -107,7 +107,7 @@ class BrowserTabPoliciesTest {
                 url = "https://example.com/page-b",
                 originalPageUrlForRevert = "https://example.com/page-a",
                 isFullPageLoad = false,
-            )
+            ),
         )
     }
 
@@ -119,7 +119,7 @@ class BrowserTabPoliciesTest {
                 url = "https://example.com/page-a",
                 originalPageUrlForRevert = "https://example.com/page-a",
                 isFullPageLoad = true,
-            )
+            ),
         )
     }
 
@@ -131,7 +131,7 @@ class BrowserTabPoliciesTest {
                 url = "https://example.com/page-b",
                 originalPageUrlForRevert = "https://example.com/page-a",
                 isFullPageLoad = true,
-            )
+            ),
         )
     }
 
@@ -143,7 +143,7 @@ class BrowserTabPoliciesTest {
                 url = "data:text/html,<html></html>",
                 originalPageUrlForRevert = "https://example.com/page-a",
                 isFullPageLoad = true,
-            )
+            ),
         )
     }
 
@@ -155,7 +155,7 @@ class BrowserTabPoliciesTest {
                 url = "https://example.com/page-b",
                 originalPageUrlForRevert = "https://example.com/page-a",
                 isFullPageLoad = true,
-            )
+            ),
         )
     }
 
@@ -167,7 +167,7 @@ class BrowserTabPoliciesTest {
                 url = "https://example.com/page-b",
                 originalPageUrlForRevert = null,
                 isFullPageLoad = true,
-            )
+            ),
         )
     }
 

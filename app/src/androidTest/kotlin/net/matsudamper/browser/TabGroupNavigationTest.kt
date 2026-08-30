@@ -7,17 +7,16 @@ import androidx.compose.ui.test.isDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import kotlin.time.Duration.Companion.seconds
 import net.matsudamper.browser.ui.tabs.TabsScreenTestTags
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
-import kotlin.time.Duration.Companion.seconds
 
 @RunWith(AndroidJUnit4::class)
 class TabGroupNavigationTest {
     @get:Rule
     val composeRule = createAndroidComposeRule<MainActivity>()
-
 
     /**
      * タブ画面を閉じた後に再度タブ画面を開くと前に開いたタブグループと同じタブグループが表示されないかを確認する
@@ -43,7 +42,7 @@ class TabGroupNavigationTest {
         composeRule.waitUntil(timeoutMillis = 10.seconds.inWholeMilliseconds) {
             runCatching {
                 composeRule.onNode(
-                    hasTestTag(TabsScreenTestTags.TabGroupTopButton(1).testTag)
+                    hasTestTag(TabsScreenTestTags.TabGroupTopButton(1).testTag),
                 ).assertIsSelected()
                 true
             }.getOrDefault(false)
@@ -61,7 +60,7 @@ class TabGroupNavigationTest {
         composeRule.waitUntil(timeoutMillis = 10.seconds.inWholeMilliseconds) {
             runCatching {
                 composeRule.onNode(
-                    hasTestTag(TabsScreenTestTags.TabGroupTopButton(1).testTag)
+                    hasTestTag(TabsScreenTestTags.TabGroupTopButton(1).testTag),
                 ).assertIsSelected()
                 true
             }.getOrDefault(false)
@@ -69,7 +68,7 @@ class TabGroupNavigationTest {
 
         // タブグループ0を表示する
         composeRule.onNode(
-            hasTestTag(TabsScreenTestTags.TabGroupTopButton(0).testTag)
+            hasTestTag(TabsScreenTestTags.TabGroupTopButton(0).testTag),
         ).performClick()
 
         // バックでブラウザへ戻る
@@ -84,7 +83,7 @@ class TabGroupNavigationTest {
         composeRule.waitUntil(timeoutMillis = 10.seconds.inWholeMilliseconds) {
             runCatching {
                 composeRule.onNode(
-                    hasTestTag(TabsScreenTestTags.TabGroupTopButton(1).testTag)
+                    hasTestTag(TabsScreenTestTags.TabGroupTopButton(1).testTag),
                 ).assertIsSelected()
                 true
             }.getOrDefault(false)
@@ -99,7 +98,7 @@ class TabGroupNavigationTest {
     private fun openTabsScreen() {
         val node = composeRule.onNode(
             hasTestTag(BrowserToolbarTestTags.OpenTabsButton.testTag)
-                .and(hasParent(hasTestTag(BrowserToolbarTestTags.Toolbar.testTag)))
+                .and(hasParent(hasTestTag(BrowserToolbarTestTags.Toolbar.testTag))),
         )
         repeat(3) {
             composeRule.waitUntil(timeoutMillis = 60_000) {
@@ -142,5 +141,4 @@ class TabGroupNavigationTest {
             composeRule.onAllNodes(hasTestTag(BrowserToolbarTestTags.Toolbar.testTag)).fetchSemanticsNodes().isNotEmpty()
         }
     }
-
 }

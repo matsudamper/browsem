@@ -23,15 +23,15 @@ class MediaWebExtensionSnapshotTest {
             buildSessionPlaybackSnapshot(
                 previousSnapshot = previousSnapshot,
                 payload =
-                    WebExtensionPlaybackPayload(
-                        isActive = true,
-                        isPlaying = true,
-                        title = "Song A",
-                        artist = "Artist",
-                        album = "Album",
-                        durationMs = 120_000L,
-                        positionMs = 10_000L,
-                    ),
+                WebExtensionPlaybackPayload(
+                    isActive = true,
+                    isPlaying = true,
+                    title = "Song A",
+                    artist = "Artist",
+                    album = "Album",
+                    durationMs = 120_000L,
+                    positionMs = 10_000L,
+                ),
             )
 
         assertEquals(120_000L, snapshot.durationMs)
@@ -56,15 +56,15 @@ class MediaWebExtensionSnapshotTest {
             buildSessionPlaybackSnapshot(
                 previousSnapshot = previousSnapshot,
                 payload =
-                    WebExtensionPlaybackPayload(
-                        isActive = true,
-                        isPlaying = true,
-                        title = "Song A",
-                        artist = "Artist",
-                        album = "Album",
-                        durationMs = 0L,
-                        positionMs = 0L,
-                    ),
+                WebExtensionPlaybackPayload(
+                    isActive = true,
+                    isPlaying = true,
+                    title = "Song A",
+                    artist = "Artist",
+                    album = "Album",
+                    durationMs = 0L,
+                    positionMs = 0L,
+                ),
             )
 
         assertEquals(0L, snapshot.durationMs)

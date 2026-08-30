@@ -9,14 +9,13 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import java.io.File
+import java.util.UUID
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.io.File
-import java.util.UUID
-import net.matsudamper.browser.feature.addressautofill.AddressAutofillHost
 import net.matsudamper.browser.feature.addressautofill.AddressAutofillSuggestionItem
 import net.matsudamper.browser.feature.forminputautofill.FormInputAutofillHost
 import net.matsudamper.browser.feature.forminputautofill.FormInputSaveDialogRequest
@@ -127,8 +126,11 @@ internal class PromptDialogState(
 
     fun confirmButtonPrompt(positive: Boolean) {
         val prompt = pendingButtonPrompt ?: return
-        val type = if (positive) GeckoSession.PromptDelegate.ButtonPrompt.Type.POSITIVE
-        else GeckoSession.PromptDelegate.ButtonPrompt.Type.NEGATIVE
+        val type = if (positive) {
+            GeckoSession.PromptDelegate.ButtonPrompt.Type.POSITIVE
+        } else {
+            GeckoSession.PromptDelegate.ButtonPrompt.Type.NEGATIVE
+        }
         pendingButtonResult?.complete(prompt.confirm(type))
         pendingButtonPrompt = null
         pendingButtonResult = null

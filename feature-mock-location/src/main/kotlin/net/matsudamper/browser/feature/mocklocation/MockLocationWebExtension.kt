@@ -1,14 +1,14 @@
 package net.matsudamper.browser.feature.mocklocation
 
 import android.util.Log
+import java.net.URI
+import java.util.Collections
+import java.util.concurrent.ConcurrentHashMap
 import org.json.JSONObject
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.WebExtension
-import java.net.URI
-import java.util.Collections
-import java.util.concurrent.ConcurrentHashMap
 
 /**
  * navigator.geolocation をサイトごとの設定に応じて差し替えるビルトイン WebExtension。
@@ -174,6 +174,7 @@ class MockLocationWebExtension {
     enum class GeolocationMode(val jsonValue: String) {
         // モック座標を返す
         MOCK("mock"),
+
         // 位置情報の取得を拒否する
         DENY("deny"),
 

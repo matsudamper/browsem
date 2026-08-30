@@ -59,7 +59,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
@@ -182,7 +181,6 @@ fun TabsScreen(
         }
     }
 }
-
 
 @Composable
 private fun TabsScreenLoadedContent(
@@ -349,12 +347,12 @@ private fun TabsScreenLoadedContent(
             ) {
                 Icon(imageVector = Icons.Default.Add, contentDescription = "新規タブ")
             }
-        }
+        },
     ) { paddingValues ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues)
+                .padding(paddingValues),
         ) {
             // グループタブバー（上辺角丸タブ）
             GroupTabBar(
@@ -409,7 +407,7 @@ private fun TabsScreenLoadedContent(
                         },
                         onToggleDefaultGroup = {
                             onToggleDefaultGroup(page)
-                        }
+                        },
                     )
                     GroupTabGrid(
                         tabs = tabsForPage,
@@ -547,7 +545,6 @@ private fun TabGroupMenu(
             }
         }
     }
-
 }
 
 /** タブを閉じたときに表示する Snackbar の本体 */
@@ -613,7 +610,6 @@ private fun PagerIndicator(
         }
     }
 }
-
 
 @Composable
 @Preview

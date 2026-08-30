@@ -3,8 +3,8 @@ package net.matsudamper.browser.data
 import net.matsudamper.browser.data.websuggestion.buildSuggestionRequest
 import net.matsudamper.browser.data.websuggestion.parseSuggestionResponse
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner

@@ -16,7 +16,7 @@ internal fun DeleteGroupDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("グループを削除") },
-        text = { Text("「${groupName}」を削除しますか？グループ内のタブは別のグループへ移動されます。") },
+        text = { Text("「$groupName」を削除しますか？グループ内のタブは別のグループへ移動されます。") },
         confirmButton = {
             TextButton(onClick = onConfirm) {
                 Text("削除", color = MaterialTheme.colorScheme.error)

@@ -12,7 +12,6 @@ import net.matsudamper.browser.data.forminput.FormFieldEntry
 import net.matsudamper.browser.data.forminput.FormInputPageKey
 import net.matsudamper.browser.data.forminput.FormInputRepository
 import net.matsudamper.browser.data.forminput.parseFormInputPageKey
-import net.matsudamper.browser.feature.addressautofill.AddressAutofillHost
 import net.matsudamper.browser.feature.addressautofill.AddressAutofillSuggestionItem
 import net.matsudamper.browser.feature.addressautofill.AddressAutofillSuggestionKind
 import org.mozilla.geckoview.GeckoSession

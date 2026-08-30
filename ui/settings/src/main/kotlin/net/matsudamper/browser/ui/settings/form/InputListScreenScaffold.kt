@@ -58,7 +58,7 @@ internal fun InputListScreenScaffold(
         Column(
             modifier = Modifier.padding(
                 top = paddingValues.calculateTopPadding(),
-            )
+            ),
         ) {
             val horizontalPadding = PaddingValues(
                 start = paddingValues.calculateStartPadding(LocalLayoutDirection.current),
@@ -93,7 +93,7 @@ internal fun InputListScreenScaffold(
                     .padding(horizontalPadding),
                 shape = containerShape.copy(
                     bottomEnd = CornerSize(0.dp),
-                    bottomStart = CornerSize(0.dp)
+                    bottomStart = CornerSize(0.dp),
                 ),
                 color = MaterialTheme.colorScheme.surfaceVariant,
             ) {
