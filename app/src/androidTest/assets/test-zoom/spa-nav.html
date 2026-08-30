@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SPA Zoom Test</title>
+</head>
+<body>
+  <!-- instrumentation テストでは Gecko 内ボタンを直接タップしづらいため、
+       透明な全画面ボタンで SPA 遷移を受け付ける -->
+  <button
+    id="nav-btn"
+    aria-label="spa-navigate"
+    style="position:fixed;inset:0;z-index:9999;opacity:0;border:0;padding:0;margin:0"
+  >SPA Navigate</button>
+  <script>
+    function pushUrl(update) {
+      const url = new URL(window.location.href);
+      update(url);
+      // replaceState では GeckoView の onLocationChange が発火せず、
+      // instrumentation テストが URL バーから viewport 幅を読めない。
+      history.pushState(null, "", url.toString());
+    }
+
+    function getEffectiveViewportWidth() {
+      const metas = Array.from(document.querySelectorAll('meta[name="viewport"]'));
+      for (let i = metas.length - 1; i >= 0; i--) {
+        const match = metas[i].content.match(/width=(\d+)/);
+        if (match) {
+          return parseInt(match[1], 10);
+        }
+      }
+      return window.innerWidth;
+    }
+
+    function reportViewportWidth() {
+      pushUrl((url) => {
+        url.searchParams.set("w", String(getEffectiveViewportWidth()));
+        if (!url.searchParams.has("route")) {
+          url.searchParams.set("route", "home");
+        }
+      });
+    }
+
+    window.addEventListener("load", reportViewportWidth);
+    window.addEventListener("resize", reportViewportWidth);
+    // viewport meta の差し替えは resize を発火しないことがある
+    setInterval(reportViewportWidth, 500);
+    if (document.head) {
+      new MutationObserver(reportViewportWidth).observe(document.head, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ["content", "name"],
+      });
+    }
+
+    document.getElementById("nav-btn").addEventListener("click", function () {
+      // SPA 遷移時に新しい viewport meta を追加する（実サイトでよくあるパターン）
+      const meta = document.createElement("meta");
+      meta.name = "viewport";
+      meta.content = "width=device-width,initial-scale=1";
+      document.head.appendChild(meta);
+      pushUrl((url) => {
+        url.searchParams.set("route", "route2");
+      });
+      setTimeout(reportViewportWidth, 50);
+    });
+  </script>
+</body>
+</html>
