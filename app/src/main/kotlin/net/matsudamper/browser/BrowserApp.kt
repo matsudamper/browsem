@@ -210,6 +210,7 @@ internal fun BrowserAppShell(
     var pendingOpenDownloadsRequest by rememberSaveable { mutableStateOf(false) }
     var pendingHighlightWorkerId by rememberSaveable { mutableStateOf<String?>(null) }
     var pendingOpenDownloadsRequestId by rememberSaveable { mutableStateOf<String?>(null) }
+    var pendingConsumeOpenDownloadsRequestId by rememberSaveable { mutableStateOf<String?>(null) }
     if (openDownloadsFlow != null) {
         LaunchedEffect(openDownloadsFlow) {
             openDownloadsFlow.onEach { request ->
@@ -678,7 +679,10 @@ internal fun BrowserAppShell(
                         DownloadManagementScreenViewModel(context.applicationContext as Application)
                     })
                     val downloadsUiState by downloadsViewModel.uiState.collectAsState()
-                    var highlightItemId by remember { mutableStateOf<UUID?>(null) }
+                    var highlightItemIdString by rememberSaveable { mutableStateOf<String?>(null) }
+                    val highlightItemId = highlightItemIdString?.let { id ->
+                        runCatching { UUID.fromString(id) }.getOrNull()
+                    }
                     LaunchedEffect(pendingOpenDownloadsRequest, pendingHighlightWorkerId, pendingOpenDownloadsRequestId) {
                         if (!pendingOpenDownloadsRequest) return@LaunchedEffect
                         val workerId = pendingHighlightWorkerId
@@ -690,6 +694,10 @@ internal fun BrowserAppShell(
                             val id = runCatching { UUID.fromString(workerId) }.getOrNull()
                             if (id != null) {
                                 downloadsViewModel.requestHighlight(id)
+                                if (requestId != null) {
+                                    pendingConsumeOpenDownloadsRequestId = requestId
+                                }
+                                return@LaunchedEffect
                             }
                         }
                         if (requestId != null) {
@@ -711,7 +719,7 @@ internal fun BrowserAppShell(
                                 }
 
                                 override fun highlightItem(id: UUID) {
-                                    highlightItemId = id
+                                    highlightItemIdString = id.toString()
                                 }
                             })
                         }
@@ -720,7 +728,14 @@ internal fun BrowserAppShell(
                         uiState = downloadsUiState,
                         onBack = { outerBackStack.removeLastOrNull() },
                         highlightItemId = highlightItemId,
-                        onHighlightComplete = { highlightItemId = null },
+                        onHighlightComplete = {
+                            highlightItemIdString = null
+                            val requestId = pendingConsumeOpenDownloadsRequestId
+                            pendingConsumeOpenDownloadsRequestId = null
+                            if (requestId != null) {
+                                onOpenDownloadsRequestConsumed?.invoke(requestId)
+                            }
+                        },
                     )
                 }
 

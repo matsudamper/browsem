@@ -7,19 +7,18 @@ internal object OpenDownloadsIntentPolicy {
     fun shouldDispatch(
         action: String?,
         intentRequestId: String?,
-        consumedRequestId: String?,
+        consumedRequestIds: Set<String>,
     ): Boolean {
         return action == DownloadWorker.ACTION_OPEN_DOWNLOADS &&
-            (consumedRequestId == null || consumedRequestId != intentRequestId)
+            intentRequestId !in consumedRequestIds
     }
 
     fun shouldClearRestoredIntent(
         action: String?,
         intentRequestId: String?,
-        consumedRequestId: String?,
+        consumedRequestIds: Set<String>,
     ): Boolean {
         return action == DownloadWorker.ACTION_OPEN_DOWNLOADS &&
-            consumedRequestId != null &&
-            consumedRequestId == intentRequestId
+            consumedRequestIds.contains(intentRequestId)
     }
 }

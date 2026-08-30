@@ -62,7 +62,7 @@ class MainActivity : ComponentActivity() {
     private var webExtensionWarmUpInProgress = false
     private var webExtensionWarmUpRetryCount = 0
     private var lastProcessedDeepLinkUrl: String? = null
-    private var consumedOpenDownloadsRequestId: String? = null
+    private val consumedOpenDownloadsRequestIds: MutableSet<String> = mutableSetOf()
     private val createNewTabChannel = Channel<NewTabRequest>(Channel.UNLIMITED)
     private val openDownloadsChannel = Channel<OpenDownloadsRequest>(Channel.CONFLATED)
 
@@ -121,7 +121,9 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         lastProcessedDeepLinkUrl = savedInstanceState?.getString(KEY_PROCESSED_DEEPLINK_URL)
-        consumedOpenDownloadsRequestId = savedInstanceState?.getString(KEY_OPEN_DOWNLOADS_CONSUMED_REQUEST_ID)
+        savedInstanceState?.getStringArray(KEY_OPEN_DOWNLOADS_CONSUMED_REQUEST_IDS)?.let { requestIds ->
+            consumedOpenDownloadsRequestIds.addAll(requestIds)
+        }
         if (intent.isCustomTabLaunchIntent()) {
             launchCustomTabActivity(intent)
             finish()
@@ -145,14 +147,14 @@ class MainActivity : ComponentActivity() {
             OpenDownloadsIntentPolicy.shouldClearRestoredIntent(
                 intent.action,
                 openDownloadsIntentRequestId,
-                consumedOpenDownloadsRequestId,
+                consumedOpenDownloadsRequestIds,
             ) -> {
                 consumeOpenDownloadsIntent(intent)
             }
             OpenDownloadsIntentPolicy.shouldDispatch(
                 intent.action,
                 openDownloadsIntentRequestId,
-                consumedOpenDownloadsRequestId,
+                consumedOpenDownloadsRequestIds,
             ) -> {
                 dispatchOpenDownloadsIntent(intent)
             }
@@ -338,8 +340,11 @@ class MainActivity : ComponentActivity() {
         super.onSaveInstanceState(outState)
         // 処理済み deeplink URL を保存して設定変更後の重複タブ作成を防ぐ
         lastProcessedDeepLinkUrl?.let { outState.putString(KEY_PROCESSED_DEEPLINK_URL, it) }
-        consumedOpenDownloadsRequestId?.let { requestId ->
-            outState.putString(KEY_OPEN_DOWNLOADS_CONSUMED_REQUEST_ID, requestId)
+        if (consumedOpenDownloadsRequestIds.isNotEmpty()) {
+            outState.putStringArray(
+                KEY_OPEN_DOWNLOADS_CONSUMED_REQUEST_IDS,
+                consumedOpenDownloadsRequestIds.toTypedArray(),
+            )
         }
     }
 
@@ -356,7 +361,7 @@ class MainActivity : ComponentActivity() {
     internal fun markOpenDownloadsIntentConsumed(requestId: String) {
         if (intent.action != DownloadWorker.ACTION_OPEN_DOWNLOADS) return
         if (openDownloadsRequestIdFrom(intent) != requestId) return
-        consumedOpenDownloadsRequestId = requestId
+        consumedOpenDownloadsRequestIds.add(requestId)
         consumeOpenDownloadsIntent(intent)
     }
 
@@ -507,7 +512,7 @@ class MainActivity : ComponentActivity() {
         private const val EXTRA_CUSTOM_TABS_SESSION = "android.support.customtabs.extra.SESSION"
         private const val EXTRA_CUSTOM_TABS_SESSION_ID = "androidx.browser.customtabs.extra.SESSION_ID"
         private const val KEY_PROCESSED_DEEPLINK_URL = "processed_deeplink_url"
-        private const val KEY_OPEN_DOWNLOADS_CONSUMED_REQUEST_ID = "open_downloads_consumed_request_id"
+        private const val KEY_OPEN_DOWNLOADS_CONSUMED_REQUEST_IDS = "open_downloads_consumed_request_ids"
     }
 
     private fun Intent.isCustomTabLaunchIntent(): Boolean {

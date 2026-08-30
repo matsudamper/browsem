@@ -12,7 +12,7 @@ class OpenDownloadsIntentPolicyTest {
             OpenDownloadsIntentPolicy.shouldDispatch(
                 DownloadWorker.ACTION_OPEN_DOWNLOADS,
                 intentRequestId = "progress:9001",
-                consumedRequestId = null,
+                consumedRequestIds = emptySet(),
             ),
         )
     }
@@ -23,7 +23,7 @@ class OpenDownloadsIntentPolicyTest {
             OpenDownloadsIntentPolicy.shouldDispatch(
                 DownloadWorker.ACTION_OPEN_DOWNLOADS,
                 intentRequestId = "progress:9001",
-                consumedRequestId = "progress:9001",
+                consumedRequestIds = setOf("progress:9001"),
             ),
         )
     }
@@ -34,7 +34,7 @@ class OpenDownloadsIntentPolicyTest {
             OpenDownloadsIntentPolicy.shouldDispatch(
                 DownloadWorker.ACTION_OPEN_DOWNLOADS,
                 intentRequestId = "complete:12345",
-                consumedRequestId = "progress:9001",
+                consumedRequestIds = setOf("progress:9001"),
             ),
         )
     }
@@ -45,7 +45,7 @@ class OpenDownloadsIntentPolicyTest {
             OpenDownloadsIntentPolicy.shouldClearRestoredIntent(
                 DownloadWorker.ACTION_OPEN_DOWNLOADS,
                 intentRequestId = "progress:9001",
-                consumedRequestId = "progress:9001",
+                consumedRequestIds = setOf("progress:9001"),
             ),
         )
     }
@@ -56,18 +56,33 @@ class OpenDownloadsIntentPolicyTest {
             OpenDownloadsIntentPolicy.shouldClearRestoredIntent(
                 DownloadWorker.ACTION_OPEN_DOWNLOADS,
                 intentRequestId = "complete:12345",
-                consumedRequestId = "progress:9001",
+                consumedRequestIds = setOf("progress:9001"),
             ),
         )
     }
 
     @Test
-    fun `未消費なら復元 Intent はクリア対象にしない`() {
-        assertFalse(
+    fun `複数消費済みでも AMS 復元 Intent が集合に含まれればクリアし再配信しない`() {
+        val consumed = setOf("request-a", "request-b")
+        assertTrue(
             OpenDownloadsIntentPolicy.shouldClearRestoredIntent(
                 DownloadWorker.ACTION_OPEN_DOWNLOADS,
-                intentRequestId = "progress:9001",
-                consumedRequestId = null,
+                intentRequestId = "request-a",
+                consumedRequestIds = consumed,
+            ),
+        )
+        assertFalse(
+            OpenDownloadsIntentPolicy.shouldDispatch(
+                DownloadWorker.ACTION_OPEN_DOWNLOADS,
+                intentRequestId = "request-a",
+                consumedRequestIds = consumed,
+            ),
+        )
+        assertTrue(
+            OpenDownloadsIntentPolicy.shouldDispatch(
+                DownloadWorker.ACTION_OPEN_DOWNLOADS,
+                intentRequestId = "request-c",
+                consumedRequestIds = consumed,
             ),
         )
     }
