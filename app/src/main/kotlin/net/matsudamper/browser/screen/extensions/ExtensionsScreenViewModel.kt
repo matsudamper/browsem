@@ -46,66 +46,6 @@ internal class ExtensionsScreenViewModel(
             eventHandler.trySend { it.requestExtensionFilePicker() }
         }
 
-        override fun uninstallExtension(extensionId: String) {
-            val extension = viewModelStateFlow.value.extensions
-                .firstOrNull { it.id == extensionId } ?: return
-            if (extension.isBuiltIn) return
-            viewModelStateFlow.update { it.copy(uninstallingId = extensionId) }
-            runtime.webExtensionController.uninstall(extension).accept(
-                {
-                    viewModelStateFlow.update { it.copy(uninstallingId = null) }
-                    loadExtensions()
-                },
-                { error ->
-                    viewModelStateFlow.update {
-                        it.copy(
-                            uninstallingId = null,
-                            errorMessage = error?.message ?: "拡張機能のアンインストールに失敗しました。",
-                        )
-                    }
-                },
-            )
-        }
-
-        override fun setExtensionEnabled(extensionId: String, enabled: Boolean) {
-            val currentState = viewModelStateFlow.value
-            if (currentState.extensionsGloballyEnabled != true ||
-                currentState.togglingId != null ||
-                currentState.uninstallingId != null ||
-                currentState.isTogglingGlobal
-            ) {
-                return
-            }
-            val extension = currentState.extensions
-                .firstOrNull { it.id == extensionId } ?: return
-            viewModelStateFlow.update { it.copy(togglingId = extensionId) }
-            val result = if (enabled) {
-                runtime.webExtensionController.enable(extension, WebExtensionController.EnableSource.USER)
-            } else {
-                runtime.webExtensionController.disable(extension, WebExtensionController.EnableSource.USER)
-            }
-            result.accept(
-                { updatedExtension ->
-                    viewModelStateFlow.update { state ->
-                        state.copy(
-                            togglingId = null,
-                            extensions = state.extensions.map { ext ->
-                                if (ext.id == extensionId && updatedExtension != null) updatedExtension else ext
-                            },
-                        )
-                    }
-                },
-                { error ->
-                    viewModelStateFlow.update {
-                        it.copy(
-                            togglingId = null,
-                            errorMessage = error?.message ?: "拡張機能の切り替えに失敗しました。",
-                        )
-                    }
-                },
-            )
-        }
-
         override fun setExtensionsGloballyEnabled(enabled: Boolean) {
             val currentState = viewModelStateFlow.value
             val globallyEnabled = currentState.extensionsGloballyEnabled ?: return
@@ -142,20 +82,88 @@ internal class ExtensionsScreenViewModel(
             }
         }
 
-        override fun openExtensionSettings(extensionId: String) {
-            val extension = viewModelStateFlow.value.extensions
-                .firstOrNull { it.id == extensionId } ?: return
-            val optionsPageUrl = extension.metaData.optionsPageUrl?.takeIf { it.isNotBlank() }
-            if (optionsPageUrl != null) {
-                eventHandler.trySend { it.navigateToExtensionSettings(optionsPageUrl) }
-            } else {
-                viewModelStateFlow.update { it.copy(errorMessage = "この拡張機能には設定画面がありません。") }
-            }
-        }
-
         override fun dismissError() {
             viewModelStateFlow.update { it.copy(errorMessage = null) }
         }
+    }
+
+    private fun uninstallExtension(extension: WebExtension) {
+        if (extension.isBuiltIn) return
+        viewModelStateFlow.update { it.copy(uninstallingId = extension.id) }
+        runtime.webExtensionController.uninstall(extension).accept(
+            {
+                viewModelStateFlow.update { it.copy(uninstallingId = null) }
+                loadExtensions()
+            },
+            { error ->
+                viewModelStateFlow.update {
+                    it.copy(
+                        uninstallingId = null,
+                        errorMessage = error?.message ?: "拡張機能のアンインストールに失敗しました。",
+                    )
+                }
+            },
+        )
+    }
+
+    private fun setExtensionEnabled(extension: WebExtension, enabled: Boolean) {
+        val currentState = viewModelStateFlow.value
+        if (currentState.extensionsGloballyEnabled != true ||
+            currentState.togglingId != null ||
+            currentState.uninstallingId != null ||
+            currentState.isTogglingGlobal
+        ) {
+            return
+        }
+        viewModelStateFlow.update { it.copy(togglingId = extension.id) }
+        val result = if (enabled) {
+            runtime.webExtensionController.enable(extension, WebExtensionController.EnableSource.USER)
+        } else {
+            runtime.webExtensionController.disable(extension, WebExtensionController.EnableSource.USER)
+        }
+        result.accept(
+            { updatedExtension ->
+                viewModelStateFlow.update { state ->
+                    state.copy(
+                        togglingId = null,
+                        extensions = state.extensions.map { ext ->
+                            if (ext.id == extension.id && updatedExtension != null) updatedExtension else ext
+                        },
+                    )
+                }
+            },
+            { error ->
+                viewModelStateFlow.update {
+                    it.copy(
+                        togglingId = null,
+                        errorMessage = error?.message ?: "拡張機能の切り替えに失敗しました。",
+                    )
+                }
+            },
+        )
+    }
+
+    private fun openExtensionSettings(extension: WebExtension) {
+        val optionsPageUrl = extension.metaData.optionsPageUrl?.takeIf { it.isNotBlank() }
+        if (optionsPageUrl != null) {
+            eventHandler.trySend { it.navigateToExtensionSettings(optionsPageUrl) }
+        } else {
+            viewModelStateFlow.update { it.copy(errorMessage = "この拡張機能には設定画面がありません。") }
+        }
+    }
+
+    private fun toExtensionUiState(extension: WebExtension): ExtensionsScreenUiState.ExtensionUiState {
+        return ExtensionsScreenUiState.ExtensionUiState(
+            id = extension.id,
+            displayName = extension.metaData.name?.takeIf { it.isNotBlank() } ?: extension.id,
+            version = extension.metaData.version,
+            hasSettingsPage = extension.metaData.optionsPageUrl?.isNotBlank() == true,
+            isEnabled = ExtensionGlobalController.isUserEnabled(extension),
+            isBuiltIn = extension.isBuiltIn,
+            onOpenSettings = { openExtensionSettings(extension) },
+            onUninstall = { uninstallExtension(extension) },
+            onToggle = { enabled -> setExtensionEnabled(extension, enabled) },
+        )
     }
 
     val uiState: StateFlow<ExtensionsScreenUiState> = MutableStateFlow(
@@ -178,16 +186,7 @@ internal class ExtensionsScreenViewModel(
                             ExtensionsScreenUiState.LoadingState.Loading
                         } else {
                             ExtensionsScreenUiState.LoadingState.Loaded(
-                                extensions = state.extensions.map { ext ->
-                                    ExtensionsScreenUiState.ExtensionUiState(
-                                        id = ext.id,
-                                        displayName = ext.metaData.name?.takeIf { it.isNotBlank() } ?: ext.id,
-                                        version = ext.metaData.version,
-                                        hasSettingsPage = ext.metaData.optionsPageUrl?.isNotBlank() == true,
-                                        isEnabled = ExtensionGlobalController.isUserEnabled(ext),
-                                        isBuiltIn = ext.isBuiltIn,
-                                    )
-                                },
+                                extensions = state.extensions.map(::toExtensionUiState),
                                 areExtensionsEnabled = state.extensionsGloballyEnabled,
                             )
                         },

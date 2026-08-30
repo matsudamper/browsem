@@ -175,9 +175,9 @@ fun ExtensionsScreen(
                                 uninstallEnabled = individualToggleEnabled,
                                 isToggling = uiState.togglingId == extension.id,
                                 toggleEnabled = individualToggleEnabled,
-                                onOpenSettings = { uiState.callbacks.openExtensionSettings(extension.id) },
-                                onUninstall = { uiState.callbacks.uninstallExtension(extension.id) },
-                                onToggle = { enabled -> uiState.callbacks.setExtensionEnabled(extension.id, enabled) },
+                                onOpenSettings = extension.onOpenSettings,
+                                onUninstall = extension.onUninstall,
+                                onToggle = extension.onToggle,
                             )
                         }
 
@@ -198,11 +198,9 @@ fun ExtensionsScreen(
                                     uninstallEnabled = individualToggleEnabled,
                                     isToggling = uiState.togglingId == extension.id,
                                     toggleEnabled = individualToggleEnabled,
-                                    onOpenSettings = { uiState.callbacks.openExtensionSettings(extension.id) },
-                                    onUninstall = { uiState.callbacks.uninstallExtension(extension.id) },
-                                    onToggle = { enabled ->
-                                        uiState.callbacks.setExtensionEnabled(extension.id, enabled)
-                                    },
+                                    onOpenSettings = extension.onOpenSettings,
+                                    onUninstall = extension.onUninstall,
+                                    onToggle = extension.onToggle,
                                 )
                             }
                         }
@@ -295,12 +293,28 @@ private fun ExtensionSectionHeader(
 private val previewCallbacks = object : ExtensionsScreenUiState.Callbacks {
     override fun refreshExtensions() = Unit
     override fun installExtensionFromFile() = Unit
-    override fun uninstallExtension(extensionId: String) = Unit
-    override fun openExtensionSettings(extensionId: String) = Unit
-    override fun setExtensionEnabled(extensionId: String, enabled: Boolean) = Unit
     override fun setExtensionsGloballyEnabled(enabled: Boolean) = Unit
     override fun dismissError() = Unit
 }
+
+private fun previewExtension(
+    id: String,
+    displayName: String,
+    version: String,
+    hasSettingsPage: Boolean,
+    isEnabled: Boolean,
+    isBuiltIn: Boolean,
+) = ExtensionsScreenUiState.ExtensionUiState(
+    id = id,
+    displayName = displayName,
+    version = version,
+    hasSettingsPage = hasSettingsPage,
+    isEnabled = isEnabled,
+    isBuiltIn = isBuiltIn,
+    onOpenSettings = {},
+    onUninstall = {},
+    onToggle = {},
+)
 
 @Preview(showBackground = true)
 @Composable
@@ -311,7 +325,7 @@ private fun ExtensionsScreenLoadedPreview() {
                 callbacks = previewCallbacks,
                 loadingState = ExtensionsScreenUiState.LoadingState.Loaded(
                     extensions = listOf(
-                        ExtensionsScreenUiState.ExtensionUiState(
+                        previewExtension(
                             id = "ublock-origin@raymondhill.net",
                             displayName = "uBlock Origin",
                             version = "1.57.2",
@@ -319,7 +333,7 @@ private fun ExtensionsScreenLoadedPreview() {
                             isEnabled = true,
                             isBuiltIn = false,
                         ),
-                        ExtensionsScreenUiState.ExtensionUiState(
+                        previewExtension(
                             id = "some-disabled-extension@example.com",
                             displayName = "無効な拡張機能",
                             version = "0.9.0",
@@ -327,7 +341,7 @@ private fun ExtensionsScreenLoadedPreview() {
                             isEnabled = false,
                             isBuiltIn = false,
                         ),
-                        ExtensionsScreenUiState.ExtensionUiState(
+                        previewExtension(
                             id = "readability@built-in",
                             displayName = "Readability (ビルトイン)",
                             version = "1.0.0",
@@ -358,7 +372,7 @@ private fun ExtensionsScreenTogglingPreview() {
                 callbacks = previewCallbacks,
                 loadingState = ExtensionsScreenUiState.LoadingState.Loaded(
                     extensions = listOf(
-                        ExtensionsScreenUiState.ExtensionUiState(
+                        previewExtension(
                             id = "ublock-origin@raymondhill.net",
                             displayName = "uBlock Origin",
                             version = "1.57.2",
@@ -389,7 +403,7 @@ private fun ExtensionsScreenInstallingPreview() {
                 callbacks = previewCallbacks,
                 loadingState = ExtensionsScreenUiState.LoadingState.Loaded(
                     extensions = listOf(
-                        ExtensionsScreenUiState.ExtensionUiState(
+                        previewExtension(
                             id = "ublock-origin@raymondhill.net",
                             displayName = "uBlock Origin",
                             version = "1.57.2",

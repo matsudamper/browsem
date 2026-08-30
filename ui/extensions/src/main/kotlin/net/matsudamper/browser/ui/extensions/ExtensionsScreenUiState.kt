@@ -17,9 +17,6 @@ data class ExtensionsScreenUiState(
 
         /** ZIP / XPI ファイルを選択して拡張機能をインストールする */
         fun installExtensionFromFile()
-        fun uninstallExtension(extensionId: String)
-        fun openExtensionSettings(extensionId: String)
-        fun setExtensionEnabled(extensionId: String, enabled: Boolean)
 
         /** 拡張機能全体の有効/無効を切り替える */
         fun setExtensionsGloballyEnabled(enabled: Boolean)
@@ -43,5 +40,8 @@ data class ExtensionsScreenUiState(
         val hasSettingsPage: Boolean,
         val isEnabled: Boolean,
         val isBuiltIn: Boolean,
+        val onOpenSettings: () -> Unit,
+        val onUninstall: () -> Unit,
+        val onToggle: (Boolean) -> Unit,
     )
 }
