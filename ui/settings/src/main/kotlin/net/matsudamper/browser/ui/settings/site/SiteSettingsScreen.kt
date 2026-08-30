@@ -40,6 +40,10 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import net.matsudamper.browser.data.SiteGeolocationState
 import net.matsudamper.browser.data.SitePermissionState
+import net.matsudamper.browser.ui.settings.CollapsibleSettingSection
+import net.matsudamper.browser.ui.settings.R
+import net.matsudamper.browser.ui.settings.SettingSection
+import net.matsudamper.browser.ui.settings.SettingsRadioOption
 import net.matsudamper.browser.resources.R as ResourcesR
 
 sealed interface SiteSettingsScreenTestTags {
@@ -110,7 +114,7 @@ fun SiteSettingsScreen(
             Spacer(Modifier.height(12.dp))
 
             if (uiState.tlsCertificate != null) {
-                _root_ide_package_.net.matsudamper.browser.ui.settings.CollapsibleSettingSection(
+                CollapsibleSettingSection(
                     title = "TLS証明書"
                 ) {
                     when (val certificate = uiState.tlsCertificate) {
@@ -148,7 +152,7 @@ fun SiteSettingsScreen(
 
             // 権限は証明書・データ削除と同じく1つのコンテナにまとめ、
             // 要求が無い場合もタイトル付きセクション内に空メッセージを表示して見た目を揃える
-            _root_ide_package_.net.matsudamper.browser.ui.settings.SettingSection(title = "サイトが要求した権限") {
+            SettingSection(title = "サイトが要求した権限") {
                 val hasGeolocation = uiState.geolocationState != null
                 val hasMicrophone = uiState.microphonePermission != null
                 val hasAutoplay = uiState.autoplayPermission != null
@@ -163,10 +167,10 @@ fun SiteSettingsScreen(
                     if (hasGeolocation) {
                         PermissionGroup(
                             title = "位置情報",
-                            iconRes = _root_ide_package_.net.matsudamper.browser.ui.settings.R.drawable.ic_location_on,
+                            iconRes = R.drawable.ic_location_on,
                         ) {
                             Column(Modifier.selectableGroup()) {
-                                _root_ide_package_.net.matsudamper.browser.ui.settings.SettingsRadioOption(
+                                SettingsRadioOption(
                                     label = "モック位置情報",
                                     selected = uiState.geolocationState == SiteGeolocationState.SITE_GEOLOCATION_MOCK,
                                     onClick = {
@@ -175,7 +179,7 @@ fun SiteSettingsScreen(
                                         )
                                     },
                                 )
-                                _root_ide_package_.net.matsudamper.browser.ui.settings.SettingsRadioOption(
+                                SettingsRadioOption(
                                     label = "実際の位置情報",
                                     selected = uiState.geolocationState == SiteGeolocationState.SITE_GEOLOCATION_REAL,
                                     onClick = {
@@ -184,7 +188,7 @@ fun SiteSettingsScreen(
                                         )
                                     },
                                 )
-                                _root_ide_package_.net.matsudamper.browser.ui.settings.SettingsRadioOption(
+                                SettingsRadioOption(
                                     label = "ブロック",
                                     selected = uiState.geolocationState == SiteGeolocationState.SITE_GEOLOCATION_DENY,
                                     onClick = {
@@ -202,10 +206,10 @@ fun SiteSettingsScreen(
                         }
                         PermissionGroup(
                             title = "マイク",
-                            iconRes = _root_ide_package_.net.matsudamper.browser.ui.settings.R.drawable.ic_mic,
+                            iconRes = R.drawable.ic_mic,
                         ) {
                             Column(Modifier.selectableGroup()) {
-                                _root_ide_package_.net.matsudamper.browser.ui.settings.SettingsRadioOption(
+                                SettingsRadioOption(
                                     label = "確認する",
                                     selected = uiState.microphonePermission == SitePermissionState.SITE_PERMISSION_ASK,
                                     onClick = {
@@ -214,7 +218,7 @@ fun SiteSettingsScreen(
                                         )
                                     },
                                 )
-                                _root_ide_package_.net.matsudamper.browser.ui.settings.SettingsRadioOption(
+                                SettingsRadioOption(
                                     label = "許可",
                                     selected = uiState.microphonePermission == SitePermissionState.SITE_PERMISSION_ALLOW,
                                     onClick = {
@@ -223,7 +227,7 @@ fun SiteSettingsScreen(
                                         )
                                     },
                                 )
-                                _root_ide_package_.net.matsudamper.browser.ui.settings.SettingsRadioOption(
+                                SettingsRadioOption(
                                     label = "ブロック",
                                     selected = uiState.microphonePermission == SitePermissionState.SITE_PERMISSION_DENY,
                                     onClick = {
@@ -241,10 +245,10 @@ fun SiteSettingsScreen(
                         }
                         PermissionGroup(
                             title = "音声の自動再生",
-                            iconRes = _root_ide_package_.net.matsudamper.browser.ui.settings.R.drawable.ic_volume_up,
+                            iconRes = R.drawable.ic_volume_up,
                         ) {
                             Column(Modifier.selectableGroup()) {
-                                _root_ide_package_.net.matsudamper.browser.ui.settings.SettingsRadioOption(
+                                SettingsRadioOption(
                                     label = "確認する",
                                     selected = uiState.autoplayPermission == SitePermissionState.SITE_PERMISSION_ASK,
                                     onClick = {
@@ -253,7 +257,7 @@ fun SiteSettingsScreen(
                                         )
                                     },
                                 )
-                                _root_ide_package_.net.matsudamper.browser.ui.settings.SettingsRadioOption(
+                                SettingsRadioOption(
                                     label = "許可",
                                     selected = uiState.autoplayPermission == SitePermissionState.SITE_PERMISSION_ALLOW,
                                     onClick = {
@@ -262,7 +266,7 @@ fun SiteSettingsScreen(
                                         )
                                     },
                                 )
-                                _root_ide_package_.net.matsudamper.browser.ui.settings.SettingsRadioOption(
+                                SettingsRadioOption(
                                     label = "ブロック",
                                     selected = uiState.autoplayPermission == SitePermissionState.SITE_PERMISSION_DENY,
                                     onClick = {
@@ -280,7 +284,7 @@ fun SiteSettingsScreen(
             Spacer(Modifier.height(12.dp))
 
             if (uiState.savedFormInputPathCount > 0) {
-                _root_ide_package_.net.matsudamper.browser.ui.settings.SettingSection(title = "保存したフォーム入力") {
+                SettingSection(title = "保存したフォーム入力") {
                     TextButton(
                         onClick = uiState.callbacks::openSavedFormInputs,
                         modifier = Modifier.fillMaxWidth(),
@@ -291,7 +295,7 @@ fun SiteSettingsScreen(
                 Spacer(Modifier.height(12.dp))
             }
 
-            _root_ide_package_.net.matsudamper.browser.ui.settings.SettingSection(title = "データの削除") {
+            SettingSection(title = "データの削除") {
                 TextButton(
                     onClick = {
                         uiState.callbacks.requestClearData(
@@ -577,7 +581,7 @@ private fun SiteSettingsScreenNoRequestedPermissionPreview() {
 @Composable
 private fun SiteSettingsScreenTlsCertificateExpandedPreview() {
     MaterialTheme {
-        _root_ide_package_.net.matsudamper.browser.ui.settings.CollapsibleSettingSection(
+        CollapsibleSettingSection(
             title = "TLS証明書",
             initiallyExpanded = true,
         ) {
@@ -598,7 +602,7 @@ private fun SiteSettingsScreenTlsCertificateExpandedPreview() {
 @Composable
 private fun SiteSettingsScreenTlsCertificateCollapsedPreview() {
     MaterialTheme {
-        _root_ide_package_.net.matsudamper.browser.ui.settings.CollapsibleSettingSection(title = "TLS証明書") {
+        CollapsibleSettingSection(title = "TLS証明書") {
             CertificateInfoRow(label = "発行先", value = "www.example.com")
             CertificateInfoRow(label = "発行者", value = "Example CA")
         }

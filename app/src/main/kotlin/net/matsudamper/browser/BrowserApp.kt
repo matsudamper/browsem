@@ -12,6 +12,7 @@ import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.os.Process
+import net.matsudamper.browser.ui.settings.site.SiteSettingsScreen
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -112,7 +113,6 @@ import net.matsudamper.browser.ui.settings.address.AddressesScreen
 import net.matsudamper.browser.ui.settings.backup.BackupProgressScreen
 import net.matsudamper.browser.ui.settings.backup.BackupProgressUiState
 import net.matsudamper.browser.ui.settings.SettingsScreen
-import net.matsudamper.browser.ui.settings.SiteSettingsScreen
 import net.matsudamper.browser.ui.settings.form.SiteFormInputFieldScreen
 import net.matsudamper.browser.ui.settings.form.SiteFormInputPathScreen
 import net.matsudamper.browser.ui.settings.form.SiteFormInputPathsScreen
