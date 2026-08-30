@@ -69,11 +69,39 @@ class BrowserScreenViewModel(
             viewModelStateFlow.collectLatest { state ->
                 uiStateFlow.update {
                     val adjacentTabs = state.resolveAdjacentTabs()
+                    val selectedTab = state.screenTabId?.let { tabId ->
+                        state.orderedBrowserTabs.firstOrNull { it.tabId == tabId }
+                    }
+                    val previousTab = adjacentTabs.previousTab?.let { tab ->
+                        BrowserScreenUiState.AdjacentTabPreview(
+                            tab = tab,
+                            onSelect = { eventHandler.trySend { it.selectTab(tab.tabId) } },
+                        )
+                    }
+                    val nextTab = adjacentTabs.nextTab?.let { tab ->
+                        BrowserScreenUiState.AdjacentTabPreview(
+                            tab = tab,
+                            onSelect = { eventHandler.trySend { it.selectTab(tab.tabId) } },
+                        )
+                    }
+                    val onBackToOpener: (() -> Unit)? = if (
+                        previousTab != null &&
+                        selectedTab?.openerTabId != null &&
+                        previousTab.tab.tabId == selectedTab.openerTabId &&
+                        selectedTab.canGoBack.not()
+                    ) {
+                        {
+                            eventHandler.trySend { it.backToOpenerTab(selectedTab.tabId) }
+                        }
+                    } else {
+                        null
+                    }
                     BrowserScreenUiState(
                         urlBarSuggestions = state.urlBarSuggestions,
                         swipePreview = BrowserScreenUiState.SwipePreviewUiState(
-                            previousTab = adjacentTabs.previousTab,
-                            nextTab = adjacentTabs.nextTab,
+                            previousTab = previousTab,
+                            nextTab = nextTab,
+                            onBackToOpener = onBackToOpener,
                         ),
                         groupTabCount = state.resolveGroupTabCount(),
                         callbacks = callbacks,
@@ -114,7 +142,10 @@ class BrowserScreenViewModel(
         }
     }
 
-    interface Event
+    interface Event {
+        fun selectTab(tabId: String)
+        fun backToOpenerTab(tabId: String)
+    }
 }
 
 // ロード状態とデータを 1 つの値で表現する。

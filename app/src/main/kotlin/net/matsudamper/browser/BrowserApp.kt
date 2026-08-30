@@ -1021,25 +1021,31 @@ private fun MainBrowserContent(
                         onDispose { browserScreenViewModel.close() }
                     }
                     val browserScreenUiState by browserScreenViewModel.uiState.collectAsState()
+                    LaunchedEffect(browserScreenViewModel) {
+                        browserScreenViewModel.eventHandler.receiveAsFlow().collect {
+                            it(object : BrowserScreenViewModel.Event {
+                                override fun selectTab(tabId: String) {
+                                    selectTab(tabId, null)
+                                }
+
+                                override fun backToOpenerTab(tabId: String) {
+                                    val openerTabId = browserTabController.findTab(tabId)?.openerTabId
+                                    val fallbackTabId = browserTabController.closeTab(tabId)
+                                    val targetTabId = openerTabId
+                                        ?.takeIf { browserTabController.findTab(it) != null }
+                                        ?: fallbackTabId
+                                    if (targetTabId != null) {
+                                        selectTab(targetTabId, null)
+                                    }
+                                }
+                            })
+                        }
+                    }
                     BrowserScreen(
                         tabId = key.tabId,
                         homepageUrl = uiState.homepageUrl,
                         uiState = browserScreenUiState,
                         browserTabController = browserTabController,
-                        onSelectTab = { tabId ->
-                            selectTab(tabId, null)
-                        },
-                        onBackToOpenerTab = { tabId ->
-                            // リンクから開いたタブを予測型バックで閉じ、opener タブへ戻る。
-                            val openerTabId = browserTabController.findTab(tabId)?.openerTabId
-                            val fallbackTabId = browserTabController.closeTab(tabId)
-                            val targetTabId = openerTabId
-                                ?.takeIf { browserTabController.findTab(it) != null }
-                                ?: fallbackTabId
-                            if (targetTabId != null) {
-                                selectTab(targetTabId, null)
-                            }
-                        },
                         previewHeaderContent = { modifier, tab, tabCount ->
                             BrowserToolbar(
                                 modifier = modifier,
@@ -1180,27 +1186,25 @@ private fun MainBrowserContent(
                                     browserTabController.selectTab(tabId)
                                     navController.replaceCurrentBrowserTab(tabId)
                                 }
+
+                                override fun openNewTab(currentGroupId: TabGroupId?) {
+                                    scope.launch {
+                                        val tabId = UUID.randomUUID().toString()
+                                        if (currentGroupId != null) {
+                                            tabGroupRepository.assignTabToGroup(tabId, currentGroupId)
+                                        }
+                                        val newTab = viewModel.createTabWithHomepage(
+                                            tabId = tabId,
+                                            insertAfterSelectedTab = false,
+                                        )
+                                        selectTab(newTab.tabId, null)
+                                    }
+                                }
                             })
                         }
                     }
                     TabsScreen(
                         uiState = tabsUiState,
-                        onSelectTab = { tabId ->
-                            selectTab(tabId, null)
-                        },
-                        onOpenNewTab = { currentGroupId: TabGroupId? ->
-                            scope.launch {
-                                val tabId = UUID.randomUUID().toString()
-                                if (currentGroupId != null) {
-                                    tabGroupRepository.assignTabToGroup(tabId, currentGroupId)
-                                }
-                                val newTab = viewModel.createTabWithHomepage(
-                                    tabId = tabId,
-                                    insertAfterSelectedTab = false,
-                                )
-                                selectTab(newTab.tabId, null)
-                            }
-                        },
                         modifier = Modifier
                             .fillMaxSize()
                             .background(MaterialTheme.colorScheme.surface),
