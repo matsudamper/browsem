@@ -123,8 +123,6 @@ internal fun calculatePagerIndicatorBounds(
 @Composable
 fun TabsScreen(
     uiState: TabsScreenUiState,
-    onSelectTab: (String) -> Unit,
-    onOpenNewTab: (currentGroupId: TabGroupId?) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
@@ -170,17 +168,12 @@ fun TabsScreen(
                 selectedTabId = loadingState.selectedTabId,
                 groupHasPlayingTab = loadingState.groupHasPlayingTab,
                 snackbarHostState = snackbarHostState,
-                onSelectTab = onSelectTab,
-                onCloseTab = currentCallbacks::onCloseTab,
-                onOpenNewTab = onOpenNewTab,
+                newTabListener = loadingState.newTabListener,
                 onReorderTabs = currentCallbacks::onReorderTabs,
                 onReorderGroups = currentCallbacks::onReorderGroups,
                 onGroupSelected = currentCallbacks::onGroupSelected,
                 onGroupPageChanged = currentCallbacks::onGroupPageChanged,
                 onAddGroup = currentCallbacks::onAddGroup,
-                onMoveTabToGroup = { tabId, targetGroupIndex ->
-                    currentCallbacks.onMoveTabToGroup(tabId, targetGroupIndex)
-                },
                 onRenameGroup = currentCallbacks::onRenameGroup,
                 onDeleteGroup = currentCallbacks::onDeleteGroup,
                 onToggleDefaultGroup = currentCallbacks::onToggleDefaultGroup,
@@ -199,15 +192,12 @@ private fun TabsScreenLoadedContent(
     selectedTabId: String?,
     groupHasPlayingTab: List<Boolean>,
     snackbarHostState: SnackbarHostState,
-    onSelectTab: (String) -> Unit,
-    onCloseTab: (String) -> Unit,
-    onOpenNewTab: (currentGroupId: TabGroupId?) -> Unit,
+    newTabListener: TabsScreenUiState.LoadingState.Loaded.NewTabListener,
     onReorderTabs: (groupIndex: Int, fromLocalIndex: Int, toLocalIndex: Int) -> Unit,
     onReorderGroups: (fromIndex: Int, toIndex: Int) -> Unit,
     onGroupSelected: (Int) -> Unit,
     onGroupPageChanged: (Int) -> Unit,
     onAddGroup: () -> Unit,
-    onMoveTabToGroup: (tabId: String, targetGroupIndex: Int) -> Unit,
     onRenameGroup: (groupIndex: Int, newName: String) -> Unit,
     onDeleteGroup: (groupIndex: Int) -> Unit,
     onToggleDefaultGroup: (groupIndex: Int) -> Unit,
@@ -308,7 +298,7 @@ private fun TabsScreenLoadedContent(
     }
 
     // グループ移動ダイアログの状態：長押しして移動せずに離したタブのID
-    var moveDialogTabId by remember { mutableStateOf<String?>(null) }
+    var moveDialogOnGroupSelected by remember { mutableStateOf<((Int) -> Unit)?>(null) }
 
     // 名前変更ダイアログの対象グループインデックス
     var renameDialogGroupIndex by remember { mutableStateOf<Int?>(null) }
@@ -350,7 +340,7 @@ private fun TabsScreenLoadedContent(
         },
         floatingActionButton = {
             FloatingActionButton(
-                onClick = { onOpenNewTab(groups.getOrNull(activeGroupIndex)?.id) },
+                onClick = newTabListener::onOpenNewTab,
                 modifier = Modifier
                     .testTag(TabsScreenTestTags.AddTabButton.testTag)
                     .onGloballyPositioned { coordinates ->
@@ -424,24 +414,21 @@ private fun TabsScreenLoadedContent(
                     GroupTabGrid(
                         tabs = tabsForPage,
                         selectedTabId = selectedTabId,
-                        onSelectTab = onSelectTab,
-                        onCloseTab = onCloseTab,
                         onReorderTabs = { from, to -> onReorderTabs(page, from, to) },
                         onTabDragStateChanged = { dragging, centerInRoot ->
                             isTabDragging = dragging
                             tabDragCenterInRoot = centerInRoot
                         },
-                        onTabDropped = { tabId ->
-                            // ドロップ先のグループタブを判定
+                        onTabDropped = { tab ->
                             val targetIndex = groupTabBounds.entries.firstOrNull { (_, bounds) ->
                                 bounds.contains(tabDragCenterInRoot)
                             }?.key
                             if (targetIndex != null && targetIndex != page) {
-                                onMoveTabToGroup(tabId, targetIndex)
+                                tab.listener.onMoveToGroup(targetIndex)
                             }
                         },
-                        onTabLongPressWithoutDrag = { tabId ->
-                            moveDialogTabId = tabId
+                        onTabLongPressWithoutDrag = { tab ->
+                            moveDialogOnGroupSelected = tab.listener::onMoveToGroup
                         },
                         floatingActionButtonBoundsInRoot = floatingActionButtonBoundsInRoot,
                         modifier = Modifier.weight(1f),
@@ -452,16 +439,16 @@ private fun TabsScreenLoadedContent(
     }
 
     // グループ移動ダイアログ
-    val dialogTabId = moveDialogTabId
-    if (dialogTabId != null) {
+    val moveDialogHandler = moveDialogOnGroupSelected
+    if (moveDialogHandler != null) {
         MoveTabToGroupDialog(
             groups = groups,
             currentGroupIndex = activeGroupIndex,
             onGroupSelected = { targetGroupIndex ->
-                onMoveTabToGroup(dialogTabId, targetGroupIndex)
-                moveDialogTabId = null
+                moveDialogHandler(targetGroupIndex)
+                moveDialogOnGroupSelected = null
             },
-            onDismiss = { moveDialogTabId = null },
+            onDismiss = { moveDialogOnGroupSelected = null },
         )
     }
 
@@ -640,11 +627,11 @@ private fun Preview() {
     val groupedTabs = remember {
         listOf(
             listOf(
-                TabsScreenTabData(id = "1", title = "Example Domain", previewImage = null),
-                TabsScreenTabData(id = "2", title = "Google", previewImage = null),
+                previewTabData(id = "1", title = "Example Domain"),
+                previewTabData(id = "2", title = "Google"),
             ),
             listOf(
-                TabsScreenTabData(id = "3", title = "GitHub", previewImage = null),
+                previewTabData(id = "3", title = "GitHub"),
             ),
         )
     }
@@ -655,15 +642,12 @@ private fun Preview() {
         selectedTabId = "1",
         groupHasPlayingTab = emptyList(),
         snackbarHostState = remember { SnackbarHostState() },
-        onSelectTab = {},
-        onCloseTab = {},
-        onOpenNewTab = {},
+        newTabListener = PreviewNewTabListener,
         onReorderTabs = { _, _, _ -> },
         onReorderGroups = { _, _ -> },
         onGroupSelected = {},
         onGroupPageChanged = {},
         onAddGroup = {},
-        onMoveTabToGroup = { _, _ -> },
         onRenameGroup = { _, _ -> },
         onDeleteGroup = {},
         onToggleDefaultGroup = {},
@@ -682,8 +666,8 @@ private fun PreviewSingleGroup() {
     val groupedTabs = remember {
         listOf(
             listOf(
-                TabsScreenTabData(id = "1", title = "Example Domain", previewImage = null),
-                TabsScreenTabData(id = "2", title = "Google", previewImage = null),
+                previewTabData(id = "1", title = "Example Domain"),
+                previewTabData(id = "2", title = "Google"),
             ),
         )
     }
@@ -694,15 +678,12 @@ private fun PreviewSingleGroup() {
         selectedTabId = "1",
         groupHasPlayingTab = emptyList(),
         snackbarHostState = remember { SnackbarHostState() },
-        onSelectTab = {},
-        onCloseTab = {},
-        onOpenNewTab = {},
+        newTabListener = PreviewNewTabListener,
         onReorderTabs = { _, _, _ -> },
         onReorderGroups = { _, _ -> },
         onGroupSelected = {},
         onGroupPageChanged = {},
         onAddGroup = {},
-        onMoveTabToGroup = { _, _ -> },
         onRenameGroup = { _, _ -> },
         onDeleteGroup = {},
         onToggleDefaultGroup = {},
@@ -722,11 +703,11 @@ private fun PreviewWithSnackbar() {
     val groupedTabs = remember {
         listOf(
             listOf(
-                TabsScreenTabData(id = "1", title = "Example Domain", previewImage = null),
-                TabsScreenTabData(id = "3", title = "GitHub", previewImage = null),
+                previewTabData(id = "1", title = "Example Domain"),
+                previewTabData(id = "3", title = "GitHub"),
             ),
             listOf(
-                TabsScreenTabData(id = "3", title = "GitHub", previewImage = null),
+                previewTabData(id = "3", title = "GitHub"),
             ),
         )
     }
@@ -737,15 +718,12 @@ private fun PreviewWithSnackbar() {
             activeGroupIndex = 0,
             selectedTabId = "1",
             snackbarHostState = remember { SnackbarHostState() },
-            onSelectTab = {},
-            onCloseTab = {},
-            onOpenNewTab = {},
+            newTabListener = PreviewNewTabListener,
             onReorderTabs = { _, _, _ -> },
             onReorderGroups = { _, _ -> },
             onGroupSelected = {},
             onGroupPageChanged = {},
             onAddGroup = {},
-            onMoveTabToGroup = { _, _ -> },
             onRenameGroup = { _, _ -> },
             onDeleteGroup = {},
             onToggleDefaultGroup = {},

@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import net.matsudamper.browser.core.TabSelectionPolicy
 import net.matsudamper.browser.core.TabStore
+import net.matsudamper.browser.core.TabSummary
 import net.matsudamper.browser.core.TabStoreState
 import net.matsudamper.browser.data.TabGroupData
 import net.matsudamper.browser.data.TabGroupId
@@ -40,46 +41,6 @@ class TabsScreenViewModel(
     val eventHandler = Channel<(Event) -> Unit>(Channel.UNLIMITED)
 
     private val callbacks = object : TabsScreenUiState.Callbacks {
-        override fun onCloseTab(tabId: String) {
-            val state = viewModelStateFlow.value
-            // 画面が把握している最新のグループ割当を反映した状態で次の選択タブを決める
-            // （同グループ優先の判定を表示と一致させるため）
-            val storeState = state.tabStoreState.copy(
-                tabGroupAssignments = state.assignments
-                    .filter { it.groupId.isNotEmpty() }
-                    .associate { it.tabId to it.groupId },
-            )
-            val wasSelected = storeState.selectedTabId == tabId
-            val nextTabId = if (wasSelected) {
-                TabSelectionPolicy.resolveNextSelectedTab(
-                    closingTabId = tabId,
-                    state = storeState,
-                )
-            } else {
-                null
-            }
-            val tab = state.tabStoreState.tabs.firstOrNull { it.id == tabId }
-            val title = tab?.title.orEmpty().ifBlank { tabId }
-            val groupId = state.assignments
-                .firstOrNull { it.tabId == tabId }
-                ?.groupId
-                ?.takeIf { it.isNotEmpty() }
-            // タブ数の表示が遅れないよう、確定（Snackbar 消滅）を待たずにこの時点で
-            // 実際に閉じる。「戻す」が押されたら undoCloseTab で復元する
-            val nextSelectedTabId = tabStore.closeTabWithUndo(tabId, nextTabId)
-            eventHandler.trySend { it.onTabClosed(tabId, nextSelectedTabId) }
-            viewModelStateFlow.update {
-                it.copy(
-                    pendingClosedTab = ViewModelState.PendingClosedTab(
-                        tabId = tabId,
-                        title = title,
-                        wasSelected = wasSelected,
-                        groupId = groupId,
-                    ),
-                )
-            }
-        }
-
         override fun onUndoCloseTab() {
             val pending = viewModelStateFlow.value.pendingClosedTab
             viewModelStateFlow.update { it.copy(pendingClosedTab = null) }
@@ -127,10 +88,6 @@ class TabsScreenViewModel(
             addGroup()
         }
 
-        override fun onMoveTabToGroup(tabId: String, targetGroupIndex: Int) {
-            moveTabToGroup(tabId, targetGroupIndex)
-        }
-
         override fun onRenameGroup(groupIndex: Int, newName: String) {
             renameGroup(groupIndex, newName)
         }
@@ -158,14 +115,7 @@ class TabsScreenViewModel(
                 val groupedTabs = groups.map { group ->
                     state.tabStoreState.tabs
                         .filter { assignmentMap[it.id] == group.id.value }
-                        .map { tab ->
-                            TabsScreenTabData(
-                                id = tab.id,
-                                title = tab.title,
-                                previewImage = tab.previewBitmapArray?.let { TabPreviewImage(it) },
-                                isPlaying = tab.id in playingIds,
-                            )
-                        }
+                        .map { tab -> buildTabData(tab, playingIds) }
                 }
                 val groupHasPlayingTab = groupedTabs.map { tabs ->
                     tabs.any { it.isPlaying }
@@ -187,6 +137,12 @@ class TabsScreenViewModel(
                                 activeGroupIndex = state.activeGroupIndex.coerceIn(0, (groups.size - 1).coerceAtLeast(0)),
                                 selectedTabId = state.tabStoreState.selectedTabId,
                                 groupHasPlayingTab = groupHasPlayingTab,
+                                newTabListener = object : TabsScreenUiState.LoadingState.Loaded.NewTabListener {
+                                    override fun onOpenNewTab() {
+                                        val group = groups.getOrNull(state.activeGroupIndex ?: 0)
+                                        eventHandler.trySend { it.openNewTab(group?.id) }
+                                    }
+                                },
                             )
                         },
                     )
@@ -205,6 +161,12 @@ class TabsScreenViewModel(
 
         /** タブ一覧を開いたまま、背後の Browser の選択タブだけを切り替える */
         fun selectTab(tabId: String)
+
+        /** タブ一覧からタブを選択し、ブラウザ画面へ戻る */
+        fun openTab(tabId: String)
+
+        /** 現在表示中のグループに新規タブを追加する */
+        fun openNewTab(currentGroupId: TabGroupId?)
     }
 
     init {
@@ -364,6 +326,64 @@ class TabsScreenViewModel(
         }
     }
 
+    private fun closeTab(tabId: String) {
+        val state = viewModelStateFlow.value
+        val storeState = state.tabStoreState.copy(
+            tabGroupAssignments = state.assignments
+                .filter { it.groupId.isNotEmpty() }
+                .associate { it.tabId to it.groupId },
+        )
+        val wasSelected = storeState.selectedTabId == tabId
+        val nextTabId = if (wasSelected) {
+            TabSelectionPolicy.resolveNextSelectedTab(
+                closingTabId = tabId,
+                state = storeState,
+            )
+        } else {
+            null
+        }
+        val tab = state.tabStoreState.tabs.firstOrNull { it.id == tabId }
+        val title = tab?.title.orEmpty().ifBlank { tabId }
+        val groupId = state.assignments
+            .firstOrNull { it.tabId == tabId }
+            ?.groupId
+            ?.takeIf { it.isNotEmpty() }
+        val nextSelectedTabId = tabStore.closeTabWithUndo(tabId, nextTabId)
+        eventHandler.trySend { it.onTabClosed(tabId, nextSelectedTabId) }
+        viewModelStateFlow.update {
+            it.copy(
+                pendingClosedTab = ViewModelState.PendingClosedTab(
+                    tabId = tabId,
+                    title = title,
+                    wasSelected = wasSelected,
+                    groupId = groupId,
+                ),
+            )
+        }
+    }
+
+    private fun buildTabData(tab: TabSummary, playingIds: Set<String>): TabsScreenTabData {
+        return TabsScreenTabData(
+            id = tab.id,
+            title = tab.title,
+            previewImage = tab.previewBitmapArray?.let { TabPreviewImage(it) },
+            isPlaying = tab.id in playingIds,
+            listener = object : TabsScreenTabData.Listener {
+                override fun onSelect() {
+                    eventHandler.trySend { it.openTab(tab.id) }
+                }
+
+                override fun onClose() {
+                    closeTab(tab.id)
+                }
+
+                override fun onMoveToGroup(targetGroupIndex: Int) {
+                    moveTabToGroup(tab.id, targetGroupIndex)
+                }
+            },
+        )
+    }
+
     /**
      * グループ内でタブを並び替える。
      * 非同期実装の TabStore でも順序が戻らないよう、対象タブの移動を1回だけ行う。
@@ -371,18 +391,9 @@ class TabsScreenViewModel(
     private fun reorderTabs(groupIndex: Int, fromLocalIndex: Int, toLocalIndex: Int) {
         val state = viewModelStateFlow.value
         val assignmentMap = state.assignments.associate { it.tabId to it.groupId }
-        val currentGroupedTabs = state.groups.map { group ->
-            state.tabStoreState.tabs
-                .filter { assignmentMap[it.id] == group.id.value }
-                .map { tab ->
-                    TabsScreenTabData(
-                        id = tab.id,
-                        title = tab.title,
-                        previewImage = tab.previewBitmapArray?.let { TabPreviewImage(it) },
-                    )
-                }
-        }
-        val tabsInGroup = currentGroupedTabs.getOrNull(groupIndex) ?: return
+        val group = state.groups.getOrNull(groupIndex) ?: return
+        val tabsInGroup = state.tabStoreState.tabs
+            .filter { assignmentMap[it.id] == group.id.value }
         if (fromLocalIndex !in tabsInGroup.indices || toLocalIndex !in tabsInGroup.indices) return
         val fromTabId = tabsInGroup[fromLocalIndex].id
         val toTabId = tabsInGroup[toLocalIndex].id

@@ -1,20 +1,36 @@
 package net.matsudamper.browser.ui.settings.address
 
 import androidx.compose.runtime.Stable
-import net.matsudamper.browser.data.address.AddressEntity
 
 @Stable
 data class AddressesScreenUiState(
     val callbacks: Callbacks,
-    val entries: List<AddressEntity>,
+    val entries: List<EntryItem>,
     val showDeleteAllDialog: Boolean,
 ) {
+    @Stable
+    data class EntryItem(
+        val id: Long,
+        val displayName: String,
+        val displayDetail: String,
+        val listener: Listener,
+    ) {
+        @Stable
+        interface Listener {
+            fun onClick()
+            fun onDelete()
+        }
+    }
+
     interface Callbacks {
         fun onClickAdd()
-        fun onClickEntry(id: Long)
-        fun onDeleteEntry(id: Long)
         fun onClickDeleteAll()
         fun onConfirmDeleteAll()
         fun onDismissDeleteAllDialog()
     }
+}
+
+internal object PreviewAddressesEntryListener : AddressesScreenUiState.EntryItem.Listener {
+    override fun onClick() = Unit
+    override fun onDelete() = Unit
 }

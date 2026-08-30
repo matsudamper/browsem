@@ -1,7 +1,9 @@
 package net.matsudamper.browser.ui.tabs
 
+import androidx.compose.runtime.Stable
 import net.matsudamper.browser.data.TabGroupData
 
+@Stable
 data class TabsScreenUiState(
     val callbacks: Callbacks,
     val loadingState: LoadingState,
@@ -13,7 +15,6 @@ data class TabsScreenUiState(
     )
 
     interface Callbacks {
-        fun onCloseTab(tabId: String)
         fun onUndoCloseTab()
         fun onConfirmCloseTab()
         fun onReorderTabs(groupIndex: Int, fromLocalIndex: Int, toLocalIndex: Int)
@@ -21,7 +22,6 @@ data class TabsScreenUiState(
         fun onGroupSelected(index: Int)
         fun onGroupPageChanged(page: Int)
         fun onAddGroup()
-        fun onMoveTabToGroup(tabId: String, targetGroupIndex: Int)
         fun onRenameGroup(groupIndex: Int, newName: String)
         fun onDeleteGroup(groupIndex: Int)
         fun onToggleDefaultGroup(groupIndex: Int)
@@ -35,16 +35,31 @@ data class TabsScreenUiState(
             val activeGroupIndex: Int,
             val selectedTabId: String?,
             val groupHasPlayingTab: List<Boolean> = emptyList(),
-        ) : LoadingState
+            val newTabListener: NewTabListener,
+        ) : LoadingState {
+            @Stable
+            interface NewTabListener {
+                fun onOpenNewTab()
+            }
+        }
     }
 }
 
+@Stable
 data class TabsScreenTabData(
     val id: String,
     val title: String,
     val previewImage: TabPreviewImage?,
     val isPlaying: Boolean = false,
-)
+    val listener: Listener,
+) {
+    @Stable
+    interface Listener {
+        fun onSelect()
+        fun onClose()
+        fun onMoveToGroup(targetGroupIndex: Int)
+    }
+}
 
 // ByteArray を contentEquals で比較するラッパー。
 // data class の自動生成 equals は配列の参照等値になるため、
@@ -57,4 +72,29 @@ class TabPreviewImage(val bytes: ByteArray) {
     }
 
     override fun hashCode(): Int = bytes.contentHashCode()
+}
+
+internal object PreviewTabListener : TabsScreenTabData.Listener {
+    override fun onSelect() = Unit
+    override fun onClose() = Unit
+    override fun onMoveToGroup(targetGroupIndex: Int) = Unit
+}
+
+internal object PreviewNewTabListener : TabsScreenUiState.LoadingState.Loaded.NewTabListener {
+    override fun onOpenNewTab() = Unit
+}
+
+internal fun previewTabData(
+    id: String,
+    title: String,
+    previewImage: TabPreviewImage? = null,
+    isPlaying: Boolean = false,
+): TabsScreenTabData {
+    return TabsScreenTabData(
+        id = id,
+        title = title,
+        previewImage = previewImage,
+        isPlaying = isPlaying,
+        listener = PreviewTabListener,
+    )
 }

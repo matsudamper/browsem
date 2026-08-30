@@ -134,18 +134,8 @@ internal class NetworkLogStateHolder(
     private var currentTabId: Int? = null
 
     private val callbacks = object : NetworkLogUiState.Callbacks {
-        override fun onClickFilter(filter: NetworkLogUiState.ResourceFilter) {
-            this@NetworkLogStateHolder.filter = filter
-        }
-
         override fun onSearchQueryChange(query: String) {
             searchQuery = query
-        }
-
-        override fun onClickEntry(id: String) {
-            selectedId = id
-            preview = NetworkLogUiState.Preview.Loading
-            clearPreviewBody()
         }
 
         override fun onClickCloseDetail() {
@@ -432,6 +422,11 @@ internal class NetworkLogStateHolder(
                 label = NetworkLogFormat.filterLabel(candidate),
                 count = count,
                 isSelected = candidate == filter,
+                listener = object : NetworkLogUiState.Filter.Listener {
+                    override fun onClick() {
+                        this@NetworkLogStateHolder.filter = candidate
+                    }
+                },
             )
         }
     }
@@ -502,6 +497,7 @@ internal class NetworkLogStateHolder(
     }
 
     private fun NetworkLogEntry.toUiStateEntry(): NetworkLogUiState.Entry {
+        val requestId = requestId
         return NetworkLogUiState.Entry(
             id = requestId,
             method = method,
@@ -518,6 +514,13 @@ internal class NetworkLogStateHolder(
                 NetworkLogUiState.Thumbnail(bitmap = thumbnails[requestId]?.bitmap)
             } else {
                 null
+            },
+            listener = object : NetworkLogUiState.Entry.Listener {
+                override fun onClick() {
+                    selectedId = requestId
+                    preview = NetworkLogUiState.Preview.Loading
+                    clearPreviewBody()
+                }
             },
         )
     }

@@ -11,6 +11,8 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import net.matsudamper.browser.data.address.AddressEntity
 import net.matsudamper.browser.data.address.AddressRepository
+import net.matsudamper.browser.data.address.displayName
+import net.matsudamper.browser.data.address.displayText
 import net.matsudamper.browser.ui.settings.address.AddressesScreenUiState
 
 internal class AddressesScreenViewModel(
@@ -24,14 +26,6 @@ internal class AddressesScreenViewModel(
     private val callbacks = object : AddressesScreenUiState.Callbacks {
         override fun onClickAdd() {
             eventHandler.trySend { it.navigateToEdit(NEW_ADDRESS_ID) }
-        }
-
-        override fun onClickEntry(id: Long) {
-            eventHandler.trySend { it.navigateToEdit(id) }
-        }
-
-        override fun onDeleteEntry(id: Long) {
-            viewModelScope.launch { addressRepository.deleteById(id) }
         }
 
         override fun onClickDeleteAll() {
@@ -60,7 +54,7 @@ internal class AddressesScreenViewModel(
                 uiStateFlow.update {
                     AddressesScreenUiState(
                         callbacks = callbacks,
-                        entries = state.entries,
+                        entries = state.entries.map(::toEntryItem),
                         showDeleteAllDialog = state.showDeleteAllDialog,
                     )
                 }
@@ -74,6 +68,23 @@ internal class AddressesScreenViewModel(
                 viewModelStateFlow.update { it.copy(entries = entries) }
             }
         }
+    }
+
+    private fun toEntryItem(entry: AddressEntity): AddressesScreenUiState.EntryItem {
+        return AddressesScreenUiState.EntryItem(
+            id = entry.id,
+            displayName = entry.displayName().ifEmpty { "（名前なし）" },
+            displayDetail = entry.displayText(),
+            listener = object : AddressesScreenUiState.EntryItem.Listener {
+                override fun onClick() {
+                    eventHandler.trySend { it.navigateToEdit(entry.id) }
+                }
+
+                override fun onDelete() {
+                    viewModelScope.launch { addressRepository.deleteById(entry.id) }
+                }
+            },
+        )
     }
 
     interface Event {
