@@ -29,7 +29,7 @@ internal class BackupProgressViewModel(
     @Volatile
     private var cleared = false
 
-    private val _phaseFlow = MutableStateFlow<BackupProgressUiState.Phase>(
+    private val mutablePhaseFlow = MutableStateFlow<BackupProgressUiState.Phase>(
         BackupProgressUiState.Phase.WaitingForFile,
     )
 
@@ -51,7 +51,7 @@ internal class BackupProgressViewModel(
         ),
     ).also { uiStateFlow ->
         viewModelScope.launch {
-            _phaseFlow.collect { phase ->
+            mutablePhaseFlow.collect { phase ->
                 uiStateFlow.update { it.copy(phase = phase) }
             }
         }
@@ -67,8 +67,8 @@ internal class BackupProgressViewModel(
      * WaitingForFile 以外のフェーズで呼ばれた場合は多重起動を防ぐため無視する。
      */
     fun startWithUri(uri: Uri) {
-        if (_phaseFlow.value !is BackupProgressUiState.Phase.WaitingForFile) return
-        _phaseFlow.update { BackupProgressUiState.Phase.InProgress(message = "準備中…", fraction = 0f) }
+        if (mutablePhaseFlow.value !is BackupProgressUiState.Phase.WaitingForFile) return
+        mutablePhaseFlow.update { BackupProgressUiState.Phase.InProgress(message = "準備中…", fraction = 0f) }
         viewModelScope.launch {
             if (isImport) {
                 runImport(uri)
@@ -90,12 +90,12 @@ internal class BackupProgressViewModel(
         }
         result.fold(
             onSuccess = {
-                _phaseFlow.update {
+                mutablePhaseFlow.update {
                     BackupProgressUiState.Phase.Completed("バックアップを書き出しました")
                 }
             },
             onFailure = { e ->
-                _phaseFlow.update {
+                mutablePhaseFlow.update {
                     BackupProgressUiState.Phase.Error(
                         message = "エクスポートに失敗しました: ${e.message ?: e::class.simpleName}",
                         pendingRestart = false,
@@ -116,19 +116,19 @@ internal class BackupProgressViewModel(
         withContext(NonCancellable) {
             try {
                 backupRepository.importFromZip(uri, onProgress = ::updateProgress)
-                _phaseFlow.update { BackupProgressUiState.Phase.PendingRestart(errorMessage = null) }
+                mutablePhaseFlow.update { BackupProgressUiState.Phase.PendingRestart(errorMessage = null) }
                 forceRestartIfDetached()
             } catch (e: BackupRepository.RestartRequiredException) {
                 // DB クローズ後の失敗。通常動作には戻れないため再起動ダイアログを出す
                 val errorMessage = "復元中にエラーが発生しました: " +
                     "${e.cause?.message ?: e.message ?: e::class.simpleName}。" +
                     "アプリを終了します"
-                _phaseFlow.update {
+                mutablePhaseFlow.update {
                     BackupProgressUiState.Phase.PendingRestart(errorMessage = errorMessage)
                 }
                 forceRestartIfDetached()
             } catch (t: Throwable) {
-                _phaseFlow.update {
+                mutablePhaseFlow.update {
                     BackupProgressUiState.Phase.Error(
                         message = "復元に失敗しました: ${t.message ?: t::class.simpleName}",
                         pendingRestart = false,
@@ -143,7 +143,7 @@ internal class BackupProgressViewModel(
      * 既に完了/エラー/再起動待ちに遷移している場合は無視する。
      */
     private fun updateProgress(progress: BackupProgress) {
-        _phaseFlow.update { current ->
+        mutablePhaseFlow.update { current ->
             if (current is BackupProgressUiState.Phase.InProgress) {
                 BackupProgressUiState.Phase.InProgress(
                     message = progress.message,
@@ -159,7 +159,7 @@ internal class BackupProgressViewModel(
         super.onCleared()
         cleared = true
         // インポート成功後に画面が破棄された場合でも確実に再起動を発火する
-        val phase = _phaseFlow.value
+        val phase = mutablePhaseFlow.value
         if (phase is BackupProgressUiState.Phase.PendingRestart) {
             killSelfProcess()
         }

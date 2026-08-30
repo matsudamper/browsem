@@ -7,11 +7,11 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.performClick
 import androidx.core.net.toUri
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import kotlin.time.Duration.Companion.seconds
 import net.matsudamper.browser.ui.tabs.TabsScreenTestTags
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
-import kotlin.time.Duration.Companion.seconds
 
 /**
  * 外部から開いたタブがデフォルトグループの末尾に追加されることを検証する。
@@ -89,7 +89,7 @@ class ExternalTabInsertionPositionTest {
     private fun openTabsScreen() {
         val node = composeRule.onNode(
             hasTestTag(BrowserToolbarTestTags.OpenTabsButton.testTag)
-                .and(hasParent(hasTestTag(BrowserToolbarTestTags.Toolbar.testTag)))
+                .and(hasParent(hasTestTag(BrowserToolbarTestTags.Toolbar.testTag))),
         )
         repeat(12) {
             val opened = runCatching {

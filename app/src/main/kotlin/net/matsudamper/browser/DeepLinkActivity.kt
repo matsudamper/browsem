@@ -14,7 +14,7 @@ class DeepLinkActivity : ComponentActivity() {
                     action = intent.action
                     data = intent.data
                     intent.extras?.let { putExtras(it) }
-                }
+                },
             )
         } else {
             startActivity(
@@ -22,7 +22,7 @@ class DeepLinkActivity : ComponentActivity() {
                     action = intent.action
                     data = intent.data
                     intent.extras?.let { putExtras(it) }
-                }
+                },
             )
         }
         finish()

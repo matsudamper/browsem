@@ -2,9 +2,9 @@ package net.matsudamper.browser.data
 
 import androidx.datastore.core.CorruptionException
 import androidx.datastore.core.Serializer
-import com.google.protobuf.InvalidProtocolBufferException
 import java.io.InputStream
 import java.io.OutputStream
+import com.google.protobuf.InvalidProtocolBufferException
 
 internal object SiteSettingsSerializer : Serializer<SiteSettings> {
     override val defaultValue: SiteSettings = SiteSettings.getDefaultInstance()

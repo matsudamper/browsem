@@ -1,6 +1,7 @@
 package net.matsudamper.browser
 
 import android.content.res.Configuration
+import java.util.Locale
 import app.cash.paparazzi.DeviceConfig
 import app.cash.paparazzi.Paparazzi
 import com.android.resources.NightMode
@@ -11,7 +12,6 @@ import org.junit.experimental.categories.Category
 import sergio.sastre.composable.preview.scanner.android.AndroidComposablePreviewScanner
 import sergio.sastre.composable.preview.scanner.android.AndroidPreviewInfo
 import sergio.sastre.composable.preview.scanner.core.preview.ComposablePreview
-import java.util.Locale
 
 @Category(PaparazziTestCategory::class)
 class PaparazziComposablePreviewTest {

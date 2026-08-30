@@ -21,7 +21,7 @@ class PagerIndicatorTest {
                 currentPage = 0,
                 offsetFraction = 0f,
                 startOffsetPx = startOffsetPx,
-            )
+            ),
         )
         // startX = startOffsetPx + item.offset
         assertEquals(startOffsetPx + 0f, startX, 0.01f)
@@ -41,7 +41,7 @@ class PagerIndicatorTest {
                 currentPage = 0,
                 offsetFraction = 0f,
                 startOffsetPx = startOffsetPx,
-            )
+            ),
         )
         // スクロール後も startX はタブの実際の表示位置に追従する
         assertEquals(startOffsetPx + (-150f), startX, 0.01f)
@@ -60,7 +60,7 @@ class PagerIndicatorTest {
                 currentPage = 0,
                 offsetFraction = 0.5f,
                 startOffsetPx = startOffsetPx,
-            )
+            ),
         )
         // 50% スワイプ: startOffsetPx + 0 + (300 - 0) * 0.5 = startOffsetPx + 150
         assertEquals(startOffsetPx + 150f, startX, 0.01f)
@@ -78,7 +78,7 @@ class PagerIndicatorTest {
                 currentPage = 1,
                 offsetFraction = -0.5f,
                 startOffsetPx = startOffsetPx,
-            )
+            ),
         )
         // 50% 逆スワイプ: startOffsetPx + 300 + (0 - 300) * 0.5 = startOffsetPx + 150
         assertEquals(startOffsetPx + 150f, startX, 0.01f)
@@ -112,7 +112,7 @@ class PagerIndicatorTest {
                 currentPage = 0,
                 offsetFraction = 0f,
                 startOffsetPx = startOffsetPx,
-            )
+            ),
         )
         // 終端 X = startX + width がタブの右端と一致する
         val endX = startX + width
@@ -135,7 +135,7 @@ class PagerIndicatorTest {
                 currentPage = 0,
                 offsetFraction = 0f,
                 startOffsetPx = startOffsetPx,
-            )
+            ),
         )
         val endX = startX + width
         val tabEndX = startOffsetPx + (-scrollOffset).toFloat() + tabWidth

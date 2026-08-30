@@ -9,20 +9,12 @@ import androidx.compose.ui.test.isDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
-import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.printToString
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import net.matsudamper.browser.ui.tabs.TabsScreenTestTags
-import org.junit.After
-import org.junit.Assert.assertTrue
-import org.junit.Before
-import org.junit.Rule
-import org.junit.Test
-import org.junit.runner.RunWith
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.net.InetAddress
@@ -33,6 +25,13 @@ import kotlin.contracts.ExperimentalContracts
 import kotlin.contracts.InvocationKind
 import kotlin.contracts.contract
 import kotlin.time.Duration.Companion.seconds
+import net.matsudamper.browser.ui.tabs.TabsScreenTestTags
+import org.junit.After
+import org.junit.Assert.assertTrue
+import org.junit.Before
+import org.junit.Rule
+import org.junit.Test
+import org.junit.runner.RunWith
 
 /**
  * target="_blank" で開いたタブの URL バースワイプ前後タブが、
@@ -80,7 +79,7 @@ class AboutBlankNewTabLocationTest {
             composeRule.waitUntil(timeoutMillis = 10.seconds.inWholeMilliseconds) {
                 runCatching {
                     composeRule.onNode(
-                        hasTestTag(TabsScreenTestTags.TabGroupTopButton(1).testTag)
+                        hasTestTag(TabsScreenTestTags.TabGroupTopButton(1).testTag),
                     ).assertIsSelected()
                     true
                 }.getOrDefault(false)
@@ -114,7 +113,7 @@ class AboutBlankNewTabLocationTest {
             composeRule.waitUntil(timeoutMillis = 10.seconds.inWholeMilliseconds) {
                 runCatching {
                     composeRule.onNode(
-                        hasTestTag(TabsScreenTestTags.TabGroupTopButton(1).testTag)
+                        hasTestTag(TabsScreenTestTags.TabGroupTopButton(1).testTag),
                     ).assertIsSelected()
                     true
                 }.getOrDefault(false)
@@ -123,7 +122,7 @@ class AboutBlankNewTabLocationTest {
 
         group("タブグループ 0 に移動するボタンを押す") {
             composeRule.onNode(
-                hasTestTag(TabsScreenTestTags.TabGroupTopButton(0).testTag)
+                hasTestTag(TabsScreenTestTags.TabGroupTopButton(0).testTag),
             ).performClick()
             composeRule.waitForIdle()
 
@@ -131,7 +130,7 @@ class AboutBlankNewTabLocationTest {
             composeRule.waitUntil(timeoutMillis = 10.seconds.inWholeMilliseconds) {
                 runCatching {
                     composeRule.onNode(
-                        hasTestTag(TabsScreenTestTags.TabGroupTopButton(0).testTag)
+                        hasTestTag(TabsScreenTestTags.TabGroupTopButton(0).testTag),
                     ).assertIsSelected()
                     true
                 }.getOrDefault(false)
@@ -197,7 +196,7 @@ class AboutBlankNewTabLocationTest {
 
         group("タブグループ 0 を表示する") {
             composeRule.onNode(
-                hasTestTag(TabsScreenTestTags.TabGroupTopButton(0).testTag)
+                hasTestTag(TabsScreenTestTags.TabGroupTopButton(0).testTag),
             ).performClick()
             composeRule.waitForIdle()
             composeRule.waitUntil(timeoutMillis = 10.seconds.inWholeMilliseconds) {
@@ -220,7 +219,7 @@ class AboutBlankNewTabLocationTest {
     private fun openTabsScreen() {
         val node = composeRule.onNode(
             hasTestTag(BrowserToolbarTestTags.OpenTabsButton.testTag)
-                .and(hasParent(hasTestTag(BrowserToolbarTestTags.Toolbar.testTag)))
+                .and(hasParent(hasTestTag(BrowserToolbarTestTags.Toolbar.testTag))),
         )
         repeat(3) {
             composeRule.waitUntil(timeoutMillis = 60_000) {
@@ -274,7 +273,7 @@ class AboutBlankNewTabLocationTest {
         println(
             "ui-diag[$label] urlBars=${urlBarNodes.size} gecko=${geckoNodes.size} " +
                 "foregroundGecko=${foregroundNodes.size} toolbars=${toolbarNodes.size} " +
-                "tabsAdd=${tabsAddNodes.size} urlBarTexts=${urlBarTexts.joinToString(",")}"
+                "tabsAdd=${tabsAddNodes.size} urlBarTexts=${urlBarTexts.joinToString(",")}",
         )
 
         // 各 UrlBar 周辺のセマンティクスもダンプして、どのスクリーン由来かを見える化する。
@@ -309,7 +308,7 @@ class AboutBlankNewTabLocationTest {
                 androidx.compose.ui.geometry.Offset(
                     x = 100f,
                     y = 100f,
-                )
+                ),
             )
         }
         composeRule.waitForIdle()
@@ -328,7 +327,7 @@ class AboutBlankNewTabLocationTest {
     private fun isTabGroupSelected(groupIndex: Int): Boolean {
         return runCatching {
             composeRule.onNode(
-                hasTestTag(TabsScreenTestTags.TabGroupTopButton(groupIndex).testTag)
+                hasTestTag(TabsScreenTestTags.TabGroupTopButton(groupIndex).testTag),
             ).assertIsSelected()
             true
         }.getOrDefault(false)
@@ -413,7 +412,7 @@ class AboutBlankNewTabLocationTest {
     @OptIn(ExperimentalContracts::class)
     private fun group(
         @Suppress("unused") title: String = "",
-        block: () -> Unit
+        block: () -> Unit,
     ) {
         contract {
             callsInPlace(block, InvocationKind.EXACTLY_ONCE)

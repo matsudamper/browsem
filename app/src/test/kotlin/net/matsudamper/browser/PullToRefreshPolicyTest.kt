@@ -15,7 +15,7 @@ class PullToRefreshPolicyTest {
                 handledResult = PanZoomController.INPUT_RESULT_HANDLED,
                 scrollableDirections = PanZoomController.SCROLLABLE_FLAG_BOTTOM,
                 overscrollDirections = PanZoomController.OVERSCROLL_FLAG_VERTICAL,
-            )
+            ),
         )
     }
 
@@ -28,7 +28,7 @@ class PullToRefreshPolicyTest {
                 scrollableDirections = PanZoomController.SCROLLABLE_FLAG_NONE,
                 overscrollDirections = PanZoomController.OVERSCROLL_FLAG_VERTICAL or
                     PanZoomController.OVERSCROLL_FLAG_HORIZONTAL,
-            )
+            ),
         )
     }
 
@@ -41,7 +41,7 @@ class PullToRefreshPolicyTest {
                 scrollableDirections = PanZoomController.SCROLLABLE_FLAG_TOP or
                     PanZoomController.SCROLLABLE_FLAG_BOTTOM,
                 overscrollDirections = PanZoomController.OVERSCROLL_FLAG_VERTICAL,
-            )
+            ),
         )
     }
 
@@ -53,7 +53,7 @@ class PullToRefreshPolicyTest {
                 handledResult = PanZoomController.INPUT_RESULT_HANDLED_CONTENT,
                 scrollableDirections = PanZoomController.SCROLLABLE_FLAG_NONE,
                 overscrollDirections = PanZoomController.OVERSCROLL_FLAG_VERTICAL,
-            )
+            ),
         )
     }
 
@@ -65,7 +65,7 @@ class PullToRefreshPolicyTest {
                 handledResult = PanZoomController.INPUT_RESULT_UNHANDLED,
                 scrollableDirections = PanZoomController.SCROLLABLE_FLAG_NONE,
                 overscrollDirections = PanZoomController.OVERSCROLL_FLAG_NONE,
-            )
+            ),
         )
     }
 
@@ -77,7 +77,7 @@ class PullToRefreshPolicyTest {
                 handledResult = PanZoomController.INPUT_RESULT_IGNORED,
                 scrollableDirections = PanZoomController.SCROLLABLE_FLAG_NONE,
                 overscrollDirections = PanZoomController.OVERSCROLL_FLAG_VERTICAL,
-            )
+            ),
         )
     }
 }

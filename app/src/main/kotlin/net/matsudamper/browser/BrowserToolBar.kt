@@ -26,8 +26,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.only
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsIgnoringVisibility
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
@@ -77,11 +77,11 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlin.math.roundToInt
+import net.matsudamper.browser.resources.R as ResourcesR
 import net.matsudamper.browser.ui.common.BrowserTheme
 import net.matsudamper.browser.ui.common.resolveBrowserToolbarColors
 import net.matsudamper.browser.ui.common.toArgbHex
-import net.matsudamper.browser.resources.R as ResourcesR
-import kotlin.math.roundToInt
 
 @Composable
 internal fun BrowserToolBar(
@@ -213,7 +213,7 @@ internal fun BrowserToolBar(
                 onOpenDownloads = onOpenDownloads,
                 onOpenDevTools = onOpenDevTools,
             )
-        }
+        },
     )
 }
 
@@ -249,7 +249,7 @@ internal class BrowserToolBarGestureState(
                 density = this,
                 onDownSwipe = {
                     this@BrowserToolBarGestureState.onOpenTabs()
-                }
+                },
             )
         }
 }
@@ -345,13 +345,13 @@ internal fun BrowserToolbar(
                 // IntrinsicSize.Min で Row 高さを子の最小 intrinsic 高さに合わせる（URL バーの自然高さ）。
                 modifier = Modifier
                     .windowInsetsPadding(
-                        WindowInsets.statusBarsIgnoringVisibility.only(WindowInsetsSides.Top)
+                        WindowInsets.statusBarsIgnoringVisibility.only(WindowInsetsSides.Top),
                     )
                     .onSizeChanged {
                         heightCache = it.height.coerceAtLeast(heightCache)
                     }
                     .defaultMinSize(
-                        minHeight = with(LocalDensity.current) { heightCache.toDp() }
+                        minHeight = with(LocalDensity.current) { heightCache.toDp() },
                     )
                     .height(IntrinsicSize.Min),
                 verticalAlignment = Alignment.CenterVertically,
@@ -478,7 +478,7 @@ internal fun BrowserToolbar(
                             )
 
                             CompositionLocalProvider(
-                                LocalMinimumInteractiveComponentSize provides 0.dp
+                                LocalMinimumInteractiveComponentSize provides 0.dp,
                             ) {
                                 Icon(
                                     modifier = Modifier
@@ -487,7 +487,7 @@ internal fun BrowserToolbar(
                                         .clickable(
                                             indication = ripple(),
                                             interactionSource = remember { MutableInteractionSource() },
-                                            onClick = { urlInputState.onValueChange("") }
+                                            onClick = { urlInputState.onValueChange("") },
                                         ),
                                     painter = painterResource(ResourcesR.drawable.close_24dp),
                                     contentDescription = "クリア",

@@ -26,7 +26,6 @@ class HistoryRepository(context: Context) {
     fun getRecent(limit: Int = 100, offset: Int = 0): Flow<List<HistoryEntry>> =
         dao.getRecent(limit, offset)
 
-
     fun searchSuggestions(query: String, limit: Int = 8): Flow<List<HistoryEntry>> =
         dao.searchSuggestions(query, limit)
 

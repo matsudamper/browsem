@@ -57,8 +57,8 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import net.matsudamper.browser.data.ThemeMode
-import net.matsudamper.browser.ui.common.BrowserTheme
 import net.matsudamper.browser.resources.R as ResourcesR
+import net.matsudamper.browser.ui.common.BrowserTheme
 
 /** アイコン 1 つ分の幅。並び替えの位置計算にも使うため全アイテムで共通にする */
 private val ITEM_SIZE = 48.dp
@@ -381,7 +381,9 @@ sealed interface BrowserExtensionActionRowTestTags {
     val id: String
     val testTag get() = "${BrowserExtensionActionRowTestTags::class.java.name}#$id"
 
-    object Container : BrowserExtensionActionRowTestTags { override val id = "extension_action_row" }
+    object Container : BrowserExtensionActionRowTestTags {
+        override val id = "extension_action_row"
+    }
 
     object ActionItem : BrowserExtensionActionRowTestTags {
         override val id = "extension_action_item"

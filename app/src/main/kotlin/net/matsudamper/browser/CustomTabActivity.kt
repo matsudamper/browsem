@@ -10,7 +10,6 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
-import kotlinx.coroutines.CompletableDeferred
 import androidx.browser.customtabs.CustomTabsSessionToken
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -20,8 +19,8 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -30,6 +29,8 @@ import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
+import java.util.concurrent.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
@@ -46,8 +47,6 @@ import net.matsudamper.browser.screen.browser.CustomTabScreenViewModel
 import net.matsudamper.browser.ui.common.BrowserTheme
 import org.koin.android.ext.android.inject
 import org.mozilla.geckoview.GeckoRuntime
-import org.mozilla.geckoview.GeckoSession
-import java.util.concurrent.CancellationException
 
 class CustomTabActivity : ComponentActivity() {
     private val runtime: GeckoRuntime by inject()
@@ -64,7 +63,7 @@ class CustomTabActivity : ComponentActivity() {
     private var pendingDownloadNotificationPermissionDeferred: CompletableDeferred<Unit>? = null
 
     private val requestDownloadNotificationPermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestPermission()
+        ActivityResultContracts.RequestPermission(),
     ) { _ ->
         pendingDownloadNotificationPermissionDeferred?.complete(Unit)
         pendingDownloadNotificationPermissionDeferred = null
@@ -133,7 +132,7 @@ class CustomTabActivity : ComponentActivity() {
 
     override fun onDestroy() {
         pendingDownloadNotificationPermissionDeferred?.cancel(
-            CancellationException("Activity was destroyed before download notification permission completed.")
+            CancellationException("Activity was destroyed before download notification permission completed."),
         )
         pendingDownloadNotificationPermissionDeferred = null
         if (::browserTabController.isInitialized) {
@@ -152,7 +151,9 @@ class CustomTabActivity : ComponentActivity() {
                 this,
                 Manifest.permission.POST_NOTIFICATIONS,
             ) == PackageManager.PERMISSION_GRANTED
-        ) return
+        ) {
+            return
+        }
         // 別のダウンロード通知パーミッション要求が保留中の場合は合流して待機
         val existingDownloadDeferred = pendingDownloadNotificationPermissionDeferred
         if (existingDownloadDeferred != null) {
@@ -184,7 +185,7 @@ class CustomTabActivity : ComponentActivity() {
                 action = Intent.ACTION_VIEW
                 data = Uri.parse(url)
                 referrerUrl?.let { putExtra(EXTRA_NEW_TAB_REFERRER_URL, it) }
-            }
+            },
         )
     }
 
@@ -206,7 +207,7 @@ class CustomTabActivity : ComponentActivity() {
                         CustomTabHandoffStore.store(state),
                     )
                 }
-            }
+            },
         )
         finish()
     }

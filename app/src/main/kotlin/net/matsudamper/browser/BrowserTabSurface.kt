@@ -8,7 +8,6 @@ import android.view.View
 import android.view.ViewConfiguration
 import android.view.ViewGroup
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -24,12 +23,12 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -41,12 +40,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.painter.Painter
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -157,11 +156,12 @@ internal fun BrowserContentHost(
                         ViewGroup.LayoutParams(
                             ViewGroup.LayoutParams.MATCH_PARENT,
                             ViewGroup.LayoutParams.MATCH_PARENT,
-                        )
+                        ),
                     )
                     swipeRefreshLayout.setOnChildScrollUpCallback { _, _ ->
-                        !swipeRefreshScrollEnabled || state.scrollY > 0
-                            || state.visualViewportScale > 1.05f
+                        !swipeRefreshScrollEnabled ||
+                            state.scrollY > 0 ||
+                            state.visualViewportScale > 1.05f
                     }
                     swipeRefreshLayout.setOnRefreshListener {
                         state.isRefreshing = true
@@ -236,8 +236,12 @@ internal fun BrowserTabOverlayLayer(
                 isUrlInputFocused = state.isUrlInputFocused,
                 suggestionCount = urlBarSuggestions.historySuggestions.size +
                     urlBarSuggestions.webSuggestions.size +
-                    if (urlBarSuggestions.isLoadingWebSuggestions) 1 else 0 +
-                    if (clipboardUrl != null) 1 else 0,
+                    if (urlBarSuggestions.isLoadingWebSuggestions) {
+                        1
+                    } else {
+                        0 +
+                            if (clipboardUrl != null) 1 else 0
+                    },
                 currentPageUrl = state.currentPageUrl,
             )
         ) {
@@ -587,12 +591,28 @@ sealed interface BrowserTabSurfaceTestTags {
     val id: String
     val testTag get() = "${BrowserTabSurfaceTestTags::class.java.name}#$id"
 
-    object UrlSuggestionList : BrowserTabSurfaceTestTags { override val id = "url_suggestion_list" }
-    object WebSuggestionSection : BrowserTabSurfaceTestTags { override val id = "web_suggestion_section" }
-    object CurrentUrlActions : BrowserTabSurfaceTestTags { override val id = "current_url_actions" }
-    object CurrentUrlText : BrowserTabSurfaceTestTags { override val id = "current_url_text" }
-    object PageLoadError : BrowserTabSurfaceTestTags { override val id = "page_load_error" }
-    object CopyButton : BrowserTabSurfaceTestTags { override val id = "copy_button" }
-    object RestoreUrlButton : BrowserTabSurfaceTestTags { override val id = "restore_url_button" }
-    object RetryButton : BrowserTabSurfaceTestTags { override val id = "retry_button" }
+    object UrlSuggestionList : BrowserTabSurfaceTestTags {
+        override val id = "url_suggestion_list"
+    }
+    object WebSuggestionSection : BrowserTabSurfaceTestTags {
+        override val id = "web_suggestion_section"
+    }
+    object CurrentUrlActions : BrowserTabSurfaceTestTags {
+        override val id = "current_url_actions"
+    }
+    object CurrentUrlText : BrowserTabSurfaceTestTags {
+        override val id = "current_url_text"
+    }
+    object PageLoadError : BrowserTabSurfaceTestTags {
+        override val id = "page_load_error"
+    }
+    object CopyButton : BrowserTabSurfaceTestTags {
+        override val id = "copy_button"
+    }
+    object RestoreUrlButton : BrowserTabSurfaceTestTags {
+        override val id = "restore_url_button"
+    }
+    object RetryButton : BrowserTabSurfaceTestTags {
+        override val id = "retry_button"
+    }
 }

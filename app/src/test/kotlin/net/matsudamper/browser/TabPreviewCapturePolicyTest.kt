@@ -11,7 +11,7 @@ class TabPreviewCapturePolicyTest {
         assertFalse(
             shouldCaptureTabPreview(
                 previewCaptureReady = false,
-            )
+            ),
         )
     }
 
@@ -20,7 +20,7 @@ class TabPreviewCapturePolicyTest {
         assertTrue(
             shouldCaptureTabPreview(
                 previewCaptureReady = true,
-            )
+            ),
         )
     }
 }

@@ -14,8 +14,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.tooling.preview.Preview
-import net.matsudamper.browser.feature.devtools.DevToolsWebExtension
 import net.matsudamper.browser.data.ThemeMode
+import net.matsudamper.browser.feature.devtools.DevToolsWebExtension
 import net.matsudamper.browser.ui.common.BrowserTheme
 
 /**
@@ -81,9 +81,15 @@ sealed interface DevToolsDialogTestTags {
     val id: String
     val testTag get() = "${DevToolsDialogTestTags::class.java.name}#$id"
 
-    object Dialog : DevToolsDialogTestTags { override val id = "dialog" }
-    object FocusedInputId : DevToolsDialogTestTags { override val id = "focused_input_id" }
-    object NetworkLog : DevToolsDialogTestTags { override val id = "network_log" }
+    object Dialog : DevToolsDialogTestTags {
+        override val id = "dialog"
+    }
+    object FocusedInputId : DevToolsDialogTestTags {
+        override val id = "focused_input_id"
+    }
+    object NetworkLog : DevToolsDialogTestTags {
+        override val id = "network_log"
+    }
 }
 
 @Preview(name = "input フォーカスあり")

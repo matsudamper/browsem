@@ -29,7 +29,7 @@ internal fun SiteFormInputListItem(
             .clickable {
                 onClick()
             }
-            .padding(contentPadding)
+            .padding(contentPadding),
     ) {
         Text(
             text = title,

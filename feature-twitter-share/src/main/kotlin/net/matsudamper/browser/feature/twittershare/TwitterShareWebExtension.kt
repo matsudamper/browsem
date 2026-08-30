@@ -3,12 +3,12 @@ package net.matsudamper.browser.feature.twittershare
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import java.util.concurrent.ConcurrentHashMap
 import org.json.JSONObject
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.WebExtension
-import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Twitter/X の共有リンク・共有ボタンのクリックを捕捉し、

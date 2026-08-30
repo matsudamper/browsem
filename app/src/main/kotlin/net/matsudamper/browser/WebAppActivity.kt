@@ -18,6 +18,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
+import java.util.concurrent.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.TabRepository
@@ -32,8 +33,6 @@ import net.matsudamper.browser.ui.browser.WebAppScreen
 import net.matsudamper.browser.ui.common.BrowserTheme
 import org.koin.android.ext.android.inject
 import org.mozilla.geckoview.GeckoRuntime
-
-import java.util.concurrent.CancellationException
 
 /**
  * ホームに「アプリとして追加」された場合に起動するActivity。
@@ -52,7 +51,7 @@ class WebAppActivity : ComponentActivity() {
     private var pendingDownloadNotificationPermissionDeferred: CompletableDeferred<Unit>? = null
 
     private val requestDownloadNotificationPermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestPermission()
+        ActivityResultContracts.RequestPermission(),
     ) { _ ->
         pendingDownloadNotificationPermissionDeferred?.complete(Unit)
         pendingDownloadNotificationPermissionDeferred = null
@@ -209,13 +208,13 @@ class WebAppActivity : ComponentActivity() {
                 action = Intent.ACTION_VIEW
                 data = android.net.Uri.parse(url)
                 referrerUrl?.let { putExtra(CustomTabActivity.EXTRA_NEW_TAB_REFERRER_URL, it) }
-            }
+            },
         )
     }
 
     override fun onDestroy() {
         pendingDownloadNotificationPermissionDeferred?.cancel(
-            CancellationException("Activity was destroyed before download notification permission completed.")
+            CancellationException("Activity was destroyed before download notification permission completed."),
         )
         pendingDownloadNotificationPermissionDeferred = null
         super.onDestroy()
@@ -229,7 +228,7 @@ class WebAppActivity : ComponentActivity() {
             Intent(this, CustomTabActivity::class.java).apply {
                 action = Intent.ACTION_VIEW
                 data = Uri.parse(url)
-            }
+            },
         )
     }
 
@@ -242,7 +241,7 @@ class WebAppActivity : ComponentActivity() {
             Intent(this, MainActivity::class.java).apply {
                 action = Intent.ACTION_VIEW
                 data = Uri.parse(url)
-            }
+            },
         )
     }
 
@@ -310,7 +309,9 @@ class WebAppActivity : ComponentActivity() {
                 this,
                 Manifest.permission.POST_NOTIFICATIONS,
             ) == PackageManager.PERMISSION_GRANTED
-        ) return
+        ) {
+            return
+        }
         // 別のダウンロード通知パーミッション要求が保留中の場合は合流して待機
         val existingDownloadDeferred = pendingDownloadNotificationPermissionDeferred
         if (existingDownloadDeferred != null) {

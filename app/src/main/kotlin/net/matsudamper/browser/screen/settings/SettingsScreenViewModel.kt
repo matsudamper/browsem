@@ -10,7 +10,6 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import net.matsudamper.browser.feature.mocklocation.MockLocationWebExtension
 import net.matsudamper.browser.data.BrowserSettings
 import net.matsudamper.browser.data.HomepageType
 import net.matsudamper.browser.data.SearchProvider
@@ -20,6 +19,7 @@ import net.matsudamper.browser.data.TranslationProvider
 import net.matsudamper.browser.data.resolvedEnableWebSuggestions
 import net.matsudamper.browser.data.resolvedExtensionsProcessEnabled
 import net.matsudamper.browser.data.resolvedInputAutoZoomEnabled
+import net.matsudamper.browser.feature.mocklocation.MockLocationWebExtension
 import net.matsudamper.browser.ui.settings.SettingsScreenUiState
 
 internal class SettingsScreenViewModel(
@@ -190,12 +190,16 @@ internal class SettingsScreenViewModel(
 
     interface Event {
         fun onOpenMockLocationOnMap()
+
         /** バックアップ進行画面に遷移する */
         fun onNavigateToBackupProgress(isImport: Boolean)
+
         /** 拡張プロセス設定変更のためプロセスを再起動する */
         fun onRestartProcess()
+
         /** デフォルトブラウザの設定画面を開く */
         fun onOpenDefaultBrowserSettings()
+
         /** デフォルトブラウザかどうかを UI 側で確認する */
         fun onCheckDefaultBrowserStatus()
     }

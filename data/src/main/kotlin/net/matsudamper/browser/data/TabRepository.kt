@@ -11,6 +11,7 @@ import net.matsudamper.browser.data.tab.TabStateEntity
 class TabRepository(context: Context) {
     private val db = TabDatabase.getInstance(context)
     private val dao = db.tabDao()
+
     // サムネイルはタブの永続データなので、消えうる cacheDir ではなく filesDir に置く。
     // 以前は cacheDir に保存していたため、旧ディレクトリからのマイグレーションを行う。
     private val thumbnailDir = File(context.filesDir, "tab_thumbnails").apply { mkdirs() }

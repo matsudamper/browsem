@@ -7,6 +7,7 @@ dependencies {
     compileOnly(libs.kotlin.compose.gradle.plugin)
     compileOnly(libs.kotlin.gradle.plugin)
     implementation(libs.detekt.gradle.plugin)
+    implementation(libs.ktlint.gradle.plugin)
 }
 
 gradlePlugin {
@@ -22,6 +23,10 @@ gradlePlugin {
         register("browserJvmLibrary") {
             id = "browser-jvm-library-convention"
             implementationClass = "net.matsudamper.browser.buildlogic.BrowserJvmLibraryConventionPlugin"
+        }
+        register("ktlintConvention") {
+            id = "ktlint-convention"
+            implementationClass = "net.matsudamper.browser.buildlogic.KtlintConventionPlugin"
         }
     }
 }

@@ -2,10 +2,10 @@ package net.matsudamper.browser
 
 import android.view.WindowInsets
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.filter
 import androidx.compose.ui.test.hasAnyDescendant
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
-import androidx.compose.ui.test.filter
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
@@ -15,6 +15,7 @@ import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performTextReplacement
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import java.io.File
 import net.matsudamper.browser.ui.tabs.TabsScreenTestTags
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -23,7 +24,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
-import java.io.File
 
 /**
  * Managed device(ATD) 上で、ブラウザの主要フローが壊れていないことを確認するスモークテスト。
@@ -206,7 +206,7 @@ class GmdSmokeTest {
         composeRule.waitUntil(timeoutMillis = 30_000) {
             val currentUrl = composeRule.currentUrlBarText()
             currentUrl.startsWith(seededUrl) ||
-                currentUrl.contains("${HISTORY_SEED_FILE_PREFIX}_${token}")
+                currentUrl.contains("${HISTORY_SEED_FILE_PREFIX}_$token")
         }
         waitForHistorySuggestionsHidden()
         waitForUrlBarNotFocused()
@@ -351,7 +351,7 @@ class GmdSmokeTest {
             .substringAfter("://", url)
             .substringBefore("/")
             .replace(Regex("[^a-zA-Z0-9_-]"), "_")
-        val fileName = "${HISTORY_SEED_FILE_PREFIX}_${token}.html"
+        val fileName = "${HISTORY_SEED_FILE_PREFIX}_$token.html"
         val destination = File(destinationDir, fileName)
         destination.writeText(
             """
@@ -365,7 +365,7 @@ class GmdSmokeTest {
                 <main>$title</main>
               </body>
             </html>
-            """.trimIndent()
+            """.trimIndent(),
         )
         val server = LocalHttpServer(destinationDir)
         localHttpServer = server
@@ -585,10 +585,10 @@ class GmdSmokeTest {
      */
     private fun assertGeckoViewInFront() {
         assertTrue(
-            composeRule.onAllNodesWithTag(GeckoBrowserTabTestTags.GeckoContainer.testTag).fetchSemanticsNodes().isNotEmpty()
+            composeRule.onAllNodesWithTag(GeckoBrowserTabTestTags.GeckoContainer.testTag).fetchSemanticsNodes().isNotEmpty(),
         )
         assertTrue(
-            composeRule.onAllNodesWithTag(BrowserTabSurfaceTestTags.UrlSuggestionList.testTag).fetchSemanticsNodes().isEmpty()
+            composeRule.onAllNodesWithTag(BrowserTabSurfaceTestTags.UrlSuggestionList.testTag).fetchSemanticsNodes().isEmpty(),
         )
     }
 

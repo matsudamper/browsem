@@ -3,6 +3,7 @@ package net.matsudamper.browser
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.SystemClock
 import android.util.Log
@@ -10,8 +11,10 @@ import android.view.ActionMode
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
-import androidx.core.net.toUri
 import androidx.activity.compose.PredictiveBackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContract
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -34,12 +37,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContract
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.core.content.ContextCompat
-import android.content.pm.PackageManager
-import kotlinx.coroutines.CompletableDeferred
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -54,7 +51,6 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toArgb
@@ -62,40 +58,44 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
+import androidx.core.net.toUri
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import java.net.URLEncoder
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.withContext
 import net.matsudamper.browser.data.TranslationProvider
+import net.matsudamper.browser.data.address.AddressRepository
+import net.matsudamper.browser.data.forminput.FormInputRepository
+import net.matsudamper.browser.feature.addressautofill.AddressAutofillCoordinator
+import net.matsudamper.browser.feature.addressautofill.AddressAutofillDelegate
+import net.matsudamper.browser.feature.findinpage.FindInPageWebExtension
+import net.matsudamper.browser.feature.forminputautofill.FormInputAutofillCoordinator
 import net.matsudamper.browser.feature.media.GeckoMediaSessionDelegate
 import net.matsudamper.browser.feature.media.MediaWebExtension
-import net.matsudamper.browser.feature.findinpage.FindInPageWebExtension
 import net.matsudamper.browser.feature.mocklocation.MockLocationWebExtension
 import net.matsudamper.browser.feature.networklog.NetworkLogWebExtension
 import net.matsudamper.browser.feature.themecolor.ThemeColorWebExtension
-import net.matsudamper.browser.data.address.AddressRepository
-import net.matsudamper.browser.data.forminput.FormInputRepository
-import net.matsudamper.browser.feature.forminputautofill.FormInputAutofillCoordinator
-import net.matsudamper.browser.feature.addressautofill.AddressAutofillCoordinator
-import net.matsudamper.browser.feature.addressautofill.AddressAutofillDelegate
 import net.matsudamper.browser.feature.twittershare.TwitterShareWebExtension
 import net.matsudamper.browser.feature.viewportscale.ViewportScaleWebExtension
 import net.matsudamper.browser.translate.TranslationPriorityLanguage
+import net.matsudamper.browser.ui.browser.UrlBarSuggestionsUiState
 import net.matsudamper.browser.ui.common.findActivity
 import net.matsudamper.browser.ui.common.resolveBrowserToolbarColors
-import net.matsudamper.browser.ui.browser.UrlBarSuggestionsUiState
 import org.koin.compose.koinInject
 import org.mozilla.geckoview.BasicSelectionActionDelegate
-import org.mozilla.geckoview.GeckoSession.SelectionActionDelegate
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
+import org.mozilla.geckoview.GeckoSession.SelectionActionDelegate
 import org.mozilla.geckoview.GeckoView
-import java.net.URLEncoder
 
 @Composable
 @OptIn(ExperimentalLayoutApi::class)
@@ -152,7 +152,7 @@ internal fun GeckoBrowserTab(
         }
     }
     val requestPermissionsLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()
+        ActivityResultContracts.RequestMultiplePermissions(),
     ) { results ->
         val granted = results.filterValues { it }.keys.toTypedArray()
         pendingPermissionsRef.pending?.complete(granted)
@@ -766,8 +766,8 @@ internal fun GeckoBrowserTab(
             browserTab.detachSessionCallbacks()
             session.promptDelegate = null
             addressAutofillDelegate.restoreWrapped(session)
-            if (session.mediaSessionDelegate === mediaSessionDelegate
-                && !mediaWebExtension.shouldKeepSessionAttached(session)
+            if (session.mediaSessionDelegate === mediaSessionDelegate &&
+                !mediaWebExtension.shouldKeepSessionAttached(session)
             ) {
                 session.mediaSessionDelegate = null
             }
@@ -827,7 +827,8 @@ internal fun GeckoBrowserTab(
                 // コピー等の標準項目・他アプリの後にカスタム項目を末尾追加
                 val text = mSelection?.text?.trim() ?: ""
                 if (text.isNotBlank()) {
-                    val isUrl = text.startsWith("http://") || text.startsWith("https://") ||
+                    val isUrl = text.startsWith("http://") ||
+                        text.startsWith("https://") ||
                         (!text.contains(" ") && text.contains("."))
                     if (isUrl) {
                         val title = if (enableTabUi) "新しいタブで開く" else "開く"
@@ -940,8 +941,8 @@ internal fun GeckoBrowserTab(
                         // setSession のタイミングを restoreSurfaceIfNeeded 側で「サイズが安定するまで
                         // 待つ」よう制御している。
                         .imePadding()
-                }
-            )
+                },
+            ),
     ) {
         if (state.isFullScreen) {
             // フルスクリーン時はツールバー・翻訳バー・検索バーを非表示
@@ -1137,7 +1138,7 @@ internal fun GeckoBrowserTab(
                 browserTab = browserTab,
                 updateGeckoView = {
                     geckoView = it
-                }
+                },
             )
 
             BrowserTabOverlayLayer(
@@ -1279,7 +1280,7 @@ private fun TabHistoryBottomSheet(
                                 Modifier.background(MaterialTheme.colorScheme.primaryContainer)
                             } else {
                                 Modifier
-                            }
+                            },
                         )
                         .clickable { onNavigateTo(index) }
                         .padding(horizontal = 16.dp, vertical = 12.dp),

@@ -1,13 +1,13 @@
 package net.matsudamper.browser
 
+import java.time.Instant
+import java.time.ZoneId
 import net.matsudamper.browser.feature.networklog.NetworkLogEntry
 import net.matsudamper.browser.feature.networklog.NetworkResourceType
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.time.Instant
-import java.time.ZoneId
 
 class NetworkLogFormatTest {
     @Test

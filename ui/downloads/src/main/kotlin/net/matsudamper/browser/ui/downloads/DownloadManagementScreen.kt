@@ -24,12 +24,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -46,24 +46,24 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Canvas
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Paint
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.NonCancellable
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.UUID
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -221,8 +221,8 @@ private fun DownloadItemRow(
                     indication = ripple(),
                     onLongClick = { menuExpanded = true },
                     onClick = {
-                    item.listener.onOpenFile()
-                },
+                        item.listener.onOpenFile()
+                    },
                 )
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -500,9 +500,11 @@ private fun PreviewInProgress() {
                 originPageUrl = "https://example.com/page",
                 listener = PreviewDownloadItemListener,
             ),
-            loadPreview = { DownloadManagementScreenUiState.Preview.FileType(
-                DownloadManagementScreenUiState.DownloadFileType.UNKNOWN,
-            ) },
+            loadPreview = {
+                DownloadManagementScreenUiState.Preview.FileType(
+                    DownloadManagementScreenUiState.DownloadFileType.UNKNOWN,
+                )
+            },
             isHighlighted = false,
             onHighlightFinished = {},
         )
@@ -527,9 +529,11 @@ private fun PreviewPaused() {
                 originPageUrl = "https://example.com/page",
                 listener = PreviewDownloadItemListener,
             ),
-            loadPreview = { DownloadManagementScreenUiState.Preview.FileType(
-                DownloadManagementScreenUiState.DownloadFileType.UNKNOWN,
-            ) },
+            loadPreview = {
+                DownloadManagementScreenUiState.Preview.FileType(
+                    DownloadManagementScreenUiState.DownloadFileType.UNKNOWN,
+                )
+            },
             isHighlighted = false,
             onHighlightFinished = {},
         )
@@ -554,9 +558,11 @@ private fun PreviewPausedCannotResume() {
                 originPageUrl = "https://fonts.google.com/icons",
                 listener = PreviewDownloadItemListener,
             ),
-            loadPreview = { DownloadManagementScreenUiState.Preview.FileType(
-                DownloadManagementScreenUiState.DownloadFileType.UNKNOWN,
-            ) },
+            loadPreview = {
+                DownloadManagementScreenUiState.Preview.FileType(
+                    DownloadManagementScreenUiState.DownloadFileType.UNKNOWN,
+                )
+            },
             isHighlighted = false,
             onHighlightFinished = {},
         )
@@ -579,9 +585,11 @@ private fun PreviewFailedCanResume() {
                 originPageUrl = "https://example.com/page",
                 listener = PreviewDownloadItemListener,
             ),
-            loadPreview = { DownloadManagementScreenUiState.Preview.FileType(
-                DownloadManagementScreenUiState.DownloadFileType.UNKNOWN,
-            ) },
+            loadPreview = {
+                DownloadManagementScreenUiState.Preview.FileType(
+                    DownloadManagementScreenUiState.DownloadFileType.UNKNOWN,
+                )
+            },
             isHighlighted = false,
             onHighlightFinished = {},
         )
@@ -705,9 +713,11 @@ private fun PreviewFailedCannotResume() {
                 originPageUrl = null,
                 listener = PreviewDownloadItemListener,
             ),
-            loadPreview = { DownloadManagementScreenUiState.Preview.FileType(
-                DownloadManagementScreenUiState.DownloadFileType.UNKNOWN,
-            ) },
+            loadPreview = {
+                DownloadManagementScreenUiState.Preview.FileType(
+                    DownloadManagementScreenUiState.DownloadFileType.UNKNOWN,
+                )
+            },
             isHighlighted = false,
             onHighlightFinished = {},
         )
@@ -729,9 +739,11 @@ private fun PreviewLongFileName() {
                 originPageUrl = "https://example.com/page",
                 listener = PreviewDownloadItemListener,
             ),
-            loadPreview = { DownloadManagementScreenUiState.Preview.FileType(
-                DownloadManagementScreenUiState.DownloadFileType.UNKNOWN,
-            ) },
+            loadPreview = {
+                DownloadManagementScreenUiState.Preview.FileType(
+                    DownloadManagementScreenUiState.DownloadFileType.UNKNOWN,
+                )
+            },
             isHighlighted = false,
             onHighlightFinished = {},
         )

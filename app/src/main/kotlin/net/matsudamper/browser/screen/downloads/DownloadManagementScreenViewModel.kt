@@ -17,6 +17,9 @@ import androidx.core.net.toUri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.work.WorkManager
+import java.io.File
+import java.util.Locale
+import java.util.UUID
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -32,9 +35,6 @@ import net.matsudamper.browser.data.download.DownloadRecordStatus
 import net.matsudamper.browser.data.download.DownloadRepository
 import net.matsudamper.browser.download.DownloadUrl
 import net.matsudamper.browser.ui.downloads.DownloadManagementScreenUiState
-import java.io.File
-import java.util.Locale
-import java.util.UUID
 
 internal class DownloadManagementScreenViewModel(
     application: Application,

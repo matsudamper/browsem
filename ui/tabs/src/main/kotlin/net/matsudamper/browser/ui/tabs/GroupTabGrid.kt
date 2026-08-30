@@ -21,13 +21,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.Stable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -36,15 +36,14 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInRoot
-import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.round
 import androidx.compose.ui.unit.toOffset
-
 
 /**
  * グループ内のタブグリッド。
@@ -145,8 +144,8 @@ internal fun GroupTabGrid(
                         val tab = tabId?.let { id -> currentTabs.firstOrNull { it.id == id } }
                         if (result != null && tab != null) {
                             val shouldShowMenu = !result.didReorder &&
-                                    result.releasedInsideGrid &&
-                                    result.elapsedMs <= MENU_RELEASE_WINDOW_MS
+                                result.releasedInsideGrid &&
+                                result.elapsedMs <= MENU_RELEASE_WINDOW_MS
                             if (shouldShowMenu) {
                                 currentOnTabLongPressWithoutDrag(tab)
                             } else {
@@ -234,7 +233,6 @@ private const val TAB_BITMAP_CACHE_BYTES: Int = 16 * 1024 * 1024
 // 長押し開始から離すまでの時間がこの値以内かつタブが移動していなければ移動メニューを表示する。
 private const val MENU_RELEASE_WINDOW_MS: Long = 2_000L
 
-
 @Composable
 private fun rememberDragDropState(
     gridState: LazyGridState,
@@ -291,8 +289,10 @@ private class DragDropState(
             val itemBottom = itemTop + info.size.height
             val itemLeft = info.offset.x.toFloat()
             val itemRight = itemLeft + info.size.width
-            offset.x >= itemLeft && offset.x <= itemRight &&
-                    offset.y >= itemTop && offset.y <= itemBottom
+            offset.x >= itemLeft &&
+                offset.x <= itemRight &&
+                offset.y >= itemTop &&
+                offset.y <= itemBottom
         } ?: return
 
         draggedItemKey = item.key

@@ -1,9 +1,9 @@
 package net.matsudamper.browser.data.download
 
 import android.content.Context
+import java.util.UUID
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
-import java.util.UUID
 
 enum class DownloadRecordStatus { ENQUEUED, RUNNING, SUCCEEDED, FAILED, CANCELLED, PAUSED }
 

@@ -47,7 +47,7 @@ internal class HistoryScreenViewModel(
             searchQuery = "",
             entries = emptyList(),
             showDeleteAllDialog = false,
-        )
+        ),
     ).also { uiStateFlow ->
         viewModelScope.launch {
             viewModelStateFlow.collectLatest { state ->
@@ -68,8 +68,11 @@ internal class HistoryScreenViewModel(
         viewModelScope.launch {
             viewModelStateFlow
                 .flatMapLatest { state ->
-                    if (state.searchQuery.isBlank()) historyRepository.getRecent()
-                    else historyRepository.search(state.searchQuery)
+                    if (state.searchQuery.isBlank()) {
+                        historyRepository.getRecent()
+                    } else {
+                        historyRepository.search(state.searchQuery)
+                    }
                 }
                 .collect { entries ->
                     viewModelStateFlow.update { it.copy(entries = entries) }

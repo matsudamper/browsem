@@ -1,10 +1,10 @@
 package net.matsudamper.browser.download
 
-import com.sun.net.httpserver.HttpExchange
-import com.sun.net.httpserver.HttpServer
 import java.net.InetSocketAddress
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import com.sun.net.httpserver.HttpExchange
+import com.sun.net.httpserver.HttpServer
 
 /**
  * テスト用のローカルHTTPサーバー。

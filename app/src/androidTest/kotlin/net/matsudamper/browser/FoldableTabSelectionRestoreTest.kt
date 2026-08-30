@@ -7,13 +7,13 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import java.io.File
+import kotlin.time.Duration.Companion.seconds
 import net.matsudamper.browser.ui.tabs.TabsScreenTestTags // pragma: allowlist secret
 import org.junit.After
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
-import java.io.File
-import kotlin.time.Duration.Companion.seconds
 
 /**
  * フォルダブル展開などの構成変更（Activity 再生成）後も、

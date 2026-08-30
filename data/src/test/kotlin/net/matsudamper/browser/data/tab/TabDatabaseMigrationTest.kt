@@ -44,7 +44,10 @@ class TabDatabaseMigrationTest {
         }
 
         val db = helper.runMigrationsAndValidate(
-            TEST_DB, 2, true, *TabDatabase.allMigrations(sessionStateDir()),
+            TEST_DB,
+            2,
+            true,
+            *TabDatabase.allMigrations(sessionStateDir()),
         )
 
         db.query("SELECT tabId, groupId FROM tab_state WHERE tabId = 't1'").use { cursor ->
@@ -70,7 +73,10 @@ class TabDatabaseMigrationTest {
         }
 
         val db = helper.runMigrationsAndValidate(
-            TEST_DB, 3, true, *TabDatabase.allMigrations(sessionStateDir()),
+            TEST_DB,
+            3,
+            true,
+            *TabDatabase.allMigrations(sessionStateDir()),
         )
 
         db.query("SELECT groupId, isDefault FROM tab_group WHERE groupId = 'g1'").use { cursor ->
@@ -95,7 +101,10 @@ class TabDatabaseMigrationTest {
         }
 
         val db = helper.runMigrationsAndValidate(
-            TEST_DB, 4, true, *TabDatabase.allMigrations(sessionDir),
+            TEST_DB,
+            4,
+            true,
+            *TabDatabase.allMigrations(sessionDir),
         )
 
         db.query("SELECT tabId, url, title FROM tab_state WHERE tabId = 't1'").use { cursor ->
@@ -136,7 +145,10 @@ class TabDatabaseMigrationTest {
         }
 
         helper.runMigrationsAndValidate(
-            TEST_DB, 4, true, *TabDatabase.allMigrations(sessionDir),
+            TEST_DB,
+            4,
+            true,
+            *TabDatabase.allMigrations(sessionDir),
         )
 
         // 既にファイルが存在する場合は上書きしない（アプリ側で既に移行済み）

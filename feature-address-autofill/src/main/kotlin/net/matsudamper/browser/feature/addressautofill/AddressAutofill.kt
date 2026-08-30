@@ -26,6 +26,7 @@ enum class AddressAutofillSuggestionKind {
     Name,
     Address,
     Email,
+
     /** ページ固有のフォーム入力候補（住所等とは別経路） */
     FormField,
 }
