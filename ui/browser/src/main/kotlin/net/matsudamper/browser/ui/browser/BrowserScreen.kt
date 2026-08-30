@@ -80,10 +80,8 @@ fun BrowserScreen(
         }
     }
     if (selectedTab == null) {
-        /**
-         * フォアグラウンド遷移直後に findTab が空を返すケースのフレーキー解析用ログ。
-         * 該当時間帯に UrlBar が semantics tree から消えるテスト失敗との突き合わせに使う。
-         */
+        // フォアグラウンド遷移直後に findTab が空を返すケースのフレーキー解析用ログ。
+        // 該当時間帯に UrlBar が semantics tree から消えるテスト失敗との突き合わせに使う。
         LaunchedEffect(tabId) {
             Log.d(
                 "BrowserScreen",

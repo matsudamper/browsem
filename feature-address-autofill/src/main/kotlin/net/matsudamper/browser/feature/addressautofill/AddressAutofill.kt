@@ -34,6 +34,7 @@ enum class AddressAutofillSuggestionKind {
 fun AddressAutofillSuggestionKind.toFillMode(): AddressAutofillFillMode {
     return when (this) {
         AddressAutofillSuggestionKind.Email -> AddressAutofillFillMode.Email
+
         AddressAutofillSuggestionKind.Name,
         AddressAutofillSuggestionKind.Address,
         AddressAutofillSuggestionKind.FormField,
@@ -586,10 +587,13 @@ fun addressCompletionText(
 ): String {
     return when (kind) {
         AddressAutofillSuggestionKind.Email -> address.email
+
         AddressAutofillSuggestionKind.Name -> addressDisplayName(address)
+
         AddressAutofillSuggestionKind.Address -> {
             addressDisplayAddress(address).ifEmpty { addressDisplayName(address) }
         }
+
         AddressAutofillSuggestionKind.FormField -> ""
     }
 }

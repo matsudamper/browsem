@@ -109,7 +109,9 @@ internal fun parseSuggestionResponse(
 ): List<String> {
     return when (searchProvider) {
         SearchProvider.GOOGLE -> parseGoogleSuggestions(body)
+
         SearchProvider.DUCKDUCKGO -> parseDuckDuckGoSuggestions(body)
+
         SearchProvider.CUSTOM,
         SearchProvider.UNRECOGNIZED,
         -> emptyList()

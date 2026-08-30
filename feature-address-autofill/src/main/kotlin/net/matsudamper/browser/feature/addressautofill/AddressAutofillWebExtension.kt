@@ -157,6 +157,7 @@ class AddressAutofillWebExtension {
                                     lastFocusPorts[session] = port
                                     mainHandler.post { onFieldFocus?.invoke(kind) }
                                 }
+
                                 "field-blur" -> {
                                     mainHandler.post { onFieldBlur?.invoke() }
                                 }

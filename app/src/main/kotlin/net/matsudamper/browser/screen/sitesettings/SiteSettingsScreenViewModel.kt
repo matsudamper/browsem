@@ -185,6 +185,7 @@ internal class SiteSettingsScreenViewModel(
                 StorageController.ClearFlags.COOKIES or
                     StorageController.ClearFlags.DOM_STORAGES or
                     StorageController.ClearFlags.AUTH_SESSIONS
+
             SiteSettingsScreenUiState.ClearDataType.Cache -> StorageController.ClearFlags.ALL_CACHES
         }
         val targetName = when (type) {

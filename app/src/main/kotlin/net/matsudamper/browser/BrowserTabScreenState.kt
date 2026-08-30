@@ -380,7 +380,9 @@ internal class BrowserTabScreenState(
         }
         val persistedState = when (val choice = result.await()) {
             AutoplayPermissionChoice.Allow -> SitePermissionState.SITE_PERMISSION_ALLOW
+
             AutoplayPermissionChoice.Deny -> SitePermissionState.SITE_PERMISSION_DENY
+
             // 今回のみ許可・未選択は永続化せず ASK のままにして、次回も確認する
             AutoplayPermissionChoice.AllowOnce, null -> return choice == AutoplayPermissionChoice.AllowOnce
         }
@@ -522,7 +524,8 @@ internal class BrowserTabScreenState(
         get() = resolveAmoInstallUriFromPage(currentPageUrl) != null
 
     // --- 拡張機能アクション（ツールバーメニューのアイコン行）---
-    /** メニューのアイコン行の横スクロール位置。タブ内でのみ保持し、永続化はしない */
+
+    // メニューのアイコン行の横スクロール位置。タブ内でのみ保持し、永続化はしない
     val extensionActionScrollState = ScrollState(initial = 0)
 
     /** 表示中の拡張機能ポップアップ。null なら非表示 */
@@ -1418,8 +1421,11 @@ internal class BrowserTabScreenState(
         contextMenuState = when {
             linkUri != null && isImage && srcUri != null ->
                 ContextMenuState.LinkWithImage(url = linkUri, imageSrcUrl = srcUri)
+
             linkUri != null -> ContextMenuState.Link(url = linkUri)
+
             isImage && srcUri != null -> ContextMenuState.Image(srcUrl = srcUri)
+
             // AUDIO / VIDEO / NONE は未対応
             else -> null
         }
@@ -1550,14 +1556,17 @@ internal class BrowserTabScreenState(
         if (isSinglePageMode && request.target == GeckoSession.NavigationDelegate.TARGET_WINDOW_NEW) {
             return when (externalAction) {
                 ExternalAppNavigationAction.AllowInBrowser -> null
+
                 ExternalAppNavigationAction.AppNotFound -> {
                     Toast.makeText(context, "対応するアプリが見つかりません", Toast.LENGTH_SHORT).show()
                     GeckoResult.fromValue(AllowOrDeny.DENY)
                 }
+
                 is ExternalAppNavigationAction.Launch -> {
                     pendingExternalAppLaunch = externalAction.request
                     GeckoResult.fromValue(AllowOrDeny.DENY)
                 }
+
                 is ExternalAppNavigationAction.OpenFallback -> {
                     openFallbackUrl(externalAction.url)
                     GeckoResult.fromValue(AllowOrDeny.DENY)
@@ -1572,14 +1581,17 @@ internal class BrowserTabScreenState(
                     null
                 }
             }
+
             ExternalAppNavigationAction.AppNotFound -> {
                 Toast.makeText(context, "対応するアプリが見つかりません", Toast.LENGTH_SHORT).show()
                 GeckoResult.fromValue(AllowOrDeny.DENY)
             }
+
             is ExternalAppNavigationAction.Launch -> {
                 pendingExternalAppLaunch = externalAction.request
                 GeckoResult.fromValue(AllowOrDeny.DENY)
             }
+
             is ExternalAppNavigationAction.OpenFallback -> {
                 openFallbackUrl(externalAction.url)
                 GeckoResult.fromValue(AllowOrDeny.DENY)

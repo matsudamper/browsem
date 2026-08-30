@@ -50,6 +50,7 @@ internal fun TranslationStatusBar(
         -> MaterialTheme.colorScheme.secondaryContainer
 
         TranslationState.Error -> MaterialTheme.colorScheme.errorContainer
+
         TranslationState.Idle -> return
     }
 

@@ -267,6 +267,7 @@ internal fun GeckoBrowserTab(
         when (prompt.type) {
             GeckoSession.PromptDelegate.FilePrompt.Type.MULTIPLE ->
                 multipleFilesLauncher.launch(mimeTypes)
+
             else ->
                 singleFileLauncher.launch(mimeTypes)
         }
@@ -293,9 +294,7 @@ internal fun GeckoBrowserTab(
         snapshotFlow { state.capturePreviewRequestCount }
             .collectLatest { count ->
                 if (count == 0) return@collectLatest
-                /**
-                 * GeckoView.capturePixels は Main スレッド必須。
-                 */
+                // GeckoView.capturePixels は Main スレッド必須。
                 withContext(Dispatchers.Main.immediate) {
                     geckoView?.also { gv -> state.captureTabPreview(gv) }
                 }
@@ -471,6 +470,7 @@ internal fun GeckoBrowserTab(
     fun resumeFromPauseIfNeeded(gecko: GeckoView) {
         when (surfaceResumeState) {
             SurfaceResumeState.RELEASED -> restoreSurfaceIfNeeded(gecko)
+
             SurfaceResumeState.PAUSED_KEEP_SURFACE -> {
                 Log.d(
                     TAG_SURFACE_RESUME,
@@ -479,6 +479,7 @@ internal fun GeckoBrowserTab(
                 )
                 surfaceResumeState = SurfaceResumeState.ACTIVE
             }
+
             SurfaceResumeState.ACTIVE, SurfaceResumeState.WAITING_STABLE -> Unit
         }
     }
@@ -523,6 +524,7 @@ internal fun GeckoBrowserTab(
                                     " mediaKeep=${mediaWebExtension.shouldKeepSessionAttached(session)}",
                             )
                         }
+
                         target == null -> {
                             // geckoView が更新されないまま ON_PAUSE が来ると release できず、
                             // 復帰時に session 付きで surface が再作成され BLAST reject が起きる。
@@ -533,6 +535,7 @@ internal fun GeckoBrowserTab(
                                     " 復帰時にハングする可能性あり session=${session.logKey()}",
                             )
                         }
+
                         surfaceResumeState == SurfaceResumeState.ACTIVE && !currentIsImeVisible -> {
                             // IME 非表示: stale サイズ resize のハング経路を踏まないため
                             // surface を維持し、オーバーレイ表示中の白画面化を防ぐ。
@@ -548,6 +551,7 @@ internal fun GeckoBrowserTab(
                             state.captureTabPreview(target)
                             surfaceResumeState = SurfaceResumeState.PAUSED_KEEP_SURFACE
                         }
+
                         else -> {
                             // IME 表示中の ACTIVE、または WAITING_STABLE 中（前回 resume の
                             // 安定待ちが完了する前に再度 pause した場合）は従来どおり release。
@@ -570,6 +574,7 @@ internal fun GeckoBrowserTab(
                         }
                     }
                 }
+
                 Lifecycle.Event.ON_STOP -> {
                     session.flushSessionState()
                     // IME 表示中の pause は ON_PAUSE で release 済み (RELEASED)。
@@ -584,6 +589,7 @@ internal fun GeckoBrowserTab(
                             mediaWebExtension.shouldKeepSessionAttached(session) -> {
                                 state.captureTabPreview(target)
                             }
+
                             surfaceResumeState == SurfaceResumeState.PAUSED_KEEP_SURFACE -> {
                                 // IME 非表示の pause で surface を維持していたが、ON_STOP に
                                 // 到達した = 完全に不可視化した (ホームボタン等)。ここで release
@@ -604,16 +610,20 @@ internal fun GeckoBrowserTab(
                                 target.visibility = View.INVISIBLE
                                 surfaceResumeState = SurfaceResumeState.RELEASED
                             }
+
                             else -> Unit
                         }
                     }
                 }
+
                 Lifecycle.Event.ON_START -> {
                     geckoView?.also(::resumeFromPauseIfNeeded)
                 }
+
                 Lifecycle.Event.ON_RESUME -> {
                     geckoView?.also(::resumeFromPauseIfNeeded)
                 }
+
                 else -> Unit
             }
         }
@@ -865,6 +875,7 @@ internal fun GeckoBrowserTab(
                         mode.finish()
                         return true
                     }
+
                     MENU_ID_OPEN -> {
                         val url = if (text.startsWith("http://") || text.startsWith("https://")) {
                             text
@@ -1421,7 +1432,9 @@ private class GetMultipleContentsWithMimeTypes : ActivityResultContract<Array<St
 private fun applyMimeTypes(intent: Intent, mimeTypes: Array<String>) {
     when {
         mimeTypes.isEmpty() -> intent.type = "*/*"
+
         mimeTypes.size == 1 -> intent.type = mimeTypes[0]
+
         else -> {
             intent.type = "*/*"
             intent.putExtra(Intent.EXTRA_MIME_TYPES, mimeTypes)

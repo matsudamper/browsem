@@ -100,6 +100,7 @@ class BrowserTabController(
                     createAndAppendInitialTab(homepageUrl).tabId
                 }
             }
+
             RestoreState.IN_PROGRESS -> {
                 // 別のコルーチンで復元中。完了を待機してから返す
                 Log.d(TAG, "restoreTabs(): 進行中の復元を待機")
@@ -108,6 +109,7 @@ class BrowserTabController(
                     createAndAppendInitialTab(homepageUrl).tabId
                 }
             }
+
             RestoreState.NOT_STARTED -> { /* 以下で復元処理を実行 */ }
         }
         // 前回失敗で例外完了した deferred を再生成して、新しい試行の待機先を提供する

@@ -267,6 +267,7 @@ internal class NetworkLogStateHolder(
     private fun NetworkLogBody.toThumbnailBitmap(): Bitmap? {
         return when (this) {
             is NetworkLogBody.Binary -> decodeThumbnail(bytes)
+
             is NetworkLogBody.Text -> {
                 if (NetworkLogSvgRenderer.isSvg(mimeType)) {
                     NetworkLogSvgRenderer.render(text, THUMBNAIL_MAX_PIXELS)
