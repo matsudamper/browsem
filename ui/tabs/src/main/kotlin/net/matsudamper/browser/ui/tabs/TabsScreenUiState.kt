@@ -1,7 +1,9 @@
 package net.matsudamper.browser.ui.tabs
 
+import androidx.compose.runtime.Stable
 import net.matsudamper.browser.data.TabGroupData
 
+@Stable
 data class TabsScreenUiState(
     val callbacks: Callbacks,
     val loadingState: LoadingState,
@@ -13,7 +15,6 @@ data class TabsScreenUiState(
     )
 
     interface Callbacks {
-        fun onCloseTab(tabId: String)
         fun onUndoCloseTab()
         fun onConfirmCloseTab()
         fun onReorderTabs(groupIndex: Int, fromLocalIndex: Int, toLocalIndex: Int)
@@ -21,7 +22,6 @@ data class TabsScreenUiState(
         fun onGroupSelected(index: Int)
         fun onGroupPageChanged(page: Int)
         fun onAddGroup()
-        fun onMoveTabToGroup(tabId: String, targetGroupIndex: Int)
         fun onRenameGroup(groupIndex: Int, newName: String)
         fun onDeleteGroup(groupIndex: Int)
         fun onToggleDefaultGroup(groupIndex: Int)
@@ -35,15 +35,20 @@ data class TabsScreenUiState(
             val activeGroupIndex: Int,
             val selectedTabId: String?,
             val groupHasPlayingTab: List<Boolean> = emptyList(),
+            val onOpenNewTab: () -> Unit,
         ) : LoadingState
     }
 }
 
+@Stable
 data class TabsScreenTabData(
     val id: String,
     val title: String,
     val previewImage: TabPreviewImage?,
     val isPlaying: Boolean = false,
+    val onSelect: () -> Unit,
+    val onClose: () -> Unit,
+    val onMoveToGroup: (targetGroupIndex: Int) -> Unit,
 )
 
 // ByteArray を contentEquals で比較するラッパー。
@@ -57,4 +62,21 @@ class TabPreviewImage(val bytes: ByteArray) {
     }
 
     override fun hashCode(): Int = bytes.contentHashCode()
+}
+
+internal fun previewTabData(
+    id: String,
+    title: String,
+    previewImage: TabPreviewImage? = null,
+    isPlaying: Boolean = false,
+): TabsScreenTabData {
+    return TabsScreenTabData(
+        id = id,
+        title = title,
+        previewImage = previewImage,
+        isPlaying = isPlaying,
+        onSelect = {},
+        onClose = {},
+        onMoveToGroup = {},
+    )
 }

@@ -55,12 +55,10 @@ import androidx.compose.ui.unit.toOffset
 internal fun GroupTabGrid(
     tabs: List<TabsScreenTabData>,
     selectedTabId: String?,
-    onSelectTab: (String) -> Unit,
-    onCloseTab: (String) -> Unit,
     onReorderTabs: (fromIndex: Int, toIndex: Int) -> Unit,
     onTabDragStateChanged: (isDragging: Boolean, centerInRoot: Offset) -> Unit,
-    onTabDropped: (tabId: String) -> Unit,
-    onTabLongPressWithoutDrag: (tabId: String) -> Unit,
+    onTabDropped: (TabsScreenTabData) -> Unit,
+    onTabLongPressWithoutDrag: (TabsScreenTabData) -> Unit,
     floatingActionButtonBoundsInRoot: Rect?,
     modifier: Modifier = Modifier,
 ) {
@@ -143,20 +141,15 @@ internal fun GroupTabGrid(
                     val handleEnd: () -> Unit = {
                         val result = dragDropState.endDrag()
                         val tabId = result?.key as? String
-                        if (result != null && tabId != null) {
-                            // メニューを開く条件:
-                            //   - 並び替え未発生（タブが動いていない）
-                            //   - ドラッグ中心がグリッド内（グループバー上でリリースしていない）
-                            //   - 押してから 2 秒以内に離した
+                        val tab = tabId?.let { id -> tabs.firstOrNull { it.id == id } }
+                        if (result != null && tab != null) {
                             val shouldShowMenu = !result.didReorder &&
                                     result.releasedInsideGrid &&
                                     result.elapsedMs <= MENU_RELEASE_WINDOW_MS
                             if (shouldShowMenu) {
-                                currentOnTabLongPressWithoutDrag(tabId)
+                                currentOnTabLongPressWithoutDrag(tab)
                             } else {
-                                // 別グループへホバー中ならクロスグループ移動が走る。
-                                // それ以外（並び替え済みでグリッド内に戻したケース等）は no-op。
-                                currentOnTabDropped(tabId)
+                                currentOnTabDropped(tab)
                             }
                         }
                     }
@@ -191,11 +184,9 @@ internal fun GroupTabGrid(
                 TabCard(
                     tab = tab,
                     selected = selected,
-                    onSelectTab = { tabId ->
-                        // 長押し(ドラッグ)モード中はタブ選択をブロックする
-                        if (!dragDropState.isDragging) onSelectTab(tabId)
+                    onSelect = {
+                        if (!dragDropState.isDragging) tab.onSelect()
                     },
-                    onCloseTab = onCloseTab,
                     bitmapCache = bitmapCache,
                     modifier = Modifier
                         .fillMaxWidth()
@@ -222,8 +213,7 @@ internal fun GroupTabGrid(
                     TabCard(
                         tab = overlayTab,
                         selected = overlayTab.id == selectedTabId,
-                        onSelectTab = {},
-                        onCloseTab = {},
+                        onSelect = {},
                         bitmapCache = bitmapCache,
                         modifier = Modifier.fillMaxSize(),
                     )

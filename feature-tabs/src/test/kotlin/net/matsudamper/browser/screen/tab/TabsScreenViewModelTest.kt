@@ -266,6 +266,14 @@ class TabsScreenViewModelTest {
         return (uiState.value.loadingState as? TabsScreenUiState.LoadingState.Loaded)?.activeGroupIndex
     }
 
+    private fun TabsScreenViewModel.closeTabById(tabId: String) {
+        val loaded = uiState.value.loadingState as TabsScreenUiState.LoadingState.Loaded
+        loaded.groupedTabs
+            .flatten()
+            .first { it.id == tabId }
+            .onClose()
+    }
+
     // -----------------------------------------------------------------------
     // バグ2 再現テスト
     // -----------------------------------------------------------------------
@@ -627,7 +635,7 @@ class TabsScreenViewModelTest {
         assertEquals("グループBを選択後は activeGroupIndex = 1", 1, viewModel.activeGroupIndexFromUiState())
 
         // グループBのタブ（tab-b）を閉じる（選択中ではないため selectedTabId は "tab-a" のまま）
-        viewModel.uiState.value.callbacks.onCloseTab("tab-b")
+        viewModel.closeTabById("tab-b")
         advanceUntilIdle()
 
         // 期待: グループBのままでいるべき（activeGroupIndex = 1）
@@ -656,6 +664,8 @@ class TabsScreenViewModelTest {
         override fun selectTab(tabId: String) {
             selectedTabIds += tabId
         }
+
+        override fun openNewTab(currentGroupId: TabGroupId?) = Unit
     }
 
     /** eventHandler に溜まったイベントをすべて recorder へ流す */
@@ -700,7 +710,7 @@ class TabsScreenViewModelTest {
         assertEquals("初期表示は選択タブのグループA", 0, viewModel.activeGroupIndexFromUiState())
 
         // 選択中タブを閉じる → この時点で実際に閉じ、次のタブ（同グループの tab-a2）へ選択切替
-        viewModel.uiState.value.callbacks.onCloseTab("tab-a1")
+        viewModel.closeTabById("tab-a1")
         viewModel.drainEvents(recorder)
         assertEquals("閉じた時点で実際にタブが閉じられるべき", listOf("tab-a1"), tabStore.closedTabIds)
         assertEquals("閉じた時点で閉鎖イベントが発行されるべき", listOf("tab-a1"), recorder.closedTabIds)
@@ -754,7 +764,7 @@ class TabsScreenViewModelTest {
         assertEquals(0, viewModel.activeGroupIndexFromUiState())
 
         // グループA 最後のタブを閉じる → 選択は他グループの tab-b へ切り替わる
-        viewModel.uiState.value.callbacks.onCloseTab("tab-a")
+        viewModel.closeTabById("tab-a")
         viewModel.drainEvents(recorder)
         assertEquals("tab-b", tabStore.tabStoreState.value.selectedTabId)
         advanceUntilIdle()
@@ -794,7 +804,7 @@ class TabsScreenViewModelTest {
         advanceUntilIdle()
 
         // 閉じた時点で実際に閉じられ、選択は次のタブへ切り替わる
-        viewModel.uiState.value.callbacks.onCloseTab("tab-1")
+        viewModel.closeTabById("tab-1")
         viewModel.drainEvents(recorder)
         assertEquals(listOf("tab-1"), tabStore.closedTabIds)
         assertEquals("tab-2", tabStore.tabStoreState.value.selectedTabId)
@@ -852,7 +862,7 @@ class TabsScreenViewModelTest {
         advanceUntilIdle()
 
         // タブを閉じる → eventHandler を消費しなくてもこの時点で閉じられている
-        viewModel.uiState.value.callbacks.onCloseTab("tab-1")
+        viewModel.closeTabById("tab-1")
         assertEquals("閉じた時点でタブが TabStore から閉じられるべき", listOf("tab-1"), tabStore.closedTabIds)
         assertTrue(
             "閉じたタブは TabStore に残っていないべき",
@@ -885,7 +895,7 @@ class TabsScreenViewModelTest {
         val viewModel = buildViewModel(tabStore, repo, this)
         advanceUntilIdle()
 
-        viewModel.uiState.value.callbacks.onCloseTab("tab-2")
+        viewModel.closeTabById("tab-2")
         viewModel.drainEvents(recorder)
         assertEquals("非選択タブの閉鎖では選択は変わらない", "tab-1", tabStore.tabStoreState.value.selectedTabId)
 
