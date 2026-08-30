@@ -26,7 +26,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import net.matsudamper.browser.data.history.HistoryEntry
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -78,8 +77,8 @@ fun HistoryScreen(
                 items(uiState.entries, key = { it.id }) { entry ->
                     HistoryItem(
                         entry = entry,
-                        onClick = { uiState.callbacks.onClickEntry(entry.url) },
-                        onDelete = { uiState.callbacks.onDeleteEntry(entry.id) },
+                        onClick = entry.onClick,
+                        onDelete = entry.onDelete,
                     )
                 }
             }
@@ -107,7 +106,7 @@ fun HistoryScreen(
 
 @Composable
 private fun HistoryItem(
-    entry: HistoryEntry,
+    entry: HistoryScreenUiState.EntryItem,
     onClick: () -> Unit,
     onDelete: () -> Unit,
 ) {
