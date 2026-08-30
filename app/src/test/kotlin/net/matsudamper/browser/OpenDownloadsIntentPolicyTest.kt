@@ -86,4 +86,17 @@ class OpenDownloadsIntentPolicyTest {
             ),
         )
     }
+
+    @Test
+    fun `再配信時は消費済み集合から request ID を除去して配信可能にする`() {
+        val consumed = mutableSetOf("progress:9001")
+        consumed.remove("progress:9001")
+        assertTrue(
+            OpenDownloadsIntentPolicy.shouldDispatch(
+                DownloadWorker.ACTION_OPEN_DOWNLOADS,
+                intentRequestId = "progress:9001",
+                consumedRequestIds = consumed,
+            ),
+        )
+    }
 }
