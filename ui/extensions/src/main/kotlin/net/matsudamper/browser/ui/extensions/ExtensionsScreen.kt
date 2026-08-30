@@ -175,9 +175,6 @@ fun ExtensionsScreen(
                                 uninstallEnabled = individualToggleEnabled,
                                 isToggling = uiState.togglingId == extension.id,
                                 toggleEnabled = individualToggleEnabled,
-                                onOpenSettings = extension.onOpenSettings,
-                                onUninstall = extension.onUninstall,
-                                onToggle = extension.onToggle,
                             )
                         }
 
@@ -198,9 +195,6 @@ fun ExtensionsScreen(
                                     uninstallEnabled = individualToggleEnabled,
                                     isToggling = uiState.togglingId == extension.id,
                                     toggleEnabled = individualToggleEnabled,
-                                    onOpenSettings = extension.onOpenSettings,
-                                    onUninstall = extension.onUninstall,
-                                    onToggle = extension.onToggle,
                                 )
                             }
                         }
@@ -311,9 +305,7 @@ private fun previewExtension(
     hasSettingsPage = hasSettingsPage,
     isEnabled = isEnabled,
     isBuiltIn = isBuiltIn,
-    onOpenSettings = {},
-    onUninstall = {},
-    onToggle = {},
+    listener = PreviewExtensionListener,
 )
 
 @Preview(showBackground = true)
@@ -433,9 +425,6 @@ private fun ExtensionRow(
     uninstallEnabled: Boolean,
     isToggling: Boolean,
     toggleEnabled: Boolean,
-    onOpenSettings: () -> Unit,
-    onUninstall: () -> Unit,
-    onToggle: (Boolean) -> Unit,
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
 
@@ -450,7 +439,7 @@ private fun ExtensionRow(
                     enabled = uninstallEnabled,
                     onClick = {
                         menuExpanded = false
-                        onUninstall()
+                        extension.listener.onUninstall()
                     },
                 )
             }
@@ -459,7 +448,7 @@ private fun ExtensionRow(
             modifier = Modifier
                 .fillMaxWidth()
                 .combinedClickable(
-                    onClick = onOpenSettings,
+                    onClick = extension.listener::onOpenSettings,
                     onLongClick = { menuExpanded = true },
                 )
                 .padding(horizontal = 16.dp, vertical = 12.dp),
@@ -493,7 +482,7 @@ private fun ExtensionRow(
             Spacer(modifier = Modifier.width(8.dp))
             Switch(
                 checked = extension.isEnabled,
-                onCheckedChange = { onToggle(it) },
+                onCheckedChange = extension.listener::onToggle,
                 enabled = toggleEnabled && !isToggling,
                 modifier = Modifier.semantics {
                     contentDescription = "${extension.displayName} の有効/無効"

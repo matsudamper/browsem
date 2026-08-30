@@ -168,7 +168,7 @@ fun TabsScreen(
                 selectedTabId = loadingState.selectedTabId,
                 groupHasPlayingTab = loadingState.groupHasPlayingTab,
                 snackbarHostState = snackbarHostState,
-                onOpenNewTab = loadingState.onOpenNewTab,
+                newTabListener = loadingState.newTabListener,
                 onReorderTabs = currentCallbacks::onReorderTabs,
                 onReorderGroups = currentCallbacks::onReorderGroups,
                 onGroupSelected = currentCallbacks::onGroupSelected,
@@ -192,7 +192,7 @@ private fun TabsScreenLoadedContent(
     selectedTabId: String?,
     groupHasPlayingTab: List<Boolean>,
     snackbarHostState: SnackbarHostState,
-    onOpenNewTab: () -> Unit,
+    newTabListener: TabsScreenUiState.LoadingState.Loaded.NewTabListener,
     onReorderTabs: (groupIndex: Int, fromLocalIndex: Int, toLocalIndex: Int) -> Unit,
     onReorderGroups: (fromIndex: Int, toIndex: Int) -> Unit,
     onGroupSelected: (Int) -> Unit,
@@ -340,7 +340,7 @@ private fun TabsScreenLoadedContent(
         },
         floatingActionButton = {
             FloatingActionButton(
-                onClick = onOpenNewTab,
+                onClick = newTabListener::onOpenNewTab,
                 modifier = Modifier
                     .testTag(TabsScreenTestTags.AddTabButton.testTag)
                     .onGloballyPositioned { coordinates ->
@@ -424,11 +424,11 @@ private fun TabsScreenLoadedContent(
                                 bounds.contains(tabDragCenterInRoot)
                             }?.key
                             if (targetIndex != null && targetIndex != page) {
-                                tab.onMoveToGroup(targetIndex)
+                                tab.listener.onMoveToGroup(targetIndex)
                             }
                         },
                         onTabLongPressWithoutDrag = { tab ->
-                            moveDialogOnGroupSelected = tab.onMoveToGroup
+                            moveDialogOnGroupSelected = tab.listener::onMoveToGroup
                         },
                         floatingActionButtonBoundsInRoot = floatingActionButtonBoundsInRoot,
                         modifier = Modifier.weight(1f),
@@ -642,7 +642,7 @@ private fun Preview() {
         selectedTabId = "1",
         groupHasPlayingTab = emptyList(),
         snackbarHostState = remember { SnackbarHostState() },
-        onOpenNewTab = {},
+        newTabListener = PreviewNewTabListener,
         onReorderTabs = { _, _, _ -> },
         onReorderGroups = { _, _ -> },
         onGroupSelected = {},
@@ -678,7 +678,7 @@ private fun PreviewSingleGroup() {
         selectedTabId = "1",
         groupHasPlayingTab = emptyList(),
         snackbarHostState = remember { SnackbarHostState() },
-        onOpenNewTab = {},
+        newTabListener = PreviewNewTabListener,
         onReorderTabs = { _, _, _ -> },
         onReorderGroups = { _, _ -> },
         onGroupSelected = {},
@@ -718,7 +718,7 @@ private fun PreviewWithSnackbar() {
             activeGroupIndex = 0,
             selectedTabId = "1",
             snackbarHostState = remember { SnackbarHostState() },
-            onOpenNewTab = {},
+            newTabListener = PreviewNewTabListener,
             onReorderTabs = { _, _, _ -> },
             onReorderGroups = { _, _ -> },
             onGroupSelected = {},

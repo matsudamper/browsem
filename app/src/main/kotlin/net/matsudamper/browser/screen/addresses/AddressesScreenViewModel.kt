@@ -75,8 +75,15 @@ internal class AddressesScreenViewModel(
             id = entry.id,
             displayName = entry.displayName().ifEmpty { "（名前なし）" },
             displayDetail = entry.displayText(),
-            onClick = { eventHandler.trySend { it.navigateToEdit(entry.id) } },
-            onDelete = { viewModelScope.launch { addressRepository.deleteById(entry.id) } },
+            listener = object : AddressesScreenUiState.EntryItem.Listener {
+                override fun onClick() {
+                    eventHandler.trySend { it.navigateToEdit(entry.id) }
+                }
+
+                override fun onDelete() {
+                    viewModelScope.launch { addressRepository.deleteById(entry.id) }
+                }
+            },
         )
     }
 

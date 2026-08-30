@@ -137,9 +137,11 @@ class TabsScreenViewModel(
                                 activeGroupIndex = state.activeGroupIndex.coerceIn(0, (groups.size - 1).coerceAtLeast(0)),
                                 selectedTabId = state.tabStoreState.selectedTabId,
                                 groupHasPlayingTab = groupHasPlayingTab,
-                                onOpenNewTab = {
-                                    val group = groups.getOrNull(state.activeGroupIndex ?: 0)
-                                    eventHandler.trySend { it.openNewTab(group?.id) }
+                                newTabListener = object : TabsScreenUiState.LoadingState.Loaded.NewTabListener {
+                                    override fun onOpenNewTab() {
+                                        val group = groups.getOrNull(state.activeGroupIndex ?: 0)
+                                        eventHandler.trySend { it.openNewTab(group?.id) }
+                                    }
                                 },
                             )
                         },
@@ -363,9 +365,19 @@ class TabsScreenViewModel(
             title = tab.title,
             previewImage = tab.previewBitmapArray?.let { TabPreviewImage(it) },
             isPlaying = tab.id in playingIds,
-            onSelect = { eventHandler.trySend { it.selectTab(tab.id) } },
-            onClose = { closeTab(tab.id) },
-            onMoveToGroup = { targetGroupIndex -> moveTabToGroup(tab.id, targetGroupIndex) },
+            listener = object : TabsScreenTabData.Listener {
+                override fun onSelect() {
+                    eventHandler.trySend { it.selectTab(tab.id) }
+                }
+
+                override fun onClose() {
+                    closeTab(tab.id)
+                }
+
+                override fun onMoveToGroup(targetGroupIndex: Int) {
+                    moveTabToGroup(tab.id, targetGroupIndex)
+                }
+            },
         )
     }
 

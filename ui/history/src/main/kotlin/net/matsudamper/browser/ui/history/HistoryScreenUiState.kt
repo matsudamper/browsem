@@ -15,9 +15,14 @@ data class HistoryScreenUiState(
         val title: String,
         val url: String,
         val visitedAt: Long,
-        val onClick: () -> Unit,
-        val onDelete: () -> Unit,
-    )
+        val listener: Listener,
+    ) {
+        @Stable
+        interface Listener {
+            fun onClick()
+            fun onDelete()
+        }
+    }
 
     interface Callbacks {
         fun onSearchQueryChange(query: String)
@@ -25,4 +30,9 @@ data class HistoryScreenUiState(
         fun onConfirmDeleteAll()
         fun onDismissDeleteAllDialog()
     }
+}
+
+internal object PreviewHistoryEntryListener : HistoryScreenUiState.EntryItem.Listener {
+    override fun onClick() = Unit
+    override fun onDelete() = Unit
 }

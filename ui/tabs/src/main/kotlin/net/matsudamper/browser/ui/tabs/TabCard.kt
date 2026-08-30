@@ -52,7 +52,6 @@ private fun PreviewTabCardShortTitle() {
     TabCard(
         tab = previewTabData(id = "1", title = "Google"),
         selected = false,
-        onSelect = {},
         bitmapCache = LruCache(1),
         modifier = Modifier
             .width(160.dp)
@@ -69,7 +68,6 @@ private fun PreviewTabCardLongTitle() {
             title = "GitHub - matsudamper/browsem: Android Browser App",
         ),
         selected = false,
-        onSelect = {},
         bitmapCache = LruCache(1),
         modifier = Modifier
             .width(160.dp)
@@ -86,7 +84,6 @@ private fun PreviewTabCardVeryLongTitle() {
             title = "非常に長いタイトルで最大フォントでは2行に収まらず縮小が必要になるケースのサンプルテキスト",
         ),
         selected = false,
-        onSelect = {},
         bitmapCache = LruCache(1),
         modifier = Modifier
             .width(160.dp)
@@ -98,12 +95,13 @@ private fun PreviewTabCardVeryLongTitle() {
 internal fun TabCard(
     tab: TabsScreenTabData,
     selected: Boolean,
-    onSelect: () -> Unit,
     bitmapCache: LruCache<TabPreviewImage, Bitmap>,
     modifier: Modifier = Modifier,
+    selectEnabled: Boolean = true,
 ) {
     Card(
-        onClick = onSelect,
+        onClick = tab.listener::onSelect,
+        enabled = selectEnabled,
         modifier = modifier,
         border = BorderStroke(
             width = if (selected) 2.dp else 1.dp,
@@ -158,7 +156,7 @@ internal fun TabCard(
                     modifier = Modifier.weight(1f),
                 )
                 IconButton(
-                    onClick = tab.onClose,
+                    onClick = tab.listener::onClose,
                     modifier = Modifier.offset { IntOffset(4, -4) },
                 ) {
                     Icon(

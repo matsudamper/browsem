@@ -422,8 +422,10 @@ internal class NetworkLogStateHolder(
                 label = NetworkLogFormat.filterLabel(candidate),
                 count = count,
                 isSelected = candidate == filter,
-                onClick = {
-                    this@NetworkLogStateHolder.filter = candidate
+                listener = object : NetworkLogUiState.Filter.Listener {
+                    override fun onClick() {
+                        this@NetworkLogStateHolder.filter = candidate
+                    }
                 },
             )
         }
@@ -513,10 +515,12 @@ internal class NetworkLogStateHolder(
             } else {
                 null
             },
-            onClick = {
-                selectedId = requestId
-                preview = NetworkLogUiState.Preview.Loading
-                clearPreviewBody()
+            listener = object : NetworkLogUiState.Entry.Listener {
+                override fun onClick() {
+                    selectedId = requestId
+                    preview = NetworkLogUiState.Preview.Loading
+                    clearPreviewBody()
+                }
             },
         )
     }

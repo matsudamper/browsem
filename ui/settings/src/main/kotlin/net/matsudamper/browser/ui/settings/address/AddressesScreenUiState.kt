@@ -13,9 +13,14 @@ data class AddressesScreenUiState(
         val id: Long,
         val displayName: String,
         val displayDetail: String,
-        val onClick: () -> Unit,
-        val onDelete: () -> Unit,
-    )
+        val listener: Listener,
+    ) {
+        @Stable
+        interface Listener {
+            fun onClick()
+            fun onDelete()
+        }
+    }
 
     interface Callbacks {
         fun onClickAdd()
@@ -23,4 +28,9 @@ data class AddressesScreenUiState(
         fun onConfirmDeleteAll()
         fun onDismissDeleteAllDialog()
     }
+}
+
+internal object PreviewAddressesEntryListener : AddressesScreenUiState.EntryItem.Listener {
+    override fun onClick() = Unit
+    override fun onDelete() = Unit
 }

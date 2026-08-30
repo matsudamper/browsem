@@ -75,33 +75,44 @@ class BrowserScreenViewModel(
                     val previousTab = adjacentTabs.previousTab?.let { tab ->
                         BrowserScreenUiState.AdjacentTabPreview(
                             tab = tab,
-                            onSelect = { eventHandler.trySend { it.selectTab(tab.tabId) } },
+                            listener = object : BrowserScreenUiState.AdjacentTabPreview.Listener {
+                                override fun onSelect() {
+                                    eventHandler.trySend { it.selectTab(tab.tabId) }
+                                }
+                            },
                         )
                     }
                     val nextTab = adjacentTabs.nextTab?.let { tab ->
                         BrowserScreenUiState.AdjacentTabPreview(
                             tab = tab,
-                            onSelect = { eventHandler.trySend { it.selectTab(tab.tabId) } },
+                            listener = object : BrowserScreenUiState.AdjacentTabPreview.Listener {
+                                override fun onSelect() {
+                                    eventHandler.trySend { it.selectTab(tab.tabId) }
+                                }
+                            },
                         )
                     }
-                    val onBackToOpener: (() -> Unit)? = if (
-                        previousTab != null &&
-                        selectedTab?.openerTabId != null &&
-                        previousTab.tab.tabId == selectedTab.openerTabId &&
-                        selectedTab.canGoBack.not()
-                    ) {
-                        {
-                            eventHandler.trySend { it.backToOpenerTab(selectedTab.tabId) }
+                    val backToOpenerListener: BrowserScreenUiState.SwipePreviewUiState.BackToOpenerListener? =
+                        if (
+                            previousTab != null &&
+                            selectedTab?.openerTabId != null &&
+                            previousTab.tab.tabId == selectedTab.openerTabId &&
+                            selectedTab.canGoBack.not()
+                        ) {
+                            object : BrowserScreenUiState.SwipePreviewUiState.BackToOpenerListener {
+                                override fun onBackToOpener() {
+                                    eventHandler.trySend { it.backToOpenerTab(selectedTab.tabId) }
+                                }
+                            }
+                        } else {
+                            null
                         }
-                    } else {
-                        null
-                    }
                     BrowserScreenUiState(
                         urlBarSuggestions = state.urlBarSuggestions,
                         swipePreview = BrowserScreenUiState.SwipePreviewUiState(
                             previousTab = previousTab,
                             nextTab = nextTab,
-                            onBackToOpener = onBackToOpener,
+                            backToOpenerListener = backToOpenerListener,
                         ),
                         groupTabCount = state.resolveGroupTabCount(),
                         callbacks = callbacks,

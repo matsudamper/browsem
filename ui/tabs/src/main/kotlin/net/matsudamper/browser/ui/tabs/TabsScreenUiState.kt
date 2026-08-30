@@ -35,8 +35,13 @@ data class TabsScreenUiState(
             val activeGroupIndex: Int,
             val selectedTabId: String?,
             val groupHasPlayingTab: List<Boolean> = emptyList(),
-            val onOpenNewTab: () -> Unit,
-        ) : LoadingState
+            val newTabListener: NewTabListener,
+        ) : LoadingState {
+            @Stable
+            interface NewTabListener {
+                fun onOpenNewTab()
+            }
+        }
     }
 }
 
@@ -46,10 +51,15 @@ data class TabsScreenTabData(
     val title: String,
     val previewImage: TabPreviewImage?,
     val isPlaying: Boolean = false,
-    val onSelect: () -> Unit,
-    val onClose: () -> Unit,
-    val onMoveToGroup: (targetGroupIndex: Int) -> Unit,
-)
+    val listener: Listener,
+) {
+    @Stable
+    interface Listener {
+        fun onSelect()
+        fun onClose()
+        fun onMoveToGroup(targetGroupIndex: Int)
+    }
+}
 
 // ByteArray を contentEquals で比較するラッパー。
 // data class の自動生成 equals は配列の参照等値になるため、
@@ -64,6 +74,16 @@ class TabPreviewImage(val bytes: ByteArray) {
     override fun hashCode(): Int = bytes.contentHashCode()
 }
 
+internal object PreviewTabListener : TabsScreenTabData.Listener {
+    override fun onSelect() = Unit
+    override fun onClose() = Unit
+    override fun onMoveToGroup(targetGroupIndex: Int) = Unit
+}
+
+internal object PreviewNewTabListener : TabsScreenUiState.LoadingState.Loaded.NewTabListener {
+    override fun onOpenNewTab() = Unit
+}
+
 internal fun previewTabData(
     id: String,
     title: String,
@@ -75,8 +95,6 @@ internal fun previewTabData(
         title = title,
         previewImage = previewImage,
         isPlaying = isPlaying,
-        onSelect = {},
-        onClose = {},
-        onMoveToGroup = {},
+        listener = PreviewTabListener,
     )
 }

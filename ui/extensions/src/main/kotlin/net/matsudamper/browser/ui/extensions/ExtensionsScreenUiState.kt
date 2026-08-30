@@ -40,8 +40,19 @@ data class ExtensionsScreenUiState(
         val hasSettingsPage: Boolean,
         val isEnabled: Boolean,
         val isBuiltIn: Boolean,
-        val onOpenSettings: () -> Unit,
-        val onUninstall: () -> Unit,
-        val onToggle: (Boolean) -> Unit,
-    )
+        val listener: Listener,
+    ) {
+        @Stable
+        interface Listener {
+            fun onOpenSettings()
+            fun onUninstall()
+            fun onToggle(enabled: Boolean)
+        }
+    }
+}
+
+internal object PreviewExtensionListener : ExtensionsScreenUiState.ExtensionUiState.Listener {
+    override fun onOpenSettings() = Unit
+    override fun onUninstall() = Unit
+    override fun onToggle(enabled: Boolean) = Unit
 }

@@ -75,11 +75,7 @@ fun HistoryScreen(
 
             LazyColumn(modifier = Modifier.fillMaxSize()) {
                 items(uiState.entries, key = { it.id }) { entry ->
-                    HistoryItem(
-                        entry = entry,
-                        onClick = entry.onClick,
-                        onDelete = entry.onDelete,
-                    )
+                    HistoryItem(entry = entry)
                 }
             }
         }
@@ -107,8 +103,6 @@ fun HistoryScreen(
 @Composable
 private fun HistoryItem(
     entry: HistoryScreenUiState.EntryItem,
-    onClick: () -> Unit,
-    onDelete: () -> Unit,
 ) {
     val dateFormat = remember { SimpleDateFormat("yyyy/MM/dd HH:mm", Locale.getDefault()) }
 
@@ -138,13 +132,13 @@ private fun HistoryItem(
             }
         },
         trailingContent = {
-            IconButton(onClick = onDelete) {
+            IconButton(onClick = entry.listener::onDelete) {
                 Icon(
                     imageVector = Icons.Default.Close,
                     contentDescription = "削除",
                 )
             }
         },
-        modifier = Modifier.clickable(onClick = onClick),
+        modifier = Modifier.clickable(onClick = entry.listener::onClick),
     )
 }

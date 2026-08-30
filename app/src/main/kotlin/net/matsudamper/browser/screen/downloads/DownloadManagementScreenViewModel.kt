@@ -43,7 +43,15 @@ internal class DownloadManagementScreenViewModel(
     private val workManager = WorkManager.getInstance(application)
     private val downloadRepository = DownloadRepository(application)
     private val geckoDownloadManager = GeckoDownloadManager(application, downloadRepository)
-    private val screenCallbacks = buildScreenCallbacks()
+    private val screenCallbacks = object : DownloadManagementScreenUiState.Callbacks {
+        override fun onOpenDownloadsFolder() {
+            openDownloadsFolder()
+        }
+
+        override suspend fun loadPreview(fileUri: String): DownloadManagementScreenUiState.Preview {
+            return this@DownloadManagementScreenViewModel.loadPreview(fileUri)
+        }
+    }
 
     val eventHandler = Channel<(Event) -> Unit>(Channel.UNLIMITED)
 
@@ -72,11 +80,6 @@ internal class DownloadManagementScreenViewModel(
                 }
         }
     }.asStateFlow()
-
-    private fun buildScreenCallbacks() = DownloadManagementScreenUiState.Callbacks(
-        onOpenDownloadsFolder = { openDownloadsFolder() },
-        loadPreview = { fileUri -> loadPreview(fileUri) },
-    )
 
     /**
      * ダウンロード済みファイルのプレビューを読み込む。
@@ -273,18 +276,30 @@ internal class DownloadManagementScreenViewModel(
             status = uiStatus,
             enqueuedAt = enqueuedAt,
             originPageUrl = referrerUrl.ifBlank { null },
-            onCancel = { cancelDownload(workerId) },
-            onPause = { pauseDownload(workerId) },
-            onOpenFile = {
-                val completedUri = (uiStatus as? DownloadManagementScreenUiState.DownloadStatus.Completed)?.fileUri
-                if (completedUri != null) {
-                    openFile(completedUri)
+            listener = object : DownloadManagementScreenUiState.DownloadItem.Listener {
+                override fun onCancel() {
+                    cancelDownload(workerId)
                 }
-            },
-            onResume = { resumeDownload(workerId) },
-            onOpenOriginPage = {
-                referrerUrl.takeIf { it.isNotBlank() }?.let { url ->
-                    eventHandler.trySend { it.navigateToUrl(url) }
+
+                override fun onPause() {
+                    pauseDownload(workerId)
+                }
+
+                override fun onOpenFile() {
+                    val completedUri = (uiStatus as? DownloadManagementScreenUiState.DownloadStatus.Completed)?.fileUri
+                    if (completedUri != null) {
+                        openFile(completedUri)
+                    }
+                }
+
+                override fun onResume() {
+                    resumeDownload(workerId)
+                }
+
+                override fun onOpenOriginPage() {
+                    referrerUrl.takeIf { it.isNotBlank() }?.let { url ->
+                        eventHandler.trySend { it.navigateToUrl(url) }
+                    }
                 }
             },
         )

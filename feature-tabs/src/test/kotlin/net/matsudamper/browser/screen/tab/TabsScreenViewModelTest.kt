@@ -271,7 +271,7 @@ class TabsScreenViewModelTest {
         loaded.groupedTabs
             .flatten()
             .first { it.id == tabId }
-            .onClose()
+            .listener.onClose()
     }
 
     // -----------------------------------------------------------------------

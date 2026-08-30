@@ -184,9 +184,7 @@ internal fun GroupTabGrid(
                 TabCard(
                     tab = tab,
                     selected = selected,
-                    onSelect = {
-                        if (!dragDropState.isDragging) tab.onSelect()
-                    },
+                    selectEnabled = !dragDropState.isDragging,
                     bitmapCache = bitmapCache,
                     modifier = Modifier
                         .fillMaxWidth()
@@ -213,7 +211,7 @@ internal fun GroupTabGrid(
                     TabCard(
                         tab = overlayTab,
                         selected = overlayTab.id == selectedTabId,
-                        onSelect = {},
+                        selectEnabled = false,
                         bitmapCache = bitmapCache,
                         modifier = Modifier.fillMaxSize(),
                     )

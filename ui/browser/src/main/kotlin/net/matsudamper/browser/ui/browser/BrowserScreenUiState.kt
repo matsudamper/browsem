@@ -14,14 +14,24 @@ data class BrowserScreenUiState(
     data class SwipePreviewUiState(
         val previousTab: AdjacentTabPreview? = null,
         val nextTab: AdjacentTabPreview? = null,
-        val onBackToOpener: (() -> Unit)? = null,
-    )
+        val backToOpenerListener: BackToOpenerListener? = null,
+    ) {
+        @Stable
+        interface BackToOpenerListener {
+            fun onBackToOpener()
+        }
+    }
 
     @Stable
     data class AdjacentTabPreview(
         val tab: BrowserTab,
-        val onSelect: () -> Unit,
-    )
+        val listener: Listener,
+    ) {
+        @Stable
+        interface Listener {
+            fun onSelect()
+        }
+    }
 
     interface Callbacks {
         suspend fun onHistoryRecord(url: String, title: String): Long

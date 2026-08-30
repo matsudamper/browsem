@@ -459,10 +459,14 @@ private fun ToolbarMenuContent(
             HorizontalDivider()
             ExtensionActionRow(
                 actions = extensionActions.map { action ->
-                    action.copy(onClick = {
-                        onDismissRequest()
-                        action.onClick()
-                    })
+                    action.copy(
+                        listener = object : WebExtensionActionController.ActionUiState.Listener {
+                            override fun onClick() {
+                                onDismissRequest()
+                                action.listener.onClick()
+                            }
+                        },
+                    )
                 },
                 scrollState = extensionActionScrollState,
                 onActionMove = onExtensionActionMove,
@@ -680,7 +684,7 @@ private fun PreviewToolbarMenuContent() {
                         icon = null,
                         badgeText = if (index == 0) "3" else null,
                         isEnabled = index != 1,
-                        onClick = {},
+                        listener = PreviewActionListener,
                     )
                 },
                 extensionActionScrollState = ScrollState(initial = 0),

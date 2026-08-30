@@ -83,8 +83,15 @@ internal class HistoryScreenViewModel(
             title = entry.title,
             url = entry.url,
             visitedAt = entry.visitedAt,
-            onClick = { eventHandler.trySend { it.navigateToUrl(entry.url) } },
-            onDelete = { viewModelScope.launch { historyRepository.deleteById(entry.id) } },
+            listener = object : HistoryScreenUiState.EntryItem.Listener {
+                override fun onClick() {
+                    eventHandler.trySend { it.navigateToUrl(entry.url) }
+                }
+
+                override fun onDelete() {
+                    viewModelScope.launch { historyRepository.deleteById(entry.id) }
+                }
+            },
         )
     }
 

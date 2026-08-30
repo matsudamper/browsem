@@ -14,12 +14,21 @@ data class CrashLogsScreenUiState(
         val id: Long,
         val title: String,
         val occurredAt: Long,
-        val onClick: () -> Unit,
-    )
+        val listener: Listener,
+    ) {
+        @Stable
+        interface Listener {
+            fun onClick()
+        }
+    }
 
     interface Callbacks {
         fun onClickDeleteAll()
         fun onConfirmDeleteAll()
         fun onDismissDeleteAllDialog()
     }
+}
+
+internal object PreviewCrashLogEntryListener : CrashLogsScreenUiState.EntryItem.Listener {
+    override fun onClick() = Unit
 }

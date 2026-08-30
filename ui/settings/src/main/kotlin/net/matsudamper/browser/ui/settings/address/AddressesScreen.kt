@@ -90,11 +90,7 @@ fun AddressesScreen(
                     .fillMaxSize(),
             ) {
                 items(uiState.entries, key = { it.id }) { entry ->
-                    AddressListItem(
-                        entry = entry,
-                        onClick = entry.onClick,
-                        onDelete = entry.onDelete,
-                    )
+                    AddressListItem(entry = entry)
                 }
             }
         }
@@ -122,8 +118,6 @@ fun AddressesScreen(
 @Composable
 private fun AddressListItem(
     entry: AddressesScreenUiState.EntryItem,
-    onClick: () -> Unit,
-    onDelete: () -> Unit,
 ) {
     ListItem(
         headlineContent = {
@@ -146,7 +140,7 @@ private fun AddressListItem(
             }
         },
         trailingContent = {
-            IconButton(onClick = onDelete) {
+            IconButton(onClick = entry.listener::onDelete) {
                 Icon(
                     painter = painterResource(ResourcesR.drawable.ic_delete_24dp),
                     contentDescription = "削除",
@@ -155,7 +149,7 @@ private fun AddressListItem(
         },
         modifier = Modifier
             .testTag(AddressesScreenTestTags.Entry(entry.id).testTag)
-            .clickable(onClick = onClick),
+            .clickable(onClick = entry.listener::onClick),
     )
 }
 
@@ -175,8 +169,7 @@ private fun PreviewAddressesScreen() {
                         id = 1,
                         displayName = "山田 太郎",
                         displayDetail = "〒1000001 東京都千代田区千代田1-1",
-                        onClick = {},
-                        onDelete = {},
+                        listener = PreviewAddressesEntryListener,
                     ),
                 ),
                 showDeleteAllDialog = false,

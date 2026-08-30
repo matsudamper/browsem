@@ -71,7 +71,11 @@ internal class CrashLogsScreenViewModel(
             id = entry.id,
             title = entry.title,
             occurredAt = entry.occurredAt,
-            onClick = { eventHandler.trySend { it.navigateToDetail(entry.id) } },
+            listener = object : CrashLogsScreenUiState.EntryItem.Listener {
+                override fun onClick() {
+                    eventHandler.trySend { it.navigateToDetail(entry.id) }
+                }
+            },
         )
     }
 

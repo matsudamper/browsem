@@ -169,7 +169,7 @@ internal fun ExtensionActionRow(
                             val action = latestActions[index]
                             // グレー表示のアクションはそのタブで機能しないため反応させない
                             if (!action.isEnabled) return@detectTapGestures
-                            action.onClick()
+                            action.listener.onClick()
                         },
                     )
                 }
@@ -238,7 +238,7 @@ private fun ExtensionActionItem(
                 role = Role.Button
                 if (action.isEnabled) {
                     onClick(label = action.title) {
-                        action.onClick()
+                        action.listener.onClick()
                         true
                     }
                 } else {
@@ -365,7 +365,7 @@ private fun PreviewExtensionActionRow() {
                         badgeText = if (index == 0) "12" else null,
                         // そのタブで機能しないアクションはグレー表示になる
                         isEnabled = index % 3 != 1,
-                        onClick = {},
+                        listener = PreviewActionListener,
                     )
                 },
                 scrollState = ScrollState(0),

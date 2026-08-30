@@ -58,7 +58,7 @@ fun BrowserScreen(
 ) {
     val prevTab = uiState.swipePreview.previousTab
     val nextTab = uiState.swipePreview.nextTab
-    val onBackToOpener = uiState.swipePreview.onBackToOpener
+    val backToOpenerListener = uiState.swipePreview.backToOpenerListener
 
     val selectedTab = browserTabController.findTab(tabId)
     LaunchedEffect(tabId, homepageUrl, selectedTab) {
@@ -116,14 +116,14 @@ fun BrowserScreen(
         // リンクから開いたタブ（opener あり）で、まだページ内を遷移しておらず
         // (canGoBack=false)、前のタブが opener 本人である場合のみ予測型バックを有効化する。
         // この状態でのバックは「タブを閉じて opener へ戻る」ため、前のタブへスライドさせる。
-        val backToOpenerEnabled = onBackToOpener != null
+        val backToOpenerEnabled = backToOpenerListener != null
         PredictiveBackHandler(enabled = backToOpenerEnabled) { progress ->
             try {
                 progress.collect { backEvent ->
                     swipeOffset.snapTo(pageWidthPx * backEvent.progress)
                 }
                 swipeOffset.animateTo(pageWidthPx)
-                onBackToOpener?.invoke()
+                backToOpenerListener?.onBackToOpener()
             } catch (e: CancellationException) {
                 // キャンセル：元の位置へ戻す（handler のコルーチンは終了するため別スコープで実行）
                 coroutineScope.launch { swipeOffset.animateTo(0f) }
@@ -176,14 +176,14 @@ fun BrowserScreen(
                     swipeOffset.value > swipeThreshold && prevTab != null -> {
                         coroutineScope.launch {
                             swipeOffset.animateTo(pageWidthPx)
-                            prevTab.onSelect()
+                            prevTab.listener.onSelect()
                         }
                     }
 
                     swipeOffset.value < -swipeThreshold && nextTab != null -> {
                         coroutineScope.launch {
                             swipeOffset.animateTo(-pageWidthPx)
-                            nextTab.onSelect()
+                            nextTab.listener.onSelect()
                         }
                     }
 

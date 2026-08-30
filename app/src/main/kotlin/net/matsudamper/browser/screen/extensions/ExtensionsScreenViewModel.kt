@@ -160,9 +160,19 @@ internal class ExtensionsScreenViewModel(
             hasSettingsPage = extension.metaData.optionsPageUrl?.isNotBlank() == true,
             isEnabled = ExtensionGlobalController.isUserEnabled(extension),
             isBuiltIn = extension.isBuiltIn,
-            onOpenSettings = { openExtensionSettings(extension) },
-            onUninstall = { uninstallExtension(extension) },
-            onToggle = { enabled -> setExtensionEnabled(extension, enabled) },
+            listener = object : ExtensionsScreenUiState.ExtensionUiState.Listener {
+                override fun onOpenSettings() {
+                    openExtensionSettings(extension)
+                }
+
+                override fun onUninstall() {
+                    uninstallExtension(extension)
+                }
+
+                override fun onToggle(enabled: Boolean) {
+                    setExtensionEnabled(extension, enabled)
+                }
+            },
         )
     }
 

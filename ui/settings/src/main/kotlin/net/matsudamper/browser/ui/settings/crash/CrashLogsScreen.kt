@@ -107,7 +107,6 @@ internal fun CrashLogsScreen(
                         CrashLogSummaryListItem(
                             entry = entry,
                             dateFormat = dateFormat,
-                            onClick = entry.onClick,
                         )
                     }
                 }
@@ -138,7 +137,6 @@ internal fun CrashLogsScreen(
 private fun CrashLogSummaryListItem(
     entry: CrashLogsScreenUiState.EntryItem,
     dateFormat: SimpleDateFormat,
-    onClick: () -> Unit,
 ) {
     ListItem(
         headlineContent = {
@@ -157,7 +155,7 @@ private fun CrashLogSummaryListItem(
         },
         modifier = Modifier
             .testTag(CrashLogsScreenTestTags.Entry(entry.id).testTag)
-            .clickable(onClick = onClick),
+            .clickable(onClick = entry.listener::onClick),
     )
 }
 
@@ -179,7 +177,7 @@ private fun PreviewCrashLogsScreen() {
                     id = 1,
                     occurredAt = 1_700_000_000_000,
                     title = "java.lang.RuntimeException: Something went wrong in the browser",
-                    onClick = {},
+                    listener = PreviewCrashLogEntryListener,
                 ),
             ),
             showDeleteAllDialog = false,

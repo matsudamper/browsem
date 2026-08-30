@@ -33,8 +33,18 @@ class WebExtensionActionController(private val runtime: GeckoRuntime) {
         val badgeText: String?,
         /** そのタブで機能するか。false ならグレー表示で操作できない */
         val isEnabled: Boolean,
-        val onClick: () -> Unit,
-    )
+        val listener: Listener,
+    ) {
+        @Stable
+        interface Listener {
+            fun onClick()
+        }
+    }
+
+    @Stable
+    interface ActionClickHandler {
+        fun onActionClick(extensionId: String)
+    }
 
     /** 拡張機能のポップアップ (browser_action の default_popup) の表示要求 */
     @Stable
@@ -177,22 +187,27 @@ class WebExtensionActionController(private val runtime: GeckoRuntime) {
      */
     fun actions(
         session: GeckoSession,
-        onActionClick: (extensionId: String) -> Unit,
+        actionClickHandler: ActionClickHandler,
     ): List<ActionUiState> {
         val overrides = sessionActions[session]
         return extensions.values.mapNotNull { extension ->
             val resolved = resolveAction(extension.id, overrides) ?: return@mapNotNull null
             val action = resolved.action
+            val extensionId = extension.id
             ActionUiState(
-                extensionId = extension.id,
+                extensionId = extensionId,
                 title = action.title?.takeIf { it.isNotBlank() }
                     ?: extension.metaData.name?.takeIf { it.isNotBlank() }
                     ?: extension.id,
-                icon = iconBitmap(session, extension.id, resolved.type),
+                icon = iconBitmap(session, extensionId, resolved.type),
                 badgeText = action.badgeText?.takeIf { it.isNotBlank() },
                 // enabled は未指定 (null) のとき有効扱い。pageAction は show() 済みのみ有効
                 isEnabled = action.enabled != false,
-                onClick = { onActionClick(extension.id) },
+                listener = object : ActionUiState.Listener {
+                    override fun onClick() {
+                        actionClickHandler.onActionClick(extensionId)
+                    }
+                },
             )
         }.sortedBy { it.title.lowercase() }
     }
@@ -359,4 +374,8 @@ class WebExtensionActionController(private val runtime: GeckoRuntime) {
         /** 正規化テーブルに保持するアイコンの上限 */
         private const val MAX_CANONICAL_BITMAPS = 64
     }
+}
+
+object PreviewActionListener : WebExtensionActionController.ActionUiState.Listener {
+    override fun onClick() = Unit
 }

@@ -89,7 +89,7 @@ fun DownloadManagementScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = uiState.callbacks.onOpenDownloadsFolder) {
+                    IconButton(onClick = uiState.callbacks::onOpenDownloadsFolder) {
                         Icon(
                             imageVector = Icons.Default.FolderOpen,
                             contentDescription = "ダウンロードフォルダを開く",
@@ -139,7 +139,7 @@ fun DownloadManagementScreen(
                 ) { item ->
                     DownloadItemRow(
                         item = item,
-                        loadPreview = uiState.callbacks.loadPreview,
+                        loadPreview = uiState.callbacks::loadPreview,
                         isHighlighted = item.id == activeHighlightId,
                         onHighlightFinished = {
                             activeHighlightId = null
@@ -204,7 +204,7 @@ private fun DownloadItemRow(
                 enabled = item.originPageUrl != null,
                 onClick = {
                     menuExpanded = false
-                    item.onOpenOriginPage()
+                    item.listener.onOpenOriginPage()
                 },
             )
         }
@@ -217,7 +217,7 @@ private fun DownloadItemRow(
                     indication = ripple(),
                     onLongClick = { menuExpanded = true },
                     onClick = {
-                    item.onOpenFile()
+                    item.listener.onOpenFile()
                 },
                 )
                 .padding(horizontal = 16.dp, vertical = 12.dp),
@@ -297,12 +297,12 @@ private fun DownloadItemRow(
                                 DownloadIconButton(
                                     iconRes = R.drawable.ic_pause,
                                     contentDescription = "一時停止",
-                                    onClick = item.onPause,
+                                    onClick = item.listener::onPause,
                                 )
                                 DownloadIconButton(
                                     iconRes = R.drawable.ic_close,
                                     contentDescription = "キャンセル",
-                                    onClick = item.onCancel,
+                                    onClick = item.listener::onCancel,
                                 )
                             }
                         }
@@ -314,13 +314,13 @@ private fun DownloadItemRow(
                                     DownloadIconButton(
                                         iconRes = R.drawable.ic_play_arrow,
                                         contentDescription = "再開",
-                                        onClick = item.onResume,
+                                        onClick = item.listener::onResume,
                                     )
                                 }
                                 DownloadIconButton(
                                     iconRes = R.drawable.ic_close,
                                     contentDescription = "キャンセル",
-                                    onClick = item.onCancel,
+                                    onClick = item.listener::onCancel,
                                 )
                             }
                         }
@@ -332,7 +332,7 @@ private fun DownloadItemRow(
                                 DownloadIconButton(
                                     iconRes = R.drawable.ic_play_arrow,
                                     contentDescription = "再開",
-                                    onClick = item.onResume,
+                                    onClick = item.listener::onResume,
                                 )
                             } else {
                                 Text(
@@ -494,11 +494,7 @@ private fun PreviewInProgress() {
                 ),
                 enqueuedAt = 0L,
                 originPageUrl = "https://example.com/page",
-                onCancel = {},
-                onPause = {},
-                onOpenFile = {},
-                onResume = {},
-                onOpenOriginPage = {},
+                listener = PreviewDownloadItemListener,
             ),
             loadPreview = { DownloadManagementScreenUiState.Preview.FileType(
                 DownloadManagementScreenUiState.DownloadFileType.UNKNOWN,
@@ -525,11 +521,7 @@ private fun PreviewPaused() {
                 ),
                 enqueuedAt = 0L,
                 originPageUrl = "https://example.com/page",
-                onCancel = {},
-                onPause = {},
-                onOpenFile = {},
-                onResume = {},
-                onOpenOriginPage = {},
+                listener = PreviewDownloadItemListener,
             ),
             loadPreview = { DownloadManagementScreenUiState.Preview.FileType(
                 DownloadManagementScreenUiState.DownloadFileType.UNKNOWN,
@@ -556,11 +548,7 @@ private fun PreviewPausedCannotResume() {
                 ),
                 enqueuedAt = 0L,
                 originPageUrl = "https://fonts.google.com/icons",
-                onCancel = {},
-                onPause = {},
-                onOpenFile = {},
-                onResume = {},
-                onOpenOriginPage = {},
+                listener = PreviewDownloadItemListener,
             ),
             loadPreview = { DownloadManagementScreenUiState.Preview.FileType(
                 DownloadManagementScreenUiState.DownloadFileType.UNKNOWN,
@@ -585,11 +573,7 @@ private fun PreviewFailedCanResume() {
                 ),
                 enqueuedAt = 0L,
                 originPageUrl = "https://example.com/page",
-                onCancel = {},
-                onPause = {},
-                onOpenFile = {},
-                onResume = {},
-                onOpenOriginPage = {},
+                listener = PreviewDownloadItemListener,
             ),
             loadPreview = { DownloadManagementScreenUiState.Preview.FileType(
                 DownloadManagementScreenUiState.DownloadFileType.UNKNOWN,
@@ -621,11 +605,7 @@ private fun PreviewCompletedWithThumbnail() {
                 ),
                 enqueuedAt = 0L,
                 originPageUrl = "https://example.com/page",
-                onCancel = {},
-                onPause = {},
-                onOpenFile = {},
-                onResume = {},
-                onOpenOriginPage = {},
+                listener = PreviewDownloadItemListener,
             ),
             loadPreview = { DownloadManagementScreenUiState.Preview.Thumbnail(thumbnail) },
             isHighlighted = false,
@@ -663,11 +643,7 @@ private fun PreviewCompletedWithAppIcon() {
                 ),
                 enqueuedAt = 0L,
                 originPageUrl = "https://example.com/page",
-                onCancel = {},
-                onPause = {},
-                onOpenFile = {},
-                onResume = {},
-                onOpenOriginPage = {},
+                listener = PreviewDownloadItemListener,
             ),
             loadPreview = { DownloadManagementScreenUiState.Preview.AppIcon(icon) },
             isHighlighted = false,
@@ -698,11 +674,7 @@ private fun PreviewCompletedFileTypeIcons() {
                         ),
                         enqueuedAt = 0L,
                         originPageUrl = null,
-                        onCancel = {},
-                        onPause = {},
-                        onOpenFile = {},
-                        onResume = {},
-                        onOpenOriginPage = {},
+                        listener = PreviewDownloadItemListener,
                     ),
                     loadPreview = { DownloadManagementScreenUiState.Preview.FileType(fileType) },
                     isHighlighted = false,
@@ -727,11 +699,7 @@ private fun PreviewFailedCannotResume() {
                 ),
                 enqueuedAt = 0L,
                 originPageUrl = null,
-                onCancel = {},
-                onPause = {},
-                onOpenFile = {},
-                onResume = {},
-                onOpenOriginPage = {},
+                listener = PreviewDownloadItemListener,
             ),
             loadPreview = { DownloadManagementScreenUiState.Preview.FileType(
                 DownloadManagementScreenUiState.DownloadFileType.UNKNOWN,
@@ -755,11 +723,7 @@ private fun PreviewLongFileName() {
                 ),
                 enqueuedAt = 0L,
                 originPageUrl = "https://example.com/page",
-                onCancel = {},
-                onPause = {},
-                onOpenFile = {},
-                onResume = {},
-                onOpenOriginPage = {},
+                listener = PreviewDownloadItemListener,
             ),
             loadPreview = { DownloadManagementScreenUiState.Preview.FileType(
                 DownloadManagementScreenUiState.DownloadFileType.UNKNOWN,
