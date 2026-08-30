@@ -7,6 +7,8 @@ import android.content.Intent
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.util.Log
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
@@ -16,6 +18,7 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import net.matsudamper.browser.AutoplayPermissionDialogTestTags
+import net.matsudamper.browser.BrowserToolbarTestTags
 import net.matsudamper.browser.GeckoBrowserTabTestTags
 import net.matsudamper.browser.LocalHttpServer
 import net.matsudamper.browser.MainActivity
@@ -115,6 +118,30 @@ class MediaPrimarySelectionTest {
             composeRule.waitForUrlBarContains(LOCAL_MEDIA_PLAYLIST_FILE_NAME, timeoutMillis = 60_000)
         }
         composeRule.waitForUrlBarNotFocused(timeoutMillis = 30_000)
+        waitForPageLoadComplete()
+    }
+
+    /**
+     * URL バーに停止ボタンが表示されている間はページロード中のため、
+     * Gecko へのタップで再生開始できないことがある。更新ボタンへ戻るまで待つ。
+     * 狭い画面でツールバーに更新ボタンが出ない場合は即座に完了する。
+     */
+    private fun waitForPageLoadComplete(timeoutMillis: Long = PAGE_LOAD_COMPLETE_TIMEOUT_MS) {
+        composeRule.waitUntil(timeoutMillis = timeoutMillis) {
+            !isPageStopButtonVisible()
+        }
+    }
+
+    private fun isPageStopButtonVisible(): Boolean {
+        return composeRule
+            .onAllNodesWithTag(BrowserToolbarTestTags.RefreshButton.testTag)
+            .fetchSemanticsNodes(atLeastOneRootRequired = false)
+            .any { node ->
+                runCatching {
+                    node.config[SemanticsProperties.ContentDescription]
+                        .any { description -> description.toString() == PAGE_STOP_CONTENT_DESCRIPTION }
+                }.getOrDefault(false)
+            }
     }
 
     /**
@@ -159,31 +186,11 @@ class MediaPrimarySelectionTest {
     }
 
     private fun ensureMediaPlaybackStarted() {
-        // 可聴 autoplay の確認ダイアログが出ていると play() が GeckoResult 待ちのまま進まない。
-        // CI ではダイアログを閉じずにタップしても再生が始まらず、tearDown で
-        // allow=false になるまで 30 秒近く滞留した。
-        confirmAutoplayPermissionIfShown()
         waitUntil(timeoutMs = AUTOSTART_GRACE_PERIOD_MS, ::hasPlaybackStarted)?.let {
             return
         }
-        runCatching {
-            composeRule.waitUntil(timeoutMillis = AUTOPLAY_DIALOG_WAIT_MS) {
-                hasPlaybackStarted(MediaSessionBridge.playbackState.value) ||
-                    isAutoplayPermissionDialogVisible()
-            }
-        }
-        confirmAutoplayPermissionIfShown()
-        waitUntil(timeoutMs = PLAYBACK_START_CONFIRM_TIMEOUT_MS, ::hasPlaybackStarted)?.let {
+        if (startPlaybackByTapping()) {
             return
-        }
-        val geckoNode = composeRule.onNodeWithTag(GeckoBrowserTabTestTags.GeckoContainer.testTag)
-        repeat(PLAYBACK_TAP_RETRY_COUNT) {
-            confirmAutoplayPermissionIfShown()
-            geckoNode.performTouchInput { click() }
-            composeRule.waitForIdle()
-            waitUntil(timeoutMs = PLAYBACK_START_CONFIRM_TIMEOUT_MS, ::hasPlaybackStarted)?.let {
-                return
-            }
         }
         throw AssertionError(
             "タップ後も再生が開始されない state=${MediaSessionBridge.playbackState.value}",
@@ -191,24 +198,43 @@ class MediaPrimarySelectionTest {
     }
 
     /**
-     * 自動再生の確認ダイアログが出ていれば「今回のみ許可」を押す。
-     * 永続化しないので他テストのサイト設定を汚さない。
+     * GeckoView をタップして再生を開始し、isPlaying になるまで待つ。
+     * 自動再生ダイアログは「却下」で閉じる。ユーザー操作による再生はブロックされない。
      */
-    private fun confirmAutoplayPermissionIfShown() {
-        if (!isAutoplayPermissionDialogVisible()) return
-        runCatching {
-            composeRule
-                .onNodeWithTag(AutoplayPermissionDialogTestTags.AllowOnce.testTag)
-                .performClick()
-            composeRule.waitForIdle()
+    private fun startPlaybackByTapping(): Boolean {
+        repeat(PLAYBACK_TAP_RETRY_COUNT) { index ->
+            dismissAutoplayPermissionDialogIfShown()
+            Log.d(TAG, "タップ試行${index + 1}/$PLAYBACK_TAP_RETRY_COUNT")
+            runCatching {
+                composeRule.onNodeWithTag(GeckoBrowserTabTestTags.GeckoContainer.testTag)
+                    .performTouchInput { click() }
+            }.onFailure { Log.d(TAG, "タップ失敗: ${it.message}") }
+            val deadline = SystemClock.elapsedRealtime() + PLAYBACK_START_CONFIRM_TIMEOUT_MS
+            while (SystemClock.elapsedRealtime() < deadline) {
+                if (hasPlaybackStarted(MediaSessionBridge.playbackState.value)) {
+                    Log.d(TAG, "タップ試行${index + 1}で再生開始を確認")
+                    return true
+                }
+                Thread.sleep(POLL_INTERVAL_MS)
+            }
+            Log.d(TAG, "タップ試行${index + 1}完了: 再生未開始 state=${MediaSessionBridge.playbackState.value}")
         }
+        return hasPlaybackStarted(MediaSessionBridge.playbackState.value)
     }
 
-    private fun isAutoplayPermissionDialogVisible(): Boolean {
-        return composeRule
-            .onAllNodesWithTag(AutoplayPermissionDialogTestTags.AllowOnce.testTag)
+    /**
+     * 自動再生の確認ダイアログが表示されていれば「却下」を押して閉じる。
+     */
+    private fun dismissAutoplayPermissionDialogIfShown() {
+        val denyNode = composeRule
+            .onAllNodesWithTag(AutoplayPermissionDialogTestTags.Deny.testTag)
             .fetchSemanticsNodes(atLeastOneRootRequired = false)
-            .isNotEmpty()
+        if (denyNode.isEmpty()) return
+        Log.d(TAG, "自動再生の確認ダイアログを却下で閉じる")
+        runCatching {
+            composeRule.onNodeWithTag(AutoplayPermissionDialogTestTags.Deny.testTag).performClick()
+            composeRule.waitForIdle()
+        }.onFailure { Log.d(TAG, "ダイアログ却下に失敗: ${it.message}") }
     }
 
     /**
@@ -239,11 +265,13 @@ class MediaPrimarySelectionTest {
     }
 
     companion object {
+        private const val TAG = "MediaPrimarySelectionTest"
         private const val TEST_TIMEOUT_MS = 180_000L
         private const val AUTOSTART_GRACE_PERIOD_MS = 2_000L
-        private const val AUTOPLAY_DIALOG_WAIT_MS = 5_000L
         private const val PLAYBACK_TAP_RETRY_COUNT = 10
         private const val PLAYBACK_START_CONFIRM_TIMEOUT_MS = 2_500L
+        private const val PAGE_LOAD_COMPLETE_TIMEOUT_MS = 60_000L
+        private const val PAGE_STOP_CONTENT_DESCRIPTION = "読み込みを停止"
         private const val FIRST_TRACK_TIMEOUT_MS = 20_000L
         private const val TRACK_SWITCH_TIMEOUT_MS = 20_000L
         private const val POLL_INTERVAL_MS = 100L

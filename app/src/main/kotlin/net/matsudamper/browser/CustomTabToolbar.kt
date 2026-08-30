@@ -74,6 +74,8 @@ internal fun CustomTabToolbar(
     onPageZoomIn: () -> Unit,
     onPageZoomOut: () -> Unit,
     onResetPageZoom: () -> Unit,
+    isPageLoading: Boolean = false,
+    onStopLoading: () -> Unit = {},
     showCloseButton: Boolean = true,
     showHome: Boolean = false,
 ) {
@@ -151,6 +153,8 @@ internal fun CustomTabToolbar(
                     onDismissRequest = { menuExpanded = false },
                     onRefresh = onRefresh,
                     onSuperRefresh = onSuperRefresh,
+                    isPageLoading = isPageLoading,
+                    onStopLoading = onStopLoading,
                     onHome = onHome,
                     onForward = onForward,
                     canGoForward = canGoForward,
