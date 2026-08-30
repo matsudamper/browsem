@@ -5,7 +5,6 @@ import androidx.compose.runtime.Stable
 @Stable
 data class SiteFormInputPathScreenUiState(
     val callbacks: Callbacks,
-    val displayOrigin: String,
     val path: String,
     val displayPath: String,
     val fields: List<FieldEntry>,
