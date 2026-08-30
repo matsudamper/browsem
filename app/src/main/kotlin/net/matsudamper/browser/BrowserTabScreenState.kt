@@ -5,6 +5,8 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.os.Handler
+import android.os.Looper
 import android.os.SystemClock
 import android.util.Log
 import android.widget.Toast
@@ -169,6 +171,7 @@ internal class BrowserTabScreenState(
     // onLocationChange で履歴記録をスキップする残り回数
     // goBack() / goForward() を複数回連続で呼ぶ場合にもカウンタで対応する
     private var skipHistoryRecordCount: Int = 0
+    private val mainHandler = Handler(Looper.getMainLooper())
     var webAppManifestJson by mutableStateOf<String?>(null)
 
     // --- タブ内ナビゲーション履歴（GeckoView の HistoryDelegate から同期） ---
@@ -1289,9 +1292,14 @@ internal class BrowserTabScreenState(
             // SPA 遷移（pushState / 同一ドキュメント内 history 移動）では
             // onPageStart / onPageStop が発火しないため両フラグを復帰させる
             markRenderingDone()
-            // onPageStop が発火しないため、ここでズームを再適用する
+            // onPageStop が発火しないため、ここでズームを再適用する。
+            // onLocationChange コールバック内から同期的に loadUri すると注入が失敗することがあるため、
+            // 次のメインスレッド dispatch まで遅延する（UI dispatcher の launch では即時実行される）。
             if (shouldReapplyPageZoomOnSpaLocationChange(pageZoomPercent, wasFullPageLoad)) {
-                injectViewportZoom(pageZoomPercent)
+                val zoomToApply = pageZoomPercent
+                mainHandler.post {
+                    injectViewportZoom(zoomToApply)
+                }
             }
         }
         currentPageUrl = url
