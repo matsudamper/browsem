@@ -50,6 +50,7 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -58,6 +59,13 @@ import net.matsudamper.browser.data.SearchProvider
 import net.matsudamper.browser.data.ThemeMode
 import net.matsudamper.browser.data.TranslationProvider
 import net.matsudamper.browser.resources.R as ResourcesR
+
+sealed interface SettingsScreenTestTags {
+    val id: String
+    val testTag get() = "${SettingsScreenTestTags::class.java.name}#$id"
+
+    data object Root : SettingsScreenTestTags { override val id = "root" }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -79,7 +87,7 @@ fun SettingsScreen(
     }
 
     Scaffold(
-        modifier = modifier,
+        modifier = modifier.testTag(SettingsScreenTestTags.Root.testTag),
         topBar = {
             TopAppBar(
                 title = { Text("設定") },

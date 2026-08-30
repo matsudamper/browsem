@@ -149,12 +149,31 @@ internal fun BrowserApp(
             // 履歴・ダウンロード画面から URL を開く際、内側ナビのタブ選択が必要。
             // MainBrowserContent がコンポジションに戻ってから消費される。
             val selectTabRequester = remember { SelectTabRequester() }
+            val tabGroupRepository: TabGroupRepository = koinInject()
             BrowserAppShell(
                 browserTabController = viewModel.browserTabController,
                 browserSessionLifecycleController = viewModel.browserSessionLifecycleController,
                 runtime = viewModel.runtime,
                 openDownloadsFlow = openDownloadsFlow,
                 onOpenDownloadsRequestConsumed = onOpenDownloadsRequestConsumed,
+                newTabUrlFlow = newTabUrlFlow,
+                onExternalTabRequest = { request ->
+                    viewModel.setupComplete.await()
+                    val tabId = UUID.randomUUID().toString()
+                    val defaultGroupId = tabGroupRepository.getDefaultGroupId()
+                    if (defaultGroupId != null) {
+                        tabGroupRepository.assignTabToGroup(tabId, defaultGroupId)
+                    }
+                    val newTab = viewModel.browserTabController.createAndAppendTab(
+                        tabId = tabId,
+                        initialUrl = request.url,
+                        restoredSessionState = request.sessionState,
+                        initialReferrerUrl = request.referrerUrl,
+                        insertAfterSelectedTab = false,
+                    )
+                    viewModel.registerExternalTab(newTab.tabId)
+                    selectTabRequester.request(newTab.tabId)
+                },
                 onNavigateToUrl = { url ->
                     val tabId = UUID.randomUUID().toString()
                     val newTab = viewModel.browserTabController.createAndAppendTab(
@@ -167,7 +186,6 @@ internal fun BrowserApp(
                 MainBrowserContent(
                     uiState = uiState,
                     viewModel = viewModel,
-                    newTabUrlFlow = newTabUrlFlow,
                     onInstallExtensionRequest = onInstallExtensionRequest,
                     onRequestDownloadNotificationPermission = onRequestDownloadNotificationPermission,
                     outerNavActions = outerNavActions,
@@ -189,6 +207,8 @@ internal fun BrowserApp(
  *   呼び出し側がタブ作成と内側ナビの更新を行う。
  *   タブ UI を持たない WebApp / CustomTab では null を渡す。この場合 URL タップは
  *   何もしない（画面も閉じない）。
+ * @param onExternalTabRequest 外部 Intent から新規タブを開く際のコールバック。
+ *   呼び出し側がタブ作成と内側ナビの更新を行う。受信時に外側スタックは Root まで戻す。
  */
 @Composable
 internal fun BrowserAppShell(
@@ -197,6 +217,8 @@ internal fun BrowserAppShell(
     runtime: GeckoRuntime,
     openDownloadsFlow: Flow<OpenDownloadsRequest>? = null,
     onOpenDownloadsRequestConsumed: ((String) -> Unit)? = null,
+    newTabUrlFlow: Flow<NewTabRequest>? = null,
+    onExternalTabRequest: (suspend (NewTabRequest) -> Unit)? = null,
     onNavigateToUrl: (suspend (url: String) -> Unit)? = null,
     rootContent: @Composable (outerNavActions: OuterNavActions) -> Unit,
 ) {
@@ -226,6 +248,15 @@ internal fun BrowserAppShell(
                     repeat(removeCount) { outerBackStack.removeLastOrNull() }
                 }
             }.launchIn(this)
+        }
+    }
+
+    if (newTabUrlFlow != null && onExternalTabRequest != null) {
+        LaunchedEffect(newTabUrlFlow, onExternalTabRequest) {
+            newTabUrlFlow.collect { request ->
+                outerNavActions.popToRoot()
+                onExternalTabRequest(request)
+            }
         }
     }
 
@@ -522,9 +553,7 @@ internal fun BrowserAppShell(
                                     val navigateToUrl = onNavigateToUrl ?: return
                                     scope.launch {
                                         navigateToUrl(url)
-                                        while (outerBackStack.size > 1) {
-                                            outerBackStack.removeLastOrNull()
-                                        }
+                                        outerNavActions.popToRoot()
                                     }
                                 }
                             })
@@ -726,9 +755,7 @@ internal fun BrowserAppShell(
                                     val navigateToUrl = onNavigateToUrl ?: return
                                     scope.launch {
                                         navigateToUrl(url)
-                                        while (outerBackStack.size > 1) {
-                                            outerBackStack.removeLastOrNull()
-                                        }
+                                        outerNavActions.popToRoot()
                                     }
                                 }
 
@@ -863,6 +890,12 @@ internal class OuterNavActions(private val backStack: MutableList<NavKey>) {
         if (backStack.none { it == destination }) backStack.add(destination)
     }
 
+    fun popToRoot() {
+        while (backStack.size > 1) {
+            backStack.removeLastOrNull()
+        }
+    }
+
     /**
      * 現在のページのホストでサイト設定を開く。ホストを取り出せない URL（about: など）では何もしない。
      */
@@ -904,7 +937,6 @@ internal class SelectTabRequester {
 private fun MainBrowserContent(
     uiState: BrowserAppUiState,
     viewModel: BrowserViewModel,
-    newTabUrlFlow: Flow<NewTabRequest>,
     onInstallExtensionRequest: (String) -> Unit,
     onRequestDownloadNotificationPermission: suspend () -> Unit,
     outerNavActions: OuterNavActions,
@@ -974,26 +1006,6 @@ private fun MainBrowserContent(
                     }
                 }
             })
-        }
-    }
-
-    LaunchedEffect(newTabUrlFlow) {
-        setupComplete.await()
-        newTabUrlFlow.collect { request ->
-            val tabId = UUID.randomUUID().toString()
-            val defaultGroupId = tabGroupRepository.getDefaultGroupId()
-            if (defaultGroupId != null) {
-                tabGroupRepository.assignTabToGroup(tabId, defaultGroupId)
-            }
-            val newTab = browserTabController.createAndAppendTab(
-                tabId = tabId,
-                initialUrl = request.url,
-                restoredSessionState = request.sessionState,
-                initialReferrerUrl = request.referrerUrl,
-                insertAfterSelectedTab = false,
-            )
-            viewModel.registerExternalTab(newTab.tabId)
-            selectTab(newTab.tabId, null)
         }
     }
 

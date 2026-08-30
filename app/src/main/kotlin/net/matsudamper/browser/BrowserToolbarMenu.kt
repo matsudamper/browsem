@@ -640,6 +640,7 @@ private fun ToolbarMenuContent(
                         contentDescription = null,
                     )
                 },
+                modifier = Modifier.testTag(BrowserToolbarMenuTestTags.SettingsButton.testTag),
                 onClick = {
                     onDismissRequest()
                     onOpenSettings()
@@ -940,4 +941,5 @@ sealed interface BrowserToolbarMenuTestTags {
     object ShareButton : BrowserToolbarMenuTestTags { override val id = "share_button" }
     object HomeButton : BrowserToolbarMenuTestTags { override val id = "home_button" }
     object DevToolsButton : BrowserToolbarMenuTestTags { override val id = "dev_tools_button" }
+    object SettingsButton : BrowserToolbarMenuTestTags { override val id = "settings_button" }
 }
