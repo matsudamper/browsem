@@ -27,6 +27,7 @@ koin = "4.2.2"
 androidxBrowser = "1.10.0"
 uiautomator = "2.4.0"
 detekt = "2.0.0-alpha.6"
+ktlint = "14.2.0"
 composeRules = "0.6.4"
 mockk = "1.14.11"
 androidsvg = "1.4"
@@ -98,3 +99,4 @@ kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", versi
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
 paparazzi = { id = "app.cash.paparazzi", version.ref = "paparazzi" }
 detekt = { id = "dev.detekt", version.ref = "detekt" }
+ktlint = { id = "org.jlleitschuh.gradle.ktlint", version.ref = "ktlint" }

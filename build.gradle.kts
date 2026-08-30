@@ -1,5 +1,6 @@
 import com.android.build.api.dsl.ApplicationExtension
 import com.android.build.api.dsl.LibraryExtension
+import org.jlleitschuh.gradle.ktlint.KtlintExtension
 
 plugins {
     alias(libs.plugins.android.application) apply false
@@ -10,6 +11,7 @@ plugins {
     alias(libs.plugins.kotlin.serialization) apply false
     alias(libs.plugins.ksp) apply false
     alias(libs.plugins.paparazzi) apply false
+    alias(libs.plugins.ktlint)
 }
 
 val robolectricPropertiesFile = layout.projectDirectory.file("robolectric.properties")
@@ -60,6 +62,17 @@ fun Project.wireRobolectricPropertiesFromRootForApp() {
     }
     tasks.withType<Test>().configureEach {
         dependsOn(rootProject.tasks.named("syncRobolectricProperties"))
+    }
+}
+
+allprojects {
+    apply(plugin = "org.jlleitschuh.gradle.ktlint")
+
+    configure<KtlintExtension> {
+        filter {
+            verbose.set(true)
+            exclude { it.file.path.contains("generated") }
+        }
     }
 }
 
