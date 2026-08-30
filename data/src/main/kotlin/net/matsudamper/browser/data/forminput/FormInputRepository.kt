@@ -321,15 +321,25 @@ class FormInputRepository(context: Context) {
                 host = origin.host,
                 port = origin.port,
                 path = path,
-            ) == 0
+            ) != 0
         ) {
-            dao.deletePreferencesForPath(
+            return
+        }
+        if (dao.countFieldPreferencesForPath(
                 scheme = origin.scheme,
                 host = origin.host,
                 port = origin.port,
                 path = path,
-            )
+            ) > 0
+        ) {
+            return
         }
+        dao.deletePreferencesForPath(
+            scheme = origin.scheme,
+            host = origin.host,
+            port = origin.port,
+            path = path,
+        )
     }
 
     private fun resolvePathEnabled(preferences: List<FormInputPreferenceEntity>): Boolean {

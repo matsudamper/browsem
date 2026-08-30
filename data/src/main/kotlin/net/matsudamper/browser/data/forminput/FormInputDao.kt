@@ -134,6 +134,20 @@ interface FormInputDao {
 
     @Query(
         """
+        SELECT COUNT(*) FROM form_input_preference
+        WHERE scheme = :scheme AND host = :host AND port = :port
+          AND path = :path AND fieldKey != ''
+        """,
+    )
+    suspend fun countFieldPreferencesForPath(
+        scheme: String,
+        host: String,
+        port: Int,
+        path: String,
+    ): Int
+
+    @Query(
+        """
         SELECT COUNT(DISTINCT path) FROM form_field_value
         WHERE scheme = :scheme AND host = :host AND port = :port
         """,
