@@ -1,4 +1,4 @@
-package net.matsudamper.browser.ui.settings
+package net.matsudamper.browser.ui.settings.form
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
