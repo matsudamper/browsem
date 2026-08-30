@@ -130,6 +130,38 @@ class FormInputDatabaseMigrationTest {
         }
     }
 
+    @Test
+    fun migrate4To5RemovesPathScopePreferences() {
+        helper.createDatabase(TEST_DB, 4).apply {
+            execSQL(
+                "INSERT INTO form_input_preference " +
+                    "(scheme, host, port, path, fieldKey, enabled) " +
+                    "VALUES ('https', 'example.com', 443, '/form', '', 0)",
+            )
+            execSQL(
+                "INSERT INTO form_input_preference " +
+                    "(scheme, host, port, path, fieldKey, enabled) " +
+                    "VALUES ('https', 'example.com', 443, '/form', 'comment', 1)",
+            )
+            close()
+        }
+
+        helper.runMigrationsAndValidate(TEST_DB, 5, true, *FormInputDatabase.ALL_MIGRATIONS).use { db ->
+            db.query(
+                "SELECT COUNT(*) FROM form_input_preference WHERE fieldKey = ''",
+            ).use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertEquals(0, cursor.getInt(0))
+            }
+            db.query(
+                "SELECT COUNT(*) FROM form_input_preference WHERE fieldKey = 'comment'",
+            ).use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertEquals(1, cursor.getInt(0))
+            }
+        }
+    }
+
     companion object {
         private const val TEST_DB = "form-input-migration-test"
     }

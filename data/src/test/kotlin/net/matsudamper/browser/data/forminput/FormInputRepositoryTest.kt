@@ -181,24 +181,6 @@ class FormInputRepositoryTest {
     }
 
     @Test
-    fun registerFieldAndSaveRecordsFieldWhenPathDisabled() = runBlocking {
-        val page = FormInputPageKey(
-            scheme = "https",
-            host = "example.com",
-            port = 443,
-            path = "/form",
-        )
-        repository.setPathEnabled(page.origin(), page.path, enabled = false)
-        repository.registerFieldAndSave(
-            pageKey = page,
-            fields = listOf(FormFieldEntry(fieldKey = "comment", value = "hello")),
-        )
-
-        assertTrue(repository.isFieldRegistered(page.origin(), page.path, "comment"))
-        assertTrue(repository.getSuggestions(pageKey = page, fieldKey = "comment").isEmpty())
-    }
-
-    @Test
     fun deleteFieldRemovesRegistration() = runBlocking {
         val page = FormInputPageKey(
             scheme = "https",

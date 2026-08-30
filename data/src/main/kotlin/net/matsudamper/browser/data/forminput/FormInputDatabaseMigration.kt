@@ -86,3 +86,12 @@ internal val FORM_INPUT_DATABASE_MIGRATION_3_4 = object : Migration(3, 4) {
         )
     }
 }
+
+internal val FORM_INPUT_DATABASE_MIGRATION_4_5 = object : Migration(4, 5) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        // パス単位の ON/OFF を廃止し、path scope の preference を削除する。
+        db.execSQL(
+            "DELETE FROM form_input_preference WHERE fieldKey = ''",
+        )
+    }
+}

@@ -18,25 +18,15 @@ class FormInputRepository(context: Context) {
     }
 
     fun observeSavedPaths(origin: FormInputOrigin): Flow<List<SavedFormPathInfo>> {
-        return combine(
-            dao.observePathCounts(
-                scheme = origin.scheme,
-                host = origin.host,
-                port = origin.port,
-            ),
-            dao.observePreferencesForOrigin(
-                scheme = origin.scheme,
-                host = origin.host,
-                port = origin.port,
-            ),
-        ) { pathCounts, preferences ->
-            val preferencesByPath = preferences.groupBy { it.path }
+        return dao.observePathCounts(
+            scheme = origin.scheme,
+            host = origin.host,
+            port = origin.port,
+        ).map { pathCounts ->
             pathCounts.map { row ->
-                val pathPreferences = preferencesByPath[row.path].orEmpty()
                 SavedFormPathInfo(
                     path = row.path,
                     fieldCount = row.fieldCount,
-                    enabled = resolvePathEnabled(pathPreferences),
                 )
             }
         }.distinctUntilChanged()
@@ -103,24 +93,8 @@ class FormInputRepository(context: Context) {
         ).distinctUntilChanged()
     }
 
-    fun observePathEnabled(origin: FormInputOrigin, path: String): Flow<Boolean> {
-        return dao.observePreferencesForPath(
-            scheme = origin.scheme,
-            host = origin.host,
-            port = origin.port,
-            path = path,
-        ).map { preferences ->
-            resolvePathEnabled(preferences)
-        }.distinctUntilChanged()
-    }
-
-    suspend fun getPathEnabled(origin: FormInputOrigin, path: String): Boolean {
-        return isPathEnabled(origin, path)
-    }
-
     suspend fun saveFields(pageKey: FormInputPageKey, fields: List<FormFieldEntry>) {
         val origin = pageKey.origin()
-        if (!isPathEnabled(origin, pageKey.path)) return
         val now = System.currentTimeMillis()
         fields.forEach { field ->
             if (field.fieldKey.isBlank() || field.value.isBlank()) return@forEach
@@ -174,7 +148,6 @@ class FormInputRepository(context: Context) {
     ): List<String> {
         if (fieldKey.isBlank()) return emptyList()
         val origin = pageKey.origin()
-        if (!isPathEnabled(origin, pageKey.path)) return emptyList()
         if (!isFieldRegistered(origin, pageKey.path, fieldKey)) return emptyList()
         return dao.getDistinctValuesForField(
             scheme = pageKey.scheme,
@@ -183,19 +156,6 @@ class FormInputRepository(context: Context) {
             path = pageKey.path,
             fieldKey = fieldKey,
             limit = limit,
-        )
-    }
-
-    suspend fun setPathEnabled(origin: FormInputOrigin, path: String, enabled: Boolean) {
-        dao.upsertPreference(
-            FormInputPreferenceEntity(
-                scheme = origin.scheme,
-                host = origin.host,
-                port = origin.port,
-                path = path,
-                fieldKey = FORM_INPUT_PATH_SCOPE_FIELD_KEY,
-                enabled = enabled,
-            ),
         )
     }
 
@@ -233,7 +193,6 @@ class FormInputRepository(context: Context) {
             if (field.fieldKey.isBlank()) return@forEach
             registerField(origin, pageKey.path, field.fieldKey)
         }
-        if (!isPathEnabled(origin, pageKey.path)) return
         saveFields(
             pageKey = pageKey,
             fields = fields.filter { field -> field.value.isNotBlank() },
@@ -322,20 +281,6 @@ class FormInputRepository(context: Context) {
         )
     }
 
-    private fun resolvePathEnabled(preferences: List<FormInputPreferenceEntity>): Boolean {
-        return preferences.find { it.fieldKey == FORM_INPUT_PATH_SCOPE_FIELD_KEY }?.enabled ?: true
-    }
-
-    private suspend fun isPathEnabled(origin: FormInputOrigin, path: String): Boolean {
-        return dao.getPreferenceEnabled(
-            scheme = origin.scheme,
-            host = origin.host,
-            port = origin.port,
-            path = path,
-            fieldKey = FORM_INPUT_PATH_SCOPE_FIELD_KEY,
-        ) ?: true
-    }
-
     private suspend fun isFieldRegisteredInternal(
         origin: FormInputOrigin,
         path: String,
@@ -364,7 +309,6 @@ data class FormFieldEntry(
 data class SavedFormPathInfo(
     val path: String,
     val fieldCount: Int,
-    val enabled: Boolean,
 )
 
 data class SavedFormFieldInfo(
