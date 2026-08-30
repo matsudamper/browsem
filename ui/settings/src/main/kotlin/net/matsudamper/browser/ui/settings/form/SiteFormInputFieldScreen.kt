@@ -52,7 +52,7 @@ fun SiteFormInputFieldScreen(
         modifier = modifier.testTag(SiteFormInputFieldScreenTestTags.Root.testTag),
         topBar = {
             TopAppBar(
-                title = { Text(uiState.fieldKey) },
+                title = { Text("保存されたid") },
                 navigationIcon = {
                     IconButton(onClick = uiState.callbacks::navigateBack) {
                         Icon(
@@ -71,7 +71,7 @@ fun SiteFormInputFieldScreen(
         ) {
             item {
                 Text(
-                    text = "${uiState.displayOrigin}${uiState.displayPath}",
+                    text = uiState.fieldKey,
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
@@ -172,8 +172,6 @@ private fun SiteFormInputFieldScreenPreview() {
                     override fun confirmDeleteValue() = Unit
                     override fun dismissDeleteValueConfirm() = Unit
                 },
-                displayOrigin = "https://example.com",
-                path = "/contact",
                 displayPath = "/contact",
                 fieldKey = "brcNum",
                 values = listOf("001", "002", "003"),
