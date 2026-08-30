@@ -27,7 +27,8 @@ koin = "4.2.2"
 androidxBrowser = "1.10.0"
 uiautomator = "2.4.0"
 detekt = "2.0.0-alpha.6"
-ktlint = "14.2.0"
+ktlint = "1.5.0"
+ktlintGradle = "14.2.0"
 composeRules = "0.6.4"
 mockk = "1.14.11"
 androidsvg = "1.4"
@@ -79,7 +80,9 @@ koinAndroidWorkManager = { module = "io.insert-koin:koin-androidx-workmanager", 
 androidx-browser = { module = "androidx.browser:browser", version.ref = "androidxBrowser" }
 androidx-test-uiautomator = { module = "androidx.test.uiautomator:uiautomator", version.ref = "uiautomator" }
 detekt-gradle-plugin = { module = "dev.detekt:detekt-gradle-plugin", version.ref = "detekt" }
+ktlint-gradle-plugin = { module = "org.jlleitschuh.gradle:ktlint-gradle", version.ref = "ktlintGradle" }
 detekt-compose-rules = { module = "io.nlopez.compose.rules:detekt", version.ref = "composeRules" }
+ktlint-cli = { module = "com.pinterest.ktlint:ktlint-cli", version.ref = "ktlint" }
 kotlin-gradle-plugin = { module = "org.jetbrains.kotlin:kotlin-gradle-plugin", version.ref = "kotlin" }
 kotlin-compose-gradle-plugin = { module = "org.jetbrains.kotlin:compose-compiler-gradle-plugin", version.ref = "kotlin" }
 android-gradle-api = { module = "com.android.tools.build:gradle-api", version.ref = "agp" }
@@ -99,4 +102,4 @@ kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", versi
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
 paparazzi = { id = "app.cash.paparazzi", version.ref = "paparazzi" }
 detekt = { id = "dev.detekt", version.ref = "detekt" }
-ktlint = { id = "org.jlleitschuh.gradle.ktlint", version.ref = "ktlint" }
+ktlint-gradle = { id = "org.jlleitschuh.gradle.ktlint", version.ref = "ktlintGradle" }
