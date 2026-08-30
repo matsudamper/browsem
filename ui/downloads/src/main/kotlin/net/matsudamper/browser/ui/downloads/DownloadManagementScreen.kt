@@ -71,10 +71,11 @@ fun DownloadManagementScreen(
     uiState: DownloadManagementScreenUiState,
     highlightItemId: UUID?,
     onBack: () -> Unit,
-    onHighlightComplete: () -> Unit,
+    onHighlightComplete: (UUID) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val listState = rememberLazyListState()
+    val currentOnHighlightComplete by rememberUpdatedState(onHighlightComplete)
     Scaffold(
         modifier = modifier,
         topBar = {
@@ -123,7 +124,10 @@ fun DownloadManagementScreen(
             LaunchedEffect(highlightItemId, uiState.downloads) {
                 val targetId = highlightItemId ?: return@LaunchedEffect
                 val index = uiState.downloads.indexOfFirst { it.id == targetId }
-                if (index < 0) return@LaunchedEffect
+                if (index < 0) {
+                    currentOnHighlightComplete(targetId)
+                    return@LaunchedEffect
+                }
                 listState.animateScrollToItem(index)
                 activeHighlightId = targetId
             }
@@ -143,7 +147,7 @@ fun DownloadManagementScreen(
                         isHighlighted = item.id == activeHighlightId,
                         onHighlightFinished = {
                             activeHighlightId = null
-                            onHighlightComplete()
+                            currentOnHighlightComplete(item.id)
                         },
                     )
                 }
@@ -190,9 +194,9 @@ private fun DownloadItemRow(
             withContext(NonCancellable) {
                 activePress?.let { interactionSource.emit(PressInteraction.Cancel(it)) }
                 highlightAlpha.snapTo(0f)
+                currentOnHighlightFinished()
             }
         }
-        currentOnHighlightFinished()
     }
     Box {
         DropdownMenu(

@@ -37,8 +37,10 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.Stable
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.Stable
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -128,7 +130,8 @@ import org.mozilla.geckoview.GeckoRuntime
 internal fun BrowserApp(
     viewModel: BrowserViewModel,
     newTabUrlFlow: Flow<NewTabRequest>,
-    openDownloadsFlow: Flow<String?>,
+    openDownloadsFlow: Flow<OpenDownloadsRequest>,
+    onOpenDownloadsRequestConsumed: (String) -> Unit,
     onInstallExtensionRequest: (String) -> Unit,
     onRequestDownloadNotificationPermission: suspend () -> Unit,
 ) {
@@ -151,6 +154,7 @@ internal fun BrowserApp(
                 browserSessionLifecycleController = viewModel.browserSessionLifecycleController,
                 runtime = viewModel.runtime,
                 openDownloadsFlow = openDownloadsFlow,
+                onOpenDownloadsRequestConsumed = onOpenDownloadsRequestConsumed,
                 onNavigateToUrl = { url ->
                     val tabId = UUID.randomUUID().toString()
                     val newTab = viewModel.browserTabController.createAndAppendTab(
@@ -191,7 +195,8 @@ internal fun BrowserAppShell(
     browserTabController: BrowserTabController,
     browserSessionLifecycleController: BrowserSessionLifecycleController,
     runtime: GeckoRuntime,
-    openDownloadsFlow: Flow<String?>? = null,
+    openDownloadsFlow: Flow<OpenDownloadsRequest>? = null,
+    onOpenDownloadsRequestConsumed: ((String) -> Unit)? = null,
     onNavigateToUrl: (suspend (url: String) -> Unit)? = null,
     rootContent: @Composable (outerNavActions: OuterNavActions) -> Unit,
 ) {
@@ -203,11 +208,16 @@ internal fun BrowserAppShell(
     val context = LocalContext.current
 
     // 通知タップ時にダウンロード管理画面を開く
-    var pendingHighlightWorkerId by remember { mutableStateOf<String?>(null) }
+    var pendingOpenDownloadsRequest by rememberSaveable { mutableStateOf(false) }
+    var pendingHighlightWorkerId by rememberSaveable { mutableStateOf<String?>(null) }
+    var pendingOpenDownloadsRequestId by rememberSaveable { mutableStateOf<String?>(null) }
+    var pendingConsumeByWorkerIdEntries by rememberSaveable { mutableStateOf(listOf<Pair<String, String>>()) }
     if (openDownloadsFlow != null) {
         LaunchedEffect(openDownloadsFlow) {
-            openDownloadsFlow.onEach { workerId ->
-                pendingHighlightWorkerId = workerId
+            openDownloadsFlow.onEach { request ->
+                pendingHighlightWorkerId = request.workerId
+                pendingOpenDownloadsRequestId = request.requestId
+                pendingOpenDownloadsRequest = true
                 val existingIndex = outerBackStack.indexOfLast { it is AppDestination.Downloads }
                 if (existingIndex < 0) {
                     outerBackStack.add(AppDestination.Downloads)
@@ -670,12 +680,43 @@ internal fun BrowserAppShell(
                         DownloadManagementScreenViewModel(context.applicationContext as Application)
                     })
                     val downloadsUiState by downloadsViewModel.uiState.collectAsState()
-                    var highlightItemId by remember { mutableStateOf<UUID?>(null) }
-                    LaunchedEffect(pendingHighlightWorkerId) {
-                        val workerId = pendingHighlightWorkerId ?: return@LaunchedEffect
-                        val id = runCatching { UUID.fromString(workerId) }.getOrNull() ?: return@LaunchedEffect
+                    val currentOnOpenDownloadsRequestConsumed by rememberUpdatedState(onOpenDownloadsRequestConsumed)
+                    var highlightItemIdString by rememberSaveable { mutableStateOf<String?>(null) }
+                    val highlightItemId = highlightItemIdString?.let { id ->
+                        runCatching { UUID.fromString(id) }.getOrNull()
+                    }
+                    DisposableEffect(Unit) {
+                        onDispose {
+                            val entries = pendingConsumeByWorkerIdEntries
+                            if (entries.isNotEmpty()) {
+                                pendingConsumeByWorkerIdEntries = emptyList()
+                                entries.forEach { (_, requestId) ->
+                                    currentOnOpenDownloadsRequestConsumed?.invoke(requestId)
+                                }
+                            }
+                        }
+                    }
+                    LaunchedEffect(pendingOpenDownloadsRequest, pendingHighlightWorkerId, pendingOpenDownloadsRequestId) {
+                        if (!pendingOpenDownloadsRequest) return@LaunchedEffect
+                        val workerId = pendingHighlightWorkerId
+                        val requestId = pendingOpenDownloadsRequestId
                         pendingHighlightWorkerId = null
-                        downloadsViewModel.requestHighlight(id)
+                        pendingOpenDownloadsRequestId = null
+                        pendingOpenDownloadsRequest = false
+                        if (workerId != null) {
+                            val id = runCatching { UUID.fromString(workerId) }.getOrNull()
+                            if (id != null) {
+                                downloadsViewModel.requestHighlight(id)
+                                if (requestId != null) {
+                                    pendingConsumeByWorkerIdEntries =
+                                        pendingConsumeByWorkerIdEntries + (workerId to requestId)
+                                }
+                                return@LaunchedEffect
+                            }
+                        }
+                        if (requestId != null) {
+                            currentOnOpenDownloadsRequestConsumed?.invoke(requestId)
+                        }
                     }
                     LaunchedEffect(downloadsViewModel) {
                         downloadsViewModel.eventHandler.receiveAsFlow().collect {
@@ -692,7 +733,7 @@ internal fun BrowserAppShell(
                                 }
 
                                 override fun highlightItem(id: UUID) {
-                                    highlightItemId = id
+                                    highlightItemIdString = id.toString()
                                 }
                             })
                         }
@@ -701,7 +742,18 @@ internal fun BrowserAppShell(
                         uiState = downloadsUiState,
                         onBack = { outerBackStack.removeLastOrNull() },
                         highlightItemId = highlightItemId,
-                        onHighlightComplete = { highlightItemId = null },
+                        onHighlightComplete = { itemId ->
+                            highlightItemIdString = null
+                            val workerId = itemId.toString()
+                            val requestId = pendingConsumeByWorkerIdEntries
+                                .firstOrNull { it.first == workerId }
+                                ?.second
+                            if (requestId != null) {
+                                pendingConsumeByWorkerIdEntries =
+                                    pendingConsumeByWorkerIdEntries.filterNot { it.first == workerId }
+                                currentOnOpenDownloadsRequestConsumed?.invoke(requestId)
+                            }
+                        },
                     )
                 }
 
