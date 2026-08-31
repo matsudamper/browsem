@@ -23,10 +23,12 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.exclude
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.isImeVisible
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
@@ -55,6 +57,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
@@ -946,12 +949,15 @@ internal fun GeckoBrowserTab(
                     Modifier
                 } else {
                     // 上部（ステータスバー）は BrowserToolBar の背景色で塗りつぶすため除外する。
-                    Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal))
-                        // ime 表示時に Web 下部入力欄が隠れないよう GeckoView も IME 上に押し上げる。
-                        // ただし resume 直後の resize で GPU プロセス kill が起きる経路があるため、
-                        // setSession のタイミングを restoreSurfaceIfNeeded 側で「サイズが安定するまで
-                        // 待つ」よう制御している。
-                        .imePadding()
+                    // IME は GeckoView が WindowInsets から onKeyboardHeight で処理する。
+                    // Compose 側で imePadding / safeDrawing(IME 含む) を掛けると、
+                    // Surface のリサイズと Gecko 内部のキーボード余白が重なり、
+                    // 候補バー消滅後の細い帯や、キーボード閉後にキーボード高の黒領域が残る。
+                    Modifier.windowInsetsPadding(
+                        WindowInsets.safeDrawing
+                            .exclude(WindowInsets.ime)
+                            .only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal),
+                    )
                 },
             ),
     ) {
@@ -1179,12 +1185,13 @@ internal fun GeckoBrowserTab(
                 !state.showFindInPage &&
                 !state.isFullScreen
             ) {
-                // Column に imePadding があるため、GeckoView 領域の下端が IME の直上になる。
+                // GeckoView は IME でリサイズしない。バーだけ IME 上へ上げる。
                 AddressAutofillSuggestionBar(
                     uiState = autofillBar,
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
-                        .fillMaxWidth(),
+                        .fillMaxWidth()
+                        .imeAboveNavigationBarsPadding(),
                 )
             }
         }
@@ -1426,6 +1433,20 @@ private class GetMultipleContentsWithMimeTypes : ActivityResultContract<Array<St
             listOfNotNull(intent.data)
         }
     }
+}
+
+/**
+ * ナビバー分は親で既に避けているので、IME との重なり分だけ候補バーを上げる。
+ * GeckoDisplay.getKeyboardHeight と同じ ime - navigationBars にする。
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun Modifier.imeAboveNavigationBarsPadding(): Modifier {
+    val density = LocalDensity.current
+    val imeBottomPx = WindowInsets.ime.getBottom(density)
+    val navigationBottomPx = WindowInsets.navigationBars.getBottom(density)
+    val liftPx = (imeBottomPx - navigationBottomPx).coerceAtLeast(0)
+    return padding(bottom = with(density) { liftPx.toDp() })
 }
 
 /** MIME タイプを Intent に適用する共通関数 */
