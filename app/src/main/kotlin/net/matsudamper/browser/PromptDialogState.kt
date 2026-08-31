@@ -83,6 +83,10 @@ internal class PromptDialogState(
     var pendingFormInputSaveDialog by mutableStateOf<FormInputSaveDialogRequest?>(null)
 
     override fun showAddressAutofillBar(items: List<AddressAutofillSuggestionItem>) {
+        if (items.isEmpty()) {
+            addressAutofillBar = null
+            return
+        }
         addressAutofillBar = AddressAutofillBarUiState(
             items = items.map { item ->
                 AddressAutofillBarUiState.Item(

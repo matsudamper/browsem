@@ -144,6 +144,39 @@ class FormInputAutofillCoordinatorTest {
     }
 
     @Test
+    fun fieldFocusWithoutSuggestionsDoesNotShowBar() = runTest {
+        val dispatcher = StandardTestDispatcher(this.testScheduler)
+        Dispatchers.setMain(dispatcher)
+        val scope = CoroutineScope(SupervisorJob() + dispatcher)
+        val repository = mockk<FormInputRepository>(relaxed = true)
+        coEvery {
+            repository.getSuggestions(
+                pageKey = FormInputPageKey(
+                    scheme = "https",
+                    host = "example.com",
+                    port = 443,
+                    path = "/form",
+                ),
+                fieldKey = "comment",
+            )
+        } returns emptyList()
+        val extension = FormInputAutofillWebExtension()
+        val host = RecordingHost(scope)
+        val coordinator = FormInputAutofillCoordinator(
+            fillExtension = extension,
+            ioDispatcher = dispatcher,
+        )
+        val session = GeckoSession()
+        coordinator.attach(session, host, repository)
+
+        extension.dispatchFieldFocus(session, "comment", "https://example.com/form")
+        advanceTimeBy(imeReadyWaitMs)
+        runCurrent()
+
+        assertFalse(host.isBarVisible)
+    }
+
+    @Test
     fun fieldBlurHidesBar() = runTest {
         val env = createEnv(this)
         env.extension.dispatchFieldFocus(env.session, "comment", "https://example.com/form")
