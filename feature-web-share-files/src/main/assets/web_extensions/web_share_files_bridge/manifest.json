@@ -12,9 +12,6 @@
       "matches": [
         "<all_urls>"
       ],
-      "exclude_matches": [
-        "about:*"
-      ],
       "js": [
         "content.js"
       ],

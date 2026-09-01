@@ -67,16 +67,15 @@ class WebShareFilesWebExtension {
                     message: Any,
                     sender: WebExtension.MessageSender,
                 ): GeckoResult<Any>? {
-                    val json = message as? JSONObject ?: return null
-                    val request = json.toWebShareFilesRequest() ?: return null
+                    val json = message as? JSONObject
+                        ?: return errorResponse("無効なリクエストです")
+                    val request = json.toWebShareFilesRequest()
+                        ?: return errorResponse("共有データが不正です")
                     val result = GeckoResult<Any>()
                     mainHandler.post {
                         callbacks[session]?.invoke(request, result)
                             ?: result.complete(
-                                JSONObject()
-                                    .put("success", false)
-                                    .put("error", "共有ハンドラが未登録です")
-                                    .put("errorName", "AbortError"),
+                                errorJson("共有ハンドラが未登録です"),
                             )
                     }
                     return result
@@ -108,15 +107,41 @@ class WebShareFilesWebExtension {
     }
 }
 
+private fun errorJson(message: String): JSONObject {
+    return JSONObject()
+        .put("success", false)
+        .put("error", message)
+        .put("errorName", "NotAllowedError")
+}
+
+private fun errorResponse(message: String): GeckoResult<Any> {
+    return GeckoResult.fromValue(errorJson(message))
+}
+
 internal fun JSONObject.toWebShareFilesRequest(): WebShareFilesWebExtension.WebShareFilesRequest? {
     val requestId = optString("requestId", "").trim()
     if (requestId.isEmpty()) return null
     val filesJson = optJSONArray("files") ?: JSONArray()
+    if (filesJson.length() == 0 || filesJson.length() > WebShareFilesLimits.MAX_FILES) {
+        return null
+    }
+    var totalDecodedBytes = 0
     val files = buildList {
         for (index in 0 until filesJson.length()) {
-            val fileJson = filesJson.optJSONObject(index) ?: continue
+            val fileJson = filesJson.optJSONObject(index) ?: return null
             val base64Data = fileJson.optString("data", "")
-            if (base64Data.isEmpty()) continue
+            if (base64Data.isEmpty()) return null
+            if (base64Data.length > WebShareFilesLimits.maxBase64CharsPerFile()) {
+                return null
+            }
+            val decodedBytes = WebShareFilesLimits.estimateDecodedBytes(base64Data.length)
+            if (decodedBytes > WebShareFilesLimits.MAX_FILE_BYTES) {
+                return null
+            }
+            totalDecodedBytes += decodedBytes
+            if (totalDecodedBytes > WebShareFilesLimits.MAX_TOTAL_BYTES) {
+                return null
+            }
             add(
                 WebShareFilesWebExtension.WebShareFile(
                     name = fileJson.optString("name", "shared"),
