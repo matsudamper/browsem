@@ -148,10 +148,9 @@ class AddressAutofillCoordinator(
     fun onAddressFetch(count: Int) {
         if (count <= 0) return
         val current = synchronized(lock) {
-            // 未フォーカスや generic 欄でも Gecko は onAddressFetch を呼ぶ。
-            // 許可した欄種以外で出すと、候補がない入力でもバーが一瞬出る。
-            if (!isAddressSuggestionFieldKind(lastFieldKind)) {
-                Log.i(TAG, "onAddressFetch skipped: last field is $lastFieldKind")
+            // メール欄では住所候補を出さない。それ以外はフォーカス判定まで保留する。
+            if (lastFieldKind == FIELD_KIND_EMAIL) {
+                Log.i(TAG, "onAddressFetch skipped: last field is email")
                 return
             }
             if (isFocusSuppressed(FIELD_KIND_ADDRESS)) {
@@ -170,7 +169,7 @@ class AddressAutofillCoordinator(
                     kind = kind,
                     shouldAbort = {
                         synchronized(lock) {
-                            !isAddressSuggestionFieldKind(lastFieldKind) ||
+                            shouldAbortAddressFetchAfterFocusSettled() ||
                                 isFocusSuppressed(FIELD_KIND_ADDRESS)
                         }
                     },
@@ -307,8 +306,16 @@ class AddressAutofillCoordinator(
         current.host.showAddressAutofillBar(items)
     }
 
-    private fun isAddressSuggestionFieldKind(kind: String?): Boolean {
-        return kind == FIELD_KIND_ADDRESS || kind == FIELD_KIND_NAME
+    /**
+     * [onAddressFetch] は shadow DOM 等でフォーカス通知が来ない場合のフォールバック。
+     * 未確定 (null) のままなら出す。OTHER / EMAIL に確定したら出さない。
+     */
+    private fun shouldAbortAddressFetchAfterFocusSettled(): Boolean {
+        return when (lastFieldKind) {
+            FIELD_KIND_ADDRESS, FIELD_KIND_NAME, null -> false
+            FIELD_KIND_EMAIL, FIELD_KIND_OTHER -> true
+            else -> true
+        }
     }
 
     private fun isFocusSuppressed(kind: String): Boolean {

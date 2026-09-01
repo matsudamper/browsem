@@ -101,13 +101,13 @@ class AddressAutofillCoordinatorTest {
     }
 
     @Test
-    fun フォーカス前の住所取得では候補バーを出さない() = runTest {
+    fun フォーカス未確定の住所取得はフォールバックとして候補バーを出す() = runTest {
         val env = createEnv()
 
         env.coordinator.onAddressFetch(1)
         advanceTimeBy(ADDRESS_AUTOFILL_IME_READY_WAIT_MS)
         advanceUntilIdle()
-        assertFalse(env.host.isBarVisible)
+        assertTrue(env.host.isBarVisible)
     }
 
     @Test
