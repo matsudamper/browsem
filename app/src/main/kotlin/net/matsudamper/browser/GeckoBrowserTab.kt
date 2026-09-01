@@ -75,6 +75,7 @@ import java.net.URLEncoder
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.withContext
 import net.matsudamper.browser.data.TranslationProvider
 import net.matsudamper.browser.data.address.AddressRepository
@@ -287,21 +288,22 @@ internal fun GeckoBrowserTab(
         }
     }
 
-    // Web Share プロンプトが来たら共有シートを起動し、結果を待ってから GeckoResult を完了する
-    val pendingWebSharePrompt = dialogState.pendingWebSharePrompt
-    LaunchedEffect(pendingWebSharePrompt) {
-        val prompt = pendingWebSharePrompt ?: return@LaunchedEffect
-        val body = buildWebShareBody(prompt.text, prompt.uri)
-        val subject = prompt.title?.takeIf { it.trim().isNotEmpty() }
-        if (!canLaunchPlainTextShare(context, body, subject)) {
-            dialogState.failWebSharePrompt()
-            return@LaunchedEffect
-        }
-        val shareIntent = buildPlainTextShareIntent(body, subject)
-        try {
-            webShareLauncher.launch(Intent.createChooser(shareIntent, null))
-        } catch (_: ActivityNotFoundException) {
-            dialogState.failWebSharePrompt()
+    // Web Share プロンプトが来たら Channel 経由で共有シートを起動し、結果を待ってから GeckoResult を完了する
+    LaunchedEffect(dialogState) {
+        dialogState.webShareLaunchChannel.receiveAsFlow().collect {
+            val prompt = dialogState.pendingWebSharePrompt ?: return@collect
+            val body = buildWebShareBody(prompt.text, prompt.uri)
+            val subject = prompt.title?.takeIf { hasWebShareContent(it, null, null) }
+            if (!canLaunchPlainTextShare(context, body, subject)) {
+                dialogState.failWebSharePrompt()
+                return@collect
+            }
+            val shareIntent = buildPlainTextShareIntent(body, subject)
+            try {
+                webShareLauncher.launch(Intent.createChooser(shareIntent, null))
+            } catch (_: ActivityNotFoundException) {
+                dialogState.failWebSharePrompt()
+            }
         }
     }
 

@@ -1,5 +1,6 @@
 package net.matsudamper.browser
 
+import android.content.Intent
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -38,5 +39,19 @@ class WebShareTextTest {
     fun hasWebShareContent_returnsTrueWhenWhitespaceOnlyFieldsAreExcluded() {
         assertTrue(hasWebShareContent("  title  ", null, null))
         assertFalse(hasWebShareContent("   ", null, null))
+    }
+
+    @Test
+    fun buildPlainTextShareIntent_putsSubjectWithoutTrimming() {
+        val intent = buildPlainTextShareIntent(body = "", subject = "  title  ")
+        assertEquals(null, intent.getStringExtra(Intent.EXTRA_TEXT))
+        assertEquals("  title  ", intent.getStringExtra(Intent.EXTRA_SUBJECT))
+    }
+
+    @Test
+    fun buildPlainTextShareIntent_putsSubjectWhenBodyEmpty() {
+        val intent = buildPlainTextShareIntent(body = "", subject = "Share title")
+        assertEquals(null, intent.getStringExtra(Intent.EXTRA_TEXT))
+        assertEquals("Share title", intent.getStringExtra(Intent.EXTRA_SUBJECT))
     }
 }

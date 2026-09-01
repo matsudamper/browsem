@@ -14,6 +14,7 @@ import java.util.UUID
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import net.matsudamper.browser.feature.addressautofill.AddressAutofillSuggestionItem
@@ -76,6 +77,9 @@ internal class PromptDialogState(
     // --- Web Share (navigator.share) ---
     var pendingWebSharePrompt by mutableStateOf<GeckoSession.PromptDelegate.SharePrompt?>(null)
     var pendingWebShareResult by mutableStateOf<GeckoResult<GeckoSession.PromptDelegate.PromptResponse>?>(null)
+
+    /** Web Share の共有シート起動要求。Activity の OneShot イベントは Channel 経由で UI へ渡す */
+    val webShareLaunchChannel = Channel<Unit>(Channel.CONFLATED)
 
     var pendingAddressSaveAddress by mutableStateOf<Autocomplete.Address?>(null)
     var pendingAddressSavePrompt by mutableStateOf<GeckoSession.PromptDelegate.AutocompleteRequest<Autocomplete.AddressSaveOption>?>(null)
@@ -366,25 +370,33 @@ internal class PromptDialogState(
 
     fun confirmWebSharePrompt() {
         val prompt = pendingWebSharePrompt ?: return
-        pendingWebShareResult?.complete(
+        val result = pendingWebShareResult
+        clearWebSharePending()
+        if (result == null || prompt.isComplete) return
+        result.complete(
             prompt.confirm(GeckoSession.PromptDelegate.SharePrompt.Result.SUCCESS),
         )
-        pendingWebSharePrompt = null
-        pendingWebShareResult = null
     }
 
     fun dismissWebSharePrompt() {
         val prompt = pendingWebSharePrompt ?: return
-        pendingWebShareResult?.complete(prompt.dismiss())
-        pendingWebSharePrompt = null
-        pendingWebShareResult = null
+        val result = pendingWebShareResult
+        clearWebSharePending()
+        if (result == null || prompt.isComplete) return
+        result.complete(prompt.dismiss())
     }
 
     fun failWebSharePrompt() {
         val prompt = pendingWebSharePrompt ?: return
-        pendingWebShareResult?.complete(
+        val result = pendingWebShareResult
+        clearWebSharePending()
+        if (result == null || prompt.isComplete) return
+        result.complete(
             prompt.confirm(GeckoSession.PromptDelegate.SharePrompt.Result.FAILURE),
         )
+    }
+
+    private fun clearWebSharePending() {
         pendingWebSharePrompt = null
         pendingWebShareResult = null
     }
@@ -525,6 +537,7 @@ internal class PromptDialogState(
                 val result = GeckoResult<GeckoSession.PromptDelegate.PromptResponse>()
                 pendingWebSharePrompt = prompt
                 pendingWebShareResult = result
+                webShareLaunchChannel.trySend(Unit)
                 return result
             }
 

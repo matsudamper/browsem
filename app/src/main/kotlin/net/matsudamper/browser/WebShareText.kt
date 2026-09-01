@@ -25,7 +25,9 @@ internal fun buildPlainTextShareIntent(body: String, subject: String?): Intent {
         if (body.isNotEmpty()) {
             putExtra(Intent.EXTRA_TEXT, body)
         }
-        subject?.let { putExtra(Intent.EXTRA_SUBJECT, it) }
+        if (subject != null) {
+            putExtra(Intent.EXTRA_SUBJECT, subject)
+        }
     }
 }
 
