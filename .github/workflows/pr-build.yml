@@ -69,8 +69,8 @@ jobs:
 
       - name: Compress APK for S3 upload
         run: |
-          zstd -6 -f -o "${APK_PATH}.zst" "${APK_PATH}"
-          echo "S3_APK_PATH=${APK_PATH}.zst" >> "$GITHUB_ENV"
+          xz -0 -c "${APK_PATH}" > "${APK_PATH}.xz"
+          echo "S3_APK_PATH=${APK_PATH}.xz" >> "$GITHUB_ENV"
 
       - name: Upload APK to S3
         id: upload_s3
