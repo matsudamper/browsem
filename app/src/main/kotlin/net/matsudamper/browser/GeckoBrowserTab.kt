@@ -12,6 +12,7 @@ import android.view.ActionMode
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
+import java.io.File
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContract
@@ -90,11 +91,13 @@ import net.matsudamper.browser.feature.mocklocation.MockLocationWebExtension
 import net.matsudamper.browser.feature.networklog.NetworkLogWebExtension
 import net.matsudamper.browser.feature.themecolor.ThemeColorWebExtension
 import net.matsudamper.browser.feature.twittershare.TwitterShareWebExtension
+import net.matsudamper.browser.feature.websharefiles.WebShareFilesWebExtension
 import net.matsudamper.browser.feature.viewportscale.ViewportScaleWebExtension
 import net.matsudamper.browser.translate.TranslationPriorityLanguage
 import net.matsudamper.browser.ui.browser.UrlBarSuggestionsUiState
 import net.matsudamper.browser.ui.common.findActivity
 import net.matsudamper.browser.ui.common.resolveBrowserToolbarColors
+import org.json.JSONObject
 import org.koin.compose.koinInject
 import org.mozilla.geckoview.BasicSelectionActionDelegate
 import org.mozilla.geckoview.GeckoResult
@@ -250,6 +253,30 @@ internal fun GeckoBrowserTab(
         } else {
             dialogState.dismissWebSharePrompt()
         }
+    }
+
+    data class PendingWebShareFiles(
+        val geckoResult: GeckoResult<Any>,
+        val cacheDir: File,
+    )
+
+    var pendingWebShareFiles by remember { mutableStateOf<PendingWebShareFiles?>(null) }
+
+    val webShareFilesLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) { activityResult ->
+        val pending = pendingWebShareFiles ?: return@rememberLauncherForActivityResult
+        pendingWebShareFiles = null
+        val response = if (activityResult.resultCode == Activity.RESULT_OK) {
+            JSONObject().put("success", true)
+        } else {
+            JSONObject()
+                .put("success", false)
+                .put("error", "共有がキャンセルされました")
+                .put("errorName", "AbortError")
+        }
+        pending.geckoResult.complete(response)
+        pending.cacheDir.deleteRecursively()
     }
 
     // ファイルピッカー（単一ファイル選択）Google Photos を含むピッカーを表示するため ACTION_GET_CONTENT を使用
@@ -727,6 +754,54 @@ internal fun GeckoBrowserTab(
         }
         onDispose {
             twitterShareWebExtension.unregisterSession(session)
+        }
+    }
+
+    // Web Share API v2 (files) のワークアラウンド。Gecko 未対応時に拡張ポリフィルから共有シートを起動する
+    val webShareFilesWebExtension: WebShareFilesWebExtension = koinInject()
+    DisposableEffect(session, webShareFilesWebExtension) {
+        webShareFilesWebExtension.registerSession(session) { request, geckoResult ->
+            try {
+                val prepared = prepareWebShareFilesIntent(
+                    context = context,
+                    title = request.title,
+                    text = request.text,
+                    url = request.url,
+                    files = decodeWebShareFiles(request.files),
+                )
+                if (prepared == null || !canLaunchWebShareFilesIntent(context, prepared.intent)) {
+                    prepared?.cacheDir?.deleteRecursively()
+                    geckoResult.complete(
+                        JSONObject()
+                            .put("success", false)
+                            .put("error", "共有できるアプリがありません")
+                            .put("errorName", "NotAllowedError"),
+                    )
+                    return@registerSession
+                }
+                pendingWebShareFiles = PendingWebShareFiles(
+                    geckoResult = geckoResult,
+                    cacheDir = prepared.cacheDir,
+                )
+                webShareFilesLauncher.launch(Intent.createChooser(prepared.intent, null))
+            } catch (_: ActivityNotFoundException) {
+                geckoResult.complete(
+                    JSONObject()
+                        .put("success", false)
+                        .put("error", "共有できるアプリがありません")
+                        .put("errorName", "NotAllowedError"),
+                )
+            } catch (_: IllegalArgumentException) {
+                geckoResult.complete(
+                    JSONObject()
+                        .put("success", false)
+                        .put("error", "共有データの準備に失敗しました")
+                        .put("errorName", "NotAllowedError"),
+                )
+            }
+        }
+        onDispose {
+            webShareFilesWebExtension.unregisterSession(session)
         }
     }
 
