@@ -82,6 +82,12 @@ internal class PromptDialogState(
     var addressAutofillBar by mutableStateOf<AddressAutofillBarUiState?>(null)
     var pendingFormInputSaveDialog by mutableStateOf<FormInputSaveDialogRequest?>(null)
 
+    /**
+     * Web Share API (navigator.share) からの共有要求を OS の共有シートで処理する。
+     * 戻り値は共有シートの起動に成功したかどうか。
+     */
+    var onWebShare: ((title: String?, text: String?, uri: String?) -> Boolean)? = null
+
     override fun showAddressAutofillBar(items: List<AddressAutofillSuggestionItem>) {
         addressAutofillBar = AddressAutofillBarUiState(
             items = items.map { item ->
@@ -478,6 +484,23 @@ internal class PromptDialogState(
                 pendingRepostConfirmPrompt = prompt
                 pendingRepostConfirmResult = result
                 return result
+            }
+
+            override fun onSharePrompt(
+                session: GeckoSession,
+                prompt: GeckoSession.PromptDelegate.SharePrompt,
+            ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse> {
+                val handler = onWebShare
+                if (handler == null) {
+                    return GeckoResult.fromValue(prompt.dismiss())
+                }
+                val shareStarted = handler(prompt.title, prompt.text, prompt.uri)
+                val response = if (shareStarted) {
+                    prompt.confirm(GeckoSession.PromptDelegate.SharePrompt.Result.SUCCESS)
+                } else {
+                    prompt.confirm(GeckoSession.PromptDelegate.SharePrompt.Result.FAILURE)
+                }
+                return GeckoResult.fromValue(response)
             }
 
             override fun onPopupPrompt(
