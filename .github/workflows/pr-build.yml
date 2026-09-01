@@ -70,11 +70,7 @@ jobs:
       - name: Compress APK for S3 upload
         run: |
           zstd -6 -f -o "${APK_PATH}.zst" "${APK_PATH}"
-          ORIG_SIZE=$(stat -c%s "${APK_PATH}")
-          COMP_SIZE=$(stat -c%s "${APK_PATH}.zst")
-          SAVED=$(( (ORIG_SIZE - COMP_SIZE) * 100 / ORIG_SIZE ))
           echo "S3_APK_PATH=${APK_PATH}.zst" >> "$GITHUB_ENV"
-          echo "S3 compression: ${ORIG_SIZE} bytes -> ${COMP_SIZE} bytes (${SAVED}% saved)"
 
       - name: Upload APK to S3
         id: upload_s3
@@ -123,9 +119,7 @@ jobs:
             | Storage | Download Link | QR Code |
             | :--- | :--- | :--- |
             | 🐙 GitHub Artifacts | [Download](${{ steps.upload_apk.outputs.artifact-url }}) | [View](${{ steps.github_qr_artifact.outputs.artifact-url }}) |
-            ${{ steps.upload_s3.outputs.url && format('| ☁️ S3 (zstd) | [Download]({0}) | [View]({1}) |', steps.upload_s3.outputs.url, steps.s3_qr_artifact.outputs.artifact-url) || format('| ☁️ S3 | ⚠️ アップロード失敗 ([run]({0}/{1}/actions/runs/{2})) | - |', github.server_url, github.repository, github.run_id) }}
-
-            S3 の APK は zstd 圧縮 (`.apk.zst`) です。展開: `zstd -d <file>.apk.zst`
+            ${{ steps.upload_s3.outputs.url && format('| ☁️ S3 | [Download]({0}) | [View]({1}) |', steps.upload_s3.outputs.url, steps.s3_qr_artifact.outputs.artifact-url) || format('| ☁️ S3 | ⚠️ アップロード失敗 ([run]({0}/{1}/actions/runs/{2})) | - |', github.server_url, github.repository, github.run_id) }}
 
             ---
             *Artifact Name: `${{ env.APK_NAME }}`*
