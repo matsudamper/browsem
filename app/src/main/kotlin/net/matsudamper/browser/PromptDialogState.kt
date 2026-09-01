@@ -89,6 +89,10 @@ internal class PromptDialogState(
     var onWebShare: ((title: String?, text: String?, uri: String?) -> Boolean)? = null
 
     override fun showAddressAutofillBar(items: List<AddressAutofillSuggestionItem>) {
+        if (items.isEmpty()) {
+            addressAutofillBar = null
+            return
+        }
         addressAutofillBar = AddressAutofillBarUiState(
             items = items.map { item ->
                 AddressAutofillBarUiState.Item(
