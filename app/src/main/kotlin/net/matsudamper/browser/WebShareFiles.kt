@@ -14,6 +14,12 @@ import net.matsudamper.browser.feature.websharefiles.WebShareFilesWebExtension
 internal const val WEB_SHARE_FILES_CHOSEN_ACTION =
     "net.matsudamper.browser.action.WEB_SHARE_FILES_CHOSEN"
 
+internal const val EXTRA_WEB_SHARE_FILES_REQUEST_ID =
+    "net.matsudamper.browser.extra.WEB_SHARE_FILES_REQUEST_ID"
+
+/** 共有先アプリが URI を読み取る猶予。 */
+internal const val WEB_SHARE_FILES_CACHE_RETENTION_MS = 10 * 60 * 1000L
+
 internal data class WebShareFilePayload(
     val name: String,
     val mimeType: String,
@@ -106,14 +112,14 @@ internal fun buildWebShareFilesIntent(
 
 internal fun prepareWebShareFilesIntent(
     context: Context,
+    requestId: String,
     title: String?,
     text: String?,
     url: String?,
     files: List<WebShareFilePayload>,
 ): PreparedWebShareFiles? {
-    if (files.isEmpty()) return null
-    val cacheDir = File(context.cacheDir, "web_share_files").apply {
-        deleteRecursively()
+    if (files.isEmpty() || requestId.isBlank()) return null
+    val cacheDir = File(context.cacheDir, "web_share_files/$requestId").apply {
         mkdirs()
     }
     return try {
@@ -141,9 +147,11 @@ internal fun prepareWebShareFilesIntent(
 internal fun buildWebShareFilesChooserIntent(
     context: Context,
     shareIntent: Intent,
+    requestId: String,
 ): Intent {
     val callbackIntent = Intent(WEB_SHARE_FILES_CHOSEN_ACTION)
         .setPackage(context.packageName)
+        .putExtra(EXTRA_WEB_SHARE_FILES_REQUEST_ID, requestId)
     val pendingIntent = PendingIntent.getBroadcast(
         context,
         UUID.randomUUID().hashCode(),

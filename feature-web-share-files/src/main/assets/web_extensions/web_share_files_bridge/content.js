@@ -8,7 +8,7 @@
   const MAX_FILE_BYTES = 5 * 1024 * 1024;
   const MAX_TOTAL_BYTES = 10 * 1024 * 1024;
   const MAX_FILES = 10;
-  const MAX_BASE64_CHARS_PER_FILE = Math.ceil((MAX_FILE_BYTES * 4) / 3);
+  const MAX_BASE64_CHARS_PER_FILE = 4 * Math.ceil(MAX_FILE_BYTES / 3);
 
   const pageWin = window.wrappedJSObject;
   if (typeof pageWin.navigator.share !== "function") return;
@@ -62,7 +62,13 @@
   }
 
   function estimateDecodedBytes(base64) {
-    return Math.floor((base64.length * 3) / 4);
+    let padding = 0;
+    if (base64.endsWith("==")) {
+      padding = 2;
+    } else if (base64.endsWith("=")) {
+      padding = 1;
+    }
+    return Math.floor((base64.length * 3) / 4) - padding;
   }
 
   function validateEncodedFiles(files) {
@@ -145,15 +151,27 @@
       return originalShare(data);
     }
 
+    if (
+      !pageWin.navigator.userActivation ||
+      !pageWin.navigator.userActivation.isActive
+    ) {
+      return Promise.reject(
+        new DOMException("ユーザー操作なしでは共有できません", "NotAllowedError"),
+      );
+    }
+
+    if (pendingNativeRequests.size > 0) {
+      return Promise.reject(
+        new DOMException("共有リクエストが競合しました", "AbortError"),
+      );
+    }
+
     const validationError = validateFiles(data.files);
     if (validationError) {
       return Promise.reject(new DOMException(validationError, "NotAllowedError"));
     }
 
     const requestId = createRequestId();
-    if (pendingNativeRequests.has(requestId)) {
-      return Promise.reject(new DOMException("共有リクエストが競合しました", "AbortError"));
-    }
 
     return encodeFilesInPage(data.files).then(function (files) {
       const encodedError = validateEncodedFiles(files);
