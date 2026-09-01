@@ -134,7 +134,7 @@ internal fun JSONObject.toWebShareFilesRequest(): WebShareFilesWebExtension.WebS
             if (base64Data.length > WebShareFilesLimits.maxBase64CharsPerFile()) {
                 return null
             }
-            val decodedBytes = WebShareFilesLimits.estimateDecodedBytes(base64Data.length)
+            val decodedBytes = WebShareFilesLimits.estimateDecodedBytes(base64Data)
             if (decodedBytes > WebShareFilesLimits.MAX_FILE_BYTES) {
                 return null
             }

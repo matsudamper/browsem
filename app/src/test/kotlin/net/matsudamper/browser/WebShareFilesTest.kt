@@ -2,6 +2,7 @@ package net.matsudamper.browser
 
 import android.content.Intent
 import android.net.Uri
+import net.matsudamper.browser.feature.websharefiles.WebShareFilesLimits
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
@@ -88,5 +89,17 @@ class WebShareFilesTest {
         )
 
         assertNull(intent)
+    }
+
+    @Test
+    fun webShareFilesLimits_maxBase64CharsPerFile_matchesPaddedCapacity() {
+        assertEquals(6_990_508, WebShareFilesLimits.maxBase64CharsPerFile())
+    }
+
+    @Test
+    fun webShareFilesLimits_estimateDecodedBytes_isPaddingAware() {
+        assertEquals(3, WebShareFilesLimits.estimateDecodedBytes("AAAA"))
+        assertEquals(2, WebShareFilesLimits.estimateDecodedBytes("AAA="))
+        assertEquals(1, WebShareFilesLimits.estimateDecodedBytes("AA=="))
     }
 }

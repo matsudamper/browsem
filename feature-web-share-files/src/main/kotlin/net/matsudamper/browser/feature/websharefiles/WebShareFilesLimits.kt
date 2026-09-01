@@ -5,7 +5,15 @@ object WebShareFilesLimits {
     const val MAX_FILE_BYTES = 5 * 1024 * 1024
     const val MAX_TOTAL_BYTES = 10 * 1024 * 1024
 
-    fun maxBase64CharsPerFile(): Int = ((MAX_FILE_BYTES.toLong() * 4L + 2L) / 3L).toInt()
+    fun maxBase64CharsPerFile(): Int = 4 * ((MAX_FILE_BYTES + 2) / 3)
 
-    fun estimateDecodedBytes(base64Length: Int): Int = (base64Length * 3) / 4
+    fun estimateDecodedBytes(base64: String): Int {
+        var padding = 0
+        if (base64.endsWith("==")) {
+            padding = 2
+        } else if (base64.endsWith("=")) {
+            padding = 1
+        }
+        return (base64.length * 3) / 4 - padding
+    }
 }
