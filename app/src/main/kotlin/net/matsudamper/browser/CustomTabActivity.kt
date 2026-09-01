@@ -10,12 +10,12 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.VisibleForTesting
 import androidx.browser.customtabs.CustomTabsSessionToken
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -100,31 +100,36 @@ class CustomTabActivity : ComponentActivity() {
             }
 
             BrowserTheme(themeMode = browserSettings.themeMode) {
-                Box(
-                    modifier = Modifier.semantics {
-                        testTagsAsResourceId = true
-                    },
-                ) {
-                    // カスタムタブは設定・サイト設定などの全画面系画面を持たないため、
-                    // BrowserAppShell は挟まず CustomTabScreen を直接描画する
-                    CustomTabScreen(
-                        initialUrl = initialUrl.takeIf { it.isNotBlank() } ?: browserSettings.resolvedHomepageUrl(),
-                        customTabsSessionToken = customTabsSessionToken,
-                        homepageUrl = browserSettings.resolvedHomepageUrl(),
-                        searchTemplate = browserSettings.resolvedSearchTemplate(),
-                        translationProvider = browserSettings.translationProvider,
-                        browserTabController = browserTabController,
-                        browserSessionLifecycleController = browserSessionLifecycleController,
-                        settingsRepository = settingsRepository,
-                        historyRepository = historyRepository,
-                        webSuggestionRepository = webSuggestionRepository,
-                        themeColorExtension = themeColorExtension,
-                        mediaWebExtension = mediaWebExtensionInstance,
-                        onClose = ::finish,
-                        onOpenInBrowser = ::openInMainBrowser,
-                        onOpenNewTabInBrowser = ::openNewTabInMainBrowser,
-                        onRequestDownloadNotificationPermission = { requestDownloadNotificationPermission() },
-                    )
+                BrowserAppShell(
+                    browserTabController = browserTabController,
+                    browserSessionLifecycleController = browserSessionLifecycleController,
+                    runtime = runtime,
+                ) { outerNavActions ->
+                    Box(
+                        modifier = Modifier.semantics {
+                            testTagsAsResourceId = true
+                        },
+                    ) {
+                        CustomTabScreen(
+                            initialUrl = initialUrl.takeIf { it.isNotBlank() } ?: browserSettings.resolvedHomepageUrl(),
+                            customTabsSessionToken = customTabsSessionToken,
+                            homepageUrl = browserSettings.resolvedHomepageUrl(),
+                            searchTemplate = browserSettings.resolvedSearchTemplate(),
+                            translationProvider = browserSettings.translationProvider,
+                            browserTabController = browserTabController,
+                            browserSessionLifecycleController = browserSessionLifecycleController,
+                            settingsRepository = settingsRepository,
+                            historyRepository = historyRepository,
+                            webSuggestionRepository = webSuggestionRepository,
+                            themeColorExtension = themeColorExtension,
+                            mediaWebExtension = mediaWebExtensionInstance,
+                            outerNavActions = outerNavActions,
+                            onClose = ::finish,
+                            onOpenInBrowser = ::openInMainBrowser,
+                            onOpenNewTabInBrowser = ::openNewTabInMainBrowser,
+                            onRequestDownloadNotificationPermission = { requestDownloadNotificationPermission() },
+                        )
+                    }
                 }
             }
         }
@@ -139,6 +144,14 @@ class CustomTabActivity : ComponentActivity() {
             browserTabController.close()
         }
         super.onDestroy()
+    }
+
+    @VisibleForTesting
+    internal fun browserTabControllerForTesting(): BrowserTabController {
+        check(::browserTabController.isInitialized) {
+            "browserTabController is not initialized"
+        }
+        return browserTabController
     }
 
     /**
@@ -227,6 +240,7 @@ private fun CustomTabScreen(
     webSuggestionRepository: WebSuggestionRepository,
     themeColorExtension: ThemeColorWebExtension,
     mediaWebExtension: MediaWebExtension,
+    outerNavActions: OuterNavActions,
     onClose: () -> Unit,
     onOpenInBrowser: (url: String, tab: BrowserTab) -> Unit,
     onOpenNewTabInBrowser: (url: String, referrerUrl: String?) -> Unit,
@@ -254,22 +268,17 @@ private fun CustomTabScreen(
         key2 = initialUrl,
         key3 = prewarmedSession,
     ) {
-        value = if (prewarmedSession != null) {
-            browserTabController.createAndAppendTabWithSession(
-                session = prewarmedSession,
-                initialUrl = initialUrl,
-            )
-        } else {
-            browserTabController.createAndAppendTab(initialUrl = initialUrl)
-        }
-    }
-    DisposableEffect(browserTabController, browserTab?.tabId) {
-        val tabId = browserTab?.tabId
-        onDispose {
-            if (tabId != null) {
-                browserTabController.closeTab(tabId)
+        // BrowserAppShell の外側ナビ（サイトの設定など）で Root が一時的に外れるため、
+        // 既存タブを再利用する。WebAppScreen と同様、破棄は Activity.onDestroy に任せる。
+        value = browserTabController.tabs.firstOrNull()
+            ?: if (prewarmedSession != null) {
+                browserTabController.createAndAppendTabWithSession(
+                    session = prewarmedSession,
+                    initialUrl = initialUrl,
+                )
+            } else {
+                browserTabController.createAndAppendTab(initialUrl = initialUrl)
             }
-        }
     }
     val activeTab = browserTab
     if (activeTab == null) {
@@ -305,8 +314,9 @@ private fun CustomTabScreen(
         onInstallExtensionRequest = {},
         onRequestDownloadNotificationPermission = onRequestDownloadNotificationPermission,
         onOpenSettings = {},
-        // カスタムタブは設定画面のナビゲーションスタックを持たないため非表示
-        onOpenSiteSettings = null,
+        onOpenSiteSettings = { url ->
+            outerNavActions.openSiteSettings(url, activeTab.tabId)
+        },
         onOpenDownloads = null,
         onOpenTabs = {},
         enableTabUi = false,
@@ -342,7 +352,9 @@ private fun CustomTabScreen(
                 onInstallExtensionRequest = {},
                 onRequestDownloadNotificationPermission = onRequestDownloadNotificationPermission,
                 onOpenSettings = {},
-                onOpenSiteSettings = null,
+                onOpenSiteSettings = { url ->
+                    outerNavActions.openSiteSettings(url, popupTab.tabId)
+                },
                 onOpenDownloads = null,
                 onOpenTabs = {},
                 enableTabUi = false,
