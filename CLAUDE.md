@@ -123,16 +123,16 @@ UIに関連した実装はPaparazziで差分を取って作業するのが良い
 
 ### レビュー対応時の必須手順（Cloud Agent）
 
-「レビューに対応して」と依頼されたら、コード修正と **各レビューコメントへの返信** をセットで完了する。返信なしで作業完了にしない。
+「レビューに対応して」と依頼されたら、コード修正と各レビューコメントへの返信をセットで完了する。返信なしで作業完了にしない。
 
-1. `gh api repos/<owner>/<repo>/pulls/<number>/comments` で **未返信の inline レビューコメント** をすべて列挙する
-2. 指摘ごとにコードを修正し、コミット・`git push` する
-3. push したコミット hash を含め、**指摘コメントごとに** `ManagePullRequest` の `post_comment`（`in_reply_to` にコメント ID）で返信する
+1. gh api repos/<owner>/<repo>/pulls/<number>/comments で未返信の inline レビューコメントをすべて列挙する
+2. 指摘ごとにコードを修正し、コミット・git push する
+3. push したコミット hash を含め、指摘コメントごとに ManagePullRequest の post_comment（in_reply_to にコメント ID）で返信する
    - 返信は短く。何をどう直したかとコミット hash だけ書く
-   - **Resolve conversation はしない**（ユーザーが行う）
-4. ユーザーへのサマリーでも「返信済み」とコミット hash を伝える
+   - Resolve conversation はしない（ユーザーが行う）
+4. ユーザーへのサマリーでも返信済みとコミット hash を伝える
 
-返信を忘れやすいので、push の直後に手順 1 と 3 を必ず実行する（テスト完了後の最終手順に含める）。
+push の直後に手順 1 と 3 を必ず実行する（テスト完了後の最終手順に含める）。
 
 ## PRの更新
 
