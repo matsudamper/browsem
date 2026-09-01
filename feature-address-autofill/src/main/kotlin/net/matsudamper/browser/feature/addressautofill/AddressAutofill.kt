@@ -148,8 +148,9 @@ class AddressAutofillCoordinator(
     fun onAddressFetch(count: Int) {
         if (count <= 0) return
         val current = synchronized(lock) {
-            if (lastFieldKind == FIELD_KIND_EMAIL || lastFieldKind == FIELD_KIND_OTHER) {
-                Log.i(TAG, "onAddressFetch skipped: last field is $lastFieldKind")
+            // メール欄では住所候補を出さない。それ以外はフォーカス判定まで保留する。
+            if (lastFieldKind == FIELD_KIND_EMAIL) {
+                Log.i(TAG, "onAddressFetch skipped: last field is email")
                 return
             }
             if (isFocusSuppressed(FIELD_KIND_ADDRESS)) {
@@ -168,8 +169,7 @@ class AddressAutofillCoordinator(
                     kind = kind,
                     shouldAbort = {
                         synchronized(lock) {
-                            lastFieldKind == FIELD_KIND_EMAIL ||
-                                lastFieldKind == FIELD_KIND_OTHER ||
+                            shouldAbortAddressFetchAfterFocusSettled() ||
                                 isFocusSuppressed(FIELD_KIND_ADDRESS)
                         }
                     },
@@ -304,6 +304,18 @@ class AddressAutofillCoordinator(
         }
         Log.i(TAG, "suggestion bar kind=$kind count=${items.size}")
         current.host.showAddressAutofillBar(items)
+    }
+
+    /**
+     * [onAddressFetch] は shadow DOM 等でフォーカス通知が来ない場合のフォールバック。
+     * 未確定 (null) のままなら出す。OTHER / EMAIL に確定したら出さない。
+     */
+    private fun shouldAbortAddressFetchAfterFocusSettled(): Boolean {
+        return when (lastFieldKind) {
+            FIELD_KIND_ADDRESS, FIELD_KIND_NAME, null -> false
+            FIELD_KIND_EMAIL, FIELD_KIND_OTHER -> true
+            else -> true
+        }
     }
 
     private fun isFocusSuppressed(kind: String): Boolean {
