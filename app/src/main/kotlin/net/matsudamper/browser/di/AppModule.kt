@@ -42,8 +42,8 @@ import net.matsudamper.browser.feature.networklog.NetworkLogStore
 import net.matsudamper.browser.feature.networklog.NetworkLogWebExtension
 import net.matsudamper.browser.feature.themecolor.ThemeColorWebExtension
 import net.matsudamper.browser.feature.twittershare.TwitterShareWebExtension
-import net.matsudamper.browser.feature.websharefiles.WebShareFilesWebExtension
 import net.matsudamper.browser.feature.viewportscale.ViewportScaleWebExtension
+import net.matsudamper.browser.feature.websharefiles.WebShareFilesWebExtension
 import org.koin.android.ext.koin.androidContext
 import org.koin.androidx.workmanager.dsl.worker
 import org.koin.core.module.dsl.viewModel
