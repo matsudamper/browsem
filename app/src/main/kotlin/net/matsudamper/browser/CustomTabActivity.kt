@@ -10,12 +10,12 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.VisibleForTesting
 import androidx.browser.customtabs.CustomTabsSessionToken
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -146,6 +146,14 @@ class CustomTabActivity : ComponentActivity() {
         super.onDestroy()
     }
 
+    @VisibleForTesting
+    internal fun browserTabControllerForTesting(): BrowserTabController {
+        check(::browserTabController.isInitialized) {
+            "browserTabController is not initialized"
+        }
+        return browserTabController
+    }
+
     /**
      * ダウンロード通知を表示するために POST_NOTIFICATIONS パーミッションを要求し、
      * ユーザーが GRANT または DENY を選択するまで待機する。
@@ -260,22 +268,17 @@ private fun CustomTabScreen(
         key2 = initialUrl,
         key3 = prewarmedSession,
     ) {
-        value = if (prewarmedSession != null) {
-            browserTabController.createAndAppendTabWithSession(
-                session = prewarmedSession,
-                initialUrl = initialUrl,
-            )
-        } else {
-            browserTabController.createAndAppendTab(initialUrl = initialUrl)
-        }
-    }
-    DisposableEffect(browserTabController, browserTab?.tabId) {
-        val tabId = browserTab?.tabId
-        onDispose {
-            if (tabId != null) {
-                browserTabController.closeTab(tabId)
+        // BrowserAppShell の外側ナビ（サイトの設定など）で Root が一時的に外れるため、
+        // 既存タブを再利用する。WebAppScreen と同様、破棄は Activity.onDestroy に任せる。
+        value = browserTabController.tabs.firstOrNull()
+            ?: if (prewarmedSession != null) {
+                browserTabController.createAndAppendTabWithSession(
+                    session = prewarmedSession,
+                    initialUrl = initialUrl,
+                )
+            } else {
+                browserTabController.createAndAppendTab(initialUrl = initialUrl)
             }
-        }
     }
     val activeTab = browserTab
     if (activeTab == null) {
