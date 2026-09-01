@@ -1,6 +1,7 @@
 package net.matsudamper.browser
 
 import android.Manifest
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
@@ -962,11 +963,16 @@ internal class BrowserTabScreenState(
 
     /** 任意のテキストを OS の共有シート（text/plain）で共有する */
     fun shareText(text: String) {
-        val intent = Intent(Intent.ACTION_SEND).apply {
-            type = "text/plain"
-            putExtra(Intent.EXTRA_TEXT, text)
+        launchPlainTextShare(body = text)
+    }
+
+    private fun launchPlainTextShare(body: String, subject: String? = null) {
+        try {
+            val intent = buildPlainTextShareIntent(body, subject)
+            context.startActivity(Intent.createChooser(intent, null))
+        } catch (_: ActivityNotFoundException) {
+            // ツールバー共有は Web Share API ではないため、起動失敗時は何もしない
         }
-        context.startActivity(Intent.createChooser(intent, null))
     }
 
     fun downloadImage(imageUrl: String) {
