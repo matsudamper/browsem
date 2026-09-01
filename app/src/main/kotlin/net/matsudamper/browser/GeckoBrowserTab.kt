@@ -953,11 +953,17 @@ internal fun GeckoBrowserTab(
                     // Compose 側で imePadding / safeDrawing(IME 含む) を掛けると、
                     // Surface のリサイズと Gecko 内部のキーボード余白が重なり、
                     // 候補バー消滅後の細い帯や、キーボード閉後にキーボード高の黒領域が残る。
-                    Modifier.windowInsetsPadding(
-                        WindowInsets.safeDrawing
-                            .exclude(WindowInsets.ime)
-                            .only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal),
-                    )
+                    Modifier
+                        .windowInsetsPadding(
+                            WindowInsets.safeDrawing
+                                .exclude(WindowInsets.ime)
+                                .exclude(WindowInsets.navigationBars)
+                                .only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal),
+                        )
+                        // IME 表示中もナビバー分は親で確保する（候補バーは ime - navigationBars で上げる）。
+                        .windowInsetsPadding(
+                            WindowInsets.navigationBars.only(WindowInsetsSides.Bottom),
+                        )
                 },
             ),
     ) {
