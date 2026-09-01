@@ -79,30 +79,27 @@ fun HistoryScreen(
             )
 
             val listState = rememberLazyListState()
+            val entries = uiState.entryList?.entries.orEmpty()
             var previousSearchQuery by remember { mutableStateOf<String?>(null) }
-            var pendingScrollToTop by remember { mutableStateOf(false) }
-            var baselineEntryIds by remember { mutableStateOf<List<Long>>(emptyList()) }
+            var previousEntryListQuery by remember { mutableStateOf<String?>(null) }
             LaunchedEffect(uiState.searchQuery) {
                 if (previousSearchQuery != null && previousSearchQuery != uiState.searchQuery) {
-                    pendingScrollToTop = true
-                    baselineEntryIds = uiState.entries.map { it.id }
                     listState.scrollToItem(0)
                 }
                 previousSearchQuery = uiState.searchQuery
             }
-            LaunchedEffect(uiState.entries) {
-                if (!pendingScrollToTop) return@LaunchedEffect
-                val currentEntryIds = uiState.entries.map { it.id }
-                if (currentEntryIds != baselineEntryIds) {
+            LaunchedEffect(uiState.entryList?.searchQuery) {
+                val query = uiState.entryList?.searchQuery ?: return@LaunchedEffect
+                if (previousEntryListQuery != null && query != previousEntryListQuery) {
                     listState.scrollToItem(0)
-                    pendingScrollToTop = false
                 }
+                previousEntryListQuery = query
             }
             LazyColumn(
                 state = listState,
                 modifier = Modifier.fillMaxSize(),
             ) {
-                items(uiState.entries, key = { it.id }) { entry ->
+                items(entries, key = { it.id }) { entry ->
                     HistoryItem(entry = entry)
                 }
             }
