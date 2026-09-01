@@ -31,6 +31,7 @@
       ? pageWin.navigator.canShare.bind(pageWin.navigator)
       : null;
   const pendingNativeRequests = new Map();
+  let pageShareReaderPromise = null;
 
   function isShareDataWithFiles(data) {
     return !!data && Array.isArray(data.files) && data.files.length > 0;
@@ -98,22 +99,34 @@
     );
   }
 
-  function readFileAsBase64(file) {
-    return new Promise(function (resolve, reject) {
-      const reader = new FileReader();
-      reader.onload = function () {
-        const result = reader.result;
-        if (typeof result !== "string") {
-          reject(new DOMException("ファイルの読み込みに失敗しました", "NotAllowedError"));
-          return;
-        }
-        const commaIndex = result.indexOf(",");
-        resolve(commaIndex >= 0 ? result.slice(commaIndex + 1) : result);
-      };
-      reader.onerror = function () {
-        reject(new DOMException("ファイルの読み込みに失敗しました", "NotAllowedError"));
-      };
-      reader.readAsDataURL(file);
+  function ensurePageShareReader() {
+    if (typeof pageWin.__browsemEncodeShareFiles === "function") {
+      return Promise.resolve();
+    }
+    if (!pageShareReaderPromise) {
+      pageShareReaderPromise = new Promise(function (resolve, reject) {
+        const script = document.createElement("script");
+        script.src = browser.runtime.getURL("page-share-reader.js");
+        script.onload = function () {
+          if (typeof pageWin.__browsemEncodeShareFiles === "function") {
+            resolve();
+          } else {
+            reject(new DOMException("共有の準備ができていません", "NotAllowedError"));
+          }
+        };
+        script.onerror = function () {
+          reject(new DOMException("共有の準備ができていません", "NotAllowedError"));
+        };
+        const root = document.documentElement || document.head || document;
+        root.appendChild(script);
+      });
+    }
+    return pageShareReaderPromise;
+  }
+
+  function encodeFilesInPage(files) {
+    return ensurePageShareReader().then(function () {
+      return pageWin.__browsemEncodeShareFiles(files);
     });
   }
 
@@ -142,17 +155,7 @@
       return Promise.reject(new DOMException("共有リクエストが競合しました", "AbortError"));
     }
 
-    return Promise.all(
-      data.files.map(function (file) {
-        return readFileAsBase64(file).then(function (base64) {
-          return {
-            name: file.name || "shared",
-            type: file.type || "application/octet-stream",
-            data: base64,
-          };
-        });
-      }),
-    ).then(function (files) {
+    return encodeFilesInPage(data.files).then(function (files) {
       const encodedError = validateEncodedFiles(files);
       if (encodedError) {
         throw new DOMException(encodedError, "NotAllowedError");

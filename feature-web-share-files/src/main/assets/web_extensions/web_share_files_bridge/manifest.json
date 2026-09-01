@@ -19,6 +19,9 @@
       "all_frames": false
     }
   ],
+  "web_accessible_resources": [
+    "page-share-reader.js"
+  ],
   "permissions": [
     "geckoViewAddons",
     "nativeMessaging",
