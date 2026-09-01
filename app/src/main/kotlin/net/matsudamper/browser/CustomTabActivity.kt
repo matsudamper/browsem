@@ -100,31 +100,36 @@ class CustomTabActivity : ComponentActivity() {
             }
 
             BrowserTheme(themeMode = browserSettings.themeMode) {
-                Box(
-                    modifier = Modifier.semantics {
-                        testTagsAsResourceId = true
-                    },
-                ) {
-                    // カスタムタブは設定・サイト設定などの全画面系画面を持たないため、
-                    // BrowserAppShell は挟まず CustomTabScreen を直接描画する
-                    CustomTabScreen(
-                        initialUrl = initialUrl.takeIf { it.isNotBlank() } ?: browserSettings.resolvedHomepageUrl(),
-                        customTabsSessionToken = customTabsSessionToken,
-                        homepageUrl = browserSettings.resolvedHomepageUrl(),
-                        searchTemplate = browserSettings.resolvedSearchTemplate(),
-                        translationProvider = browserSettings.translationProvider,
-                        browserTabController = browserTabController,
-                        browserSessionLifecycleController = browserSessionLifecycleController,
-                        settingsRepository = settingsRepository,
-                        historyRepository = historyRepository,
-                        webSuggestionRepository = webSuggestionRepository,
-                        themeColorExtension = themeColorExtension,
-                        mediaWebExtension = mediaWebExtensionInstance,
-                        onClose = ::finish,
-                        onOpenInBrowser = ::openInMainBrowser,
-                        onOpenNewTabInBrowser = ::openNewTabInMainBrowser,
-                        onRequestDownloadNotificationPermission = { requestDownloadNotificationPermission() },
-                    )
+                BrowserAppShell(
+                    browserTabController = browserTabController,
+                    browserSessionLifecycleController = browserSessionLifecycleController,
+                    runtime = runtime,
+                ) { outerNavActions ->
+                    Box(
+                        modifier = Modifier.semantics {
+                            testTagsAsResourceId = true
+                        },
+                    ) {
+                        CustomTabScreen(
+                            initialUrl = initialUrl.takeIf { it.isNotBlank() } ?: browserSettings.resolvedHomepageUrl(),
+                            customTabsSessionToken = customTabsSessionToken,
+                            homepageUrl = browserSettings.resolvedHomepageUrl(),
+                            searchTemplate = browserSettings.resolvedSearchTemplate(),
+                            translationProvider = browserSettings.translationProvider,
+                            browserTabController = browserTabController,
+                            browserSessionLifecycleController = browserSessionLifecycleController,
+                            settingsRepository = settingsRepository,
+                            historyRepository = historyRepository,
+                            webSuggestionRepository = webSuggestionRepository,
+                            themeColorExtension = themeColorExtension,
+                            mediaWebExtension = mediaWebExtensionInstance,
+                            outerNavActions = outerNavActions,
+                            onClose = ::finish,
+                            onOpenInBrowser = ::openInMainBrowser,
+                            onOpenNewTabInBrowser = ::openNewTabInMainBrowser,
+                            onRequestDownloadNotificationPermission = { requestDownloadNotificationPermission() },
+                        )
+                    }
                 }
             }
         }
@@ -227,6 +232,7 @@ private fun CustomTabScreen(
     webSuggestionRepository: WebSuggestionRepository,
     themeColorExtension: ThemeColorWebExtension,
     mediaWebExtension: MediaWebExtension,
+    outerNavActions: OuterNavActions,
     onClose: () -> Unit,
     onOpenInBrowser: (url: String, tab: BrowserTab) -> Unit,
     onOpenNewTabInBrowser: (url: String, referrerUrl: String?) -> Unit,
@@ -305,8 +311,9 @@ private fun CustomTabScreen(
         onInstallExtensionRequest = {},
         onRequestDownloadNotificationPermission = onRequestDownloadNotificationPermission,
         onOpenSettings = {},
-        // カスタムタブは設定画面のナビゲーションスタックを持たないため非表示
-        onOpenSiteSettings = null,
+        onOpenSiteSettings = { url ->
+            outerNavActions.openSiteSettings(url, activeTab.tabId)
+        },
         onOpenDownloads = null,
         onOpenTabs = {},
         enableTabUi = false,
@@ -342,7 +349,9 @@ private fun CustomTabScreen(
                 onInstallExtensionRequest = {},
                 onRequestDownloadNotificationPermission = onRequestDownloadNotificationPermission,
                 onOpenSettings = {},
-                onOpenSiteSettings = null,
+                onOpenSiteSettings = { url ->
+                    outerNavActions.openSiteSettings(url, popupTab.tabId)
+                },
                 onOpenDownloads = null,
                 onOpenTabs = {},
                 enableTabUi = false,
