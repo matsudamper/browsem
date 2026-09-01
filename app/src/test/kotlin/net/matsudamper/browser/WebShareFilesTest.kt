@@ -65,6 +65,13 @@ class WebShareFilesTest {
     }
 
     @Test
+    fun sanitizeWebShareCacheFileName_rejectsDotNames() {
+        assertEquals("0-shared", sanitizeWebShareCacheFileName(".", 0))
+        assertEquals("1-shared", sanitizeWebShareCacheFileName("..", 1))
+        assertEquals("2-photo.png", sanitizeWebShareCacheFileName("photo.png", 2))
+    }
+
+    @Test
     fun buildWebShareFilesIntent_returnsNullWhenUriCountMismatch() {
         val intent = buildWebShareFilesIntent(
             title = null,

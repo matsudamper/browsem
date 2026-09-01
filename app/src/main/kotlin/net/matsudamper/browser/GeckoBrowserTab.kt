@@ -2,8 +2,10 @@ package net.matsudamper.browser
 
 import android.app.Activity
 import android.content.ActivityNotFoundException
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.SystemClock
@@ -258,25 +260,57 @@ internal fun GeckoBrowserTab(
     data class PendingWebShareFiles(
         val geckoResult: GeckoResult<Any>,
         val cacheDir: File,
+        var completed: Boolean = false,
     )
 
     var pendingWebShareFiles by remember { mutableStateOf<PendingWebShareFiles?>(null) }
 
-    val webShareFilesLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.StartActivityForResult(),
-    ) { activityResult ->
-        val pending = pendingWebShareFiles ?: return@rememberLauncherForActivityResult
+    fun finishPendingWebShareFiles(success: Boolean, error: String? = null) {
+        val pending = pendingWebShareFiles ?: return
+        if (pending.completed) return
+        pending.completed = true
         pendingWebShareFiles = null
-        val response = if (activityResult.resultCode == Activity.RESULT_OK) {
+        val response = if (success) {
             JSONObject().put("success", true)
         } else {
             JSONObject()
                 .put("success", false)
-                .put("error", "共有がキャンセルされました")
+                .put("error", error ?: "共有がキャンセルされました")
                 .put("errorName", "AbortError")
         }
         pending.geckoResult.complete(response)
         pending.cacheDir.deleteRecursively()
+    }
+
+    val onFinishPendingWebShareFiles by rememberUpdatedState<(Boolean, String?) -> Unit>(
+        { success, error -> finishPendingWebShareFiles(success, error) },
+    )
+
+    DisposableEffect(context) {
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(receiverContext: Context?, intent: Intent?) {
+                if (intent?.action != WEB_SHARE_FILES_CHOSEN_ACTION) return
+                onFinishPendingWebShareFiles(true, null)
+            }
+        }
+        ContextCompat.registerReceiver(
+            context,
+            receiver,
+            IntentFilter(WEB_SHARE_FILES_CHOSEN_ACTION),
+            ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
+        onDispose {
+            context.unregisterReceiver(receiver)
+        }
+    }
+
+    val webShareFilesLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) { activityResult ->
+        if (pendingWebShareFiles?.completed == true) return@rememberLauncherForActivityResult
+        if (activityResult.resultCode == Activity.RESULT_CANCELED) {
+            onFinishPendingWebShareFiles(false, null)
+        }
     }
 
     // ファイルピッカー（単一ファイル選択）Google Photos を含むピッカーを表示するため ACTION_GET_CONTENT を使用
@@ -762,12 +796,22 @@ internal fun GeckoBrowserTab(
     DisposableEffect(session, webShareFilesWebExtension) {
         webShareFilesWebExtension.registerSession(session) { request, geckoResult ->
             try {
+                val payloads = decodeWebShareFiles(request.files)
+                if (payloads == null) {
+                    geckoResult.complete(
+                        JSONObject()
+                            .put("success", false)
+                            .put("error", "共有データの準備に失敗しました")
+                            .put("errorName", "NotAllowedError"),
+                    )
+                    return@registerSession
+                }
                 val prepared = prepareWebShareFilesIntent(
                     context = context,
                     title = request.title,
                     text = request.text,
                     url = request.url,
-                    files = decodeWebShareFiles(request.files),
+                    files = payloads,
                 )
                 if (prepared == null || !canLaunchWebShareFilesIntent(context, prepared.intent)) {
                     prepared?.cacheDir?.deleteRecursively()
@@ -783,7 +827,9 @@ internal fun GeckoBrowserTab(
                     geckoResult = geckoResult,
                     cacheDir = prepared.cacheDir,
                 )
-                webShareFilesLauncher.launch(Intent.createChooser(prepared.intent, null))
+                webShareFilesLauncher.launch(
+                    buildWebShareFilesChooserIntent(context, prepared.intent),
+                )
             } catch (_: ActivityNotFoundException) {
                 geckoResult.complete(
                     JSONObject()

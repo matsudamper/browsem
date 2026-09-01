@@ -1,12 +1,18 @@
 package net.matsudamper.browser
 
+import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.core.content.FileProvider
 import java.io.File
+import java.io.IOException
 import java.util.Base64
+import java.util.UUID
 import net.matsudamper.browser.feature.websharefiles.WebShareFilesWebExtension
+
+internal const val WEB_SHARE_FILES_CHOSEN_ACTION =
+    "net.matsudamper.browser.action.WEB_SHARE_FILES_CHOSEN"
 
 internal data class WebShareFilePayload(
     val name: String,
@@ -34,15 +40,28 @@ internal data class PreparedWebShareFiles(
     val cacheDir: File,
 )
 
+internal fun sanitizeWebShareCacheFileName(name: String, index: Int): String {
+    val normalized = name.replace(Regex("[\\\\/]"), "_").trim()
+    val baseName = when {
+        normalized.isEmpty() || normalized == "." || normalized == ".." -> "shared"
+        else -> normalized
+    }
+    return "$index-$baseName"
+}
+
 internal fun decodeWebShareFiles(
     files: List<WebShareFilesWebExtension.WebShareFile>,
-): List<WebShareFilePayload> {
-    return files.map { file ->
-        WebShareFilePayload(
-            name = file.name,
-            mimeType = file.mimeType,
-            bytes = Base64.getDecoder().decode(file.base64Data),
-        )
+): List<WebShareFilePayload>? {
+    return try {
+        files.map { file ->
+            WebShareFilePayload(
+                name = file.name,
+                mimeType = file.mimeType,
+                bytes = Base64.getDecoder().decode(file.base64Data),
+            )
+        }
+    } catch (_: IllegalArgumentException) {
+        null
     }
 }
 
@@ -97,18 +116,41 @@ internal fun prepareWebShareFilesIntent(
         deleteRecursively()
         mkdirs()
     }
-    val uris = files.map { file ->
-        val safeName = file.name.replace(Regex("[\\\\/]"), "_").ifBlank { "shared" }
-        val outputFile = File(cacheDir, safeName)
-        outputFile.writeBytes(file.bytes)
-        FileProvider.getUriForFile(
-            context,
-            "${context.packageName}.websharefileprovider",
-            outputFile,
-        )
+    return try {
+        val uris = files.mapIndexed { index, file ->
+            val safeName = sanitizeWebShareCacheFileName(file.name, index)
+            val outputFile = File(cacheDir, safeName)
+            outputFile.writeBytes(file.bytes)
+            FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.websharefileprovider",
+                outputFile,
+            )
+        }
+        val intent = buildWebShareFilesIntent(title, text, url, files, uris) ?: return null
+        PreparedWebShareFiles(intent = intent, cacheDir = cacheDir)
+    } catch (_: IOException) {
+        cacheDir.deleteRecursively()
+        null
+    } catch (_: IllegalArgumentException) {
+        cacheDir.deleteRecursively()
+        null
     }
-    val intent = buildWebShareFilesIntent(title, text, url, files, uris) ?: return null
-    return PreparedWebShareFiles(intent = intent, cacheDir = cacheDir)
+}
+
+internal fun buildWebShareFilesChooserIntent(
+    context: Context,
+    shareIntent: Intent,
+): Intent {
+    val callbackIntent = Intent(WEB_SHARE_FILES_CHOSEN_ACTION)
+        .setPackage(context.packageName)
+    val pendingIntent = PendingIntent.getBroadcast(
+        context,
+        UUID.randomUUID().hashCode(),
+        callbackIntent,
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE,
+    )
+    return Intent.createChooser(shareIntent, null, pendingIntent.intentSender)
 }
 
 internal fun canLaunchWebShareFilesIntent(context: Context, intent: Intent): Boolean {
