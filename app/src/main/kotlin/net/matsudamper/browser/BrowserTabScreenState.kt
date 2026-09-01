@@ -293,10 +293,6 @@ internal class BrowserTabScreenState(
     // --- プロンプトダイアログ状態（分離済み） ---
     val promptDialogState = PromptDialogState(coroutineScope)
 
-    init {
-        promptDialogState.onWebShare = ::shareWebShareContent
-    }
-
     // --- サイトごとのマイク許可確認ダイアログ状態 ---
     var microphonePermissionDialog by mutableStateOf<MicrophonePermissionDialogState?>(null)
         private set
@@ -965,34 +961,17 @@ internal class BrowserTabScreenState(
         shareText("$currentPageTitle\n$currentPageUrl")
     }
 
-    /** Web Share API (navigator.share) の共有要求を OS の共有シートで処理する */
-    fun shareWebShareContent(title: String?, text: String?, uri: String?): Boolean {
-        val body = buildWebShareBody(text, uri)
-        val subject = title?.trim()?.takeIf { it.isNotEmpty() }
-        if (body.isBlank() && subject == null) {
-            return false
-        }
-        return launchPlainTextShare(body = body, subject = subject)
-    }
-
     /** 任意のテキストを OS の共有シート（text/plain）で共有する */
     fun shareText(text: String) {
         launchPlainTextShare(body = text)
     }
 
-    private fun launchPlainTextShare(body: String, subject: String? = null): Boolean {
-        return try {
-            val intent = Intent(Intent.ACTION_SEND).apply {
-                type = "text/plain"
-                if (body.isNotBlank()) {
-                    putExtra(Intent.EXTRA_TEXT, body)
-                }
-                subject?.let { putExtra(Intent.EXTRA_SUBJECT, it) }
-            }
+    private fun launchPlainTextShare(body: String, subject: String? = null) {
+        try {
+            val intent = buildPlainTextShareIntent(body, subject)
             context.startActivity(Intent.createChooser(intent, null))
-            true
         } catch (_: ActivityNotFoundException) {
-            false
+            // ツールバー共有は Web Share API ではないため、起動失敗時は何もしない
         }
     }
 

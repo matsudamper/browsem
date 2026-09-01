@@ -1,6 +1,7 @@
 package net.matsudamper.browser
 
 import android.app.Activity
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -240,6 +241,16 @@ internal fun GeckoBrowserTab(
     // ラムダ内で ON_PAUSE 時点の最新 IME 表示状態を読めるよう rememberUpdatedState で包む。
     val currentIsImeVisible by rememberUpdatedState(isImeVisible)
 
+    val webShareLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) { activityResult ->
+        if (activityResult.resultCode == Activity.RESULT_OK) {
+            dialogState.confirmWebSharePrompt()
+        } else {
+            dialogState.dismissWebSharePrompt()
+        }
+    }
+
     // ファイルピッカー（単一ファイル選択）Google Photos を含むピッカーを表示するため ACTION_GET_CONTENT を使用
     val singleFileLauncher = rememberLauncherForActivityResult(
         GetContentWithMimeTypes(),
@@ -273,6 +284,24 @@ internal fun GeckoBrowserTab(
 
             else ->
                 singleFileLauncher.launch(mimeTypes)
+        }
+    }
+
+    // Web Share プロンプトが来たら共有シートを起動し、結果を待ってから GeckoResult を完了する
+    val pendingWebSharePrompt = dialogState.pendingWebSharePrompt
+    LaunchedEffect(pendingWebSharePrompt) {
+        val prompt = pendingWebSharePrompt ?: return@LaunchedEffect
+        val body = buildWebShareBody(prompt.text, prompt.uri)
+        val subject = prompt.title?.takeIf { it.trim().isNotEmpty() }
+        if (!canLaunchPlainTextShare(context, body, subject)) {
+            dialogState.failWebSharePrompt()
+            return@LaunchedEffect
+        }
+        val shareIntent = buildPlainTextShareIntent(body, subject)
+        try {
+            webShareLauncher.launch(Intent.createChooser(shareIntent, null))
+        } catch (_: ActivityNotFoundException) {
+            dialogState.failWebSharePrompt()
         }
     }
 

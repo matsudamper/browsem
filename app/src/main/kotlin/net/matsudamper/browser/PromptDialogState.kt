@@ -73,6 +73,10 @@ internal class PromptDialogState(
     var pendingRepostConfirmPrompt by mutableStateOf<GeckoSession.PromptDelegate.RepostConfirmPrompt?>(null)
     var pendingRepostConfirmResult by mutableStateOf<GeckoResult<GeckoSession.PromptDelegate.PromptResponse>?>(null)
 
+    // --- Web Share (navigator.share) ---
+    var pendingWebSharePrompt by mutableStateOf<GeckoSession.PromptDelegate.SharePrompt?>(null)
+    var pendingWebShareResult by mutableStateOf<GeckoResult<GeckoSession.PromptDelegate.PromptResponse>?>(null)
+
     var pendingAddressSaveAddress by mutableStateOf<Autocomplete.Address?>(null)
     var pendingAddressSavePrompt by mutableStateOf<GeckoSession.PromptDelegate.AutocompleteRequest<Autocomplete.AddressSaveOption>?>(null)
     var pendingAddressSaveResult by mutableStateOf<GeckoResult<GeckoSession.PromptDelegate.PromptResponse>?>(null)
@@ -81,12 +85,6 @@ internal class PromptDialogState(
     override var autofillBarHideGeneration: Int = 0
     var addressAutofillBar by mutableStateOf<AddressAutofillBarUiState?>(null)
     var pendingFormInputSaveDialog by mutableStateOf<FormInputSaveDialogRequest?>(null)
-
-    /**
-     * Web Share API (navigator.share) からの共有要求を OS の共有シートで処理する。
-     * 戻り値は共有シートの起動に成功したかどうか。
-     */
-    var onWebShare: ((title: String?, text: String?, uri: String?) -> Boolean)? = null
 
     override fun showAddressAutofillBar(items: List<AddressAutofillSuggestionItem>) {
         if (items.isEmpty()) {
@@ -366,6 +364,31 @@ internal class PromptDialogState(
         pendingRepostConfirmResult = null
     }
 
+    fun confirmWebSharePrompt() {
+        val prompt = pendingWebSharePrompt ?: return
+        pendingWebShareResult?.complete(
+            prompt.confirm(GeckoSession.PromptDelegate.SharePrompt.Result.SUCCESS),
+        )
+        pendingWebSharePrompt = null
+        pendingWebShareResult = null
+    }
+
+    fun dismissWebSharePrompt() {
+        val prompt = pendingWebSharePrompt ?: return
+        pendingWebShareResult?.complete(prompt.dismiss())
+        pendingWebSharePrompt = null
+        pendingWebShareResult = null
+    }
+
+    fun failWebSharePrompt() {
+        val prompt = pendingWebSharePrompt ?: return
+        pendingWebShareResult?.complete(
+            prompt.confirm(GeckoSession.PromptDelegate.SharePrompt.Result.FAILURE),
+        )
+        pendingWebSharePrompt = null
+        pendingWebShareResult = null
+    }
+
     fun confirmAddressSave() {
         val prompt = pendingAddressSavePrompt ?: return
         pendingAddressSaveResult?.complete(prompt.options.firstOrNull()?.let(prompt::confirm) ?: prompt.dismiss())
@@ -494,17 +517,15 @@ internal class PromptDialogState(
                 session: GeckoSession,
                 prompt: GeckoSession.PromptDelegate.SharePrompt,
             ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse> {
-                val handler = onWebShare
-                if (handler == null) {
-                    return GeckoResult.fromValue(prompt.dismiss())
+                if (!hasWebShareContent(prompt.title, prompt.text, prompt.uri)) {
+                    return GeckoResult.fromValue(
+                        prompt.confirm(GeckoSession.PromptDelegate.SharePrompt.Result.FAILURE),
+                    )
                 }
-                val shareStarted = handler(prompt.title, prompt.text, prompt.uri)
-                val response = if (shareStarted) {
-                    prompt.confirm(GeckoSession.PromptDelegate.SharePrompt.Result.SUCCESS)
-                } else {
-                    prompt.confirm(GeckoSession.PromptDelegate.SharePrompt.Result.FAILURE)
-                }
-                return GeckoResult.fromValue(response)
+                val result = GeckoResult<GeckoSession.PromptDelegate.PromptResponse>()
+                pendingWebSharePrompt = prompt
+                pendingWebShareResult = result
+                return result
             }
 
             override fun onPopupPrompt(

@@ -1,6 +1,8 @@
 package net.matsudamper.browser
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class WebShareTextTest {
@@ -25,5 +27,16 @@ class WebShareTextTest {
     @Test
     fun buildWebShareBody_returnsEmptyWhenBothMissing() {
         assertEquals("", buildWebShareBody(null, null))
+    }
+
+    @Test
+    fun buildWebShareBody_preservesLeadingAndTrailingWhitespace() {
+        assertEquals("  indented text\n", buildWebShareBody("  indented text\n", null))
+    }
+
+    @Test
+    fun hasWebShareContent_returnsTrueWhenWhitespaceOnlyFieldsAreExcluded() {
+        assertTrue(hasWebShareContent("  title  ", null, null))
+        assertFalse(hasWebShareContent("   ", null, null))
     }
 }
