@@ -31,6 +31,7 @@
       ? pageWin.navigator.canShare.bind(pageWin.navigator)
       : null;
   const pendingNativeRequests = new Map();
+  let pageShareReaderPromise = null;
 
   function normalizeFiles(files) {
     if (!files) return null;
@@ -48,9 +49,10 @@
     return null;
   }
 
-  function isShareDataWithFiles(data) {
-    const files = normalizeFiles(data && data.files);
-    return files !== null && files.length > 0;
+  function hasTransientUserActivation() {
+    const activation = pageWin.navigator.userActivation;
+    if (!activation) return true;
+    return activation.isActive;
   }
 
   function validateFiles(files) {
@@ -121,40 +123,67 @@
     );
   }
 
-  function encodeBufferToBase64(buffer) {
-    const bytes = new Uint8Array(buffer);
-    let binary = "";
-    const chunkSize = 0x8000;
-    for (let i = 0; i < bytes.length; i += chunkSize) {
-      binary += String.fromCharCode.apply(
-        null,
-        bytes.subarray(i, Math.min(i + chunkSize, bytes.length)),
-      );
+  function ensurePageShareReader() {
+    if (typeof pageWin.__browsemEncodeShareFiles === "function") {
+      return Promise.resolve();
     }
-    return btoa(binary);
+    if (!pageShareReaderPromise) {
+      pageShareReaderPromise = new Promise(function (resolve, reject) {
+        const script = document.createElement("script");
+        script.src = browser.runtime.getURL("page-share-reader.js");
+        script.onload = function () {
+          if (typeof pageWin.__browsemEncodeShareFiles === "function") {
+            resolve();
+          } else {
+            reject(new DOMException("共有の準備ができていません", "NotAllowedError"));
+          }
+        };
+        script.onerror = function () {
+          reject(new DOMException("共有の準備ができていません", "NotAllowedError"));
+        };
+        const root = document.documentElement || document.head || document;
+        root.appendChild(script);
+      });
+    }
+    return pageShareReaderPromise;
   }
 
-  function readFileAsBase64(file) {
-    return file.arrayBuffer().then(function (buffer) {
-      if (buffer.byteLength !== file.size) {
-        throw new DOMException("ファイルの読み込みに失敗しました", "NotAllowedError");
-      }
-      return encodeBufferToBase64(buffer);
+  function encodeFilesInPage(files) {
+    return ensurePageShareReader().then(function () {
+      return pageWin.__browsemEncodeShareFiles(files);
     });
   }
 
-  function encodeFiles(files) {
-    return Promise.all(
-      files.map(function (file) {
-        return readFileAsBase64(file).then(function (base64) {
-          return {
-            name: file.name || "shared",
-            type: file.type || "application/octet-stream",
-            data: base64,
-          };
+  function sendFilesToNative(requestId, data, encodedFiles) {
+    return new Promise(function (resolve, reject) {
+      pendingNativeRequests.set(requestId, { resolve: resolve, reject: reject });
+      browser.runtime
+        .sendNativeMessage(NATIVE_APP, {
+          requestId: requestId,
+          title: data.title || "",
+          text: data.text || "",
+          url: data.url || "",
+          files: encodedFiles,
+        })
+        .then(function (response) {
+          pendingNativeRequests.delete(requestId);
+          const result = response || {};
+          if (result.success) {
+            resolve(undefined);
+          } else {
+            reject(
+              new DOMException(
+                result.error || "共有に失敗しました",
+                result.errorName || "AbortError",
+              ),
+            );
+          }
+        })
+        .catch(function (error) {
+          pendingNativeRequests.delete(requestId);
+          reject(error);
         });
-      }),
-    );
+    });
   }
 
   pageWin.navigator.canShare = exportFunction(function (data) {
@@ -174,10 +203,7 @@
       return originalShare(data);
     }
 
-    if (
-      !pageWin.navigator.userActivation ||
-      !pageWin.navigator.userActivation.isActive
-    ) {
+    if (!hasTransientUserActivation()) {
       return Promise.reject(
         new DOMException("ユーザー操作なしでは共有できません", "NotAllowedError"),
       );
@@ -196,41 +222,17 @@
 
     const requestId = createRequestId();
 
-    return encodeFiles(files).then(function (encodedFiles) {
-      const encodedError = validateEncodedFiles(encodedFiles);
-      if (encodedError) {
-        throw new DOMException(encodedError, "NotAllowedError");
-      }
-
-      return new Promise(function (resolve, reject) {
-        pendingNativeRequests.set(requestId, { resolve: resolve, reject: reject });
-        browser.runtime
-          .sendNativeMessage(NATIVE_APP, {
-            requestId: requestId,
-            title: data.title || "",
-            text: data.text || "",
-            url: data.url || "",
-            files: encodedFiles,
-          })
-          .then(function (response) {
-            pendingNativeRequests.delete(requestId);
-            const result = response || {};
-            if (result.success) {
-              resolve(undefined);
-            } else {
-              reject(
-                new DOMException(
-                  result.error || "共有に失敗しました",
-                  result.errorName || "AbortError",
-                ),
-              );
-            }
-          })
-          .catch(function (error) {
-            pendingNativeRequests.delete(requestId);
-            reject(error);
-          });
+    return encodeFilesInPage(files)
+      .then(function (encodedFiles) {
+        const encodedError = validateEncodedFiles(encodedFiles);
+        if (encodedError) {
+          throw new DOMException(encodedError, "NotAllowedError");
+        }
+        return sendFilesToNative(requestId, data, encodedFiles);
+      })
+      .catch(function (error) {
+        pendingNativeRequests.delete(requestId);
+        throw error;
       });
-    });
   }, pageWin);
 })();
