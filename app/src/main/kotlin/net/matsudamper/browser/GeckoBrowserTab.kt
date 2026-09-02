@@ -1096,10 +1096,10 @@ internal fun GeckoBrowserTab(
                     Modifier
                 } else {
                     // 上部（ステータスバー）は BrowserToolBar の背景色で塗りつぶすため除外する。
-                    // IME は GeckoView が WindowInsets から onKeyboardHeight で処理する。
-                    // Compose 側で imePadding / safeDrawing(IME 含む) を掛けると、
-                    // Surface のリサイズと Gecko 内部のキーボード余白が重なり、
-                    // 候補バー消滅後の細い帯や、キーボード閉後にキーボード高の黒領域が残る。
+                    // IME は GeckoView コンテナ側で imeAboveNavigationBarsPadding する。
+                    // Column 全体に imePadding を掛けると Surface リサイズと Gecko 内部の
+                    // onKeyboardHeight が重なり、候補バー消滅後の細い帯やキーボード閉後の
+                    // 黒領域が残る。親の navigationBars padding と組み合わせてコンテナだけ上げる。
                     Modifier
                         .windowInsetsPadding(
                             WindowInsets.safeDrawing
@@ -1297,6 +1297,8 @@ internal fun GeckoBrowserTab(
         Box(
             modifier = Modifier
                 .weight(1f)
+                // 親 Column が navigationBars を確保済みのため、IME との重なり分だけ縮める。
+                .imeAboveNavigationBarsPadding()
                 .testTag(GeckoBrowserTabTestTags.GeckoContainer.testTag),
         ) {
             BrowserContentHost(

@@ -58,6 +58,29 @@ import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.GeckoView
 
+/**
+ * GeckoView が onAttachedToWindow で登録する IME リスナーのキー。
+ * Compose 側でコンテナをリサイズする場合、内部の onKeyboardHeight と二重になるため解除する。
+ */
+private const val GECKO_KEYBOARD_WINDOW_INSETS_LISTENER = "KEYBOARD_WINDOW_INSETS_LISTENER"
+
+/**
+ * GeckoView 内部のキーボード高さ補正を無効化する。
+ * Compose の imeAboveNavigationBarsPadding でコンテナを縮める構成と併用する。
+ */
+private fun GeckoView.disableInternalKeyboardInsetsListener() {
+    addOnAttachStateChangeListener(
+        object : View.OnAttachStateChangeListener {
+            override fun onViewAttachedToWindow(v: View) {
+                removeWindowInsetsListener(GECKO_KEYBOARD_WINDOW_INSETS_LISTENER)
+                removeOnAttachStateChangeListener(this)
+            }
+
+            override fun onViewDetachedFromWindow(v: View) = Unit
+        },
+    )
+}
+
 @Composable
 internal fun BrowserContentHost(
     state: BrowserTabScreenState,
@@ -86,6 +109,7 @@ internal fun BrowserContentHost(
                     var gestureDownY = 0f
                     val gecko = GeckoView(context).also { geckoView ->
                         geckoView.id = id
+                        geckoView.disableInternalKeyboardInsetsListener()
                         geckoView.isNestedScrollingEnabled = true
                         geckoView.setAutofillEnabled(true)
                         geckoView.importantForAutofill =
