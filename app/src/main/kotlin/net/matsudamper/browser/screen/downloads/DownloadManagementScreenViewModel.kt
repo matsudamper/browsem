@@ -97,9 +97,9 @@ internal class DownloadManagementScreenViewModel(
                 }
                 currentRecords = records
                 val items = records.map { record -> record.toDownloadItem() }
-                val hasClearableHistory = records.any { record ->
-                    record.status !in ACTIVE_DOWNLOAD_STATUSES
-                }
+                val hasClearableHistory =
+                    records.any { it.status !in ACTIVE_DOWNLOAD_STATUSES } &&
+                        records.none { it.status in ACTIVE_DOWNLOAD_STATUSES }
                 uiStateFlow.update {
                     DownloadManagementScreenUiState(
                         isLoading = false,
@@ -483,7 +483,7 @@ internal class DownloadManagementScreenViewModel(
         }
     }
 
-    /** 履歴削除対象レコードに紐づく未完了の部分ファイルを破棄する */
+    /** 履歴削除対象（PAUSED/FAILED 等）レコードに紐づく未完了の部分ファイルを破棄する */
     private fun deletePartialFilesForClearableRecords(records: List<DownloadRecord>) {
         val resolver = getApplication<Application>().contentResolver
         records
