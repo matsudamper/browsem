@@ -25,6 +25,7 @@ import net.matsudamper.browser.download.DownloadFailureReason
 import net.matsudamper.browser.download.DownloadHttpClient
 import net.matsudamper.browser.download.DownloadHttpResponse
 import net.matsudamper.browser.download.DownloadMetadata
+import net.matsudamper.browser.download.DownloadMediaStoreMimeType
 import net.matsudamper.browser.download.DownloadUrl
 import net.matsudamper.browser.download.GeckoDownloadHttpClient
 import net.matsudamper.browser.download.PendingDownloadBodyStore
@@ -286,6 +287,7 @@ internal class DownloadWorker(
             val contentLength = DownloadMetadata.parseContentLength(response.header("Content-Length"))
             val mimeType = DownloadMetadata.parseMimeType(response.header("Content-Type"))
             val fileName = guessDownloadFileName(urlString, response.header("Content-Disposition"), mimeType)
+            val mediaStoreMimeType = DownloadMediaStoreMimeType.fromFileName(fileName, mimeType)
 
             setForeground(createForegroundInfo(notificationId, 0, contentLength <= 0, fileName, 0L, contentLength, stableWorkerId))
             repository.updateProgress(id.toString(), fileName, 0, 0L, contentLength)
@@ -293,7 +295,7 @@ internal class DownloadWorker(
             val resolver = context.contentResolver
             val values = ContentValues().apply {
                 put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
-                put(MediaStore.MediaColumns.MIME_TYPE, mimeType)
+                put(MediaStore.MediaColumns.MIME_TYPE, mediaStoreMimeType)
                 put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
                 put(MediaStore.Downloads.IS_PENDING, 1)
             }
