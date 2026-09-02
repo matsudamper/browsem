@@ -43,6 +43,7 @@ import net.matsudamper.browser.feature.networklog.NetworkLogWebExtension
 import net.matsudamper.browser.feature.themecolor.ThemeColorWebExtension
 import net.matsudamper.browser.feature.twittershare.TwitterShareWebExtension
 import net.matsudamper.browser.feature.viewportscale.ViewportScaleWebExtension
+import net.matsudamper.browser.feature.websharefiles.WebShareFilesWebExtension
 import org.koin.android.ext.koin.androidContext
 import org.koin.androidx.workmanager.dsl.worker
 import org.koin.core.module.dsl.viewModel
@@ -116,6 +117,7 @@ val appModule = module {
     single { NetworkLogWebExtension(get()).also { it.install(get()) } }
     single { ViewportScaleWebExtension().also { it.install(get()) } }
     single { TwitterShareWebExtension().also { it.install(get()) } }
+    single { WebShareFilesWebExtension().also { it.install(get()) } }
     // 拡張機能のツールバーアクションはランタイム単位で受け取るため single
     single { WebExtensionActionController(get()) }
     single { ExtensionRuntimeCoordinator(get()) }
