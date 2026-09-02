@@ -16,6 +16,7 @@ import androidx.core.graphics.drawable.toBitmap
 import androidx.core.net.toUri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import java.io.File
 import java.util.Locale
@@ -56,9 +57,9 @@ internal class DownloadManagementScreenViewModel(
 
         override fun onConfirmClearHistory() {
             viewModelScope.launch {
-                downloadRepository.clearHistory()
+                clearDownloadHistory()
+                showClearHistoryDialog.value = false
             }
-            showClearHistoryDialog.value = false
         }
 
         override fun onDismissClearHistoryDialog() {
@@ -91,6 +92,9 @@ internal class DownloadManagementScreenViewModel(
             ) { records, showDialog ->
                 records to showDialog
             }.collectLatest { (records, showDialog) ->
+                if (reconcileInactiveWorkRecords(records)) {
+                    return@collectLatest
+                }
                 currentRecords = records
                 val items = records.map { record -> record.toDownloadItem() }
                 val hasClearableHistory = records.any { record ->
@@ -445,6 +449,51 @@ internal class DownloadManagementScreenViewModel(
             flags = Intent.FLAG_ACTIVITY_NEW_TASK
         }
         runCatching { app.startActivity(intent) }
+    }
+
+    /**
+     * WorkManager 上で終了済みの ENQUEUED/RUNNING レコードを CANCELLED に同期する。
+     * バックアップ開始時の一括取消などで Worker が起動せず DB だけ残るケースを解消する。
+     *
+     * @return DB を更新した場合は true。呼び出し元は更新後の Flow 再発火を待つこと。
+     */
+    private suspend fun reconcileInactiveWorkRecords(records: List<DownloadRecord>): Boolean {
+        var updated = false
+        for (record in records) {
+            if (record.status !in ACTIVE_DOWNLOAD_STATUSES) continue
+            val workState = runCatching {
+                workManager.getWorkInfoById(record.currentWorkerId).get()?.state
+            }.getOrNull() ?: WorkInfo.State.CANCELLED
+            if (workState.isFinished) {
+                downloadRepository.updateCancelled(record.currentWorkerId.toString())
+                updated = true
+            }
+        }
+        return updated
+    }
+
+    private suspend fun clearDownloadHistory() {
+        withContext(Dispatchers.IO) {
+            var records = downloadRepository.getAllDownloads()
+            if (reconcileInactiveWorkRecords(records)) {
+                records = downloadRepository.getAllDownloads()
+            }
+            deletePartialFilesForClearableRecords(records)
+            downloadRepository.clearHistory()
+        }
+    }
+
+    /** 履歴削除対象レコードに紐づく未完了の部分ファイルを破棄する */
+    private fun deletePartialFilesForClearableRecords(records: List<DownloadRecord>) {
+        val resolver = getApplication<Application>().contentResolver
+        records
+            .filter { it.status !in ACTIVE_DOWNLOAD_STATUSES }
+            .mapNotNull { it.partialFileUri }
+            .forEach { partialUri ->
+                runCatching {
+                    resolver.delete(partialUri.toUri(), null, null)
+                }
+            }
     }
 
     interface Event {
