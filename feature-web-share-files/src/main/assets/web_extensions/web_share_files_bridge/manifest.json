@@ -16,11 +16,8 @@
         "content.js"
       ],
       "run_at": "document_start",
-      "all_frames": false
+      "all_frames": true
     }
-  ],
-  "web_accessible_resources": [
-    "page-share-reader.js"
   ],
   "permissions": [
     "geckoViewAddons",

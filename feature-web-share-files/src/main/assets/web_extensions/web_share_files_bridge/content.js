@@ -31,10 +31,26 @@
       ? pageWin.navigator.canShare.bind(pageWin.navigator)
       : null;
   const pendingNativeRequests = new Map();
-  let pageShareReaderPromise = null;
+
+  function normalizeFiles(files) {
+    if (!files) return null;
+    if (Array.isArray(files)) return files;
+    if (typeof files.length === "number") {
+      const normalized = [];
+      for (let i = 0; i < files.length; i++) {
+        normalized.push(files[i]);
+      }
+      return normalized;
+    }
+    if (typeof files[Symbol.iterator] === "function") {
+      return Array.from(files);
+    }
+    return null;
+  }
 
   function isShareDataWithFiles(data) {
-    return !!data && Array.isArray(data.files) && data.files.length > 0;
+    const files = normalizeFiles(data && data.files);
+    return files !== null && files.length > 0;
   }
 
   function validateFiles(files) {
@@ -105,40 +121,46 @@
     );
   }
 
-  function ensurePageShareReader() {
-    if (typeof pageWin.__browsemEncodeShareFiles === "function") {
-      return Promise.resolve();
+  function encodeBufferToBase64(buffer) {
+    const bytes = new Uint8Array(buffer);
+    let binary = "";
+    const chunkSize = 0x8000;
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+      binary += String.fromCharCode.apply(
+        null,
+        bytes.subarray(i, Math.min(i + chunkSize, bytes.length)),
+      );
     }
-    if (!pageShareReaderPromise) {
-      pageShareReaderPromise = new Promise(function (resolve, reject) {
-        const script = document.createElement("script");
-        script.src = browser.runtime.getURL("page-share-reader.js");
-        script.onload = function () {
-          if (typeof pageWin.__browsemEncodeShareFiles === "function") {
-            resolve();
-          } else {
-            reject(new DOMException("共有の準備ができていません", "NotAllowedError"));
-          }
-        };
-        script.onerror = function () {
-          reject(new DOMException("共有の準備ができていません", "NotAllowedError"));
-        };
-        const root = document.documentElement || document.head || document;
-        root.appendChild(script);
-      });
-    }
-    return pageShareReaderPromise;
+    return btoa(binary);
   }
 
-  function encodeFilesInPage(files) {
-    return ensurePageShareReader().then(function () {
-      return pageWin.__browsemEncodeShareFiles(files);
+  function readFileAsBase64(file) {
+    return file.arrayBuffer().then(function (buffer) {
+      if (buffer.byteLength !== file.size) {
+        throw new DOMException("ファイルの読み込みに失敗しました", "NotAllowedError");
+      }
+      return encodeBufferToBase64(buffer);
     });
   }
 
+  function encodeFiles(files) {
+    return Promise.all(
+      files.map(function (file) {
+        return readFileAsBase64(file).then(function (base64) {
+          return {
+            name: file.name || "shared",
+            type: file.type || "application/octet-stream",
+            data: base64,
+          };
+        });
+      }),
+    );
+  }
+
   pageWin.navigator.canShare = exportFunction(function (data) {
-    if (isShareDataWithFiles(data)) {
-      return validateFiles(data.files) === null;
+    const files = normalizeFiles(data && data.files);
+    if (files !== null && files.length > 0) {
+      return validateFiles(files) === null;
     }
     if (originalCanShare) {
       return originalCanShare(data);
@@ -147,7 +169,8 @@
   }, pageWin);
 
   pageWin.navigator.share = exportFunction(function (data) {
-    if (!isShareDataWithFiles(data)) {
+    const files = normalizeFiles(data && data.files);
+    if (files === null || files.length === 0) {
       return originalShare(data);
     }
 
@@ -166,15 +189,15 @@
       );
     }
 
-    const validationError = validateFiles(data.files);
+    const validationError = validateFiles(files);
     if (validationError) {
       return Promise.reject(new DOMException(validationError, "NotAllowedError"));
     }
 
     const requestId = createRequestId();
 
-    return encodeFilesInPage(data.files).then(function (files) {
-      const encodedError = validateEncodedFiles(files);
+    return encodeFiles(files).then(function (encodedFiles) {
+      const encodedError = validateEncodedFiles(encodedFiles);
       if (encodedError) {
         throw new DOMException(encodedError, "NotAllowedError");
       }
@@ -187,7 +210,7 @@
             title: data.title || "",
             text: data.text || "",
             url: data.url || "",
-            files: files,
+            files: encodedFiles,
           })
           .then(function (response) {
             pendingNativeRequests.delete(requestId);
