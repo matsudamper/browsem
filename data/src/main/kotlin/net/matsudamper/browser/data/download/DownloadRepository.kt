@@ -35,6 +35,10 @@ class DownloadRepository(context: Context) {
         return dao.observeAll().map { list -> list.map { it.toRecord() } }
     }
 
+    suspend fun getAllDownloads(): List<DownloadRecord> {
+        return dao.getAll().map { it.toRecord() }
+    }
+
     /** エンキュー時に ENQUEUED 状態でレコードを事前挿入する。既存レコードがある場合は何もしない */
     suspend fun insertEnqueued(workerId: String, url: String, referrerUrl: String, enqueuedAt: Long) {
         dao.insertIgnoreConflict(
@@ -193,6 +197,11 @@ class DownloadRepository(context: Context) {
      */
     suspend fun updateResumed(workerId: String, newWorkerId: String) {
         dao.updateResumed(workerId = workerId, newWorkerId = newWorkerId)
+    }
+
+    /** 実行中以外のダウンロード履歴を削除する。ファイル自体は削除しない */
+    suspend fun clearHistory() {
+        dao.deleteHistory()
     }
 
     private fun DownloadEntity.toRecord(): DownloadRecord {

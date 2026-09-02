@@ -16,6 +16,7 @@ import androidx.core.graphics.drawable.toBitmap
 import androidx.core.net.toUri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import java.io.File
 import java.util.Locale
@@ -26,6 +27,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -43,9 +45,25 @@ internal class DownloadManagementScreenViewModel(
     private val workManager = WorkManager.getInstance(application)
     private val downloadRepository = DownloadRepository(application)
     private val geckoDownloadManager = GeckoDownloadManager(application, downloadRepository)
+    private val showClearHistoryDialog = MutableStateFlow(false)
     private val screenCallbacks = object : DownloadManagementScreenUiState.Callbacks {
         override fun onOpenDownloadsFolder() {
             openDownloadsFolder()
+        }
+
+        override fun onClickClearHistory() {
+            showClearHistoryDialog.value = true
+        }
+
+        override fun onConfirmClearHistory() {
+            viewModelScope.launch {
+                clearDownloadHistory()
+                showClearHistoryDialog.value = false
+            }
+        }
+
+        override fun onDismissClearHistoryDialog() {
+            showClearHistoryDialog.value = false
         }
 
         override suspend fun loadPreview(fileUri: String): DownloadManagementScreenUiState.Preview {
@@ -62,22 +80,36 @@ internal class DownloadManagementScreenViewModel(
         DownloadManagementScreenUiState(
             isLoading = true,
             downloads = emptyList(),
+            hasClearableHistory = false,
+            showClearHistoryDialog = false,
             callbacks = screenCallbacks,
         ),
     ).also { uiStateFlow ->
         viewModelScope.launch {
-            downloadRepository.observeDownloads()
-                .collectLatest { records ->
-                    currentRecords = records
-                    val items = records.map { record -> record.toDownloadItem() }
-                    uiStateFlow.update {
-                        DownloadManagementScreenUiState(
-                            isLoading = false,
-                            downloads = items,
-                            callbacks = screenCallbacks,
-                        )
-                    }
+            combine(
+                downloadRepository.observeDownloads(),
+                showClearHistoryDialog,
+            ) { records, showDialog ->
+                records to showDialog
+            }.collectLatest { (records, showDialog) ->
+                if (reconcileInactiveWorkRecords(records)) {
+                    return@collectLatest
                 }
+                currentRecords = records
+                val items = records.map { record -> record.toDownloadItem() }
+                val hasClearableHistory =
+                    records.any { it.status !in ACTIVE_DOWNLOAD_STATUSES } &&
+                        records.none { it.status in ACTIVE_DOWNLOAD_STATUSES }
+                uiStateFlow.update {
+                    DownloadManagementScreenUiState(
+                        isLoading = false,
+                        downloads = items,
+                        hasClearableHistory = hasClearableHistory,
+                        showClearHistoryDialog = showDialog,
+                        callbacks = screenCallbacks,
+                    )
+                }
+            }
         }
     }.asStateFlow()
 
@@ -419,6 +451,51 @@ internal class DownloadManagementScreenViewModel(
         runCatching { app.startActivity(intent) }
     }
 
+    /**
+     * WorkManager 上で終了済みの ENQUEUED/RUNNING レコードを CANCELLED に同期する。
+     * バックアップ開始時の一括取消などで Worker が起動せず DB だけ残るケースを解消する。
+     *
+     * @return DB を更新した場合は true。呼び出し元は更新後の Flow 再発火を待つこと。
+     */
+    private suspend fun reconcileInactiveWorkRecords(records: List<DownloadRecord>): Boolean {
+        var updated = false
+        for (record in records) {
+            if (record.status !in ACTIVE_DOWNLOAD_STATUSES) continue
+            val workState = runCatching {
+                workManager.getWorkInfoById(record.currentWorkerId).get()?.state
+            }.getOrNull() ?: WorkInfo.State.CANCELLED
+            if (workState.isFinished) {
+                downloadRepository.updateCancelled(record.currentWorkerId.toString())
+                updated = true
+            }
+        }
+        return updated
+    }
+
+    private suspend fun clearDownloadHistory() {
+        withContext(Dispatchers.IO) {
+            var records = downloadRepository.getAllDownloads()
+            if (reconcileInactiveWorkRecords(records)) {
+                records = downloadRepository.getAllDownloads()
+            }
+            deletePartialFilesForClearableRecords(records)
+            downloadRepository.clearHistory()
+        }
+    }
+
+    /** 履歴削除対象（PAUSED/FAILED 等）レコードに紐づく未完了の部分ファイルを破棄する */
+    private fun deletePartialFilesForClearableRecords(records: List<DownloadRecord>) {
+        val resolver = getApplication<Application>().contentResolver
+        records
+            .filter { it.status !in ACTIVE_DOWNLOAD_STATUSES }
+            .mapNotNull { it.partialFileUri }
+            .forEach { partialUri ->
+                runCatching {
+                    resolver.delete(partialUri.toUri(), null, null)
+                }
+            }
+    }
+
     interface Event {
         /** ダウンロード開始時のページURLを新しいタブで開く */
         fun navigateToUrl(url: String)
@@ -432,6 +509,12 @@ internal class DownloadManagementScreenViewModel(
     }
 
     companion object {
+        /** 履歴クリアの対象外。実行中のダウンロードは残す */
+        private val ACTIVE_DOWNLOAD_STATUSES = setOf(
+            DownloadRecordStatus.ENQUEUED,
+            DownloadRecordStatus.RUNNING,
+        )
+
         /** サムネイル・アプリアイコンを読み込む際の最大サイズ (px) */
         private const val PREVIEW_SIZE_PX = 256
 

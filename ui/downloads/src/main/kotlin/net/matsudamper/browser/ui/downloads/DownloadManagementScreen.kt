@@ -24,6 +24,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -34,6 +35,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
@@ -90,6 +92,15 @@ fun DownloadManagementScreen(
                     }
                 },
                 actions = {
+                    IconButton(
+                        onClick = uiState.callbacks::onClickClearHistory,
+                        enabled = uiState.hasClearableHistory,
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_delete_history),
+                            contentDescription = "履歴を削除",
+                        )
+                    }
                     IconButton(onClick = uiState.callbacks::onOpenDownloadsFolder) {
                         Icon(
                             imageVector = Icons.Default.FolderOpen,
@@ -153,6 +164,24 @@ fun DownloadManagementScreen(
                 }
             }
         }
+    }
+
+    if (uiState.showClearHistoryDialog) {
+        AlertDialog(
+            onDismissRequest = uiState.callbacks::onDismissClearHistoryDialog,
+            title = { Text("確認") },
+            text = { Text("ダウンロード履歴を削除しますか？ファイル自体は削除されません。") },
+            confirmButton = {
+                TextButton(onClick = uiState.callbacks::onConfirmClearHistory) {
+                    Text("削除")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = uiState.callbacks::onDismissClearHistoryDialog) {
+                    Text("キャンセル")
+                }
+            },
+        )
     }
 }
 
@@ -746,6 +775,36 @@ private fun PreviewLongFileName() {
             },
             isHighlighted = false,
             onHighlightFinished = {},
+        )
+    }
+}
+
+@Preview(name = "ダウンロード管理画面", showBackground = true)
+@Composable
+private fun PreviewDownloadManagementScreen() {
+    MaterialTheme {
+        DownloadManagementScreen(
+            uiState = DownloadManagementScreenUiState(
+                isLoading = false,
+                downloads = listOf(
+                    DownloadManagementScreenUiState.DownloadItem(
+                        id = UUID.randomUUID(),
+                        fileName = "example.zip",
+                        status = DownloadManagementScreenUiState.DownloadStatus.Completed(
+                            fileUri = "content://media/external/downloads/1",
+                        ),
+                        enqueuedAt = 0L,
+                        originPageUrl = "https://example.com/page",
+                        listener = PreviewDownloadItemListener,
+                    ),
+                ),
+                hasClearableHistory = true,
+                showClearHistoryDialog = false,
+                callbacks = PreviewDownloadManagementCallbacks,
+            ),
+            highlightItemId = null,
+            onBack = {},
+            onHighlightComplete = {},
         )
     }
 }

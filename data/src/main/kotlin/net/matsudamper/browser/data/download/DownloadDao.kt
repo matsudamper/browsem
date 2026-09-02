@@ -65,6 +65,9 @@ interface DownloadDao {
     @Query("SELECT * FROM download ORDER BY enqueuedAt DESC")
     fun observeAll(): Flow<List<DownloadEntity>>
 
+    @Query("SELECT * FROM download ORDER BY enqueuedAt DESC")
+    suspend fun getAll(): List<DownloadEntity>
+
     @Query("SELECT * FROM download WHERE currentWorkerId = :currentWorkerId")
     suspend fun getByCurrentWorkerId(currentWorkerId: String): DownloadEntity?
 
@@ -118,4 +121,8 @@ interface DownloadDao {
     /** 指定URLに一致するアクティブ（ENQUEUED/RUNNING/SUCCEEDED/PAUSED）なダウンロードを取得する */
     @Query("SELECT * FROM download WHERE url = :url AND status IN ('ENQUEUED', 'RUNNING', 'SUCCEEDED', 'PAUSED') ORDER BY enqueuedAt DESC")
     suspend fun findActiveByUrl(url: String): List<DownloadEntity>
+
+    /** 実行中以外の履歴を削除する。ダウンロード済みファイル自体は削除しない */
+    @Query("DELETE FROM download WHERE status NOT IN ('ENQUEUED', 'RUNNING')")
+    suspend fun deleteHistory()
 }
