@@ -21,6 +21,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import net.matsudamper.browser.core.ExternalDownloadTabNavigationPolicy
 import net.matsudamper.browser.data.ResolvedBrowserSettings
 import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.SiteGeolocationState
@@ -29,7 +30,6 @@ import net.matsudamper.browser.data.TabGroupRepository
 import net.matsudamper.browser.data.TabRepository
 import net.matsudamper.browser.data.ThemeMode
 import net.matsudamper.browser.data.TranslationProvider
-import net.matsudamper.browser.core.ExternalDownloadTabNavigationPolicy
 import net.matsudamper.browser.data.resolvedBrowserSettings
 import net.matsudamper.browser.data.resolvedInputAutoZoomEnabled
 import net.matsudamper.browser.feature.media.MediaWebExtension
