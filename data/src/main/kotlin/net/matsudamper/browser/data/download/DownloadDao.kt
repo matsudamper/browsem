@@ -65,6 +65,9 @@ interface DownloadDao {
     @Query("SELECT * FROM download ORDER BY enqueuedAt DESC")
     fun observeAll(): Flow<List<DownloadEntity>>
 
+    @Query("SELECT * FROM download ORDER BY enqueuedAt DESC")
+    suspend fun getAll(): List<DownloadEntity>
+
     @Query("SELECT * FROM download WHERE currentWorkerId = :currentWorkerId")
     suspend fun getByCurrentWorkerId(currentWorkerId: String): DownloadEntity?
 

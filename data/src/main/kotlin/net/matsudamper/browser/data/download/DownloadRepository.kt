@@ -35,6 +35,10 @@ class DownloadRepository(context: Context) {
         return dao.observeAll().map { list -> list.map { it.toRecord() } }
     }
 
+    suspend fun getAllDownloads(): List<DownloadRecord> {
+        return dao.getAll().map { it.toRecord() }
+    }
+
     /** エンキュー時に ENQUEUED 状態でレコードを事前挿入する。既存レコードがある場合は何もしない */
     suspend fun insertEnqueued(workerId: String, url: String, referrerUrl: String, enqueuedAt: Long) {
         dao.insertIgnoreConflict(
