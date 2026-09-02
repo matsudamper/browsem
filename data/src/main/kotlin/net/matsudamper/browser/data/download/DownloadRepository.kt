@@ -195,6 +195,11 @@ class DownloadRepository(context: Context) {
         dao.updateResumed(workerId = workerId, newWorkerId = newWorkerId)
     }
 
+    /** 実行中以外のダウンロード履歴を削除する。ファイル自体は削除しない */
+    suspend fun clearHistory() {
+        dao.deleteHistory()
+    }
+
     private fun DownloadEntity.toRecord(): DownloadRecord {
         val recordStatus = try {
             DownloadRecordStatus.valueOf(this.status)
