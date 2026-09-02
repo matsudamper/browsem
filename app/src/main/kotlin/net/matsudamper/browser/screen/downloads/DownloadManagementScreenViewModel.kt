@@ -26,6 +26,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -43,9 +44,25 @@ internal class DownloadManagementScreenViewModel(
     private val workManager = WorkManager.getInstance(application)
     private val downloadRepository = DownloadRepository(application)
     private val geckoDownloadManager = GeckoDownloadManager(application, downloadRepository)
+    private val showClearHistoryDialog = MutableStateFlow(false)
     private val screenCallbacks = object : DownloadManagementScreenUiState.Callbacks {
         override fun onOpenDownloadsFolder() {
             openDownloadsFolder()
+        }
+
+        override fun onClickClearHistory() {
+            showClearHistoryDialog.value = true
+        }
+
+        override fun onConfirmClearHistory() {
+            viewModelScope.launch {
+                downloadRepository.clearHistory()
+            }
+            showClearHistoryDialog.value = false
+        }
+
+        override fun onDismissClearHistoryDialog() {
+            showClearHistoryDialog.value = false
         }
 
         override suspend fun loadPreview(fileUri: String): DownloadManagementScreenUiState.Preview {
@@ -62,22 +79,33 @@ internal class DownloadManagementScreenViewModel(
         DownloadManagementScreenUiState(
             isLoading = true,
             downloads = emptyList(),
+            hasClearableHistory = false,
+            showClearHistoryDialog = false,
             callbacks = screenCallbacks,
         ),
     ).also { uiStateFlow ->
         viewModelScope.launch {
-            downloadRepository.observeDownloads()
-                .collectLatest { records ->
-                    currentRecords = records
-                    val items = records.map { record -> record.toDownloadItem() }
-                    uiStateFlow.update {
-                        DownloadManagementScreenUiState(
-                            isLoading = false,
-                            downloads = items,
-                            callbacks = screenCallbacks,
-                        )
-                    }
+            combine(
+                downloadRepository.observeDownloads(),
+                showClearHistoryDialog,
+            ) { records, showDialog ->
+                records to showDialog
+            }.collectLatest { (records, showDialog) ->
+                currentRecords = records
+                val items = records.map { record -> record.toDownloadItem() }
+                val hasClearableHistory = records.any { record ->
+                    record.status !in ACTIVE_DOWNLOAD_STATUSES
                 }
+                uiStateFlow.update {
+                    DownloadManagementScreenUiState(
+                        isLoading = false,
+                        downloads = items,
+                        hasClearableHistory = hasClearableHistory,
+                        showClearHistoryDialog = showDialog,
+                        callbacks = screenCallbacks,
+                    )
+                }
+            }
         }
     }.asStateFlow()
 
@@ -432,6 +460,12 @@ internal class DownloadManagementScreenViewModel(
     }
 
     companion object {
+        /** 履歴クリアの対象外。実行中のダウンロードは残す */
+        private val ACTIVE_DOWNLOAD_STATUSES = setOf(
+            DownloadRecordStatus.ENQUEUED,
+            DownloadRecordStatus.RUNNING,
+        )
+
         /** サムネイル・アプリアイコンを読み込む際の最大サイズ (px) */
         private const val PREVIEW_SIZE_PX = 256
 
