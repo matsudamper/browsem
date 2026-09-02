@@ -293,6 +293,9 @@ internal class BrowserTabScreenState(
     // --- プロンプトダイアログ状態（分離済み） ---
     val promptDialogState = PromptDialogState(coroutineScope)
 
+    // --- Web Share files ワークアラウンドの進行中状態 ---
+    val webShareFilesState = WebShareFilesState(coroutineScope)
+
     // --- サイトごとのマイク許可確認ダイアログ状態 ---
     var microphonePermissionDialog by mutableStateOf<MicrophonePermissionDialogState?>(null)
         private set

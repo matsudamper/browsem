@@ -8,6 +8,9 @@ import java.util.UUID
 data class DownloadManagementScreenUiState(
     val isLoading: Boolean,
     val downloads: List<DownloadItem>,
+    /** 履歴クリア対象のレコードがあるか。実行中のみの場合は false */
+    val hasClearableHistory: Boolean,
+    val showClearHistoryDialog: Boolean,
     val callbacks: Callbacks,
 ) {
     @Stable
@@ -107,8 +110,26 @@ data class DownloadManagementScreenUiState(
     interface Callbacks {
         fun onOpenDownloadsFolder()
 
+        fun onClickClearHistory()
+
+        fun onConfirmClearHistory()
+
+        fun onDismissClearHistoryDialog()
+
         /** ファイル URI からプレビューを読み込む。サムネイルを取得できない場合は汎用アイコンを返す */
         suspend fun loadPreview(fileUri: String): Preview
+    }
+}
+
+internal object PreviewDownloadManagementCallbacks : DownloadManagementScreenUiState.Callbacks {
+    override fun onOpenDownloadsFolder() = Unit
+    override fun onClickClearHistory() = Unit
+    override fun onConfirmClearHistory() = Unit
+    override fun onDismissClearHistoryDialog() = Unit
+    override suspend fun loadPreview(fileUri: String): DownloadManagementScreenUiState.Preview {
+        return DownloadManagementScreenUiState.Preview.FileType(
+            DownloadManagementScreenUiState.DownloadFileType.UNKNOWN,
+        )
     }
 }
 

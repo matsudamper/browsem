@@ -1,0 +1,105 @@
+package net.matsudamper.browser
+
+import android.content.Intent
+import android.net.Uri
+import net.matsudamper.browser.feature.websharefiles.WebShareFilesLimits
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
+import org.junit.Test
+
+class WebShareFilesTest {
+    @Test
+    fun buildWebShareFilesIntent_singleFile_setsStreamAndText() {
+        val uri = Uri.parse("content://example/photo.png")
+        val intent = buildWebShareFilesIntent(
+            title = "画像",
+            text = "説明",
+            url = "https://example.com",
+            files = listOf(
+                WebShareFilePayload(
+                    name = "photo.png",
+                    mimeType = "image/png",
+                    bytes = byteArrayOf(1, 2, 3),
+                ),
+            ),
+            uris = listOf(uri),
+        )
+
+        assertNotNull(intent)
+        assertEquals(Intent.ACTION_SEND, intent!!.action)
+        assertEquals("image/png", intent.type)
+        assertEquals("説明\nhttps://example.com", intent.getStringExtra(Intent.EXTRA_TEXT))
+        assertEquals("画像", intent.getStringExtra(Intent.EXTRA_SUBJECT))
+        assertEquals(uri, intent.getParcelableExtra(Intent.EXTRA_STREAM))
+    }
+
+    @Test
+    fun buildWebShareFilesIntent_multipleFiles_usesSendMultiple() {
+        val uris = listOf(
+            Uri.parse("content://example/a.png"),
+            Uri.parse("content://example/b.png"),
+        )
+        val intent = buildWebShareFilesIntent(
+            title = null,
+            text = null,
+            url = null,
+            files = listOf(
+                WebShareFilePayload(
+                    name = "a.png",
+                    mimeType = "image/png",
+                    bytes = byteArrayOf(1),
+                ),
+                WebShareFilePayload(
+                    name = "b.png",
+                    mimeType = "image/png",
+                    bytes = byteArrayOf(2),
+                ),
+            ),
+            uris = uris,
+        )
+
+        assertNotNull(intent)
+        assertEquals(Intent.ACTION_SEND_MULTIPLE, intent!!.action)
+        assertEquals("image/png", intent.type)
+        assertEquals(uris, intent.getParcelableArrayListExtra<Uri>(Intent.EXTRA_STREAM))
+    }
+
+    @Test
+    fun sanitizeWebShareCacheFileName_rejectsDotNames() {
+        assertEquals("0-shared", sanitizeWebShareCacheFileName(".", 0))
+        assertEquals("1-shared", sanitizeWebShareCacheFileName("..", 1))
+        assertEquals("2-photo.png", sanitizeWebShareCacheFileName("photo.png", 2))
+    }
+
+    @Test
+    fun buildWebShareFilesIntent_returnsNullWhenUriCountMismatch() {
+        val intent = buildWebShareFilesIntent(
+            title = null,
+            text = null,
+            url = null,
+            files = listOf(
+                WebShareFilePayload(
+                    name = "a.png",
+                    mimeType = "image/png",
+                    bytes = byteArrayOf(1),
+                ),
+            ),
+            uris = emptyList(),
+        )
+
+        assertNull(intent)
+    }
+
+    @Test
+    fun webShareFilesLimits_maxBase64CharsPerFile_matchesPaddedCapacity() {
+        assertEquals(6_990_508, WebShareFilesLimits.maxBase64CharsPerFile())
+    }
+
+    @Test
+    fun webShareFilesLimits_estimateDecodedBytes_isPaddingAware() {
+        assertEquals(3, WebShareFilesLimits.estimateDecodedBytes("AAAA"))
+        assertEquals(2, WebShareFilesLimits.estimateDecodedBytes("AAA="))
+        assertEquals(1, WebShareFilesLimits.estimateDecodedBytes("AA=="))
+    }
+}
