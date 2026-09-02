@@ -97,8 +97,8 @@ fun DownloadManagementScreen(
                         enabled = uiState.hasClearableHistory,
                     ) {
                         Icon(
-                            painter = painterResource(R.drawable.ic_clear_all),
-                            contentDescription = "履歴をクリア",
+                            painter = painterResource(R.drawable.ic_delete_history),
+                            contentDescription = "履歴を削除",
                         )
                     }
                     IconButton(onClick = uiState.callbacks::onOpenDownloadsFolder) {
