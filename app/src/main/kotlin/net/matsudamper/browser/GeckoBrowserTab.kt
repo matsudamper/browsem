@@ -1294,15 +1294,17 @@ internal fun GeckoBrowserTab(
 
         val latestOnRefresh by rememberUpdatedState { state.onRefreshFromSwipe() }
         val id = rememberSaveable { View.generateViewId() }
+        val subtractNavigationBarsForIme = !state.isFullScreen
         Box(
             modifier = Modifier
                 .weight(1f)
-                // 親 Column が navigationBars を確保済みのため、IME との重なり分だけ縮める。
-                .imeAboveNavigationBarsPadding()
                 .testTag(GeckoBrowserTabTestTags.GeckoContainer.testTag),
         ) {
             BrowserContentHost(
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier
+                    .fillMaxSize()
+                    // GeckoView のみ縮め、候補バーと二重に IME 余白を掛けない。
+                    .imeAboveNavigationBarsPadding(subtractNavigationBars = subtractNavigationBarsForIme),
                 state = state,
                 id = id,
                 session = session,
@@ -1340,13 +1342,13 @@ internal fun GeckoBrowserTab(
                 !state.showFindInPage &&
                 !state.isFullScreen
             ) {
-                // GeckoView は IME でリサイズしない。バーだけ IME 上へ上げる。
+                // 親 Box は縮めない。GeckoView とは別にバーだけ IME 上へ上げる。
                 AddressAutofillSuggestionBar(
                     uiState = autofillBar,
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()
-                        .imeAboveNavigationBarsPadding(),
+                        .imeAboveNavigationBarsPadding(subtractNavigationBars = subtractNavigationBarsForIme),
                 )
             }
         }
@@ -1591,15 +1593,22 @@ private class GetMultipleContentsWithMimeTypes : ActivityResultContract<Array<St
 }
 
 /**
- * ナビバー分は親で既に避けているので、IME との重なり分だけ候補バーを上げる。
- * GeckoDisplay.getKeyboardHeight と同じ ime - navigationBars にする。
+ * IME 表示時の下端余白。親が navigationBars を確保済みなら ime - navigationBars、
+ * フルスクリーンなど親が確保していない場合は IME 全高を使う。
+ * GeckoDisplay.getKeyboardHeight と同じ計算（subtractNavigationBars=true 時）。
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun Modifier.imeAboveNavigationBarsPadding(): Modifier {
+private fun Modifier.imeAboveNavigationBarsPadding(
+    subtractNavigationBars: Boolean = true,
+): Modifier {
     val density = LocalDensity.current
     val imeBottomPx = WindowInsets.ime.getBottom(density)
-    val navigationBottomPx = WindowInsets.navigationBars.getBottom(density)
+    val navigationBottomPx = if (subtractNavigationBars) {
+        WindowInsets.navigationBars.getBottom(density)
+    } else {
+        0
+    }
     val liftPx = (imeBottomPx - navigationBottomPx).coerceAtLeast(0)
     return padding(bottom = with(density) { liftPx.toDp() })
 }

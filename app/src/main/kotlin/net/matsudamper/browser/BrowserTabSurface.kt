@@ -72,8 +72,8 @@ private fun GeckoView.disableInternalKeyboardInsetsListener() {
     addOnAttachStateChangeListener(
         object : View.OnAttachStateChangeListener {
             override fun onViewAttachedToWindow(v: View) {
+                // onAttachedToWindow のたびに Gecko が登録し直すため、再アタッチ時も解除する。
                 removeWindowInsetsListener(GECKO_KEYBOARD_WINDOW_INSETS_LISTENER)
-                removeOnAttachStateChangeListener(this)
             }
 
             override fun onViewDetachedFromWindow(v: View) = Unit
