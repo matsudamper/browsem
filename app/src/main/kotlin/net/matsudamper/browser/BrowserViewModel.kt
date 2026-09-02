@@ -29,6 +29,7 @@ import net.matsudamper.browser.data.TabGroupRepository
 import net.matsudamper.browser.data.TabRepository
 import net.matsudamper.browser.data.ThemeMode
 import net.matsudamper.browser.data.TranslationProvider
+import net.matsudamper.browser.core.ExternalDownloadTabNavigationPolicy
 import net.matsudamper.browser.data.resolvedBrowserSettings
 import net.matsudamper.browser.data.resolvedInputAutoZoomEnabled
 import net.matsudamper.browser.feature.media.MediaWebExtension
@@ -244,6 +245,30 @@ internal class BrowserViewModel(
      */
     fun registerExternalTab(tabId: String) {
         externalTabPreviousTabs[tabId] = browserTabController.selectedTabId
+    }
+
+    fun isExternalTab(tabId: String): Boolean {
+        return externalTabPreviousTabs.containsKey(tabId)
+    }
+
+    /**
+     * 外部ダウンロードタブの確認ダイアログで確定/キャンセルされた後に呼ぶ。
+     * タブを閉じ、デフォルトグループの最後のタブへ遷移するためのタブ ID を返す。
+     */
+    suspend fun finishExternalDownloadTab(tabId: String): String? {
+        if (!externalTabPreviousTabs.containsKey(tabId)) {
+            return null
+        }
+        externalTabPreviousTabs.remove(tabId)
+        val defaultGroupId = tabGroupRepository.getDefaultGroupId()?.value
+        val targetTabId = ExternalDownloadTabNavigationPolicy.resolveTargetTabAfterClosingExternalDownload(
+            state = browserTabController.tabStoreState.value,
+            defaultGroupId = defaultGroupId,
+            excludingTabId = tabId,
+        )
+        browserTabController.closeTabWithUndo(tabId, nextSelectedTabId = targetTabId)
+        browserTabController.confirmClosedTab()
+        return targetTabId ?: browserTabController.selectedTabId
     }
 
     /**
