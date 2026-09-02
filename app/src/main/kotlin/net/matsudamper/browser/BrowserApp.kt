@@ -1202,6 +1202,18 @@ private fun MainBrowserContent(
                                         selectTab(targetTabId, null)
                                     }
                                 },
+                                onExternalDownloadDialogResolved = if (viewModel.isExternalTab(key.tabId)) {
+                                    {
+                                        scope.launch {
+                                            val targetTabId = viewModel.finishExternalDownloadTab(key.tabId)
+                                            if (targetTabId != null) {
+                                                selectTab(targetTabId, null)
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    null
+                                },
                                 onHistoryRecord = browserScreenUiState.callbacks::onHistoryRecord,
                                 onHistoryTitleUpdate = browserScreenUiState.callbacks::onHistoryTitleUpdate,
                                 urlBarSuggestions = browserScreenUiState.urlBarSuggestions,
