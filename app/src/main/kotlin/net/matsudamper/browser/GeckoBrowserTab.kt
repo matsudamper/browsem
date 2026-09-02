@@ -50,10 +50,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -79,10 +77,8 @@ import java.io.File
 import java.net.URLEncoder
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.receiveAsFlow
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import net.matsudamper.browser.data.TranslationProvider
 import net.matsudamper.browser.data.address.AddressRepository
@@ -233,6 +229,7 @@ internal fun GeckoBrowserTab(
     }
 
     val dialogState = state.promptDialogState
+    val webShareFilesState = state.webShareFilesState
     val session = state.session
     val keyboardController = LocalSoftwareKeyboardController.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -261,49 +258,8 @@ internal fun GeckoBrowserTab(
         }
     }
 
-    data class PendingWebShareFiles(
-        val requestId: String,
-        val geckoResult: GeckoResult<Any>,
-        val cacheDir: File,
-        var completed: Boolean = false,
-    )
-
-    var pendingWebShareFiles by remember { mutableStateOf<PendingWebShareFiles?>(null) }
-    val retainedWebShareCacheDirs = remember { mutableStateListOf<File>() }
-    val webShareCleanupScope = rememberCoroutineScope()
-
-    fun scheduleWebShareCacheCleanup(cacheDir: File) {
-        retainedWebShareCacheDirs.add(cacheDir)
-        webShareCleanupScope.launch {
-            delay(WEB_SHARE_FILES_CACHE_RETENTION_MS)
-            cacheDir.deleteRecursively()
-            retainedWebShareCacheDirs.remove(cacheDir)
-        }
-    }
-
-    fun finishPendingWebShareFiles(success: Boolean, error: String? = null) {
-        val pending = pendingWebShareFiles ?: return
-        if (pending.completed) return
-        pending.completed = true
-        pendingWebShareFiles = null
-        val response = if (success) {
-            JSONObject().put("success", true)
-        } else {
-            JSONObject()
-                .put("success", false)
-                .put("error", error ?: "共有がキャンセルされました")
-                .put("errorName", "AbortError")
-        }
-        pending.geckoResult.complete(response)
-        if (success) {
-            scheduleWebShareCacheCleanup(pending.cacheDir)
-        } else {
-            pending.cacheDir.deleteRecursively()
-        }
-    }
-
     val onFinishPendingWebShareFiles by rememberUpdatedState<(Boolean, String?) -> Unit>(
-        { success, error -> finishPendingWebShareFiles(success, error) },
+        { success, error -> webShareFilesState.finish(success, error) },
     )
 
     DisposableEffect(context) {
@@ -311,7 +267,7 @@ internal fun GeckoBrowserTab(
             override fun onReceive(receiverContext: Context?, intent: Intent?) {
                 if (intent?.action != WEB_SHARE_FILES_CHOSEN_ACTION) return
                 val requestId = intent.getStringExtra(EXTRA_WEB_SHARE_FILES_REQUEST_ID) ?: return
-                if (pendingWebShareFiles?.requestId != requestId) return
+                if (webShareFilesState.pending?.requestId != requestId) return
                 onFinishPendingWebShareFiles(true, null)
             }
         }
@@ -329,7 +285,7 @@ internal fun GeckoBrowserTab(
     val webShareFilesLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
     ) { activityResult ->
-        if (pendingWebShareFiles?.completed == true) return@rememberLauncherForActivityResult
+        if (webShareFilesState.pending?.completed == true) return@rememberLauncherForActivityResult
         if (activityResult.resultCode == Activity.RESULT_CANCELED) {
             onFinishPendingWebShareFiles(false, null)
         }
@@ -818,7 +774,7 @@ internal fun GeckoBrowserTab(
     DisposableEffect(session, webShareFilesWebExtension) {
         webShareFilesWebExtension.registerSession(session) { request, geckoResult ->
             try {
-                val activePending = pendingWebShareFiles
+                val activePending = webShareFilesState.pending
                 if (activePending != null && !activePending.completed) {
                     geckoResult.complete(
                         JSONObject()
@@ -856,7 +812,7 @@ internal fun GeckoBrowserTab(
                     )
                     return@registerSession
                 }
-                pendingWebShareFiles = PendingWebShareFiles(
+                webShareFilesState.pending = WebShareFilesState.Pending(
                     requestId = request.requestId,
                     geckoResult = geckoResult,
                     cacheDir = prepared.cacheDir,
@@ -886,20 +842,7 @@ internal fun GeckoBrowserTab(
         }
         onDispose {
             webShareFilesWebExtension.unregisterSession(session)
-            pendingWebShareFiles?.let { pending ->
-                if (!pending.completed) {
-                    pending.geckoResult.complete(
-                        JSONObject()
-                            .put("success", false)
-                            .put("error", "共有がキャンセルされました")
-                            .put("errorName", "AbortError"),
-                    )
-                }
-                pending.cacheDir.deleteRecursively()
-            }
-            pendingWebShareFiles = null
-            retainedWebShareCacheDirs.forEach { it.deleteRecursively() }
-            retainedWebShareCacheDirs.clear()
+            webShareFilesState.cleanupOnDispose()
         }
     }
 
