@@ -24,8 +24,8 @@ import net.matsudamper.browser.download.DownloadEngine
 import net.matsudamper.browser.download.DownloadFailureReason
 import net.matsudamper.browser.download.DownloadHttpClient
 import net.matsudamper.browser.download.DownloadHttpResponse
-import net.matsudamper.browser.download.DownloadMetadata
 import net.matsudamper.browser.download.DownloadMediaStoreMimeType
+import net.matsudamper.browser.download.DownloadMetadata
 import net.matsudamper.browser.download.DownloadUrl
 import net.matsudamper.browser.download.GeckoDownloadHttpClient
 import net.matsudamper.browser.download.PendingDownloadBodyStore
