@@ -30,7 +30,7 @@ internal object TestIme {
         "mInputMethodService",
     )
     private const val DUMP_MAX_LINES = 30
-    private const val LOGCAT_MAX_LINES = 30
+    private const val LOGCAT_MAX_LINES = 60
 
     private var previousDefaultIme: String? = null
     private var previousShowImeWithHardKeyboard: String? = null
@@ -93,7 +93,10 @@ internal object TestIme {
             .filter { line -> DUMP_KEYS.any { line.contains(it) } }
             .take(DUMP_MAX_LINES)
             .joinToString(separator = "\n") { it.trim() }
-        val serviceLog = shell("logcat -d -s ${TestInputMethodService.TAG}:V InputMethodManagerService:W")
+        val serviceLog = shell(
+            "logcat -d -s ${TestInputMethodService.TAG}:V InputMethodManagerService:W " +
+                "AndroidRuntime:E ActivityManager:W DEBUG:E",
+        )
             .lineSequence()
             .filter { it.isNotBlank() }
             .toList()
