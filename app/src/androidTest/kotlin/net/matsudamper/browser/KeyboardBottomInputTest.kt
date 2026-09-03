@@ -14,6 +14,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
 import org.junit.After
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -34,8 +35,15 @@ class KeyboardBottomInputTest {
 
     private var localHttpServer: LocalHttpServer? = null
 
+    @Before
+    fun setUp() {
+        // aosp-atd イメージにはソフトキーボードが無いため、ダミー IME を有効化する
+        assertTrue("テスト用 IME を既定にできない", TestIme.enable())
+    }
+
     @After
     fun tearDown() {
+        TestIme.reset()
         localHttpServer?.close()
         localHttpServer = null
     }
