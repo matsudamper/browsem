@@ -83,8 +83,15 @@ internal fun BrowserContentHost(
     val density = LocalDensity.current
     val imeBottomPx = WindowInsets.ime.getBottom(density)
     val navigationBottomPx = WindowInsets.navigationBars.getBottom(density)
-    // GeckoDisplay.getKeyboardHeight と同じ ime - navigationBars
-    val keyboardHeightPx = (imeBottomPx - navigationBottomPx).coerceAtLeast(0)
+    val keyboardHeightPx = if (state.isFullScreen) {
+        // フルスクリーンでは親がナビバー余白を確保しないため、IME inset をそのまま使う。
+        // 差し引くと GeckoView の下端がキーボード上端よりナビバー分だけ下に残る。
+        imeBottomPx
+    } else {
+        // 通常表示はナビバー分を親で確保済みなので、その分を除く。
+        // GeckoDisplay.getKeyboardHeight と同じ ime - navigationBars。
+        (imeBottomPx - navigationBottomPx).coerceAtLeast(0)
+    }
 
     Box(modifier = modifier) {
         AndroidView(
