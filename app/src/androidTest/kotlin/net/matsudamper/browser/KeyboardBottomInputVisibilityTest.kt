@@ -1,0 +1,203 @@
+package net.matsudamper.browser
+
+import android.view.View
+import android.view.ViewGroup
+import android.view.WindowInsets
+import androidx.compose.ui.test.click
+import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.percentOffset
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
+import java.io.File
+import net.matsudamper.browser.ui.tabs.TabsScreenTestTags
+import org.junit.After
+import org.junit.Assert.assertTrue
+import org.junit.Rule
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.mozilla.geckoview.GeckoView
+
+/**
+ * キーボード表示時にページ下部の入力欄が隠れる不具合の再現テスト。
+ *
+ * Issue: https://github.com/matsudamper/browsem/issues/674
+ *
+ * 期待: IME 表示中、GeckoView の下端がキーボード上端より上にあり、
+ * 下部固定入力欄がキーボードに隠れないこと。
+ */
+@RunWith(AndroidJUnit4::class)
+class KeyboardBottomInputVisibilityTest {
+
+    @get:Rule
+    val composeRule = createAndroidComposeRule<MainActivity>()
+
+    private var localHttpServer: LocalHttpServer? = null
+
+    @After
+    fun tearDown() {
+        localHttpServer?.close()
+        localHttpServer = null
+    }
+
+    @Test
+    fun bottomFixedInputStaysAboveKeyboardWhenFocused() {
+        ensureBrowserScreen()
+        val pageUrl = startBottomInputPageServer()
+
+        openLocalPage(
+            url = pageUrl,
+            urlMarker = INDEX_FILE_NAME,
+        )
+        composeRule.waitForUrlBarNotFocused(timeoutMillis = 30_000)
+
+        focusBottomInputField()
+        waitForImeVisible(timeoutMillis = 10_000)
+        waitForImeLayoutSettled(timeoutMillis = 15_000)
+
+        val snapshot = readImeLayoutSnapshot()
+        assertTrue(
+            "IME が表示されていない (snapshot=$snapshot)",
+            snapshot.imeVisible,
+        )
+        assertTrue(
+            "GeckoView の下端がキーボード上端より下にある = 下部入力が隠れる " +
+                "(geckoBottom=${snapshot.geckoBottomOnScreen}, keyboardTop=${snapshot.keyboardTopOnScreen}, " +
+                "imeInset=${snapshot.imeInsetBottom}, geckoBottomMargin=${snapshot.geckoBottomMargin}, " +
+                "snapshot=$snapshot)",
+            snapshot.geckoBottomOnScreen <= snapshot.keyboardTopOnScreen + LAYOUT_TOLERANCE_PX,
+        )
+    }
+
+    private fun focusBottomInputField() {
+        composeRule.onNodeWithTag(GeckoBrowserTabTestTags.GeckoContainer.testTag)
+            .performTouchInput {
+                // 画面下部の固定 footer 入力付近をタップする
+                click(percentOffset(0.5f, 0.92f))
+            }
+        composeRule.waitForIdle()
+    }
+
+    private fun waitForImeVisible(timeoutMillis: Long) {
+        composeRule.waitUntil(timeoutMillis = timeoutMillis) {
+            readImeLayoutSnapshot().imeVisible
+        }
+    }
+
+    private fun waitForImeLayoutSettled(timeoutMillis: Long) {
+        composeRule.waitUntil(timeoutMillis = timeoutMillis) {
+            val snapshot = readImeLayoutSnapshot()
+            snapshot.imeVisible && snapshot.imeInsetBottom > 0
+        }
+        composeRule.waitForIdle()
+    }
+
+    private fun readImeLayoutSnapshot(): ImeLayoutSnapshot {
+        val snapshotHolder = arrayOf<ImeLayoutSnapshot?>(null)
+        composeRule.runOnIdle {
+            val activity = composeRule.activity
+            val decorView = activity.window.decorView
+            val rootInsets = decorView.rootWindowInsets
+            val imeVisible = rootInsets?.isVisible(WindowInsets.Type.ime()) == true
+            val imeInsetBottom = rootInsets?.getInsets(WindowInsets.Type.ime())?.bottom ?: 0
+            val geckoView = requireNotNull(decorView.findGeckoView()) {
+                "GeckoView が見つからない"
+            }
+            val location = IntArray(2)
+            geckoView.getLocationOnScreen(location)
+            val geckoBottomOnScreen = location[1] + geckoView.height
+            val geckoBottomMargin = (geckoView.layoutParams as? ViewGroup.MarginLayoutParams)
+                ?.bottomMargin ?: 0
+            val screenHeight = activity.resources.displayMetrics.heightPixels
+            val keyboardTopOnScreen = screenHeight - imeInsetBottom
+            snapshotHolder[0] = ImeLayoutSnapshot(
+                imeVisible = imeVisible,
+                imeInsetBottom = imeInsetBottom,
+                geckoBottomOnScreen = geckoBottomOnScreen,
+                geckoBottomMargin = geckoBottomMargin,
+                keyboardTopOnScreen = keyboardTopOnScreen,
+                screenHeight = screenHeight,
+            )
+        }
+        return requireNotNull(snapshotHolder[0])
+    }
+
+    private fun ensureBrowserScreen() {
+        val browserReady = runCatching {
+            composeRule.waitUntil(timeoutMillis = 20_000) {
+                composeRule.onAllNodesWithTag(UrlTextInputTestTags.UrlBar.testTag)
+                    .fetchSemanticsNodes().isNotEmpty()
+            }
+            true
+        }.getOrDefault(false)
+        if (browserReady) return
+
+        val tabsReady = runCatching {
+            composeRule.waitForTabsScreenLoaded(timeoutMillis = 10_000)
+            true
+        }.getOrDefault(false)
+        if (tabsReady) {
+            composeRule.onNodeWithTag(TabsScreenTestTags.AddTabButton.testTag).performClick()
+            composeRule.waitForIdle()
+        }
+        composeRule.waitUntil(timeoutMillis = 20_000) {
+            composeRule.onAllNodesWithTag(UrlTextInputTestTags.UrlBar.testTag)
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+    }
+
+    private fun openLocalPage(url: String, urlMarker: String) {
+        composeRule.openUrlViaViewIntent(url)
+        val openedByIntent = runCatching {
+            composeRule.waitForUrlBarContains(urlMarker, timeoutMillis = 20_000)
+            true
+        }.getOrDefault(false)
+        if (!openedByIntent) {
+            composeRule.openUrlFromUrlBar(url)
+            composeRule.waitForUrlBarContains(urlMarker, timeoutMillis = 60_000)
+        }
+    }
+
+    private fun startBottomInputPageServer(): String {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val targetContext = instrumentation.targetContext
+        val destinationDir = File(targetContext.cacheDir, ASSET_DIR_NAME).apply { mkdirs() }
+        val assetManager = instrumentation.context.assets
+        val destination = File(destinationDir, INDEX_FILE_NAME)
+        assetManager.open("$ASSET_DIR_NAME/$INDEX_FILE_NAME").use { input ->
+            destination.outputStream().use { output ->
+                input.copyTo(output)
+            }
+        }
+        val server = LocalHttpServer(destinationDir)
+        localHttpServer = server
+        return server.url(INDEX_FILE_NAME)
+    }
+
+    private fun View.findGeckoView(): GeckoView? {
+        if (this is GeckoView) return this
+        if (this !is ViewGroup) return null
+        for (index in 0 until childCount) {
+            getChildAt(index).findGeckoView()?.let { return it }
+        }
+        return null
+    }
+
+    private data class ImeLayoutSnapshot(
+        val imeVisible: Boolean,
+        val imeInsetBottom: Int,
+        val geckoBottomOnScreen: Int,
+        val geckoBottomMargin: Int,
+        val keyboardTopOnScreen: Int,
+        val screenHeight: Int,
+    )
+
+    companion object {
+        private const val ASSET_DIR_NAME = "test-keyboard-bottom-input"
+        private const val INDEX_FILE_NAME = "index.html"
+        private const val LAYOUT_TOLERANCE_PX = 8
+    }
+}
