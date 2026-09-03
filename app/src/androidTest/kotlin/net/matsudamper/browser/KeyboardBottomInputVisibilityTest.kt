@@ -121,6 +121,7 @@ class KeyboardBottomInputVisibilityTest {
             if (
                 text.contains(BOTTOM_INPUT_PLACEHOLDER, ignoreCase = true) ||
                 hint.contains(BOTTOM_INPUT_PLACEHOLDER, ignoreCase = true) ||
+                hint.contains(BOTTOM_INPUT_LABEL, ignoreCase = true) ||
                 contentDescription.contains(BOTTOM_INPUT_LABEL, ignoreCase = true)
             ) {
                 return AccessibilityNodeInfo.obtain(node)
