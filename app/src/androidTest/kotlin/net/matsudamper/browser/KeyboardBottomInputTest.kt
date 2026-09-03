@@ -202,13 +202,15 @@ class KeyboardBottomInputTest {
         val deadline = SystemClock.elapsedRealtime() + IME_WAIT_MILLIS
         while (SystemClock.elapsedRealtime() < deadline) {
             clickPageInput()
-            val shown = runCatching {
+            // URL バーの IME 非表示が遅れて届くと、その inset だけで成立してしまう。
+            // ページ内の入力欄がフォーカスされていることも条件に含める。
+            val focused = runCatching {
                 composeRule.waitUntil(timeoutMillis = TAP_RETRY_INTERVAL_MILLIS) {
-                    imeInsetBottom() > 0
+                    imeInsetBottom() > 0 && findBottomInputBoundsInScreen() != null
                 }
                 true
             }.getOrDefault(false)
-            if (shown) return true
+            if (focused) return true
         }
         return false
     }
