@@ -2,10 +2,12 @@ package net.matsudamper.browser
 
 import android.graphics.Rect
 import android.os.Build
+import android.view.KeyEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowInsets
 import android.view.accessibility.AccessibilityNodeInfo
+import android.view.inputmethod.InputMethodManager
 import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -21,6 +23,7 @@ import java.io.File
 import net.matsudamper.browser.ui.tabs.TabsScreenTestTags
 import org.junit.After
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -41,6 +44,13 @@ class KeyboardBottomInputVisibilityTest {
     val composeRule = createAndroidComposeRule<MainActivity>()
 
     private var localHttpServer: LocalHttpServer? = null
+
+    @Before
+    fun enableSoftKeyboardOnGmd() {
+        // ATD ではハードウェアキーボード扱いでソフト IME が出ないことがある
+        val uiDevice = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
+        uiDevice.executeShellCommand("settings put secure show_ime_with_hard_keyboard 1")
+    }
 
     @After
     fun tearDown() {
@@ -88,6 +98,7 @@ class KeyboardBottomInputVisibilityTest {
                 if (field != null) {
                     field.click()
                     composeRule.waitForIdle()
+                    requestImeForFocusedView()
                     true
                 } else {
                     val uiAutomation = InstrumentationRegistry.getInstrumentation().uiAutomation
@@ -102,6 +113,7 @@ class KeyboardBottomInputVisibilityTest {
                             target.getBoundsInScreen(inputBounds)
                             target.recycle()
                             tapBottomInputOnGeckoContainer(inputBounds)
+                            requestImeForFocusedView()
                             true
                         }
                     } finally {
@@ -127,6 +139,21 @@ class KeyboardBottomInputVisibilityTest {
             .performTouchInput {
                 click(androidx.compose.ui.geometry.Offset(tapX, tapY))
             }
+        composeRule.waitForIdle()
+    }
+
+    private fun requestImeForFocusedView() {
+        val uiDevice = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
+        uiDevice.pressKeyCode(KeyEvent.KEYCODE_A)
+        composeRule.runOnIdle {
+            val activity = composeRule.activity
+            val imm = activity.getSystemService(InputMethodManager::class.java) ?: return@runOnIdle
+            val focused = activity.currentFocus ?: activity.window.decorView.findFocus()
+            if (focused != null) {
+                imm.showSoftInput(focused, InputMethodManager.SHOW_IMPLICIT)
+            }
+            imm.toggleSoftInput(InputMethodManager.SHOW_FORCED, InputMethodManager.HIDE_IMPLICIT_ONLY)
+        }
         composeRule.waitForIdle()
     }
 
