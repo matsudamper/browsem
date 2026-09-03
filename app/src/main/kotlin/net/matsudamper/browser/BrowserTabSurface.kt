@@ -14,9 +14,12 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -44,6 +47,7 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -68,6 +72,20 @@ internal fun BrowserContentHost(
     updateGeckoView: (GeckoView) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    // Firefox (Fenix) の ImeInsetsSynchronizer と同様に、キーボード分だけ表示領域を
+    // 物理的に縮める。Gecko 内部の onKeyboardHeight は解除しない。あちらは
+    // interactive-widget の解釈 (レイアウトビューポートを保つ) に必要で、
+    // 表示領域の縮小と役割が別のため両方が要る。
+    //
+    // GeckoView は Activity の decorView へ WindowInsets リスナーを張るが、
+    // ComposeView が insets を消費するため View 階層の子には届かない。Compose 側で
+    // 高さを読み、AndroidView の update で反映する。
+    val density = LocalDensity.current
+    val imeBottomPx = WindowInsets.ime.getBottom(density)
+    val navigationBottomPx = WindowInsets.navigationBars.getBottom(density)
+    // GeckoDisplay.getKeyboardHeight と同じ ime - navigationBars
+    val keyboardHeightPx = (imeBottomPx - navigationBottomPx).coerceAtLeast(0)
+
     Box(modifier = modifier) {
         AndroidView(
             modifier = Modifier
@@ -176,6 +194,11 @@ internal fun BrowserContentHost(
             update = { swipeRefreshLayout ->
                 swipeRefreshLayout.isEnabled = !state.isFullScreen
                 swipeRefreshLayout.isRefreshing = state.isRefreshing
+                // SwipeRefreshLayout は子を padding 分だけ縮めて measure/layout する。
+                // 再生中の surface リサイズを増やさないよう、値が変わるときだけ更新する。
+                if (swipeRefreshLayout.paddingBottom != keyboardHeightPx) {
+                    swipeRefreshLayout.setPadding(0, 0, 0, keyboardHeightPx)
+                }
                 val geckoView = swipeRefreshLayout.findViewById<GeckoView>(id)
                 if (!state.isUrlInputFocused && !state.showFindInPage && !geckoView.isFocused) {
                     geckoView.requestFocus()
