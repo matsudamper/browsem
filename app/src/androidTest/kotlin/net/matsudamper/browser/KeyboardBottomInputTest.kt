@@ -5,6 +5,9 @@ import android.os.SystemClock
 import android.view.WindowInsets
 import android.view.accessibility.AccessibilityNodeInfo
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
@@ -42,6 +45,30 @@ class KeyboardBottomInputTest {
         TestIme.reset()
         localHttpServer?.close()
         localHttpServer = null
+    }
+
+    /**
+     * テスト用 IME が URL バーで表示できることを確認する切り分け用テスト。
+     *
+     * これが失敗する場合はダミー IME 自体の問題、成功する場合は
+     * Gecko 側がキーボード表示を要求していないことになる。
+     */
+    @Test
+    fun testImeShowsForUrlBar() {
+        composeRule.waitUntil(timeoutMillis = URL_BAR_WAIT_MILLIS) {
+            composeRule.onAllNodesWithTag(UrlTextInputTestTags.UrlBar.testTag)
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithTag(UrlTextInputTestTags.UrlBar.testTag).performClick()
+
+        val shown = runCatching {
+            composeRule.waitUntil(timeoutMillis = IME_WAIT_MILLIS) {
+                imeInsetBottom() > 0
+            }
+            true
+        }.getOrDefault(false)
+
+        assertTrue("URL バーでもテスト用 IME が表示されない: ${TestIme.diagnostics()}", shown)
     }
 
     @Test
@@ -336,6 +363,7 @@ class KeyboardBottomInputTest {
         private const val BOTTOM_INPUT_DIR_NAME = "test-ime-bottom"
         private const val BOTTOM_INPUT_FILE_NAME = "index.html"
 
+        private const val URL_BAR_WAIT_MILLIS = 60_000L
         private const val IME_HIDE_WAIT_MILLIS = 10_000L
         private const val IME_WAIT_MILLIS = 30_000L
         private const val IME_STABLE_WAIT_MILLIS = 10_000L
