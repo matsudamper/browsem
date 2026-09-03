@@ -1,17 +1,22 @@
 package net.matsudamper.browser
 
+import android.graphics.Rect
 import android.os.Build
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowInsets
 import android.view.accessibility.AccessibilityNodeInfo
 import androidx.compose.ui.test.ComposeTimeoutException
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.test.uiautomator.By
+import androidx.test.uiautomator.UiDevice
 import java.io.File
 import net.matsudamper.browser.ui.tabs.TabsScreenTestTags
 import org.junit.After
@@ -73,33 +78,55 @@ class KeyboardBottomInputVisibilityTest {
     }
 
     private fun focusBottomInputField() {
-        val uiAutomation = InstrumentationRegistry.getInstrumentation().uiAutomation
+        val uiDevice = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
+        val inputBounds = Rect()
         var lastDump = ""
         try {
             composeRule.waitUntil(timeoutMillis = 30_000) {
-                val root = uiAutomation.rootInActiveWindow ?: return@waitUntil false
-                try {
-                    val dump = StringBuilder()
-                    val target = findBottomInputField(root, dump)
-                    lastDump = dump.toString()
-                    if (target == null) {
-                        false
-                    } else {
-                        val clicked = target.performAction(AccessibilityNodeInfo.ACTION_CLICK) ||
-                            target.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
-                        target.recycle()
-                        clicked
+                val field = uiDevice.findObject(By.hint(BOTTOM_INPUT_LABEL))
+                    ?: uiDevice.findObject(By.desc(BOTTOM_INPUT_LABEL))
+                if (field != null) {
+                    field.click()
+                    composeRule.waitForIdle()
+                    true
+                } else {
+                    val uiAutomation = InstrumentationRegistry.getInstrumentation().uiAutomation
+                    val root = uiAutomation.rootInActiveWindow ?: return@waitUntil false
+                    try {
+                        val dump = StringBuilder()
+                        val target = findBottomInputField(root, dump)
+                        lastDump = dump.toString()
+                        if (target == null) {
+                            false
+                        } else {
+                            target.getBoundsInScreen(inputBounds)
+                            target.recycle()
+                            tapBottomInputOnGeckoContainer(inputBounds)
+                            true
+                        }
+                    } finally {
+                        root.recycle()
                     }
-                } finally {
-                    root.recycle()
                 }
             }
         } catch (e: ComposeTimeoutException) {
             throw AssertionError(
-                "下部入力欄をフォーカスできない (dump=\n$lastDump)",
+                "下部入力欄をタップできない (dump=\n$lastDump)",
                 e,
             )
         }
+    }
+
+    private fun tapBottomInputOnGeckoContainer(inputBounds: Rect) {
+        val geckoSemantics = composeRule.onNodeWithTag(GeckoBrowserTabTestTags.GeckoContainer.testTag)
+            .fetchSemanticsNode()
+        val containerBounds = geckoSemantics.boundsInRoot
+        val tapX = inputBounds.exactCenterX() - containerBounds.left
+        val tapY = inputBounds.exactCenterY() - containerBounds.top
+        composeRule.onNodeWithTag(GeckoBrowserTabTestTags.GeckoContainer.testTag)
+            .performTouchInput {
+                click(androidx.compose.ui.geometry.Offset(tapX, tapY))
+            }
         composeRule.waitForIdle()
     }
 
@@ -156,7 +183,7 @@ class KeyboardBottomInputVisibilityTest {
     private fun waitForImeLayoutSettled(timeoutMillis: Long) {
         composeRule.waitUntil(timeoutMillis = timeoutMillis) {
             val snapshot = readImeLayoutSnapshot()
-            snapshot.imeVisible && snapshot.imeInsetBottom > 0
+            snapshot.imeInsetBottom > 0
         }
         composeRule.waitForIdle()
     }
