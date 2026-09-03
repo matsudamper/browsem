@@ -1,5 +1,6 @@
 package net.matsudamper.browser
 
+import android.app.Instrumentation
 import android.graphics.Rect
 import android.os.Build
 import android.view.KeyEvent
@@ -143,18 +144,35 @@ class KeyboardBottomInputVisibilityTest {
     }
 
     private fun requestImeForFocusedView() {
-        val uiDevice = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
-        uiDevice.pressKeyCode(KeyEvent.KEYCODE_A)
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val uiDevice = UiDevice.getInstance(instrumentation)
+        sendTextKeyToFocusedInput(instrumentation)
         composeRule.runOnIdle {
             val activity = composeRule.activity
             val imm = activity.getSystemService(InputMethodManager::class.java) ?: return@runOnIdle
+            val geckoView = activity.window.decorView.findGeckoView()
             val focused = activity.currentFocus ?: activity.window.decorView.findFocus()
+            if (geckoView != null) {
+                imm.showSoftInput(geckoView, InputMethodManager.SHOW_IMPLICIT)
+            }
             if (focused != null) {
                 imm.showSoftInput(focused, InputMethodManager.SHOW_IMPLICIT)
             }
             imm.toggleSoftInput(InputMethodManager.SHOW_FORCED, InputMethodManager.HIDE_IMPLICIT_ONLY)
         }
         composeRule.waitForIdle()
+        // 物理キーイベントでも IME を起動できない場合は GMD 側の制約
+        if (readImeLayoutSnapshot().imeInsetBottom == 0) {
+            uiDevice.pressKeyCode(KeyEvent.KEYCODE_ENTER)
+            composeRule.waitForIdle()
+        }
+    }
+
+    private fun sendTextKeyToFocusedInput(instrumentation: Instrumentation) {
+        val keyDown = KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_A)
+        val keyUp = KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_A)
+        instrumentation.sendKeySync(keyDown)
+        instrumentation.sendKeySync(keyUp)
     }
 
     private fun findBottomInputField(
