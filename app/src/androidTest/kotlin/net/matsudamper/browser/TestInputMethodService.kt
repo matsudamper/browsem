@@ -1,10 +1,8 @@
 package net.matsudamper.browser
 
-import android.content.Context
 import android.inputmethodservice.InputMethodService
 import android.util.TypedValue
 import android.view.View
-import android.view.ViewGroup
 
 /**
  * テストで IME insets を発生させるための、固定高さのダミーキーボード。
@@ -14,37 +12,35 @@ import android.view.ViewGroup
  * 有効化して、決まった高さの IME insets を発生させる。
  */
 class TestInputMethodService : InputMethodService() {
+    private val keyboardHeightPx: Int
+        get() = TypedValue.applyDimension(
+            TypedValue.COMPLEX_UNIT_DIP,
+            KEYBOARD_HEIGHT_DP.toFloat(),
+            resources.displayMetrics,
+        ).toInt()
+
     override fun onCreateInputView(): View {
-        return FixedHeightView(this)
+        return View(this).apply {
+            minimumHeight = keyboardHeightPx
+            setBackgroundColor(BACKGROUND_COLOR)
+        }
     }
 
     /** 横向きでも全画面 IME にせず、insets として観測できるようにする */
     override fun onEvaluateFullscreenMode(): Boolean = false
 
     /**
-     * 親の measureSpec に関わらず固定高さで測定されるビュー。
+     * アプリへ通知する IME の高さを固定する。
      *
-     * minimumHeight だけでは親から与えられた高さいっぱいに広がり、
-     * IME が画面全体を覆ってしまうため、onMeasure で高さを固定する。
+     * 入力ビューの測定に任せると IME ウィンドウが画面いっぱいに広がり、
+     * insets が画面高さ相当になってしまうため、ここで直接指定する。
      */
-    private class FixedHeightView(context: Context) : View(context) {
-        private val fixedHeightPx = TypedValue.applyDimension(
-            TypedValue.COMPLEX_UNIT_DIP,
-            KEYBOARD_HEIGHT_DP.toFloat(),
-            context.resources.displayMetrics,
-        ).toInt()
-
-        init {
-            layoutParams = ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                fixedHeightPx,
-            )
-            setBackgroundColor(BACKGROUND_COLOR)
-        }
-
-        override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
-            setMeasuredDimension(getDefaultSize(suggestedMinimumWidth, widthMeasureSpec), fixedHeightPx)
-        }
+    override fun onComputeInsets(outInsets: Insets) {
+        super.onComputeInsets(outInsets)
+        val decorHeight = window?.window?.decorView?.height ?: return
+        val top = (decorHeight - keyboardHeightPx).coerceAtLeast(0)
+        outInsets.contentTopInsets = top
+        outInsets.visibleTopInsets = top
     }
 
     companion object {

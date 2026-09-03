@@ -15,6 +15,15 @@ internal object TestIme {
         "net.matsudamper.browser.androidtest/net.matsudamper.browser.TestInputMethodService"
     private const val SELECT_TIMEOUT_MILLIS = 10_000L
     private const val POLL_INTERVAL_MILLIS = 200L
+    private val DUMP_KEYS = listOf(
+        "mInputShown",
+        "mIsInputViewShown",
+        "mImeWindowVis",
+        "mCurMethodId",
+        "mServedView",
+        "mShowRequested",
+    )
+    private const val DUMP_MAX_LINES = 20
 
     /**
      * ダミー IME を有効化して既定の IME にする。切り替わったかどうかを返す。
@@ -42,6 +51,19 @@ internal object TestIme {
     fun reset() {
         shell("ime reset")
         shell("settings delete secure show_ime_with_hard_keyboard")
+    }
+
+    /**
+     * IME が表示されない場合の診断用に、input_method の状態を抜粋して返す。
+     */
+    fun diagnostics(): String {
+        val defaultIme = shell("settings get secure default_input_method").trim()
+        val dump = shell("dumpsys input_method")
+            .lineSequence()
+            .filter { line -> DUMP_KEYS.any { line.contains(it) } }
+            .take(DUMP_MAX_LINES)
+            .joinToString(separator = "\n") { it.trim() }
+        return "default_input_method=$defaultIme\n$dump"
     }
 
     private fun shell(command: String): String {

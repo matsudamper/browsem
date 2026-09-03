@@ -62,7 +62,7 @@ class KeyboardBottomInputTest {
         )
 
         assertTrue(
-            "ページ下部の入力欄をタップしてもキーボードが表示されない",
+            "ページ下部の入力欄をタップしてもキーボードが表示されない: ${TestIme.diagnostics()}",
             focusBottomInputAndWaitForIme(),
         )
 
