@@ -46,31 +46,53 @@ class KeyboardBottomInputTest {
         composeRule.openUrlFromUrlBar(pageUrl)
         composeRule.waitForUrlBarContains(BOTTOM_INPUT_FILE_NAME, timeoutMillis = 60_000)
         composeRule.waitForUrlBarNotFocused()
+        // URL バーの IME が閉じきる前だと、その inset を「入力欄のキーボード」と
+        // 誤認してページをタップしないまま先へ進んでしまう。
+        assertTrue(
+            "URL バーのキーボードが閉じない",
+            waitForImeHidden(),
+        )
 
         assertTrue(
             "ページ下部の入力欄をタップしてもキーボードが表示されない",
             focusBottomInputAndWaitForIme(),
         )
 
-        var lastDiagnostics = "入力欄のアクセシビリティノードが見つからない"
-        val visible = runCatching {
-            composeRule.waitUntil(timeoutMillis = INPUT_VISIBLE_WAIT_MILLIS) {
-                val bounds = findBottomInputBoundsInScreen()
-                val keyboardTop = keyboardTopInScreen()
-                if (bounds == null || keyboardTop == null) {
-                    lastDiagnostics = "bounds=$bounds keyboardTop=$keyboardTop"
-                    false
-                } else {
-                    lastDiagnostics = "入力欄 bottom=${bounds.bottom} キーボード上端=$keyboardTop"
-                    bounds.bottom <= keyboardTop
-                }
-            }
-            true
-        }.getOrDefault(false)
+        assertVisibleAboveKeyboard()
+    }
 
+    /**
+     * 入力欄がキーボード上端より上にある状態が続くことを検証する。
+     *
+     * IME はアニメーションで迫り上がるため、inset が初めて 0 を超えた瞬間に判定すると
+     * まだキーボードが入力欄より下にある途中フレームで成立してしまう。inset が安定して
+     * から、さらに一定回数連続で条件を満たすことを確認する。
+     */
+    private fun assertVisibleAboveKeyboard() {
         assertTrue(
+            "キーボードの高さが安定しない",
+            waitForStableImeInsetBottom() > 0,
+        )
+
+        var lastDiagnostics = "入力欄のアクセシビリティノードが見つからない"
+        var okCount = 0
+        val deadline = SystemClock.elapsedRealtime() + INPUT_VISIBLE_WAIT_MILLIS
+        while (SystemClock.elapsedRealtime() < deadline) {
+            val bounds = findBottomInputBoundsInScreen()
+            val keyboardTop = keyboardTopInScreen()
+            if (bounds == null || keyboardTop == null) {
+                lastDiagnostics = "bounds=$bounds keyboardTop=$keyboardTop"
+                okCount = 0
+            } else {
+                lastDiagnostics = "入力欄 bottom=${bounds.bottom} キーボード上端=$keyboardTop"
+                okCount = if (bounds.bottom <= keyboardTop) okCount + 1 else 0
+            }
+            if (okCount >= REQUIRED_STABLE_COUNT) return
+            Thread.sleep(POLL_INTERVAL_MILLIS)
+        }
+
+        throw AssertionError(
             "キーボード表示中にページ下部の入力欄がキーボードに隠れている: $lastDiagnostics",
-            visible,
         )
     }
 
@@ -86,26 +108,58 @@ class KeyboardBottomInputTest {
     }
 
     /**
-     * IME が表示されるまでタップを繰り返し、表示されたかどうかを返す。
+     * IME が閉じるまで待機し、閉じたかどうかを返す。
+     */
+    private fun waitForImeHidden(): Boolean {
+        return runCatching {
+            composeRule.waitUntil(timeoutMillis = IME_HIDE_WAIT_MILLIS) {
+                imeInsetBottom() == 0
+            }
+            true
+        }.getOrDefault(false)
+    }
+
+    /**
+     * ページ内の入力欄にフォーカスが移り IME が表示されるまでタップを繰り返す。
      *
      * ページの読み込みや Gecko の解析が遅れると、URL 更新後もまだ入力欄が
      * 生成されておらずタップが空振りする。1 回だけのタップだと Issue #674 と
-     * 無関係に失敗するため、IME が出るまでタップを再試行する。
+     * 無関係に失敗するため、条件を満たすまでタップを再試行する。
      */
     private fun focusBottomInputAndWaitForIme(): Boolean {
         val deadline = SystemClock.elapsedRealtime() + IME_WAIT_MILLIS
         while (SystemClock.elapsedRealtime() < deadline) {
-            if (imeInsetBottom() > 0) return true
             tapBottomOfGeckoContainer()
-            val shown = runCatching {
+            val focused = runCatching {
                 composeRule.waitUntil(timeoutMillis = TAP_RETRY_INTERVAL_MILLIS) {
-                    imeInsetBottom() > 0
+                    imeInsetBottom() > 0 && findBottomInputBoundsInScreen() != null
                 }
                 true
             }.getOrDefault(false)
-            if (shown) return true
+            if (focused) return true
         }
         return false
+    }
+
+    /**
+     * IME の高さが変化しなくなるまで待ち、その高さを返す。安定しなければ 0 を返す。
+     */
+    private fun waitForStableImeInsetBottom(): Int {
+        var lastValue = -1
+        var stableCount = 0
+        val deadline = SystemClock.elapsedRealtime() + IME_STABLE_WAIT_MILLIS
+        while (SystemClock.elapsedRealtime() < deadline) {
+            val current = imeInsetBottom()
+            if (current > 0 && current == lastValue) {
+                stableCount++
+                if (stableCount >= REQUIRED_STABLE_COUNT) return current
+            } else {
+                stableCount = 0
+            }
+            lastValue = current
+            Thread.sleep(POLL_INTERVAL_MILLIS)
+        }
+        return 0
     }
 
     private fun imeInsetBottom(): Int {
@@ -148,7 +202,7 @@ class KeyboardBottomInputTest {
         } finally {
             root.recycle()
         }
-        // フォーカス中の入力欄が見つからない場合に備え、最も下にある入力欄を使う
+        // フォーカス中の入力欄が複数見つかった場合は最も下にあるものを使う
         return editableBounds.maxByOrNull { it.bottom }
     }
 
@@ -197,10 +251,17 @@ class KeyboardBottomInputTest {
         /** 入力欄はビューポート下端 12% を占めるため、その中央付近をタップする */
         private const val BOTTOM_INPUT_TAP_RATIO = 0.94f
 
+        private const val IME_HIDE_WAIT_MILLIS = 10_000L
         private const val IME_WAIT_MILLIS = 30_000L
+        private const val IME_STABLE_WAIT_MILLIS = 10_000L
+        private const val INPUT_VISIBLE_WAIT_MILLIS = 15_000L
 
         /** タップが空振りしたときに再タップするまでの待ち時間 */
         private const val TAP_RETRY_INTERVAL_MILLIS = 3_000L
-        private const val INPUT_VISIBLE_WAIT_MILLIS = 10_000L
+
+        private const val POLL_INTERVAL_MILLIS = 200L
+
+        /** IME アニメーション途中のフレームで判定しないよう、連続で満たすことを求める回数 */
+        private const val REQUIRED_STABLE_COUNT = 5
     }
 }
