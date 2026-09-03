@@ -1096,9 +1096,9 @@ internal fun GeckoBrowserTab(
                     Modifier
                 } else {
                     // 上部（ステータスバー）は BrowserToolBar の背景色で塗りつぶすため除外する。
-                    // IME は GeckoView が WindowInsets から onKeyboardHeight で処理する（Firefox Android 同様）。
-                    // Compose 側で GeckoView をリサイズすると PopupMenu 内入力などで
-                    // Surface が揺れてメニューが消えるため、オーバーレイ UI だけ余白を取る。
+                    // IME は BrowserTabSurface の ImeInsetsSynchronizer が GeckoView コンテナの
+                    // bottomMargin を更新する（Firefox Android 同様）。Compose の imePadding は
+                    // recompose で PopupMenu が消えるため使わない。
                     Modifier
                         .windowInsetsPadding(
                             WindowInsets.safeDrawing
@@ -1590,7 +1590,7 @@ private class GetMultipleContentsWithMimeTypes : ActivityResultContract<Array<St
 
 /**
  * Compose オーバーレイ（住所候補バー等）を IME 上に載せる余白。
- * GeckoView 本体は onKeyboardHeight でスクロールするためリサイズしない。
+ * GeckoView 本体は ImeInsetsSynchronizer で bottomMargin を更新する。
  * 親 Column が navigationBars を確保済みなら ime - navigationBars、
  * フルスクリーンなど親が確保していない場合は IME 全高を使う。
  */

@@ -58,6 +58,50 @@ import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.GeckoView
 
+/**
+ * GeckoView が onAttachedToWindow で登録する IME リスナーのキー。
+ * View の bottomMargin でコンテナを縮める場合、内部の onKeyboardHeight と二重になるため解除する。
+ */
+private const val GECKO_KEYBOARD_WINDOW_INSETS_LISTENER = "KEYBOARD_WINDOW_INSETS_LISTENER"
+
+private fun GeckoView.disableInternalKeyboardInsetsListener() {
+    addOnAttachStateChangeListener(
+        object : View.OnAttachStateChangeListener {
+            override fun onViewAttachedToWindow(v: View) {
+                // onAttachedToWindow のたびに Gecko が登録し直すため、再アタッチ時も解除する。
+                removeWindowInsetsListener(GECKO_KEYBOARD_WINDOW_INSETS_LISTENER)
+            }
+
+            override fun onViewDetachedFromWindow(v: View) = Unit
+        },
+    )
+}
+
+/**
+ * Firefox (Fenix) と同様に SwipeRefreshLayout の bottomMargin でキーボード分だけ縮める。
+ * Compose の imePadding とは異なり recompose を起こさない。
+ */
+private fun setupGeckoContainerImeInsets(swipeRefreshLayout: GeckoSwipeRefreshLayout) {
+    (swipeRefreshLayout.layoutParams as? ViewGroup.MarginLayoutParams)?.bottomMargin = 0
+    ImeInsetsSynchronizer.setup(
+        targetView = swipeRefreshLayout,
+        insetsSource = swipeRefreshLayout,
+        synchronizeViewWithIME = false,
+        onIMEAnimationStarted = { isKeyboardShowingUp, _ ->
+            if (!isKeyboardShowingUp) {
+                (swipeRefreshLayout.layoutParams as? ViewGroup.MarginLayoutParams)?.bottomMargin = 0
+                swipeRefreshLayout.requestLayout()
+            }
+        },
+        onIMEAnimationFinished = { isKeyboardShowingUp, keyboardHeight ->
+            if (isKeyboardShowingUp || keyboardHeight == 0) {
+                (swipeRefreshLayout.layoutParams as? ViewGroup.MarginLayoutParams)?.bottomMargin = keyboardHeight
+                swipeRefreshLayout.requestLayout()
+            }
+        },
+    )
+}
+
 @Composable
 internal fun BrowserContentHost(
     state: BrowserTabScreenState,
@@ -86,6 +130,7 @@ internal fun BrowserContentHost(
                     var gestureDownY = 0f
                     val gecko = GeckoView(context).also { geckoView ->
                         geckoView.id = id
+                        geckoView.disableInternalKeyboardInsetsListener()
                         geckoView.isNestedScrollingEnabled = true
                         geckoView.setAutofillEnabled(true)
                         geckoView.importantForAutofill =
@@ -171,6 +216,7 @@ internal fun BrowserContentHost(
                         state.isRefreshing = true
                         latestOnRefresh()
                     }
+                    setupGeckoContainerImeInsets(swipeRefreshLayout)
                 }
             },
             update = { swipeRefreshLayout ->
