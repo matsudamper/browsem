@@ -176,10 +176,6 @@ internal fun BrowserContentHost(
             update = { swipeRefreshLayout ->
                 swipeRefreshLayout.isEnabled = !state.isFullScreen
                 swipeRefreshLayout.isRefreshing = state.isRefreshing
-                val geckoView = swipeRefreshLayout.findViewById<GeckoView>(id)
-                if (!state.isUrlInputFocused && !state.showFindInPage && !geckoView.isFocused) {
-                    geckoView.requestFocus()
-                }
             },
         )
 
