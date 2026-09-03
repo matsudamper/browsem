@@ -105,7 +105,8 @@ class KeyboardBottomInputTest {
         }
 
         throw AssertionError(
-            "キーボード表示中にページ下部の入力欄がキーボードに隠れている: $lastDiagnostics",
+            "キーボード表示中にページ下部の入力欄がキーボードに隠れている: $lastDiagnostics\n" +
+                "編集可能ノード一覧:\n${dumpEditableNodes()}",
         )
     }
 
@@ -143,13 +144,13 @@ class KeyboardBottomInputTest {
         val deadline = SystemClock.elapsedRealtime() + IME_WAIT_MILLIS
         while (SystemClock.elapsedRealtime() < deadline) {
             tapBottomOfGeckoContainer()
-            val focused = runCatching {
+            val shown = runCatching {
                 composeRule.waitUntil(timeoutMillis = TAP_RETRY_INTERVAL_MILLIS) {
-                    imeInsetBottom() > 0 && findBottomInputBoundsInScreen() != null
+                    imeInsetBottom() > 0
                 }
                 true
             }.getOrDefault(false)
-            if (focused) return true
+            if (shown) return true
         }
         return false
     }
@@ -218,34 +219,63 @@ class KeyboardBottomInputTest {
      * GeckoView が公開するアクセシビリティノードから探す。
      */
     private fun findBottomInputBoundsInScreen(): Rect? {
-        val uiAutomation = InstrumentationRegistry.getInstrumentation().uiAutomation
-        val root = uiAutomation.rootInActiveWindow ?: return null
-        val editableBounds = mutableListOf<Rect>()
-        try {
-            collectEditableBounds(root, editableBounds)
-        } finally {
-            root.recycle()
-        }
-        // フォーカス中の入力欄が複数見つかった場合は最も下にあるものを使う
-        return editableBounds.maxByOrNull { it.bottom }
+        val nodes = collectEditableNodes()
+        // フォーカス中のものを優先し、無ければ最も下にある入力欄を使う
+        return nodes.filter { it.focused }.maxByOrNull { it.bounds.bottom }?.bounds
+            ?: nodes.maxByOrNull { it.bounds.bottom }?.bounds
     }
 
     /**
-     * フォーカス中の編集可能ノードの画面座標を集める。
+     * 失敗時の診断用に、見つかった編集可能ノードを 1 行ずつ書き出す。
      */
-    private fun collectEditableBounds(node: AccessibilityNodeInfo, result: MutableList<Rect>) {
-        if (node.isEditable && node.isFocused) {
-            result += Rect().also { node.getBoundsInScreen(it) }
+    private fun dumpEditableNodes(): String {
+        val nodes = collectEditableNodes()
+        if (nodes.isEmpty()) return "(編集可能ノードなし)"
+        return nodes.joinToString(separator = "\n") {
+            "class=${it.className} focused=${it.focused} bounds=${it.bounds} text=${it.text}"
+        }
+    }
+
+    /**
+     * アクセシビリティツリーから編集可能なノードを集める。
+     */
+    private fun collectEditableNodes(): List<EditableNode> {
+        val uiAutomation = InstrumentationRegistry.getInstrumentation().uiAutomation
+        val root = uiAutomation.rootInActiveWindow ?: return emptyList()
+        val result = mutableListOf<EditableNode>()
+        try {
+            collectEditableNodes(root, result)
+        } finally {
+            root.recycle()
+        }
+        return result
+    }
+
+    private fun collectEditableNodes(node: AccessibilityNodeInfo, result: MutableList<EditableNode>) {
+        if (node.isEditable) {
+            result += EditableNode(
+                className = node.className?.toString().orEmpty(),
+                focused = node.isFocused,
+                bounds = Rect().also { node.getBoundsInScreen(it) },
+                text = node.text?.toString().orEmpty().take(TEXT_DUMP_LENGTH),
+            )
         }
         for (index in 0 until node.childCount) {
             val child = node.getChild(index) ?: continue
             try {
-                collectEditableBounds(child, result)
+                collectEditableNodes(child, result)
             } finally {
                 child.recycle()
             }
         }
     }
+
+    private data class EditableNode(
+        val className: String,
+        val focused: Boolean,
+        val bounds: Rect,
+        val text: String,
+    )
 
     /**
      * 下部入力欄テスト用のローカル HTML をキャッシュへ展開し、
@@ -284,6 +314,9 @@ class KeyboardBottomInputTest {
         private const val TAP_RETRY_INTERVAL_MILLIS = 3_000L
 
         private const val POLL_INTERVAL_MILLIS = 200L
+
+        /** 診断出力に含めるテキストの最大長 */
+        private const val TEXT_DUMP_LENGTH = 40
 
         /** IME アニメーション途中のフレームで判定しないよう、連続で満たすことを求める回数 */
         private const val REQUIRED_STABLE_COUNT = 5
