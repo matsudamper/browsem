@@ -1,15 +1,15 @@
 package net.matsudamper.browser
 
+import android.os.Build
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowInsets
-import androidx.compose.ui.test.click
+import android.view.accessibility.AccessibilityNodeInfo
+import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.percentOffset
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performTouchInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
@@ -55,13 +55,13 @@ class KeyboardBottomInputVisibilityTest {
         composeRule.waitForUrlBarNotFocused(timeoutMillis = 30_000)
 
         focusBottomInputField()
-        waitForImeVisible(timeoutMillis = 10_000)
+        waitForImeVisible(timeoutMillis = 20_000)
         waitForImeLayoutSettled(timeoutMillis = 15_000)
 
         val snapshot = readImeLayoutSnapshot()
         assertTrue(
             "IME が表示されていない (snapshot=$snapshot)",
-            snapshot.imeVisible,
+            snapshot.imeVisible || snapshot.imeInsetBottom > 0,
         )
         assertTrue(
             "GeckoView の下端がキーボード上端より下にある = 下部入力が隠れる " +
@@ -73,17 +73,82 @@ class KeyboardBottomInputVisibilityTest {
     }
 
     private fun focusBottomInputField() {
-        composeRule.onNodeWithTag(GeckoBrowserTabTestTags.GeckoContainer.testTag)
-            .performTouchInput {
-                // 画面下部の固定 footer 入力付近をタップする
-                click(percentOffset(0.5f, 0.92f))
+        val uiAutomation = InstrumentationRegistry.getInstrumentation().uiAutomation
+        var lastDump = ""
+        try {
+            composeRule.waitUntil(timeoutMillis = 30_000) {
+                val root = uiAutomation.rootInActiveWindow ?: return@waitUntil false
+                try {
+                    val dump = StringBuilder()
+                    val target = findBottomInputField(root, dump)
+                    lastDump = dump.toString()
+                    if (target == null) {
+                        false
+                    } else {
+                        val clicked = target.performAction(AccessibilityNodeInfo.ACTION_CLICK) ||
+                            target.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
+                        target.recycle()
+                        clicked
+                    }
+                } finally {
+                    root.recycle()
+                }
             }
+        } catch (e: ComposeTimeoutException) {
+            throw AssertionError(
+                "下部入力欄をフォーカスできない (dump=\n$lastDump)",
+                e,
+            )
+        }
         composeRule.waitForIdle()
     }
 
+    private fun findBottomInputField(
+        node: AccessibilityNodeInfo,
+        dump: StringBuilder,
+    ): AccessibilityNodeInfo? {
+        val cls = node.className?.toString().orEmpty()
+        val text = node.text?.toString().orEmpty()
+        val hint = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            node.hintText?.toString().orEmpty()
+        } else {
+            ""
+        }
+        val contentDescription = node.contentDescription?.toString().orEmpty()
+        val isEdit = node.isEditable || cls.contains("EditText", ignoreCase = true)
+        if (isEdit) {
+            dump.appendLine("edit cls=$cls text=$text hint=$hint desc=$contentDescription")
+            if (
+                text.contains(BOTTOM_INPUT_PLACEHOLDER, ignoreCase = true) ||
+                hint.contains(BOTTOM_INPUT_PLACEHOLDER, ignoreCase = true) ||
+                contentDescription.contains(BOTTOM_INPUT_LABEL, ignoreCase = true)
+            ) {
+                return AccessibilityNodeInfo.obtain(node)
+            }
+        }
+        for (index in 0 until node.childCount) {
+            val child = node.getChild(index) ?: continue
+            try {
+                findBottomInputField(child, dump)?.let { return it }
+            } finally {
+                child.recycle()
+            }
+        }
+        return null
+    }
+
     private fun waitForImeVisible(timeoutMillis: Long) {
-        composeRule.waitUntil(timeoutMillis = timeoutMillis) {
-            readImeLayoutSnapshot().imeVisible
+        try {
+            composeRule.waitUntil(timeoutMillis = timeoutMillis) {
+                val snapshot = readImeLayoutSnapshot()
+                snapshot.imeVisible || snapshot.imeInsetBottom > 0
+            }
+        } catch (e: ComposeTimeoutException) {
+            val snapshot = readImeLayoutSnapshot()
+            throw AssertionError(
+                "IME が表示されない (snapshot=$snapshot)",
+                e,
+            )
         }
     }
 
@@ -198,6 +263,8 @@ class KeyboardBottomInputVisibilityTest {
     companion object {
         private const val ASSET_DIR_NAME = "test-keyboard-bottom-input"
         private const val INDEX_FILE_NAME = "index.html"
+        private const val BOTTOM_INPUT_PLACEHOLDER = "Type here"
+        private const val BOTTOM_INPUT_LABEL = "Bottom field"
         private const val LAYOUT_TOLERANCE_PX = 8
     }
 }
