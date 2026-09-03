@@ -1096,10 +1096,9 @@ internal fun GeckoBrowserTab(
                     Modifier
                 } else {
                     // 上部（ステータスバー）は BrowserToolBar の背景色で塗りつぶすため除外する。
-                    // IME は GeckoView コンテナ側で imeAboveNavigationBarsPadding する。
-                    // Column 全体に imePadding を掛けると Surface リサイズと Gecko 内部の
-                    // onKeyboardHeight が重なり、候補バー消滅後の細い帯やキーボード閉後の
-                    // 黒領域が残る。親の navigationBars padding と組み合わせてコンテナだけ上げる。
+                    // IME は GeckoView が WindowInsets から onKeyboardHeight で処理する（Firefox Android 同様）。
+                    // Compose 側で GeckoView をリサイズすると PopupMenu 内入力などで
+                    // Surface が揺れてメニューが消えるため、オーバーレイ UI だけ余白を取る。
                     Modifier
                         .windowInsetsPadding(
                             WindowInsets.safeDrawing
@@ -1301,10 +1300,7 @@ internal fun GeckoBrowserTab(
                 .testTag(GeckoBrowserTabTestTags.GeckoContainer.testTag),
         ) {
             BrowserContentHost(
-                modifier = Modifier
-                    .fillMaxSize()
-                    // GeckoView のみ縮め、候補バーと二重に IME 余白を掛けない。
-                    .imeAboveNavigationBarsPadding(subtractNavigationBars = subtractNavigationBarsForIme),
+                modifier = Modifier.fillMaxSize(),
                 state = state,
                 id = id,
                 session = session,
@@ -1342,7 +1338,7 @@ internal fun GeckoBrowserTab(
                 !state.showFindInPage &&
                 !state.isFullScreen
             ) {
-                // 親 Box は縮めない。GeckoView とは別にバーだけ IME 上へ上げる。
+                // GeckoView はリサイズしない。候補バーだけ IME 上へ上げる。
                 AddressAutofillSuggestionBar(
                     uiState = autofillBar,
                     modifier = Modifier
@@ -1593,9 +1589,10 @@ private class GetMultipleContentsWithMimeTypes : ActivityResultContract<Array<St
 }
 
 /**
- * IME 表示時の下端余白。親が navigationBars を確保済みなら ime - navigationBars、
+ * Compose オーバーレイ（住所候補バー等）を IME 上に載せる余白。
+ * GeckoView 本体は onKeyboardHeight でスクロールするためリサイズしない。
+ * 親 Column が navigationBars を確保済みなら ime - navigationBars、
  * フルスクリーンなど親が確保していない場合は IME 全高を使う。
- * GeckoDisplay.getKeyboardHeight と同じ計算（subtractNavigationBars=true 時）。
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
