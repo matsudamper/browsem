@@ -176,6 +176,31 @@
       isGenericSensitiveIdentity(el);
   }
 
+  // PopupMenu・モーダル内の検索欄など、一時的なオーバーレイ内の入力は対象外。
+  // フォーカスすると候補バーの hide/show で下部レイアウトが揺れ、メニューが閉じる。
+  function isTransientFieldContext(el) {
+    if (!el || !el.closest) return false;
+    const type = (el.getAttribute('type') || '').toLowerCase();
+    if (type === 'search') return true;
+    const selectors = [
+      'dialog',
+      '[role="dialog"]',
+      '[role="alertdialog"]',
+      '[role="menu"]',
+      '[role="listbox"]',
+      '[aria-modal="true"]',
+      'details-menu',
+      '.Overlay',
+      '[data-modal]',
+      '[data-overlay]',
+      '[popover]',
+    ];
+    for (let i = 0; i < selectors.length; i++) {
+      if (el.closest(selectors[i])) return true;
+    }
+    return false;
+  }
+
   function isTargetField(el) {
     if (!el || !el.tagName) return false;
     const tag = String(el.tagName).toUpperCase();
@@ -185,6 +210,7 @@
     if (isNonValueField(el)) return false;
     if (hasAutocompleteOff(el)) return false;
     if (isExcludedAutofillField(el)) return false;
+    if (isTransientFieldContext(el)) return false;
     return true;
   }
 
@@ -421,7 +447,8 @@
     setTimeout(function () {
       saveFieldIfTarget(leavingEl);
       const active = deepActiveElement();
-      if (isEditableFormControl(active) && isTargetField(active)) return;
+      if (isEditableFormControl(active) &&
+        (isTargetField(active) || isTransientFieldContext(active))) return;
       if (focusedElement === leavingEl) {
         focusedElement = null;
         focusedFieldKey = '';

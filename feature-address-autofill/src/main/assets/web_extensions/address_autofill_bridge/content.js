@@ -236,9 +236,34 @@
     return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
   }
 
+  // PopupMenu・モーダル内の検索欄など、一時的なオーバーレイ内の入力は対象外。
+  function isTransientFieldContext(el) {
+    if (!el || !el.closest) return false;
+    const type = (el.getAttribute('type') || '').toLowerCase();
+    if (type === 'search') return true;
+    const selectors = [
+      'dialog',
+      '[role="dialog"]',
+      '[role="alertdialog"]',
+      '[role="menu"]',
+      '[role="listbox"]',
+      '[aria-modal="true"]',
+      'details-menu',
+      '.Overlay',
+      '[data-modal]',
+      '[data-overlay]',
+      '[popover]',
+    ];
+    for (let i = 0; i < selectors.length; i++) {
+      if (el.closest(selectors[i])) return true;
+    }
+    return false;
+  }
+
   document.addEventListener('focusin', function (event) {
     const el = event.target;
     if (!isEditableFormControl(el)) return;
+    if (isTransientFieldContext(el)) return;
     let kind = 'other';
     if (isEmailField(el)) kind = 'email';
     else if (isNameField(el)) kind = 'name';
@@ -253,7 +278,10 @@
     const el = event.target;
     if (!isEditableFormControl(el)) return;
     const next = event.relatedTarget;
-    if (isEditableFormControl(next)) return;
+    if (isEditableFormControl(next)) {
+      if (isTransientFieldContext(next)) return;
+      return;
+    }
     port.postMessage({ action: 'field-blur' });
   }, true);
 })();
