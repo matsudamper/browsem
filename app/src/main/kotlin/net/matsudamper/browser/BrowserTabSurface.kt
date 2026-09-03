@@ -81,22 +81,27 @@ private fun GeckoView.disableInternalKeyboardInsetsListener() {
  * Firefox (Fenix) と同様に SwipeRefreshLayout の bottomMargin でキーボード分だけ縮める。
  * Compose の imePadding とは異なり recompose を起こさない。
  */
+private fun View.updateBottomMarginIfChanged(bottom: Int) {
+    val layoutParams = layoutParams as? ViewGroup.MarginLayoutParams ?: return
+    if (layoutParams.bottomMargin == bottom) return
+    layoutParams.bottomMargin = bottom
+    requestLayout()
+}
+
 private fun setupGeckoContainerImeInsets(swipeRefreshLayout: GeckoSwipeRefreshLayout) {
-    (swipeRefreshLayout.layoutParams as? ViewGroup.MarginLayoutParams)?.bottomMargin = 0
+    swipeRefreshLayout.updateBottomMarginIfChanged(0)
     ImeInsetsSynchronizer.setup(
         targetView = swipeRefreshLayout,
         insetsSource = swipeRefreshLayout,
         synchronizeViewWithIME = false,
         onIMEAnimationStarted = { isKeyboardShowingUp, _ ->
             if (!isKeyboardShowingUp) {
-                (swipeRefreshLayout.layoutParams as? ViewGroup.MarginLayoutParams)?.bottomMargin = 0
-                swipeRefreshLayout.requestLayout()
+                swipeRefreshLayout.updateBottomMarginIfChanged(0)
             }
         },
         onIMEAnimationFinished = { isKeyboardShowingUp, keyboardHeight ->
             if (isKeyboardShowingUp || keyboardHeight == 0) {
-                (swipeRefreshLayout.layoutParams as? ViewGroup.MarginLayoutParams)?.bottomMargin = keyboardHeight
-                swipeRefreshLayout.requestLayout()
+                swipeRefreshLayout.updateBottomMarginIfChanged(keyboardHeight)
             }
         },
     )
