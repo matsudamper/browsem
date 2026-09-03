@@ -219,10 +219,13 @@ class KeyboardBottomInputTest {
      * GeckoView が公開するアクセシビリティノードから探す。
      */
     private fun findBottomInputBoundsInScreen(): Rect? {
-        val nodes = collectEditableNodes()
-        // フォーカス中のものを優先し、無ければ最も下にある入力欄を使う
-        return nodes.filter { it.focused }.maxByOrNull { it.bounds.bottom }?.bounds
-            ?: nodes.maxByOrNull { it.bounds.bottom }?.bounds
+        // 未フォーカスの編集可能ノード (URL バー等) はキーボードより上にあるため、
+        // フォールバックに使うと入力欄が隠れていてもテストが通ってしまう。
+        // フォーカス中のノードだけを対象にする。
+        return collectEditableNodes()
+            .filter { it.focused }
+            .maxByOrNull { it.bounds.bottom }
+            ?.bounds
     }
 
     /**
