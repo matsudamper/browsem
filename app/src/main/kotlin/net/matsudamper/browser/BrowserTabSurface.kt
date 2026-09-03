@@ -50,10 +50,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.view.ViewCompat
 import kotlin.math.abs
 import net.matsudamper.browser.data.ThemeMode
 import net.matsudamper.browser.ui.browser.UrlBarSuggestionsUiState
 import net.matsudamper.browser.ui.common.BrowserTheme
+import net.matsudamper.browser.ui.common.findActivity
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.GeckoView
@@ -78,33 +80,32 @@ private fun GeckoView.disableInternalKeyboardInsetsListener() {
 }
 
 /**
- * Firefox (Fenix) と同様に SwipeRefreshLayout の bottomMargin でキーボード分だけ縮める。
- * Compose の imePadding とは異なり recompose を起こさない。
+ * Firefox (Fenix) と同様に GeckoView の bottomMargin でキーボード分だけ縮める。
+ * Compose 配下の View は IME insets を受け取れないため decorView を監視する。
  */
-private fun View.updateBottomMarginIfChanged(bottom: Int) {
-    val layoutParams = layoutParams as? ViewGroup.MarginLayoutParams ?: return
-    if (layoutParams.bottomMargin == bottom) return
-    layoutParams.bottomMargin = bottom
-    requestLayout()
-}
-
-private fun setupGeckoContainerImeInsets(swipeRefreshLayout: GeckoSwipeRefreshLayout) {
-    swipeRefreshLayout.updateBottomMarginIfChanged(0)
-    ImeInsetsSynchronizer.setup(
-        targetView = swipeRefreshLayout,
-        insetsSource = swipeRefreshLayout,
+private fun setupGeckoImeInsets(
+    context: android.content.Context,
+    geckoView: GeckoView,
+): ImeInsetsSynchronizer {
+    val insetsSource = context.findActivity()?.window?.decorView ?: geckoView
+    geckoView.updateBottomMarginIfChanged(0)
+    val synchronizer = ImeInsetsSynchronizer.setup(
+        targetView = geckoView,
+        insetsSource = insetsSource,
         synchronizeViewWithIME = false,
         onIMEAnimationStarted = { isKeyboardShowingUp, _ ->
             if (!isKeyboardShowingUp) {
-                swipeRefreshLayout.updateBottomMarginIfChanged(0)
+                geckoView.updateBottomMarginIfChanged(0)
             }
         },
         onIMEAnimationFinished = { isKeyboardShowingUp, keyboardHeight ->
             if (isKeyboardShowingUp || keyboardHeight == 0) {
-                swipeRefreshLayout.updateBottomMarginIfChanged(keyboardHeight)
+                geckoView.updateBottomMarginIfChanged(keyboardHeight)
             }
         },
     )
+    ViewCompat.requestApplyInsets(insetsSource)
+    return synchronizer
 }
 
 @Composable
@@ -207,7 +208,7 @@ internal fun BrowserContentHost(
                     updateGeckoView(gecko)
                     swipeRefreshLayout.addView(
                         gecko,
-                        ViewGroup.LayoutParams(
+                        ViewGroup.MarginLayoutParams(
                             ViewGroup.LayoutParams.MATCH_PARENT,
                             ViewGroup.LayoutParams.MATCH_PARENT,
                         ),
@@ -221,8 +222,13 @@ internal fun BrowserContentHost(
                         state.isRefreshing = true
                         latestOnRefresh()
                     }
-                    setupGeckoContainerImeInsets(swipeRefreshLayout)
+                    val imeSynchronizer = setupGeckoImeInsets(context, gecko)
+                    gecko.setTag(imeSynchronizer)
                 }
+            },
+            onRelease = { swipeRefreshLayout ->
+                val geckoView = swipeRefreshLayout.findViewById<GeckoView>(id)
+                (geckoView?.tag as? ImeInsetsSynchronizer)?.detach()
             },
             update = { swipeRefreshLayout ->
                 swipeRefreshLayout.isEnabled = !state.isFullScreen
