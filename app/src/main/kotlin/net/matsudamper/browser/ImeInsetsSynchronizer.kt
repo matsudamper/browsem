@@ -152,11 +152,15 @@ internal class ImeInsetsSynchronizer private constructor(
 
     private fun updateTargetBottomMargin(bottom: Int) {
         if (synchronizeViewWithIME) {
-            with(targetView) {
-                (layoutParams as ViewGroup.MarginLayoutParams).setMargins(0, 0, 0, bottom)
-                requestLayout()
-            }
+            targetView.updateBottomMarginIfChanged(bottom)
         }
+    }
+
+    /** [insetsSource] へのリスナー登録を解除し、margin を戻す。 */
+    fun detach() {
+        ViewCompat.setWindowInsetsAnimationCallback(insetsSource, null)
+        ViewCompat.setOnApplyWindowInsetsListener(insetsSource, null)
+        targetView.updateBottomMarginIfChanged(0)
     }
 
     companion object {
@@ -179,4 +183,18 @@ internal class ImeInsetsSynchronizer private constructor(
                 onIMEAnimationFinished,
             )
     }
+}
+
+internal fun View.updateBottomMarginIfChanged(bottom: Int) {
+    val current = layoutParams
+    val marginParams = when (current) {
+        is ViewGroup.MarginLayoutParams -> current
+        else -> ViewGroup.MarginLayoutParams(
+            current.width,
+            current.height,
+        ).also { layoutParams = it }
+    }
+    if (marginParams.bottomMargin == bottom) return
+    marginParams.bottomMargin = bottom
+    requestLayout()
 }
