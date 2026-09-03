@@ -1,8 +1,10 @@
 package net.matsudamper.browser
 
 import android.inputmethodservice.InputMethodService
+import android.util.Log
 import android.util.TypedValue
 import android.view.View
+import android.view.inputmethod.EditorInfo
 
 /**
  * テストで IME insets を発生させるための、固定高さのダミーキーボード。
@@ -19,7 +21,23 @@ class TestInputMethodService : InputMethodService() {
             resources.displayMetrics,
         ).toInt()
 
+    override fun onCreate() {
+        super.onCreate()
+        Log.i(TAG, "onCreate")
+    }
+
+    override fun onStartInputView(info: EditorInfo?, restarting: Boolean) {
+        super.onStartInputView(info, restarting)
+        Log.i(TAG, "onStartInputView restarting=$restarting inputType=${info?.inputType}")
+    }
+
+    override fun onWindowShown() {
+        super.onWindowShown()
+        Log.i(TAG, "onWindowShown")
+    }
+
     override fun onCreateInputView(): View {
+        Log.i(TAG, "onCreateInputView height=$keyboardHeightPx")
         return View(this).apply {
             minimumHeight = keyboardHeightPx
             setBackgroundColor(BACKGROUND_COLOR)
@@ -44,6 +62,9 @@ class TestInputMethodService : InputMethodService() {
     }
 
     companion object {
+        /** 失敗時の診断でログを絞り込むためのタグ */
+        const val TAG = "BrowsemTestIme"
+
         /** 実キーボードに近い高さ。画面下部の入力欄を確実に覆う */
         const val KEYBOARD_HEIGHT_DP = 300
 

@@ -22,8 +22,15 @@ internal object TestIme {
         "mCurMethodId",
         "mServedView",
         "mShowRequested",
+        "mBoundToMethod",
+        "mCurMethod=",
+        "mHaveConnection",
+        "mVisibleBound",
+        "mSystemReady",
+        "mInputMethodService",
     )
-    private const val DUMP_MAX_LINES = 20
+    private const val DUMP_MAX_LINES = 30
+    private const val LOGCAT_MAX_LINES = 30
 
     private var previousDefaultIme: String? = null
     private var previousShowImeWithHardKeyboard: String? = null
@@ -86,7 +93,13 @@ internal object TestIme {
             .filter { line -> DUMP_KEYS.any { line.contains(it) } }
             .take(DUMP_MAX_LINES)
             .joinToString(separator = "\n") { it.trim() }
-        return "default_input_method=$defaultIme\n$dump"
+        val serviceLog = shell("logcat -d -s ${TestInputMethodService.TAG}:V InputMethodManagerService:W")
+            .lineSequence()
+            .filter { it.isNotBlank() }
+            .toList()
+            .takeLast(LOGCAT_MAX_LINES)
+            .joinToString(separator = "\n")
+        return "default_input_method=$defaultIme\n$dump\nlogcat:\n$serviceLog"
     }
 
     private fun shell(command: String): String {
