@@ -77,9 +77,13 @@ class KeyboardBottomInputTest {
      * から、さらに一定回数連続で条件を満たすことを確認する。
      */
     private fun assertVisibleAboveKeyboard() {
+        val keyboardHeight = waitForStableImeInsetBottom()
+        assertTrue("キーボードの高さが安定しない", keyboardHeight > 0)
+        // キーボードが画面の大半を覆うのはテスト用 IME の設定ミスであり、
+        // Issue #674 の判定として意味を成さないため区別して落とす。
         assertTrue(
-            "キーボードの高さが安定しない",
-            waitForStableImeInsetBottom() > 0,
+            "キーボードが画面の大半を覆っている: keyboardHeight=$keyboardHeight screenHeight=${screenHeight()}",
+            keyboardHeight < screenHeight() / 2,
         )
 
         var lastDiagnostics = "入力欄のアクセシビリティノードが見つからない"
@@ -92,7 +96,8 @@ class KeyboardBottomInputTest {
                 lastDiagnostics = "bounds=$bounds keyboardTop=$keyboardTop"
                 okCount = 0
             } else {
-                lastDiagnostics = "入力欄 bottom=${bounds.bottom} キーボード上端=$keyboardTop"
+                lastDiagnostics =
+                    "入力欄 bounds=$bounds キーボード上端=$keyboardTop 画面高さ=${screenHeight()}"
                 okCount = if (bounds.bottom <= keyboardTop) okCount + 1 else 0
             }
             if (okCount >= REQUIRED_STABLE_COUNT) return
@@ -177,6 +182,17 @@ class KeyboardBottomInputTest {
             bottom = insets?.getInsets(WindowInsets.Type.ime())?.bottom ?: 0
         }
         return bottom
+    }
+
+    /**
+     * decorView から見た画面の高さを返す。
+     */
+    private fun screenHeight(): Int {
+        var height = 0
+        composeRule.runOnIdle {
+            height = composeRule.activity.window.decorView.height
+        }
+        return height
     }
 
     /**
