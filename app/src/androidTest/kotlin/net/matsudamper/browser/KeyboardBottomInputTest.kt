@@ -4,11 +4,7 @@ import android.graphics.Rect
 import android.os.SystemClock
 import android.view.WindowInsets
 import android.view.accessibility.AccessibilityNodeInfo
-import androidx.compose.ui.test.click
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
-import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.percentOffset
-import androidx.compose.ui.test.performTouchInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.File
@@ -23,7 +19,7 @@ import org.junit.runner.RunWith
  * ページ下部の入力欄にフォーカスしてキーボードを表示したとき、
  * 入力欄がキーボードに隠れないことを確認する (Issue #674)。
  *
- * ビューポート最下部に入力欄を置いたローカルページをタップしてフォーカスし、
+ * ビューポート最下部に入力欄を置いたローカルページの入力欄にフォーカスし、
  * IME 表示後に入力欄のアクセシビリティノードの画面座標がキーボード上端より
  * 上にあることを検証する。JS の visualViewport はキーボード高さが Gecko に
  * 伝わっていない場合でも縮まないため、画面座標で判定する。
@@ -62,7 +58,7 @@ class KeyboardBottomInputTest {
         )
 
         assertTrue(
-            "ページ下部の入力欄をタップしてもキーボードが表示されない: ${TestIme.diagnostics()}",
+            "ページ下部の入力欄をフォーカスしてもキーボードが表示されない: ${TestIme.diagnostics()}",
             focusBottomInputAndWaitForIme(),
         )
 
@@ -111,14 +107,49 @@ class KeyboardBottomInputTest {
     }
 
     /**
-     * GeckoView の下端付近 (入力欄の位置) をタップしてフォーカスさせる。
+     * ページ内の入力欄をアクセシビリティ操作でフォーカスさせる。
+     *
+     * GeckoView の座標タップは Gecko 側の入力欄にフォーカスが移らないことがあり
+     * (dumpsys 上で mInputShown=false のまま)、キーボードが出ないため、
+     * ページ内の入力欄ノードを直接クリックする。
      */
-    private fun tapBottomOfGeckoContainer() {
-        composeRule.onNodeWithTag(GeckoBrowserTabTestTags.GeckoContainer.testTag)
-            .performTouchInput {
-                click(percentOffset(0.5f, BOTTOM_INPUT_TAP_RATIO))
+    private fun clickPageInput(): Boolean {
+        val uiAutomation = InstrumentationRegistry.getInstrumentation().uiAutomation
+        val root = uiAutomation.rootInActiveWindow ?: return false
+        var clicked = false
+        try {
+            val node = findPageInput(root)
+            if (node != null) {
+                clicked = node.performAction(AccessibilityNodeInfo.ACTION_CLICK) ||
+                    node.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
+                node.recycle()
             }
+        } finally {
+            root.recycle()
+        }
         composeRule.waitForIdle()
+        return clicked
+    }
+
+    /**
+     * ページ内 (URL バー以外) の入力欄ノードを探す。
+     */
+    private fun findPageInput(node: AccessibilityNodeInfo): AccessibilityNodeInfo? {
+        val className = node.className?.toString().orEmpty()
+        val viewId = node.viewIdResourceName.orEmpty()
+        val isInput = node.isEditable || className.contains("EditText", ignoreCase = true)
+        val isChrome = viewId.contains("UrlTextInput", ignoreCase = true)
+        if (isInput && !isChrome) {
+            @Suppress("DEPRECATION")
+            return AccessibilityNodeInfo.obtain(node)
+        }
+        for (index in 0 until node.childCount) {
+            val child = node.getChild(index) ?: continue
+            val found = findPageInput(child)
+            child.recycle()
+            if (found != null) return found
+        }
+        return null
     }
 
     /**
@@ -143,7 +174,7 @@ class KeyboardBottomInputTest {
     private fun focusBottomInputAndWaitForIme(): Boolean {
         val deadline = SystemClock.elapsedRealtime() + IME_WAIT_MILLIS
         while (SystemClock.elapsedRealtime() < deadline) {
-            tapBottomOfGeckoContainer()
+            clickPageInput()
             val shown = runCatching {
                 composeRule.waitUntil(timeoutMillis = TAP_RETRY_INTERVAL_MILLIS) {
                     imeInsetBottom() > 0
@@ -304,9 +335,6 @@ class KeyboardBottomInputTest {
         private const val BOTTOM_INPUT_ASSET_DIR = "test-ime-bottom"
         private const val BOTTOM_INPUT_DIR_NAME = "test-ime-bottom"
         private const val BOTTOM_INPUT_FILE_NAME = "index.html"
-
-        /** 入力欄はビューポート下端 12% を占めるため、その中央付近をタップする */
-        private const val BOTTOM_INPUT_TAP_RATIO = 0.94f
 
         private const val IME_HIDE_WAIT_MILLIS = 10_000L
         private const val IME_WAIT_MILLIS = 30_000L
