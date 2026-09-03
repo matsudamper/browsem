@@ -1,6 +1,7 @@
 package net.matsudamper.browser
 
 import android.graphics.Rect
+import android.os.SystemClock
 import android.view.WindowInsets
 import android.view.accessibility.AccessibilityNodeInfo
 import androidx.compose.ui.test.click
@@ -46,11 +47,9 @@ class KeyboardBottomInputTest {
         composeRule.waitForUrlBarContains(BOTTOM_INPUT_FILE_NAME, timeoutMillis = 60_000)
         composeRule.waitForUrlBarNotFocused()
 
-        tapBottomOfGeckoContainer()
-
         assertTrue(
             "ページ下部の入力欄をタップしてもキーボードが表示されない",
-            waitForImeVisible(timeoutMillis = IME_WAIT_MILLIS),
+            focusBottomInputAndWaitForIme(),
         )
 
         var lastDiagnostics = "入力欄のアクセシビリティノードが見つからない"
@@ -87,15 +86,26 @@ class KeyboardBottomInputTest {
     }
 
     /**
-     * IME が表示されるまで待機し、表示されたかどうかを返す。
+     * IME が表示されるまでタップを繰り返し、表示されたかどうかを返す。
+     *
+     * ページの読み込みや Gecko の解析が遅れると、URL 更新後もまだ入力欄が
+     * 生成されておらずタップが空振りする。1 回だけのタップだと Issue #674 と
+     * 無関係に失敗するため、IME が出るまでタップを再試行する。
      */
-    private fun waitForImeVisible(timeoutMillis: Long): Boolean {
-        return runCatching {
-            composeRule.waitUntil(timeoutMillis = timeoutMillis) {
-                imeInsetBottom() > 0
-            }
-            true
-        }.getOrDefault(false)
+    private fun focusBottomInputAndWaitForIme(): Boolean {
+        val deadline = SystemClock.elapsedRealtime() + IME_WAIT_MILLIS
+        while (SystemClock.elapsedRealtime() < deadline) {
+            if (imeInsetBottom() > 0) return true
+            tapBottomOfGeckoContainer()
+            val shown = runCatching {
+                composeRule.waitUntil(timeoutMillis = TAP_RETRY_INTERVAL_MILLIS) {
+                    imeInsetBottom() > 0
+                }
+                true
+            }.getOrDefault(false)
+            if (shown) return true
+        }
+        return false
     }
 
     private fun imeInsetBottom(): Int {
@@ -187,7 +197,10 @@ class KeyboardBottomInputTest {
         /** 入力欄はビューポート下端 12% を占めるため、その中央付近をタップする */
         private const val BOTTOM_INPUT_TAP_RATIO = 0.94f
 
-        private const val IME_WAIT_MILLIS = 20_000L
+        private const val IME_WAIT_MILLIS = 30_000L
+
+        /** タップが空振りしたときに再タップするまでの待ち時間 */
+        private const val TAP_RETRY_INTERVAL_MILLIS = 3_000L
         private const val INPUT_VISIBLE_WAIT_MILLIS = 10_000L
     }
 }
