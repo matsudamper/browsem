@@ -1599,6 +1599,7 @@ private class GetMultipleContentsWithMimeTypes : ActivityResultContract<Array<St
 private fun Modifier.imeAboveNavigationBarsPadding(
     subtractNavigationBars: Boolean = true,
 ): Modifier {
+    if (!WindowInsets.isImeVisible) return this
     val density = LocalDensity.current
     val imeBottomPx = WindowInsets.ime.getBottom(density)
     val navigationBottomPx = if (subtractNavigationBars) {
