@@ -25,10 +25,18 @@ internal object TestIme {
     )
     private const val DUMP_MAX_LINES = 20
 
+    private var previousDefaultIme: String? = null
+    private var previousShowImeWithHardKeyboard: String? = null
+
     /**
      * ダミー IME を有効化して既定の IME にする。切り替わったかどうかを返す。
+     *
+     * 後続のテストへ設定が波及しないよう、変更前の値を控えておく。
      */
     fun enable(): Boolean {
+        previousDefaultIme = readSetting("default_input_method")
+        previousShowImeWithHardKeyboard = readSetting("show_ime_with_hard_keyboard")
+
         // エミュレータはハードウェアキーボードを持つ扱いのため、明示的に許可しないと
         // ソフトキーボードが表示されない。
         shell("settings put secure show_ime_with_hard_keyboard 1")
@@ -37,7 +45,7 @@ internal object TestIme {
 
         val deadline = SystemClock.elapsedRealtime() + SELECT_TIMEOUT_MILLIS
         while (SystemClock.elapsedRealtime() < deadline) {
-            if (shell("settings get secure default_input_method").trim() == SERVICE_ID) {
+            if (readSetting("default_input_method") == SERVICE_ID) {
                 return true
             }
             Thread.sleep(POLL_INTERVAL_MILLIS)
@@ -46,18 +54,33 @@ internal object TestIme {
     }
 
     /**
-     * IME の選択状態を端末の既定へ戻す。
+     * enable() で変更した IME 設定を元の値へ戻す。
      */
     fun reset() {
-        shell("ime reset")
-        shell("settings delete secure show_ime_with_hard_keyboard")
+        shell("ime disable $SERVICE_ID")
+        previousDefaultIme?.let { shell("ime set $it") }
+        previousDefaultIme = null
+
+        when (val previous = previousShowImeWithHardKeyboard) {
+            null -> shell("settings delete secure show_ime_with_hard_keyboard")
+            else -> shell("settings put secure show_ime_with_hard_keyboard $previous")
+        }
+        previousShowImeWithHardKeyboard = null
+    }
+
+    /**
+     * secure 設定を読む。未設定なら null を返す。
+     */
+    private fun readSetting(key: String): String? {
+        return shell("settings get secure $key").trim()
+            .takeIf { it.isNotEmpty() && it != "null" }
     }
 
     /**
      * IME が表示されない場合の診断用に、input_method の状態を抜粋して返す。
      */
     fun diagnostics(): String {
-        val defaultIme = shell("settings get secure default_input_method").trim()
+        val defaultIme = readSetting("default_input_method")
         val dump = shell("dumpsys input_method")
             .lineSequence()
             .filter { line -> DUMP_KEYS.any { line.contains(it) } }
