@@ -189,6 +189,7 @@ internal fun View.updateBottomMarginIfChanged(bottom: Int) {
     val current = layoutParams
     val marginParams = when (current) {
         is ViewGroup.MarginLayoutParams -> current
+
         else -> ViewGroup.MarginLayoutParams(
             current.width,
             current.height,
