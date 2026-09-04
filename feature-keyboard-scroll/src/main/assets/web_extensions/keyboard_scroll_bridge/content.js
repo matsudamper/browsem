@@ -20,6 +20,8 @@
    * 縮まないため、その差でキーボードの有無を判定できる。
    */
   function isKeyboardVisible() {
+    // ピンチズーム中も visual viewport は縮む。倍率が等倍のときだけ見る。
+    if (visualViewport.scale > 1) return false;
     const layoutHeight = document.documentElement.clientHeight;
     return layoutHeight - visualViewport.height > KEYBOARD_MIN_HEIGHT;
   }
@@ -56,7 +58,10 @@
   }
 
   /**
-   * キャレット (折りたたみ選択) の矩形を返す。取れなければ null。
+   * contenteditable のキャレット矩形を返す。取れなければ null。
+   *
+   * textarea や input の選択位置は window.getSelection() に現れないため、
+   * フォームコントロールでは使えない。
    */
   function caretRect() {
     const selection = window.getSelection();
@@ -95,13 +100,19 @@
     }
 
     const elementRect = element.getBoundingClientRect();
-    // 可視範囲より背の高い textarea や contenteditable では、要素を中央揃えしても
-    // キャレットがキーボードの下に残る。キャレットを基準にする。
-    const caret = elementRect.height > visualViewport.height ? caretRect() : null;
-
-    if (caret == null) {
+    if (elementRect.height <= visualViewport.height) {
       if (!isOutside(elementRect)) return;
       element.scrollIntoView({ block: "center", inline: "nearest" });
+      return;
+    }
+
+    // 可視範囲より背の高い要素は中央揃えしてもキャレットがキーボードの下に残る。
+    const caret = element.isContentEditable ? caretRect() : null;
+    if (caret == null) {
+      // textarea や input のキャレット位置は取得できない。要素内のスクロールは
+      // Gecko がキャレットへ追従させるため、下端を可視範囲に入れて任せる。
+      if (elementRect.bottom <= visibleBottom()) return;
+      element.scrollIntoView({ block: "end", inline: "nearest" });
       return;
     }
 
