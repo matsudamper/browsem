@@ -530,9 +530,6 @@ sealed interface BrowserTabDialogLayerTestTags {
     data object FormInputSaveConfirmButton : BrowserTabDialogLayerTestTags {
         override val id = "form_input_save_confirm_button"
     }
-    data object ChoicePromptDialog : BrowserTabDialogLayerTestTags {
-        override val id = "choice_prompt_dialog"
-    }
 }
 
 private fun buildAddressDisplayText(
@@ -1086,7 +1083,6 @@ private fun ChoicePromptDialog(
         mutableStateOf(flatChoices.filter { it.selected }.map { it.id }.toSet())
     }
     AlertDialog(
-        modifier = Modifier.testTag(BrowserTabDialogLayerTestTags.ChoicePromptDialog.testTag),
         onDismissRequest = onDismiss,
         text = {
             LazyColumn {

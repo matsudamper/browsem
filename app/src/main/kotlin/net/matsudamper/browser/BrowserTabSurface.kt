@@ -82,12 +82,12 @@ internal fun BrowserContentHost(
 ) {
     // Firefox (Fenix) の ImeInsetsSynchronizer と同じく、キーボード分だけ表示領域を
     // 物理的に縮める。Gecko は onKeyboardHeight を受け取っても visual viewport を
-    // 縮めないため (CI の診断で確認)、縮めない限り position: fixed の下部入力欄も
-    // 文書末尾の入力欄もキーボードの上へ出せない。
+    // 縮めないため、縮めない限り position: fixed の下部入力欄も文書末尾の入力欄も
+    // キーボードの上へ出せない。
     //
     // ime ではなく imeAnimationTarget を使う。ime はアニメーションの各フレームで
-    // 変化するため、追従すると 1 回の表示で何度もリサイズが走り、Gecko が
-    // ポップアップを閉じてしまう。確定値なら表示/非表示ごとに 1 回で済む。
+    // 変化するため、追従すると 1 回の表示で何度もリサイズが走る。確定値なら
+    // 表示/非表示ごとに 1 回で済む。
     //
     // 親が既に消費した分は差し引く。window.open のオーバーレイでは
     // safeDrawing (IME 含む) が消費済みで、表示領域は既に縮んでいる。
