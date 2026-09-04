@@ -6,6 +6,7 @@ import androidx.core.app.NotificationCompat
 import androidx.work.OneTimeWorkRequest
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
+import androidx.work.await
 import androidx.work.workDataOf
 import java.util.UUID
 import kotlinx.coroutines.CoroutineScope
@@ -118,9 +119,10 @@ internal class GeckoDownloadManager(
                 referrerUrl = referrerUrl,
                 enqueuedAt = System.currentTimeMillis(),
             )
-            WorkManager.getInstance(context).enqueue(workRequest)
+            WorkManager.getInstance(context).enqueue(workRequest).await()
         } catch (e: Throwable) {
             PendingDownloadBodyStore.discard(workId.toString())
+            downloadRepository.updateCancelled(workRequest.id.toString())
             throw e
         }
         val notification = NotificationCompat.Builder(context, DownloadWorker.CHANNEL_ID)
