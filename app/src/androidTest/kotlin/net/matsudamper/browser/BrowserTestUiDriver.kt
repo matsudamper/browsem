@@ -2,7 +2,6 @@ package net.matsudamper.browser
 
 import android.content.Intent
 import android.net.Uri
-import android.os.SystemClock
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.ComposeTimeoutException
@@ -137,77 +136,4 @@ internal fun AndroidComposeTestRule<*, MainActivity>.currentUrlActionsText(): St
             .config[SemanticsProperties.Text]
             .joinToString(separator = "") { it.text }
     }.getOrDefault("")
-}
-
-/**
- * ローカル HTTP サーバーで開いたページが期待どおりかを判定する。
- *
- * セッション復元の遅延コミットでホームページ (google.com) に上書きされる
- * flaky 失敗を検出するため、google.com は常に不一致とする。
- */
-internal fun isExpectedLocalPage(url: String, urlMarker: String): Boolean {
-    if (url.contains("google.com", ignoreCase = true)) return false
-    return url.contains(urlMarker)
-}
-
-/**
- * ブラウザ画面 (ツールバー) が表示されるまで待機する。
- */
-internal fun AndroidComposeTestRule<*, MainActivity>.waitForBrowserReady(
-    timeoutMillis: Long = 60_000,
-) {
-    waitUntil(timeoutMillis = timeoutMillis) {
-        onAllNodesWithTag(BrowserToolbarTestTags.Toolbar.testTag)
-            .fetchSemanticsNodes().isNotEmpty()
-    }
-}
-
-/**
- * 期待するローカルページ URL が一定時間安定するまで待つ。
- *
- * 復元タブの遅延ナビゲーションで google.com に戻った場合は pageUrl を
- * 開き直して再試行する。
- */
-internal fun AndroidComposeTestRule<*, MainActivity>.waitForStableLocalPage(
-    pageUrl: String,
-    urlMarker: String,
-    timeoutMillis: Long = 60_000,
-    stablePolls: Int = 5,
-    pollIntervalMillis: Long = 400,
-) {
-    var stableCount = 0
-    val deadline = SystemClock.elapsedRealtime() + timeoutMillis
-    while (SystemClock.elapsedRealtime() < deadline) {
-        val current = currentPageUrlFromUi()
-        if (isExpectedLocalPage(current, urlMarker)) {
-            stableCount++
-            if (stableCount >= stablePolls) return
-        } else {
-            stableCount = 0
-            openUrlFromUrlBar(pageUrl)
-            waitForIdle()
-        }
-        Thread.sleep(pollIntervalMillis)
-    }
-    throw AssertionError(
-        "waitForStableLocalPage timeout: expected=\"$urlMarker\" current=\"${currentPageUrlFromUi()}\"",
-    )
-}
-
-/**
- * ローカルページを開き、URL が安定するまで待つ。
- */
-internal fun AndroidComposeTestRule<*, MainActivity>.openLocalPageAndStabilize(
-    pageUrl: String,
-    urlMarker: String,
-    timeoutMillis: Long = 60_000,
-) {
-    openUrlFromUrlBar(pageUrl)
-    waitForUrlBarContains(urlMarker, timeoutMillis = timeoutMillis)
-    waitForUrlBarNotFocused()
-    waitForStableLocalPage(
-        pageUrl = pageUrl,
-        urlMarker = urlMarker,
-        timeoutMillis = timeoutMillis,
-    )
 }
