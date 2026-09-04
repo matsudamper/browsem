@@ -155,10 +155,21 @@ internal fun AndroidComposeTestRule<*, MainActivity>.currentUrlActionsText(): St
  *
  * セッション復元の遅延コミットでホームページ (google.com) に上書きされる
  * flaky 失敗を検出するため、google.com は常に不一致とする。
+ * ファイル名だけでは別ポートの同名ページを区別できないため、origin と path で照合する。
  */
-internal fun isExpectedLocalPage(url: String, urlMarker: String): Boolean {
-    if (url.contains("google.com", ignoreCase = true)) return false
-    return url.contains(urlMarker)
+internal fun isExpectedLocalPage(currentUrl: String, expectedPageUrl: String): Boolean {
+    if (currentUrl.contains("google.com", ignoreCase = true)) return false
+    val expected = Uri.parse(expectedPageUrl)
+    val current = Uri.parse(currentUrl)
+    val expectedHost = expected.host ?: return false
+    if (!expectedHost.equals(current.host, ignoreCase = true)) return false
+    val expectedPort = if (expected.port != -1) expected.port else expected.defaultPort
+    val currentPort = if (current.port != -1) current.port else current.defaultPort
+    if (expectedPort != currentPort) return false
+    val expectedPath = expected.encodedPath?.trimEnd('/').orEmpty()
+    val currentPath = current.encodedPath?.trimEnd('/').orEmpty()
+    if (expectedPath.isEmpty()) return true
+    return currentPath == expectedPath || currentPath.startsWith("$expectedPath/")
 }
 
 /**
@@ -205,7 +216,7 @@ internal fun AndroidComposeTestRule<*, MainActivity>.waitForSessionNavigationSet
  * リロード後の検証など、ナビゲーション操作そのものを検証するケースで使う。
  */
 internal fun AndroidComposeTestRule<*, MainActivity>.waitForStablePageMarker(
-    urlMarker: String,
+    expectedPageUrl: String,
     timeoutMillis: Long = 60_000,
     stablePolls: Int = 8,
     pollIntervalMillis: Long = 500,
@@ -213,7 +224,7 @@ internal fun AndroidComposeTestRule<*, MainActivity>.waitForStablePageMarker(
     var stableCount = 0
     val deadline = SystemClock.elapsedRealtime() + timeoutMillis
     while (SystemClock.elapsedRealtime() < deadline) {
-        if (isExpectedLocalPage(currentPageUrlFromUi(), urlMarker)) {
+        if (isExpectedLocalPage(currentPageUrlFromUi(), expectedPageUrl)) {
             stableCount++
             if (stableCount >= stablePolls) return
         } else {
@@ -222,7 +233,7 @@ internal fun AndroidComposeTestRule<*, MainActivity>.waitForStablePageMarker(
         Thread.sleep(pollIntervalMillis)
     }
     throw AssertionError(
-        "waitForStablePageMarker timeout: expected=\"$urlMarker\" current=\"${currentPageUrlFromUi()}\"",
+        "waitForStablePageMarker timeout: expected=\"$expectedPageUrl\" current=\"${currentPageUrlFromUi()}\"",
     )
 }
 
@@ -234,7 +245,6 @@ internal fun AndroidComposeTestRule<*, MainActivity>.waitForStablePageMarker(
  */
 internal fun AndroidComposeTestRule<*, MainActivity>.waitForStableLocalPage(
     pageUrl: String,
-    urlMarker: String,
     timeoutMillis: Long = 60_000,
     stablePolls: Int = 8,
     pollIntervalMillis: Long = 500,
@@ -243,7 +253,7 @@ internal fun AndroidComposeTestRule<*, MainActivity>.waitForStableLocalPage(
     val deadline = SystemClock.elapsedRealtime() + timeoutMillis
     while (SystemClock.elapsedRealtime() < deadline) {
         val current = currentPageUrlFromUi()
-        if (isExpectedLocalPage(current, urlMarker)) {
+        if (isExpectedLocalPage(current, pageUrl)) {
             stableCount++
             if (stableCount >= stablePolls) return
         } else {
@@ -254,7 +264,7 @@ internal fun AndroidComposeTestRule<*, MainActivity>.waitForStableLocalPage(
         Thread.sleep(pollIntervalMillis)
     }
     throw AssertionError(
-        "waitForStableLocalPage timeout: expected=\"$urlMarker\" current=\"${currentPageUrlFromUi()}\"",
+        "waitForStableLocalPage timeout: expected=\"$pageUrl\" current=\"${currentPageUrlFromUi()}\"",
     )
 }
 
@@ -263,24 +273,22 @@ internal fun AndroidComposeTestRule<*, MainActivity>.waitForStableLocalPage(
  */
 internal fun AndroidComposeTestRule<*, MainActivity>.openLocalPageAndStabilize(
     pageUrl: String,
-    urlMarker: String,
     timeoutMillis: Long = 60_000,
 ) {
     waitForBrowserReady()
     waitForSessionNavigationSettled()
     val openedByIntent = runCatching {
         openUrlViaViewIntent(pageUrl)
-        waitForUrlBarContains(urlMarker, timeoutMillis = 20_000)
+        waitForUrlBarContains(pageUrl, timeoutMillis = 20_000)
         true
     }.getOrDefault(false)
     if (!openedByIntent) {
         openUrlFromUrlBar(pageUrl)
-        waitForUrlBarContains(urlMarker, timeoutMillis = timeoutMillis)
+        waitForUrlBarContains(pageUrl, timeoutMillis = timeoutMillis)
     }
     waitForUrlBarNotFocused()
     waitForStableLocalPage(
         pageUrl = pageUrl,
-        urlMarker = urlMarker,
         timeoutMillis = timeoutMillis,
     )
 }

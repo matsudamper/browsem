@@ -158,7 +158,7 @@ class PageZoomTest {
     @Test
     fun pageZoomPersistedAfterSpaNavigation() {
         val spaPageUrl = startSpaZoomPageServer()
-        composeRule.openLocalPageAndStabilize(spaPageUrl, SPA_NAV_FILE_NAME)
+        composeRule.openLocalPageAndStabilize(spaPageUrl)
 
         val baselineWidth = waitForViewportWidthInUrl(timeoutMillis = 30_000)
         openPageZoomMenuAndSet200Percent()
