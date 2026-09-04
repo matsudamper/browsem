@@ -97,8 +97,8 @@ internal class BrowserViewModel(
     interface Event {
         fun onTabsRestored(tabId: String)
 
-        /** 外部ダウンロードタブの確認ダイアログで確定/キャンセルされた */
-        fun onExternalDownloadDialogResolved(tabId: String)
+        /** 外部ダウンロードタブを閉じた後に遷移すべきタブ ID */
+        fun onExternalDownloadTabClosed(targetTabId: String?)
     }
 
     private val viewModelStateFlow = MutableStateFlow(ViewModelState())
@@ -252,6 +252,17 @@ internal class BrowserViewModel(
     fun registerExternalTab(tabId: String) {
         externalTabPreviousTabs[tabId] = browserTabController.selectedTabId
         externalTabIdsFlow.update { it + tabId }
+    }
+
+    /**
+     * 外部ダウンロードタブの確認ダイアログで確定/キャンセルされた後に呼ぶ。
+     * viewModelScope でタブ閉鎖を完了し、遷移先タブ ID を UI に通知する。
+     */
+    fun onExternalDownloadDialogResolved(tabId: String) {
+        viewModelScope.launch {
+            val targetTabId = finishExternalDownloadTab(tabId)
+            eventHandler.trySend { it.onExternalDownloadTabClosed(targetTabId) }
+        }
     }
 
     /**

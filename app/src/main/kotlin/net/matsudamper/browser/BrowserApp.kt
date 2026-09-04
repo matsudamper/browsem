@@ -1006,12 +1006,9 @@ private fun MainBrowserContent(
                     }
                 }
 
-                override fun onExternalDownloadDialogResolved(tabId: String) {
-                    scope.launch {
-                        val targetTabId = viewModel.finishExternalDownloadTab(tabId)
-                        if (targetTabId != null) {
-                            selectTab(targetTabId, null)
-                        }
+                override fun onExternalDownloadTabClosed(targetTabId: String?) {
+                    if (targetTabId != null) {
+                        selectTab(targetTabId, null)
                     }
                 }
             })
@@ -1118,7 +1115,7 @@ private fun MainBrowserContent(
                                 }
 
                                 override fun onExternalDownloadDialogResolved(tabId: String) {
-                                    viewModel.eventHandler.trySend { it.onExternalDownloadDialogResolved(tabId) }
+                                    viewModel.onExternalDownloadDialogResolved(tabId)
                                 }
                             })
                         }
