@@ -106,6 +106,30 @@ class KeyboardBottomInputTest {
     }
 
     /**
+     * position: fixed の下部入力欄がキーボードに隠れないことを検証する。
+     *
+     * chat 系 UI で使われる構成。固定配置の要素はスクロールしても動かないため、
+     * 文書へ余白を足してスクロールさせる方式では救えない。表示領域そのものが
+     * 縮む必要があることを検知する。
+     */
+    @Test
+    fun fixedBottomInputStaysVisibleAboveKeyboard() {
+        val pageUrl = startPageServer(FIXED_DIR_NAME, FIXED_ASSET_DIR)
+        composeRule.openUrlFromUrlBar(pageUrl)
+        composeRule.waitForUrlBarContains(PAGE_FILE_NAME, timeoutMillis = URL_BAR_WAIT_MILLIS)
+        composeRule.waitForUrlBarNotFocused()
+        assertTrue("URL バーのキーボードが閉じない", waitForImeHidden())
+
+        if (!focusBottomInputAndWaitForIme()) {
+            throw AssertionError(
+                "固定配置の入力欄をフォーカスしてもキーボードが表示されない: ${TestIme.diagnostics()}",
+            )
+        }
+
+        assertVisibleAboveKeyboard()
+    }
+
+    /**
      * キーボード表示中に select のポップアップを開いても閉じないことを検証する。
      *
      * キーボード対応でリサイズやスクロールを行うと Gecko がポップアップを閉じる。
@@ -529,6 +553,8 @@ class KeyboardBottomInputTest {
         private const val BOTTOM_INPUT_ASSET_DIR = "test-ime-bottom"
         private const val BOTTOM_INPUT_DIR_NAME = "test-ime-bottom"
         private const val BOTTOM_INPUT_FILE_NAME = PAGE_FILE_NAME
+        private const val FIXED_ASSET_DIR = "test-ime-fixed"
+        private const val FIXED_DIR_NAME = "test-ime-fixed"
         private const val POPUP_ASSET_DIR = "test-ime-popup"
         private const val POPUP_DIR_NAME = "test-ime-popup"
         private const val POPUP_FILE_NAME = PAGE_FILE_NAME
