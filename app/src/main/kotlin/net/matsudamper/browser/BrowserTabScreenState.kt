@@ -44,6 +44,7 @@ import net.matsudamper.browser.data.extractSiteHost
 import net.matsudamper.browser.feature.devtools.DevToolsWebExtension
 import net.matsudamper.browser.feature.findinpage.FindInPageWebExtension
 import net.matsudamper.browser.translate.TranslationPriorityLanguage
+import net.matsudamper.browser.ui.browser.BrowserScreenUiState
 import org.json.JSONObject
 import org.koin.compose.koinInject
 import org.mozilla.geckoview.AllowOrDeny
@@ -77,7 +78,7 @@ internal fun rememberBrowserTabScreenState(
     onHistoryTitleUpdate: (suspend (id: Long, title: String) -> Unit)? = null,
     onRequestDownloadNotificationPermission: suspend () -> Unit = {},
     onRequestAndroidPermissions: suspend (Array<String>) -> Array<String> = { emptyArray() },
-    onExternalDownloadDialogResolved: (() -> Unit)? = null,
+    externalDownloadDialogListener: BrowserScreenUiState.ExternalDownloadDialogListener? = null,
 ): BrowserTabScreenState {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -107,7 +108,7 @@ internal fun rememberBrowserTabScreenState(
             onHistoryTitleUpdate = onHistoryTitleUpdate,
             onRequestDownloadNotificationPermission = onRequestDownloadNotificationPermission,
             onRequestAndroidPermissions = onRequestAndroidPermissions,
-            onExternalDownloadDialogResolved = onExternalDownloadDialogResolved,
+            externalDownloadDialogListener = externalDownloadDialogListener,
         )
     }
     state.homepageUrl = homepageUrl
@@ -137,7 +138,7 @@ internal class BrowserTabScreenState(
     private val context: Context,
     private val onRequestDownloadNotificationPermission: suspend () -> Unit = {},
     private val onRequestAndroidPermissions: suspend (Array<String>) -> Array<String> = { emptyArray() },
-    private val onExternalDownloadDialogResolved: (() -> Unit)? = null,
+    private val externalDownloadDialogListener: BrowserScreenUiState.ExternalDownloadDialogListener? = null,
     var onHistoryRecord: (suspend (url: String, title: String) -> Long)? = null,
     var onHistoryTitleUpdate: (suspend (id: Long, title: String) -> Unit)? = null,
 ) : BrowserSessionStateCallbacks {
@@ -1034,7 +1035,9 @@ internal class BrowserTabScreenState(
                         )
                     },
                     onConfirm = {
-                        proceedDownloadFromResponse(response, referrerUrl)
+                        proceedDownloadFromResponse(response, referrerUrl) {
+                            finishExternalDownloadTabIfNeeded()
+                        }
                     },
                     onDismiss = {
                         response.body?.close()
@@ -1049,8 +1052,9 @@ internal class BrowserTabScreenState(
     fun confirmPendingDownload() {
         val response = pendingDownloadResponse ?: return
         pendingDownloadResponse = null
-        proceedDownloadFromResponse(response, currentPageUrl)
-        finishExternalDownloadTabIfNeeded()
+        proceedDownloadFromResponse(response, currentPageUrl) {
+            finishExternalDownloadTabIfNeeded()
+        }
     }
 
     fun cancelPendingDownload() {
@@ -1065,20 +1069,21 @@ internal class BrowserTabScreenState(
     }
 
     private fun finishExternalDownloadTabIfNeeded() {
-        onExternalDownloadDialogResolved?.invoke()
+        externalDownloadDialogListener?.onResolved()
     }
 
-    private fun proceedDownloadFromResponse(response: WebResponse, referrerUrl: String) {
+    private fun proceedDownloadFromResponse(
+        response: WebResponse,
+        referrerUrl: String,
+        onEnqueued: (() -> Unit)? = null,
+    ) {
         coroutineScope.launch {
             var enqueued = false
             try {
                 onRequestDownloadNotificationPermission()
-                geckoDownloadManager.enqueueDownloadFromResponse(
-                    response = response,
-                    referrerUrl = referrerUrl,
-                    coroutineScope = coroutineScope,
-                )
+                geckoDownloadManager.enqueueDownloadFromResponse(response, referrerUrl)
                 enqueued = true
+                onEnqueued?.invoke()
             } finally {
                 if (!enqueued) {
                     response.body?.close()
@@ -1091,7 +1096,6 @@ internal class BrowserTabScreenState(
         val state = duplicateDownloadState ?: return
         duplicateDownloadState = null
         state.onConfirm()
-        finishExternalDownloadTabIfNeeded()
     }
 
     fun cancelDuplicateDownload() {
