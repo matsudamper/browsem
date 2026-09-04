@@ -8,6 +8,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -293,6 +294,7 @@ internal fun BrowserToolbar(
     val toolbarColors = resolveBrowserToolbarColors(
         toolbarColor = toolbarColor,
         defaultToolbarColor = MaterialTheme.colorScheme.primaryContainer,
+        isSystemDarkTheme = isSystemInDarkTheme(),
     )
 
     Surface(
