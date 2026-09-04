@@ -23,8 +23,8 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import net.matsudamper.browser.ui.common.StatusBarAppearanceEffect
 import net.matsudamper.browser.resources.R as ResourcesR
+import net.matsudamper.browser.ui.common.StatusBarAppearanceEffect
 
 sealed interface AddressesScreenTestTags {
     val id: String

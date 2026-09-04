@@ -67,9 +67,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import net.matsudamper.browser.ui.common.StatusBarAppearanceEffect
 import net.matsudamper.browser.data.TabGroupData
 import net.matsudamper.browser.data.TabGroupId
+import net.matsudamper.browser.ui.common.StatusBarAppearanceEffect
 
 internal object TabsLayoutDefaults {
     val minCellWidth: Dp = 220.dp

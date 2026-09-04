@@ -20,8 +20,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
-import net.matsudamper.browser.ui.common.StatusBarAppearanceEffect
 import androidx.compose.ui.unit.dp
+import net.matsudamper.browser.ui.common.StatusBarAppearanceEffect
 
 sealed interface SiteFormInputFieldScreenTestTags {
     val id: String

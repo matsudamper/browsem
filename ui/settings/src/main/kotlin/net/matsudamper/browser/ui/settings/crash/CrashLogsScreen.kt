@@ -29,8 +29,8 @@ import androidx.compose.ui.unit.dp
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import net.matsudamper.browser.ui.common.StatusBarAppearanceEffect
 import net.matsudamper.browser.resources.R as ResourcesR
+import net.matsudamper.browser.ui.common.StatusBarAppearanceEffect
 
 sealed interface CrashLogsScreenTestTags {
     val id: String

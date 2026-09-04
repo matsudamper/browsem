@@ -31,10 +31,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import net.matsudamper.browser.ui.common.StatusBarAppearanceEffect
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import net.matsudamper.browser.ui.common.StatusBarAppearanceEffect
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
