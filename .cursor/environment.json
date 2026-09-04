@@ -1,4 +1,0 @@
-{
-  "name": "browsem",
-  "install": "bash .claude/setup.sh"
-}
