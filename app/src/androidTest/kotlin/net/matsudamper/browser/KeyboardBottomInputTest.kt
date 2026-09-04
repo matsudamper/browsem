@@ -362,12 +362,12 @@ class KeyboardBottomInputTest {
      */
     private fun viewportDiagnostics(): String {
         val pfd = InstrumentationRegistry.getInstrumentation().uiAutomation
-            .executeShellCommand("logcat -d -s KeyboardScrollExt:V BrowsemGeckoInsets:V")
+            .executeShellCommand("logcat -d -s KeyboardScrollExt:V")
         val log = ParcelFileDescriptor.AutoCloseInputStream(pfd).use {
             it.readBytes().decodeToString()
         }
         return log.lineSequence()
-            .filter { it.contains("viewport") || it.contains("ime=") }
+            .filter { it.contains("keyboard") }
             .toList()
             .takeLast(VIEWPORT_LOG_MAX_LINES)
             .joinToString(separator = "\n")
