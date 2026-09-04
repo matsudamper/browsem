@@ -82,7 +82,6 @@ class KeyboardBottomInputTest {
 
     @Test
     fun bottomInputStaysVisibleAboveKeyboard() {
-        composeRule.waitForBrowserReady()
         val pageUrl = startBottomInputPageServer()
         composeRule.openLocalPageAndStabilize(pageUrl, BOTTOM_INPUT_FILE_NAME)
         // URL バーの IME が閉じきる前だと、その inset を「入力欄のキーボード」と
@@ -112,7 +111,6 @@ class KeyboardBottomInputTest {
      */
     @Test
     fun fixedBottomInputStaysVisibleAboveKeyboard() {
-        composeRule.waitForBrowserReady()
         val pageUrl = startPageServer(FIXED_DIR_NAME, FIXED_ASSET_DIR)
         composeRule.openLocalPageAndStabilize(pageUrl, PAGE_FILE_NAME, timeoutMillis = URL_BAR_WAIT_MILLIS)
         assertTrue("URL バーのキーボードが閉じない", waitForImeHidden())
