@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.onConsumedWindowInsetsChanged
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -37,6 +38,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -79,9 +81,14 @@ internal fun BrowserContentHost(
     // まま残るため Gecko がキーボードを認識しない。Compose 側で高さの変化を見て
     // 確定後に insets を再 dispatch させ、正しい高さを届ける。
     val density = LocalDensity.current
-    val imeBottomPx = WindowInsets.ime.getBottom(density)
+    // 親が既に消費した分は差し引く。window.open のオーバーレイでは
+    // safeDrawing (IME 含む) が消費済みで、ダイアログの表示領域は既に
+    // キーボードの上まで縮んでいる。生の値を送ると二重に持ち上がる。
+    var consumedBottomPx by remember { mutableIntStateOf(0) }
+    val rawImeBottomPx = WindowInsets.ime.getBottom(density)
+    val imeBottomPx = (rawImeBottomPx - consumedBottomPx).coerceAtLeast(0)
     val view = LocalView.current
-    LaunchedEffect(imeBottomPx, view) {
+    LaunchedEffect(rawImeBottomPx, view) {
         ViewCompat.requestApplyInsets(view.rootView)
     }
 
@@ -99,7 +106,11 @@ internal fun BrowserContentHost(
     // ドロップダウン等) を閉じてしまい、Firefox と挙動が変わる。
     // 文書末尾の入力欄がキーボードに隠れる件は keyboard_scroll_bridge 拡張が
     // visual viewport 基準でスクロールして解決する。
-    Box(modifier = modifier) {
+    Box(
+        modifier = modifier.onConsumedWindowInsetsChanged { consumed ->
+            consumedBottomPx = consumed.getBottom(density)
+        },
+    ) {
         AndroidView(
             modifier = Modifier
                 .fillMaxSize()
