@@ -26,13 +26,32 @@
     return layoutHeight - visualViewport.height > KEYBOARD_MIN_HEIGHT;
   }
 
+  // 文字入力を受け付ける input の type。checkbox や button などキーボードを
+  // 出さないものを含めると、フォーカスが移っただけでスクロールしてしまう。
+  const TEXT_INPUT_TYPES = [
+    "text",
+    "search",
+    "url",
+    "tel",
+    "email",
+    "password",
+    "number",
+    "date",
+    "datetime-local",
+    "month",
+    "time",
+    "week",
+  ];
+
   function isTextEntry(element) {
     if (!element) return false;
     if (element.isContentEditable) return true;
     const tagName = element.tagName;
+    if (tagName === "TEXTAREA") return true;
     // select はキーボードを出さない。対象に含めると、ドロップダウンを開いた
     // ときの focusin でスクロールしてしまい、開いたばかりの選択肢が閉じる。
-    return tagName === "INPUT" || tagName === "TEXTAREA";
+    if (tagName !== "INPUT") return false;
+    return TEXT_INPUT_TYPES.includes(element.type);
   }
 
   function isScrollTarget(element) {
