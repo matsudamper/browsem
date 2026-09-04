@@ -61,6 +61,11 @@
   }
 
   function scrollFocusedIntoView() {
+    // URL バーを開くとページ側のフォーカスは外れるが activeElement は残る。
+    // その状態でも GeckoView は縮むため resize が届く。URL 編集で背後の
+    // ページが勝手に動かないよう、フォーカスを持っているときだけ補正する。
+    if (!document.hasFocus()) return;
+
     const element = focusedElement();
     if (!isScrollTarget(element)) return;
 
