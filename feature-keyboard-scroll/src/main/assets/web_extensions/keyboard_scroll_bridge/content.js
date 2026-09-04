@@ -1,4 +1,4 @@
-// キーボード表示で表示領域が縮んだとき、フォーカス中の入力欄を可視範囲へ運ぶ。
+// キーボード表示で visual viewport が縮んだとき、フォーカス中の入力欄を可視範囲へ運ぶ。
 // Gecko 側のスクロール判断はレイアウトビューポートの扱いやアニメーションの
 // タイミングに左右されるため、ページ側で明示的にスクロールさせて確実にする。
 (function () {
@@ -8,8 +8,21 @@
   // 表示領域が変わってから安定するまでの待ち時間 (ms)。
   // キーボードのアニメーション中は resize が連続で届く。
   const SETTLE_DELAY = 120;
+  // キーボードとみなす最小の縮み量 (CSS px)。
+  const KEYBOARD_MIN_HEIGHT = 100;
 
   const isTopFrame = window === window.top;
+
+  /**
+   * キーボードで visual viewport が縮んでいるかを返す。
+   *
+   * レイアウトビューポートは interactive-widget の既定 (resizes-visual) では
+   * 縮まないため、その差でキーボードの有無を判定できる。
+   */
+  function isKeyboardVisible() {
+    const layoutHeight = document.documentElement.clientHeight;
+    return layoutHeight - visualViewport.height > KEYBOARD_MIN_HEIGHT;
+  }
 
   function isTextEntry(element) {
     if (!element) return false;
@@ -18,14 +31,21 @@
     return tagName === "INPUT" || tagName === "TEXTAREA" || tagName === "SELECT";
   }
 
+  function isScrollTarget(element) {
+    if (isTextEntry(element)) return true;
+    if (element == null) return false;
+    // 子フレーム内の入力欄は外側から見えない。フレームごと運ぶ。
+    if (element.tagName === "IFRAME") return true;
+    // closed な shadow root では中の入力欄まで辿れない。カスタム要素
+    // (タグ名にハイフンを含む) にフォーカスがあるなら host ごと運ぶ。
+    return element.tagName.includes("-");
+  }
+
   /**
    * フォーカスされている要素を返す。
    *
    * Web Components では外側の activeElement が shadow host になるため、
-   * open な shadow root を辿って実際の入力欄まで降りる。closed な場合は
-   * host までしか辿れないが、host を運べば入力欄も可視範囲に入る。
-   * 画面下部の iframe 内に入力欄がある場合も、外側からは iframe 要素しか
-   * 見えないため同じ扱いにする。
+   * open な shadow root を辿って実際の入力欄まで降りる。
    */
   function focusedElement() {
     let element = document.activeElement;
@@ -35,35 +55,33 @@
     return element;
   }
 
-  function isScrollTarget(element) {
-    if (isTextEntry(element)) return true;
-    // 子フレーム内の入力欄は外側から見えない。フレームごと運ぶ。
-    return element != null && element.tagName === "IFRAME";
+  /**
+   * キャレット (折りたたみ選択) の矩形を返す。取れなければ null。
+   */
+  function caretRect() {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) return null;
+    const rect = selection.getRangeAt(0).getBoundingClientRect();
+    // 選択が無い要素では幅も高さも 0 の原点矩形になることがある。
+    if (rect.height === 0 && rect.top === 0) return null;
+    return rect;
   }
 
-  /**
-   * スクロールの基準にする矩形を返す。
-   *
-   * 可視範囲より背の高い textarea や contenteditable では、要素全体を
-   * 基準にするとキャレットがキーボードの下に残る。選択範囲が取れる場合は
-   * そちらを優先する。
-   */
-  function targetRect(element) {
-    const elementRect = element.getBoundingClientRect();
-    if (elementRect.height <= visualViewport.height) return elementRect;
+  function visibleTop() {
+    return visualViewport.offsetTop;
+  }
 
-    const selection = window.getSelection();
-    if (!selection || selection.rangeCount === 0) return elementRect;
-    const selectionRect = selection.getRangeAt(0).getBoundingClientRect();
-    // 折りたたまれた選択では幅も高さも 0 になることがある。
-    if (selectionRect.height === 0 && selectionRect.top === 0) return elementRect;
-    return selectionRect;
+  function visibleBottom() {
+    return visualViewport.offsetTop + visualViewport.height;
+  }
+
+  function isOutside(rect) {
+    return rect.top < visibleTop() || rect.bottom > visibleBottom();
   }
 
   function scrollFocusedIntoView() {
     // URL バーを開くとページ側のフォーカスは外れるが activeElement は残る。
-    // その状態でも GeckoView は縮むため resize が届く。URL 編集で背後の
-    // ページが勝手に動かないよう、フォーカスを持っているときだけ補正する。
+    // URL 編集で背後のページが勝手に動かないよう、フォーカスを持っているときだけ補正する。
     if (!document.hasFocus()) return;
 
     const element = focusedElement();
@@ -71,14 +89,29 @@
 
     // 子フレームでは自身の可視範囲しか測れず、親フレーム内での位置が分からない。
     // scrollIntoView は親フレームまで伝播するため、判定せずに運ぶ。
-    if (isTopFrame) {
-      const rect = targetRect(element);
-      const visibleTop = visualViewport.offsetTop;
-      const visibleBottom = visibleTop + visualViewport.height;
-      if (rect.top >= visibleTop && rect.bottom <= visibleBottom) return;
+    if (!isTopFrame) {
+      element.scrollIntoView({ block: "center", inline: "nearest" });
+      return;
     }
 
+    const elementRect = element.getBoundingClientRect();
+    // 可視範囲より背の高い textarea や contenteditable では、要素を中央揃えしても
+    // キャレットがキーボードの下に残る。キャレットを基準にする。
+    const caret = elementRect.height > visualViewport.height ? caretRect() : null;
+
+    if (caret == null) {
+      if (!isOutside(elementRect)) return;
+      element.scrollIntoView({ block: "center", inline: "nearest" });
+      return;
+    }
+
+    if (!isOutside(caret)) return;
+    // 入れ子のスクロールコンテナごと動かしてから、キャレットの残差を詰める。
     element.scrollIntoView({ block: "center", inline: "nearest" });
+    const movedCaret = caretRect();
+    if (movedCaret == null || !isOutside(movedCaret)) return;
+    const centeredTop = visibleTop() + (visualViewport.height - movedCaret.height) / 2;
+    window.scrollBy(0, movedCaret.top - centeredTop);
   }
 
   let settleTimer = 0;
@@ -87,8 +120,25 @@
     settleTimer = setTimeout(scrollFocusedIntoView, SETTLE_DELAY);
   }
 
-  // focusin では補正しない。ページが focus({ preventScroll: true }) で
-  // 画面外の入力欄へフォーカスするだけのケースまで動かしてしまうため。
-  // 表示領域が変わったときだけ補正する。
-  visualViewport.addEventListener("resize", scheduleScroll);
+  // ピンチズームでも resize は届く。倍率が変わったときはユーザー操作なので触らない。
+  let lastScale = visualViewport.scale;
+  visualViewport.addEventListener("resize", function () {
+    const scale = visualViewport.scale;
+    const scaleChanged = scale !== lastScale;
+    lastScale = scale;
+    if (scaleChanged) return;
+    scheduleScroll();
+  });
+
+  // IME の「次へ」でフォーカスだけが移る場合は resize が来ない。
+  // キーボードが出ていると確認できるときだけ補正する。ページが
+  // focus({ preventScroll: true }) で画面外へフォーカスするだけのケースは対象外。
+  document.addEventListener(
+    "focusin",
+    function () {
+      if (!isKeyboardVisible()) return;
+      scheduleScroll();
+    },
+    true,
+  );
 })();
