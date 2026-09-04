@@ -155,6 +155,32 @@ class TabDatabaseMigrationTest {
         assertEquals("already_migrated", File(sessionDir, "t1").readText())
     }
 
+    /** v4→v5: pageZoomPercent 追加。既存タブは 100% になる */
+    @Test
+    fun migrate4To5() {
+        helper.createDatabase(TEST_DB, 4).apply {
+            execSQL(
+                "INSERT INTO tab_state " +
+                    "(tabId, url, title, openerTabId, themeColor, sortOrder, isSelected, groupId) " +
+                    "VALUES ('t1', 'https://example.com', 'Example', '', NULL, 0, 1, '')",
+            )
+            close()
+        }
+
+        val db = helper.runMigrationsAndValidate(
+            TEST_DB,
+            5,
+            true,
+            *TabDatabase.allMigrations(sessionStateDir()),
+        )
+
+        db.query("SELECT tabId, pageZoomPercent FROM tab_state WHERE tabId = 't1'").use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals("t1", cursor.getString(0))
+            assertEquals(100, cursor.getInt(1))
+        }
+    }
+
     /** v1 から最新バージョンまで全マイグレーションを連続適用できることを確認 */
     @Test
     fun migrateAllFrom1() {

@@ -143,6 +143,7 @@ class BrowserTabController(
                             title = restored.persistedTabState.title,
                             previewBitmapArray = restored.previewImageWebp,
                             themeColor = restored.persistedTabState.themeColor,
+                            pageZoomPercent = restored.persistedTabState.pageZoomPercent,
                             openerTabId = restored.persistedTabState.openerTabId.ifBlank { null },
                             insertIndex = index,
                         )
@@ -425,6 +426,7 @@ class BrowserTabController(
         title: String,
         previewBitmapArray: ByteArray?,
         themeColor: Int? = null,
+        pageZoomPercent: Int = DEFAULT_PAGE_ZOOM_PERCENT,
         openerTabId: String? = null,
         insertIndex: Int = tabs.size,
     ): BrowserTab {
@@ -436,6 +438,7 @@ class BrowserTabController(
             title = title.ifBlank { initialUrl },
             previewBitmapArray = previewBitmapArray,
             themeColor = themeColor,
+            pageZoomPercent = pageZoomPercent,
             openerTabId = openerTabId,
         )
         tabRegistry.insert(tab = tab, insertIndex = insertIndex)
