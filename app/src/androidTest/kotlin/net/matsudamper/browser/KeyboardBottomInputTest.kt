@@ -163,13 +163,18 @@ class KeyboardBottomInputTest {
 
         // アクセシビリティの座標更新が遅延し、GeckoView は縮小済みなのに bounds だけ古い
         // 値のまま残ることがある。表示領域がキーボード上端まで縮んでいれば Issue #674 は満たしている。
+        // ただし bounds を一切見ないと偽陽性になるため、古い座標を許容しつつ可視領域との比較は維持する。
+        val bounds = findFocusedPageInputBoundsInScreen()
         val geckoBottom = geckoViewBottomInScreen()
         val keyboardTop = keyboardTopInScreen()
+        val visibleBottom = listOfNotNull(keyboardTop, geckoBottom).minOrNull()
         if (
+            bounds != null &&
+            visibleBottom != null &&
             geckoBottom != null &&
             keyboardTop != null &&
             kotlin.math.abs(geckoBottom - keyboardTop) <= GECKO_KEYBOARD_TOLERANCE_PX &&
-            findFocusedPageInputBoundsInScreen() != null
+            bounds.bottom <= visibleBottom + STALE_BOUNDS_TOLERANCE_PX
         ) {
             return
         }
@@ -523,5 +528,8 @@ class KeyboardBottomInputTest {
 
         /** GeckoView 下端とキーボード上端の許容誤差 (px) */
         private const val GECKO_KEYBOARD_TOLERANCE_PX = 8
+
+        /** a11y 座標キャッシュ遅延時に許容する bounds の過大評価 (px) */
+        private const val STALE_BOUNDS_TOLERANCE_PX = 48
     }
 }
