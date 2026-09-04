@@ -2,6 +2,7 @@ package net.matsudamper.browser.feature.keyboardscroll
 
 import android.util.Log
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.CopyOnWriteArrayList
 import org.json.JSONObject
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoSession
@@ -20,7 +21,9 @@ import org.mozilla.geckoview.WebExtension
  */
 class KeyboardScrollWebExtension {
     private var extension: WebExtension? = null
-    private val ports = ConcurrentHashMap<GeckoSession, WebExtension.Port>()
+
+    // all_frames のため iframe ごとにポートが張られる。全てへ配信する。
+    private val ports = ConcurrentHashMap<GeckoSession, MutableList<WebExtension.Port>>()
     private val sessions = ConcurrentHashMap<GeckoSession, Int>()
 
     fun install(runtime: GeckoRuntime) {
@@ -43,7 +46,14 @@ class KeyboardScrollWebExtension {
         extension?.also { ext -> attachPortDelegate(session, ext) }
     }
 
+    /**
+     * セッションの登録を解除する。
+     *
+     * ページ側にキーボード余白が残らないよう 0 を送ってからポートを捨てる。
+     * content script は再接続しないため、ポートを黙って捨てると余白が残る。
+     */
     fun unregisterSession(session: GeckoSession) {
+        postKeyboardHeight(session, 0)
         sessions.remove(session)
         ports.remove(session)
     }
@@ -56,8 +66,14 @@ class KeyboardScrollWebExtension {
     fun setKeyboardHeight(session: GeckoSession, heightPx: Int) {
         if (sessions[session] == heightPx) return
         sessions[session] = heightPx
-        val port = ports[session] ?: return
-        port.postMessage(JSONObject().put("keyboardHeightPx", heightPx))
+        postKeyboardHeight(session, heightPx)
+    }
+
+    private fun postKeyboardHeight(session: GeckoSession, heightPx: Int) {
+        val message = JSONObject().put("keyboardHeightPx", heightPx)
+        ports[session]?.forEach { port ->
+            runCatching { port.postMessage(message) }
+        }
     }
 
     private fun attachPortDelegate(session: GeckoSession, extension: WebExtension) {
@@ -65,13 +81,13 @@ class KeyboardScrollWebExtension {
             extension,
             object : WebExtension.MessageDelegate {
                 override fun onConnect(port: WebExtension.Port) {
-                    ports[session] = port
+                    ports.getOrPut(session) { CopyOnWriteArrayList() }.add(port)
                     port.setDelegate(
                         object : WebExtension.PortDelegate {
                             override fun onPortMessage(message: Any, port: WebExtension.Port) = Unit
 
                             override fun onDisconnect(port: WebExtension.Port) {
-                                ports.remove(session, port)
+                                ports[session]?.remove(port)
                             }
                         },
                     )
