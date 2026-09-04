@@ -32,7 +32,7 @@ class BrowserScreenViewModel(
     tabGroupRepository: TabGroupRepository,
     browserTabsFlow: Flow<List<BrowserTab>>,
     screenTabId: String,
-    isExternalDownloadTab: Boolean = false,
+    externalTabIdsFlow: StateFlow<Set<String>>,
 ) : ViewModel(), Closeable {
     // ViewModel継承時はonCleared()でキャンセル、remember()使用時はclose()でキャンセル
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -59,22 +59,11 @@ class BrowserScreenViewModel(
 
     val eventHandler = Channel<(Event) -> Unit>(Channel.UNLIMITED)
 
-    private val externalDownloadDialogListener: BrowserScreenUiState.ExternalDownloadDialogListener? =
-        if (isExternalDownloadTab) {
-            object : BrowserScreenUiState.ExternalDownloadDialogListener {
-                override fun onResolved() {
-                    eventHandler.trySend { it.onExternalDownloadDialogResolved(screenTabId) }
-                }
-            }
-        } else {
-            null
-        }
-
     val uiState: StateFlow<BrowserScreenUiState> = MutableStateFlow(
         BrowserScreenUiState(
             urlBarSuggestions = UrlBarSuggestionsUiState(),
             groupTabCount = null,
-            externalDownloadDialogListener = externalDownloadDialogListener,
+            externalDownloadDialogListener = null,
             callbacks = callbacks,
         ),
     ).also { uiStateFlow ->
@@ -117,6 +106,16 @@ class BrowserScreenViewModel(
                             object : BrowserScreenUiState.SwipePreviewUiState.BackToOpenerListener {
                                 override fun onBackToOpener() {
                                     eventHandler.trySend { it.backToOpenerTab(selectedTab.tabId) }
+                                }
+                            }
+                        } else {
+                            null
+                        }
+                    val externalDownloadDialogListener =
+                        if (state.screenTabId in state.externalTabIds) {
+                            object : BrowserScreenUiState.ExternalDownloadDialogListener {
+                                override fun onResolved() {
+                                    eventHandler.trySend { it.onExternalDownloadDialogResolved(screenTabId) }
                                 }
                             }
                         } else {
@@ -167,6 +166,11 @@ class BrowserScreenViewModel(
                 }
             }
         }
+        scope.launch {
+            externalTabIdsFlow.collectLatest { externalTabIds ->
+                viewModelStateFlow.update { it.copy(externalTabIds = externalTabIds) }
+            }
+        }
     }
 
     interface Event {
@@ -190,6 +194,7 @@ private data class ViewModelState(
     val browserTabs: List<BrowserTab> = emptyList(),
     val orderedBrowserTabs: List<BrowserTab> = emptyList(),
     val screenTabId: String? = null,
+    val externalTabIds: Set<String> = emptySet(),
 ) {
     fun withResolvedOrderedBrowserTabs(): ViewModelState {
         val orderedBrowserTabs = resolveOrderedBrowserTabs()

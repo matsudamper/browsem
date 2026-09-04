@@ -112,6 +112,7 @@ class BrowserScreenViewModelTest {
             tabGroupRepository = tabGroupRepository,
             browserTabsFlow = browserTabsFlow,
             screenTabId = screenTabId,
+            externalTabIdsFlow = MutableStateFlow(emptySet()),
         )
     }
 

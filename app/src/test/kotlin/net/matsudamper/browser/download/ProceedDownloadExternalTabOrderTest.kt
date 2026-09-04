@@ -1,6 +1,7 @@
 package net.matsudamper.browser.download
 
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceTimeBy
@@ -21,6 +22,7 @@ import org.junit.Test
  * エンキュー前にタブを閉じると rememberCoroutineScope がキャンセルされ、
  * ダウンロードが開始されない不具合が起きる（PR #672 レビュー指摘）。
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 class ProceedDownloadExternalTabOrderTest {
 
     @Test
