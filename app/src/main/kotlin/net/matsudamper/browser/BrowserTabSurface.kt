@@ -1,6 +1,7 @@
 package net.matsudamper.browser
 
 import android.annotation.SuppressLint
+import android.util.Log
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.view.MotionEvent
@@ -50,6 +51,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.view.WindowInsetsCompat
 import kotlin.math.abs
 import net.matsudamper.browser.data.ThemeMode
 import net.matsudamper.browser.ui.browser.UrlBarSuggestionsUiState
@@ -57,6 +59,11 @@ import net.matsudamper.browser.ui.common.BrowserTheme
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.GeckoView
+
+/**
+ * GeckoView へ届く WindowInsets を測るための診断リスナーのキー。
+ */
+private const val GECKO_INSETS_DIAGNOSTIC_KEY = "BrowsemGeckoInsets"
 
 @Composable
 internal fun BrowserContentHost(
@@ -96,6 +103,15 @@ internal fun BrowserContentHost(
                         geckoView.importantForAutofill =
                             View.IMPORTANT_FOR_AUTOFILL_YES_EXCLUDE_DESCENDANTS
                         geckoView.setSession(session)
+                        // GeckoView が decorView へ張ったリスナーへ実際に何が届いているかを測る。
+                        // 同じ insets が GeckoDisplay へ渡り onKeyboardHeight になるため、
+                        // キーボード高さが Gecko に伝わらない原因の切り分けに使う。
+                        geckoView.addWindowInsetsListener(GECKO_INSETS_DIAGNOSTIC_KEY) { _, insets ->
+                            val ime = insets.getInsets(WindowInsetsCompat.Type.ime()).bottom
+                            val nav = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom
+                            Log.i(GECKO_INSETS_DIAGNOSTIC_KEY, "ime=$ime navigationBars=$nav")
+                            insets
+                        }
                         // Engine 側で非アクティブ扱いになると Compositor の描画更新が止まり、
                         // 復帰時の黒画面につながるため、初期生成時に必ず active 化する。
                         session.setActive(true)

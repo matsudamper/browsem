@@ -267,12 +267,12 @@ class KeyboardBottomInputTest {
      */
     private fun viewportDiagnostics(): String {
         val pfd = InstrumentationRegistry.getInstrumentation().uiAutomation
-            .executeShellCommand("logcat -d -s KeyboardScrollExt:V")
+            .executeShellCommand("logcat -d -s KeyboardScrollExt:V BrowsemGeckoInsets:V")
         val log = ParcelFileDescriptor.AutoCloseInputStream(pfd).use {
             it.readBytes().decodeToString()
         }
         return log.lineSequence()
-            .filter { it.contains("viewport") }
+            .filter { it.contains("viewport") || it.contains("ime=") }
             .toList()
             .takeLast(VIEWPORT_LOG_MAX_LINES)
             .joinToString(separator = "\n")
@@ -443,6 +443,6 @@ class KeyboardBottomInputTest {
 
         /** IME アニメーション途中のフレームで判定しないよう、連続で満たすことを求める回数 */
         private const val REQUIRED_STABLE_COUNT = 5
-        private const val VIEWPORT_LOG_MAX_LINES = 12
+        private const val VIEWPORT_LOG_MAX_LINES = 20
     }
 }
