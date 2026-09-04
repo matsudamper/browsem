@@ -284,8 +284,11 @@ class KeyboardBottomInputTest {
         try {
             val node = findPageInput(root)
             if (node != null) {
-                clicked = node.performAction(AccessibilityNodeInfo.ACTION_CLICK) ||
-                    node.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
+                // ACTION_CLICK が true を返してもフォーカスが移らないことがある。
+                // 短絡させず両方を試す。
+                val focused = node.performAction(AccessibilityNodeInfo.ACTION_FOCUS)
+                val tapped = node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                clicked = focused || tapped
                 node.recycle()
             }
         } finally {
