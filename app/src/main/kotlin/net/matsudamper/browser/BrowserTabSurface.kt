@@ -19,7 +19,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.ime
-import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.onConsumedWindowInsetsChanged
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -38,6 +38,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -80,20 +81,20 @@ internal fun BrowserContentHost(
     // キーボード分だけ表示領域を物理的に縮める。GeckoView は Activity の decorView へ
     // WindowInsets リスナーを張るが、ComposeView が insets を消費するため View 階層の
     // 子には届かない。Compose 側で高さを読み、AndroidView の update で反映する。
+    //
+    // 親が既に消費した分は差し引く。通常表示はナビバー余白、フルスクリーンは何も
+    // 消費されず、window.open のオーバーレイでは safeDrawing (IME 含む) が消費済み。
+    // 消費分を引くことで、いずれの経路でも二重にキーボード分を縮めずに済む。
     val density = LocalDensity.current
+    var consumedBottomPx by remember { mutableIntStateOf(0) }
     val imeBottomPx = WindowInsets.ime.getBottom(density)
-    val navigationBottomPx = WindowInsets.navigationBars.getBottom(density)
-    val keyboardHeightPx = if (state.isFullScreen) {
-        // フルスクリーンでは親がナビバー余白を確保しないため、IME inset をそのまま使う。
-        // 差し引くと GeckoView の下端がキーボード上端よりナビバー分だけ下に残る。
-        imeBottomPx
-    } else {
-        // 通常表示はナビバー分を親で確保済みなので、その分を除く。
-        // GeckoDisplay.getKeyboardHeight と同じ ime - navigationBars。
-        (imeBottomPx - navigationBottomPx).coerceAtLeast(0)
-    }
+    val keyboardHeightPx = (imeBottomPx - consumedBottomPx).coerceAtLeast(0)
 
-    Box(modifier = modifier) {
+    Box(
+        modifier = modifier.onConsumedWindowInsetsChanged { consumed ->
+            consumedBottomPx = consumed.getBottom(density)
+        },
+    ) {
         AndroidView(
             modifier = Modifier
                 .fillMaxSize()
