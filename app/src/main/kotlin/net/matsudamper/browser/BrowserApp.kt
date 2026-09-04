@@ -104,6 +104,7 @@ import net.matsudamper.browser.screen.sitesettings.SiteSettingsScreenViewModel
 import net.matsudamper.browser.screen.tab.TabsScreenViewModel
 import net.matsudamper.browser.ui.browser.BrowserScreen
 import net.matsudamper.browser.ui.common.BrowserTheme
+import net.matsudamper.browser.ui.common.ThemeSurfaceStatusBarAppearanceEffect
 import net.matsudamper.browser.ui.downloads.DownloadManagementScreen
 import net.matsudamper.browser.ui.extensions.ExtensionsScreen
 import net.matsudamper.browser.ui.history.HistoryScreen
@@ -273,7 +274,7 @@ internal fun BrowserAppShell(
                     rootContent(outerNavActions)
                 }
 
-                AppDestination.Settings -> navEntry(key) {
+                AppDestination.Settings -> overlayNavEntry(key) {
                     val lifecycleOwner = LocalLifecycleOwner.current
                     val settingsViewModel = composeViewModel(initializer = {
                         SettingsScreenViewModel(settingsRepository)
@@ -363,7 +364,7 @@ internal fun BrowserAppShell(
                     }
                 }
 
-                is AppDestination.SiteSettings -> navEntry(key) {
+                is AppDestination.SiteSettings -> overlayNavEntry(key) {
                     val siteSettingsRepository: SiteSettingsRepository = koinInject()
                     val formInputRepository: FormInputRepository = koinInject()
                     val geckoRuntime: GeckoRuntime = koinInject()
@@ -422,7 +423,7 @@ internal fun BrowserAppShell(
                     )
                 }
 
-                is AppDestination.SiteFormInputPaths -> navEntry(key) {
+                is AppDestination.SiteFormInputPaths -> overlayNavEntry(key) {
                     val formInputRepository: FormInputRepository = koinInject()
                     val origin = FormInputOrigin(
                         scheme = key.scheme,
@@ -461,7 +462,7 @@ internal fun BrowserAppShell(
                     )
                 }
 
-                is AppDestination.SiteFormInputPath -> navEntry(key) {
+                is AppDestination.SiteFormInputPath -> overlayNavEntry(key) {
                     val formInputRepository: FormInputRepository = koinInject()
                     val origin = FormInputOrigin(
                         scheme = key.scheme,
@@ -506,7 +507,7 @@ internal fun BrowserAppShell(
                     )
                 }
 
-                is AppDestination.SiteFormInputField -> navEntry(key) {
+                is AppDestination.SiteFormInputField -> overlayNavEntry(key) {
                     val formInputRepository: FormInputRepository = koinInject()
                     val origin = FormInputOrigin(
                         scheme = key.scheme,
@@ -540,7 +541,7 @@ internal fun BrowserAppShell(
                     )
                 }
 
-                AppDestination.History -> navEntry(key) {
+                AppDestination.History -> overlayNavEntry(key) {
                     val historyViewModel = composeViewModel(initializer = {
                         HistoryScreenViewModel(historyRepository)
                     })
@@ -565,7 +566,7 @@ internal fun BrowserAppShell(
                     )
                 }
 
-                AppDestination.Addresses -> navEntry(key) {
+                AppDestination.Addresses -> overlayNavEntry(key) {
                     val addressRepository: AddressRepository = koinInject()
                     val addressesViewModel = composeViewModel(initializer = {
                         AddressesScreenViewModel(addressRepository)
@@ -586,7 +587,7 @@ internal fun BrowserAppShell(
                     )
                 }
 
-                AppDestination.CrashLogs -> navEntry(key) {
+                AppDestination.CrashLogs -> overlayNavEntry(key) {
                     val crashLogRepository: CrashLogRepository = koinInject()
                     val crashLogsViewModel = composeViewModel(initializer = {
                         CrashLogsScreenViewModel(crashLogRepository)
@@ -607,7 +608,7 @@ internal fun BrowserAppShell(
                     )
                 }
 
-                is AppDestination.CrashLogDetail -> navEntry(key) {
+                is AppDestination.CrashLogDetail -> overlayNavEntry(key) {
                     val crashLogRepository: CrashLogRepository = koinInject()
                     val crashLogDetailViewModel = composeViewModel(initializer = {
                         CrashLogDetailScreenViewModel(
@@ -636,7 +637,7 @@ internal fun BrowserAppShell(
                     )
                 }
 
-                is AppDestination.AddressEdit -> navEntry(key) {
+                is AppDestination.AddressEdit -> overlayNavEntry(key) {
                     val addressRepository: AddressRepository = koinInject()
                     val addressEditViewModel = composeViewModel(initializer = {
                         AddressEditScreenViewModel(
@@ -660,7 +661,7 @@ internal fun BrowserAppShell(
                     )
                 }
 
-                AppDestination.Extensions -> navEntry(key) {
+                AppDestination.Extensions -> overlayNavEntry(key) {
                     val extensionRuntimeCoordinator: ExtensionRuntimeCoordinator = koinInject()
                     val extensionsViewModel = composeViewModel(initializer = {
                         ExtensionsScreenViewModel(
@@ -704,7 +705,7 @@ internal fun BrowserAppShell(
                     )
                 }
 
-                AppDestination.Downloads -> navEntry(key) {
+                AppDestination.Downloads -> overlayNavEntry(key) {
                     val downloadsViewModel = composeViewModel(initializer = {
                         DownloadManagementScreenViewModel(context.applicationContext as Application)
                     })
@@ -784,7 +785,7 @@ internal fun BrowserAppShell(
                     )
                 }
 
-                is AppDestination.BackupProgress -> navEntry(key) {
+                is AppDestination.BackupProgress -> overlayNavEntry(key) {
                     val backupRepository: BackupRepository = koinInject()
                     val backupViewModel = composeViewModel(initializer = {
                         BackupProgressViewModel(key.isImport, backupRepository)
@@ -1235,7 +1236,7 @@ private fun MainBrowserContent(
                     )
                 }
 
-                BrowserNavDestination.Tabs -> navEntry(key) {
+                BrowserNavDestination.Tabs -> overlayNavEntry(key) {
                     val tabsViewModel = composeViewModel(initializer = {
                         TabsScreenViewModel(
                             tabStore = browserTabController,
@@ -1334,6 +1335,16 @@ internal fun navEntry(
         contentKey = key,
         content = content,
     )
+}
+
+private fun overlayNavEntry(
+    key: NavKey,
+    content: @Composable (NavKey) -> Unit,
+): NavEntry<NavKey> {
+    return navEntry(key) {
+        ThemeSurfaceStatusBarAppearanceEffect()
+        content(key)
+    }
 }
 
 private fun <T : NavKey> AnimatedContentTransitionScope<Scene<T>>.popTransition(

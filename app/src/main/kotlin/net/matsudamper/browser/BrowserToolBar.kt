@@ -8,7 +8,6 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -80,6 +79,7 @@ import androidx.compose.ui.unit.sp
 import kotlin.math.roundToInt
 import net.matsudamper.browser.resources.R as ResourcesR
 import net.matsudamper.browser.ui.common.BrowserTheme
+import net.matsudamper.browser.ui.common.isAppInDarkTheme
 import net.matsudamper.browser.ui.common.resolveBrowserToolbarColors
 import net.matsudamper.browser.ui.common.toArgbHex
 
@@ -294,7 +294,7 @@ internal fun BrowserToolbar(
     val toolbarColors = resolveBrowserToolbarColors(
         toolbarColor = toolbarColor,
         defaultToolbarColor = MaterialTheme.colorScheme.primaryContainer,
-        isSystemDarkTheme = isSystemInDarkTheme(),
+        isAppDarkTheme = isAppInDarkTheme(),
     )
 
     Surface(
