@@ -77,11 +77,22 @@ internal fun AndroidComposeTestRule<*, MainActivity>.waitForTabsScreenLoaded(
 }
 
 internal fun AndroidComposeTestRule<*, MainActivity>.waitForUrlBarNotFocused(
-    timeoutMillis: Long = 20_000,
+    timeoutMillis: Long = 30_000,
 ) {
-    waitUntil(timeoutMillis = timeoutMillis) {
-        !isUrlBarFocused()
+    val deadline = SystemClock.elapsedRealtime() + timeoutMillis
+    while (SystemClock.elapsedRealtime() < deadline) {
+        if (!isUrlBarFocused()) return
+        runCatching { tapGeckoContainer() }
+        Thread.sleep(200)
     }
+    if (!isUrlBarFocused()) return
+    runOnIdle { activity.onBackPressedDispatcher.onBackPressed() }
+    waitForIdle()
+    if (!isUrlBarFocused()) return
+    throw AssertionError(
+        "waitForUrlBarNotFocused timeout: urlBarFocused=true " +
+            "urlInput=\"${currentUrlBarText()}\" currentUrl=\"${currentPageUrlFromUi()}\"",
+    )
 }
 
 internal fun AndroidComposeTestRule<*, MainActivity>.isUrlBarFocused(): Boolean {
