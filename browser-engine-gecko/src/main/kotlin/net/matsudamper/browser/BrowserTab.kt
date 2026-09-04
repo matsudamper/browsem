@@ -158,8 +158,23 @@ class BrowserTab(
 
     private val sessionDelegateHost = BrowserTabSessionDelegateHost(this)
 
+    private var textInputDelegate: UserGestureGatedTextInputDelegate? = null
+
     internal fun bindSessionDelegates() {
+        textInputDelegate = UserGestureGatedTextInputDelegate(session)
         sessionDelegateHost.bindToSession(session)
+    }
+
+    fun notifyContentTouchForKeyboard() {
+        textInputDelegate?.onUserGesture()
+    }
+
+    fun suppressKeyboardUntilUserGesture() {
+        textInputDelegate?.onSessionShownWithoutUserGesture()
+    }
+
+    internal fun onNavigationStartedForKeyboard() {
+        textInputDelegate?.onNavigationStarted()
     }
 
     internal fun disposeSessionDelegates(cause: Throwable) {
