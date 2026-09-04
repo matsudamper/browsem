@@ -129,31 +129,6 @@ class KeyboardBottomInputTest {
     }
 
     /**
-     * 画面遷移直後の autofocus ではキーボードを出さず、入力欄を明示的に操作したときだけ
-     * キーボードを表示する。
-     */
-    @Test
-    fun autofocusDoesNotShowKeyboardUntilInputIsTapped() {
-        val pageUrl = startPageServer(AUTOFOCUS_DIR_NAME, AUTOFOCUS_ASSET_DIR)
-        composeRule.openUrlFromUrlBar(pageUrl)
-        composeRule.waitForUrlBarContains(PAGE_FILE_NAME, timeoutMillis = URL_BAR_WAIT_MILLIS)
-        composeRule.waitForUrlBarNotFocused()
-        assertTrue("URL バーのキーボードが閉じない", waitForImeHidden())
-
-        Thread.sleep(AUTOFOCUS_SETTLE_MILLIS)
-        assertTrue(
-            "autofocus 直後にキーボードが表示されている: ${TestIme.diagnostics()}",
-            imeInsetBottom() == 0,
-        )
-
-        if (!focusBottomInputAndWaitForIme()) {
-            throw AssertionError(
-                "autofocus 入力欄を操作してもキーボードが表示されない: ${TestIme.diagnostics()}",
-            )
-        }
-    }
-
-    /**
      * 入力欄がキーボード上端より上にある状態が続くことを検証する。
      *
      * IME はアニメーションで迫り上がるため、inset が初めて 0 を超えた瞬間に判定すると
@@ -471,11 +446,6 @@ class KeyboardBottomInputTest {
         private const val BOTTOM_INPUT_FILE_NAME = PAGE_FILE_NAME
         private const val FIXED_ASSET_DIR = "test-ime-fixed"
         private const val FIXED_DIR_NAME = "test-ime-fixed"
-        private const val AUTOFOCUS_ASSET_DIR = "test-ime-autofocus"
-        private const val AUTOFOCUS_DIR_NAME = "test-ime-autofocus"
-
-        /** autofocus の showSoftInput が届くまでの待ち時間 */
-        private const val AUTOFOCUS_SETTLE_MILLIS = 1_500L
 
         private const val URL_BAR_WAIT_MILLIS = 60_000L
         private const val IME_HIDE_WAIT_MILLIS = 10_000L

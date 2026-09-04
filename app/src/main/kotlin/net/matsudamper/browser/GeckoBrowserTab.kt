@@ -358,7 +358,6 @@ internal fun GeckoBrowserTab(
         }
         imeWasVisibleDuringUrlFocus = false
         keyboardController?.hide()
-        state.suppressKeyboardUntilUserGesture()
         runCatching { session.setFocused(true) }
         geckoView?.requestFocus()
     }

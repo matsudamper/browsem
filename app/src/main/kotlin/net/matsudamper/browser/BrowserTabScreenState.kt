@@ -248,7 +248,6 @@ internal class BrowserTabScreenState(
         isTouchGestureActive = true
         touchGestureMoved = false
         touchGestureStartedAtMs = SystemClock.elapsedRealtime()
-        browserTab.notifyContentTouchForKeyboard()
     }
 
     /** タッチスロップを超える移動、またはマルチタッチが発生した */
@@ -260,11 +259,6 @@ internal class BrowserTabScreenState(
     fun onContentTouchEnd() {
         isTouchGestureActive = false
         touchGestureEndedAtMs = SystemClock.elapsedRealtime()
-    }
-
-    /** タブ表示や URL バー復帰など、ユーザー操作なしで GeckoView にフォーカスを戻す直前に呼ぶ */
-    fun suppressKeyboardUntilUserGesture() {
-        browserTab.suppressKeyboardUntilUserGesture()
     }
 
     /**
@@ -1344,7 +1338,6 @@ internal class BrowserTabScreenState(
         } else {
             // SPA 遷移（pushState / 同一ドキュメント内 history 移動）では
             // onPageStart / onPageStop が発火しないため両フラグを復帰させる
-            browserTab.onNavigationStartedForKeyboard()
             markRenderingDone()
             // onPageStop が発火しないため、ここでズームを再適用する。
             // onLocationChange コールバック内から同期的に loadUri すると注入が失敗することがあるため、

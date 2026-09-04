@@ -308,7 +308,6 @@ fun createGeckoSessionDelegateBundle(
             override fun onPageStart(session: GeckoSession, url: String) {
                 // 新しいページでは前ページの証明書情報を持ち越さない
                 browserTab.securityInfo = null
-                browserTab.onNavigationStartedForKeyboard()
                 callbacks.onPageStart(url)
             }
 

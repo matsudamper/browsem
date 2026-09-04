@@ -227,7 +227,6 @@ internal fun BrowserContentHost(
                 swipeRefreshLayout.keyboardHeight = keyboardHeightPx
                 val geckoView = swipeRefreshLayout.findViewById<GeckoView>(id)
                 if (!state.isUrlInputFocused && !state.showFindInPage && !geckoView.isFocused) {
-                    state.suppressKeyboardUntilUserGesture()
                     geckoView.requestFocus()
                 }
             },
