@@ -120,6 +120,8 @@ internal fun rememberBrowserTabScreenState(
     state.onWebAppCrossDomainNavigation = onWebAppCrossDomainNavigation
     state.onHistoryRecord = onHistoryRecord
     state.onHistoryTitleUpdate = onHistoryTitleUpdate
+    state.externalDownloadDialogListener = externalDownloadDialogListener
+    state.externalTabInitialUrl = externalTabInitialUrl
     return state
 }
 
@@ -141,8 +143,8 @@ internal class BrowserTabScreenState(
     private val context: Context,
     private val onRequestDownloadNotificationPermission: suspend () -> Unit = {},
     private val onRequestAndroidPermissions: suspend (Array<String>) -> Array<String> = { emptyArray() },
-    private val externalDownloadDialogListener: BrowserScreenUiState.ExternalDownloadDialogListener? = null,
-    private val externalTabInitialUrl: String? = null,
+    var externalDownloadDialogListener: BrowserScreenUiState.ExternalDownloadDialogListener? = null,
+    var externalTabInitialUrl: String? = null,
     var onHistoryRecord: (suspend (url: String, title: String) -> Long)? = null,
     var onHistoryTitleUpdate: (suspend (id: Long, title: String) -> Unit)? = null,
 ) : BrowserSessionStateCallbacks {
