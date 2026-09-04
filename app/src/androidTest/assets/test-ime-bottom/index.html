@@ -12,19 +12,15 @@
         font-family: sans-serif;
       }
       /*
-        vh などビューポート相対の値を使うと、表示領域が縮んだときに入力欄が
-        リフローで一緒に上へ動いてしまい、スクロールが行われなくてもテストが
-        通ってしまう。そのため寸法はすべて固定の CSS ピクセルで指定する。
+        入力欄は文書の末尾に置く。下に余白があるとスクロールの余地が残り、
+        表示領域が縮まなくても Gecko が入力欄を上へ運べてしまうため、
+        Issue #674 の「下までスクロールしても入力欄がキーボードに隠れたまま」
+        という状態にならない。
 
-        値は GMD の Pixel 6 (API 34, CSS ピクセルで約 390x840) を前提に、
-        キーボード非表示では入力欄が見えており、キーボード (300dp) を出すと
-        隠れる位置になるよう調整してある。
+        vh などビューポート相対の値は使わない。表示領域が縮んだときに
+        入力欄がリフローで動いてしまうため、寸法は固定の CSS ピクセルにする。
       */
       .spacer-above {
-        height: 600px;
-      }
-      /* 文書をビューポートより十分長くしてスクロール余地を残す。 */
-      .spacer-below {
         height: 2000px;
       }
       #bottom-input {
@@ -41,6 +37,5 @@
       <h1>IME Bottom Input</h1>
     </div>
     <input type="text" id="bottom-input" name="bottom" placeholder="bottom-input" />
-    <div class="spacer-below"></div>
   </body>
 </html>
