@@ -163,59 +163,6 @@ internal fun AndroidComposeTestRule<*, MainActivity>.waitForBrowserReady(
 }
 
 /**
- * 起動直後のセッション復元ナビゲーションが落ち着くまで待機する。
- *
- * 復元タブの遅延コミットで URL が変わり続ける間は安定とみなさない。
- */
-internal fun AndroidComposeTestRule<*, MainActivity>.waitForSessionNavigationSettled(
-    timeoutMillis: Long = 60_000,
-    stablePolls: Int = 8,
-    pollIntervalMillis: Long = 500,
-) {
-    var lastUrl: String? = null
-    var stableCount = 0
-    val deadline = SystemClock.elapsedRealtime() + timeoutMillis
-    while (SystemClock.elapsedRealtime() < deadline) {
-        val current = currentPageUrlFromUi()
-        if (current.isNotEmpty() && current == lastUrl) {
-            stableCount++
-            if (stableCount >= stablePolls) return
-        } else {
-            stableCount = 0
-            lastUrl = current
-        }
-        Thread.sleep(pollIntervalMillis)
-    }
-}
-
-/**
- * 期待する URL マーカーが一定時間安定するまで待つ (ページの開き直しは行わない)。
- *
- * リロード後の検証など、ナビゲーション操作そのものを検証するケースで使う。
- */
-internal fun AndroidComposeTestRule<*, MainActivity>.waitForStablePageMarker(
-    urlMarker: String,
-    timeoutMillis: Long = 60_000,
-    stablePolls: Int = 8,
-    pollIntervalMillis: Long = 500,
-) {
-    var stableCount = 0
-    val deadline = SystemClock.elapsedRealtime() + timeoutMillis
-    while (SystemClock.elapsedRealtime() < deadline) {
-        if (isExpectedLocalPage(currentPageUrlFromUi(), urlMarker)) {
-            stableCount++
-            if (stableCount >= stablePolls) return
-        } else {
-            stableCount = 0
-        }
-        Thread.sleep(pollIntervalMillis)
-    }
-    throw AssertionError(
-        "waitForStablePageMarker timeout: expected=\"$urlMarker\" current=\"${currentPageUrlFromUi()}\"",
-    )
-}
-
-/**
  * 期待するローカルページ URL が一定時間安定するまで待つ。
  *
  * 復元タブの遅延ナビゲーションで google.com に戻った場合は pageUrl を
@@ -225,8 +172,8 @@ internal fun AndroidComposeTestRule<*, MainActivity>.waitForStableLocalPage(
     pageUrl: String,
     urlMarker: String,
     timeoutMillis: Long = 60_000,
-    stablePolls: Int = 8,
-    pollIntervalMillis: Long = 500,
+    stablePolls: Int = 5,
+    pollIntervalMillis: Long = 400,
 ) {
     var stableCount = 0
     val deadline = SystemClock.elapsedRealtime() + timeoutMillis
@@ -255,17 +202,8 @@ internal fun AndroidComposeTestRule<*, MainActivity>.openLocalPageAndStabilize(
     urlMarker: String,
     timeoutMillis: Long = 60_000,
 ) {
-    waitForBrowserReady()
-    waitForSessionNavigationSettled()
-    val openedByIntent = runCatching {
-        openUrlViaViewIntent(pageUrl)
-        waitForUrlBarContains(urlMarker, timeoutMillis = 20_000)
-        true
-    }.getOrDefault(false)
-    if (!openedByIntent) {
-        openUrlFromUrlBar(pageUrl)
-        waitForUrlBarContains(urlMarker, timeoutMillis = timeoutMillis)
-    }
+    openUrlFromUrlBar(pageUrl)
+    waitForUrlBarContains(urlMarker, timeoutMillis = timeoutMillis)
     waitForUrlBarNotFocused()
     waitForStableLocalPage(
         pageUrl = pageUrl,
