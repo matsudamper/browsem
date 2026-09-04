@@ -149,3 +149,138 @@ internal fun AndroidComposeTestRule<*, MainActivity>.currentUrlActionsText(): St
             .joinToString(separator = "") { it.text }
     }.getOrDefault("")
 }
+
+/**
+ * ローカル HTTP サーバーで開いたページが期待どおりかを判定する。
+ *
+ * セッション復元の遅延コミットでホームページ (google.com) に上書きされる
+ * flaky 失敗を検出するため、google.com は常に不一致とする。
+ */
+internal fun isExpectedLocalPage(url: String, urlMarker: String): Boolean {
+    if (url.contains("google.com", ignoreCase = true)) return false
+    return url.contains(urlMarker)
+}
+
+/**
+ * ブラウザ画面 (ツールバー) が表示されるまで待機する。
+ */
+internal fun AndroidComposeTestRule<*, MainActivity>.waitForBrowserReady(
+    timeoutMillis: Long = 60_000,
+) {
+    waitUntil(timeoutMillis = timeoutMillis) {
+        onAllNodesWithTag(BrowserToolbarTestTags.Toolbar.testTag)
+            .fetchSemanticsNodes().isNotEmpty()
+    }
+}
+
+/**
+ * 起動直後のセッション復元ナビゲーションが落ち着くまで待機する。
+ *
+ * 復元タブの遅延コミットで URL が変わり続ける間は安定とみなさない。
+ */
+internal fun AndroidComposeTestRule<*, MainActivity>.waitForSessionNavigationSettled(
+    timeoutMillis: Long = 60_000,
+    stablePolls: Int = 8,
+    pollIntervalMillis: Long = 500,
+) {
+    var lastUrl: String? = null
+    var stableCount = 0
+    val deadline = SystemClock.elapsedRealtime() + timeoutMillis
+    while (SystemClock.elapsedRealtime() < deadline) {
+        val current = currentPageUrlFromUi()
+        if (current.isNotEmpty() && current == lastUrl) {
+            stableCount++
+            if (stableCount >= stablePolls) return
+        } else {
+            stableCount = 0
+            lastUrl = current
+        }
+        Thread.sleep(pollIntervalMillis)
+    }
+}
+
+/**
+ * 期待する URL マーカーが一定時間安定するまで待つ (ページの開き直しは行わない)。
+ *
+ * リロード後の検証など、ナビゲーション操作そのものを検証するケースで使う。
+ */
+internal fun AndroidComposeTestRule<*, MainActivity>.waitForStablePageMarker(
+    urlMarker: String,
+    timeoutMillis: Long = 60_000,
+    stablePolls: Int = 8,
+    pollIntervalMillis: Long = 500,
+) {
+    var stableCount = 0
+    val deadline = SystemClock.elapsedRealtime() + timeoutMillis
+    while (SystemClock.elapsedRealtime() < deadline) {
+        if (isExpectedLocalPage(currentPageUrlFromUi(), urlMarker)) {
+            stableCount++
+            if (stableCount >= stablePolls) return
+        } else {
+            stableCount = 0
+        }
+        Thread.sleep(pollIntervalMillis)
+    }
+    throw AssertionError(
+        "waitForStablePageMarker timeout: expected=\"$urlMarker\" current=\"${currentPageUrlFromUi()}\"",
+    )
+}
+
+/**
+ * 期待するローカルページ URL が一定時間安定するまで待つ。
+ *
+ * 復元タブの遅延ナビゲーションで google.com に戻った場合は pageUrl を
+ * 開き直して再試行する。
+ */
+internal fun AndroidComposeTestRule<*, MainActivity>.waitForStableLocalPage(
+    pageUrl: String,
+    urlMarker: String,
+    timeoutMillis: Long = 60_000,
+    stablePolls: Int = 8,
+    pollIntervalMillis: Long = 500,
+) {
+    var stableCount = 0
+    val deadline = SystemClock.elapsedRealtime() + timeoutMillis
+    while (SystemClock.elapsedRealtime() < deadline) {
+        val current = currentPageUrlFromUi()
+        if (isExpectedLocalPage(current, urlMarker)) {
+            stableCount++
+            if (stableCount >= stablePolls) return
+        } else {
+            stableCount = 0
+            openUrlFromUrlBar(pageUrl)
+            waitForIdle()
+        }
+        Thread.sleep(pollIntervalMillis)
+    }
+    throw AssertionError(
+        "waitForStableLocalPage timeout: expected=\"$urlMarker\" current=\"${currentPageUrlFromUi()}\"",
+    )
+}
+
+/**
+ * ローカルページを開き、URL が安定するまで待つ。
+ */
+internal fun AndroidComposeTestRule<*, MainActivity>.openLocalPageAndStabilize(
+    pageUrl: String,
+    urlMarker: String,
+    timeoutMillis: Long = 60_000,
+) {
+    waitForBrowserReady()
+    waitForSessionNavigationSettled()
+    val openedByIntent = runCatching {
+        openUrlViaViewIntent(pageUrl)
+        waitForUrlBarContains(urlMarker, timeoutMillis = 20_000)
+        true
+    }.getOrDefault(false)
+    if (!openedByIntent) {
+        openUrlFromUrlBar(pageUrl)
+        waitForUrlBarContains(urlMarker, timeoutMillis = timeoutMillis)
+    }
+    waitForUrlBarNotFocused()
+    waitForStableLocalPage(
+        pageUrl = pageUrl,
+        urlMarker = urlMarker,
+        timeoutMillis = timeoutMillis,
+    )
+}
