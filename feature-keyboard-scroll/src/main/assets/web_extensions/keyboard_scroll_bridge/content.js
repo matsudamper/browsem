@@ -183,7 +183,9 @@
     const scaleChanged = scale !== lastScale;
     lastScale = scale;
     reportViewport("resize");
-    if (scaleChanged) return;
+    // 倍率が変わったときも、ズームしたままの状態で寸法だけ変わったときも触らない。
+    // どちらもユーザーが決めた表示位置を上書きすることになる。
+    if (scaleChanged || scale > 1) return;
     scheduleScroll();
   });
 
