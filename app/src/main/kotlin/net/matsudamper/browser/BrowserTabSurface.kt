@@ -87,7 +87,9 @@ internal fun BrowserContentHost(
     val imeBottomPx = WindowInsets.ime.getBottom(density)
     val view = LocalView.current
     LaunchedEffect(imeBottomPx, view) {
-        ViewCompat.requestApplyInsets(view)
+        // GeckoView がリスナーを張っているのは decorView の rootView。
+        // ComposeView へ要求してもそこは再実行されない。
+        ViewCompat.requestApplyInsets(view.rootView)
     }
 
     // キーボード分の表示領域は Gecko 内部の onKeyboardHeight に任せる。

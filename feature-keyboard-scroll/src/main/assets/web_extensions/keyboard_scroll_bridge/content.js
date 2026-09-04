@@ -130,10 +130,11 @@
     // 可視範囲より背の高い要素は中央揃えしてもキャレットがキーボードの下に残る。
     const caret = element.isContentEditable ? caretRect() : null;
     if (caret == null) {
-      // textarea や input のキャレット位置は取得できない。要素内のスクロールは
-      // Gecko がキャレットへ追従させるため、下端を可視範囲に入れて任せる。
-      if (elementRect.bottom <= visibleBottom()) return;
-      element.scrollIntoView({ block: "end", inline: "nearest" });
+      // textarea や input のキャレット位置は取得できない。下端を揃えると
+      // キャレットが上端付近にある場合に画面外へ追い出してしまうため、
+      // 可視範囲へ入る最小限だけ動かし、要素内のスクロールは Gecko の
+      // キャレット追従に任せる。
+      element.scrollIntoView({ block: "nearest", inline: "nearest" });
       return;
     }
 
@@ -178,14 +179,21 @@
 
   // ピンチズームでも resize は届く。倍率が変わったときはユーザー操作なので触らない。
   let lastScale = visualViewport.scale;
+  let lastHeight = visualViewport.height;
   visualViewport.addEventListener("resize", function () {
     const scale = visualViewport.scale;
+    const height = visualViewport.height;
     const scaleChanged = scale !== lastScale;
+    const shrank = height < lastHeight;
     lastScale = scale;
+    lastHeight = height;
     reportViewport("resize");
     // 倍率が変わったときも、ズームしたままの状態で寸法だけ変わったときも触らない。
     // どちらもユーザーが決めた表示位置を上書きすることになる。
     if (scaleChanged || scale > 1) return;
+    // 広がる方向の resize はキーボードが閉じたときなので補正しない。
+    // フォーカスが残っていると、閉じた後に元の入力欄へ引き戻してしまう。
+    if (!shrank) return;
     scheduleScroll();
   });
 
