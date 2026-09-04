@@ -453,6 +453,7 @@ internal class BrowserTabScreenState(
         val existingDownloads: List<DuplicateDownloadEntry>,
         internal val onConfirm: () -> Unit,
         internal val onDismiss: () -> Unit = {},
+        internal val onCancel: () -> Unit = {},
     )
 
     data class DuplicateDownloadEntry(
@@ -1043,6 +1044,9 @@ internal class BrowserTabScreenState(
                     onDismiss = {
                         response.body?.close()
                     },
+                    onCancel = {
+                        finishExternalDownloadTabIfNeeded()
+                    },
                 )
                 return@launch
             }
@@ -1098,7 +1102,7 @@ internal class BrowserTabScreenState(
         val state = duplicateDownloadState ?: return
         duplicateDownloadState = null
         state.onDismiss()
-        finishExternalDownloadTabIfNeeded()
+        state.onCancel()
     }
 
     fun dismissDuplicateDownload() {
