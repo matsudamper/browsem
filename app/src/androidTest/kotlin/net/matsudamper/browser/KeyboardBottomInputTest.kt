@@ -106,6 +106,101 @@ class KeyboardBottomInputTest {
     }
 
     /**
+     * キーボード表示中に select のポップアップを開いても閉じないことを検証する。
+     *
+     * キーボード対応でリサイズやスクロールを行うと Gecko がポップアップを閉じる。
+     * Firefox では閉じないため、下部入力欄の対応と引き換えにこれを壊していないかを見る。
+     */
+    @Test
+    fun choicePopupStaysOpenWhileKeyboardShown() {
+        val pageUrl = startPageServer(POPUP_DIR_NAME, POPUP_ASSET_DIR)
+        composeRule.openUrlFromUrlBar(pageUrl)
+        composeRule.waitForUrlBarContains(POPUP_FILE_NAME, timeoutMillis = URL_BAR_WAIT_MILLIS)
+        composeRule.waitForUrlBarNotFocused()
+        assertTrue("URL バーのキーボードが閉じない", waitForImeHidden())
+
+        if (!focusBottomInputAndWaitForIme()) {
+            throw AssertionError(
+                "ページの入力欄をフォーカスしてもキーボードが表示されない: ${TestIme.diagnostics()}",
+            )
+        }
+
+        assertTrue("select のノードをクリックできない", clickPageChoice())
+        assertTrue(
+            "select のポップアップが開かない",
+            waitForChoiceDialog(visible = true),
+        )
+
+        // 開いた直後に閉じられないことを見る。キーボード対応のリサイズや
+        // スクロール補正は遅延して走るため、一定時間開いたままかを確認する。
+        var okCount = 0
+        val deadline = SystemClock.elapsedRealtime() + POPUP_STABLE_WAIT_MILLIS
+        while (SystemClock.elapsedRealtime() < deadline) {
+            if (!isChoiceDialogDisplayed()) {
+                throw AssertionError("キーボード表示中に select のポップアップが閉じた")
+            }
+            okCount++
+            if (okCount >= REQUIRED_STABLE_COUNT) return
+            Thread.sleep(POLL_INTERVAL_MILLIS)
+        }
+        throw AssertionError("select のポップアップの状態を確認できない")
+    }
+
+    /**
+     * ページ内の select をアクセシビリティ操作でクリックする。
+     */
+    private fun clickPageChoice(): Boolean {
+        val uiAutomation = InstrumentationRegistry.getInstrumentation().uiAutomation
+        val root = uiAutomation.rootInActiveWindow ?: return false
+        var clicked = false
+        try {
+            val node = findPageChoice(root)
+            if (node != null) {
+                clicked = node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                node.recycle()
+            }
+        } finally {
+            root.recycle()
+        }
+        composeRule.waitForIdle()
+        return clicked
+    }
+
+    /**
+     * ページ内の select ノードを探す。Gecko は Spinner として公開する。
+     */
+    private fun findPageChoice(node: AccessibilityNodeInfo): AccessibilityNodeInfo? {
+        val className = node.className?.toString().orEmpty()
+        if (className.contains("Spinner", ignoreCase = true)) {
+            @Suppress("DEPRECATION")
+            return AccessibilityNodeInfo.obtain(node)
+        }
+        for (index in 0 until node.childCount) {
+            val child = node.getChild(index) ?: continue
+            val found = findPageChoice(child)
+            child.recycle()
+            if (found != null) return found
+        }
+        return null
+    }
+
+    private fun isChoiceDialogDisplayed(): Boolean {
+        return composeRule
+            .onAllNodesWithTag(BrowserTabDialogLayerTestTags.ChoicePromptDialog.testTag)
+            .fetchSemanticsNodes()
+            .isNotEmpty()
+    }
+
+    private fun waitForChoiceDialog(visible: Boolean): Boolean {
+        return runCatching {
+            composeRule.waitUntil(timeoutMillis = POPUP_WAIT_MILLIS) {
+                isChoiceDialogDisplayed() == visible
+            }
+            true
+        }.getOrDefault(false)
+    }
+
+    /**
      * 入力欄がキーボード上端より上にある状態が続くことを検証する。
      *
      * IME はアニメーションで迫り上がるため、inset が初めて 0 を超えた瞬間に判定すると
@@ -407,11 +502,18 @@ class KeyboardBottomInputTest {
      * ループバック HTTP サーバーから配信してその URL を返す。
      */
     private fun startBottomInputPageServer(): String {
+        return startPageServer(BOTTOM_INPUT_DIR_NAME, BOTTOM_INPUT_ASSET_DIR)
+    }
+
+    /**
+     * assets の HTML をキャッシュへ展開し、ループバック HTTP サーバーから配信する。
+     */
+    private fun startPageServer(dirName: String, assetDir: String): String {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
-        val destinationDir = File(instrumentation.targetContext.cacheDir, BOTTOM_INPUT_DIR_NAME)
+        val destinationDir = File(instrumentation.targetContext.cacheDir, dirName)
             .apply { mkdirs() }
-        val destination = File(destinationDir, BOTTOM_INPUT_FILE_NAME)
-        instrumentation.context.assets.open("$BOTTOM_INPUT_ASSET_DIR/$BOTTOM_INPUT_FILE_NAME")
+        val destination = File(destinationDir, PAGE_FILE_NAME)
+        instrumentation.context.assets.open("$assetDir/$PAGE_FILE_NAME")
             .use { input ->
                 destination.outputStream().use { output ->
                     input.copyTo(output)
@@ -419,13 +521,19 @@ class KeyboardBottomInputTest {
             }
         val server = LocalHttpServer(destinationDir)
         localHttpServer = server
-        return server.url(BOTTOM_INPUT_FILE_NAME)
+        return server.url(PAGE_FILE_NAME)
     }
 
     companion object {
+        private const val PAGE_FILE_NAME = "index.html"
         private const val BOTTOM_INPUT_ASSET_DIR = "test-ime-bottom"
         private const val BOTTOM_INPUT_DIR_NAME = "test-ime-bottom"
-        private const val BOTTOM_INPUT_FILE_NAME = "index.html"
+        private const val BOTTOM_INPUT_FILE_NAME = PAGE_FILE_NAME
+        private const val POPUP_ASSET_DIR = "test-ime-popup"
+        private const val POPUP_DIR_NAME = "test-ime-popup"
+        private const val POPUP_FILE_NAME = PAGE_FILE_NAME
+        private const val POPUP_WAIT_MILLIS = 20_000L
+        private const val POPUP_STABLE_WAIT_MILLIS = 5_000L
 
         private const val URL_BAR_WAIT_MILLIS = 60_000L
         private const val IME_HIDE_WAIT_MILLIS = 10_000L
