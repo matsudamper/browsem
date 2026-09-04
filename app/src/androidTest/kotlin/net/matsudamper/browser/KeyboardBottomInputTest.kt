@@ -93,10 +93,13 @@ class KeyboardBottomInputTest {
             waitForImeHidden(),
         )
 
-        assertTrue(
-            "ページ下部の入力欄をフォーカスしてもキーボードが表示されない: ${TestIme.diagnostics()}",
-            focusBottomInputAndWaitForIme(),
-        )
+        // 診断は失敗が確定してから取る。assertTrue の引数として渡すと再試行の前の
+        // 状態しか残らず、実際に失敗した時点の dumpsys / logcat を確認できない。
+        if (!focusBottomInputAndWaitForIme()) {
+            throw AssertionError(
+                "ページ下部の入力欄をフォーカスしてもキーボードが表示されない: ${TestIme.diagnostics()}",
+            )
+        }
 
         assertVisibleAboveKeyboard()
     }
