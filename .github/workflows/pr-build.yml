@@ -67,12 +67,17 @@ jobs:
           name: ${{ env.APK_NAME }}
           path: ${{ env.APK_PATH }}
 
+      - name: Compress APK for S3 upload
+        run: |
+          xz -0 -c "${APK_PATH}" > "${APK_PATH}.xz"
+          echo "S3_APK_PATH=${APK_PATH}.xz" >> "$GITHUB_ENV"
+
       - name: Upload APK to S3
         id: upload_s3
         uses: matsudamper/actions/upload-matsudamper-s3@a1ecf81b1a0ce320824a49711e456f396e4e8fea # v1.0.0
         continue-on-error: true
         with:
-          file_path: ${{ env.APK_PATH }}
+          file_path: ${{ env.S3_APK_PATH }}
 
       - name: Generate and Upload GitHub QR code
         id: upload_github_qr
@@ -111,10 +116,10 @@ jobs:
           message: |
             ✅ **Debug APK is ready!**
 
-            | Storage | Download Link | QR Code |
-            | :--- | :--- | :--- |
-            | 🐙 GitHub Artifacts | [Download](${{ steps.upload_apk.outputs.artifact-url }}) | [View](${{ steps.github_qr_artifact.outputs.artifact-url }}) |
-            ${{ steps.upload_s3.outputs.url && format('| ☁️ S3 | [Download]({0}) | [View]({1}) |', steps.upload_s3.outputs.url, steps.s3_qr_artifact.outputs.artifact-url) || format('| ☁️ S3 | ⚠️ アップロード失敗 ([run]({0}/{1}/actions/runs/{2})) | - |', github.server_url, github.repository, github.run_id) }}
+            | Storage | 圧縮方式 | Download Link | QR Code |
+            | :--- | :--- | :--- | :--- |
+            | 🐙 GitHub Artifacts | zstd | [Download](${{ steps.upload_apk.outputs.artifact-url }}) | [View](${{ steps.github_qr_artifact.outputs.artifact-url }}) |
+            ${{ steps.upload_s3.outputs.url && format('| ☁️ S3 | xz | [Download]({0}) | [View]({1}) |', steps.upload_s3.outputs.url, steps.s3_qr_artifact.outputs.artifact-url) || format('| ☁️ S3 | - | ⚠️ アップロード失敗 ([run]({0}/{1}/actions/runs/{2})) | - |', github.server_url, github.repository, github.run_id) }}
 
             ---
             *Artifact Name: `${{ env.APK_NAME }}`*

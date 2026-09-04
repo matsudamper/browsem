@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>IME Fixed Input Test</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+        background: #ffffff;
+        color: #000000;
+        font-family: sans-serif;
+      }
+      /*
+        chat 系 UI と同じ構成。入力欄は position: fixed の下部バーに置く。
+        固定配置の要素はスクロールしても動かないため、文書へ余白を足して
+        スクロールさせる方式では原理的に救えない。ビューポート自体が
+        縮む必要があることを検知するためのページ。
+      */
+      .scroller {
+        height: 100%;
+        overflow: auto;
+      }
+      .filler {
+        height: 2000px;
+      }
+      #fixed-input {
+        box-sizing: border-box;
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        height: 60px;
+        font-size: 24px;
+        padding: 8px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="scroller">
+      <h1>IME Fixed Input</h1>
+      <div class="filler"></div>
+    </div>
+    <input type="text" id="fixed-input" name="fixed" placeholder="fixed-input" />
+  </body>
+</html>
