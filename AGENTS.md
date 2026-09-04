@@ -16,14 +16,22 @@ GeckoView ベースの Android ブラウザ。Kotlin / Jetpack Compose / Materia
 変更・削除前に `git log -p` で追加経緯を確認する。
 
 ## テスト
-- 単体: JUnit 4。`./gradlew test`（Paparazziは自動除外）。単体は全件実行可
+- 単体: JUnit 4。`./gradlew test`（Paparazziは自動除外）
 - Instrumentation: Gradle Managed Device のみ（実機・通常エミュレータ禁止）
-- Instrumentation は通常 class 指定で絞る（`-Pandroid.testInstrumentationRunnerArguments.class=...`）。全件はユーザー明示指示時のみ
+- 通常は全件実行せず class 指定で絞る
 - UI操作は Compose セマンティクス API。生のタッチ注入禁止
-- repository等をUIテストから直接いじらない。UI操作で行う
+- `pressBack()` など物理ボタンは `onBackPressedDispatcher.onBackPressed()` を使う
+- repository等をテストから直接いじらない。UI操作で行う
 - コンポーネント特定は `hasTestTag`（テキスト監視以外で `hasText` を使わない）
 - TestTagは直接stringせず既存パターンに合わせる
 - GMD起動失敗時は名前・IDを一時変更して再実行可
+
+## 変更後（必須）
+コード変更後はコミット前に、以下をこの順で逐次実行する。
+1. `./gradlew :app:assembleDebug` でビルド確認
+2. `./gradlew detekt` で lint を確認
+3. `./gradlew test` でユニットテスト通過を確認
+4. UI 変更を含む場合は `@Preview` を追加/更新し、Paparazzi スナップショットを撮影（コミットしない。PR とチャットに貼る）
 
 ## ビルド例
 ```bash
@@ -35,8 +43,9 @@ GeckoView ベースの Android ブラウザ。Kotlin / Jetpack Compose / Materia
 ./gradlew :app:pixel6Api34DebugAndroidTest
 ```
 
-## PRフォロー（Cursor Cloud Agent）
-リモート実行ではPR push後にCI・PR購読。ローカルCLI/IDE拡張はユーザー指示時のみ。
+## Git（browsem）
+- 複数の論理変更を 1 つのコミットにまとめない
+- `git commit --amend` や squash による統合も禁止する（目的にかかわらず）
 
 # 共通ルール
 
@@ -85,8 +94,39 @@ GeckoView ベースの Android ブラウザ。Kotlin / Jetpack Compose / Materia
 - 勝手に Resolve しない（ユーザー指示のみ）
 - PR への一般コメントは避け、説明はコミットメッセージ側
 - ホビー前提: セキュリティ・要件未達以外の細かい指摘は深追いしない。ユーザー本人のコメントは必ず対応
-- コミット後は PR 本文を fetch して必要なら更新（ユーザー手書き部分は保持）
-- Cursor Cloud Agent: PR 提出後は CI / コメントを購読して対応（ローカル CLI / IDE 拡張はユーザー指示時のみ）
+
+## PRの更新
+このルールは AI リモート実行環境では自動的に適用する。ローカル CLI や IDE 拡張ではユーザーから指示があった場合にのみ適用する。
+
+ファイルを編集・コミットした後、現在のブランチに紐づく既存の PR があるかを確認する。PR が存在する場合、以下の手順でタイトルと本文の更新要否を判断する。
+
+1. 現在のブランチの PR を取得し、タイトルと本文を読む
+2. 今回の変更内容（コミット群）と PR の現在のタイトル・本文を比較し、内容が乖離していないか確認する
+3. 更新が必要と判断した場合のみ、以下のルールに従って更新する
+   - ユーザーが手動で編集した部分は保持する。ユーザーが書いたと思われる説明・コメント・チェックリストは変更しない
+   - タイトルは変更の全体像を簡潔に反映する。ユーザーが設定したタイトルと大きく意図が変わらない場合は変更しない
+   - 本文は変更内容に合わせて全体を更新してよいが、ユーザーが追記した内容は尊重して保持する
+4. 更新不要と判断した場合はスキップし、更新した場合はユーザーに変更内容を報告する
+
+## PR作成後のフォロー（Cursor Cloud Agent）
+このルールは Cursor Cloud Agent（AIリモート実行環境）でのみ自動的に適用する。ローカル CLI や IDE 拡張ではユーザーから指示があった場合にのみ適用する。
+
+PR を作成または更新して push した後、レビューと CI の結果を待ち、必要に応じて修正する。
+
+### 購読
+1. `cursor-subscriptions-list_subscriptions` で既存の購読を確認する。同一 PR・ブランチへの購読がなければ新規作成する
+2. `cursor-subscriptions-subscribe_github_ci` で push したブランチの CI 完了を購読する
+3. `cursor-subscriptions-subscribe_github_pr`（scope: `pr`）で PR のレビュー・コメントを購読する
+4. 購読後はターンを終了し、通知を待つ
+
+### 通知で再開したら
+- CI 失敗: 失敗したチェックを調査し修正して push する
+- レビューコメント: 内容を確認し対応する。対応内容はコミットメッセージに書く（GitHub への返信はレビューコメントへの返信のみ）
+- Bugbot や Agentic Security Review の指摘: レビューコメントと同様に対応する
+- 修正を push したら購読は維持する（期限切れの場合は再購読する）
+
+### 購読の解除
+PR がマージまたはクローズされたら `cursor-subscriptions-unsubscribe` で購読を解除する。
 
 ## ビルド・検証（方針）
 - ビルド / format / lint / test 等のタスクは並列実行しない。逐次実行する
@@ -98,4 +138,3 @@ GeckoView ベースの Android ブラウザ。Kotlin / Jetpack Compose / Materia
 ## 実装方針
 - 指示されていない箇所の差分は最小にする
 - 実装方針を変えるなら先に確認を取る
-
