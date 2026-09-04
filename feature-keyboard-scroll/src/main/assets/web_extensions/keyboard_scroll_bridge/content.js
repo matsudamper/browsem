@@ -158,9 +158,43 @@
     // 親フレームまで伝播するので、残差の補正はトップフレームだけで行う。
     if (!isTopFrame) return;
 
+    // 残差はキーボード境界まで詰める。html/body が overflow: hidden の
+    // 固定モーダル内などでは window.scrollBy が効かないため、
+    // スクロールできる祖先を優先して動かす。
     const rect = targetRect(element);
     if (rect.bottom <= visibleBottom() && rect.top >= visibleTop()) return;
-    window.scrollBy(0, rect.bottom - visibleBottom());
+    scrollByFromNearestScrollable(element, rect.bottom - visibleBottom());
+  }
+
+  /**
+   * 縦方向にスクロールできる直近の祖先を返す。無ければ null。
+   */
+  function scrollableAncestor(element) {
+    let node = element.parentElement;
+    while (node) {
+      const overflowY = window.getComputedStyle(node).overflowY;
+      const scrollable = overflowY === "auto" || overflowY === "scroll";
+      if (scrollable && node.scrollHeight > node.clientHeight) return node;
+      node = node.parentElement;
+    }
+    return null;
+  }
+
+  /**
+   * 残差分だけスクロールする。祖先が動かせるならそちらを優先する。
+   */
+  function scrollByFromNearestScrollable(element, delta) {
+    if (delta === 0) return;
+    const ancestor = scrollableAncestor(element);
+    if (ancestor == null) {
+      window.scrollBy(0, delta);
+      return;
+    }
+    const before = ancestor.scrollTop;
+    ancestor.scrollTop = before + delta;
+    const moved = ancestor.scrollTop - before;
+    // 祖先が上限に達していたら残りをページ側で詰める。
+    if (moved !== delta) window.scrollBy(0, delta - moved);
   }
 
   function scheduleScroll() {

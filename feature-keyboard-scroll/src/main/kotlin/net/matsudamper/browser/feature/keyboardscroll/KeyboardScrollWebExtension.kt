@@ -55,7 +55,9 @@ class KeyboardScrollWebExtension {
     fun unregisterSession(session: GeckoSession) {
         postKeyboardHeight(session, 0)
         sessions.remove(session)
-        ports.remove(session)
+        // ポートは捨てない。content script は connectNative を一度しか呼ばないため、
+        // ここで参照を消すとタブへ戻ったときに高さを届けられなくなる。
+        // ポートは document が破棄されるときの onDisconnect で外れる。
     }
 
     /**
@@ -87,7 +89,9 @@ class KeyboardScrollWebExtension {
                             override fun onPortMessage(message: Any, port: WebExtension.Port) = Unit
 
                             override fun onDisconnect(port: WebExtension.Port) {
-                                ports[session]?.remove(port)
+                                val remaining = ports[session] ?: return
+                                remaining.remove(port)
+                                if (remaining.isEmpty()) ports.remove(session)
                             }
                         },
                     )
