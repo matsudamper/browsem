@@ -1075,7 +1075,7 @@ private fun MainBrowserContent(
                             .map { browserTabController.tabs.toList() }
                             .distinctUntilChanged()
                     }
-                    val browserScreenViewModel = remember(key.tabId, tabGroupRepository, browserTabsFlow) {
+                    val browserScreenViewModel = remember(key.tabId, tabGroupRepository, browserTabsFlow, viewModel) {
                         BrowserScreenViewModel(
                             historyRepository = historyRepository,
                             settingsRepository = settingsRepository,
@@ -1083,6 +1083,7 @@ private fun MainBrowserContent(
                             tabGroupRepository = tabGroupRepository,
                             browserTabsFlow = browserTabsFlow,
                             screenTabId = key.tabId,
+                            isExternalDownloadTab = viewModel.isExternalTab(key.tabId),
                         )
                     }
                     DisposableEffect(key.tabId) {
@@ -1104,6 +1105,15 @@ private fun MainBrowserContent(
                                         ?: fallbackTabId
                                     if (targetTabId != null) {
                                         selectTab(targetTabId, null)
+                                    }
+                                }
+
+                                override fun onExternalDownloadDialogResolved(tabId: String) {
+                                    scope.launch {
+                                        val targetTabId = viewModel.finishExternalDownloadTab(tabId)
+                                        if (targetTabId != null) {
+                                            selectTab(targetTabId, null)
+                                        }
                                     }
                                 }
                             })
@@ -1202,18 +1212,7 @@ private fun MainBrowserContent(
                                         selectTab(targetTabId, null)
                                     }
                                 },
-                                onExternalDownloadDialogResolved = if (viewModel.isExternalTab(key.tabId)) {
-                                    {
-                                        scope.launch {
-                                            val targetTabId = viewModel.finishExternalDownloadTab(key.tabId)
-                                            if (targetTabId != null) {
-                                                selectTab(targetTabId, null)
-                                            }
-                                        }
-                                    }
-                                } else {
-                                    null
-                                },
+                                externalDownloadDialogListener = browserScreenUiState.externalDownloadDialogListener,
                                 onHistoryRecord = browserScreenUiState.callbacks::onHistoryRecord,
                                 onHistoryTitleUpdate = browserScreenUiState.callbacks::onHistoryTitleUpdate,
                                 urlBarSuggestions = browserScreenUiState.urlBarSuggestions,
