@@ -160,11 +160,9 @@ class KeyboardBottomInputTest {
         var okCount = 0
         val deadline = SystemClock.elapsedRealtime() + POPUP_STABLE_WAIT_MILLIS
         while (SystemClock.elapsedRealtime() < deadline) {
-            // キーボードが閉じていると「表示中に閉じない」という前提が失われ、
-            // リサイズ由来の回帰を検出できないまま成功してしまう。
-            if (imeInsetBottom() <= 0) {
-                throw AssertionError("select を開いた後にキーボードが閉じた")
-            }
+            // キーボードが閉じること自体は正常。select はテキスト入力ではないため
+            // フォーカスが移ってキーボードは閉じる。検出したいのは、その閉じる
+            // ときのリサイズでポップアップまで閉じてしまう回帰。
             if (!isChoiceDialogDisplayed()) {
                 throw AssertionError("キーボード表示中に select のポップアップが閉じた")
             }
