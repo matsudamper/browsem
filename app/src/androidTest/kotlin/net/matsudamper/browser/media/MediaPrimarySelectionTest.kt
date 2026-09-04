@@ -49,7 +49,6 @@ class MediaPrimarySelectionTest {
     val timeoutRule: Timeout = Timeout.millis(TEST_TIMEOUT_MS)
 
     private var localHttpServer: LocalHttpServer? = null
-    private var autoplayDialogDismissCount = 0
 
     @Before
     fun setUp() {
@@ -120,12 +119,6 @@ class MediaPrimarySelectionTest {
         }
         composeRule.waitForUrlBarNotFocused(timeoutMillis = 30_000)
         waitForPageLoadComplete()
-        composeRule.waitForIdle()
-        composeRule.waitUntil(timeoutMillis = GECKO_CONTAINER_READY_TIMEOUT_MS) {
-            composeRule.onAllNodesWithTag(GeckoBrowserTabTestTags.GeckoContainer.testTag)
-                .fetchSemanticsNodes(atLeastOneRootRequired = false)
-                .isNotEmpty()
-        }
     }
 
     /**
@@ -200,8 +193,7 @@ class MediaPrimarySelectionTest {
             return
         }
         throw AssertionError(
-            "タップ後も再生が開始されない state=${MediaSessionBridge.playbackState.value} " +
-                "(自動再生ダイアログ却下回数=$autoplayDialogDismissCount)",
+            "タップ後も再生が開始されない state=${MediaSessionBridge.playbackState.value}",
         )
     }
 
@@ -213,7 +205,6 @@ class MediaPrimarySelectionTest {
         repeat(PLAYBACK_TAP_RETRY_COUNT) { index ->
             dismissAutoplayPermissionDialogIfShown()
             Log.d(TAG, "タップ試行${index + 1}/$PLAYBACK_TAP_RETRY_COUNT")
-            composeRule.waitForIdle()
             runCatching {
                 composeRule.onNodeWithTag(GeckoBrowserTabTestTags.GeckoContainer.testTag)
                     .performTouchInput { click() }
@@ -240,7 +231,6 @@ class MediaPrimarySelectionTest {
             .fetchSemanticsNodes(atLeastOneRootRequired = false)
         if (denyNode.isEmpty()) return
         Log.d(TAG, "自動再生の確認ダイアログを却下で閉じる")
-        autoplayDialogDismissCount += 1
         runCatching {
             composeRule.onNodeWithTag(AutoplayPermissionDialogTestTags.Deny.testTag).performClick()
             composeRule.waitForIdle()
@@ -277,11 +267,10 @@ class MediaPrimarySelectionTest {
     companion object {
         private const val TAG = "MediaPrimarySelectionTest"
         private const val TEST_TIMEOUT_MS = 180_000L
-        private const val AUTOSTART_GRACE_PERIOD_MS = 3_000L
+        private const val AUTOSTART_GRACE_PERIOD_MS = 2_000L
         private const val PLAYBACK_TAP_RETRY_COUNT = 10
-        private const val PLAYBACK_START_CONFIRM_TIMEOUT_MS = 4_000L
+        private const val PLAYBACK_START_CONFIRM_TIMEOUT_MS = 2_500L
         private const val PAGE_LOAD_COMPLETE_TIMEOUT_MS = 60_000L
-        private const val GECKO_CONTAINER_READY_TIMEOUT_MS = 30_000L
         private const val PAGE_STOP_CONTENT_DESCRIPTION = "読み込みを停止"
         private const val FIRST_TRACK_TIMEOUT_MS = 20_000L
         private const val TRACK_SWITCH_TIMEOUT_MS = 20_000L
