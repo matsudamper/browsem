@@ -31,6 +31,7 @@ class WebAppScreenViewModel(
         BrowserScreenUiState(
             urlBarSuggestions = UrlBarSuggestionsUiState(),
             groupTabCount = null,
+            externalDownloadDialogListener = null,
             callbacks = callbacks,
         ),
     ).also { uiStateFlow ->
@@ -40,6 +41,7 @@ class WebAppScreenViewModel(
                     BrowserScreenUiState(
                         urlBarSuggestions = suggestions,
                         groupTabCount = null,
+                        externalDownloadDialogListener = null,
                         callbacks = callbacks,
                     )
                 }
