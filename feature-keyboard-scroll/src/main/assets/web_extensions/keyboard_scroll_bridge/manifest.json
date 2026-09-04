@@ -15,6 +15,7 @@
       "exclude_matches": [
         "about:*"
       ],
+      "all_frames": true,
       "js": [
         "content.js"
       ],
