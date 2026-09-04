@@ -46,7 +46,6 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -97,6 +96,7 @@ import net.matsudamper.browser.feature.websharefiles.WebShareFilesWebExtension
 import net.matsudamper.browser.translate.TranslationPriorityLanguage
 import net.matsudamper.browser.ui.browser.BrowserScreenUiState
 import net.matsudamper.browser.ui.browser.UrlBarSuggestionsUiState
+import net.matsudamper.browser.ui.common.StatusBarAppearanceEffect
 import net.matsudamper.browser.ui.common.findActivity
 import net.matsudamper.browser.ui.common.resolveBrowserToolbarColors
 import org.json.JSONObject
@@ -207,14 +207,10 @@ internal fun GeckoBrowserTab(
         toolbarColor = state.toolbarColor,
         defaultToolbarColor = MaterialTheme.colorScheme.primaryContainer,
     )
-    val view = LocalView.current
-    if (!view.isInEditMode && !state.isFullScreen) {
-        SideEffect {
-            val window = view.findActivity()?.window ?: return@SideEffect
-            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars =
-                toolbarColors.isBrightBackground
-        }
+    if (!state.isFullScreen) {
+        StatusBarAppearanceEffect(toolbarColors.resolvedToolbarColor)
     }
+    val view = LocalView.current
 
     // フルスクリーン時にシステムバーを非表示にする
     if (!view.isInEditMode) {

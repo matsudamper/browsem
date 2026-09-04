@@ -14,6 +14,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -25,7 +26,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import net.matsudamper.browser.ui.common.ThemeSurfaceStatusBarAppearanceEffect
+import net.matsudamper.browser.ui.common.StatusBarAppearanceEffect
 import net.matsudamper.browser.resources.R as ResourcesR
 import net.matsudamper.browser.ui.settings.SettingSection
 
@@ -49,7 +50,7 @@ fun AddressEditScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    ThemeSurfaceStatusBarAppearanceEffect()
+    StatusBarAppearanceEffect(MaterialTheme.colorScheme.surface)
     Scaffold(
         modifier = modifier.testTag(AddressEditScreenTestTags.Root.testTag),
         topBar = {

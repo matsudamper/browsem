@@ -1,15 +1,15 @@
 package net.matsudamper.browser.ui.common
 
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
 @Composable
-fun ThemeSurfaceStatusBarAppearanceEffect() {
-    val isBrightBackground = MaterialTheme.colorScheme.surface.luminance() >= 0.5f
+fun StatusBarAppearanceEffect(backgroundColor: Color) {
+    val isBrightBackground = backgroundColor.luminance() >= 0.5f
     val view = LocalView.current
     if (!view.isInEditMode) {
         SideEffect {

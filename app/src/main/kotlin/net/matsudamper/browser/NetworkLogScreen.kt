@@ -61,7 +61,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import net.matsudamper.browser.data.ThemeMode
 import net.matsudamper.browser.resources.R as ResourcesR
 import net.matsudamper.browser.ui.common.BrowserTheme
-import net.matsudamper.browser.ui.common.ThemeSurfaceStatusBarAppearanceEffect
+import net.matsudamper.browser.ui.common.StatusBarAppearanceEffect
 
 /**
  * ネットワークログを全画面ダイアログで表示する。
@@ -81,7 +81,7 @@ internal fun NetworkLogDialog(uiState: NetworkLogUiState) {
         properties = DialogProperties(usePlatformDefaultWidth = false),
     ) {
         Surface(modifier = Modifier.fillMaxSize()) {
-            ThemeSurfaceStatusBarAppearanceEffect()
+            StatusBarAppearanceEffect(MaterialTheme.colorScheme.surface)
             NetworkLogScreen(uiState = uiState)
         }
     }

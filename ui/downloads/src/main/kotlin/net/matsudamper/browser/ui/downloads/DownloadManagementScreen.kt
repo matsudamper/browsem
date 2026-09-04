@@ -59,7 +59,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import net.matsudamper.browser.ui.common.ThemeSurfaceStatusBarAppearanceEffect
+import net.matsudamper.browser.ui.common.StatusBarAppearanceEffect
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -77,7 +77,7 @@ fun DownloadManagementScreen(
     onHighlightComplete: (UUID) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    ThemeSurfaceStatusBarAppearanceEffect()
+    StatusBarAppearanceEffect(MaterialTheme.colorScheme.surface)
     val listState = rememberLazyListState()
     val currentOnHighlightComplete by rememberUpdatedState(onHighlightComplete)
     Scaffold(

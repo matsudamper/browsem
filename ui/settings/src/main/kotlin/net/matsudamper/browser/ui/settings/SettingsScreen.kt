@@ -54,7 +54,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import net.matsudamper.browser.ui.common.ThemeSurfaceStatusBarAppearanceEffect
+import net.matsudamper.browser.ui.common.StatusBarAppearanceEffect
 import net.matsudamper.browser.data.HomepageType
 import net.matsudamper.browser.data.SearchProvider
 import net.matsudamper.browser.data.ThemeMode
@@ -82,7 +82,7 @@ fun SettingsScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    ThemeSurfaceStatusBarAppearanceEffect()
+    StatusBarAppearanceEffect(MaterialTheme.colorScheme.surface)
     val focusManager = LocalFocusManager.current
     val softwareKeyboardController = LocalSoftwareKeyboardController.current
     LaunchedEffect(Unit) {
