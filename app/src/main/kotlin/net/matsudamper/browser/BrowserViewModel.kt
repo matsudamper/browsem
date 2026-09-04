@@ -96,6 +96,9 @@ internal class BrowserViewModel(
 
     interface Event {
         fun onTabsRestored(tabId: String)
+
+        /** 外部ダウンロードタブの確認ダイアログで確定/キャンセルされた */
+        fun onExternalDownloadDialogResolved(tabId: String)
     }
 
     private val viewModelStateFlow = MutableStateFlow(ViewModelState())
@@ -237,7 +240,10 @@ internal class BrowserViewModel(
 
     // 外部タブを開く直前に選択されていたタブ ID を記憶するマップ
     private val externalTabPreviousTabs = mutableMapOf<String, String?>()
+    private val externalTabIdsFlow = MutableStateFlow<Set<String>>(emptySet())
     private val externalTabCleanupMutex = Mutex()
+
+    val externalTabIds: StateFlow<Set<String>> = externalTabIdsFlow.asStateFlow()
 
     /**
      * 外部タブ登録時に呼ぶ。呼び出し時点の selectedTabId（= 外部タブ開封前のタブ）を記録する。
@@ -245,10 +251,7 @@ internal class BrowserViewModel(
      */
     fun registerExternalTab(tabId: String) {
         externalTabPreviousTabs[tabId] = browserTabController.selectedTabId
-    }
-
-    fun isExternalTab(tabId: String): Boolean {
-        return externalTabPreviousTabs.containsKey(tabId)
+        externalTabIdsFlow.update { it + tabId }
     }
 
     /**
@@ -276,6 +279,7 @@ internal class BrowserViewModel(
             ).tabId
         }
         externalTabPreviousTabs.remove(tabId)
+        externalTabIdsFlow.update { it - tabId }
         browserTabController.closeTabWithUndo(tabId, nextSelectedTabId = targetTabId)
         browserTabController.confirmClosedTab()
         return targetTabId
@@ -318,6 +322,7 @@ internal class BrowserViewModel(
         externalTabCleanupMutex.withLock {
             val cleanup = snapshotSelectedExternalTabFinishCleanup() ?: return
             externalTabPreviousTabs.remove(cleanup.tabId)
+            externalTabIdsFlow.update { it - cleanup.tabId }
             browserTabController.awaitPersistenceIdle()
             withContext(Dispatchers.IO) {
                 tabRepository.closeTab(cleanup.tabId, cleanup.nextSelectedTabId)
