@@ -225,9 +225,18 @@ internal fun BrowserContentHost(
                 swipeRefreshLayout.isEnabled = !state.isFullScreen
                 swipeRefreshLayout.isRefreshing = state.isRefreshing
                 // SwipeRefreshLayout は子を padding 分だけ縮めて measure/layout する。
+                // 横向きの全画面 IME やマルチウィンドウでは、ウィンドウ基準の
+                // キーボード高がツールバーを除いたこのコンテナの高さを超えることがある。
+                // そのまま padding にすると子の高さが負になるため、コンテナ高で抑える。
+                val containerHeight = swipeRefreshLayout.height
+                val paddingBottom = if (containerHeight > 0) {
+                    keyboardHeightPx.coerceAtMost(containerHeight)
+                } else {
+                    keyboardHeightPx
+                }
                 // 再生中の surface リサイズを増やさないよう、値が変わるときだけ更新する。
-                if (swipeRefreshLayout.paddingBottom != keyboardHeightPx) {
-                    swipeRefreshLayout.setPadding(0, 0, 0, keyboardHeightPx)
+                if (swipeRefreshLayout.paddingBottom != paddingBottom) {
+                    swipeRefreshLayout.setPadding(0, 0, 0, paddingBottom)
                 }
                 val geckoView = swipeRefreshLayout.findViewById<GeckoView>(id)
                 if (!state.isUrlInputFocused && !state.showFindInPage && !geckoView.isFocused) {
