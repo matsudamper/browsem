@@ -83,12 +83,7 @@ internal fun BrowserContentHost(
     val density = LocalDensity.current
     val imeBottomPx = WindowInsets.ime.getBottom(density)
     val navigationBottomPx = WindowInsets.navigationBars.getBottom(density)
-    // 一時: 再現テストのネガティブコントロール。縮小を無効にしてもテストが通るなら、
-    // テストが症状を捉えていないことになる。確認後に revert する。
-    val disableShrinkForNegativeControl = true
-    val keyboardHeightPx = if (disableShrinkForNegativeControl) {
-        0
-    } else if (state.isFullScreen) {
+    val keyboardHeightPx = if (state.isFullScreen) {
         // フルスクリーンでは親がナビバー余白を確保しないため、IME inset をそのまま使う。
         // 差し引くと GeckoView の下端がキーボード上端よりナビバー分だけ下に残る。
         imeBottomPx
