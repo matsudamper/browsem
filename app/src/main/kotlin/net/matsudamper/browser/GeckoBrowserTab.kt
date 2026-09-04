@@ -734,9 +734,13 @@ internal fun GeckoBrowserTab(
         }
     }
 
-    // ネイティブ側とのやり取りが無いため、ここで参照してインストールを走らせる。
-    // 起動時に生成すると GeckoRuntime の生成が早すぎてプロセスが落ちる。
-    koinInject<KeyboardScrollWebExtension>()
+    val keyboardScrollWebExtension: KeyboardScrollWebExtension = koinInject()
+    DisposableEffect(session, keyboardScrollWebExtension) {
+        keyboardScrollWebExtension.registerSession(session)
+        onDispose {
+            keyboardScrollWebExtension.unregisterSession(session)
+        }
+    }
 
     val viewportScaleWebExtension: ViewportScaleWebExtension = koinInject()
     DisposableEffect(session, state, viewportScaleWebExtension) {

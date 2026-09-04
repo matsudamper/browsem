@@ -23,6 +23,8 @@
     }
   ],
   "permissions": [
-    "geckoViewAddons"
+    "geckoViewAddons",
+    "nativeMessaging",
+    "nativeMessagingFromContent"
   ]
 }

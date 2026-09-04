@@ -1,6 +1,7 @@
 package net.matsudamper.browser
 
 import android.graphics.Rect
+import android.os.ParcelFileDescriptor
 import android.os.SystemClock
 import android.view.View
 import android.view.ViewGroup
@@ -142,6 +143,7 @@ class KeyboardBottomInputTest {
         throw AssertionError(
             "キーボード表示中にページ下部の入力欄がキーボードに隠れている: $lastDiagnostics\n" +
                 "GeckoView: ${geckoViewBoundsInScreen()}\n" +
+                "visualViewport:\n${viewportDiagnostics()}\n" +
                 "編集可能ノード一覧:\n${dumpEditableNodes()}",
         )
     }
@@ -256,6 +258,25 @@ class KeyboardBottomInputTest {
             bottom = insets?.getInsets(WindowInsets.Type.ime())?.bottom ?: 0
         }
         return bottom
+    }
+
+    /**
+     * 拡張が送った visual viewport の実測値をログから抜き出す。
+     *
+     * キーボード高さが Gecko へ届いて visual viewport が縮んでいるかを確認する。
+     */
+    private fun viewportDiagnostics(): String {
+        val pfd = InstrumentationRegistry.getInstrumentation().uiAutomation
+            .executeShellCommand("logcat -d -s KeyboardScrollExt:V")
+        val log = ParcelFileDescriptor.AutoCloseInputStream(pfd).use {
+            it.readBytes().decodeToString()
+        }
+        return log.lineSequence()
+            .filter { it.contains("viewport") }
+            .toList()
+            .takeLast(VIEWPORT_LOG_MAX_LINES)
+            .joinToString(separator = "\n")
+            .ifEmpty { "拡張からのログ無し" }
     }
 
     /**
@@ -422,5 +443,6 @@ class KeyboardBottomInputTest {
 
         /** IME アニメーション途中のフレームで判定しないよう、連続で満たすことを求める回数 */
         private const val REQUIRED_STABLE_COUNT = 5
+        private const val VIEWPORT_LOG_MAX_LINES = 12
     }
 }

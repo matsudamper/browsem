@@ -114,6 +114,26 @@
     window.scrollBy(0, movedCaret.top - centeredTop);
   }
 
+  /**
+   * visual viewport の実測値をネイティブへ送る。
+   *
+   * キーボード高さが Gecko に届いているか (visual viewport が縮んでいるか) を
+   * CI のログから確認するための診断。
+   */
+  function reportViewport(reason) {
+    if (!isTopFrame) return;
+    browser.runtime
+      .sendNativeMessage("keyboardScrollBridge", {
+        reason: reason,
+        layoutHeight: document.documentElement.clientHeight,
+        visualHeight: visualViewport.height,
+        visualOffsetTop: visualViewport.offsetTop,
+        scrollY: window.scrollY,
+        scrollMaxY: document.documentElement.scrollHeight - document.documentElement.clientHeight,
+      })
+      .catch(function () {});
+  }
+
   let settleTimer = 0;
   function scheduleScroll() {
     clearTimeout(settleTimer);
@@ -126,6 +146,7 @@
     const scale = visualViewport.scale;
     const scaleChanged = scale !== lastScale;
     lastScale = scale;
+    reportViewport("resize");
     if (scaleChanged) return;
     scheduleScroll();
   });
@@ -136,6 +157,7 @@
   document.addEventListener(
     "focusin",
     function () {
+      reportViewport("focusin");
       if (!isKeyboardVisible()) return;
       scheduleScroll();
     },
