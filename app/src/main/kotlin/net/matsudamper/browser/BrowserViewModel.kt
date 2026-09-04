@@ -259,16 +259,26 @@ internal class BrowserViewModel(
         if (!externalTabPreviousTabs.containsKey(tabId)) {
             return null
         }
-        externalTabPreviousTabs.remove(tabId)
         val defaultGroupId = tabGroupRepository.getDefaultGroupId()?.value
-        val targetTabId = ExternalDownloadTabNavigationPolicy.resolveTargetTabAfterClosingExternalDownload(
+        var targetTabId = ExternalDownloadTabNavigationPolicy.resolveTargetTabAfterClosingExternalDownload(
             state = browserTabController.tabStoreState.value,
             defaultGroupId = defaultGroupId,
             excludingTabId = tabId,
         )
+        if (targetTabId == null) {
+            val newTabId = UUID.randomUUID().toString()
+            tabGroupRepository.getDefaultGroupId()?.let { groupId ->
+                tabGroupRepository.assignTabToGroup(newTabId, groupId)
+            }
+            targetTabId = createTabWithHomepage(
+                tabId = newTabId,
+                insertAfterSelectedTab = false,
+            ).tabId
+        }
+        externalTabPreviousTabs.remove(tabId)
         browserTabController.closeTabWithUndo(tabId, nextSelectedTabId = targetTabId)
         browserTabController.confirmClosedTab()
-        return targetTabId ?: browserTabController.selectedTabId
+        return targetTabId
     }
 
     /**
