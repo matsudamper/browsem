@@ -113,6 +113,7 @@ class BrowserScreenViewModelTest {
             browserTabsFlow = browserTabsFlow,
             screenTabId = screenTabId,
             externalTabIdsFlow = MutableStateFlow(emptySet()),
+            externalTabInitialUrlsFlow = MutableStateFlow(emptyMap()),
         )
     }
 

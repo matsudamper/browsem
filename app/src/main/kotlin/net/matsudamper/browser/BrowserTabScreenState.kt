@@ -80,6 +80,7 @@ internal fun rememberBrowserTabScreenState(
     onRequestDownloadNotificationPermission: suspend () -> Unit = {},
     onRequestAndroidPermissions: suspend (Array<String>) -> Array<String> = { emptyArray() },
     externalDownloadDialogListener: BrowserScreenUiState.ExternalDownloadDialogListener? = null,
+    externalTabInitialUrl: String? = null,
 ): BrowserTabScreenState {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -110,6 +111,7 @@ internal fun rememberBrowserTabScreenState(
             onRequestDownloadNotificationPermission = onRequestDownloadNotificationPermission,
             onRequestAndroidPermissions = onRequestAndroidPermissions,
             externalDownloadDialogListener = externalDownloadDialogListener,
+            externalTabInitialUrl = externalTabInitialUrl,
         )
     }
     state.homepageUrl = homepageUrl
@@ -140,6 +142,7 @@ internal class BrowserTabScreenState(
     private val onRequestDownloadNotificationPermission: suspend () -> Unit = {},
     private val onRequestAndroidPermissions: suspend (Array<String>) -> Array<String> = { emptyArray() },
     private val externalDownloadDialogListener: BrowserScreenUiState.ExternalDownloadDialogListener? = null,
+    private val externalTabInitialUrl: String? = null,
     var onHistoryRecord: (suspend (url: String, title: String) -> Long)? = null,
     var onHistoryTitleUpdate: (suspend (id: Long, title: String) -> Unit)? = null,
 ) : BrowserSessionStateCallbacks {
@@ -1038,14 +1041,14 @@ internal class BrowserTabScreenState(
                     },
                     onConfirm = {
                         proceedDownloadFromResponse(response, referrerUrl) {
-                            finishExternalDownloadTabIfNeeded()
+                            finishExternalDownloadTabIfNeeded(response.uri)
                         }
                     },
                     onDismiss = {
                         response.body?.close()
                     },
                     onCancel = {
-                        finishExternalDownloadTabIfNeeded()
+                        finishExternalDownloadTabIfNeeded(response.uri)
                     },
                 )
                 return@launch
@@ -1058,14 +1061,15 @@ internal class BrowserTabScreenState(
         val response = pendingDownloadResponse ?: return
         pendingDownloadResponse = null
         proceedDownloadFromResponse(response, currentPageUrl) {
-            finishExternalDownloadTabIfNeeded()
+            finishExternalDownloadTabIfNeeded(response.uri)
         }
     }
 
     fun cancelPendingDownload() {
+        val response = pendingDownloadResponse
         pendingDownloadResponse?.body?.close()
         pendingDownloadResponse = null
-        finishExternalDownloadTabIfNeeded()
+        response?.let { finishExternalDownloadTabIfNeeded(it.uri) }
     }
 
     fun dismissPendingDownload() {
@@ -1073,7 +1077,9 @@ internal class BrowserTabScreenState(
         pendingDownloadResponse = null
     }
 
-    private fun finishExternalDownloadTabIfNeeded() {
+    private fun finishExternalDownloadTabIfNeeded(responseUri: String) {
+        val initialUrl = externalTabInitialUrl ?: return
+        if (!matchesExternalDownloadInitialUrl(initialUrl, responseUri)) return
         externalDownloadDialogListener?.onResolved()
     }
 

@@ -171,7 +171,7 @@ internal fun BrowserApp(
                         initialReferrerUrl = request.referrerUrl,
                         insertAfterSelectedTab = false,
                     )
-                    viewModel.registerExternalTab(newTab.tabId)
+                    viewModel.registerExternalTab(newTab.tabId, request.url)
                     selectTabRequester.request(newTab.tabId)
                 },
                 onNavigateToUrl = { url ->
@@ -1090,6 +1090,7 @@ private fun MainBrowserContent(
                             browserTabsFlow = browserTabsFlow,
                             screenTabId = key.tabId,
                             externalTabIdsFlow = viewModel.externalTabIds,
+                            externalTabInitialUrlsFlow = viewModel.externalTabInitialUrls,
                         )
                     }
                     DisposableEffect(key.tabId) {
@@ -1214,6 +1215,7 @@ private fun MainBrowserContent(
                                     }
                                 },
                                 externalDownloadDialogListener = browserScreenUiState.externalDownloadDialogListener,
+                                externalTabInitialUrl = browserScreenUiState.externalTabInitialUrl,
                                 onHistoryRecord = browserScreenUiState.callbacks::onHistoryRecord,
                                 onHistoryTitleUpdate = browserScreenUiState.callbacks::onHistoryTitleUpdate,
                                 urlBarSuggestions = browserScreenUiState.urlBarSuggestions,

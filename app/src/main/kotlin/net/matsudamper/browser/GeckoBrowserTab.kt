@@ -139,6 +139,7 @@ internal fun GeckoBrowserTab(
     onOpenInBrowser: ((String) -> Unit)? = null,
     onCloseTab: (() -> Unit)? = null,
     externalDownloadDialogListener: BrowserScreenUiState.ExternalDownloadDialogListener? = null,
+    externalTabInitialUrl: String? = null,
     onToolbarHorizontalDrag: (Float) -> Unit = {},
     onToolbarDragEnd: () -> Unit = {},
     onHistoryRecord: (suspend (url: String, title: String) -> Long)? = null,
@@ -182,6 +183,7 @@ internal fun GeckoBrowserTab(
         onHistoryTitleUpdate = onHistoryTitleUpdate,
         onRequestDownloadNotificationPermission = onRequestDownloadNotificationPermission,
         externalDownloadDialogListener = externalDownloadDialogListener,
+        externalTabInitialUrl = externalTabInitialUrl,
         onRequestAndroidPermissions = { permissions ->
             val alreadyGranted = permissions.filter {
                 ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED

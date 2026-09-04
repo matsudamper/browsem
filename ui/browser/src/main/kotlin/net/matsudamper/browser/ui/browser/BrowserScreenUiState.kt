@@ -9,6 +9,7 @@ data class BrowserScreenUiState(
     val swipePreview: SwipePreviewUiState = SwipePreviewUiState(),
     val groupTabCount: Int?,
     val externalDownloadDialogListener: ExternalDownloadDialogListener?,
+    val externalTabInitialUrl: String?,
     val callbacks: Callbacks,
 ) {
     @Stable

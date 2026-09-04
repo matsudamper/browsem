@@ -240,18 +240,23 @@ internal class BrowserViewModel(
 
     // 外部タブを開く直前に選択されていたタブ ID を記憶するマップ
     private val externalTabPreviousTabs = mutableMapOf<String, String?>()
+    private val externalTabInitialUrlByTabId = mutableMapOf<String, String>()
     private val externalTabIdsFlow = MutableStateFlow<Set<String>>(emptySet())
+    private val externalTabInitialUrlsFlow = MutableStateFlow<Map<String, String>>(emptyMap())
     private val externalTabCleanupMutex = Mutex()
 
     val externalTabIds: StateFlow<Set<String>> = externalTabIdsFlow.asStateFlow()
+    val externalTabInitialUrls: StateFlow<Map<String, String>> = externalTabInitialUrlsFlow.asStateFlow()
 
     /**
      * 外部タブ登録時に呼ぶ。呼び出し時点の selectedTabId（= 外部タブ開封前のタブ）を記録する。
      * [selectTab] より前に呼び出すこと。
      */
-    fun registerExternalTab(tabId: String) {
+    fun registerExternalTab(tabId: String, initialUrl: String) {
         externalTabPreviousTabs[tabId] = browserTabController.selectedTabId
+        externalTabInitialUrlByTabId[tabId] = initialUrl
         externalTabIdsFlow.update { it + tabId }
+        externalTabInitialUrlsFlow.update { it + (tabId to initialUrl) }
     }
 
     /**
@@ -290,7 +295,9 @@ internal class BrowserViewModel(
             ).tabId
         }
         externalTabPreviousTabs.remove(tabId)
+        externalTabInitialUrlByTabId.remove(tabId)
         externalTabIdsFlow.update { it - tabId }
+        externalTabInitialUrlsFlow.update { it - tabId }
         browserTabController.closeTabWithUndo(tabId, nextSelectedTabId = targetTabId)
         browserTabController.confirmClosedTab()
         return targetTabId
@@ -333,7 +340,9 @@ internal class BrowserViewModel(
         externalTabCleanupMutex.withLock {
             val cleanup = snapshotSelectedExternalTabFinishCleanup() ?: return
             externalTabPreviousTabs.remove(cleanup.tabId)
+            externalTabInitialUrlByTabId.remove(cleanup.tabId)
             externalTabIdsFlow.update { it - cleanup.tabId }
+            externalTabInitialUrlsFlow.update { it - cleanup.tabId }
             browserTabController.awaitPersistenceIdle()
             withContext(Dispatchers.IO) {
                 tabRepository.closeTab(cleanup.tabId, cleanup.nextSelectedTabId)

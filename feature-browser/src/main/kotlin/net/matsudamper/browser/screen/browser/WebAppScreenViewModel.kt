@@ -32,6 +32,7 @@ class WebAppScreenViewModel(
             urlBarSuggestions = UrlBarSuggestionsUiState(),
             groupTabCount = null,
             externalDownloadDialogListener = null,
+            externalTabInitialUrl = null,
             callbacks = callbacks,
         ),
     ).also { uiStateFlow ->
@@ -42,6 +43,7 @@ class WebAppScreenViewModel(
                         urlBarSuggestions = suggestions,
                         groupTabCount = null,
                         externalDownloadDialogListener = null,
+                        externalTabInitialUrl = null,
                         callbacks = callbacks,
                     )
                 }
