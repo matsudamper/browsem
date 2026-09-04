@@ -2,6 +2,8 @@ package net.matsudamper.browser
 
 import android.graphics.Rect
 import android.os.SystemClock
+import android.view.View
+import android.view.ViewGroup
 import android.view.WindowInsets
 import android.view.accessibility.AccessibilityNodeInfo
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -17,6 +19,7 @@ import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.mozilla.geckoview.GeckoView
 
 /**
  * ページ下部の入力欄にフォーカスしてキーボードを表示したとき、
@@ -135,6 +138,7 @@ class KeyboardBottomInputTest {
 
         throw AssertionError(
             "キーボード表示中にページ下部の入力欄がキーボードに隠れている: $lastDiagnostics\n" +
+                "GeckoView: ${geckoViewBoundsInScreen()}\n" +
                 "編集可能ノード一覧:\n${dumpEditableNodes()}",
         )
     }
@@ -249,6 +253,34 @@ class KeyboardBottomInputTest {
             bottom = insets?.getInsets(WindowInsets.Type.ime())?.bottom ?: 0
         }
         return bottom
+    }
+
+    /**
+     * GeckoView の画面座標を返す。表示領域の縮小が効いているかの切り分けに使う。
+     */
+    private fun geckoViewBoundsInScreen(): String {
+        var result = "見つからない"
+        composeRule.runOnIdle {
+            val geckoView = findGeckoView(composeRule.activity.window.decorView)
+            if (geckoView != null) {
+                val location = IntArray(2)
+                geckoView.getLocationOnScreen(location)
+                result = "top=${location[1]} bottom=${location[1] + geckoView.height}"
+            }
+        }
+        return result
+    }
+
+    /**
+     * View 階層から [GeckoView] を探す。
+     */
+    private fun findGeckoView(view: View): GeckoView? {
+        if (view is GeckoView) return view
+        if (view !is ViewGroup) return null
+        for (index in 0 until view.childCount) {
+            findGeckoView(view.getChildAt(index))?.let { return it }
+        }
+        return null
     }
 
     /**
