@@ -15,9 +15,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -45,12 +47,15 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import kotlin.math.abs
 import net.matsudamper.browser.data.ThemeMode
@@ -75,6 +80,16 @@ internal fun BrowserContentHost(
     updateGeckoView: (GeckoView) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    // IME アニメーション中の dispatch で GeckoView へ ime=0 が届き、最後の値が 0 の
+    // まま残るため Gecko がキーボードを認識しない。Compose 側で高さの変化を見て
+    // 確定後に insets を再 dispatch させ、正しい高さを届ける。
+    val density = LocalDensity.current
+    val imeBottomPx = WindowInsets.ime.getBottom(density)
+    val view = LocalView.current
+    LaunchedEffect(imeBottomPx, view) {
+        ViewCompat.requestApplyInsets(view)
+    }
+
     // キーボード分の表示領域は Gecko 内部の onKeyboardHeight に任せる。
     // View を物理的に縮めるとリサイズのたびに Gecko がポップアップ (select の
     // ドロップダウン等) を閉じてしまい、Firefox と挙動が変わる。
