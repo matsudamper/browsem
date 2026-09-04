@@ -14,12 +14,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.ime
-import androidx.compose.foundation.layout.onConsumedWindowInsetsChanged
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -38,7 +35,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -48,7 +44,6 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -63,11 +58,6 @@ import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.GeckoView
 
-/**
- * GeckoView が内部で登録するキーボード高さ通知用の WindowInsets リスナーのキー。
- */
-private const val GECKO_KEYBOARD_INSETS_LISTENER_KEY = "KEYBOARD_WINDOW_INSETS_LISTENER"
-
 @Composable
 internal fun BrowserContentHost(
     state: BrowserTabScreenState,
@@ -78,23 +68,12 @@ internal fun BrowserContentHost(
     updateGeckoView: (GeckoView) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    // キーボード分だけ表示領域を物理的に縮める。GeckoView は Activity の decorView へ
-    // WindowInsets リスナーを張るが、ComposeView が insets を消費するため View 階層の
-    // 子には届かない。Compose 側で高さを読み、AndroidView の update で反映する。
-    //
-    // 親が既に消費した分は差し引く。通常表示はナビバー余白、フルスクリーンは何も
-    // 消費されず、window.open のオーバーレイでは safeDrawing (IME 含む) が消費済み。
-    // 消費分を引くことで、いずれの経路でも二重にキーボード分を縮めずに済む。
-    val density = LocalDensity.current
-    var consumedBottomPx by remember { mutableIntStateOf(0) }
-    val imeBottomPx = WindowInsets.ime.getBottom(density)
-    val keyboardHeightPx = (imeBottomPx - consumedBottomPx).coerceAtLeast(0)
-
-    Box(
-        modifier = modifier.onConsumedWindowInsetsChanged { consumed ->
-            consumedBottomPx = consumed.getBottom(density)
-        },
-    ) {
+    // キーボード分の表示領域は Gecko 内部の onKeyboardHeight に任せる。
+    // View を物理的に縮めるとリサイズのたびに Gecko がポップアップ (select の
+    // ドロップダウン等) を閉じてしまい、Firefox と挙動が変わる。
+    // 文書末尾の入力欄がキーボードに隠れる件は keyboard_scroll_bridge 拡張が
+    // visual viewport 基準でスクロールして解決する。
+    Box(modifier = modifier) {
         AndroidView(
             modifier = Modifier
                 .fillMaxSize()
@@ -117,24 +96,6 @@ internal fun BrowserContentHost(
                         geckoView.importantForAutofill =
                             View.IMPORTANT_FOR_AUTOFILL_YES_EXCLUDE_DESCENDANTS
                         geckoView.setSession(session)
-                        // Gecko 内部のキーボード高さ通知を解除する。表示領域は下の padding で
-                        // 物理的に縮めており、Gecko 側でも onKeyboardHeight を適用すると
-                        // キーボード分が二重に引かれる。さらに Gecko は
-                        // interactive-widget の既定 (resizes-visual) に従って
-                        // レイアウトビューポートを保つため、文書末尾にある入力欄が
-                        // スクロール上限に阻まれてキーボードの上まで来られない。
-                        // GeckoView.onAttachedToWindow が毎回リスナーを張り直すので、
-                        // attach のたびに外す。
-                        geckoView.addOnAttachStateChangeListener(
-                            object : View.OnAttachStateChangeListener {
-                                override fun onViewAttachedToWindow(v: View) {
-                                    (v as GeckoView)
-                                        .removeWindowInsetsListener(GECKO_KEYBOARD_INSETS_LISTENER_KEY)
-                                }
-
-                                override fun onViewDetachedFromWindow(v: View) = Unit
-                            },
-                        )
                         // Engine 側で非アクティブ扱いになると Compositor の描画更新が止まり、
                         // 復帰時の黒画面につながるため、初期生成時に必ず active 化する。
                         session.setActive(true)
@@ -220,9 +181,6 @@ internal fun BrowserContentHost(
             update = { swipeRefreshLayout ->
                 swipeRefreshLayout.isEnabled = !state.isFullScreen
                 swipeRefreshLayout.isRefreshing = state.isRefreshing
-                // 実際の padding への反映と高さの上限制御は GeckoSwipeRefreshLayout が
-                // measure 時に行う。setter は値が変わるときだけ requestLayout する。
-                swipeRefreshLayout.keyboardHeight = keyboardHeightPx
                 val geckoView = swipeRefreshLayout.findViewById<GeckoView>(id)
                 if (!state.isUrlInputFocused && !state.showFindInPage && !geckoView.isFocused) {
                     geckoView.requestFocus()

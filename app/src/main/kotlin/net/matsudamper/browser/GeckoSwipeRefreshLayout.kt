@@ -14,30 +14,6 @@ internal class GeckoSwipeRefreshLayout(context: Context) : SwipeRefreshLayout(co
 
     private var currentDispatchAction: Int = MotionEvent.ACTION_CANCEL
 
-    /**
-     * キーボードのために下端から差し引く高さ。
-     *
-     * SwipeRefreshLayout は子を padding 分だけ縮めて measure/layout するため、
-     * この値を下 padding として使う。実際の適用は [onMeasure] で行い、
-     * 測定される高さを超えないように抑える。横向きの全画面 IME やマルチウィンドウでは
-     * ウィンドウ基準のキーボード高がこのコンテナの高さを超えることがあり、
-     * そのまま padding にすると子の高さが負になる。
-     */
-    var keyboardHeight: Int = 0
-        set(value) {
-            if (field == value) return
-            field = value
-            requestLayout()
-        }
-
-    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
-        val paddingBottom = keyboardHeight.coerceIn(0, MeasureSpec.getSize(heightMeasureSpec))
-        if (getPaddingBottom() != paddingBottom) {
-            setPadding(0, 0, 0, paddingBottom)
-        }
-        super.onMeasure(widthMeasureSpec, heightMeasureSpec)
-    }
-
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
         currentDispatchAction = ev.actionMasked
         return try {
