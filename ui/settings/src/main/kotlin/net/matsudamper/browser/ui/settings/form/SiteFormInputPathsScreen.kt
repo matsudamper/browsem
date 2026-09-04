@@ -15,6 +15,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.tooling.preview.Preview
+import net.matsudamper.browser.ui.common.ThemeSurfaceStatusBarAppearanceEffect
 import androidx.compose.ui.unit.dp
 
 sealed interface SiteFormInputPathsScreenTestTags {
@@ -36,6 +37,7 @@ fun SiteFormInputPathsScreen(
     uiState: SiteFormInputPathsScreenUiState,
     modifier: Modifier = Modifier,
 ) {
+    ThemeSurfaceStatusBarAppearanceEffect()
     InputListScreenScaffold(
         modifier = modifier.testTag(SiteFormInputPathsScreenTestTags.Root.testTag),
         pageTitle = "保存したフォーム入力",

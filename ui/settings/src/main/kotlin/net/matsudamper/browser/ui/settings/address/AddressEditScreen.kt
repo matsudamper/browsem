@@ -25,6 +25,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import net.matsudamper.browser.ui.common.ThemeSurfaceStatusBarAppearanceEffect
 import net.matsudamper.browser.resources.R as ResourcesR
 import net.matsudamper.browser.ui.settings.SettingSection
 
@@ -48,6 +49,7 @@ fun AddressEditScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    ThemeSurfaceStatusBarAppearanceEffect()
     Scaffold(
         modifier = modifier.testTag(AddressEditScreenTestTags.Root.testTag),
         topBar = {

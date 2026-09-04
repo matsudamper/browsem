@@ -41,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import net.matsudamper.browser.data.SiteGeolocationState
 import net.matsudamper.browser.data.SitePermissionState
 import net.matsudamper.browser.resources.R as ResourcesR
+import net.matsudamper.browser.ui.common.ThemeSurfaceStatusBarAppearanceEffect
 import net.matsudamper.browser.ui.settings.CollapsibleSettingSection
 import net.matsudamper.browser.ui.settings.R
 import net.matsudamper.browser.ui.settings.SettingSection
@@ -67,6 +68,7 @@ fun SiteSettingsScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    ThemeSurfaceStatusBarAppearanceEffect()
     val snackbarHostState = remember { SnackbarHostState() }
     val currentCallbacks by rememberUpdatedState(uiState.callbacks)
     val clearDataResultMessage = uiState.clearDataResultMessage

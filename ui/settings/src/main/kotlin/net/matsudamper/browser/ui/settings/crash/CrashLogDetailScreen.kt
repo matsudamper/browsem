@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import net.matsudamper.browser.ui.common.ThemeSurfaceStatusBarAppearanceEffect
 import net.matsudamper.browser.data.crashlog.CrashLogEntity
 import net.matsudamper.browser.resources.R as ResourcesR
 
@@ -51,6 +52,7 @@ internal fun CrashLogDetailScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    ThemeSurfaceStatusBarAppearanceEffect()
     val entry = uiState.entry
     val dateFormat = remember { SimpleDateFormat("yyyy/MM/dd HH:mm:ss", Locale.getDefault()) }
 
