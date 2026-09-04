@@ -9,7 +9,7 @@ fi
 echo "[session-start] Setting up Gradle and Android environment..."
 
 python3 - <<'PYEOF'
-import os, sys, re, subprocess, tempfile, zipfile, shutil, urllib.request, urllib.parse
+import os, sys, re, subprocess, tempfile, urllib.request, urllib.parse
 
 proxy_url = os.environ.get('HTTPS_PROXY', '')
 
@@ -139,89 +139,6 @@ if (proxyUser && proxyPassword) {{
     with open(os.path.join(gradle_home, 'gradle.properties'), 'w') as f:
         f.write(props)
     print(f"[session-start] gradle.properties written (proxy={host}:{port})")
-
-# ── ダウンロード用ヘルパー（プロキシ有無に応じて opener を切り替え）────────────────
-if proxy_url:
-    proxy_handler = urllib.request.ProxyHandler({'https': proxy_url, 'http': proxy_url})
-    opener = urllib.request.build_opener(proxy_handler)
-else:
-    opener = urllib.request.build_opener()
-
-def download(url, dest_path):
-    print(f"[session-start] Downloading {url} ...")
-    with opener.open(url) as resp:
-        total = int(resp.headers.get('Content-Length', 0))
-        downloaded = 0
-        with open(dest_path, 'wb') as f:
-            while True:
-                chunk = resp.read(65536)
-                if not chunk:
-                    break
-                f.write(chunk)
-                downloaded += len(chunk)
-                if total:
-                    pct = downloaded * 100 // total
-                    print(f"\r  {pct}% ({downloaded}/{total} bytes)", end='', flush=True)
-    print()
-
-# ── Android SDK セットアップ ──────────────────────────────────────────────────
-project_dir = os.environ.get('CLAUDE_PROJECT_DIR', '/home/user/browsem')
-android_home = os.path.expanduser('~/android-sdk')
-local_props = os.path.join(project_dir, 'local.properties')
-
-os.makedirs(android_home, exist_ok=True)
-
-# cmdline-tools のインストール（sdkmanager を使えるようにする）
-cmdline_tools_dir = os.path.join(android_home, 'cmdline-tools', 'latest')
-sdkmanager_bin = os.path.join(cmdline_tools_dir, 'bin', 'sdkmanager')
-if not os.path.exists(sdkmanager_bin):
-    print("[session-start] Installing Android SDK command-line tools...")
-    cmdline_url = 'https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip'
-    cmdline_zip = os.path.join(android_home, 'commandlinetools.zip')
-    download(cmdline_url, cmdline_zip)
-    with zipfile.ZipFile(cmdline_zip, 'r') as zf:
-        zf.extractall(android_home)
-    os.unlink(cmdline_zip)
-    extracted = os.path.join(android_home, 'cmdline-tools')
-    temp_dir  = os.path.join(android_home, '_cmdline-tools-temp')
-    os.rename(extracted, temp_dir)
-    os.makedirs(extracted, exist_ok=True)
-    shutil.move(temp_dir, cmdline_tools_dir)
-    os.chmod(sdkmanager_bin, 0o755)
-    print(f"[session-start] cmdline-tools installed: {cmdline_tools_dir}")
-
-# ライセンスファイルを直接書き込む（ネットワーク不要）
-licenses_dir = os.path.join(android_home, 'licenses')
-os.makedirs(licenses_dir, exist_ok=True)
-with open(os.path.join(licenses_dir, 'android-sdk-license'), 'w') as f:
-    f.write('\n24333f8a63b6825ea9c5514f83c2829b004d1fee\n')
-print("[session-start] Android SDK license accepted")
-
-# local.properties に sdk.dir を書き込む
-with open(local_props, 'w') as f:
-    f.write(f"sdk.dir={android_home}\n")
-print(f"[session-start] local.properties written: sdk.dir={android_home}")
-
-# ── Android SDK Platform 36 の android.jar が欠けていれば補完する ──────────────
-platform_dir = os.path.join(android_home, 'platforms', 'android-36')
-android_jar  = os.path.join(platform_dir, 'android.jar')
-if not os.path.exists(android_jar):
-    print("[session-start] android-36/android.jar が見つかりません。ダウンロードします...")
-    os.makedirs(platform_dir, exist_ok=True)
-    platform_zip_path = os.path.join(android_home, 'platform-36.zip')
-    download('https://dl.google.com/android/repository/platform-36_r02.zip', platform_zip_path)
-    with zipfile.ZipFile(platform_zip_path, 'r') as zf:
-        # android-36/ 配下のファイルを platforms/android-36/ に展開する
-        members = [m for m in zf.namelist() if m.startswith('android-36/') and not m.endswith('/')]
-        for member in members:
-            dest = os.path.join(platform_dir, member[len('android-36/'):])
-            os.makedirs(os.path.dirname(dest), exist_ok=True)
-            with zf.open(member) as src, open(dest, 'wb') as dst:
-                dst.write(src.read())
-    os.unlink(platform_zip_path)
-    print(f"[session-start] android-36 platform installed: {platform_dir}")
-else:
-    print("[session-start] android-36/android.jar は既に存在します。スキップします。")
 
 # ── protobuf compiler のインストール ──────────────────────────────────────────
 result = subprocess.run(['which', 'protoc'], capture_output=True)
