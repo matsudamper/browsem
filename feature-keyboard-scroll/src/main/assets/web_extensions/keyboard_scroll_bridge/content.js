@@ -64,27 +64,81 @@
     return element;
   }
 
+  // ページが指定していた padding-bottom。復元するために覚えておく。
+  let savedPaddingBottom = null;
+  let savedPaddingPriority = "";
+
   /**
    * キーボード分の余白を文書の下端へ反映する。
    *
    * これによりスクロール上限が伸び、文書末尾の入力欄をキーボードの上まで
    * 運べるようになる。ページのレイアウトは変えない。
+   * ページ自身のインライン指定は保存して復元する。
    */
   function applyKeyboardPadding() {
     const root = document.documentElement;
     if (!root) return;
+
     if (keyboardHeightCss <= 0) {
-      root.style.removeProperty("padding-bottom");
+      if (savedPaddingBottom === null) return;
+      if (savedPaddingBottom === "") {
+        root.style.removeProperty("padding-bottom");
+      } else {
+        root.style.setProperty("padding-bottom", savedPaddingBottom, savedPaddingPriority);
+      }
       root.style.removeProperty(PADDING_PROPERTY);
+      savedPaddingBottom = null;
+      savedPaddingPriority = "";
       return;
     }
+
+    if (savedPaddingBottom === null) {
+      savedPaddingBottom = root.style.getPropertyValue("padding-bottom");
+      savedPaddingPriority = root.style.getPropertyPriority("padding-bottom");
+    }
+    // 元の指定に足す。置き換えるとページのレイアウトが変わる。
+    const base = savedPaddingBottom === "" ? "0px" : savedPaddingBottom;
     root.style.setProperty(PADDING_PROPERTY, keyboardHeightCss + "px");
-    root.style.setProperty("padding-bottom", "var(" + PADDING_PROPERTY + ")");
+    root.style.setProperty(
+      "padding-bottom",
+      "calc(" + base + " + var(" + PADDING_PROPERTY + "))",
+      savedPaddingPriority,
+    );
   }
 
+  /**
+   * キーボード上端の位置を、getBoundingClientRect と同じ座標系で返す。
+   *
+   * visual viewport はキーボードでは縮まないため自分で差し引く。
+   * ピンチズーム中は倍率で割って visual viewport 側の単位へ直す。
+   */
   function visibleBottom() {
-    // visual viewport は縮まないため、キーボード上端は自分で計算する。
-    return document.documentElement.clientHeight - keyboardHeightCss;
+    const viewport = window.visualViewport;
+    if (!viewport) return document.documentElement.clientHeight - keyboardHeightCss;
+    const scale = viewport.scale || 1;
+    return viewport.offsetTop + viewport.height - keyboardHeightCss / scale;
+  }
+
+  function visibleTop() {
+    const viewport = window.visualViewport;
+    return viewport ? viewport.offsetTop : 0;
+  }
+
+  /**
+   * スクロールの基準にする矩形を返す。
+   *
+   * 可視範囲より背の高い contenteditable では、要素の下端を揃えると
+   * キャレットが画面外へ出る。キャレットが取れる場合はそちらを使う。
+   */
+  function targetRect(element) {
+    const rect = element.getBoundingClientRect();
+    if (rect.height <= visibleBottom() - visibleTop()) return rect;
+    if (!element.isContentEditable) return rect;
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) return rect;
+    const caret = selection.getRangeAt(0).getBoundingClientRect();
+    if (caret.height === 0 && caret.top === 0) return rect;
+    return caret;
   }
 
   function scrollFocusedIntoView() {
@@ -96,16 +150,16 @@
     const element = focusedElement();
     if (!isScrollTarget(element)) return;
 
-    // 子フレームでは親フレーム内での位置が分からない。
-    // scrollIntoView は親フレームまで伝播するため、判定せずに運ぶ。
-    if (!isTopFrame) {
-      element.scrollIntoView({ block: "nearest", inline: "nearest" });
-      return;
-    }
+    // 入れ子のスクロールコンテナや固定パネルは window.scrollBy では動かせない。
+    // まず scrollIntoView でスクロール祖先を動かす。可視範囲へ入る最小限に留める。
+    element.scrollIntoView({ block: "nearest", inline: "nearest" });
 
-    const rect = element.getBoundingClientRect();
-    if (rect.bottom <= visibleBottom() && rect.top >= 0) return;
-    // 可視範囲へ入る最小限だけ動かす。大きく動かすとポップアップが閉じやすい。
+    // 子フレームでは親フレーム内での位置が分からない。scrollIntoView が
+    // 親フレームまで伝播するので、残差の補正はトップフレームだけで行う。
+    if (!isTopFrame) return;
+
+    const rect = targetRect(element);
+    if (rect.bottom <= visibleBottom() && rect.top >= visibleTop()) return;
     window.scrollBy(0, rect.bottom - visibleBottom());
   }
 
