@@ -30,7 +30,9 @@
     if (!element) return false;
     if (element.isContentEditable) return true;
     const tagName = element.tagName;
-    return tagName === "INPUT" || tagName === "TEXTAREA" || tagName === "SELECT";
+    // select はキーボードを出さない。対象に含めると、ドロップダウンを開いた
+    // ときの focusin でスクロールしてしまい、開いたばかりの選択肢が閉じる。
+    return tagName === "INPUT" || tagName === "TEXTAREA";
   }
 
   function isScrollTarget(element) {
@@ -95,14 +97,14 @@
     // 子フレームでは自身の可視範囲しか測れず、親フレーム内での位置が分からない。
     // scrollIntoView は親フレームまで伝播するため、判定せずに運ぶ。
     if (!isTopFrame) {
-      element.scrollIntoView({ block: "center", inline: "nearest" });
+      element.scrollIntoView({ block: "nearest", inline: "nearest" });
       return;
     }
 
     const elementRect = element.getBoundingClientRect();
     if (elementRect.height <= visualViewport.height) {
       if (!isOutside(elementRect)) return;
-      element.scrollIntoView({ block: "center", inline: "nearest" });
+      element.scrollIntoView({ block: "nearest", inline: "nearest" });
       return;
     }
 
@@ -118,11 +120,15 @@
 
     if (!isOutside(caret)) return;
     // 入れ子のスクロールコンテナごと動かしてから、キャレットの残差を詰める。
-    element.scrollIntoView({ block: "center", inline: "nearest" });
+    element.scrollIntoView({ block: "nearest", inline: "nearest" });
     const movedCaret = caretRect();
     if (movedCaret == null || !isOutside(movedCaret)) return;
-    const centeredTop = visibleTop() + (visualViewport.height - movedCaret.height) / 2;
-    window.scrollBy(0, movedCaret.top - centeredTop);
+    // 可視範囲へ入る最小限だけ動かす。大きく動かすとポップアップが閉じる。
+    if (movedCaret.bottom > visibleBottom()) {
+      window.scrollBy(0, movedCaret.bottom - visibleBottom());
+    } else {
+      window.scrollBy(0, movedCaret.top - visibleTop());
+    }
   }
 
   /**
