@@ -6,9 +6,15 @@ import androidx.compose.runtime.Stable
 data class HistoryScreenUiState(
     val callbacks: Callbacks,
     val searchQuery: String,
-    val entries: List<EntryItem>,
+    val entryList: EntryList?,
     val showDeleteAllDialog: Boolean,
 ) {
+    @Stable
+    data class EntryList(
+        val searchQuery: String,
+        val entries: List<EntryItem>,
+    )
+
     @Stable
     data class EntryItem(
         val id: Long,
