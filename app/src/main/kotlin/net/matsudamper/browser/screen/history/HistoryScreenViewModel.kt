@@ -7,8 +7,10 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import net.matsudamper.browser.data.history.HistoryEntry
@@ -20,6 +22,7 @@ internal class HistoryScreenViewModel(
 ) : ViewModel() {
 
     private val viewModelStateFlow = MutableStateFlow(ViewModelState())
+    private val entryListFlow = MutableStateFlow<EntryListData?>(null)
     val eventHandler = Channel<(Event) -> Unit>(Channel.UNLIMITED)
 
     private val callbacks = object : HistoryScreenUiState.Callbacks {
@@ -45,20 +48,24 @@ internal class HistoryScreenViewModel(
         HistoryScreenUiState(
             callbacks = callbacks,
             searchQuery = "",
-            entries = emptyList(),
+            entryList = null,
             showDeleteAllDialog = false,
         ),
     ).also { uiStateFlow ->
         viewModelScope.launch {
-            viewModelStateFlow.collectLatest { state ->
-                uiStateFlow.update {
-                    HistoryScreenUiState(
-                        callbacks = callbacks,
-                        searchQuery = state.searchQuery,
-                        entries = state.entries.map(::toEntryItem),
-                        showDeleteAllDialog = state.showDeleteAllDialog,
-                    )
-                }
+            combine(
+                viewModelStateFlow.map { it.searchQuery }.distinctUntilChanged(),
+                viewModelStateFlow.map { it.showDeleteAllDialog }.distinctUntilChanged(),
+                entryListFlow,
+            ) { searchQuery, showDeleteAllDialog, entryListData ->
+                HistoryScreenUiState(
+                    callbacks = callbacks,
+                    searchQuery = searchQuery,
+                    entryList = entryListData?.toUiEntryList(),
+                    showDeleteAllDialog = showDeleteAllDialog,
+                )
+            }.collect { uiState ->
+                uiStateFlow.value = uiState
             }
         }
     }.asStateFlow()
@@ -67,17 +74,27 @@ internal class HistoryScreenViewModel(
         @OptIn(ExperimentalCoroutinesApi::class)
         viewModelScope.launch {
             viewModelStateFlow
-                .flatMapLatest { state ->
-                    if (state.searchQuery.isBlank()) {
+                .map { it.searchQuery }
+                .distinctUntilChanged()
+                .flatMapLatest { query ->
+                    val entriesFlow = if (query.isBlank()) {
                         historyRepository.getRecent()
                     } else {
-                        historyRepository.search(state.searchQuery)
+                        historyRepository.search(query)
                     }
+                    entriesFlow.map { entries -> EntryListData(searchQuery = query, entries = entries) }
                 }
-                .collect { entries ->
-                    viewModelStateFlow.update { it.copy(entries = entries) }
+                .collect { entryListData ->
+                    entryListFlow.value = entryListData
                 }
         }
+    }
+
+    private fun EntryListData.toUiEntryList(): HistoryScreenUiState.EntryList {
+        return HistoryScreenUiState.EntryList(
+            searchQuery = searchQuery,
+            entries = entries.map(::toEntryItem),
+        )
     }
 
     private fun toEntryItem(entry: HistoryEntry): HistoryScreenUiState.EntryItem {
@@ -102,9 +119,13 @@ internal class HistoryScreenViewModel(
         fun navigateToUrl(url: String)
     }
 
+    private data class EntryListData(
+        val searchQuery: String,
+        val entries: List<HistoryEntry>,
+    )
+
     data class ViewModelState(
         val searchQuery: String = "",
         val showDeleteAllDialog: Boolean = false,
-        val entries: List<HistoryEntry> = emptyList(),
     )
 }

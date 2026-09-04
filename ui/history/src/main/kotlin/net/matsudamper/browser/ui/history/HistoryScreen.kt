@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
@@ -22,7 +23,11 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -73,8 +78,28 @@ fun HistoryScreen(
                     .padding(horizontal = 16.dp, vertical = 8.dp),
             )
 
-            LazyColumn(modifier = Modifier.fillMaxSize()) {
-                items(uiState.entries, key = { it.id }) { entry ->
+            val listState = rememberLazyListState()
+            val entries = uiState.entryList?.entries.orEmpty()
+            var previousSearchQuery by remember { mutableStateOf<String?>(null) }
+            var previousEntryListQuery by remember { mutableStateOf<String?>(null) }
+            LaunchedEffect(uiState.searchQuery) {
+                if (previousSearchQuery != null && previousSearchQuery != uiState.searchQuery) {
+                    listState.scrollToItem(0)
+                }
+                previousSearchQuery = uiState.searchQuery
+            }
+            LaunchedEffect(uiState.entryList?.searchQuery) {
+                val query = uiState.entryList?.searchQuery ?: return@LaunchedEffect
+                if (previousEntryListQuery != null && query != previousEntryListQuery) {
+                    listState.scrollToItem(0)
+                }
+                previousEntryListQuery = query
+            }
+            LazyColumn(
+                state = listState,
+                modifier = Modifier.fillMaxSize(),
+            ) {
+                items(entries, key = { it.id }) { entry ->
                     HistoryItem(entry = entry)
                 }
             }
