@@ -10,7 +10,6 @@ import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.LaunchedEffect
@@ -60,10 +59,6 @@ class WebAppActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // MainActivity / CustomTabActivity と同じく edge-to-edge にする。
-        // ここだけ decor がウィンドウを縮める挙動のままだと、BrowserContentHost が
-        // 同じ IME inset をもう一度 padding として適用して二重に縮む。
-        enableEdgeToEdge()
         runtime.settings.setExtensionsWebAPIEnabled(true)
 
         // 外部アプリから任意のURLが渡されないよう、http/https スキームのみ許可する
