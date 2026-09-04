@@ -161,6 +161,7 @@ internal fun BrowserContentHost(
                                     gestureDownX = event.x
                                     gestureDownY = event.y
                                     state.onContentTouchStart()
+                                    browserTab.notifyContentTouchForKeyboard()
                                     (view as GeckoView).onTouchEventForDetailResult(event).then { detail ->
                                         if (detail != null && !gestureHadMultiTouch) {
                                             swipeRefreshScrollEnabled = canTriggerPullToRefresh(
@@ -227,6 +228,7 @@ internal fun BrowserContentHost(
                 swipeRefreshLayout.keyboardHeight = keyboardHeightPx
                 val geckoView = swipeRefreshLayout.findViewById<GeckoView>(id)
                 if (!state.isUrlInputFocused && !state.showFindInPage && !geckoView.isFocused) {
+                    browserTab.suppressKeyboardUntilUserGesture()
                     geckoView.requestFocus()
                 }
             },
