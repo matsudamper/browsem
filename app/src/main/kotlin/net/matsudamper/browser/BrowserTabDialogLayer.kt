@@ -160,7 +160,7 @@ internal fun BrowserTabDialogLayer(
                 }
             },
             dismissButton = {
-                TextButton(onClick = state::dismissPendingDownload) {
+                TextButton(onClick = state::cancelPendingDownload) {
                     Text("キャンセル")
                 }
             },
@@ -171,6 +171,7 @@ internal fun BrowserTabDialogLayer(
         DuplicateDownloadDialog(
             state = duplicateState,
             onConfirm = state::confirmDuplicateDownload,
+            onCancel = state::cancelDuplicateDownload,
             onDismiss = state::dismissDuplicateDownload,
             onOpenFile = onOpenFile,
         )
@@ -1145,6 +1146,7 @@ private fun ChoicePromptDialog(
 private fun DuplicateDownloadDialog(
     state: BrowserTabScreenState.DuplicateDownloadState,
     onConfirm: () -> Unit,
+    onCancel: () -> Unit,
     onDismiss: () -> Unit,
     onOpenFile: ((String) -> Unit)?,
 ) {
@@ -1192,7 +1194,7 @@ private fun DuplicateDownloadDialog(
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
+            TextButton(onClick = onCancel) {
                 Text("キャンセル")
             }
         },
@@ -1233,6 +1235,7 @@ private fun PreviewDuplicateDownloadDialog() {
                 onConfirm = {},
             ),
             onConfirm = {},
+            onCancel = {},
             onDismiss = {},
             onOpenFile = {},
         )

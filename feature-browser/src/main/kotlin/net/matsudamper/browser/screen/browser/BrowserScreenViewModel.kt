@@ -32,6 +32,8 @@ class BrowserScreenViewModel(
     tabGroupRepository: TabGroupRepository,
     browserTabsFlow: Flow<List<BrowserTab>>,
     screenTabId: String,
+    externalTabIdsFlow: StateFlow<Set<String>>,
+    externalTabInitialUrlsFlow: StateFlow<Map<String, String>>,
 ) : ViewModel(), Closeable {
     // ViewModel継承時はonCleared()でキャンセル、remember()使用時はclose()でキャンセル
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -62,6 +64,8 @@ class BrowserScreenViewModel(
         BrowserScreenUiState(
             urlBarSuggestions = UrlBarSuggestionsUiState(),
             groupTabCount = null,
+            externalDownloadDialogListener = null,
+            externalTabInitialUrl = null,
             callbacks = callbacks,
         ),
     ).also { uiStateFlow ->
@@ -109,6 +113,16 @@ class BrowserScreenViewModel(
                         } else {
                             null
                         }
+                    val externalDownloadDialogListener =
+                        if (state.screenTabId in state.externalTabIds) {
+                            object : BrowserScreenUiState.ExternalDownloadDialogListener {
+                                override fun onResolved() {
+                                    eventHandler.trySend { it.onExternalDownloadDialogResolved(screenTabId) }
+                                }
+                            }
+                        } else {
+                            null
+                        }
                     BrowserScreenUiState(
                         urlBarSuggestions = state.urlBarSuggestions,
                         swipePreview = BrowserScreenUiState.SwipePreviewUiState(
@@ -117,6 +131,8 @@ class BrowserScreenViewModel(
                             backToOpenerListener = backToOpenerListener,
                         ),
                         groupTabCount = state.resolveGroupTabCount(),
+                        externalDownloadDialogListener = externalDownloadDialogListener,
+                        externalTabInitialUrl = state.externalTabInitialUrls[state.screenTabId],
                         callbacks = callbacks,
                     )
                 }
@@ -153,11 +169,22 @@ class BrowserScreenViewModel(
                 }
             }
         }
+        scope.launch {
+            externalTabIdsFlow.collectLatest { externalTabIds ->
+                viewModelStateFlow.update { it.copy(externalTabIds = externalTabIds) }
+            }
+        }
+        scope.launch {
+            externalTabInitialUrlsFlow.collectLatest { externalTabInitialUrls ->
+                viewModelStateFlow.update { it.copy(externalTabInitialUrls = externalTabInitialUrls) }
+            }
+        }
     }
 
     interface Event {
         fun selectTab(tabId: String)
         fun backToOpenerTab(tabId: String)
+        fun onExternalDownloadDialogResolved(tabId: String)
     }
 }
 
@@ -175,6 +202,8 @@ private data class ViewModelState(
     val browserTabs: List<BrowserTab> = emptyList(),
     val orderedBrowserTabs: List<BrowserTab> = emptyList(),
     val screenTabId: String? = null,
+    val externalTabIds: Set<String> = emptySet(),
+    val externalTabInitialUrls: Map<String, String> = emptyMap(),
 ) {
     fun withResolvedOrderedBrowserTabs(): ViewModelState {
         val orderedBrowserTabs = resolveOrderedBrowserTabs()

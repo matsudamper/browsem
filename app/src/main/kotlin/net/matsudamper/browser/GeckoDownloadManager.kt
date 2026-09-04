@@ -3,8 +3,10 @@ package net.matsudamper.browser
 import android.app.NotificationManager
 import android.content.Context
 import androidx.core.app.NotificationCompat
+import androidx.work.OneTimeWorkRequest
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
+import androidx.work.await
 import androidx.work.workDataOf
 import java.util.UUID
 import kotlinx.coroutines.CoroutineScope
@@ -52,31 +54,85 @@ internal class GeckoDownloadManager(
             )
             .addTag(DownloadWorker.TAG_DOWNLOAD)
             .build()
-        // WorkerがENQUEUED状態の間もUI上に表示するため、事前にレコードを挿入する
         coroutineScope.launch {
-            try {
-                downloadRepository.insertEnqueued(
-                    workerId = workRequest.id.toString(),
-                    url = url,
-                    referrerUrl = referrerUrl,
-                    enqueuedAt = System.currentTimeMillis(),
-                )
-                WorkManager.getInstance(context).enqueue(workRequest)
-            } catch (e: Throwable) {
-                // エンキュー失敗・キャンセル時は保持した元レスポンスのボディを確実に閉じてリークを防ぐ
-                PendingDownloadBodyStore.discard(workId.toString())
-                throw e
-            }
-            // Workerが起動する前から即座に通知を表示する
-            val notification = NotificationCompat.Builder(context, DownloadWorker.CHANNEL_ID)
-                .setSmallIcon(android.R.drawable.stat_sys_download)
-                .setContentTitle(context.getString(R.string.download_notification_starting))
-                .setProgress(100, 0, true)
-                .setOnlyAlertOnce(true)
-                .build()
-            context.getSystemService(NotificationManager::class.java)
-                .notify(notificationId, notification)
+            enqueueDownloadInternal(
+                workRequest = workRequest,
+                workId = workId,
+                url = url,
+                referrerUrl = referrerUrl,
+                notificationId = notificationId,
+            )
         }
+    }
+
+    suspend fun enqueueDownloadFromResponse(response: WebResponse, referrerUrl: String) {
+        enqueueDownloadSuspend(
+            url = response.uri,
+            referrerUrl = referrerUrl,
+            response = response,
+        )
+    }
+
+    suspend fun enqueueDownloadSuspend(
+        url: String,
+        referrerUrl: String,
+        response: WebResponse? = null,
+    ) {
+        DownloadWorker.ensureNotificationChannel(context)
+        val workId = UUID.randomUUID()
+        if (response != null) {
+            PendingDownloadBodyStore.put(workId.toString(), response)
+        }
+        val notificationId = workId.hashCode() and 0x7fffffff
+        val workRequest = OneTimeWorkRequestBuilder<DownloadWorker>()
+            .setId(workId)
+            .setInputData(
+                workDataOf(
+                    DownloadWorker.KEY_URL to url,
+                    DownloadWorker.KEY_REFERRER_URL to referrerUrl,
+                    DownloadWorker.KEY_NOTIFICATION_ID to notificationId,
+                    DownloadWorker.KEY_STABLE_WORKER_ID to workId.toString(),
+                ),
+            )
+            .addTag(DownloadWorker.TAG_DOWNLOAD)
+            .build()
+        enqueueDownloadInternal(
+            workRequest = workRequest,
+            workId = workId,
+            url = url,
+            referrerUrl = referrerUrl,
+            notificationId = notificationId,
+        )
+    }
+
+    private suspend fun enqueueDownloadInternal(
+        workRequest: OneTimeWorkRequest,
+        workId: UUID,
+        url: String,
+        referrerUrl: String,
+        notificationId: Int,
+    ) {
+        try {
+            downloadRepository.insertEnqueued(
+                workerId = workRequest.id.toString(),
+                url = url,
+                referrerUrl = referrerUrl,
+                enqueuedAt = System.currentTimeMillis(),
+            )
+            WorkManager.getInstance(context).enqueue(workRequest).await()
+        } catch (e: Throwable) {
+            PendingDownloadBodyStore.discard(workId.toString())
+            downloadRepository.updateCancelled(workRequest.id.toString())
+            throw e
+        }
+        val notification = NotificationCompat.Builder(context, DownloadWorker.CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.stat_sys_download)
+            .setContentTitle(context.getString(R.string.download_notification_starting))
+            .setProgress(100, 0, true)
+            .setOnlyAlertOnce(true)
+            .build()
+        context.getSystemService(NotificationManager::class.java)
+            .notify(notificationId, notification)
     }
 
     /**

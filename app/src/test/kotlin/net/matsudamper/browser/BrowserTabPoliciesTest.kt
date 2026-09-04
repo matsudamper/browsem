@@ -172,6 +172,26 @@ class BrowserTabPoliciesTest {
     }
 
     @Test
+    fun externalDownloadInitialUrlMatchesResponseIgnoringFragmentAndTrailingSlash() {
+        assertTrue(
+            matchesExternalDownloadInitialUrl(
+                initialUrl = "https://example.com/file.zip/",
+                responseUri = "https://example.com/file.zip#download",
+            ),
+        )
+    }
+
+    @Test
+    fun externalDownloadInitialUrlDoesNotMatchDifferentResponse() {
+        assertFalse(
+            matchesExternalDownloadInitialUrl(
+                initialUrl = "https://example.com/page",
+                responseUri = "https://example.com/file.zip",
+            ),
+        )
+    }
+
+    @Test
     fun webAppSameHostIsNotCrossDomain() {
         assertFalse(
             isWebAppCrossDomainNavigation(
