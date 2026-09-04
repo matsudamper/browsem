@@ -20,18 +20,10 @@ GeckoView ベースの Android ブラウザ。Kotlin / Jetpack Compose / Materia
 - Instrumentation: Gradle Managed Device のみ（実機・通常エミュレータ禁止）
 - 通常は全件実行せず class 指定で絞る
 - UI操作は Compose セマンティクス API。生のタッチ注入禁止
-- `pressBack()` など物理ボタンは `onBackPressedDispatcher.onBackPressed()` を使う
 - repository等をテストから直接いじらない。UI操作で行う
 - コンポーネント特定は `hasTestTag`（テキスト監視以外で `hasText` を使わない）
 - TestTagは直接stringせず既存パターンに合わせる
 - GMD起動失敗時は名前・IDを一時変更して再実行可
-
-## 変更後（必須）
-コード変更後はコミット前に、以下をこの順で逐次実行する。
-1. `./gradlew :app:assembleDebug` でビルド確認
-2. `./gradlew detekt` で lint を確認
-3. `./gradlew test` でユニットテスト通過を確認
-4. UI 変更を含む場合は `@Preview` を追加/更新し、Paparazzi スナップショットを撮影（コミットしない。PR とチャットに貼る）
 
 ## ビルド例
 ```bash
@@ -43,15 +35,8 @@ GeckoView ベースの Android ブラウザ。Kotlin / Jetpack Compose / Materia
 ./gradlew :app:pixel6Api34DebugAndroidTest
 ```
 
-## Git（browsem）
-- 複数の論理変更を 1 つのコミットにまとめない
-- `git commit --amend` や squash による統合も禁止する（目的にかかわらず）
-
 ## PRフォロー（Cursor Cloud Agent）
-このルールは Cursor Cloud Agent（AIリモート実行環境）でのみ自動的に適用する。ローカル CLI や IDE 拡張ではユーザーから指示があった場合にのみ適用する。
-
-- PR push 後に CI・PR を購読する
-- コミット後の PR 本文 fetch・更新もリモート実行時のみ自動適用する
+リモート実行ではPR push後にCI・PR購読。ローカルCLI/IDE拡張はユーザー指示時のみ。
 
 # 共通ルール
 
@@ -105,7 +90,7 @@ GeckoView ベースの Android ブラウザ。Kotlin / Jetpack Compose / Materia
 
 ## ビルド・検証（方針）
 - ビルド / format / lint / test 等のタスクは並列実行しない。逐次実行する
-- 編集後は確認してからコミット（具体コマンドはリポジトリ固有セクション）
+- 編集後は確認してからコミット
 - 命令を無視して無理通ししない
 - 一回の指示で 5 回連続失敗したら経緯とやったことをまとめて提出して停止
 - ネットワーク起因のビルド失敗は深掘り不要。通らなかった旨を報告してよい
