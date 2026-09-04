@@ -275,32 +275,34 @@ internal class BrowserViewModel(
      * タブを閉じ、デフォルトグループの最後のタブへ遷移するためのタブ ID を返す。
      */
     suspend fun finishExternalDownloadTab(tabId: String): String? {
-        if (!externalTabPreviousTabs.containsKey(tabId)) {
-            return null
-        }
-        val defaultGroupId = tabGroupRepository.getDefaultGroupId()?.value
-        var targetTabId = ExternalDownloadTabNavigationPolicy.resolveTargetTabAfterClosingExternalDownload(
-            state = browserTabController.tabStoreState.value,
-            defaultGroupId = defaultGroupId,
-            excludingTabId = tabId,
-        )
-        if (targetTabId == null) {
-            val newTabId = UUID.randomUUID().toString()
-            tabGroupRepository.getDefaultGroupId()?.let { groupId ->
-                tabGroupRepository.assignTabToGroup(newTabId, groupId)
+        return externalTabCleanupMutex.withLock {
+            if (!externalTabPreviousTabs.containsKey(tabId)) {
+                return@withLock null
             }
-            targetTabId = createTabWithHomepage(
-                tabId = newTabId,
-                insertAfterSelectedTab = false,
-            ).tabId
+            val defaultGroupId = tabGroupRepository.getDefaultGroupId()?.value
+            var targetTabId = ExternalDownloadTabNavigationPolicy.resolveTargetTabAfterClosingExternalDownload(
+                state = browserTabController.tabStoreState.value,
+                defaultGroupId = defaultGroupId,
+                excludingTabId = tabId,
+            )
+            if (targetTabId == null) {
+                val newTabId = UUID.randomUUID().toString()
+                tabGroupRepository.getDefaultGroupId()?.let { groupId ->
+                    tabGroupRepository.assignTabToGroup(newTabId, groupId)
+                }
+                targetTabId = createTabWithHomepage(
+                    tabId = newTabId,
+                    insertAfterSelectedTab = false,
+                ).tabId
+            }
+            externalTabPreviousTabs.remove(tabId)
+            externalTabInitialUrlByTabId.remove(tabId)
+            externalTabIdsFlow.update { it - tabId }
+            externalTabInitialUrlsFlow.update { it - tabId }
+            browserTabController.closeTabWithUndo(tabId, nextSelectedTabId = targetTabId)
+            browserTabController.confirmClosedTab()
+            targetTabId
         }
-        externalTabPreviousTabs.remove(tabId)
-        externalTabInitialUrlByTabId.remove(tabId)
-        externalTabIdsFlow.update { it - tabId }
-        externalTabInitialUrlsFlow.update { it - tabId }
-        browserTabController.closeTabWithUndo(tabId, nextSelectedTabId = targetTabId)
-        browserTabController.confirmClosedTab()
-        return targetTabId
     }
 
     /**
