@@ -157,7 +157,6 @@ dependencies {
     implementation(project(":feature-theme-color"))
     implementation(project(":feature-twitter-share"))
     implementation(project(":feature-web-share-files"))
-    implementation(project(":feature-keyboard-scroll"))
     implementation(project(":feature-viewport-scale"))
     implementation(project(":data"))
     implementation(project(":resources"))

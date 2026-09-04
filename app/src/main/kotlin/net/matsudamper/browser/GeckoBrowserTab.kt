@@ -87,7 +87,6 @@ import net.matsudamper.browser.feature.addressautofill.AddressAutofillCoordinato
 import net.matsudamper.browser.feature.addressautofill.AddressAutofillDelegate
 import net.matsudamper.browser.feature.findinpage.FindInPageWebExtension
 import net.matsudamper.browser.feature.forminputautofill.FormInputAutofillCoordinator
-import net.matsudamper.browser.feature.keyboardscroll.KeyboardScrollWebExtension
 import net.matsudamper.browser.feature.media.GeckoMediaSessionDelegate
 import net.matsudamper.browser.feature.media.MediaWebExtension
 import net.matsudamper.browser.feature.mocklocation.MockLocationWebExtension
@@ -731,14 +730,6 @@ internal fun GeckoBrowserTab(
         mockLocationWebExtension.registerSession(session) { state.currentPageUrl }
         onDispose {
             mockLocationWebExtension.unregisterSession(session)
-        }
-    }
-
-    val keyboardScrollWebExtension: KeyboardScrollWebExtension = koinInject()
-    DisposableEffect(session, keyboardScrollWebExtension) {
-        keyboardScrollWebExtension.registerSession(session)
-        onDispose {
-            keyboardScrollWebExtension.unregisterSession(session)
         }
     }
 

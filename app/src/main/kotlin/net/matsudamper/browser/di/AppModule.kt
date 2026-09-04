@@ -36,7 +36,6 @@ import net.matsudamper.browser.feature.devtools.DevToolsWebExtension
 import net.matsudamper.browser.feature.findinpage.FindInPageWebExtension
 import net.matsudamper.browser.feature.forminputautofill.FormInputAutofillCoordinator
 import net.matsudamper.browser.feature.forminputautofill.FormInputAutofillWebExtension
-import net.matsudamper.browser.feature.keyboardscroll.KeyboardScrollWebExtension
 import net.matsudamper.browser.feature.media.MediaWebExtension
 import net.matsudamper.browser.feature.mocklocation.MockLocationWebExtension
 import net.matsudamper.browser.feature.networklog.NetworkLogStore
@@ -116,7 +115,6 @@ val appModule = module {
     // 通信ログはランタイム単位で収集するため、ストア・拡張機能ともに single で管理
     single { NetworkLogStore() }
     single { NetworkLogWebExtension(get()).also { it.install(get()) } }
-    single { KeyboardScrollWebExtension().also { it.install(get()) } }
     single { ViewportScaleWebExtension().also { it.install(get()) } }
     single { TwitterShareWebExtension().also { it.install(get()) } }
     single { WebShareFilesWebExtension().also { it.install(get()) } }
