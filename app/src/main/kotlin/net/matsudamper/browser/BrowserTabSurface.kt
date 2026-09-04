@@ -77,14 +77,9 @@ internal fun BrowserContentHost(
     updateGeckoView: (GeckoView) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    // Firefox (Fenix) の ImeInsetsSynchronizer と同様に、キーボード分だけ表示領域を
-    // 物理的に縮める。Gecko 内部の onKeyboardHeight は解除しない。あちらは
-    // interactive-widget の解釈 (レイアウトビューポートを保つ) に必要で、
-    // 表示領域の縮小と役割が別のため両方が要る。
-    //
-    // GeckoView は Activity の decorView へ WindowInsets リスナーを張るが、
-    // ComposeView が insets を消費するため View 階層の子には届かない。Compose 側で
-    // 高さを読み、AndroidView の update で反映する。
+    // キーボード分だけ表示領域を物理的に縮める。GeckoView は Activity の decorView へ
+    // WindowInsets リスナーを張るが、ComposeView が insets を消費するため View 階層の
+    // 子には届かない。Compose 側で高さを読み、AndroidView の update で反映する。
     val density = LocalDensity.current
     val imeBottomPx = WindowInsets.ime.getBottom(density)
     val navigationBottomPx = WindowInsets.navigationBars.getBottom(density)
@@ -224,20 +219,9 @@ internal fun BrowserContentHost(
             update = { swipeRefreshLayout ->
                 swipeRefreshLayout.isEnabled = !state.isFullScreen
                 swipeRefreshLayout.isRefreshing = state.isRefreshing
-                // SwipeRefreshLayout は子を padding 分だけ縮めて measure/layout する。
-                // 横向きの全画面 IME やマルチウィンドウでは、ウィンドウ基準の
-                // キーボード高がツールバーを除いたこのコンテナの高さを超えることがある。
-                // そのまま padding にすると子の高さが負になるため、コンテナ高で抑える。
-                val containerHeight = swipeRefreshLayout.height
-                val paddingBottom = if (containerHeight > 0) {
-                    keyboardHeightPx.coerceAtMost(containerHeight)
-                } else {
-                    keyboardHeightPx
-                }
-                // 再生中の surface リサイズを増やさないよう、値が変わるときだけ更新する。
-                if (swipeRefreshLayout.paddingBottom != paddingBottom) {
-                    swipeRefreshLayout.setPadding(0, 0, 0, paddingBottom)
-                }
+                // 実際の padding への反映と高さの上限制御は GeckoSwipeRefreshLayout が
+                // measure 時に行う。setter は値が変わるときだけ requestLayout する。
+                swipeRefreshLayout.keyboardHeight = keyboardHeightPx
                 val geckoView = swipeRefreshLayout.findViewById<GeckoView>(id)
                 if (!state.isUrlInputFocused && !state.showFindInPage && !geckoView.isFocused) {
                     geckoView.requestFocus()
