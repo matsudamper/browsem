@@ -1,9 +1,52 @@
 # browsem
 
-リポジトリ固有のルールは次を参照:
-- @docs/agent-repo.md
+## 概要
+GeckoView ベースの Android ブラウザ。Kotlin / Jetpack Compose / Material 3 / Navigation 3 / Koin DI。
+
+## アーキテクチャ
+- OneShotイベントはChannelを使ったevent
+- データフロー: Proto → DataStore/Room → Repository → ViewModel(ViewModelStateFlow) → UiState → Compose
+- GeckoRuntimeはプロセスに1つ。`GeckoRuntime.getDefault(context)` で取得し ViewModel・Controller 経由で配布
+
+## GeckoView 調査
+- Bugzilla: https://bugzilla.mozilla.org/
+- コンポーネント例: `Core :: GeckoView` / `GeckoView :: General`
+
+## デグレ防止
+変更・削除前に `git log -p` で追加経緯を確認する。
+
+## テスト
+- 単体: JUnit 4。`./gradlew test`（Paparazziは自動除外）
+- Instrumentation: Gradle Managed Device のみ（実機・通常エミュレータ禁止）
+- 通常は全件実行せず class 指定で絞る
+- UI操作は Compose セマンティクス API。生のタッチ注入禁止
+- repository等をテストから直接いじらない。UI操作で行う
+- コンポーネント特定は `hasTestTag`（テキスト監視以外で `hasText` を使わない）
+- TestTagは直接stringせず既存パターンに合わせる
+- GMD起動失敗時は名前・IDを一時変更して再実行可
+
+## ビルド例
+```bash
+./gradlew :app:assembleDebug
+./gradlew test
+./gradlew :app:verifyPaparazziDebug
+./gradlew :app:recordPaparazziDebug -Dpaparazzi.filter="PreviewName"
+./gradlew :app:lintDebug detekt
+./gradlew :app:pixel6Api34DebugAndroidTest
+```
+
+## PRフォロー（Cursor Cloud Agent）
+リモート実行ではPR push後にCI・PR購読。ローカルCLI/IDE拡張はユーザー指示時のみ。
 
 # 共通ルール
+
+## docs の参照
+リポジトリに存在する `docs/` 以下のエージェント向けドキュメントがあれば、必ず読んで従う。無いファイルは無視してよい。
+
+例:
+- `docs/agent-kotlin.md` — Kotlin 詳細スタイル
+- `docs/agent-compose.md` — Compose / UiState / Paparazzi
+- 既存の `docs/compose-guidelines.md` / `docs/coding_style.md` などリポ固有の詳細ガイド
 
 ## 言語
 - 応答・説明・コミットメッセージ・PR 文・レビュー返信は日本語
@@ -18,7 +61,7 @@
 - 書くなら What ではなく Why / コードで表せない制約
 - 既存コメントは削除しない。古くなったら更新可
 - どうしても必要そうなら勝手に書かずチャットで相談
-- 例外の緩さはリポジトリ固有ドキュメントに従う
+- 例外の緩さはリポジトリ固有セクションおよび docs に従う
 
 ## Kotlin / 一般（該当する場合）
 - Kotlin 公式コーディング規約に従う（リポに docs があればそちら優先）
@@ -47,7 +90,7 @@
 
 ## ビルド・検証（方針）
 - ビルド / format / lint / test 等のタスクは並列実行しない。逐次実行する
-- 編集後は確認してからコミット（具体コマンドはリポジトリ固有ドキュメント）
+- 編集後は確認してからコミット（具体コマンドはリポジトリ固有セクション）
 - 命令を無視して無理通ししない
 - 一回の指示で 5 回連続失敗したら経緯とやったことをまとめて提出して停止
 - ネットワーク起因のビルド失敗は深掘り不要。通らなかった旨を報告してよい
