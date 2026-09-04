@@ -171,7 +171,7 @@ internal fun BrowserApp(
                         initialReferrerUrl = request.referrerUrl,
                         insertAfterSelectedTab = false,
                     )
-                    viewModel.registerExternalTab(newTab.tabId)
+                    viewModel.registerExternalTab(newTab.tabId, request.url)
                     selectTabRequester.request(newTab.tabId)
                 },
                 onNavigateToUrl = { url ->
@@ -1005,6 +1005,12 @@ private fun MainBrowserContent(
                         }
                     }
                 }
+
+                override fun onExternalDownloadTabClosed(targetTabId: String?) {
+                    if (targetTabId != null) {
+                        selectTab(targetTabId, null)
+                    }
+                }
             })
         }
     }
@@ -1075,7 +1081,7 @@ private fun MainBrowserContent(
                             .map { browserTabController.tabs.toList() }
                             .distinctUntilChanged()
                     }
-                    val browserScreenViewModel = remember(key.tabId, tabGroupRepository, browserTabsFlow) {
+                    val browserScreenViewModel = remember(key.tabId, tabGroupRepository, browserTabsFlow, viewModel) {
                         BrowserScreenViewModel(
                             historyRepository = historyRepository,
                             settingsRepository = settingsRepository,
@@ -1083,6 +1089,8 @@ private fun MainBrowserContent(
                             tabGroupRepository = tabGroupRepository,
                             browserTabsFlow = browserTabsFlow,
                             screenTabId = key.tabId,
+                            externalTabIdsFlow = viewModel.externalTabIds,
+                            externalTabInitialUrlsFlow = viewModel.externalTabInitialUrls,
                         )
                     }
                     DisposableEffect(key.tabId) {
@@ -1105,6 +1113,10 @@ private fun MainBrowserContent(
                                     if (targetTabId != null) {
                                         selectTab(targetTabId, null)
                                     }
+                                }
+
+                                override fun onExternalDownloadDialogResolved(tabId: String) {
+                                    viewModel.onExternalDownloadDialogResolved(tabId)
                                 }
                             })
                         }
@@ -1202,6 +1214,8 @@ private fun MainBrowserContent(
                                         selectTab(targetTabId, null)
                                     }
                                 },
+                                externalDownloadDialogListener = browserScreenUiState.externalDownloadDialogListener,
+                                externalTabInitialUrl = browserScreenUiState.externalTabInitialUrl,
                                 onHistoryRecord = browserScreenUiState.callbacks::onHistoryRecord,
                                 onHistoryTitleUpdate = browserScreenUiState.callbacks::onHistoryTitleUpdate,
                                 urlBarSuggestions = browserScreenUiState.urlBarSuggestions,

@@ -8,8 +8,15 @@ data class BrowserScreenUiState(
     val urlBarSuggestions: UrlBarSuggestionsUiState,
     val swipePreview: SwipePreviewUiState = SwipePreviewUiState(),
     val groupTabCount: Int?,
+    val externalDownloadDialogListener: ExternalDownloadDialogListener?,
+    val externalTabInitialUrl: String?,
     val callbacks: Callbacks,
 ) {
+    @Stable
+    interface ExternalDownloadDialogListener {
+        fun onResolved()
+    }
+
     @Stable
     data class SwipePreviewUiState(
         val previousTab: AdjacentTabPreview? = null,

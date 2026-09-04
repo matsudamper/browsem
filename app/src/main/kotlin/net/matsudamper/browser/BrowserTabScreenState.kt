@@ -41,9 +41,11 @@ import net.matsudamper.browser.data.SiteSettingsRepository
 import net.matsudamper.browser.data.TranslationProvider
 import net.matsudamper.browser.data.download.DownloadRecordStatus
 import net.matsudamper.browser.data.extractSiteHost
+import net.matsudamper.browser.download.proceedDownloadFromResponse
 import net.matsudamper.browser.feature.devtools.DevToolsWebExtension
 import net.matsudamper.browser.feature.findinpage.FindInPageWebExtension
 import net.matsudamper.browser.translate.TranslationPriorityLanguage
+import net.matsudamper.browser.ui.browser.BrowserScreenUiState
 import org.json.JSONObject
 import org.koin.compose.koinInject
 import org.mozilla.geckoview.AllowOrDeny
@@ -77,6 +79,8 @@ internal fun rememberBrowserTabScreenState(
     onHistoryTitleUpdate: (suspend (id: Long, title: String) -> Unit)? = null,
     onRequestDownloadNotificationPermission: suspend () -> Unit = {},
     onRequestAndroidPermissions: suspend (Array<String>) -> Array<String> = { emptyArray() },
+    externalDownloadDialogListener: BrowserScreenUiState.ExternalDownloadDialogListener? = null,
+    externalTabInitialUrl: String? = null,
 ): BrowserTabScreenState {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -106,6 +110,8 @@ internal fun rememberBrowserTabScreenState(
             onHistoryTitleUpdate = onHistoryTitleUpdate,
             onRequestDownloadNotificationPermission = onRequestDownloadNotificationPermission,
             onRequestAndroidPermissions = onRequestAndroidPermissions,
+            externalDownloadDialogListener = externalDownloadDialogListener,
+            externalTabInitialUrl = externalTabInitialUrl,
         )
     }
     state.homepageUrl = homepageUrl
@@ -114,6 +120,8 @@ internal fun rememberBrowserTabScreenState(
     state.onWebAppCrossDomainNavigation = onWebAppCrossDomainNavigation
     state.onHistoryRecord = onHistoryRecord
     state.onHistoryTitleUpdate = onHistoryTitleUpdate
+    state.externalDownloadDialogListener = externalDownloadDialogListener
+    state.externalTabInitialUrl = externalTabInitialUrl
     return state
 }
 
@@ -135,6 +143,8 @@ internal class BrowserTabScreenState(
     private val context: Context,
     private val onRequestDownloadNotificationPermission: suspend () -> Unit = {},
     private val onRequestAndroidPermissions: suspend (Array<String>) -> Array<String> = { emptyArray() },
+    var externalDownloadDialogListener: BrowserScreenUiState.ExternalDownloadDialogListener? = null,
+    var externalTabInitialUrl: String? = null,
     var onHistoryRecord: (suspend (url: String, title: String) -> Long)? = null,
     var onHistoryTitleUpdate: (suspend (id: Long, title: String) -> Unit)? = null,
 ) : BrowserSessionStateCallbacks {
@@ -448,6 +458,7 @@ internal class BrowserTabScreenState(
         val existingDownloads: List<DuplicateDownloadEntry>,
         internal val onConfirm: () -> Unit,
         internal val onDismiss: () -> Unit = {},
+        internal val onCancel: () -> Unit = {},
     )
 
     data class DuplicateDownloadEntry(
@@ -1031,10 +1042,15 @@ internal class BrowserTabScreenState(
                         )
                     },
                     onConfirm = {
-                        proceedDownloadFromResponse(response, referrerUrl)
+                        proceedDownloadFromResponse(response, referrerUrl) {
+                            finishExternalDownloadTabIfNeeded(response.uri)
+                        }
                     },
                     onDismiss = {
                         response.body?.close()
+                    },
+                    onCancel = {
+                        finishExternalDownloadTabIfNeeded(response.uri)
                     },
                 )
                 return@launch
@@ -1046,26 +1062,16 @@ internal class BrowserTabScreenState(
     fun confirmPendingDownload() {
         val response = pendingDownloadResponse ?: return
         pendingDownloadResponse = null
-        proceedDownloadFromResponse(response, currentPageUrl)
+        proceedDownloadFromResponse(response, currentPageUrl) {
+            finishExternalDownloadTabIfNeeded(response.uri)
+        }
     }
 
-    private fun proceedDownloadFromResponse(response: WebResponse, referrerUrl: String) {
-        coroutineScope.launch {
-            var enqueued = false
-            try {
-                onRequestDownloadNotificationPermission()
-                geckoDownloadManager.enqueueDownloadFromResponse(
-                    response = response,
-                    referrerUrl = referrerUrl,
-                    coroutineScope = coroutineScope,
-                )
-                enqueued = true
-            } finally {
-                if (!enqueued) {
-                    response.body?.close()
-                }
-            }
-        }
+    fun cancelPendingDownload() {
+        val response = pendingDownloadResponse
+        pendingDownloadResponse?.body?.close()
+        pendingDownloadResponse = null
+        response?.let { finishExternalDownloadTabIfNeeded(it.uri) }
     }
 
     fun dismissPendingDownload() {
@@ -1073,10 +1079,38 @@ internal class BrowserTabScreenState(
         pendingDownloadResponse = null
     }
 
+    private fun finishExternalDownloadTabIfNeeded(responseUri: String) {
+        val initialUrl = externalTabInitialUrl ?: return
+        if (!matchesExternalDownloadInitialUrl(initialUrl, responseUri)) return
+        externalDownloadDialogListener?.onResolved()
+    }
+
+    private fun proceedDownloadFromResponse(
+        response: WebResponse,
+        referrerUrl: String,
+        onEnqueued: (() -> Unit)? = null,
+    ) {
+        coroutineScope.launch {
+            proceedDownloadFromResponse(
+                awaitPermission = { onRequestDownloadNotificationPermission() },
+                enqueue = { geckoDownloadManager.enqueueDownloadFromResponse(response, referrerUrl) },
+                onEnqueued = onEnqueued,
+                onEnqueueFailed = { response.body?.close() },
+            )
+        }
+    }
+
     fun confirmDuplicateDownload() {
         val state = duplicateDownloadState ?: return
         duplicateDownloadState = null
         state.onConfirm()
+    }
+
+    fun cancelDuplicateDownload() {
+        val state = duplicateDownloadState ?: return
+        duplicateDownloadState = null
+        state.onDismiss()
+        state.onCancel()
     }
 
     fun dismissDuplicateDownload() {

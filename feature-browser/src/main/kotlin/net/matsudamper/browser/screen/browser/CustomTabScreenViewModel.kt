@@ -31,6 +31,8 @@ class CustomTabScreenViewModel(
         BrowserScreenUiState(
             urlBarSuggestions = UrlBarSuggestionsUiState(),
             groupTabCount = null,
+            externalDownloadDialogListener = null,
+            externalTabInitialUrl = null,
             callbacks = callbacks,
         ),
     ).also { uiStateFlow ->
@@ -40,6 +42,8 @@ class CustomTabScreenViewModel(
                     BrowserScreenUiState(
                         urlBarSuggestions = suggestions,
                         groupTabCount = null,
+                        externalDownloadDialogListener = null,
+                        externalTabInitialUrl = null,
                         callbacks = callbacks,
                     )
                 }

@@ -46,3 +46,8 @@ internal fun normalizedBrowserPageKey(url: String): String {
         .substringBefore("#")
         .removeSuffix("/")
 }
+
+/** 外部 Intent の初期 URL に対応するダウンロード応答かどうかを判定する */
+internal fun matchesExternalDownloadInitialUrl(initialUrl: String, responseUri: String): Boolean {
+    return normalizedBrowserPageKey(initialUrl) == normalizedBrowserPageKey(responseUri)
+}

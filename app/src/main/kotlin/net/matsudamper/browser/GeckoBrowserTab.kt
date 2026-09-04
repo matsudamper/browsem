@@ -96,6 +96,7 @@ import net.matsudamper.browser.feature.twittershare.TwitterShareWebExtension
 import net.matsudamper.browser.feature.viewportscale.ViewportScaleWebExtension
 import net.matsudamper.browser.feature.websharefiles.WebShareFilesWebExtension
 import net.matsudamper.browser.translate.TranslationPriorityLanguage
+import net.matsudamper.browser.ui.browser.BrowserScreenUiState
 import net.matsudamper.browser.ui.browser.UrlBarSuggestionsUiState
 import net.matsudamper.browser.ui.common.findActivity
 import net.matsudamper.browser.ui.common.resolveBrowserToolbarColors
@@ -137,6 +138,8 @@ internal fun GeckoBrowserTab(
     onCloseCustomTab: (() -> Unit)? = null,
     onOpenInBrowser: ((String) -> Unit)? = null,
     onCloseTab: (() -> Unit)? = null,
+    externalDownloadDialogListener: BrowserScreenUiState.ExternalDownloadDialogListener? = null,
+    externalTabInitialUrl: String? = null,
     onToolbarHorizontalDrag: (Float) -> Unit = {},
     onToolbarDragEnd: () -> Unit = {},
     onHistoryRecord: (suspend (url: String, title: String) -> Long)? = null,
@@ -179,6 +182,8 @@ internal fun GeckoBrowserTab(
         onHistoryRecord = onHistoryRecord,
         onHistoryTitleUpdate = onHistoryTitleUpdate,
         onRequestDownloadNotificationPermission = onRequestDownloadNotificationPermission,
+        externalDownloadDialogListener = externalDownloadDialogListener,
+        externalTabInitialUrl = externalTabInitialUrl,
         onRequestAndroidPermissions = { permissions ->
             val alreadyGranted = permissions.filter {
                 ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED
