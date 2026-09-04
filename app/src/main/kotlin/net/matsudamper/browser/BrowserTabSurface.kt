@@ -62,6 +62,11 @@ import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.GeckoView
 
+/**
+ * GeckoView が内部で登録するキーボード高さ通知用の WindowInsets リスナーのキー。
+ */
+private const val GECKO_KEYBOARD_INSETS_LISTENER_KEY = "KEYBOARD_WINDOW_INSETS_LISTENER"
+
 @Composable
 internal fun BrowserContentHost(
     state: BrowserTabScreenState,
@@ -116,6 +121,24 @@ internal fun BrowserContentHost(
                         geckoView.importantForAutofill =
                             View.IMPORTANT_FOR_AUTOFILL_YES_EXCLUDE_DESCENDANTS
                         geckoView.setSession(session)
+                        // Gecko 内部のキーボード高さ通知を解除する。表示領域は下の padding で
+                        // 物理的に縮めており、Gecko 側でも onKeyboardHeight を適用すると
+                        // キーボード分が二重に引かれる。さらに Gecko は
+                        // interactive-widget の既定 (resizes-visual) に従って
+                        // レイアウトビューポートを保つため、文書末尾にある入力欄が
+                        // スクロール上限に阻まれてキーボードの上まで来られない。
+                        // GeckoView.onAttachedToWindow が毎回リスナーを張り直すので、
+                        // attach のたびに外す。
+                        geckoView.addOnAttachStateChangeListener(
+                            object : View.OnAttachStateChangeListener {
+                                override fun onViewAttachedToWindow(v: View) {
+                                    (v as GeckoView)
+                                        .removeWindowInsetsListener(GECKO_KEYBOARD_INSETS_LISTENER_KEY)
+                                }
+
+                                override fun onViewDetachedFromWindow(v: View) = Unit
+                            },
+                        )
                         // Engine 側で非アクティブ扱いになると Compositor の描画更新が止まり、
                         // 復帰時の黒画面につながるため、初期生成時に必ず active 化する。
                         session.setActive(true)
