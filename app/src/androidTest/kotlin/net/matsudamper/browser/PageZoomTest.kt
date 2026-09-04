@@ -192,9 +192,10 @@ class PageZoomTest {
      */
     @Test
     fun pageZoomPersistedAfterNavigation() {
-        composeRule.waitForBrowserReady()
         val zoomPageUrl = startZoomPageServer()
-        composeRule.openLocalPageAndStabilize(zoomPageUrl, ZOOM_INDEX_FILE_NAME)
+        composeRule.openUrlFromUrlBar(zoomPageUrl)
+        composeRule.waitForUrlBarContains(ZOOM_INDEX_FILE_NAME, timeoutMillis = 60_000)
+        composeRule.waitForUrlBarNotFocused()
 
         openPageZoomMenuAndSet200Percent()
         composeRule.waitUntil(timeoutMillis = 10_000) {
@@ -204,22 +205,13 @@ class PageZoomTest {
         // 「リロード操作で別ページへ遷移した」のかを切り分けられるようにする。
         // CI では起動時に復元されたタブの読み込みが遅れてコミットされ、リロード後の URL が
         // https://www.google.com/?zx=... になる flaky 失敗が観測されている。
-        composeRule.waitForStableLocalPage(
-            pageUrl = zoomPageUrl,
-            urlMarker = ZOOM_INDEX_FILE_NAME,
-            timeoutMillis = 30_000,
-        )
         val urlBeforeRefresh = composeRule.currentPageUrlFromUi()
         println("page-zoom-reload beforeRefresh=\"$urlBeforeRefresh\"")
         composeRule.onNodeWithTag(BrowserToolbarMenuTestTags.RefreshButton.testTag).performClick()
         // 再読み込み直後に URL バーがフォーカスを得ると urlInput が空にクリアされる。
-        // waitForStableLocalPage はフォーカス状態に依存せず現在ページ URL を読む。
+        // waitForUrlBarContains はフォーカス状態に依存せず現在ページ URL を読む。
         try {
-            composeRule.waitForStableLocalPage(
-                pageUrl = zoomPageUrl,
-                urlMarker = ZOOM_INDEX_FILE_NAME,
-                timeoutMillis = 60_000,
-            )
+            composeRule.waitForUrlBarContains(ZOOM_INDEX_FILE_NAME, timeoutMillis = 60_000)
         } catch (e: AssertionError) {
             throw AssertionError(
                 "リロード後にズームページ($ZOOM_INDEX_FILE_NAME)に留まらない: " +
