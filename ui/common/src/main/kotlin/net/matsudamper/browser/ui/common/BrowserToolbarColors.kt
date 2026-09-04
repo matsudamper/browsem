@@ -16,11 +16,10 @@ data class BrowserToolbarColors(
 fun resolveBrowserToolbarColors(
     toolbarColor: Color?,
     defaultToolbarColor: Color,
-    isAppDarkTheme: Boolean,
 ): BrowserToolbarColors {
     val resolvedToolbarColor = toolbarColor ?: defaultToolbarColor
-    val isBrightThemeColor = toolbarColor?.luminance()?.let { it >= 0.5f } ?: !isAppDarkTheme
-    val isBrightBackground = resolvedToolbarColor.isBrightBackground()
+    val isBrightThemeColor = toolbarColor?.luminance()?.let { it >= 0.5f }
+        ?: (defaultToolbarColor.luminance() >= 0.5f)
     val urlBarBackgroundColor = if (isBrightThemeColor) {
         Color.Black
     } else {
@@ -37,7 +36,7 @@ fun resolveBrowserToolbarColors(
         urlBarBackgroundColor = urlBarBackgroundColor,
         toolbarContentColor = toolbarContentColor,
         colorSource = if (toolbarColor == null) "default" else "theme",
-        isBrightBackground = isBrightBackground,
+        isBrightBackground = resolvedToolbarColor.luminance() >= 0.5f,
     )
 }
 

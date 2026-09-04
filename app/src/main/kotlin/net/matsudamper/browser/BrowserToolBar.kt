@@ -79,7 +79,6 @@ import androidx.compose.ui.unit.sp
 import kotlin.math.roundToInt
 import net.matsudamper.browser.resources.R as ResourcesR
 import net.matsudamper.browser.ui.common.BrowserTheme
-import net.matsudamper.browser.ui.common.isAppInDarkTheme
 import net.matsudamper.browser.ui.common.resolveBrowserToolbarColors
 import net.matsudamper.browser.ui.common.toArgbHex
 
@@ -294,7 +293,6 @@ internal fun BrowserToolbar(
     val toolbarColors = resolveBrowserToolbarColors(
         toolbarColor = toolbarColor,
         defaultToolbarColor = MaterialTheme.colorScheme.primaryContainer,
-        isAppDarkTheme = isAppInDarkTheme(),
     )
 
     Surface(
