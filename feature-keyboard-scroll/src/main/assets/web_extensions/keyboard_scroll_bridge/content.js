@@ -18,23 +18,61 @@
     return tagName === "INPUT" || tagName === "TEXTAREA" || tagName === "SELECT";
   }
 
-  function isOutsideVisibleArea(element) {
-    // 子フレームでは自身の可視範囲しか測れず、親フレーム内での位置が分からない。
-    // scrollIntoView は親フレームまで伝播するため、判定せずに運ぶ。
-    if (!isTopFrame) return true;
+  /**
+   * フォーカスされている要素を返す。
+   *
+   * Web Components では外側の activeElement が shadow host になるため、
+   * open な shadow root を辿って実際の入力欄まで降りる。closed な場合は
+   * host までしか辿れないが、host を運べば入力欄も可視範囲に入る。
+   * 画面下部の iframe 内に入力欄がある場合も、外側からは iframe 要素しか
+   * 見えないため同じ扱いにする。
+   */
+  function focusedElement() {
+    let element = document.activeElement;
+    while (element && element.shadowRoot && element.shadowRoot.activeElement) {
+      element = element.shadowRoot.activeElement;
+    }
+    return element;
+  }
 
-    const rect = element.getBoundingClientRect();
-    // getBoundingClientRect はレイアウトビューポート基準。
-    // 可視範囲は visualViewport のオフセットと高さで表す。
-    const visibleTop = visualViewport.offsetTop;
-    const visibleBottom = visibleTop + visualViewport.height;
-    return rect.top < visibleTop || rect.bottom > visibleBottom;
+  function isScrollTarget(element) {
+    if (isTextEntry(element)) return true;
+    // 子フレーム内の入力欄は外側から見えない。フレームごと運ぶ。
+    return element != null && element.tagName === "IFRAME";
+  }
+
+  /**
+   * スクロールの基準にする矩形を返す。
+   *
+   * 可視範囲より背の高い textarea や contenteditable では、要素全体を
+   * 基準にするとキャレットがキーボードの下に残る。選択範囲が取れる場合は
+   * そちらを優先する。
+   */
+  function targetRect(element) {
+    const elementRect = element.getBoundingClientRect();
+    if (elementRect.height <= visualViewport.height) return elementRect;
+
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) return elementRect;
+    const selectionRect = selection.getRangeAt(0).getBoundingClientRect();
+    // 折りたたまれた選択では幅も高さも 0 になることがある。
+    if (selectionRect.height === 0 && selectionRect.top === 0) return elementRect;
+    return selectionRect;
   }
 
   function scrollFocusedIntoView() {
-    const element = document.activeElement;
-    if (!isTextEntry(element)) return;
-    if (!isOutsideVisibleArea(element)) return;
+    const element = focusedElement();
+    if (!isScrollTarget(element)) return;
+
+    // 子フレームでは自身の可視範囲しか測れず、親フレーム内での位置が分からない。
+    // scrollIntoView は親フレームまで伝播するため、判定せずに運ぶ。
+    if (isTopFrame) {
+      const rect = targetRect(element);
+      const visibleTop = visualViewport.offsetTop;
+      const visibleBottom = visibleTop + visualViewport.height;
+      if (rect.top >= visibleTop && rect.bottom <= visibleBottom) return;
+    }
+
     element.scrollIntoView({ block: "center", inline: "nearest" });
   }
 
@@ -48,8 +86,4 @@
   // 画面外の入力欄へフォーカスするだけのケースまで動かしてしまうため。
   // 表示領域が変わったときだけ補正する。
   visualViewport.addEventListener("resize", scheduleScroll);
-
-  // 読み込みが遅いページでは、注入前にタップと IME 表示が終わっていることがある。
-  // その場合は以降のイベントが来ないため、注入時にも一度だけ確認する。
-  scheduleScroll();
 })();
