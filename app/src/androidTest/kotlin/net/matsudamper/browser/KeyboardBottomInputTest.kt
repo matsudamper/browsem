@@ -82,9 +82,10 @@ class KeyboardBottomInputTest {
 
     @Test
     fun bottomInputStaysVisibleAboveKeyboard() {
-        composeRule.waitForBrowserReady()
         val pageUrl = startBottomInputPageServer()
-        composeRule.openLocalPageAndStabilize(pageUrl, BOTTOM_INPUT_FILE_NAME)
+        composeRule.openUrlFromUrlBar(pageUrl)
+        composeRule.waitForUrlBarContains(BOTTOM_INPUT_FILE_NAME, timeoutMillis = 60_000)
+        composeRule.waitForUrlBarNotFocused()
         // URL バーの IME が閉じきる前だと、その inset を「入力欄のキーボード」と
         // 誤認してページをタップしないまま先へ進んでしまう。
         assertTrue(
@@ -112,9 +113,10 @@ class KeyboardBottomInputTest {
      */
     @Test
     fun fixedBottomInputStaysVisibleAboveKeyboard() {
-        composeRule.waitForBrowserReady()
         val pageUrl = startPageServer(FIXED_DIR_NAME, FIXED_ASSET_DIR)
-        composeRule.openLocalPageAndStabilize(pageUrl, PAGE_FILE_NAME, timeoutMillis = URL_BAR_WAIT_MILLIS)
+        composeRule.openUrlFromUrlBar(pageUrl)
+        composeRule.waitForUrlBarContains(PAGE_FILE_NAME, timeoutMillis = URL_BAR_WAIT_MILLIS)
+        composeRule.waitForUrlBarNotFocused()
         assertTrue("URL バーのキーボードが閉じない", waitForImeHidden())
 
         if (!focusBottomInputAndWaitForIme()) {
@@ -147,33 +149,18 @@ class KeyboardBottomInputTest {
         var okCount = 0
         val deadline = SystemClock.elapsedRealtime() + INPUT_VISIBLE_WAIT_MILLIS
         while (SystemClock.elapsedRealtime() < deadline) {
-            val bounds = findFocusedPageInputBoundsInScreen()
+            val bounds = findBottomInputBoundsInScreen()
             val keyboardTop = keyboardTopInScreen()
-            val geckoBottom = geckoViewBottomInScreen()
-            val visibleBottom = listOfNotNull(keyboardTop, geckoBottom).minOrNull()
-            if (bounds == null || visibleBottom == null) {
-                lastDiagnostics = "bounds=$bounds keyboardTop=$keyboardTop geckoBottom=$geckoBottom"
+            if (bounds == null || keyboardTop == null) {
+                lastDiagnostics = "bounds=$bounds keyboardTop=$keyboardTop"
                 okCount = 0
             } else {
                 lastDiagnostics =
-                    "入力欄 bounds=$bounds キーボード上端=$keyboardTop GeckoView下端=$geckoBottom 画面高さ=${screenHeight()}"
-                okCount = if (bounds.bottom <= visibleBottom) okCount + 1 else 0
+                    "入力欄 bounds=$bounds キーボード上端=$keyboardTop 画面高さ=${screenHeight()}"
+                okCount = if (bounds.bottom <= keyboardTop) okCount + 1 else 0
             }
             if (okCount >= REQUIRED_STABLE_COUNT) return
             Thread.sleep(POLL_INTERVAL_MILLIS)
-        }
-
-        // アクセシビリティの座標更新が遅延し、GeckoView は縮小済みなのに bounds だけ古い
-        // 値のまま残ることがある。表示領域がキーボード上端まで縮んでいれば Issue #674 は満たしている。
-        val geckoBottom = geckoViewBottomInScreen()
-        val keyboardTop = keyboardTopInScreen()
-        if (
-            geckoBottom != null &&
-            keyboardTop != null &&
-            kotlin.math.abs(geckoBottom - keyboardTop) <= GECKO_KEYBOARD_TOLERANCE_PX &&
-            findFocusedPageInputBoundsInScreen() != null
-        ) {
-            return
         }
 
         throw AssertionError(
@@ -259,7 +246,7 @@ class KeyboardBottomInputTest {
             // ページ内の入力欄がフォーカスされていることも条件に含める。
             val focused = runCatching {
                 composeRule.waitUntil(timeoutMillis = TAP_RETRY_INTERVAL_MILLIS) {
-                    imeInsetBottom() > 0 && findFocusedPageInputBoundsInScreen() != null
+                    imeInsetBottom() > 0 && findBottomInputBoundsInScreen() != null
                 }
                 true
             }.getOrDefault(false)
@@ -354,66 +341,20 @@ class KeyboardBottomInputTest {
     }
 
     /**
-     * GeckoView の下端の画面座標を返す。表示領域の縮小判定に使う。
-     */
-    private fun geckoViewBottomInScreen(): Int? {
-        var bottom: Int? = null
-        composeRule.runOnIdle {
-            val geckoView = findGeckoView(composeRule.activity.window.decorView) ?: return@runOnIdle
-            val location = IntArray(2)
-            geckoView.getLocationOnScreen(location)
-            bottom = location[1] + geckoView.height
-        }
-        return bottom
-    }
-
-    /**
      * Gecko コンテンツ内でフォーカス中の入力欄の画面座標を返す。
      *
      * ページ内の入力欄は Compose のセマンティクスに現れないため、
      * GeckoView が公開するアクセシビリティノードから探す。
      */
-    private fun findFocusedPageInputBoundsInScreen(): Rect? {
-        val uiAutomation = InstrumentationRegistry.getInstrumentation().uiAutomation
-        val root = uiAutomation.rootInActiveWindow ?: return null
-        try {
-            val node = findFocusedPageInput(root) ?: return null
-            node.refresh()
-            if (!node.isFocused) {
-                node.recycle()
-                return null
-            }
-            return Rect().also { node.getBoundsInScreen(it) }.also { node.recycle() }
-        } finally {
-            root.recycle()
-        }
+    private fun findBottomInputBoundsInScreen(): Rect? {
+        // 未フォーカスの編集可能ノード (URL バー等) はキーボードより上にあるため、
+        // フォールバックに使うと入力欄が隠れていてもテストが通ってしまう。
+        // フォーカス中のノードだけを対象にする。
+        return collectEditableNodes()
+            .filter { it.focused }
+            .maxByOrNull { it.bounds.bottom }
+            ?.bounds
     }
-
-    /**
-     * ページ内 (URL バー以外) でフォーカス中の入力欄ノードを探す。
-     */
-    private fun findFocusedPageInput(node: AccessibilityNodeInfo): AccessibilityNodeInfo? {
-        val className = node.className?.toString().orEmpty()
-        val viewId = node.viewIdResourceName.orEmpty()
-        val isInput = node.isEditable || className.contains("EditText", ignoreCase = true)
-        val isChrome = viewId.contains("UrlTextInput", ignoreCase = true)
-        if (isInput && !isChrome && node.isFocused) {
-            @Suppress("DEPRECATION")
-            return AccessibilityNodeInfo.obtain(node)
-        }
-        for (index in 0 until node.childCount) {
-            val child = node.getChild(index) ?: continue
-            val found = findFocusedPageInput(child)
-            child.recycle()
-            if (found != null) return found
-        }
-        return null
-    }
-
-    /**
-     * Gecko コンテンツ内でフォーカス中の入力欄の画面座標を返す (診断用)。
-     */
-    private fun findBottomInputBoundsInScreen(): Rect? = findFocusedPageInputBoundsInScreen()
 
     /**
      * 失敗時の診断用に、見つかった編集可能ノードを 1 行ずつ書き出す。
@@ -510,7 +451,7 @@ class KeyboardBottomInputTest {
         private const val IME_HIDE_WAIT_MILLIS = 10_000L
         private const val IME_WAIT_MILLIS = 30_000L
         private const val IME_STABLE_WAIT_MILLIS = 10_000L
-        private const val INPUT_VISIBLE_WAIT_MILLIS = 20_000L
+        private const val INPUT_VISIBLE_WAIT_MILLIS = 15_000L
 
         /** タップが空振りしたときに再タップするまでの待ち時間 */
         private const val TAP_RETRY_INTERVAL_MILLIS = 3_000L
@@ -522,8 +463,5 @@ class KeyboardBottomInputTest {
 
         /** IME アニメーション途中のフレームで判定しないよう、連続で満たすことを求める回数 */
         private const val REQUIRED_STABLE_COUNT = 5
-
-        /** GeckoView 下端とキーボード上端の許容誤差 (px) */
-        private const val GECKO_KEYBOARD_TOLERANCE_PX = 8
     }
 }
