@@ -32,13 +32,13 @@ class KeyboardShowPolicyTest {
     }
 
     @Test
-    fun `抑制開始から十分時間が経過したフォーカスはユーザー操作とみなす`() {
+    fun `autofocus抑制時間を過ぎたフォーカス移動は許可する`() {
         val policy = KeyboardShowPolicy()
         policy.onNavigationStarted(nowMs = 1_000L)
 
         assertTrue(
             policy.shouldShowSoftInput(
-                nowMs = 1_000L + KeyboardShowPolicy.LATE_FOCUS_ALLOW_MS + 1,
+                nowMs = 1_000L + KeyboardShowPolicy.AUTOFOCUS_SUPPRESS_MS + 1,
             ),
         )
     }

@@ -15,23 +15,27 @@ internal class UserGestureGatedTextInputDelegate(
     private val policy: KeyboardShowPolicy = KeyboardShowPolicy(),
 ) : GeckoSession.TextInputDelegate {
     private val defaultDelegate: GeckoSession.TextInputDelegate = session.textInput.delegate
+    private var pendingShowSoftInput = false
 
     init {
         session.textInput.setDelegate(this)
     }
 
     fun onNavigationStarted() {
+        pendingShowSoftInput = false
         policy.onNavigationStarted()
         defaultDelegate.hideSoftInput(session)
     }
 
     fun onSessionShownWithoutUserGesture() {
+        pendingShowSoftInput = false
         policy.onSessionShownWithoutUserGesture()
         defaultDelegate.hideSoftInput(session)
     }
 
     fun onUserGesture() {
         policy.onUserGesture()
+        flushPendingShowSoftInput()
     }
 
     override fun restartInput(session: GeckoSession, reason: Int) {
@@ -40,12 +44,22 @@ internal class UserGestureGatedTextInputDelegate(
 
     override fun showSoftInput(session: GeckoSession) {
         if (policy.shouldShowSoftInput()) {
+            pendingShowSoftInput = false
             defaultDelegate.showSoftInput(session)
+        } else {
+            pendingShowSoftInput = true
         }
     }
 
     override fun hideSoftInput(session: GeckoSession) {
+        pendingShowSoftInput = false
         defaultDelegate.hideSoftInput(session)
+    }
+
+    private fun flushPendingShowSoftInput() {
+        if (!pendingShowSoftInput) return
+        pendingShowSoftInput = false
+        defaultDelegate.showSoftInput(session)
     }
 
     override fun updateSelection(

@@ -173,7 +173,7 @@ class BrowserTab(
         textInputDelegate?.onSessionShownWithoutUserGesture()
     }
 
-    internal fun onNavigationStartedForKeyboard() {
+    fun onNavigationStartedForKeyboard() {
         textInputDelegate?.onNavigationStarted()
     }
 

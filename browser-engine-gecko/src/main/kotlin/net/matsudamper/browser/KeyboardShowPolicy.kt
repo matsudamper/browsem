@@ -7,8 +7,8 @@ import android.os.SystemClock
  * をユーザー操作由来のときだけ許可するための判定ロジック。
  *
  * 画面遷移直後の autofocus ではキーボードを出さず、インプットへの明示的な操作後だけ
- * 表示する。アクセシビリティ操作はタッチリスナーを通らないため、抑制開始から一定時間
- * 経過したフォーカス移動はユーザー操作とみなす。
+ * 表示する。autofocus はナビゲーション直後の短い時間帯に集中するため、その間だけ
+ * 抑制し、それ以降のフォーカス移動（アクセシビリティ操作を含む）は許可する。
  */
 internal class KeyboardShowPolicy {
     private var suppressUntilUserGesture = false
@@ -37,10 +37,11 @@ internal class KeyboardShowPolicy {
         if (!suppressUntilUserGesture) return true
         if (userTouchedSinceSuppress) return true
         val suppressStartedAtMs = maxOf(navigationStartedAtMs, sessionShownAtMs)
-        return nowMs - suppressStartedAtMs > LATE_FOCUS_ALLOW_MS
+        return nowMs - suppressStartedAtMs > AUTOFOCUS_SUPPRESS_MS
     }
 
     companion object {
-        const val LATE_FOCUS_ALLOW_MS = 3_000L
+        /** autofocus が集中するナビゲーション直後の抑制時間 */
+        const val AUTOFOCUS_SUPPRESS_MS = 500L
     }
 }
