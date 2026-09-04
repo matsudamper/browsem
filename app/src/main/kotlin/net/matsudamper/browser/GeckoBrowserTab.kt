@@ -87,6 +87,7 @@ import net.matsudamper.browser.feature.addressautofill.AddressAutofillCoordinato
 import net.matsudamper.browser.feature.addressautofill.AddressAutofillDelegate
 import net.matsudamper.browser.feature.findinpage.FindInPageWebExtension
 import net.matsudamper.browser.feature.forminputautofill.FormInputAutofillCoordinator
+import net.matsudamper.browser.feature.keyboardscroll.KeyboardScrollWebExtension
 import net.matsudamper.browser.feature.media.GeckoMediaSessionDelegate
 import net.matsudamper.browser.feature.media.MediaWebExtension
 import net.matsudamper.browser.feature.mocklocation.MockLocationWebExtension
@@ -732,6 +733,10 @@ internal fun GeckoBrowserTab(
             mockLocationWebExtension.unregisterSession(session)
         }
     }
+
+    // ネイティブ側とのやり取りが無いため、ここで参照してインストールを走らせる。
+    // 起動時に生成すると GeckoRuntime の生成が早すぎてプロセスが落ちる。
+    koinInject<KeyboardScrollWebExtension>()
 
     val viewportScaleWebExtension: ViewportScaleWebExtension = koinInject()
     DisposableEffect(session, state, viewportScaleWebExtension) {

@@ -116,9 +116,7 @@ val appModule = module {
     // 通信ログはランタイム単位で収集するため、ストア・拡張機能ともに single で管理
     single { NetworkLogStore() }
     single { NetworkLogWebExtension(get()).also { it.install(get()) } }
-    // ネイティブ側から参照しないため、注入されるまで生成されないと拡張がインストール
-    // されない。起動時に生成する。
-    single(createdAtStart = true) { KeyboardScrollWebExtension().also { it.install(get()) } }
+    single { KeyboardScrollWebExtension().also { it.install(get()) } }
     single { ViewportScaleWebExtension().also { it.install(get()) } }
     single { TwitterShareWebExtension().also { it.install(get()) } }
     single { WebShareFilesWebExtension().also { it.install(get()) } }
