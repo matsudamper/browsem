@@ -16,11 +16,11 @@ GeckoView ベースの Android ブラウザ。Kotlin / Jetpack Compose / Materia
 変更・削除前に `git log -p` で追加経緯を確認する。
 
 ## テスト
-- 単体: JUnit 4。`./gradlew test`（Paparazziは自動除外）
+- 単体: JUnit 4。`./gradlew test`（Paparazziは自動除外）。単体は全件実行可
 - Instrumentation: Gradle Managed Device のみ（実機・通常エミュレータ禁止）
-- 通常は全件実行せず class 指定で絞る
+- Instrumentation は通常 class 指定で絞る（`-Pandroid.testInstrumentationRunnerArguments.class=...`）。全件はユーザー明示指示時のみ
 - UI操作は Compose セマンティクス API。生のタッチ注入禁止
-- repository等をテストから直接いじらない。UI操作で行う
+- repository等をUIテストから直接いじらない。UI操作で行う
 - コンポーネント特定は `hasTestTag`（テキスト監視以外で `hasText` を使わない）
 - TestTagは直接stringせず既存パターンに合わせる
 - GMD起動失敗時は名前・IDを一時変更して再実行可
@@ -86,7 +86,7 @@ GeckoView ベースの Android ブラウザ。Kotlin / Jetpack Compose / Materia
 - PR への一般コメントは避け、説明はコミットメッセージ側
 - ホビー前提: セキュリティ・要件未達以外の細かい指摘は深追いしない。ユーザー本人のコメントは必ず対応
 - コミット後は PR 本文を fetch して必要なら更新（ユーザー手書き部分は保持）
-- Cursor 系: PR 提出後は CI / コメントを購読して対応
+- Cursor Cloud Agent: PR 提出後は CI / コメントを購読して対応（ローカル CLI / IDE 拡張はユーザー指示時のみ）
 
 ## ビルド・検証（方針）
 - ビルド / format / lint / test 等のタスクは並列実行しない。逐次実行する
