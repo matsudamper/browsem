@@ -41,6 +41,7 @@ import net.matsudamper.browser.data.SiteSettingsRepository
 import net.matsudamper.browser.data.TranslationProvider
 import net.matsudamper.browser.data.download.DownloadRecordStatus
 import net.matsudamper.browser.data.extractSiteHost
+import net.matsudamper.browser.download.proceedDownloadFromResponse
 import net.matsudamper.browser.feature.devtools.DevToolsWebExtension
 import net.matsudamper.browser.feature.findinpage.FindInPageWebExtension
 import net.matsudamper.browser.translate.TranslationPriorityLanguage
@@ -1078,17 +1079,12 @@ internal class BrowserTabScreenState(
         onEnqueued: (() -> Unit)? = null,
     ) {
         coroutineScope.launch {
-            var enqueued = false
-            try {
-                onRequestDownloadNotificationPermission()
-                geckoDownloadManager.enqueueDownloadFromResponse(response, referrerUrl)
-                enqueued = true
-                onEnqueued?.invoke()
-            } finally {
-                if (!enqueued) {
-                    response.body?.close()
-                }
-            }
+            proceedDownloadFromResponse(
+                awaitPermission = { onRequestDownloadNotificationPermission() },
+                enqueue = { geckoDownloadManager.enqueueDownloadFromResponse(response, referrerUrl) },
+                onEnqueued = onEnqueued,
+                onEnqueueFailed = { response.body?.close() },
+            )
         }
     }
 

@@ -14,7 +14,7 @@ import org.junit.Test
 /**
  * 外部ダウンロードタブで「ダウンロード」確定後にタブを閉じる処理の順序を検証する。
  *
- * BrowserTabScreenState.proceedDownloadFromResponse と同じ順序契約:
+ * proceedDownloadFromResponse の順序契約:
  * 1. 通知権限待機
  * 2. WorkManager エンキュー完了
  * 3. タブ閉鎖コールバック
@@ -31,8 +31,7 @@ class ProceedDownloadExternalTabOrderTest {
         val permissionGranted = CompletableDeferred<Unit>()
 
         launch {
-            simulateProceedDownloadFromResponse(
-                events = events,
+            proceedDownloadFromResponse(
                 awaitPermission = {
                     events.add("permission_wait")
                     permissionGranted.await()
@@ -71,14 +70,14 @@ class ProceedDownloadExternalTabOrderTest {
         val events = mutableListOf<String>()
 
         runCatching {
-            simulateProceedDownloadFromResponse(
-                events = events,
+            proceedDownloadFromResponse(
                 awaitPermission = { events.add("permission_granted") },
                 enqueue = {
                     events.add("enqueue_start")
                     error("enqueue failed")
                 },
                 onEnqueued = { events.add("tab_close") },
+                onEnqueueFailed = { events.add("body_closed") },
             )
         }
 
@@ -87,24 +86,5 @@ class ProceedDownloadExternalTabOrderTest {
             events,
         )
         assertFalse(events.contains("tab_close"))
-    }
-
-    private suspend fun simulateProceedDownloadFromResponse(
-        events: MutableList<String>,
-        awaitPermission: suspend () -> Unit,
-        enqueue: suspend () -> Unit,
-        onEnqueued: () -> Unit,
-    ) {
-        var enqueued = false
-        try {
-            awaitPermission()
-            enqueue()
-            enqueued = true
-            onEnqueued()
-        } finally {
-            if (!enqueued) {
-                events.add("body_closed")
-            }
-        }
     }
 }
