@@ -384,6 +384,10 @@ class KeyboardBottomInputTest {
 
     private fun collectEditableNodes(node: AccessibilityNodeInfo, result: MutableList<EditableNode>) {
         if (node.isEditable) {
+            // アクセシビリティノードはキャッシュから返るため、リフローで座標が動いても
+            // イベントが飛ばない限り古い値のままになる。refresh はキャッシュを迂回して
+            // 元のビューから読み直す。
+            node.refresh()
             result += EditableNode(
                 className = node.className?.toString().orEmpty(),
                 focused = node.isFocused,
