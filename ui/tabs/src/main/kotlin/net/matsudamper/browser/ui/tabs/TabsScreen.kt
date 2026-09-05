@@ -69,6 +69,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import net.matsudamper.browser.data.TabGroupData
 import net.matsudamper.browser.data.TabGroupId
+import net.matsudamper.browser.ui.common.StatusBarAppearanceEffect
 
 internal object TabsLayoutDefaults {
     val minCellWidth: Dp = 220.dp
@@ -124,6 +125,7 @@ fun TabsScreen(
     uiState: TabsScreenUiState,
     modifier: Modifier = Modifier,
 ) {
+    StatusBarAppearanceEffect(MaterialTheme.colorScheme.surface)
     val snackbarHostState = remember { SnackbarHostState() }
     val currentCallbacks by rememberUpdatedState(uiState.callbacks)
     val pendingClosedTab = uiState.pendingClosedTab

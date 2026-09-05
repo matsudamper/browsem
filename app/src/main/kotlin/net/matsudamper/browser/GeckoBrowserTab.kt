@@ -98,6 +98,7 @@ import net.matsudamper.browser.feature.websharefiles.WebShareFilesWebExtension
 import net.matsudamper.browser.translate.TranslationPriorityLanguage
 import net.matsudamper.browser.ui.browser.BrowserScreenUiState
 import net.matsudamper.browser.ui.browser.UrlBarSuggestionsUiState
+import net.matsudamper.browser.ui.common.StatusBarAppearanceEffect
 import net.matsudamper.browser.ui.common.findActivity
 import net.matsudamper.browser.ui.common.resolveBrowserToolbarColors
 import org.json.JSONObject
@@ -209,17 +210,18 @@ internal fun GeckoBrowserTab(
         defaultToolbarColor = MaterialTheme.colorScheme.primaryContainer,
         isSystemDarkTheme = isSystemInDarkTheme(),
     )
+    if (!state.isFullScreen) {
+        StatusBarAppearanceEffect(toolbarColors.resolvedToolbarColor)
+    }
+
     val view = LocalView.current
     if (!view.isInEditMode) {
         SideEffect {
+            if (!(customTabMode || webAppMode)) return@SideEffect
             val window = view.findActivity()?.window ?: return@SideEffect
-            val insetsController = WindowCompat.getInsetsController(window, view)
-            insetsController.isAppearanceLightStatusBars = toolbarColors.isBrightBackground
             // CustomTab / WebApp は enableEdgeToEdge しないため、旧 OS ではシステム
             // ステータスバー背景が Theme.Browser のまま残る。ツールバー色に合わせる。
-            if (customTabMode || webAppMode) {
-                window.statusBarColor = toolbarColors.resolvedToolbarColor.toArgb()
-            }
+            window.statusBarColor = toolbarColors.resolvedToolbarColor.toArgb()
         }
     }
 

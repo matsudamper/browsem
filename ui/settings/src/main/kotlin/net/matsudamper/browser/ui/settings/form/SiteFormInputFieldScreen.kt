@@ -21,6 +21,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import net.matsudamper.browser.ui.common.StatusBarAppearanceEffect
 
 sealed interface SiteFormInputFieldScreenTestTags {
     val id: String
@@ -41,6 +42,7 @@ fun SiteFormInputFieldScreen(
     uiState: SiteFormInputFieldScreenUiState,
     modifier: Modifier = Modifier,
 ) {
+    StatusBarAppearanceEffect(MaterialTheme.colorScheme.surface)
     InputListScreenScaffold(
         modifier = modifier.testTag(SiteFormInputFieldScreenTestTags.Root.testTag),
         onClickBack = { uiState.callbacks.navigateBack() },
