@@ -1311,6 +1311,7 @@ internal fun GeckoBrowserTab(
                 session = session,
                 latestOnRefresh = latestOnRefresh,
                 browserTab = browserTab,
+                shrinkViewportForKeyboard = !customTabMode,
                 updateGeckoView = {
                     geckoView = it
                 },
