@@ -29,6 +29,9 @@ interface TabDao {
     @Query("UPDATE tab_state SET themeColor = :themeColor WHERE tabId = :tabId")
     suspend fun updateThemeColor(tabId: String, themeColor: Int?)
 
+    @Query("UPDATE tab_state SET pageZoomPercent = :pageZoomPercent WHERE tabId = :tabId")
+    suspend fun updatePageZoomPercent(tabId: String, pageZoomPercent: Int)
+
     @Query("UPDATE tab_state SET sortOrder = :sortOrder WHERE tabId = :tabId")
     suspend fun updateSortOrder(tabId: String, sortOrder: Int)
 

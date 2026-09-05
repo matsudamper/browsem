@@ -25,6 +25,18 @@ internal fun shouldReapplyPageZoomOnSpaLocationChange(
 }
 
 /**
+ * セッション復元後など onPageStop が発火しない経路で、描画準備完了時に
+ * 永続化済みズームを document へ反映すべきかを判定する。
+ * フルページロード中は onPageStop 側で再適用するため、ここでは false を返す。
+ */
+internal fun shouldApplyPersistedPageZoomAfterRender(
+    pageZoomPercent: Int,
+    isFullPageLoadPending: Boolean,
+): Boolean {
+    return pageZoomPercent != 100 && !isFullPageLoadPending
+}
+
+/**
  * viewport meta を書き換えてページズームを適用する javascript: URI を生成する。
  *
  * SPA は遷移後に viewport meta を差し替えることがあるため、

@@ -58,6 +58,7 @@ abstract class TabGroupDao {
                 sortOrder = 0,
                 isSelected = 0,
                 groupId = groupId,
+                pageZoomPercent = 100,
             ),
         )
         updateTabGroup(tabId, groupId)
@@ -80,6 +81,7 @@ abstract class TabGroupDao {
                 sortOrder = 0,
                 isSelected = 0,
                 groupId = "",
+                pageZoomPercent = 100,
             ),
         )
         updateTabGroupIfUnassigned(tabId, groupId)

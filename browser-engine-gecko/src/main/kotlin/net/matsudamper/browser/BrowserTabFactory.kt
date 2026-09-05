@@ -15,6 +15,7 @@ internal class BrowserTabFactory(
         title: String,
         previewBitmapArray: ByteArray?,
         themeColor: Int? = null,
+        pageZoomPercent: Int = DEFAULT_PAGE_ZOOM_PERCENT,
         openerTabId: String? = null,
     ): BrowserTab {
         return BrowserTab(
@@ -26,12 +27,14 @@ internal class BrowserTabFactory(
             title = title.ifBlank { initialUrl },
             previewBitmap = previewBitmapArray ?: byteArrayOf(),
             themeColor = themeColor,
+            pageZoomPercent = pageZoomPercent,
             onStateChanged = onTabStateChanged,
             onUrlChanged = persistenceCoordinator::persistUrl,
             onSessionStateChanged = persistenceCoordinator::persistSessionState,
             onTitleChanged = persistenceCoordinator::persistTitle,
             onPreviewBitmapChanged = persistenceCoordinator::persistPreviewBitmap,
             onThemeColorChanged = persistenceCoordinator::persistThemeColor,
+            onPageZoomPercentChanged = persistenceCoordinator::persistPageZoomPercent,
         ).also { tab ->
             tab.bindSessionDelegates()
         }
@@ -49,6 +52,7 @@ internal class BrowserTabFactory(
             title = persistedTabState.title.ifBlank { persistedTabState.url },
             previewBitmapArray = previewBitmapArray,
             themeColor = persistedTabState.themeColor,
+            pageZoomPercent = persistedTabState.pageZoomPercent,
             openerTabId = persistedTabState.openerTabId.ifBlank { null },
         ).also { tab ->
             tab.pendingSessionState = persistedTabState.sessionState.takeIf { it.isNotBlank() }

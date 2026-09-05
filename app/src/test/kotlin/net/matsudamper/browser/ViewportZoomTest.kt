@@ -54,6 +54,36 @@ class ViewportZoomTest {
     }
 
     @Test
+    fun shouldApplyPersistedPageZoomAfterRenderWhenSessionRestored() {
+        assertTrue(
+            shouldApplyPersistedPageZoomAfterRender(
+                pageZoomPercent = 200,
+                isFullPageLoadPending = false,
+            ),
+        )
+    }
+
+    @Test
+    fun shouldNotApplyPersistedPageZoomAfterRenderDuringFullPageLoad() {
+        assertFalse(
+            shouldApplyPersistedPageZoomAfterRender(
+                pageZoomPercent = 200,
+                isFullPageLoadPending = true,
+            ),
+        )
+    }
+
+    @Test
+    fun shouldNotApplyPersistedPageZoomAfterRenderAtDefaultZoom() {
+        assertFalse(
+            shouldApplyPersistedPageZoomAfterRender(
+                pageZoomPercent = 100,
+                isFullPageLoadPending = false,
+            ),
+        )
+    }
+
+    @Test
     fun injectionScriptContainsViewportContent() {
         val script = buildViewportZoomInjectionScript(
             viewportContent = "width=200,initial-scale=1",
