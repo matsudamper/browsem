@@ -3,6 +3,7 @@ package net.matsudamper.browser
 import android.content.Intent
 import android.net.Uri
 import android.os.SystemClock
+import android.view.inputmethod.InputMethodManager
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.ComposeTimeoutException
@@ -82,17 +83,43 @@ internal fun AndroidComposeTestRule<*, MainActivity>.waitForUrlBarNotFocused(
     val deadline = SystemClock.elapsedRealtime() + timeoutMillis
     while (SystemClock.elapsedRealtime() < deadline) {
         if (!isUrlBarFocused()) return
-        runCatching { tapGeckoContainer() }
+        dismissUrlBarFocusWithoutPageInteraction()
         Thread.sleep(200)
     }
-    if (!isUrlBarFocused()) return
-    runOnIdle { activity.onBackPressedDispatcher.onBackPressed() }
-    waitForIdle()
-    if (!isUrlBarFocused()) return
     throw AssertionError(
         "waitForUrlBarNotFocused timeout: urlBarFocused=true " +
             "urlInput=\"${currentUrlBarText()}\" currentUrl=\"${currentPageUrlFromUi()}\"",
     )
+}
+
+/**
+ * Gecko コンテンツや Back 操作を使わず URL バーのフォーカスを外す。
+ *
+ * IME を閉じるとアプリ側 LaunchedEffect が closeUrlInput(true) を呼ぶ。
+ * サジェストオーバーレイ表示中は Compose セマンティクスで Surface をタップする。
+ */
+internal fun AndroidComposeTestRule<*, MainActivity>.dismissUrlBarFocusWithoutPageInteraction() {
+    if (!isUrlBarFocused()) return
+    hideSoftInputFromDecorView()
+    if (!isUrlBarFocused()) return
+    val hasSuggestionOverlay = runCatching {
+        onAllNodesWithTag(BrowserTabSurfaceTestTags.UrlSuggestionList.testTag)
+            .fetchSemanticsNodes().isNotEmpty()
+    }.getOrDefault(false)
+    if (hasSuggestionOverlay) {
+        runCatching {
+            onNodeWithTag(BrowserTabSurfaceTestTags.UrlSuggestionList.testTag).performClick()
+            waitForIdle()
+        }
+    }
+}
+
+private fun AndroidComposeTestRule<*, MainActivity>.hideSoftInputFromDecorView() {
+    runOnIdle {
+        val imm = activity.getSystemService(InputMethodManager::class.java)
+        imm?.hideSoftInputFromWindow(activity.window.decorView.windowToken, 0)
+    }
+    waitForIdle()
 }
 
 internal fun AndroidComposeTestRule<*, MainActivity>.isUrlBarFocused(): Boolean {
