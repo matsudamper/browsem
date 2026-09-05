@@ -47,6 +47,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import net.matsudamper.browser.resources.R as ResourcesR
+import net.matsudamper.browser.ui.common.StatusBarAppearanceEffect
 
 sealed interface ExtensionsScreenTestTags {
     val id: String
@@ -71,6 +72,7 @@ fun ExtensionsScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    StatusBarAppearanceEffect(MaterialTheme.colorScheme.surface)
     Scaffold(
         modifier = modifier,
         topBar = {

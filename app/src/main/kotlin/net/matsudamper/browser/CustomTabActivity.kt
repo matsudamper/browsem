@@ -3,18 +3,22 @@ package net.matsudamper.browser
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.res.Configuration
+import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.VisibleForTesting
 import androidx.browser.customtabs.CustomTabsSessionToken
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -26,6 +30,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTagsAsResourceId
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -36,6 +41,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.TabRepository
+import net.matsudamper.browser.data.ThemeMode
 import net.matsudamper.browser.data.TranslationProvider
 import net.matsudamper.browser.data.history.HistoryRepository
 import net.matsudamper.browser.data.resolvedHomepageUrl
@@ -71,7 +77,9 @@ class CustomTabActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
+        // enableEdgeToEdge() はウィンドウを透過させ、キーボード直上の未描画領域から
+        // 下層 Activity（WebApp 等）が見えてしまう。ステータスバーは CustomTabToolbar が処理する。
+        window.setBackgroundDrawable(ColorDrawable(Color.BLACK))
         runtime.settings.setExtensionsWebAPIEnabled(true)
 
         // 拡張機能は Koin の single で管理されるため、ここではセッション管理のみ担当する
@@ -105,11 +113,7 @@ class CustomTabActivity : ComponentActivity() {
                     browserSessionLifecycleController = browserSessionLifecycleController,
                     runtime = runtime,
                 ) { outerNavActions ->
-                    Box(
-                        modifier = Modifier.semantics {
-                            testTagsAsResourceId = true
-                        },
-                    ) {
+                    CustomTabOpaqueShell {
                         CustomTabScreen(
                             initialUrl = initialUrl.takeIf { it.isNotBlank() } ?: browserSettings.resolvedHomepageUrl(),
                             customTabsSessionToken = customTabsSessionToken,
@@ -374,6 +378,67 @@ private fun CustomTabScreen(
                 urlBarSuggestions = uiState.urlBarSuggestions,
                 onUrlInputChanged = uiState.callbacks::onUrlInputChanged,
                 onSessionDetachedFromView = retainOpenersAfterDetach,
+            )
+        }
+    }
+}
+
+@Composable
+internal fun CustomTabOpaqueShell(
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.surface)
+            .semantics {
+                testTagsAsResourceId = true
+            },
+    ) {
+        content()
+    }
+}
+
+@Preview(name = "CustomTabOpaqueShellLight", widthDp = 412, heightDp = 915)
+@Preview(
+    name = "CustomTabOpaqueShellDark",
+    widthDp = 412,
+    heightDp = 915,
+    uiMode = Configuration.UI_MODE_NIGHT_YES,
+)
+@Composable
+private fun PreviewCustomTabOpaqueShell() {
+    BrowserTheme(themeMode = ThemeMode.THEME_SYSTEM) {
+        CustomTabOpaqueShell {
+            CustomTabToolbar(
+                title = "example.com",
+                url = "https://example.com/page",
+                onClose = {},
+                toolbarColor = null,
+                onRefresh = {},
+                onSuperRefresh = {},
+                onHome = {},
+                onForward = {},
+                canGoForward = false,
+                onBack = {},
+                canGoBack = true,
+                onLongPressHistory = {},
+                isPcMode = false,
+                onPcModeToggle = {},
+                showInstallExtensionItem = false,
+                onInstallExtension = {},
+                onTranslatePage = {},
+                onShare = {},
+                onFindInPage = {},
+                onAddToHomeScreen = {},
+                showAddToHomeScreen = true,
+                onOpenInBrowser = {},
+                onOpenSiteSettings = {},
+                pageZoomPercent = 100,
+                onPageZoomIn = {},
+                onPageZoomOut = {},
+                onResetPageZoom = {},
             )
         }
     }

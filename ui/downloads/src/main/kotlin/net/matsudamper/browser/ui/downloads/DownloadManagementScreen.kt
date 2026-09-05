@@ -66,6 +66,7 @@ import java.util.UUID
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import net.matsudamper.browser.ui.common.StatusBarAppearanceEffect
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -76,6 +77,7 @@ fun DownloadManagementScreen(
     onHighlightComplete: (UUID) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    StatusBarAppearanceEffect(MaterialTheme.colorScheme.surface)
     val listState = rememberLazyListState()
     val currentOnHighlightComplete by rememberUpdatedState(onHighlightComplete)
     Scaffold(
