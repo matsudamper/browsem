@@ -202,13 +202,28 @@ class DevToolsWebExtension {
             timeout = timeout,
         )
         mainHandler.postDelayed(timeout, EXECUTE_TIMEOUT_MS)
-        port.postMessage(
+        val sent = postMessage(
+            port,
             JSONObject().apply {
                 put("action", "execute")
                 put("requestId", requestId)
                 put("code", code)
             },
         )
+        if (!sent) {
+            finishExecution(requestId, ConsoleEntry.Kind.ResultError, PORT_DISCONNECTED_MESSAGE)
+        }
+    }
+
+    /** 切断済みのポートへの送信は例外になるため、成否を返して呼び出し側で扱えるようにする */
+    private fun postMessage(port: WebExtension.Port, message: JSONObject): Boolean {
+        return try {
+            port.postMessage(message)
+            true
+        } catch (e: RuntimeException) {
+            Log.w(TAG, "送信に失敗: action=${message.optString("action")}", e)
+            false
+        }
     }
 
     private fun postToContentScript(session: GeckoSession, message: JSONObject) {
@@ -217,7 +232,7 @@ class DevToolsWebExtension {
             Log.w(TAG, "ポートが未接続: action=${message.optString("action")}")
             return
         }
-        port.postMessage(message)
+        postMessage(port, message)
     }
 
     private fun appendEntry(
