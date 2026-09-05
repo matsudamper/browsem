@@ -69,27 +69,40 @@
     return text.slice(0, MAX_MESSAGE_LENGTH) + '…';
   }
 
+  // ページが定義した getter はログ出力のために実行しない。
+  // DOM の属性のような組み込みのアクセサは prototype 側にあるため、自身の記述子だけを見る
+  function readProperty(value, key) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    if (descriptor && !('value' in descriptor)) return undefined;
+    return value[key];
+  }
+
   // Xray 越しのページ側オブジェクトは instanceof が使えないため、形で判定する
   function isErrorLike(value) {
-    return typeof value.message === 'string' && typeof value.name === 'string' &&
+    return typeof readProperty(value, 'message') === 'string' &&
+      typeof readProperty(value, 'name') === 'string' &&
       ('stack' in value);
   }
 
   function isElementLike(value) {
-    return value.nodeType === 1 && typeof value.tagName === 'string';
+    return readProperty(value, 'nodeType') === 1 &&
+      typeof readProperty(value, 'tagName') === 'string';
   }
 
   function isArrayLike(value) {
     if (Array.isArray(value)) return true;
-    return typeof value.length === 'number' && typeof value.splice === 'function';
+    return typeof readProperty(value, 'length') === 'number' &&
+      typeof readProperty(value, 'splice') === 'function';
   }
 
   function describeElement(el) {
-    const id = el.id ? '#' + el.id : '';
-    const className = typeof el.className === 'string' && el.className
-      ? '.' + el.className.trim().split(/\s+/).join('.')
+    const elementId = readProperty(el, 'id');
+    const id = elementId ? '#' + elementId : '';
+    const rawClassName = readProperty(el, 'className');
+    const className = typeof rawClassName === 'string' && rawClassName
+      ? '.' + rawClassName.trim().split(/\s+/).join('.')
       : '';
-    return '<' + el.tagName.toLowerCase() + id + className + '>';
+    return '<' + readProperty(el, 'tagName').toLowerCase() + id + className + '>';
   }
 
   // 1 回の整形で走査できるノード数。深い・巨大なオブジェクトで走査が長引かないようにする
@@ -106,15 +119,30 @@
     }
   }
 
-  function formatEntries(value, keys, totalCount, depth, open, close) {
+  function formatEntries(value, keys, omittedLabel, depth, open, close) {
     const parts = keys.map(function (key) {
       const formatted = formatProperty(value, key, depth);
       return open === '[' ? formatted : key + ': ' + formatted;
     });
-    if (totalCount > keys.length) {
-      parts.push('…他 ' + (totalCount - keys.length) + ' 件');
+    if (omittedLabel !== null) {
+      parts.push(omittedLabel);
     }
     return open + parts.join(', ') + close;
+  }
+
+  // キーの配列を作る時点で頭打ちにする。全件を配列化すると巨大なオブジェクトで停止しうる
+  function ownKeysUpToLimit(value) {
+    const keys = [];
+    let hasMore = false;
+    for (const key in value) {
+      if (!Object.prototype.hasOwnProperty.call(value, key)) continue;
+      if (keys.length >= MAX_FORMAT_ENTRIES) {
+        hasMore = true;
+        break;
+      }
+      keys.push(key);
+    }
+    return { keys: keys, hasMore: hasMore };
   }
 
   function formatObjectLike(value, depth) {
@@ -123,16 +151,17 @@
     formatNodeBudget -= 1;
     if (isArrayLike(value)) {
       // length が極端に大きい配列でも走査が伸びないよう、上限までの添字だけを作る
-      const length = value.length;
+      const length = readProperty(value, 'length');
       const shownCount = Math.min(length, MAX_FORMAT_ENTRIES);
       const indexes = [];
       for (let index = 0; index < shownCount; index += 1) {
         indexes.push(index);
       }
-      return formatEntries(value, indexes, length, depth, '[', ']');
+      const omitted = length > shownCount ? '…他 ' + (length - shownCount) + ' 件' : null;
+      return formatEntries(value, indexes, omitted, depth, '[', ']');
     }
-    const keys = Object.keys(value);
-    return formatEntries(value, keys.slice(0, MAX_FORMAT_ENTRIES), keys.length, depth, '{', '}');
+    const own = ownKeysUpToLimit(value);
+    return formatEntries(value, own.keys, own.hasMore ? '…他' : null, depth, '{', '}');
   }
 
   function formatValue(value, depth) {
