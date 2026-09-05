@@ -1,6 +1,11 @@
 package net.matsudamper.browser
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.widget.Toast
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -10,13 +15,18 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -36,7 +46,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
@@ -45,10 +57,13 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import net.matsudamper.browser.data.ThemeMode
 import net.matsudamper.browser.feature.devtools.DevToolsWebExtension
+import net.matsudamper.browser.resources.R as ResourcesR
 import net.matsudamper.browser.ui.common.BrowserTheme
 import net.matsudamper.browser.ui.common.StatusBarAppearanceEffect
 import org.koin.compose.koinInject
 import org.mozilla.geckoview.GeckoSession
+
+private const val CONSOLE_LOG_PREVIEW_MAX_LINES = 8
 
 @Composable
 internal fun DevToolsConsoleDialog(
@@ -60,7 +75,13 @@ internal fun DevToolsConsoleDialog(
         onDismiss = onDismiss,
     )
     Dialog(
-        onDismissRequest = { uiState.callbacks.onDismiss() },
+        onDismissRequest = {
+            if (uiState.detail != null) {
+                uiState.callbacks.onCloseDetail()
+            } else {
+                uiState.callbacks.onDismiss()
+            }
+        },
         properties = DialogProperties(usePlatformDefaultWidth = false),
     ) {
         Surface(modifier = Modifier.fillMaxSize()) {
@@ -75,6 +96,7 @@ internal fun rememberDevToolsConsoleUiState(
     session: GeckoSession,
     onDismiss: () -> Unit,
 ): DevToolsConsoleUiState {
+    val context = LocalContext.current
     val extension: DevToolsWebExtension = koinInject()
     val currentOnDismiss by rememberUpdatedState(onDismiss)
     val consoleLogsBySession by extension.consoleLogs.collectAsState()
@@ -85,7 +107,8 @@ internal fun rememberDevToolsConsoleUiState(
             DevToolsConsoleUiState.ExecutionState.Idle,
         )
     }
-    val callbacks = remember(session, extension) {
+    var detail by remember { mutableStateOf<DevToolsConsoleUiState.Detail?>(null) }
+    val callbacks = remember(session, extension, context) {
         object : DevToolsConsoleUiState.Callbacks {
             override fun onDismiss() {
                 currentOnDismiss()
@@ -93,6 +116,7 @@ internal fun rememberDevToolsConsoleUiState(
 
             override fun onClearLogs() {
                 extension.clearConsoleLogs(session)
+                detail = null
             }
 
             override fun onScriptTextChange(text: String) {
@@ -114,12 +138,39 @@ internal fun rememberDevToolsConsoleUiState(
                     }
                 }
             }
+
+            override fun onOpenLogEntryDetail(entry: DevToolsWebExtension.ConsoleLogEntry) {
+                detail = DevToolsConsoleUiState.Detail.LogEntry(entry)
+            }
+
+            override fun onOpenExecutionErrorDetail(message: String) {
+                detail = DevToolsConsoleUiState.Detail.ExecutionError(message)
+            }
+
+            override fun onCloseDetail() {
+                detail = null
+            }
+
+            override fun onCopyDetailMessage() {
+                val message = when (val currentDetail = detail) {
+                    is DevToolsConsoleUiState.Detail.LogEntry -> currentDetail.entry.message
+                    is DevToolsConsoleUiState.Detail.ExecutionError -> currentDetail.message
+                    null -> return
+                }
+                copyConsoleTextToClipboard(
+                    context = context,
+                    label = "console",
+                    text = message,
+                    toastMessage = "全文をコピーしました",
+                )
+            }
         }
     }
     return DevToolsConsoleUiState(
         entries = entries,
         scriptText = scriptText,
         executionState = executionState,
+        detail = detail,
         callbacks = callbacks,
     )
 }
@@ -129,8 +180,15 @@ internal data class DevToolsConsoleUiState(
     val entries: List<DevToolsWebExtension.ConsoleLogEntry>,
     val scriptText: String,
     val executionState: ExecutionState,
+    val detail: Detail?,
     val callbacks: Callbacks,
 ) {
+    @Stable
+    sealed interface Detail {
+        data class LogEntry(val entry: DevToolsWebExtension.ConsoleLogEntry) : Detail
+        data class ExecutionError(val message: String) : Detail
+    }
+
     @Stable
     sealed interface ExecutionState {
         data object Idle : ExecutionState
@@ -145,6 +203,10 @@ internal data class DevToolsConsoleUiState(
         fun onClearLogs()
         fun onScriptTextChange(text: String)
         fun onExecuteScript()
+        fun onOpenLogEntryDetail(entry: DevToolsWebExtension.ConsoleLogEntry)
+        fun onOpenExecutionErrorDetail(message: String)
+        fun onCloseDetail()
+        fun onCopyDetailMessage()
     }
 }
 
@@ -154,69 +216,158 @@ internal fun DevToolsConsoleScreen(
     uiState: DevToolsConsoleUiState,
     modifier: Modifier = Modifier,
 ) {
+    val detail = uiState.detail
     val listState = rememberLazyListState()
     val scrollTargetId = uiState.entries.lastOrNull()?.id
-    LaunchedEffect(scrollTargetId) {
-        if (uiState.entries.isNotEmpty()) {
+    LaunchedEffect(scrollTargetId, detail) {
+        if (detail == null && uiState.entries.isNotEmpty()) {
             listState.animateScrollToItem(uiState.entries.lastIndex)
         }
     }
     Scaffold(
         modifier = modifier.testTag(DevToolsConsoleTestTags.Screen.testTag),
         topBar = {
-            TopAppBar(
-                title = { Text("コンソール") },
-                actions = {
-                    TextButton(onClick = { uiState.callbacks.onClearLogs() }) {
-                        Text("消去")
-                    }
-                    TextButton(onClick = { uiState.callbacks.onDismiss() }) {
-                        Text("閉じる")
-                    }
-                },
-            )
+            if (detail == null) {
+                TopAppBar(
+                    title = { Text("コンソール") },
+                    actions = {
+                        TextButton(onClick = { uiState.callbacks.onClearLogs() }) {
+                            Text("消去")
+                        }
+                        TextButton(onClick = { uiState.callbacks.onDismiss() }) {
+                            Text("閉じる")
+                        }
+                    },
+                )
+            } else {
+                TopAppBar(
+                    title = { Text(detailTitle(detail)) },
+                    navigationIcon = {
+                        IconButton(
+                            modifier = Modifier.testTag(DevToolsConsoleTestTags.DetailBackButton.testTag),
+                            onClick = uiState.callbacks::onCloseDetail,
+                        ) {
+                            Icon(
+                                painter = painterResource(ResourcesR.drawable.ic_arrow_back_24dp),
+                                contentDescription = "一覧へ戻る",
+                            )
+                        }
+                    },
+                    actions = {
+                        TextButton(
+                            modifier = Modifier.testTag(DevToolsConsoleTestTags.DetailCopyButton.testTag),
+                            onClick = uiState.callbacks::onCopyDetailMessage,
+                        ) {
+                            Text(detailCopyButtonLabel(detail))
+                        }
+                    },
+                )
+            }
         },
     ) { innerPadding ->
-        Column(
+        if (detail == null) {
+            DevToolsConsoleListContent(
+                uiState = uiState,
+                listState = listState,
+                modifier = Modifier.padding(innerPadding),
+            )
+        } else {
+            DevToolsConsoleDetailContent(
+                detail = detail,
+                modifier = Modifier.padding(innerPadding),
+            )
+        }
+    }
+}
+
+@Composable
+private fun DevToolsConsoleListContent(
+    uiState: DevToolsConsoleUiState,
+    listState: LazyListState,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier.fillMaxSize(),
+    ) {
+        Box(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding),
+                .weight(1f)
+                .fillMaxWidth(),
         ) {
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth(),
-            ) {
-                if (uiState.entries.isEmpty()) {
-                    Text(
-                        modifier = Modifier
-                            .align(Alignment.Center)
-                            .padding(16.dp),
-                        text = "console.log などの出力がここに表示されます",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                } else {
-                    SelectionContainer {
-                        LazyColumn(
-                            modifier = Modifier.fillMaxSize(),
-                            state = listState,
-                            contentPadding = PaddingValues(vertical = 8.dp),
-                        ) {
-                            items(
-                                items = uiState.entries,
-                                key = { entry -> entry.id },
-                            ) { entry ->
-                                ConsoleLogRow(entry = entry)
-                                HorizontalDivider()
-                            }
+            if (uiState.entries.isEmpty()) {
+                Text(
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .padding(16.dp),
+                    text = "console.log などの出力がここに表示されます",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                SelectionContainer {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        state = listState,
+                        contentPadding = PaddingValues(vertical = 8.dp),
+                    ) {
+                        items(
+                            items = uiState.entries,
+                            key = { entry -> entry.id },
+                        ) { entry ->
+                            ConsoleLogRow(
+                                entry = entry,
+                                onOpenDetail = uiState.callbacks::onOpenLogEntryDetail,
+                            )
+                            HorizontalDivider()
                         }
                     }
                 }
             }
-            ExecutionFeedbackSection(executionState = uiState.executionState)
-            HorizontalDivider()
-            ConsoleInputSection(uiState = uiState)
+        }
+        ExecutionFeedbackSection(
+            executionState = uiState.executionState,
+            onOpenExecutionErrorDetail = uiState.callbacks::onOpenExecutionErrorDetail,
+        )
+        HorizontalDivider()
+        ConsoleInputSection(uiState = uiState)
+    }
+}
+
+@Composable
+private fun DevToolsConsoleDetailContent(
+    detail: DevToolsConsoleUiState.Detail,
+    modifier: Modifier = Modifier,
+) {
+    val message = when (detail) {
+        is DevToolsConsoleUiState.Detail.LogEntry -> detail.entry.message
+        is DevToolsConsoleUiState.Detail.ExecutionError -> detail.message
+    }
+    val url = when (detail) {
+        is DevToolsConsoleUiState.Detail.LogEntry -> detail.entry.url
+        is DevToolsConsoleUiState.Detail.ExecutionError -> null
+    }
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+    ) {
+        if (url != null) {
+            Text(
+                text = url,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(bottom = 8.dp),
+            )
+        }
+        SelectionContainer {
+            Text(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag(DevToolsConsoleTestTags.DetailMessage.testTag),
+                text = message,
+                style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
+            )
         }
     }
 }
@@ -224,6 +375,7 @@ internal fun DevToolsConsoleScreen(
 @Composable
 private fun ExecutionFeedbackSection(
     executionState: DevToolsConsoleUiState.ExecutionState,
+    onOpenExecutionErrorDetail: (String) -> Unit,
 ) {
     when (executionState) {
         DevToolsConsoleUiState.ExecutionState.Idle -> Unit
@@ -253,15 +405,37 @@ private fun ExecutionFeedbackSection(
             }
         }
         is DevToolsConsoleUiState.ExecutionState.Error -> {
-            Text(
+            val isTruncated = isConsoleMessageTruncated(
+                message = executionState.message,
+                maxLines = CONSOLE_LOG_PREVIEW_MAX_LINES,
+            )
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
-                    .testTag(DevToolsConsoleTestTags.Result.testTag),
-                text = executionState.message,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.error,
-            )
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+            ) {
+                Text(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag(DevToolsConsoleTestTags.Result.testTag),
+                    text = previewConsoleMessage(
+                        message = executionState.message,
+                        maxLines = CONSOLE_LOG_PREVIEW_MAX_LINES,
+                    ),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error,
+                    maxLines = CONSOLE_LOG_PREVIEW_MAX_LINES,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (isTruncated) {
+                    TextButton(
+                        modifier = Modifier.testTag(DevToolsConsoleTestTags.OpenDetailButton.testTag),
+                        onClick = { onOpenExecutionErrorDetail(executionState.message) },
+                    ) {
+                        Text("続きを見る")
+                    }
+                }
+            }
         }
     }
 }
@@ -299,11 +473,25 @@ private fun ConsoleInputSection(
 }
 
 @Composable
-private fun ConsoleLogRow(entry: DevToolsWebExtension.ConsoleLogEntry) {
+private fun ConsoleLogRow(
+    entry: DevToolsWebExtension.ConsoleLogEntry,
+    onOpenDetail: (DevToolsWebExtension.ConsoleLogEntry) -> Unit,
+) {
+    val isTruncated = isConsoleMessageTruncated(
+        message = entry.message,
+        maxLines = CONSOLE_LOG_PREVIEW_MAX_LINES,
+    )
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .background(consoleLevelBackground(entry.level))
+            .then(
+                if (isTruncated) {
+                    Modifier.clickable { onOpenDetail(entry) }
+                } else {
+                    Modifier
+                },
+            )
             .padding(horizontal = 12.dp, vertical = 8.dp),
     ) {
         Row(
@@ -327,10 +515,25 @@ private fun ConsoleLogRow(entry: DevToolsWebExtension.ConsoleLogEntry) {
             )
         }
         Text(
-            text = entry.message,
+            text = previewConsoleMessage(
+                message = entry.message,
+                maxLines = CONSOLE_LOG_PREVIEW_MAX_LINES,
+            ),
             style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
             modifier = Modifier.padding(top = 4.dp),
+            maxLines = CONSOLE_LOG_PREVIEW_MAX_LINES,
+            overflow = TextOverflow.Ellipsis,
         )
+        if (isTruncated) {
+            Text(
+                text = "続きを見る",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier
+                    .padding(top = 4.dp)
+                    .testTag(DevToolsConsoleTestTags.OpenDetailButton.testTag),
+            )
+        }
     }
 }
 
@@ -366,6 +569,45 @@ private fun consoleLevelLabel(level: DevToolsWebExtension.ConsoleLogEntry.Level)
     }
 }
 
+private fun isConsoleMessageTruncated(message: String, maxLines: Int): Boolean {
+    return message.lineSequence().count() > maxLines
+}
+
+private fun previewConsoleMessage(message: String, maxLines: Int): String {
+    return message.lineSequence().take(maxLines).joinToString("\n")
+}
+
+private fun detailTitle(detail: DevToolsConsoleUiState.Detail): String {
+    return when (detail) {
+        is DevToolsConsoleUiState.Detail.LogEntry -> consoleLevelLabel(detail.entry.level)
+        is DevToolsConsoleUiState.Detail.ExecutionError -> "実行エラー"
+    }
+}
+
+private fun detailCopyButtonLabel(detail: DevToolsConsoleUiState.Detail): String {
+    return when (detail) {
+        is DevToolsConsoleUiState.Detail.LogEntry -> {
+            if (detail.entry.level == DevToolsWebExtension.ConsoleLogEntry.Level.Error) {
+                "エラー全文をコピー"
+            } else {
+                "全文をコピー"
+            }
+        }
+        is DevToolsConsoleUiState.Detail.ExecutionError -> "エラー全文をコピー"
+    }
+}
+
+private fun copyConsoleTextToClipboard(
+    context: Context,
+    label: String,
+    text: String,
+    toastMessage: String,
+) {
+    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+    clipboard.setPrimaryClip(ClipData.newPlainText(label, text))
+    Toast.makeText(context, toastMessage, Toast.LENGTH_SHORT).show()
+}
+
 sealed interface DevToolsConsoleTestTags {
     val id: String
     val testTag get() = "${DevToolsConsoleTestTags::class.java.name}#$id"
@@ -381,6 +623,18 @@ sealed interface DevToolsConsoleTestTags {
     }
     object Result : DevToolsConsoleTestTags {
         override val id = "result"
+    }
+    object DetailBackButton : DevToolsConsoleTestTags {
+        override val id = "detail_back_button"
+    }
+    object DetailCopyButton : DevToolsConsoleTestTags {
+        override val id = "detail_copy_button"
+    }
+    object DetailMessage : DevToolsConsoleTestTags {
+        override val id = "detail_message"
+    }
+    object OpenDetailButton : DevToolsConsoleTestTags {
+        override val id = "open_detail_button"
     }
 }
 
@@ -401,6 +655,55 @@ private fun PreviewDevToolsConsoleScreenWithEntries() {
                 ),
                 scriptText = "1 + 2",
                 executionState = DevToolsConsoleUiState.ExecutionState.Idle,
+                detail = null,
+                callbacks = PreviewDevToolsConsoleCallbacks,
+            ),
+        )
+    }
+}
+
+@Preview(name = "長いログ")
+@Composable
+private fun PreviewDevToolsConsoleScreenLongEntry() {
+    BrowserTheme(themeMode = ThemeMode.THEME_SYSTEM) {
+        DevToolsConsoleScreen(
+            uiState = DevToolsConsoleUiState(
+                entries = listOf(
+                    DevToolsWebExtension.ConsoleLogEntry(
+                        id = 2L,
+                        level = DevToolsWebExtension.ConsoleLogEntry.Level.Error,
+                        message = (1..12).joinToString("\n") { line -> "error line $line" },
+                        url = "https://example.com/app.js",
+                        timestampMs = 2L,
+                    ),
+                ),
+                scriptText = "",
+                executionState = DevToolsConsoleUiState.ExecutionState.Idle,
+                detail = null,
+                callbacks = PreviewDevToolsConsoleCallbacks,
+            ),
+        )
+    }
+}
+
+@Preview(name = "ログ詳細")
+@Composable
+private fun PreviewDevToolsConsoleScreenDetail() {
+    BrowserTheme(themeMode = ThemeMode.THEME_SYSTEM) {
+        DevToolsConsoleScreen(
+            uiState = DevToolsConsoleUiState(
+                entries = listOf(),
+                scriptText = "",
+                executionState = DevToolsConsoleUiState.ExecutionState.Idle,
+                detail = DevToolsConsoleUiState.Detail.LogEntry(
+                    DevToolsWebExtension.ConsoleLogEntry(
+                        id = 3L,
+                        level = DevToolsWebExtension.ConsoleLogEntry.Level.Error,
+                        message = (1..12).joinToString("\n") { line -> "error line $line" },
+                        url = "https://example.com/app.js",
+                        timestampMs = 3L,
+                    ),
+                ),
                 callbacks = PreviewDevToolsConsoleCallbacks,
             ),
         )
@@ -416,6 +719,7 @@ private fun PreviewDevToolsConsoleScreenSuccess() {
                 entries = listOf(),
                 scriptText = "1 + 2",
                 executionState = DevToolsConsoleUiState.ExecutionState.Success("3"),
+                detail = null,
                 callbacks = PreviewDevToolsConsoleCallbacks,
             ),
         )
@@ -427,4 +731,8 @@ private object PreviewDevToolsConsoleCallbacks : DevToolsConsoleUiState.Callback
     override fun onClearLogs() = Unit
     override fun onScriptTextChange(text: String) = Unit
     override fun onExecuteScript() = Unit
+    override fun onOpenLogEntryDetail(entry: DevToolsWebExtension.ConsoleLogEntry) = Unit
+    override fun onOpenExecutionErrorDetail(message: String) = Unit
+    override fun onCloseDetail() = Unit
+    override fun onCopyDetailMessage() = Unit
 }
