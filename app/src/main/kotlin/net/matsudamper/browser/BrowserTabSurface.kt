@@ -92,7 +92,7 @@ internal fun BrowserContentHost(
     //
     // 親が既に消費した分は差し引く。window.open のオーバーレイでは
     // safeDrawing (IME 含む) が消費済みで、表示領域は既に縮んでいる。
-    // Custom Tab は adjustResize のみで縮めるため、ここでの手動縮小は無効化する
+    // Custom Tab / WebApp は adjustResize のみで縮めるため、ここでの手動縮小は無効化する
     // （二重縮小するとキーボード直上に未描画の隙間ができる）。
     val density = LocalDensity.current
     var consumedBottomPx by remember { mutableIntStateOf(0) }

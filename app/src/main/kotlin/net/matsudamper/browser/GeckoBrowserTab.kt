@@ -1100,11 +1100,7 @@ internal fun GeckoBrowserTab(
                 if (state.isFullScreen) {
                     Modifier
                 } else {
-                    // 上部（ステータスバー）は BrowserToolBar の背景色で塗りつぶすため除外する。
-                    // IME は GeckoView が WindowInsets から onKeyboardHeight で処理する。
-                    // Compose 側で imePadding / safeDrawing(IME 含む) を掛けると、
-                    // Surface のリサイズと Gecko 内部のキーボード余白が重なり、
-                    // 候補バー消滅後の細い帯や、キーボード閉後にキーボード高の黒領域が残る。
+                    val singlePageMode = customTabMode || webAppMode
                     Modifier
                         .windowInsetsPadding(
                             WindowInsets.safeDrawing
@@ -1112,9 +1108,16 @@ internal fun GeckoBrowserTab(
                                 .exclude(WindowInsets.navigationBars)
                                 .only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal),
                         )
-                        // IME 表示中もナビバー分は親で確保する（候補バーは ime - navigationBars で上げる）。
-                        .windowInsetsPadding(
-                            WindowInsets.navigationBars.only(WindowInsetsSides.Bottom),
+                        .then(
+                            // 単一ページ（WebApp / Custom Tab）は adjustResize でウィンドウが縮む。
+                            // IME 表示中にナビバー分も確保すると、キーボード直上に余分な帯ができる。
+                            if (singlePageMode && isImeVisible) {
+                                Modifier
+                            } else {
+                                Modifier.windowInsetsPadding(
+                                    WindowInsets.navigationBars.only(WindowInsetsSides.Bottom),
+                                )
+                            },
                         )
                 },
             ),
@@ -1311,7 +1314,7 @@ internal fun GeckoBrowserTab(
                 session = session,
                 latestOnRefresh = latestOnRefresh,
                 browserTab = browserTab,
-                shrinkViewportForKeyboard = !customTabMode,
+                shrinkViewportForKeyboard = !customTabMode && !webAppMode,
                 updateGeckoView = {
                     geckoView = it
                 },
