@@ -5,6 +5,7 @@
   if (window !== window.top) return;
 
   const MAX_EXECUTE_CODE_LENGTH = 10000;
+  const MAX_CONSOLE_MESSAGE_LENGTH = 4096;
 
   // ネイティブアプリとの双方向ポートを確立する
   const port = browser.runtime.connectNative('devToolsBridge');
@@ -18,6 +19,11 @@
   function postMessage(message) {
     if (disconnected) return;
     port.postMessage(message);
+  }
+
+  function truncateMessage(message) {
+    if (message.length <= MAX_CONSOLE_MESSAGE_LENGTH) return message;
+    return message.slice(0, MAX_CONSOLE_MESSAGE_LENGTH) + '…';
   }
 
   // input / textarea / contenteditable など、テキスト入力に類する要素のみを対象とする
@@ -46,34 +52,39 @@
     }
   }
 
-  function stringifyConsoleArgs(args) {
-    return Array.from(args).map(function (value) {
-      if (typeof value === 'string') return value;
-      if (value === undefined) return 'undefined';
-      if (value === null) return 'null';
-      if (typeof value === 'object') {
-        try {
-          return JSON.stringify(value);
-        } catch (error) {
-          return String(value);
-        }
-      }
-      return String(value);
-    }).join(' ');
+  function safeFormatConsoleArg(value) {
+    if (value === undefined) return 'undefined';
+    if (value === null) return 'null';
+    const type = typeof value;
+    if (type === 'string') return value;
+    if (type === 'number' || type === 'boolean' || type === 'bigint') return String(value);
+    if (type === 'function') return '[Function]';
+    if (type === 'symbol') return String(value);
+    try {
+      return Object.prototype.toString.call(value);
+    } catch (error) {
+      return '[object]';
+    }
+  }
+
+  function safeFormatConsoleArgs(args) {
+    return Array.from(args).map(safeFormatConsoleArg).join(' ');
   }
 
   function formatResult(value) {
     if (value === undefined) return 'undefined';
     if (value === null) return 'null';
     if (typeof value === 'string') return value;
-    if (typeof value === 'object') {
-      try {
-        return JSON.stringify(value);
-      } catch (error) {
-        return String(value);
-      }
+    if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint') {
+      return String(value);
     }
-    return String(value);
+    if (typeof value === 'function') return '[Function]';
+    if (typeof value === 'symbol') return String(value);
+    try {
+      return Object.prototype.toString.call(value);
+    } catch (error) {
+      return '[object]';
+    }
   }
 
   const pageWin = window.wrappedJSObject;
@@ -96,15 +107,32 @@
     levels.forEach(function (level) {
       const original = pageWin.console[level];
       pageWin.console[level] = exportFunction(function () {
-        notifyConsole(level, stringifyConsoleArgs(arguments));
         original.apply(pageWin.console, arguments);
+        try {
+          notifyConsole(level, truncateMessage(safeFormatConsoleArgs(arguments)));
+        } catch (error) {
+          // 転送失敗でページ側の console 呼び出しを壊さない
+        }
       }, pageWin);
     });
   }
 
-  const evaluateInPage = exportFunction(function (source) {
-    // eslint-disable-next-line no-eval
-    return eval(source);
+  pageWin.__browsemDevToolsReportResult = exportFunction(function (requestId, success, value) {
+    if (success) {
+      postMessage({
+        action: 'executeResult',
+        requestId: requestId,
+        success: true,
+        result: formatResult(value),
+      });
+      return;
+    }
+    postMessage({
+      action: 'executeResult',
+      requestId: requestId,
+      success: false,
+      error: String(value && value.message ? value.message : value),
+    });
   }, pageWin);
 
   function executeScript(requestId, code) {
@@ -126,22 +154,23 @@
       });
       return;
     }
-    try {
-      const result = evaluateInPage(code);
-      postMessage({
-        action: 'executeResult',
-        requestId: requestId,
-        success: true,
-        result: formatResult(result),
-      });
-    } catch (error) {
-      postMessage({
-        action: 'executeResult',
-        requestId: requestId,
-        success: false,
-        error: String(error && error.message ? error.message : error),
-      });
-    }
+
+    const script = document.createElement('script');
+    script.textContent =
+      '(function(){' +
+      'var requestId=' + JSON.stringify(requestId) + ';' +
+      'try{' +
+      'var result=eval(' + JSON.stringify(code) + ');' +
+      'if(result&&typeof result.then==="function"){' +
+      'result.then(function(res){window.__browsemDevToolsReportResult(requestId,true,res);})' +
+      '.catch(function(err){window.__browsemDevToolsReportResult(requestId,false,err);});' +
+      'return;' +
+      '}' +
+      'window.__browsemDevToolsReportResult(requestId,true,result);' +
+      '}catch(e){window.__browsemDevToolsReportResult(requestId,false,e);}' +
+      '})();';
+    (document.documentElement || document.head).appendChild(script);
+    script.remove();
   }
 
   installConsoleHook();
@@ -160,13 +189,20 @@
     }
   });
 
-  // フォーカスの移動を監視して都度通知する
-  document.addEventListener('focusin', reportFocusedInput, true);
-  document.addEventListener('focusout', function () {
-    // focusout 直後に activeElement が body に戻るため、次のフレームで再評価する
-    setTimeout(reportFocusedInput, 0);
-  }, true);
+  function setupFocusListeners() {
+    if (setupFocusListeners.done) return;
+    setupFocusListeners.done = true;
+    document.addEventListener('focusin', reportFocusedInput, true);
+    document.addEventListener('focusout', function () {
+      // focusout 直後に activeElement が body に戻るため、次のフレームで再評価する
+      setTimeout(reportFocusedInput, 0);
+    }, true);
+    reportFocusedInput();
+  }
 
-  // 接続直後に現在の状態を一度送信する
-  reportFocusedInput();
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', setupFocusListeners);
+  } else {
+    setupFocusListeners();
+  }
 })();

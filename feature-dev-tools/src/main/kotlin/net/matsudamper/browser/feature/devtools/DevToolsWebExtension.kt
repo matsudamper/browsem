@@ -26,6 +26,7 @@ class DevToolsWebExtension {
     private var extension: WebExtension? = null
     private val mainHandler = Handler(Looper.getMainLooper())
     private val nextRequestId = AtomicLong(0)
+    private val nextLogId = AtomicLong(0)
 
     // セッションごとの接続ポート
     private val sessionPorts = ConcurrentHashMap<GeckoSession, WebExtension.Port>()
@@ -43,6 +44,7 @@ class DevToolsWebExtension {
 
     private data class PendingExecution(
         val session: GeckoSession,
+        val port: WebExtension.Port,
         val callback: (ScriptExecutionResult) -> Unit,
     )
 
@@ -60,6 +62,7 @@ class DevToolsWebExtension {
 
     /** ページ console 出力の 1 行分 */
     data class ConsoleLogEntry(
+        val id: Long,
         val level: Level,
         val message: String,
         val url: String,
@@ -117,7 +120,6 @@ class DevToolsWebExtension {
         sessionCallbacks.remove(session)
         sessionPorts.remove(session)
         attachedSessions.remove(session)
-        _consoleLogs.update { it - session }
         extension?.let { ext ->
             session.webExtensionController.setMessageDelegate(ext, null, NATIVE_APP_ID)
         }
@@ -151,14 +153,13 @@ class DevToolsWebExtension {
         code: String,
         onResult: (ScriptExecutionResult) -> Unit,
     ) {
-        val requestId = "req-${nextRequestId.incrementAndGet()}"
-        executeCallbacks[requestId] = PendingExecution(session, onResult)
         val port = sessionPorts[session]
         if (port == null) {
-            executeCallbacks.remove(requestId)
             onResult(ScriptExecutionResult.Failure("ポートが未接続"))
             return
         }
+        val requestId = "req-${nextRequestId.incrementAndGet()}"
+        executeCallbacks[requestId] = PendingExecution(session, port, onResult)
         port.postMessage(
             JSONObject().apply {
                 put("action", "execute")
@@ -184,15 +185,26 @@ class DevToolsWebExtension {
         }
     }
 
+    private fun createConsoleLogEntry(json: JSONObject): ConsoleLogEntry {
+        val rawMessage = json.optString("message", "")
+        val message = if (rawMessage.length <= MAX_CONSOLE_MESSAGE_LENGTH) {
+            rawMessage
+        } else {
+            rawMessage.take(MAX_CONSOLE_MESSAGE_LENGTH) + "…"
+        }
+        return ConsoleLogEntry(
+            id = nextLogId.incrementAndGet(),
+            level = parseConsoleLevel(json.optString("level")),
+            message = message,
+            url = json.optString("url", ""),
+            timestampMs = json.optLong("timestamp", System.currentTimeMillis()),
+        )
+    }
+
     private fun handlePortMessage(session: GeckoSession, json: JSONObject) {
         when (json.optString("action")) {
             "consoleLog" -> {
-                val entry = ConsoleLogEntry(
-                    level = parseConsoleLevel(json.optString("level")),
-                    message = json.optString("message", ""),
-                    url = json.optString("url", ""),
-                    timestampMs = json.optLong("timestamp", System.currentTimeMillis()),
-                )
+                val entry = createConsoleLogEntry(json)
                 mainHandler.post {
                     appendConsoleLog(session, entry)
                 }
@@ -237,9 +249,9 @@ class DevToolsWebExtension {
         }
     }
 
-    private fun failPendingExecutions(session: GeckoSession, message: String) {
+    private fun failPendingExecutionsForPort(port: WebExtension.Port, message: String) {
         executeCallbacks.entries.removeIf { (_, pending) ->
-            if (pending.session != session) return@removeIf false
+            if (pending.port !== port) return@removeIf false
             mainHandler.post {
                 pending.callback(ScriptExecutionResult.Failure(message))
             }
@@ -272,10 +284,10 @@ class DevToolsWebExtension {
 
                         override fun onDisconnect(port: WebExtension.Port) {
                             Log.d(TAG, "onDisconnect: ポート切断")
+                            failPendingExecutionsForPort(port, "ポートが切断されました")
                             // ページ遷移等で新しいポートに差し替わっている場合、
                             // 古いポートの遅延切断が新しい接続を消さないよう識別チェックする
                             if (sessionPorts.remove(session, port)) {
-                                failPendingExecutions(session, "ポートが切断されました")
                                 mainHandler.post {
                                     sessionCallbacks[session]?.invoke(null)
                                 }
@@ -294,5 +306,6 @@ class DevToolsWebExtension {
         private const val EXTENSION_URI =
             "resource://android/assets/web_extensions/dev_tools_bridge/"
         private const val MAX_CONSOLE_LOG_ENTRIES = 500
+        private const val MAX_CONSOLE_MESSAGE_LENGTH = 4096
     }
 }

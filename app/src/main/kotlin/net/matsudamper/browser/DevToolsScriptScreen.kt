@@ -35,6 +35,7 @@ import androidx.compose.ui.window.DialogProperties
 import net.matsudamper.browser.data.ThemeMode
 import net.matsudamper.browser.feature.devtools.DevToolsWebExtension
 import net.matsudamper.browser.ui.common.BrowserTheme
+import net.matsudamper.browser.ui.common.StatusBarAppearanceEffect
 import org.koin.compose.koinInject
 import org.mozilla.geckoview.GeckoSession
 
@@ -52,6 +53,7 @@ internal fun DevToolsScriptDialog(
         properties = DialogProperties(usePlatformDefaultWidth = false),
     ) {
         Surface(modifier = Modifier.fillMaxSize()) {
+            StatusBarAppearanceEffect(MaterialTheme.colorScheme.surface)
             DevToolsScriptScreen(uiState = uiState)
         }
     }

@@ -39,6 +39,7 @@ import androidx.compose.ui.window.DialogProperties
 import net.matsudamper.browser.data.ThemeMode
 import net.matsudamper.browser.feature.devtools.DevToolsWebExtension
 import net.matsudamper.browser.ui.common.BrowserTheme
+import net.matsudamper.browser.ui.common.StatusBarAppearanceEffect
 import org.koin.compose.koinInject
 import org.mozilla.geckoview.GeckoSession
 
@@ -56,6 +57,7 @@ internal fun DevToolsConsoleLogDialog(
         properties = DialogProperties(usePlatformDefaultWidth = false),
     ) {
         Surface(modifier = Modifier.fillMaxSize()) {
+            StatusBarAppearanceEffect(MaterialTheme.colorScheme.surface)
             DevToolsConsoleLogScreen(uiState = uiState)
         }
     }
@@ -106,7 +108,8 @@ internal fun DevToolsConsoleLogScreen(
     modifier: Modifier = Modifier,
 ) {
     val listState = rememberLazyListState()
-    LaunchedEffect(uiState.entries.size) {
+    val scrollTargetId = uiState.entries.lastOrNull()?.id
+    LaunchedEffect(scrollTargetId) {
         if (uiState.entries.isNotEmpty()) {
             listState.animateScrollToItem(uiState.entries.lastIndex)
         }
@@ -153,9 +156,7 @@ internal fun DevToolsConsoleLogScreen(
             ) {
                 items(
                     items = uiState.entries,
-                    key = { entry ->
-                        "${entry.timestampMs}:${entry.level}:${entry.message}"
-                    },
+                    key = { entry -> entry.id },
                 ) { entry ->
                     ConsoleLogRow(entry = entry)
                     HorizontalDivider()
@@ -250,12 +251,14 @@ private fun PreviewDevToolsConsoleLogScreenWithEntries() {
             uiState = DevToolsConsoleLogUiState(
                 entries = listOf(
                     DevToolsWebExtension.ConsoleLogEntry(
+                        id = 1L,
                         level = DevToolsWebExtension.ConsoleLogEntry.Level.Log,
                         message = "hello world",
                         url = "https://example.com/",
                         timestampMs = 1L,
                     ),
                     DevToolsWebExtension.ConsoleLogEntry(
+                        id = 2L,
                         level = DevToolsWebExtension.ConsoleLogEntry.Level.Error,
                         message = "something failed",
                         url = "https://example.com/",
