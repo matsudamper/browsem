@@ -387,18 +387,29 @@
     }
   }
 
+  // ネイティブ側がセッションを登録する前に接続すると、delegate 不在で即切断される。
+  // 事前読み込みしたセッションは登録まで数分空くことがあるため、
+  // 回数では打ち切らず、間隔を伸ばしながら文書が生きている間は繋ぎ直す
+  function scheduleReconnect() {
+    const delay = Math.min(RECONNECT_DELAY_MS * Math.pow(2, reconnectCount), MAX_RECONNECT_DELAY_MS);
+    reconnectCount += 1;
+    setTimeout(connect, delay);
+  }
+
   function connect() {
-    port = browser.runtime.connectNative('devToolsBridge');
+    try {
+      port = browser.runtime.connectNative('devToolsBridge');
+    } catch (error) {
+      // 接続の呼び出し自体が失敗した場合も繋ぎ直す。諦めるとこの文書では以後届かない
+      port = null;
+      scheduleReconnect();
+      return;
+    }
     port.onMessage.addListener(onNativeMessage);
     port.onDisconnect.addListener(function () {
       port = null;
       forwarding = false;
-      // ネイティブ側がセッションを登録する前に接続すると、delegate 不在で即切断される。
-      // 事前読み込みしたセッションは登録まで数分空くことがあるため、
-      // 回数では打ち切らず、間隔を伸ばしながら文書が生きている間は繋ぎ直す
-      const delay = Math.min(RECONNECT_DELAY_MS * Math.pow(2, reconnectCount), MAX_RECONNECT_DELAY_MS);
-      reconnectCount += 1;
-      setTimeout(connect, delay);
+      scheduleReconnect();
     });
     // 接続直後に現在の状態を送る。ネイティブ側はこの識別子でページ遷移と再接続を見分ける
     postMessage({ action: 'hello', documentId: documentId });
