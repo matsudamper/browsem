@@ -190,13 +190,20 @@ internal fun isExpectedLocalPage(currentUrl: String, expectedPageUrl: String): B
     val current = Uri.parse(currentUrl)
     val expectedHost = expected.host ?: return false
     if (!expectedHost.equals(current.host, ignoreCase = true)) return false
-    val expectedPort = if (expected.port != -1) expected.port else expected.defaultPort
-    val currentPort = if (current.port != -1) current.port else current.defaultPort
-    if (expectedPort != currentPort) return false
+    if (effectivePort(expected) != effectivePort(current)) return false
     val expectedPath = expected.encodedPath?.trimEnd('/').orEmpty()
     val currentPath = current.encodedPath?.trimEnd('/').orEmpty()
     if (expectedPath.isEmpty()) return true
     return currentPath == expectedPath || currentPath.startsWith("$expectedPath/")
+}
+
+private fun effectivePort(uri: Uri): Int {
+    if (uri.port != -1) return uri.port
+    return when (uri.scheme?.lowercase()) {
+        "http" -> 80
+        "https" -> 443
+        else -> -1
+    }
 }
 
 /**
