@@ -263,22 +263,22 @@
 
   // ---- スクリプト実行 ----
 
-  // ページの CSP が eval を禁止している場合、ページコンテキストでの eval は EvalError になる
-  function isEvalBlockedByCsp(error) {
-    if (!error) return false;
-    if (error.name === 'EvalError') return true;
-    return /call to eval|unsafe-eval|Content Security Policy/i.test(String(error.message || ''));
+  // 実行するコード自身の EvalError と区別するため、副作用のない式で eval の可否を確かめる
+  function isPageEvalAllowed() {
+    try {
+      pageWindow.eval('0');
+      return true;
+    } catch (error) {
+      return false;
+    }
   }
 
   function evaluate(code) {
-    try {
-      return pageWindow.eval(code);
-    } catch (error) {
-      if (!isEvalBlockedByCsp(error)) throw error;
-    }
+    if (isPageEvalAllowed()) return pageWindow.eval(code);
     // CSP でページ側の eval が禁止されている場合はコンテンツスクリプト側で実行する。
-    // ページの変数は参照できないが、DOM 操作は同じように行える
-    return eval(code);
+    // ページの変数は参照できないが、DOM 操作は同じように行える。
+    // 直接 eval だとこのスクリプトのローカル変数が見えてしまうため、間接 eval で行う
+    return (0, eval)(code);
   }
 
   function isThenable(value) {
