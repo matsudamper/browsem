@@ -147,8 +147,6 @@
 
   function formatObjectLike(value, depth) {
     if (depth >= MAX_FORMAT_DEPTH) return isArrayLike(value) ? '[…]' : '{…}';
-    if (formatNodeBudget <= 0) return '…';
-    formatNodeBudget -= 1;
     if (isArrayLike(value)) {
       // length が極端に大きい配列でも走査が伸びないよう、上限までの添字だけを作る
       const length = readProperty(value, 'length');
@@ -164,7 +162,16 @@
     return formatEntries(value, own.keys, own.hasMore ? '…他' : null, depth, '{', '}');
   }
 
+  function formatErrorLike(value) {
+    const stack = readProperty(value, 'stack');
+    if (typeof stack === 'string' && stack) return stack;
+    return readProperty(value, 'name') + ': ' + readProperty(value, 'message');
+  }
+
   function formatValue(value, depth) {
+    // 予算はプリミティブも含めて消費する。深さと件数の上限だけでは総量を抑えられない
+    if (formatNodeBudget <= 0) return '…';
+    formatNodeBudget -= 1;
     if (value === undefined) return 'undefined';
     if (value === null) return 'null';
     const type = typeof value;
@@ -174,7 +181,7 @@
     }
     if (type === 'function') return 'function ' + (value.name || '(anonymous)') + '()';
     try {
-      if (isErrorLike(value)) return value.stack || value.name + ': ' + value.message;
+      if (isErrorLike(value)) return formatErrorLike(value);
       if (isElementLike(value)) return describeElement(value);
       return formatObjectLike(value, depth);
     } catch (error) {
@@ -187,11 +194,17 @@
     }
   }
 
+  // console 出力 1 件・実行結果 1 件のような、独立した整形の起点。予算はここで戻す
+  function formatForEntry(value) {
+    formatNodeBudget = MAX_FORMAT_NODES;
+    return truncate(formatValue(value, 0));
+  }
+
   function formatArgs(args) {
     const values = Array.prototype.slice.call(args, 0, MAX_ARG_COUNT);
-    // 引数ごとに切り詰めてから連結し、巨大なオブジェクトでも中間文字列を膨らませない
+    // 予算は 1 回の出力全体で共有し、引数ごとに切り詰めてから連結する
+    formatNodeBudget = MAX_FORMAT_NODES;
     return truncate(values.map(function (value) {
-      formatNodeBudget = MAX_FORMAT_NODES;
       return truncate(formatValue(value, 0));
     }).join(' '));
   }
@@ -282,11 +295,11 @@
         return;
       }
       const at = event.filename ? ' (' + event.filename + ':' + event.lineno + ')' : '';
-      const detail = event.error ? formatValue(event.error, 0) : event.message;
+      const detail = event.error ? formatForEntry(event.error) : event.message;
       addLog('error', truncate(detail + at));
     }, true);
     window.addEventListener('unhandledrejection', function (event) {
-      addLog('error', truncate('Uncaught (in promise) ' + formatValue(event.reason, 0)));
+      addLog('error', truncate('Uncaught (in promise) ' + formatForEntry(event.reason)));
     }, true);
   }
 
@@ -315,22 +328,20 @@
   }
 
   function postExecuteSuccess(requestId, value) {
-    formatNodeBudget = MAX_FORMAT_NODES;
     postMessage({
       action: 'executeResult',
       requestId: requestId,
       success: true,
-      result: truncate(formatValue(value, 0)),
+      result: formatForEntry(value),
     });
   }
 
   function postExecuteFailure(requestId, error) {
-    formatNodeBudget = MAX_FORMAT_NODES;
     postMessage({
       action: 'executeResult',
       requestId: requestId,
       success: false,
-      error: truncate(formatValue(error, 0)),
+      error: formatForEntry(error),
     });
   }
 
