@@ -52,6 +52,10 @@ class DevToolsWebExtension {
     // 実行結果の待ち受け。ポート切断やタイムアウトでも必ず結果を返す
     private val pendingExecutions = ConcurrentHashMap<String, PendingExecution>()
 
+    // 反映待ちの行。メインスレッドでのみ触る
+    private val bufferedEntries = mutableMapOf<GeckoSession, MutableList<ConsoleEntry>>()
+    private var bufferedEntriesFlushScheduled = false
+
     private val _consoleEntries =
         MutableStateFlow<Map<GeckoSession, List<ConsoleEntry>>>(mapOf())
 
@@ -141,6 +145,7 @@ class DevToolsWebExtension {
         consoleWatchingSessions.remove(session)
         receivedLogSeq.remove(session)
         connectedDocumentIds.remove(session)
+        bufferedEntries.remove(session)
         // 実行待ちを残すとタイムアウトが後から発火し、破棄済みセッションの表示内容が復活する
         cancelPendingExecutions { pending -> pending.session === session }
         _consoleEntries.update { current -> current - session }
@@ -176,6 +181,7 @@ class DevToolsWebExtension {
 
     /** コンソールの表示内容を消去する */
     fun clearConsoleEntries(session: GeckoSession) {
+        bufferedEntries.remove(session)
         _consoleEntries.update { current -> current + (session to listOf()) }
     }
 
@@ -249,9 +255,25 @@ class DevToolsWebExtension {
             url = url,
             timestampMs = timestampMs,
         )
+        bufferedEntries.getOrPut(session) { mutableListOf() }.add(entry)
+        if (bufferedEntriesFlushScheduled) return
+        bufferedEntriesFlushScheduled = true
+        mainHandler.postDelayed(flushBufferedEntries, ENTRY_FLUSH_DELAY_MS)
+    }
+
+    /**
+     * 高頻度に出力するページでも UI の更新が詰まらないよう、
+     * 受け取った行はまとめてから反映する。
+     */
+    private val flushBufferedEntries = Runnable {
+        bufferedEntriesFlushScheduled = false
+        if (bufferedEntries.isEmpty()) return@Runnable
+        val added = bufferedEntries.toMap()
+        bufferedEntries.clear()
         _consoleEntries.update { current ->
-            val entries = (current[session].orEmpty() + entry).takeLast(MAX_CONSOLE_ENTRIES)
-            current + (session to entries)
+            current + added.mapValues { (session, entries) ->
+                (current[session].orEmpty() + entries).takeLast(MAX_CONSOLE_ENTRIES)
+            }
         }
     }
 
@@ -420,6 +442,7 @@ class DevToolsWebExtension {
         private const val EXTENSION_URI =
             "resource://android/assets/web_extensions/dev_tools_bridge/"
         private const val MAX_CONSOLE_ENTRIES = 500
+        private const val ENTRY_FLUSH_DELAY_MS = 100L
         private const val EXECUTE_TIMEOUT_MS = 10_000L
         private const val PORT_DISCONNECTED_MESSAGE = "ページと接続できていません"
     }
