@@ -25,6 +25,7 @@ import net.matsudamper.browser.ui.common.BrowserTheme
  * @param focusedInput フォーカス中の入力要素の情報。フォーカスがない場合は null。
  * @param onCopyFocusedInputId フォーカス中の input の id をコピーする。
  * @param onOpenNetworkLog ネットワークログ画面を開く。
+ * @param onOpenConsole コンソール画面を開く。
  * @param onDismiss ダイアログを閉じる。
  */
 @Composable
@@ -32,6 +33,7 @@ internal fun DevToolsDialog(
     focusedInput: DevToolsWebExtension.FocusedInputInfo?,
     onCopyFocusedInputId: () -> Unit,
     onOpenNetworkLog: () -> Unit,
+    onOpenConsole: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     // フォーカス中の input の id（空文字は「なし」とみなす）
@@ -67,6 +69,15 @@ internal fun DevToolsDialog(
                     colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                     headlineContent = { Text("ネットワークログ") },
                 )
+                // 押すとページの console 出力の確認と JavaScript の実行を行う画面を開く
+                ListItem(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(onClick = onOpenConsole)
+                        .testTag(DevToolsDialogTestTags.Console.testTag),
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                    headlineContent = { Text("コンソール") },
+                )
             }
         },
         confirmButton = {
@@ -90,6 +101,9 @@ sealed interface DevToolsDialogTestTags {
     object NetworkLog : DevToolsDialogTestTags {
         override val id = "network_log"
     }
+    object Console : DevToolsDialogTestTags {
+        override val id = "console"
+    }
 }
 
 @Preview(name = "input フォーカスあり")
@@ -105,6 +119,7 @@ private fun PreviewDevToolsDialogFocused() {
             ),
             onCopyFocusedInputId = {},
             onOpenNetworkLog = {},
+            onOpenConsole = {},
             onDismiss = {},
         )
     }
@@ -118,6 +133,7 @@ private fun PreviewDevToolsDialogNoFocus() {
             focusedInput = null,
             onCopyFocusedInputId = {},
             onOpenNetworkLog = {},
+            onOpenConsole = {},
             onDismiss = {},
         )
     }
