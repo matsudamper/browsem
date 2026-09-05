@@ -213,8 +213,13 @@ internal fun GeckoBrowserTab(
     if (!view.isInEditMode) {
         SideEffect {
             val window = view.findActivity()?.window ?: return@SideEffect
-            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars =
-                toolbarColors.isBrightBackground
+            val insetsController = WindowCompat.getInsetsController(window, view)
+            insetsController.isAppearanceLightStatusBars = toolbarColors.isBrightBackground
+            // CustomTab / WebApp は enableEdgeToEdge しないため、旧 OS ではシステム
+            // ステータスバー背景が Theme.Browser のまま残る。ツールバー色に合わせる。
+            if (customTabMode || webAppMode) {
+                window.statusBarColor = toolbarColors.resolvedToolbarColor.toArgb()
+            }
         }
     }
 
@@ -1109,7 +1114,7 @@ internal fun GeckoBrowserTab(
                         )
                         .then(
                             // IME 表示中にナビバー分も確保すると、キーボード直上に余分な帯ができる。
-                            // 住所オートフィル候補バーは imeAboveNavigationBarsPadding で個別に上げる。
+                            // 住所オートフィル候補バーは imeAboveNavigationBarsPadding で IME 全高ぶん上げる。
                             if (isImeVisible) {
                                 Modifier
                             } else {
@@ -1598,17 +1603,15 @@ private class GetMultipleContentsWithMimeTypes : ActivityResultContract<Array<St
 }
 
 /**
- * ナビバー分は親で既に避けているので、IME との重なり分だけ候補バーを上げる。
- * GeckoDisplay.getKeyboardHeight と同じ ime - navigationBars にする。
+ * IME 表示中は親 Column が navigationBars の bottom padding を外すため、
+ * 候補バーは IME の全高ぶん上げる。
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun Modifier.imeAboveNavigationBarsPadding(): Modifier {
     val density = LocalDensity.current
     val imeBottomPx = WindowInsets.ime.getBottom(density)
-    val navigationBottomPx = WindowInsets.navigationBars.getBottom(density)
-    val liftPx = (imeBottomPx - navigationBottomPx).coerceAtLeast(0)
-    return padding(bottom = with(density) { liftPx.toDp() })
+    return padding(bottom = with(density) { imeBottomPx.toDp() })
 }
 
 /** MIME タイプを Intent に適用する共通関数 */
