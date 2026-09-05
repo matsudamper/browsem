@@ -195,31 +195,54 @@
   // 開発者ツールを開く前の出力も見せたいので、常に読み込み直後からフックしておく。
   const pageWindow = window.wrappedJSObject;
 
+  // 転送の失敗を握り潰すと原因が分からなくなるため、最初の 1 件だけログに残す
+  let hookFailureReported = false;
+
+  function reportHookFailure(error) {
+    if (hookFailureReported) return;
+    hookFailureReported = true;
+    addLog('error', truncate('console フックの転送に失敗しました: ' + String(error)));
+  }
+
   function installConsoleHook() {
     const pageConsole = pageWindow.console;
     if (!pageConsole) return;
-    const notify = exportFunction(function (level, message) {
-      addLog(level, message);
-    }, pageWindow);
-
     ['log', 'info', 'warn', 'error', 'debug'].forEach(function (level) {
       const original = pageConsole[level];
       if (typeof original !== 'function') return;
       pageConsole[level] = exportFunction(function () {
         try {
-          notify(level, formatArgs(arguments));
+          addLog(level, formatArgs(arguments));
         } catch (error) {
-          // 転送に失敗してもページ側の console 呼び出しは壊さない
+          reportHookFailure(error);
         }
-        return original.apply(pageConsole, arguments);
+        try {
+          return original.apply(pageConsole, arguments);
+        } catch (error) {
+          // ページ側の呼び出しが失敗しても差し替えが原因で例外を投げない
+          return undefined;
+        }
       }, pageWindow);
     });
   }
 
+  function resourceErrorMessage(event) {
+    const target = event.target;
+    const url = (target && (target.src || target.href)) || '';
+    const tag = target && target.tagName ? target.tagName.toLowerCase() : 'リソース';
+    return 'リソースの読み込みに失敗しました: ' + tag + ' ' + url;
+  }
+
   function installErrorHooks() {
     window.addEventListener('error', function (event) {
-      const detail = event.error ? formatValue(event.error, 0) : String(event.message || '');
+      // キャプチャフェーズには画像や script の読み込み失敗も届く。
+      // これらは message を持たない Event のため、内容が空の行にならないよう分けて扱う
+      if (typeof event.message !== 'string') {
+        addLog('error', truncate(resourceErrorMessage(event)));
+        return;
+      }
       const at = event.filename ? ' (' + event.filename + ':' + event.lineno + ')' : '';
+      const detail = event.error ? formatValue(event.error, 0) : event.message;
       addLog('error', truncate(detail + at));
     }, true);
     window.addEventListener('unhandledrejection', function (event) {
