@@ -359,9 +359,8 @@ class DevToolsWebExtension {
         if (connectedDocumentIds.put(session, documentId) != documentId) {
             receivedLogSeq[session] = 0L
         }
-        if (consoleWatchingSessions.contains(session)) {
-            setConsoleWatching(session, true)
-        }
+        // 転送しない場合も必ず返す。コンテンツスクリプトはこの応答で接続の成立を判断する
+        setConsoleWatching(session, consoleWatchingSessions.contains(session))
     }
 
     private fun onPortDisconnected(session: GeckoSession, port: WebExtension.Port) {
