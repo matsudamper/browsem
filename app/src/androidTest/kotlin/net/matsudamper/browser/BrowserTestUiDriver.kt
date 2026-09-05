@@ -84,8 +84,13 @@ internal fun AndroidComposeTestRule<*, MainActivity>.waitForUrlBarNotFocused(
     while (SystemClock.elapsedRealtime() < deadline) {
         if (!isUrlBarFocused()) return
         dismissUrlBarFocusWithoutPageInteraction()
+        if (!isUrlBarFocused()) return
+        dismissUrlBarFocusViaGeckoContainerIfSafe()
         Thread.sleep(200)
     }
+    if (!isUrlBarFocused()) return
+    dismissUrlBarFocusViaBackIfStillFocused()
+    if (!isUrlBarFocused()) return
     throw AssertionError(
         "waitForUrlBarNotFocused timeout: urlBarFocused=true " +
             "urlInput=\"${currentUrlBarText()}\" currentUrl=\"${currentPageUrlFromUi()}\"",
@@ -93,25 +98,73 @@ internal fun AndroidComposeTestRule<*, MainActivity>.waitForUrlBarNotFocused(
 }
 
 /**
- * Gecko コンテンツや Back 操作を使わず URL バーのフォーカスを外す。
+ * ページ遷移や Back を使わず URL バーのフォーカスを外す。
  *
- * IME を閉じるとアプリ側 LaunchedEffect が closeUrlInput(true) を呼ぶ。
- * サジェストオーバーレイ表示中は Compose セマンティクスで Surface をタップする。
+ * IME 非表示はアプリ側 LaunchedEffect (URL_BAR_IME_HIDE_GRACE_MS) 経由で closeUrlInput する。
+ * それでも残る場合は ImeAction 送信と currentFocus.clearFocus() を試す。
  */
 internal fun AndroidComposeTestRule<*, MainActivity>.dismissUrlBarFocusWithoutPageInteraction() {
     if (!isUrlBarFocused()) return
     hideSoftInputFromDecorView()
+    Thread.sleep(URL_BAR_IME_HIDE_GRACE_MS + 100)
     if (!isUrlBarFocused()) return
-    val hasSuggestionOverlay = runCatching {
-        onAllNodesWithTag(BrowserTabSurfaceTestTags.UrlSuggestionList.testTag)
-            .fetchSemanticsNodes().isNotEmpty()
-    }.getOrDefault(false)
+    runCatching {
+        onNodeWithTag(UrlTextInputTestTags.UrlBar.testTag).performImeAction()
+        waitForIdle()
+    }
+    if (!isUrlBarFocused()) return
+    val hasSuggestionOverlay = hasUrlSuggestionOverlay()
     if (hasSuggestionOverlay) {
         runCatching {
             onNodeWithTag(BrowserTabSurfaceTestTags.UrlSuggestionList.testTag).performClick()
             waitForIdle()
         }
+        if (!isUrlBarFocused()) return
     }
+    clearCurrentAppFocus()
+}
+
+/**
+ * サジェストオーバーレイが無いときだけ Gecko コンテナ上端をタップしてフォーカスを移す。
+ *
+ * 中央タップはページ内ボタン誤操作のリスクがあるため、上端 5% を使う。
+ */
+internal fun AndroidComposeTestRule<*, MainActivity>.dismissUrlBarFocusViaGeckoContainerIfSafe() {
+    if (!isUrlBarFocused()) return
+    if (hasUrlSuggestionOverlay()) return
+    runCatching {
+        onNodeWithTag(GeckoBrowserTabTestTags.GeckoContainer.testTag)
+            .performTouchInput { click(percentOffset(0.5f, 0.05f)) }
+        waitForIdle()
+    }
+}
+
+/**
+ * URL バーがまだフォーカスされている場合のみ Back を送る。
+ *
+ * runOnIdle 内で直前に再確認し、フォーカス解除済みなら canGoBack 側へ誤送信しない。
+ */
+internal fun AndroidComposeTestRule<*, MainActivity>.dismissUrlBarFocusViaBackIfStillFocused() {
+    runOnIdle {
+        if (isUrlBarFocused()) {
+            activity.onBackPressedDispatcher.onBackPressed()
+        }
+    }
+    waitForIdle()
+}
+
+private fun AndroidComposeTestRule<*, MainActivity>.hasUrlSuggestionOverlay(): Boolean {
+    return runCatching {
+        onAllNodesWithTag(BrowserTabSurfaceTestTags.UrlSuggestionList.testTag)
+            .fetchSemanticsNodes().isNotEmpty()
+    }.getOrDefault(false)
+}
+
+private fun AndroidComposeTestRule<*, MainActivity>.clearCurrentAppFocus() {
+    runOnIdle {
+        activity.currentFocus?.clearFocus()
+    }
+    waitForIdle()
 }
 
 private fun AndroidComposeTestRule<*, MainActivity>.hideSoftInputFromDecorView() {
@@ -330,3 +383,5 @@ internal fun AndroidComposeTestRule<*, MainActivity>.openLocalPageAndStabilize(
         timeoutMillis = timeoutMillis,
     )
 }
+
+private const val URL_BAR_IME_HIDE_GRACE_MS = 700L
