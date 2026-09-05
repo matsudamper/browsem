@@ -14,9 +14,9 @@
   const MAX_FORMAT_ENTRIES = 50;
   const MAX_FORMAT_NODES = 500;
 
-  // ネイティブ側の受け口が用意される前に接続すると即座に切断されるため、数回だけ繋ぎ直す
-  const MAX_RECONNECT_COUNT = 5;
+  // ネイティブ側の受け口が用意される前に接続すると即座に切断されるため、間隔を伸ばしつつ繋ぎ直す
   const RECONNECT_DELAY_MS = 500;
+  const MAX_RECONNECT_DELAY_MS = 30000;
 
   // ページ遷移とポートの繋ぎ直しをネイティブ側が区別するための、この文書での識別子
   const documentId = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2);
@@ -354,11 +354,11 @@
       port = null;
       forwarding = false;
       // ネイティブ側がセッションを登録する前に接続すると、delegate 不在で即切断される。
-      // そのままだとこの文書では以降ログも実行も届かないため、数回だけ繋ぎ直す
-      if (reconnectCount < MAX_RECONNECT_COUNT) {
-        reconnectCount += 1;
-        setTimeout(connect, RECONNECT_DELAY_MS);
-      }
+      // 事前読み込みしたセッションは登録まで数分空くことがあるため、
+      // 回数では打ち切らず、間隔を伸ばしながら文書が生きている間は繋ぎ直す
+      const delay = Math.min(RECONNECT_DELAY_MS * Math.pow(2, reconnectCount), MAX_RECONNECT_DELAY_MS);
+      reconnectCount += 1;
+      setTimeout(connect, delay);
     });
     // 接続直後に現在の状態を送る。ネイティブ側はこの識別子でページ遷移と再接続を見分ける
     postMessage({ action: 'hello', documentId: documentId });
