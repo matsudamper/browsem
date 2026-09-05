@@ -16,6 +16,9 @@
     disconnected = true;
   });
 
+  let consoleHookEnabled = false;
+  let focusTrackingEnabled = false;
+
   function postMessage(message) {
     if (disconnected) return;
     port.postMessage(message);
@@ -38,6 +41,7 @@
   // 現在フォーカスされている入力要素の情報を送信する。
   // フォーカスが入力要素でない場合は focused=false を送る。
   function reportFocusedInput() {
+    if (!focusTrackingEnabled) return;
     const el = document.activeElement;
     if (isInputLike(el)) {
       postMessage({
@@ -94,6 +98,7 @@
     pageWin.__devToolsConsoleHookInstalled = true;
 
     const notifyConsole = exportFunction(function (level, message) {
+      if (!consoleHookEnabled) return;
       postMessage({
         action: 'consoleLog',
         level: level,
@@ -117,23 +122,26 @@
     });
   }
 
-  pageWin.__browsemDevToolsReportResult = exportFunction(function (requestId, success, value) {
-    if (success) {
+  function ensureExecuteBridge() {
+    if (pageWin.__browsemDevToolsReportResult) return;
+    pageWin.__browsemDevToolsReportResult = exportFunction(function (requestId, success, value) {
+      if (success) {
+        postMessage({
+          action: 'executeResult',
+          requestId: requestId,
+          success: true,
+          result: formatResult(value),
+        });
+        return;
+      }
       postMessage({
         action: 'executeResult',
         requestId: requestId,
-        success: true,
-        result: formatResult(value),
+        success: false,
+        error: String(value && value.message ? value.message : value),
       });
-      return;
-    }
-    postMessage({
-      action: 'executeResult',
-      requestId: requestId,
-      success: false,
-      error: String(value && value.message ? value.message : value),
-    });
-  }, pageWin);
+    }, pageWin);
+  }
 
   function executeScript(requestId, code) {
     if (!code) {
@@ -155,6 +163,8 @@
       return;
     }
 
+    ensureExecuteBridge();
+
     const script = document.createElement('script');
     script.textContent =
       '(function(){' +
@@ -173,10 +183,25 @@
     script.remove();
   }
 
-  installConsoleHook();
-
   port.onMessage.addListener(function (msg) {
     if (!msg) return;
+
+    if (msg.action === 'setConsoleHookEnabled') {
+      consoleHookEnabled = !!msg.enabled;
+      if (consoleHookEnabled) {
+        installConsoleHook();
+      }
+      return;
+    }
+
+    if (msg.action === 'setFocusTrackingEnabled') {
+      focusTrackingEnabled = !!msg.enabled;
+      if (focusTrackingEnabled) {
+        setupFocusListeners();
+        reportFocusedInput();
+      }
+      return;
+    }
 
     // ネイティブ側からの明示的な問い合わせに応答する
     if (msg.action === 'query') {
@@ -197,12 +222,5 @@
       // focusout 直後に activeElement が body に戻るため、次のフレームで再評価する
       setTimeout(reportFocusedInput, 0);
     }, true);
-    reportFocusedInput();
-  }
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', setupFocusListeners);
-  } else {
-    setupFocusListeners();
   }
 })();

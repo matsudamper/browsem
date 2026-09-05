@@ -137,12 +137,17 @@ class DevToolsWebExtension {
     fun setFocusNotificationsEnabled(session: GeckoSession, enabled: Boolean) {
         if (enabled) {
             focusNotificationSessions.add(session)
-            return
+        } else {
+            focusNotificationSessions.remove(session)
+            mainHandler.post {
+                sessionCallbacks[session]?.invoke(null)
+            }
         }
-        focusNotificationSessions.remove(session)
-        mainHandler.post {
-            sessionCallbacks[session]?.invoke(null)
-        }
+        sendFeatureMessage(
+            session = session,
+            action = "setFocusTrackingEnabled",
+            enabled = enabled,
+        )
     }
 
     /** コンソール画面表示中のみ console ログを収集する */
@@ -152,6 +157,11 @@ class DevToolsWebExtension {
         } else {
             consoleWatchingSessions.remove(session)
         }
+        sendFeatureMessage(
+            session = session,
+            action = "setConsoleHookEnabled",
+            enabled = enabled,
+        )
     }
 
     /** 現在フォーカスされている入力要素の情報を問い合わせる */
@@ -205,6 +215,37 @@ class DevToolsWebExtension {
             return
         }
         port.postMessage(message)
+    }
+
+    private fun sendFeatureMessage(
+        session: GeckoSession,
+        action: String,
+        enabled: Boolean,
+    ) {
+        sendMessage(
+            session,
+            JSONObject().apply {
+                put("action", action)
+                put("enabled", enabled)
+            },
+        )
+    }
+
+    private fun syncContentScriptFeatures(session: GeckoSession) {
+        if (focusNotificationSessions.contains(session)) {
+            sendFeatureMessage(
+                session = session,
+                action = "setFocusTrackingEnabled",
+                enabled = true,
+            )
+        }
+        if (consoleWatchingSessions.contains(session)) {
+            sendFeatureMessage(
+                session = session,
+                action = "setConsoleHookEnabled",
+                enabled = true,
+            )
+        }
     }
 
     private fun appendConsoleLog(session: GeckoSession, entry: ConsoleLogEntry) {
@@ -307,6 +348,7 @@ class DevToolsWebExtension {
                 override fun onConnect(port: WebExtension.Port) {
                     Log.d(TAG, "onConnect: ポート接続")
                     sessionPorts[session] = port
+                    syncContentScriptFeatures(session)
                     port.setDelegate(object : WebExtension.PortDelegate {
                         override fun onPortMessage(
                             message: Any,
