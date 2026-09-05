@@ -54,7 +54,8 @@ GeckoView ベースの Android ブラウザ。Kotlin / Jetpack Compose / Materia
 
 例:
 - `docs/agent-kotlin.md` — Kotlin 詳細スタイル
-- `docs/agent-compose.md` — Compose / UiState / Paparazzi
+- `docs/agent-compose.md` — Compose / UiState
+- `docs/agent-paparazzi.md` — Paparazzi
 - 既存の `docs/compose-guidelines.md` / `docs/coding_style.md` などリポ固有の詳細ガイド
 
 ## 言語
