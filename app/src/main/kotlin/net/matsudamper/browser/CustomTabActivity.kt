@@ -11,6 +11,7 @@ import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.VisibleForTesting
 import androidx.browser.customtabs.CustomTabsSessionToken
@@ -77,8 +78,8 @@ class CustomTabActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // enableEdgeToEdge() はウィンドウを透過させ、キーボード直上の未描画領域から
-        // 下層 Activity（WebApp 等）が見えてしまう。ステータスバーは CustomTabToolbar が処理する。
+        enableEdgeToEdge()
+        // ウィンドウ透過によるキーボード直上の未描画領域から下層 Activity（WebApp 等）の透けを防止する
         window.setBackgroundDrawable(ColorDrawable(Color.BLACK))
         runtime.settings.setExtensionsWebAPIEnabled(true)
 

@@ -219,7 +219,7 @@ internal fun GeckoBrowserTab(
         SideEffect {
             if (!(customTabMode || webAppMode)) return@SideEffect
             val window = view.findActivity()?.window ?: return@SideEffect
-            // CustomTab / WebApp は enableEdgeToEdge しないため、旧 OS ではシステム
+            // WebApp 等で enableEdgeToEdge しない場合や旧 OS ではシステム
             // ステータスバー背景が Theme.Browser のまま残る。ツールバー色に合わせる。
             window.statusBarColor = toolbarColors.resolvedToolbarColor.toArgb()
         }
