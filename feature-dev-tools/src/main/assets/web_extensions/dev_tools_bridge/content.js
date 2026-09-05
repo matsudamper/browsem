@@ -9,6 +9,11 @@
   const MAX_MESSAGE_LENGTH = 4096;
   const MAX_ARG_COUNT = 20;
 
+  // 値の整形はページの操作を止めないよう、深さ・件数・走査ノード数で頭打ちにする
+  const MAX_FORMAT_DEPTH = 3;
+  const MAX_FORMAT_ENTRIES = 50;
+  const MAX_FORMAT_NODES = 500;
+
   // ネイティブアプリとの双方向ポートを確立する
   const port = browser.runtime.connectNative('devToolsBridge');
 
@@ -69,6 +74,11 @@
     return value.nodeType === 1 && typeof value.tagName === 'string';
   }
 
+  function isArrayLike(value) {
+    if (Array.isArray(value)) return true;
+    return typeof value.length === 'number' && typeof value.splice === 'function';
+  }
+
   function describeElement(el) {
     const id = el.id ? '#' + el.id : '';
     const className = typeof el.className === 'string' && el.className
@@ -77,21 +87,49 @@
     return '<' + el.tagName.toLowerCase() + id + className + '>';
   }
 
-  function stringifyObject(value) {
-    const seen = new WeakSet();
-    return JSON.stringify(value, function (key, entry) {
-      if (entry === null || typeof entry !== 'object') return entry;
-      if (seen.has(entry)) return '[Circular]';
-      seen.add(entry);
-      return entry;
-    }, 2);
+  // 1 回の整形で走査できるノード数。深い・巨大なオブジェクトで走査が長引かないようにする
+  let formatNodeBudget = MAX_FORMAT_NODES;
+
+  function formatProperty(value, key, depth) {
+    try {
+      return formatValue(value[key], depth + 1);
+    } catch (error) {
+      // getter が例外を投げる場合がある
+      return '[取得できません]';
+    }
   }
 
-  function formatValue(value) {
+  function formatEntries(value, keys, depth, open, close) {
+    const shown = keys.slice(0, MAX_FORMAT_ENTRIES);
+    const parts = shown.map(function (key) {
+      const formatted = formatProperty(value, key, depth);
+      return open === '[' ? formatted : key + ': ' + formatted;
+    });
+    if (keys.length > shown.length) {
+      parts.push('…他 ' + (keys.length - shown.length) + ' 件');
+    }
+    return open + parts.join(', ') + close;
+  }
+
+  function formatObjectLike(value, depth) {
+    if (depth >= MAX_FORMAT_DEPTH) return isArrayLike(value) ? '[…]' : '{…}';
+    if (formatNodeBudget <= 0) return '…';
+    formatNodeBudget -= 1;
+    if (isArrayLike(value)) {
+      const indexes = [];
+      for (let index = 0; index < value.length; index += 1) {
+        indexes.push(index);
+      }
+      return formatEntries(value, indexes, depth, '[', ']');
+    }
+    return formatEntries(value, Object.keys(value), depth, '{', '}');
+  }
+
+  function formatValue(value, depth) {
     if (value === undefined) return 'undefined';
     if (value === null) return 'null';
     const type = typeof value;
-    if (type === 'string') return value;
+    if (type === 'string') return depth > 0 ? truncate(JSON.stringify(value)) : truncate(value);
     if (type === 'number' || type === 'boolean' || type === 'bigint' || type === 'symbol') {
       return String(value);
     }
@@ -99,10 +137,9 @@
     try {
       if (isErrorLike(value)) return value.stack || value.name + ': ' + value.message;
       if (isElementLike(value)) return describeElement(value);
-      const json = stringifyObject(value);
-      if (json !== undefined) return json;
+      return formatObjectLike(value, depth);
     } catch (error) {
-      // 循環参照や getter の例外では String() にフォールバックする
+      // 循環参照や Xray 越しに触れないオブジェクトでは String() にフォールバックする
     }
     try {
       return String(value);
@@ -115,7 +152,8 @@
     const values = Array.prototype.slice.call(args, 0, MAX_ARG_COUNT);
     // 引数ごとに切り詰めてから連結し、巨大なオブジェクトでも中間文字列を膨らませない
     return truncate(values.map(function (value) {
-      return truncate(formatValue(value));
+      formatNodeBudget = MAX_FORMAT_NODES;
+      return truncate(formatValue(value, 0));
     }).join(' '));
   }
 
@@ -180,12 +218,12 @@
 
   function installErrorHooks() {
     window.addEventListener('error', function (event) {
-      const detail = event.error ? formatValue(event.error) : String(event.message || '');
+      const detail = event.error ? formatValue(event.error, 0) : String(event.message || '');
       const at = event.filename ? ' (' + event.filename + ':' + event.lineno + ')' : '';
       addLog('error', truncate(detail + at));
     }, true);
     window.addEventListener('unhandledrejection', function (event) {
-      addLog('error', truncate('Uncaught (in promise) ' + formatValue(event.reason)));
+      addLog('error', truncate('Uncaught (in promise) ' + formatValue(event.reason, 0)));
     }, true);
   }
 
@@ -214,20 +252,22 @@
   }
 
   function postExecuteSuccess(requestId, value) {
+    formatNodeBudget = MAX_FORMAT_NODES;
     postMessage({
       action: 'executeResult',
       requestId: requestId,
       success: true,
-      result: truncate(formatValue(value)),
+      result: truncate(formatValue(value, 0)),
     });
   }
 
   function postExecuteFailure(requestId, error) {
+    formatNodeBudget = MAX_FORMAT_NODES;
     postMessage({
       action: 'executeResult',
       requestId: requestId,
       success: false,
-      error: truncate(formatValue(error)),
+      error: truncate(formatValue(error, 0)),
     });
   }
 
