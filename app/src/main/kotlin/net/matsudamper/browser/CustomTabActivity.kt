@@ -12,9 +12,11 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.VisibleForTesting
 import androidx.browser.customtabs.CustomTabsSessionToken
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -106,9 +108,12 @@ class CustomTabActivity : ComponentActivity() {
                     runtime = runtime,
                 ) { outerNavActions ->
                     Box(
-                        modifier = Modifier.semantics {
-                            testTagsAsResourceId = true
-                        },
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(MaterialTheme.colorScheme.surface)
+                            .semantics {
+                                testTagsAsResourceId = true
+                            },
                     ) {
                         CustomTabScreen(
                             initialUrl = initialUrl.takeIf { it.isNotBlank() } ?: browserSettings.resolvedHomepageUrl(),
