@@ -14,18 +14,23 @@
   const MAX_FORMAT_ENTRIES = 50;
   const MAX_FORMAT_NODES = 500;
 
-  // ネイティブアプリとの双方向ポートを確立する
-  const port = browser.runtime.connectNative('devToolsBridge');
+  // ネイティブ側の受け口が用意される前に接続すると即座に切断されるため、数回だけ繋ぎ直す
+  const MAX_RECONNECT_COUNT = 5;
+  const RECONNECT_DELAY_MS = 500;
 
-  // ポート切断後に postMessage を呼ぶと例外になるため、切断状態を追跡する
-  let disconnected = false;
-  port.onDisconnect.addListener(function () {
-    disconnected = true;
-  });
+  // ページ遷移とポートの繋ぎ直しをネイティブ側が区別するための、この文書での識別子
+  const documentId = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2);
+
+  let port = null;
+  let reconnectCount = 0;
 
   function postMessage(message) {
-    if (disconnected) return;
-    port.postMessage(message);
+    if (port === null) return;
+    try {
+      port.postMessage(message);
+    } catch (error) {
+      // 切断直後の送信は例外になるが、再接続時に送り直されるため無視してよい
+    }
   }
 
   // ---- フォーカス中の入力要素 ----
@@ -167,6 +172,7 @@
   function addLog(level, message) {
     const log = {
       action: 'consoleLog',
+      documentId: documentId,
       seq: nextSeq,
       level: level,
       message: message,
@@ -314,10 +320,12 @@
     }
   }
 
-  // ---- ネイティブからの要求 ----
+  // ---- ネイティブとの接続 ----
 
-  port.onMessage.addListener(function (msg) {
+  function onNativeMessage(msg) {
     if (!msg) return;
+    // 応答があるならネイティブ側の受け口は用意されているため、繋ぎ直しの回数を戻す
+    reconnectCount = 0;
     if (msg.action === 'query') {
       reportFocusedInput();
       return;
@@ -332,7 +340,25 @@
     if (msg.action === 'execute') {
       executeScript(msg.requestId || '', msg.code || '');
     }
-  });
+  }
+
+  function connect() {
+    port = browser.runtime.connectNative('devToolsBridge');
+    port.onMessage.addListener(onNativeMessage);
+    port.onDisconnect.addListener(function () {
+      port = null;
+      forwarding = false;
+      // ネイティブ側がセッションを登録する前に接続すると、delegate 不在で即切断される。
+      // そのままだとこの文書では以降ログも実行も届かないため、数回だけ繋ぎ直す
+      if (reconnectCount < MAX_RECONNECT_COUNT) {
+        reconnectCount += 1;
+        setTimeout(connect, RECONNECT_DELAY_MS);
+      }
+    });
+    // 接続直後に現在の状態を送る。ネイティブ側はこの識別子でページ遷移と再接続を見分ける
+    postMessage({ action: 'hello', documentId: documentId });
+    reportFocusedInput();
+  }
 
   installConsoleHook();
   installErrorHooks();
@@ -344,6 +370,5 @@
     setTimeout(reportFocusedInput, 0);
   }, true);
 
-  // 接続直後に現在の状態を一度送信する
-  reportFocusedInput();
+  connect();
 })();

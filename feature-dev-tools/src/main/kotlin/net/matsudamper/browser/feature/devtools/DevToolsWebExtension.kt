@@ -46,6 +46,9 @@ class DevToolsWebExtension {
     // セッションごとに受信済みのコンテンツスクリプト通番。再送分の重複取り込みを防ぐ
     private val receivedLogSeq = ConcurrentHashMap<GeckoSession, Long>()
 
+    // セッションごとに接続中のコンテンツスクリプトの文書識別子。通番を戻す契機の判定に使う
+    private val connectedDocumentIds = ConcurrentHashMap<GeckoSession, String>()
+
     // 実行結果の待ち受け。ポート切断やタイムアウトでも必ず結果を返す
     private val pendingExecutions = ConcurrentHashMap<String, PendingExecution>()
 
@@ -137,6 +140,7 @@ class DevToolsWebExtension {
         attachedSessions.remove(session)
         consoleWatchingSessions.remove(session)
         receivedLogSeq.remove(session)
+        connectedDocumentIds.remove(session)
         // 実行待ちを残すとタイムアウトが後から発火し、破棄済みセッションの表示内容が復活する
         cancelPendingExecutions { pending -> pending.session === session }
         _consoleEntries.update { current -> current - session }
@@ -283,8 +287,17 @@ class DevToolsWebExtension {
         sessionCallbacks[session]?.invoke(info)
     }
 
-    private fun handlePortMessage(session: GeckoSession, json: JSONObject) {
+    private fun handlePortMessage(
+        session: GeckoSession,
+        port: WebExtension.Port,
+        json: JSONObject,
+    ) {
+        // ページ遷移直後は古いポートに溜まっていたメッセージが届くことがある。
+        // 取り込むと通番が新しいページのものと混ざるため、現在のポートの分だけ扱う
+        if (sessionPorts[session] !== port) return
         when (json.optString("action")) {
+            "hello" -> handleHello(session, json)
+
             "consoleLog" -> handleConsoleLog(session, json)
 
             "executeResult" -> {
@@ -318,10 +331,19 @@ class DevToolsWebExtension {
         }
     }
 
-    /** ページ遷移でコンテンツスクリプトが作り直されるため、そのページ分のログを取り直す */
     private fun onPortConnected(session: GeckoSession, port: WebExtension.Port) {
         sessionPorts[session] = port
-        receivedLogSeq[session] = 0L
+    }
+
+    /**
+     * 接続直後の挨拶。文書識別子が変わっていればページ遷移なので通番を戻し、
+     * 同じ文書への繋ぎ直しであれば受信済みの続きから転送させる。
+     */
+    private fun handleHello(session: GeckoSession, json: JSONObject) {
+        val documentId = json.optString("documentId", "")
+        if (connectedDocumentIds.put(session, documentId) != documentId) {
+            receivedLogSeq[session] = 0L
+        }
         if (consoleWatchingSessions.contains(session)) {
             setConsoleWatching(session, true)
         }
@@ -364,7 +386,7 @@ class DevToolsWebExtension {
                             port: WebExtension.Port,
                         ) {
                             val json = message as? JSONObject ?: return
-                            mainHandler.post { handlePortMessage(session, json) }
+                            mainHandler.post { handlePortMessage(session, port, json) }
                         }
 
                         override fun onDisconnect(port: WebExtension.Port) {
