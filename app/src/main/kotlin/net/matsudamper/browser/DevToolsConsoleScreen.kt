@@ -333,11 +333,13 @@ private fun entryLabelColor(kind: DevToolsConsoleUiState.Kind): Color {
         -> MaterialTheme.colorScheme.error
 
         DevToolsConsoleUiState.Kind.Warn -> MaterialTheme.colorScheme.tertiary
+
         DevToolsConsoleUiState.Kind.Info,
         DevToolsConsoleUiState.Kind.Result,
         -> MaterialTheme.colorScheme.primary
 
         DevToolsConsoleUiState.Kind.Debug -> MaterialTheme.colorScheme.secondary
+
         DevToolsConsoleUiState.Kind.Log,
         DevToolsConsoleUiState.Kind.Input,
         -> MaterialTheme.colorScheme.onSurfaceVariant

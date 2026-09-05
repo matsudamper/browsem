@@ -154,12 +154,19 @@ internal class DevToolsConsoleStateHolder(
     ): DevToolsConsoleUiState.Kind {
         return when (kind) {
             DevToolsWebExtension.ConsoleEntry.Kind.Log -> DevToolsConsoleUiState.Kind.Log
+
             DevToolsWebExtension.ConsoleEntry.Kind.Info -> DevToolsConsoleUiState.Kind.Info
+
             DevToolsWebExtension.ConsoleEntry.Kind.Warn -> DevToolsConsoleUiState.Kind.Warn
+
             DevToolsWebExtension.ConsoleEntry.Kind.Error -> DevToolsConsoleUiState.Kind.Error
+
             DevToolsWebExtension.ConsoleEntry.Kind.Debug -> DevToolsConsoleUiState.Kind.Debug
+
             DevToolsWebExtension.ConsoleEntry.Kind.Input -> DevToolsConsoleUiState.Kind.Input
+
             DevToolsWebExtension.ConsoleEntry.Kind.Result -> DevToolsConsoleUiState.Kind.Result
+
             DevToolsWebExtension.ConsoleEntry.Kind.ResultError ->
                 DevToolsConsoleUiState.Kind.ResultError
         }
