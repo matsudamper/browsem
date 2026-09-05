@@ -83,9 +83,7 @@ class KeyboardBottomInputTest {
     @Test
     fun bottomInputStaysVisibleAboveKeyboard() {
         val pageUrl = startBottomInputPageServer()
-        composeRule.openUrlFromUrlBar(pageUrl)
-        composeRule.waitForUrlBarContains(BOTTOM_INPUT_FILE_NAME, timeoutMillis = 60_000)
-        composeRule.waitForUrlBarNotFocused()
+        composeRule.openLocalPageAndStabilize(pageUrl)
         // URL バーの IME が閉じきる前だと、その inset を「入力欄のキーボード」と
         // 誤認してページをタップしないまま先へ進んでしまう。
         assertTrue(
@@ -114,9 +112,7 @@ class KeyboardBottomInputTest {
     @Test
     fun fixedBottomInputStaysVisibleAboveKeyboard() {
         val pageUrl = startPageServer(FIXED_DIR_NAME, FIXED_ASSET_DIR)
-        composeRule.openUrlFromUrlBar(pageUrl)
-        composeRule.waitForUrlBarContains(PAGE_FILE_NAME, timeoutMillis = URL_BAR_WAIT_MILLIS)
-        composeRule.waitForUrlBarNotFocused()
+        composeRule.openLocalPageAndStabilize(pageUrl, timeoutMillis = URL_BAR_WAIT_MILLIS)
         assertTrue("URL バーのキーボードが閉じない", waitForImeHidden())
 
         if (!focusBottomInputAndWaitForIme()) {
@@ -207,8 +203,7 @@ class KeyboardBottomInputTest {
         val isInput = node.isEditable || className.contains("EditText", ignoreCase = true)
         val isChrome = viewId.contains("UrlTextInput", ignoreCase = true)
         if (isInput && !isChrome) {
-            @Suppress("DEPRECATION")
-            return AccessibilityNodeInfo.obtain(node)
+            return AccessibilityNodeInfo(node)
         }
         for (index in 0 until node.childCount) {
             val child = node.getChild(index) ?: continue
