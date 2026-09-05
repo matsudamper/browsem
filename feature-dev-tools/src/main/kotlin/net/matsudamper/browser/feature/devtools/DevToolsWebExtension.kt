@@ -42,6 +42,12 @@ class DevToolsWebExtension {
     // スクリプト実行結果の待ち受け
     private val executeCallbacks = ConcurrentHashMap<String, PendingExecution>()
 
+    // 開発者ツール UI が開いているセッションだけ通知を処理する
+    private val focusNotificationSessions =
+        Collections.newSetFromMap(ConcurrentHashMap<GeckoSession, Boolean>())
+    private val consoleWatchingSessions =
+        Collections.newSetFromMap(ConcurrentHashMap<GeckoSession, Boolean>())
+
     private data class PendingExecution(
         val session: GeckoSession,
         val port: WebExtension.Port,
@@ -118,10 +124,33 @@ class DevToolsWebExtension {
 
     fun unregisterSession(session: GeckoSession) {
         sessionCallbacks.remove(session)
+        focusNotificationSessions.remove(session)
+        consoleWatchingSessions.remove(session)
         sessionPorts.remove(session)
         attachedSessions.remove(session)
         extension?.let { ext ->
             session.webExtensionController.setMessageDelegate(ext, null, NATIVE_APP_ID)
+        }
+    }
+
+    /** 開発者ツールメニュー表示中のみフォーカス通知を処理する */
+    fun setFocusNotificationsEnabled(session: GeckoSession, enabled: Boolean) {
+        if (enabled) {
+            focusNotificationSessions.add(session)
+            return
+        }
+        focusNotificationSessions.remove(session)
+        mainHandler.post {
+            sessionCallbacks[session]?.invoke(null)
+        }
+    }
+
+    /** コンソール画面表示中のみ console ログを収集する */
+    fun setConsoleWatchingEnabled(session: GeckoSession, enabled: Boolean) {
+        if (enabled) {
+            consoleWatchingSessions.add(session)
+        } else {
+            consoleWatchingSessions.remove(session)
         }
     }
 
@@ -204,11 +233,13 @@ class DevToolsWebExtension {
     private fun handlePortMessage(session: GeckoSession, json: JSONObject) {
         when (json.optString("action")) {
             "consoleLog" -> {
+                if (!consoleWatchingSessions.contains(session)) return
                 val entry = createConsoleLogEntry(json)
                 mainHandler.post {
                     appendConsoleLog(session, entry)
                 }
             }
+
             "executeResult" -> {
                 val requestId = json.optString("requestId", "")
                 val pending = executeCallbacks.remove(requestId) ?: return
@@ -221,7 +252,10 @@ class DevToolsWebExtension {
                     pending.callback(result)
                 }
             }
+
             else -> {
+                if (!focusNotificationSessions.contains(session)) return
+                val callback = sessionCallbacks[session] ?: return
                 val info = if (json.optBoolean("focused", false)) {
                     FocusedInputInfo(
                         id = json.optString("id", ""),
@@ -233,7 +267,7 @@ class DevToolsWebExtension {
                     null
                 }
                 mainHandler.post {
-                    sessionCallbacks[session]?.invoke(info)
+                    callback(info)
                 }
             }
         }
@@ -288,8 +322,10 @@ class DevToolsWebExtension {
                             // ページ遷移等で新しいポートに差し替わっている場合、
                             // 古いポートの遅延切断が新しい接続を消さないよう識別チェックする
                             if (sessionPorts.remove(session, port)) {
-                                mainHandler.post {
-                                    sessionCallbacks[session]?.invoke(null)
+                                if (focusNotificationSessions.contains(session)) {
+                                    mainHandler.post {
+                                        sessionCallbacks[session]?.invoke(null)
+                                    }
                                 }
                             }
                         }

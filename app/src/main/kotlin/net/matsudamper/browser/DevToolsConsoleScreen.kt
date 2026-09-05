@@ -35,6 +35,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.collectAsState
@@ -70,6 +71,13 @@ internal fun DevToolsConsoleDialog(
     session: GeckoSession,
     onDismiss: () -> Unit,
 ) {
+    val extension: DevToolsWebExtension = koinInject()
+    DisposableEffect(session, extension) {
+        extension.setConsoleWatchingEnabled(session, true)
+        onDispose {
+            extension.setConsoleWatchingEnabled(session, false)
+        }
+    }
     val uiState = rememberDevToolsConsoleUiState(
         session = session,
         onDismiss = onDismiss,
@@ -133,6 +141,7 @@ internal fun rememberDevToolsConsoleUiState(
                     executionState = when (result) {
                         is DevToolsWebExtension.ScriptExecutionResult.Success ->
                             DevToolsConsoleUiState.ExecutionState.Success(result.result)
+
                         is DevToolsWebExtension.ScriptExecutionResult.Failure ->
                             DevToolsConsoleUiState.ExecutionState.Error(result.message)
                     }
@@ -379,6 +388,7 @@ private fun ExecutionFeedbackSection(
 ) {
     when (executionState) {
         DevToolsConsoleUiState.ExecutionState.Idle -> Unit
+
         DevToolsConsoleUiState.ExecutionState.Running -> {
             Row(
                 modifier = Modifier
@@ -391,6 +401,7 @@ private fun ExecutionFeedbackSection(
                 Text(text = "実行中…")
             }
         }
+
         is DevToolsConsoleUiState.ExecutionState.Success -> {
             SelectionContainer {
                 Text(
@@ -404,6 +415,7 @@ private fun ExecutionFeedbackSection(
                 )
             }
         }
+
         is DevToolsConsoleUiState.ExecutionState.Error -> {
             val isTruncated = isConsoleMessageTruncated(
                 message = executionState.message,
@@ -542,8 +554,10 @@ private fun consoleLevelBackground(level: DevToolsWebExtension.ConsoleLogEntry.L
     return when (level) {
         DevToolsWebExtension.ConsoleLogEntry.Level.Error ->
             MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.35f)
+
         DevToolsWebExtension.ConsoleLogEntry.Level.Warn ->
             MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.35f)
+
         else -> Color.Transparent
     }
 }
@@ -593,6 +607,7 @@ private fun detailCopyButtonLabel(detail: DevToolsConsoleUiState.Detail): String
                 "全文をコピー"
             }
         }
+
         is DevToolsConsoleUiState.Detail.ExecutionError -> "エラー全文をコピー"
     }
 }

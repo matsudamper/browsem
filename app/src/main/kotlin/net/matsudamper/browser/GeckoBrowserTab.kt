@@ -877,7 +877,18 @@ internal fun GeckoBrowserTab(
             state.devToolsFocusedInput = focusedInput
         }
         onDispose {
+            devToolsWebExtension.setFocusNotificationsEnabled(session, false)
+            devToolsWebExtension.setConsoleWatchingEnabled(session, false)
             devToolsWebExtension.unregisterSession(session)
+        }
+    }
+    DisposableEffect(session, state, state.showDevTools) {
+        state.devToolsWebExtension.setFocusNotificationsEnabled(session, state.showDevTools)
+        if (!state.showDevTools) {
+            state.devToolsFocusedInput = null
+        }
+        onDispose {
+            state.devToolsWebExtension.setFocusNotificationsEnabled(session, false)
         }
     }
 
