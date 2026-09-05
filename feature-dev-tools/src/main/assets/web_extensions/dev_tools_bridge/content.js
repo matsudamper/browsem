@@ -8,6 +8,7 @@
   const MAX_BUFFERED_LOGS = 500;
   const MAX_MESSAGE_LENGTH = 4096;
   const MAX_ARG_COUNT = 20;
+  const MAX_URL_LENGTH = 2048;
 
   // 値の整形はページの操作を止めないよう、深さ・件数・走査ノード数で頭打ちにする
   const MAX_FORMAT_DEPTH = 3;
@@ -67,6 +68,13 @@
   function truncate(text) {
     if (text.length <= MAX_MESSAGE_LENGTH) return text;
     return text.slice(0, MAX_MESSAGE_LENGTH) + '…';
+  }
+
+  // フラグメントに巨大な値を持つページがあるため、URL も送る前に切り詰める
+  function currentUrl() {
+    const url = location.href;
+    if (url.length <= MAX_URL_LENGTH) return url;
+    return url.slice(0, MAX_URL_LENGTH) + '…';
   }
 
   // ページが定義した getter はログ出力のために実行しない。
@@ -179,7 +187,9 @@
     if (type === 'number' || type === 'boolean' || type === 'bigint' || type === 'symbol') {
       return String(value);
     }
-    if (type === 'function') return 'function ' + (value.name || '(anonymous)') + '()';
+    if (type === 'function') {
+      return 'function ' + (readProperty(value, 'name') || '(anonymous)') + '()';
+    }
     try {
       if (isErrorLike(value)) return formatErrorLike(value);
       if (isElementLike(value)) return describeElement(value);
@@ -223,7 +233,7 @@
       seq: nextSeq,
       level: level,
       message: message,
-      url: location.href,
+      url: currentUrl(),
       timestamp: Date.now(),
     };
     nextSeq += 1;
