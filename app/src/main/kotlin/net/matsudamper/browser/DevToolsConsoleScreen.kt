@@ -33,6 +33,11 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -51,6 +56,9 @@ import net.matsudamper.browser.ui.common.StatusBarAppearanceEffect
 
 // 1 行に表示する最大行数。これを超える出力はタップして全文を見る
 private const val CONSOLE_ENTRY_MAX_LINES = 8
+
+// 末尾から何行目までを「末尾を見ている」とみなすか。追加直後でも追従を続けるための余裕
+private const val TAIL_FOLLOW_TOLERANCE = 3
 
 /**
  * コンソールを全画面ダイアログで表示する。
@@ -164,9 +172,17 @@ private fun ConsoleListContent(
     modifier: Modifier = Modifier,
 ) {
     val listState = rememberLazyListState()
-    // 出力が増えたら最新の行が見えるようにする
+    // 末尾を見ている間だけ追従する。過去の行を読んでいる最中に飛ばされないようにする
+    var followsTail by remember { mutableStateOf(true) }
+    LaunchedEffect(listState) {
+        snapshotFlow { listState.layoutInfo }.collect { layoutInfo ->
+            val lastVisibleIndex = layoutInfo.visibleItemsInfo.lastOrNull()?.index
+            followsTail = lastVisibleIndex == null ||
+                lastVisibleIndex >= layoutInfo.totalItemsCount - TAIL_FOLLOW_TOLERANCE
+        }
+    }
     LaunchedEffect(uiState.entries.lastOrNull()?.id) {
-        if (uiState.entries.isNotEmpty()) {
+        if (followsTail && uiState.entries.isNotEmpty()) {
             listState.scrollToItem(uiState.entries.lastIndex)
         }
     }
