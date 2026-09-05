@@ -232,6 +232,14 @@ internal class BrowserTabScreenState(
     var showNetworkLog by mutableStateOf(false)
         private set
 
+    // コンソールログ画面を表示中かどうか
+    var showDevToolsConsoleLog by mutableStateOf(false)
+        private set
+
+    // スクリプト実行画面を表示中かどうか
+    var showDevToolsScript by mutableStateOf(false)
+        private set
+
     // --- Back gesture state ---
     var isBackGestureInProgress by mutableStateOf(false)
 
@@ -876,6 +884,26 @@ internal class BrowserTabScreenState(
 
     fun closeNetworkLog() {
         showNetworkLog = false
+    }
+
+    /** コンソールログ画面を開く。開発者ツールのダイアログは閉じる */
+    fun openDevToolsConsoleLog() {
+        showDevTools = false
+        showDevToolsConsoleLog = true
+    }
+
+    fun closeDevToolsConsoleLog() {
+        showDevToolsConsoleLog = false
+    }
+
+    /** スクリプト実行画面を開く。開発者ツールのダイアログは閉じる */
+    fun openDevToolsScript() {
+        showDevTools = false
+        showDevToolsScript = true
+    }
+
+    fun closeDevToolsScript() {
+        showDevToolsScript = false
     }
 
     fun onTranslate(translationProvider: TranslationProvider) {

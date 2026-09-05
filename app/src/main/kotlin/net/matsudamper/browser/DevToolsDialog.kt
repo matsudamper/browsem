@@ -25,6 +25,8 @@ import net.matsudamper.browser.ui.common.BrowserTheme
  * @param focusedInput フォーカス中の入力要素の情報。フォーカスがない場合は null。
  * @param onCopyFocusedInputId フォーカス中の input の id をコピーする。
  * @param onOpenNetworkLog ネットワークログ画面を開く。
+ * @param onOpenConsoleLog コンソールログ画面を開く。
+ * @param onOpenScriptRunner スクリプト実行画面を開く。
  * @param onDismiss ダイアログを閉じる。
  */
 @Composable
@@ -32,6 +34,8 @@ internal fun DevToolsDialog(
     focusedInput: DevToolsWebExtension.FocusedInputInfo?,
     onCopyFocusedInputId: () -> Unit,
     onOpenNetworkLog: () -> Unit,
+    onOpenConsoleLog: () -> Unit,
+    onOpenScriptRunner: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     // フォーカス中の input の id（空文字は「なし」とみなす）
@@ -67,6 +71,22 @@ internal fun DevToolsDialog(
                     colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                     headlineContent = { Text("ネットワークログ") },
                 )
+                ListItem(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(onClick = onOpenConsoleLog)
+                        .testTag(DevToolsDialogTestTags.ConsoleLog.testTag),
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                    headlineContent = { Text("コンソールログ") },
+                )
+                ListItem(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(onClick = onOpenScriptRunner)
+                        .testTag(DevToolsDialogTestTags.ScriptRunner.testTag),
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                    headlineContent = { Text("スクリプト実行") },
+                )
             }
         },
         confirmButton = {
@@ -90,6 +110,12 @@ sealed interface DevToolsDialogTestTags {
     object NetworkLog : DevToolsDialogTestTags {
         override val id = "network_log"
     }
+    object ConsoleLog : DevToolsDialogTestTags {
+        override val id = "console_log"
+    }
+    object ScriptRunner : DevToolsDialogTestTags {
+        override val id = "script_runner"
+    }
 }
 
 @Preview(name = "input フォーカスあり")
@@ -105,6 +131,8 @@ private fun PreviewDevToolsDialogFocused() {
             ),
             onCopyFocusedInputId = {},
             onOpenNetworkLog = {},
+            onOpenConsoleLog = {},
+            onOpenScriptRunner = {},
             onDismiss = {},
         )
     }
@@ -118,6 +146,8 @@ private fun PreviewDevToolsDialogNoFocus() {
             focusedInput = null,
             onCopyFocusedInputId = {},
             onOpenNetworkLog = {},
+            onOpenConsoleLog = {},
+            onOpenScriptRunner = {},
             onDismiss = {},
         )
     }

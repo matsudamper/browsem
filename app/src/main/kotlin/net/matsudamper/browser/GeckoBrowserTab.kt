@@ -1405,6 +1405,8 @@ internal fun GeckoBrowserTab(
             focusedInput = state.devToolsFocusedInput,
             onCopyFocusedInputId = state::copyFocusedInputId,
             onOpenNetworkLog = state::openNetworkLog,
+            onOpenConsoleLog = state::openDevToolsConsoleLog,
+            onOpenScriptRunner = state::openDevToolsScript,
             onDismiss = state::closeDevTools,
         )
     }
@@ -1416,6 +1418,22 @@ internal fun GeckoBrowserTab(
                 session = session,
                 onDismiss = state::closeNetworkLog,
             ),
+        )
+    }
+
+    // コンソールログ画面
+    if (state.showDevToolsConsoleLog) {
+        DevToolsConsoleLogDialog(
+            session = session,
+            onDismiss = state::closeDevToolsConsoleLog,
+        )
+    }
+
+    // スクリプト実行画面
+    if (state.showDevToolsScript) {
+        DevToolsScriptDialog(
+            session = session,
+            onDismiss = state::closeDevToolsScript,
         )
     }
 
