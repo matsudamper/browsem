@@ -59,6 +59,7 @@ import net.matsudamper.browser.data.SearchProvider
 import net.matsudamper.browser.data.ThemeMode
 import net.matsudamper.browser.data.TranslationProvider
 import net.matsudamper.browser.resources.R as ResourcesR
+import net.matsudamper.browser.ui.common.StatusBarAppearanceEffect
 
 sealed interface SettingsScreenTestTags {
     val id: String
@@ -81,6 +82,7 @@ fun SettingsScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    StatusBarAppearanceEffect(MaterialTheme.colorScheme.surface)
     val focusManager = LocalFocusManager.current
     val softwareKeyboardController = LocalSoftwareKeyboardController.current
     LaunchedEffect(Unit) {
