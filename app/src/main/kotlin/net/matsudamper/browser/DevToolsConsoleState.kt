@@ -63,8 +63,8 @@ internal class DevToolsConsoleStateHolder(
     private var scriptText by mutableStateOf("")
     private var isExecuting by mutableStateOf(false)
 
-    /** 全文表示中の行。一覧表示中は null */
-    private var selectedEntryId by mutableStateOf<Long?>(null)
+    // 全文表示中の行。履歴の上限で一覧から消えても表示を続けられるよう、控えを持つ
+    private var selectedEntry by mutableStateOf<DevToolsWebExtension.ConsoleEntry?>(null)
 
     private val callbacks = object : DevToolsConsoleUiState.Callbacks {
         override fun onScriptTextChange(text: String) {
@@ -81,16 +81,16 @@ internal class DevToolsConsoleStateHolder(
         }
 
         override fun onClickClear() {
-            selectedEntryId = null
+            selectedEntry = null
             extension.clearConsoleEntries(session)
         }
 
         override fun onClickCloseDetail() {
-            selectedEntryId = null
+            selectedEntry = null
         }
 
         override fun onClickCopyDetail() {
-            val message = selectedEntry()?.message ?: return
+            val message = selectedEntry?.message ?: return
             val clipboard =
                 context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
             clipboard.setPrimaryClip(ClipData.newPlainText("console", message))
@@ -102,13 +102,10 @@ internal class DevToolsConsoleStateHolder(
         }
     }
 
-    private var currentEntries: List<DevToolsWebExtension.ConsoleEntry> = listOf()
-
     fun createUiState(
         entries: List<DevToolsWebExtension.ConsoleEntry>,
     ): DevToolsConsoleUiState {
-        currentEntries = entries
-        val selected = selectedEntry()
+        val selected = selectedEntry
         return DevToolsConsoleUiState(
             callbacks = callbacks,
             entries = entries.map { entry -> createEntry(entry) },
@@ -127,11 +124,6 @@ internal class DevToolsConsoleStateHolder(
         )
     }
 
-    private fun selectedEntry(): DevToolsWebExtension.ConsoleEntry? {
-        val id = selectedEntryId ?: return null
-        return currentEntries.firstOrNull { entry -> entry.id == id }
-    }
-
     private fun createEntry(
         entry: DevToolsWebExtension.ConsoleEntry,
     ): DevToolsConsoleUiState.Entry {
@@ -143,7 +135,7 @@ internal class DevToolsConsoleStateHolder(
             url = entry.url.takeIf { it.isNotBlank() },
             listener = object : DevToolsConsoleUiState.Entry.Listener {
                 override fun onClick() {
-                    selectedEntryId = entry.id
+                    selectedEntry = entry
                 }
             },
         )
