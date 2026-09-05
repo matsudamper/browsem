@@ -1109,8 +1109,9 @@ internal fun GeckoBrowserTab(
                                 .only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal),
                         )
                         .then(
-                            // 単一ページ（WebApp / Custom Tab）は adjustResize でウィンドウが縮む。
-                            // IME 表示中にナビバー分も確保すると、キーボード直上に余分な帯ができる。
+                            // Custom Tab は adjustResize のみで縮める。
+                            // WebApp は手動縮小と併用するが、IME 表示中のナビバー padding は外す
+                            // （確保するとキーボード直上に余分な帯ができる）。
                             if (singlePageMode && isImeVisible) {
                                 Modifier
                             } else {
@@ -1314,7 +1315,8 @@ internal fun GeckoBrowserTab(
                 session = session,
                 latestOnRefresh = latestOnRefresh,
                 browserTab = browserTab,
-                shrinkViewportForKeyboard = !customTabMode && !webAppMode,
+                // Custom Tab は adjustResize のみ。WebApp / 通常ブラウザは手動縮小も使う。
+                shrinkViewportForKeyboard = !customTabMode,
                 updateGeckoView = {
                     geckoView = it
                 },
