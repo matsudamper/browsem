@@ -30,6 +30,7 @@ import java.util.Date
 import java.util.Locale
 import net.matsudamper.browser.data.crashlog.CrashLogEntity
 import net.matsudamper.browser.resources.R as ResourcesR
+import net.matsudamper.browser.ui.common.StatusBarAppearanceEffect
 
 sealed interface CrashLogDetailScreenTestTags {
     val id: String
@@ -51,6 +52,7 @@ internal fun CrashLogDetailScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    StatusBarAppearanceEffect(MaterialTheme.colorScheme.surface)
     val entry = uiState.entry
     val dateFormat = remember { SimpleDateFormat("yyyy/MM/dd HH:mm:ss", Locale.getDefault()) }
 

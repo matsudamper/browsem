@@ -30,6 +30,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import net.matsudamper.browser.resources.R as ResourcesR
+import net.matsudamper.browser.ui.common.StatusBarAppearanceEffect
 
 sealed interface CrashLogsScreenTestTags {
     val id: String
@@ -52,6 +53,7 @@ internal fun CrashLogsScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    StatusBarAppearanceEffect(MaterialTheme.colorScheme.surface)
     Scaffold(
         modifier = modifier.testTag(CrashLogsScreenTestTags.Root.testTag),
         topBar = {

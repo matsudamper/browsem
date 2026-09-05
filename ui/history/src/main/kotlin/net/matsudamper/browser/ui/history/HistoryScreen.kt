@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.dp
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import net.matsudamper.browser.ui.common.StatusBarAppearanceEffect
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -42,6 +43,7 @@ fun HistoryScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    StatusBarAppearanceEffect(MaterialTheme.colorScheme.surface)
     Scaffold(
         modifier = modifier,
         topBar = {
