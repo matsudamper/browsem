@@ -208,6 +208,10 @@ internal fun AndroidComposeTestRule<*, MainActivity>.waitForSessionNavigationSet
         }
         Thread.sleep(pollIntervalMillis)
     }
+    throw AssertionError(
+        "waitForSessionNavigationSettled timeout: lastUrl=\"$lastUrl\" " +
+            "stableCount=$stableCount current=\"${currentPageUrlFromUi()}\"",
+    )
 }
 
 /**
