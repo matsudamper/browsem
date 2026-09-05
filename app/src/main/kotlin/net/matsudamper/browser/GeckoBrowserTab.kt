@@ -47,6 +47,7 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -212,7 +213,17 @@ internal fun GeckoBrowserTab(
     if (!state.isFullScreen) {
         StatusBarAppearanceEffect(toolbarColors.resolvedToolbarColor)
     }
+
     val view = LocalView.current
+    if (!view.isInEditMode) {
+        SideEffect {
+            if (!(customTabMode || webAppMode)) return@SideEffect
+            val window = view.findActivity()?.window ?: return@SideEffect
+            // CustomTab / WebApp は enableEdgeToEdge しないため、旧 OS ではシステム
+            // ステータスバー背景が Theme.Browser のまま残る。ツールバー色に合わせる。
+            window.statusBarColor = toolbarColors.resolvedToolbarColor.toArgb()
+        }
+    }
 
     // フルスクリーン時にシステムバーを非表示にする
     if (!view.isInEditMode) {
@@ -1096,11 +1107,6 @@ internal fun GeckoBrowserTab(
                 if (state.isFullScreen) {
                     Modifier
                 } else {
-                    // 上部（ステータスバー）は BrowserToolBar の背景色で塗りつぶすため除外する。
-                    // IME は GeckoView が WindowInsets から onKeyboardHeight で処理する。
-                    // Compose 側で imePadding / safeDrawing(IME 含む) を掛けると、
-                    // Surface のリサイズと Gecko 内部のキーボード余白が重なり、
-                    // 候補バー消滅後の細い帯や、キーボード閉後にキーボード高の黒領域が残る。
                     Modifier
                         .windowInsetsPadding(
                             WindowInsets.safeDrawing
@@ -1108,9 +1114,16 @@ internal fun GeckoBrowserTab(
                                 .exclude(WindowInsets.navigationBars)
                                 .only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal),
                         )
-                        // IME 表示中もナビバー分は親で確保する（候補バーは ime - navigationBars で上げる）。
-                        .windowInsetsPadding(
-                            WindowInsets.navigationBars.only(WindowInsetsSides.Bottom),
+                        .then(
+                            // IME 表示中にナビバー分も確保すると、キーボード直上に余分な帯ができる。
+                            // 住所オートフィル候補バーは imeAboveNavigationBarsPadding で IME 全高ぶん上げる。
+                            if (isImeVisible) {
+                                Modifier
+                            } else {
+                                Modifier.windowInsetsPadding(
+                                    WindowInsets.navigationBars.only(WindowInsetsSides.Bottom),
+                                )
+                            },
                         )
                 },
             ),
@@ -1307,6 +1320,8 @@ internal fun GeckoBrowserTab(
                 session = session,
                 latestOnRefresh = latestOnRefresh,
                 browserTab = browserTab,
+                // Custom Tab は adjustResize のみ。WebApp / 通常ブラウザは手動縮小も使う。
+                shrinkViewportForKeyboard = !customTabMode,
                 updateGeckoView = {
                     geckoView = it
                 },
@@ -1590,17 +1605,15 @@ private class GetMultipleContentsWithMimeTypes : ActivityResultContract<Array<St
 }
 
 /**
- * ナビバー分は親で既に避けているので、IME との重なり分だけ候補バーを上げる。
- * GeckoDisplay.getKeyboardHeight と同じ ime - navigationBars にする。
+ * IME 表示中は親 Column が navigationBars の bottom padding を外すため、
+ * 候補バーは IME の全高ぶん上げる。
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun Modifier.imeAboveNavigationBarsPadding(): Modifier {
     val density = LocalDensity.current
     val imeBottomPx = WindowInsets.ime.getBottom(density)
-    val navigationBottomPx = WindowInsets.navigationBars.getBottom(density)
-    val liftPx = (imeBottomPx - navigationBottomPx).coerceAtLeast(0)
-    return padding(bottom = with(density) { liftPx.toDp() })
+    return padding(bottom = with(density) { imeBottomPx.toDp() })
 }
 
 /** MIME タイプを Intent に適用する共通関数 */
