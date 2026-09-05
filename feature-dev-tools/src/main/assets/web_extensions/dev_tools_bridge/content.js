@@ -97,21 +97,22 @@
 
   function formatProperty(value, key, depth) {
     try {
+      // getter を実行するとログ出力だけでページの状態が変わりうるため、値を取らずに示す
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      if (descriptor && typeof descriptor.get === 'function') return '[Getter]';
       return formatValue(value[key], depth + 1);
     } catch (error) {
-      // getter が例外を投げる場合がある
       return '[取得できません]';
     }
   }
 
-  function formatEntries(value, keys, depth, open, close) {
-    const shown = keys.slice(0, MAX_FORMAT_ENTRIES);
-    const parts = shown.map(function (key) {
+  function formatEntries(value, keys, totalCount, depth, open, close) {
+    const parts = keys.map(function (key) {
       const formatted = formatProperty(value, key, depth);
       return open === '[' ? formatted : key + ': ' + formatted;
     });
-    if (keys.length > shown.length) {
-      parts.push('…他 ' + (keys.length - shown.length) + ' 件');
+    if (totalCount > keys.length) {
+      parts.push('…他 ' + (totalCount - keys.length) + ' 件');
     }
     return open + parts.join(', ') + close;
   }
@@ -121,13 +122,17 @@
     if (formatNodeBudget <= 0) return '…';
     formatNodeBudget -= 1;
     if (isArrayLike(value)) {
+      // length が極端に大きい配列でも走査が伸びないよう、上限までの添字だけを作る
+      const length = value.length;
+      const shownCount = Math.min(length, MAX_FORMAT_ENTRIES);
       const indexes = [];
-      for (let index = 0; index < value.length; index += 1) {
+      for (let index = 0; index < shownCount; index += 1) {
         indexes.push(index);
       }
-      return formatEntries(value, indexes, depth, '[', ']');
+      return formatEntries(value, indexes, length, depth, '[', ']');
     }
-    return formatEntries(value, Object.keys(value), depth, '{', '}');
+    const keys = Object.keys(value);
+    return formatEntries(value, keys.slice(0, MAX_FORMAT_ENTRIES), keys.length, depth, '{', '}');
   }
 
   function formatValue(value, depth) {
