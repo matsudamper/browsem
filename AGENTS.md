@@ -54,7 +54,8 @@ GeckoView ベースの Android ブラウザ。Kotlin / Jetpack Compose / Materia
 
 例:
 - `docs/agent-kotlin.md` — Kotlin 詳細スタイル
-- `docs/agent-compose.md` — Compose / UiState / Paparazzi
+- `docs/agent-compose.md` — Compose / UiState
+- `docs/agent-paparazzi.md` — Paparazzi
 - 既存の `docs/compose-guidelines.md` / `docs/coding_style.md` などリポ固有の詳細ガイド
 
 ## 言語
@@ -103,6 +104,7 @@ GeckoView ベースの Android ブラウザ。Kotlin / Jetpack Compose / Materia
 - 「一般コメントを避ける」はレビュースレッドへの返信を禁止する意味ではない
 
 - ホビー前提: セキュリティ・要件未達以外の細かい指摘は深追いしない。ユーザー本人のコメントは必ず対応
+
 
 ## PRの更新
 このルールは AI リモート実行環境では自動的に適用する。ローカル CLI や IDE 拡張ではユーザーから指示があった場合にのみ適用する。
