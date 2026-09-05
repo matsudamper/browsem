@@ -248,6 +248,9 @@
   // 開発者ツールを開く前の出力も見せたいので、常に読み込み直後からフックしておく。
   const pageWindow = window.wrappedJSObject;
 
+  // ページが window.eval を差し替えても実行内容が変わらないよう、読み込み直後の関数を控える
+  const pageEval = pageWindow.eval;
+
   // 転送の失敗を握り潰すと原因が分からなくなるため、最初の 1 件だけログに残す
   let hookFailureReported = false;
 
@@ -308,7 +311,7 @@
   // 実行するコード自身の EvalError と区別するため、副作用のない式で eval の可否を確かめる
   function isPageEvalAllowed() {
     try {
-      pageWindow.eval('0');
+      pageEval.call(pageWindow, '0');
       return true;
     } catch (error) {
       return false;
@@ -316,7 +319,7 @@
   }
 
   function evaluate(code) {
-    if (isPageEvalAllowed()) return pageWindow.eval(code);
+    if (isPageEvalAllowed()) return pageEval.call(pageWindow, code);
     // CSP でページ側の eval が禁止されている場合はコンテンツスクリプト側で実行する。
     // ページの変数は参照できないが、DOM 操作は同じように行える。
     // 直接 eval だとこのスクリプトのローカル変数が見えてしまうため、間接 eval で行う
