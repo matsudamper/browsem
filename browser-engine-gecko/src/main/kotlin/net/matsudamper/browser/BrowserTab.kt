@@ -26,18 +26,21 @@ class BrowserTab(
     title: String,
     previewBitmap: ByteArray?,
     themeColor: Int? = null,
+    pageZoomPercent: Int = DEFAULT_PAGE_ZOOM_PERCENT,
     private val onStateChanged: () -> Unit = {},
     private val onUrlChanged: (String, String) -> Unit = { _, _ -> },
     private val onSessionStateChanged: (String, String) -> Unit = { _, _ -> },
     private val onTitleChanged: (String, String) -> Unit = { _, _ -> },
     private val onPreviewBitmapChanged: (String, ByteArray?) -> Unit = { _, _ -> },
     private val onThemeColorChanged: (String, Int?) -> Unit = { _, _ -> },
+    private val onPageZoomPercentChanged: (String, Int) -> Unit = { _, _ -> },
 ) {
     private var currentUrlState by mutableStateOf(currentUrl)
     private var sessionStateState by mutableStateOf(sessionState)
     private var titleState by mutableStateOf(title)
     private var previewBitmapState: ByteArray? by mutableStateOf(previewBitmap)
     private var themeColorState: Int? by mutableStateOf(themeColor)
+    private var pageZoomPercentState by mutableIntStateOf(pageZoomPercent)
 
     var currentUrl: String
         get() = currentUrlState
@@ -82,6 +85,16 @@ class BrowserTab(
             themeColorState = value
             onStateChanged()
             onThemeColorChanged(tabId, value)
+        }
+
+    // ページズーム倍率。タブ切替や BrowserTabScreenState の再生成後も維持する。
+    var pageZoomPercent: Int
+        get() = pageZoomPercentState
+        set(value) {
+            if (pageZoomPercentState == value) return
+            pageZoomPercentState = value
+            onStateChanged()
+            onPageZoomPercentChanged(tabId, value)
         }
 
     // このタブが現在ページ内で「戻る」履歴を持つか（永続化は不要）。
@@ -200,6 +213,8 @@ class BrowserTab(
         sessionDelegateHost.initHistoryCache(sessionState)
     }
 }
+
+const val DEFAULT_PAGE_ZOOM_PERCENT = 100
 
 private fun ByteArray?.contentEqualsNullable(other: ByteArray?): Boolean {
     return when {

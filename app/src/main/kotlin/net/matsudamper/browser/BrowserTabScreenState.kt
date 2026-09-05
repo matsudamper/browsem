@@ -517,8 +517,9 @@ internal class BrowserTabScreenState(
     var pageLoadError by mutableStateOf<PageLoadError?>(null)
 
     // --- ズーム状態（viewport width 操作によりテキスト・画像含め全体をズーム）---
-    var pageZoomPercent by mutableIntStateOf(100)
-        private set
+    // BrowserTab.pageZoomPercent に委譲することで、タブ切替や State 再生成後も倍率を維持する。
+    val pageZoomPercent: Int
+        get() = browserTab.pageZoomPercent
 
     // --- Scroll / Refresh state ---
     var visualViewportScale by mutableFloatStateOf(1f)
@@ -738,8 +739,15 @@ internal class BrowserTabScreenState(
     }
 
     private fun applyPageZoom(percent: Int) {
-        pageZoomPercent = percent
+        browserTab.pageZoomPercent = percent
         injectViewportZoom(percent)
+    }
+
+    private fun maybeApplyPersistedPageZoomAfterRender() {
+        if (!shouldApplyPersistedPageZoomAfterRender(pageZoomPercent, isFullPageLoadPending)) {
+            return
+        }
+        injectViewportZoom(pageZoomPercent)
     }
 
     // viewport meta を書き換えてページ全体のズームを適用する
@@ -1476,11 +1484,13 @@ internal class BrowserTabScreenState(
 
     override fun onRenderReady() {
         renderReady = true
+        maybeApplyPersistedPageZoomAfterRender()
     }
 
     override fun onPreviewCaptureReady() {
         renderReady = true
         previewCaptureReady = true
+        maybeApplyPersistedPageZoomAfterRender()
         // 新ページの初回描画 (onFirstContentfulPaint) 時点でキャプチャを更新する。
         // ロード完了 (onPageStop) まで待つと、ロードの長いページでタブ切替した際に
         // 前のページ（別ドメイン）のプレビューが表示され続けるため。

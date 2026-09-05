@@ -98,6 +98,7 @@ class TabRepository(context: Context) {
                         else -> 0
                     },
                     groupId = existing?.groupId.orEmpty(),
+                    pageZoomPercent = tab.pageZoomPercent,
                 ),
             )
 
@@ -126,6 +127,10 @@ class TabRepository(context: Context) {
 
     suspend fun updateThemeColor(tabId: String, themeColor: Int?) {
         dao.updateThemeColor(tabId, themeColor)
+    }
+
+    suspend fun updatePageZoomPercent(tabId: String, pageZoomPercent: Int) {
+        dao.updatePageZoomPercent(tabId, pageZoomPercent)
     }
 
     suspend fun selectTab(tabId: String?) {
@@ -228,6 +233,7 @@ class TabRepository(context: Context) {
         tabId = tabId,
         openerTabId = openerTabId,
         themeColor = themeColor,
+        pageZoomPercent = pageZoomPercent,
     )
 }
 
@@ -243,6 +249,7 @@ data class PersistedTabState(
     val tabId: String = "",
     val openerTabId: String = "",
     val themeColor: Int? = null,
+    val pageZoomPercent: Int = 100,
 )
 
 private fun TabStateEntity.isPlaceholderForPreAssignment(): Boolean {

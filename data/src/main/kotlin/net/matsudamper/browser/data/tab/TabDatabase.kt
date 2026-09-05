@@ -19,7 +19,7 @@ abstract class TabDatabase : RoomDatabase() {
 
     companion object {
         /** Room の @Database version と連動。バックアップ互換性チェックでも参照する */
-        const val SCHEMA_VERSION: Int = 4
+        const val SCHEMA_VERSION: Int = 5
 
         @Volatile
         private var instance: TabDatabase? = null
@@ -103,11 +103,21 @@ abstract class TabDatabase : RoomDatabase() {
             }
         }
 
+        /** v4→v5: tab_state へ pageZoomPercent カラム追加 */
+        private val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "ALTER TABLE `tab_state` ADD COLUMN `pageZoomPercent` INTEGER NOT NULL DEFAULT 100",
+                )
+            }
+        }
+
         /** 全マイグレーション。getInstance とマイグレーションテストで共用する */
         internal fun allMigrations(sessionStateDir: File): Array<Migration> = arrayOf(
             MIGRATION_1_2,
             MIGRATION_2_3,
             createMigration3To4(sessionStateDir),
+            MIGRATION_4_5,
         )
 
         fun getInstance(context: Context): TabDatabase {

@@ -10,6 +10,7 @@ internal fun BrowserTab.toPersistedTabState(): PersistedTabState = PersistedTabS
     tabId = tabId,
     openerTabId = openerTabId.orEmpty(),
     themeColor = themeColor,
+    pageZoomPercent = pageZoomPercent,
 )
 
 internal fun BrowserTab.toSummary(): TabSummary = TabSummary(

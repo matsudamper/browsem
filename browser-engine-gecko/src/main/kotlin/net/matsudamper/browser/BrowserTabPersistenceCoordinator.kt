@@ -99,6 +99,12 @@ internal class BrowserTabPersistenceCoordinator(
         }
     }
 
+    fun persistPageZoomPercent(tabId: String, value: Int) {
+        enqueue {
+            it.updatePageZoomPercent(tabId, value)
+        }
+    }
+
     fun persistPreviewBitmap(tabId: String, previewBitmap: ByteArray?) {
         tabRepository ?: return
         controllerScope.launch(Dispatchers.IO) {
