@@ -1100,7 +1100,6 @@ internal fun GeckoBrowserTab(
                 if (state.isFullScreen) {
                     Modifier
                 } else {
-                    val singlePageMode = customTabMode || webAppMode
                     Modifier
                         .windowInsetsPadding(
                             WindowInsets.safeDrawing
@@ -1109,10 +1108,9 @@ internal fun GeckoBrowserTab(
                                 .only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal),
                         )
                         .then(
-                            // Custom Tab は adjustResize のみで縮める。
-                            // WebApp は手動縮小と併用するが、IME 表示中のナビバー padding は外す
-                            // （確保するとキーボード直上に余分な帯ができる）。
-                            if (singlePageMode && isImeVisible) {
+                            // IME 表示中にナビバー分も確保すると、キーボード直上に余分な帯ができる。
+                            // 住所オートフィル候補バーは imeAboveNavigationBarsPadding で個別に上げる。
+                            if (isImeVisible) {
                                 Modifier
                             } else {
                                 Modifier.windowInsetsPadding(
