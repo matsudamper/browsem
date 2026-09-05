@@ -113,7 +113,10 @@
 
   function formatArgs(args) {
     const values = Array.prototype.slice.call(args, 0, MAX_ARG_COUNT);
-    return truncate(values.map(formatValue).join(' '));
+    // 引数ごとに切り詰めてから連結し、巨大なオブジェクトでも中間文字列を膨らませない
+    return truncate(values.map(function (value) {
+      return truncate(formatValue(value));
+    }).join(' '));
   }
 
   // ---- console 出力の収集 ----

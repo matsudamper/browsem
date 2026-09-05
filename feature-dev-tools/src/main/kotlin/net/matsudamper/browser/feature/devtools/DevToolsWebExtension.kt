@@ -137,6 +137,8 @@ class DevToolsWebExtension {
         attachedSessions.remove(session)
         consoleWatchingSessions.remove(session)
         receivedLogSeq.remove(session)
+        // 実行待ちを残すとタイムアウトが後から発火し、破棄済みセッションの表示内容が復活する
+        cancelPendingExecutions { pending -> pending.session === session }
         _consoleEntries.update { current -> current - session }
         extension?.let { ext ->
             session.webExtensionController.setMessageDelegate(ext, null, NATIVE_APP_ID)
@@ -232,6 +234,18 @@ class DevToolsWebExtension {
             val entries = (current[session].orEmpty() + entry).takeLast(MAX_CONSOLE_ENTRIES)
             current + (session to entries)
         }
+    }
+
+    /** 結果を表示せずに実行待ちを終わらせる。表示内容ごと破棄する場合に使う */
+    private fun cancelPendingExecutions(predicate: (PendingExecution) -> Boolean) {
+        pendingExecutions.entries
+            .filter { (_, pending) -> predicate(pending) }
+            .map { (requestId, _) -> requestId }
+            .forEach { requestId ->
+                val pending = pendingExecutions.remove(requestId) ?: return@forEach
+                mainHandler.removeCallbacks(pending.timeout)
+                pending.onFinished()
+            }
     }
 
     private fun finishExecution(requestId: String, kind: ConsoleEntry.Kind, message: String) {
