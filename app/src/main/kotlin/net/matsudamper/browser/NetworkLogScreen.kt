@@ -1,5 +1,6 @@
 package net.matsudamper.browser
 
+import android.view.WindowManager
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -39,6 +40,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -48,6 +50,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
@@ -57,6 +60,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.window.DialogWindowProvider
 import kotlinx.coroutines.flow.distinctUntilChanged
 import net.matsudamper.browser.data.ThemeMode
 import net.matsudamper.browser.resources.R as ResourcesR
@@ -80,6 +84,13 @@ internal fun NetworkLogDialog(uiState: NetworkLogUiState) {
         },
         properties = DialogProperties(usePlatformDefaultWidth = false),
     ) {
+        // ダイアログの softInputMode 既定値は ADJUST_UNSPECIFIED で、URL 絞り込み中に
+        // キーボードでログ一覧の下部が隠れる。DialogWrapper が properties 更新のたびに
+        // 既定値へ戻すため、SideEffect で毎コンポジション適用する。
+        val dialogWindow = (LocalView.current.parent as? DialogWindowProvider)?.window
+        SideEffect {
+            dialogWindow?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+        }
         Surface(modifier = Modifier.fillMaxSize()) {
             StatusBarAppearanceEffect(MaterialTheme.colorScheme.surface)
             NetworkLogScreen(uiState = uiState)
