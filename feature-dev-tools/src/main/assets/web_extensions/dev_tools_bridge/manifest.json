@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "Dev Tools Bridge",
-  "version": "1.0",
+  "version": "1.1",
   "browser_specific_settings": {
     "gecko": {
       "id": "dev-tools-bridge@browsem"
@@ -18,7 +18,7 @@
       "js": [
         "content.js"
       ],
-      "run_at": "document_idle"
+      "run_at": "document_start"
     }
   ],
   "permissions": [

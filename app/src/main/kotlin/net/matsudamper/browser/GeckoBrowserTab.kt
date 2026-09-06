@@ -1410,6 +1410,7 @@ internal fun GeckoBrowserTab(
             focusedInput = state.devToolsFocusedInput,
             onCopyFocusedInputId = state::copyFocusedInputId,
             onOpenNetworkLog = state::openNetworkLog,
+            onOpenConsole = state::openDevToolsConsole,
             onDismiss = state::closeDevTools,
         )
     }
@@ -1420,6 +1421,16 @@ internal fun GeckoBrowserTab(
             uiState = rememberNetworkLogUiState(
                 session = session,
                 onDismiss = state::closeNetworkLog,
+            ),
+        )
+    }
+
+    // コンソール画面
+    if (state.showDevToolsConsole) {
+        DevToolsConsoleDialog(
+            uiState = rememberDevToolsConsoleUiState(
+                session = session,
+                onDismiss = state::closeDevToolsConsole,
             ),
         )
     }
