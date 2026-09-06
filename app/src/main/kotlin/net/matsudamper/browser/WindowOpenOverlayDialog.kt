@@ -1,17 +1,15 @@
 package net.matsudamper.browser
 
 import android.content.res.Configuration
+import android.os.Build
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawing
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -20,6 +18,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -27,6 +26,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -34,6 +34,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.window.DialogWindowProvider
 import net.matsudamper.browser.data.ThemeMode
 import net.matsudamper.browser.resources.R as ResourcesR
 import net.matsudamper.browser.ui.common.BrowserTheme
@@ -103,14 +104,30 @@ internal fun WindowOpenOverlayDialog(
             dismissOnBackPress = true,
         ),
     ) {
+        EdgeToEdgeDialogWindowEffect()
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .windowInsetsPadding(WindowInsets.safeDrawing)
                 .testTag(WindowOpenOverlayDialogTestTags.Dialog.testTag),
         ) {
             content()
         }
+    }
+}
+
+/**
+ * ダイアログのウィンドウを Activity と同じ edge-to-edge に揃える。
+ * ダイアログは enableEdgeToEdge() の対象外で、ナビゲーションバーに
+ * システムのコントラスト用スクリムが乗ってしまう。
+ */
+@Composable
+private fun EdgeToEdgeDialogWindowEffect() {
+    val view = LocalView.current
+    if (view.isInEditMode) return
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return
+    val dialogWindow = (view.parent as? DialogWindowProvider)?.window ?: return
+    SideEffect {
+        dialogWindow.isNavigationBarContrastEnforced = false
     }
 }
 
