@@ -9,12 +9,15 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
@@ -78,11 +81,21 @@ internal fun NetworkLogDialog(uiState: NetworkLogUiState) {
                 uiState.callbacks.onDismiss()
             }
         },
-        properties = DialogProperties(usePlatformDefaultWidth = false),
+        // targetSdk 35 以降は decorFitsSystemWindows が無視されるため、
+        // ダイアログ側でシステムバー・IME のインセットを自前で避ける。
+        // これを付けないと URL 絞り込みの入力中にログ一覧の下部がキーボードに隠れる。
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = false,
+        ),
     ) {
         Surface(modifier = Modifier.fillMaxSize()) {
             StatusBarAppearanceEffect(MaterialTheme.colorScheme.surface)
-            NetworkLogScreen(uiState = uiState)
+            // 背景はシステムバー領域まで描き、インセットは内側のコンテンツで避ける。
+            NetworkLogScreen(
+                uiState = uiState,
+                modifier = Modifier.windowInsetsPadding(WindowInsets.safeDrawing),
+            )
         }
     }
 }
