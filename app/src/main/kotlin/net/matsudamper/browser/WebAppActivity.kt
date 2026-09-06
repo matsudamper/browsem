@@ -63,7 +63,6 @@ class WebAppActivity : ComponentActivity() {
         enableEdgeToEdge()
         runtime.settings.setExtensionsWebAPIEnabled(true)
 
-        // 外部アプリから任意のURLが渡されないよう、http/https スキームのみ許可する
         val initialUrl = resolveInitialUrl()
         setContent {
             val browserViewModel = viewModel(initializer = {
@@ -295,10 +294,7 @@ class WebAppActivity : ComponentActivity() {
      */
     private fun resolveInitialUrl(): String? {
         if (intent.action != Intent.ACTION_VIEW) return null
-        val data = intent.data ?: return null
-        val scheme = data.scheme ?: return null
-        if (scheme != "http" && scheme != "https") return null
-        return data.toString()
+        return sanitizeExternalInitialUrl(intent.dataString)
     }
 
     /**
