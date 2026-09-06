@@ -161,7 +161,7 @@ class MainActivity : ComponentActivity() {
             }
         }
         if (intent.action != DownloadWorker.ACTION_OPEN_DOWNLOADS) {
-            val url = sanitizeExternalInitialUrl(intent.dataString)
+            val url = ExternalInitialUrlPolicy.sanitize(intent.dataString)
             if (url != null && url != lastProcessedDeepLinkUrl) {
                 val result = createNewTabChannel.trySend(
                     NewTabRequest(
@@ -290,7 +290,7 @@ class MainActivity : ComponentActivity() {
             dispatchOpenDownloadsIntent(intent)
             return
         }
-        val url = sanitizeExternalInitialUrl(intent.dataString)
+        val url = ExternalInitialUrlPolicy.sanitize(intent.dataString)
         if (url != null) {
             val result = createNewTabChannel.trySend(
                 NewTabRequest(

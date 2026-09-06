@@ -294,7 +294,7 @@ class WebAppActivity : ComponentActivity() {
      */
     private fun resolveInitialUrl(): String? {
         if (intent.action != Intent.ACTION_VIEW) return null
-        return sanitizeExternalInitialUrl(intent.dataString)
+        return ExternalInitialUrlPolicy.sanitize(intent.dataString)
     }
 
     /**

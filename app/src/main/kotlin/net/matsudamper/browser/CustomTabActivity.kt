@@ -99,7 +99,7 @@ class CustomTabActivity : ComponentActivity() {
             )
         }
 
-        val initialUrl = sanitizeExternalInitialUrl(intent.dataString).orEmpty()
+        val initialUrl = ExternalInitialUrlPolicy.sanitize(intent.dataString).orEmpty()
         val customTabsSessionToken = CustomTabsSessionToken.getSessionTokenFromIntent(intent)
         setContent {
             val settings by settingsRepository.settings.collectAsState(initial = null)
