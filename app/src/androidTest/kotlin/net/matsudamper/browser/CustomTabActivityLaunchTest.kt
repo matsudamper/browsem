@@ -2,6 +2,7 @@ package net.matsudamper.browser
 
 import android.content.Intent
 import android.net.Uri
+import android.view.View
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
@@ -19,6 +20,35 @@ import org.junit.runner.RunWith
 class CustomTabActivityLaunchTest {
     @get:Rule
     val composeRule = createEmptyComposeRule()
+
+    /**
+     * カスタムタブが edge-to-edge で表示され、コンテンツがステータスバーの裏まで描画されることを確認する。
+     */
+    @Test(timeout = 45_000L)
+    fun customTabDrawsBehindStatusBar() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val intent = Intent(context, CustomTabActivity::class.java).apply {
+            action = Intent.ACTION_VIEW
+            data = Uri.parse("https://customtab-edge-to-edge-test.invalid/")
+        }
+
+        ActivityScenario.launch<CustomTabActivity>(intent).use { scenario ->
+            composeRule.waitUntil(timeoutMillis = 20_000) {
+                composeRule.onAllNodesWithTag(CustomTabToolbarTestTags.MenuButton.testTag)
+                    .fetchSemanticsNodes()
+                    .isNotEmpty()
+            }
+
+            var contentTopOnScreen = -1
+            scenario.onActivity { activity ->
+                val content = activity.findViewById<View>(android.R.id.content)
+                val location = IntArray(2)
+                content.getLocationOnScreen(location)
+                contentTopOnScreen = location[1]
+            }
+            assertEquals(0, contentTopOnScreen)
+        }
+    }
 
     /**
      * カスタムタブのツールバーメニューから「サイトの設定」を開けることを確認する。

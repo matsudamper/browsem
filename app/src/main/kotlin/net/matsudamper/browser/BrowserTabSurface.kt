@@ -79,7 +79,6 @@ internal fun BrowserContentHost(
     latestOnRefresh: () -> Unit,
     updateGeckoView: (GeckoView) -> Unit,
     modifier: Modifier = Modifier,
-    shrinkViewportForKeyboard: Boolean = true,
 ) {
     // Firefox (Fenix) の ImeInsetsSynchronizer と同じく、キーボード分だけ表示領域を
     // 物理的に縮める。Gecko は onKeyboardHeight を受け取っても visual viewport を
@@ -92,17 +91,12 @@ internal fun BrowserContentHost(
     //
     // 親が既に消費した分は差し引く。window.open のオーバーレイでは
     // safeDrawing (IME 含む) が消費済みで、表示領域は既に縮んでいる。
-    // Custom Tab は adjustResize のみで縮めるため手動縮小は無効化する。
-    // WebApp は documentLaunchMode 等の影響で adjustResize だけでは足りないため、
-    // 手動縮小を併用する（IME 中のナビバー padding は GeckoBrowserTab 側で外す）。
+    // Custom Tab / WebApp も edge-to-edge でウィンドウが縮まないため手動縮小を使う。
+    // IME 中のナビバー padding は GeckoBrowserTab 側で外す。
     val density = LocalDensity.current
     var consumedBottomPx by remember { mutableIntStateOf(0) }
     val imeTargetBottomPx = WindowInsets.imeAnimationTarget.getBottom(density)
-    val keyboardHeightPx = if (shrinkViewportForKeyboard) {
-        (imeTargetBottomPx - consumedBottomPx).coerceAtLeast(0)
-    } else {
-        0
-    }
+    val keyboardHeightPx = (imeTargetBottomPx - consumedBottomPx).coerceAtLeast(0)
 
     Box(
         modifier = modifier.onConsumedWindowInsetsChanged { consumed ->
