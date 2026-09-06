@@ -89,13 +89,13 @@ internal fun NetworkLogDialog(uiState: NetworkLogUiState) {
             decorFitsSystemWindows = false,
         ),
     ) {
-        Surface(
-            modifier = Modifier
-                .fillMaxSize()
-                .windowInsetsPadding(WindowInsets.safeDrawing),
-        ) {
+        Surface(modifier = Modifier.fillMaxSize()) {
             StatusBarAppearanceEffect(MaterialTheme.colorScheme.surface)
-            NetworkLogScreen(uiState = uiState)
+            // 背景はシステムバー領域まで描き、インセットは内側のコンテンツで避ける。
+            NetworkLogScreen(
+                uiState = uiState,
+                modifier = Modifier.windowInsetsPadding(WindowInsets.safeDrawing),
+            )
         }
     }
 }
