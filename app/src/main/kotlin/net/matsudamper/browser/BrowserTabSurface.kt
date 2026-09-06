@@ -583,6 +583,60 @@ private fun PreviewCurrentPageUrlListItemDark() {
     }
 }
 
+@Preview(name = "URLサジェスト一覧Light")
+@Composable
+private fun PreviewUrlSuggestionListLight() {
+    BrowserTheme(themeMode = ThemeMode.THEME_LIGHT) {
+        Surface {
+            UrlSuggestionList(
+                currentPageUrl = PREVIEW_SUGGESTION_CURRENT_PAGE_URL,
+                historySuggestions = previewSuggestionHistoryEntries,
+                webSuggestions = previewSuggestionWebSuggestions,
+                isLoadingWebSuggestions = false,
+                onHistorySuggestionClick = {},
+                onWebSuggestionClick = {},
+                onCopyCurrentUrl = {},
+                onRestoreCurrentUrl = {},
+                clipboardUrl = PREVIEW_SUGGESTION_CLIPBOARD_URL,
+                onClipboardUrlClick = {},
+            )
+        }
+    }
+}
+
+@Preview(name = "URLサジェスト一覧Dark")
+@Composable
+private fun PreviewUrlSuggestionListDark() {
+    BrowserTheme(themeMode = ThemeMode.THEME_DARK) {
+        Surface {
+            UrlSuggestionList(
+                currentPageUrl = PREVIEW_SUGGESTION_CURRENT_PAGE_URL,
+                historySuggestions = previewSuggestionHistoryEntries,
+                webSuggestions = previewSuggestionWebSuggestions,
+                isLoadingWebSuggestions = false,
+                onHistorySuggestionClick = {},
+                onWebSuggestionClick = {},
+                onCopyCurrentUrl = {},
+                onRestoreCurrentUrl = {},
+                clipboardUrl = PREVIEW_SUGGESTION_CLIPBOARD_URL,
+                onClipboardUrlClick = {},
+            )
+        }
+    }
+}
+
+private const val PREVIEW_SUGGESTION_CURRENT_PAGE_URL = "https://example.com/very/long/path?query=value"
+private const val PREVIEW_SUGGESTION_CLIPBOARD_URL = "https://clipboard.example.com/copied"
+private val previewSuggestionHistoryEntries = List(4) { index ->
+    net.matsudamper.browser.data.history.HistoryEntry(
+        id = index.toLong() + 1,
+        url = "https://history.example.com/page$index",
+        title = "履歴タイトル $index",
+        visitedAt = 0,
+    )
+}
+private val previewSuggestionWebSuggestions = List(4) { index -> "検索候補 $index" }
+
 @Composable
 internal fun PageLoadErrorOverlay(
     pageLoadError: PageLoadError,
