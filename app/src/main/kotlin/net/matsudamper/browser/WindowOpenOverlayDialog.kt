@@ -108,6 +108,8 @@ internal fun WindowOpenOverlayDialog(
         Box(
             modifier = Modifier
                 .fillMaxSize()
+                // インセットの外側（ナビゲーションバー領域など）から下層の画面が透けないよう不透明にする
+                .background(MaterialTheme.colorScheme.surface)
                 .testTag(WindowOpenOverlayDialogTestTags.Dialog.testTag),
         ) {
             content()
