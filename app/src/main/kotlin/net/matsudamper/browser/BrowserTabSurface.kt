@@ -91,8 +91,8 @@ internal fun BrowserContentHost(
     //
     // 親が既に消費した分は差し引く。window.open のオーバーレイでは
     // safeDrawing (IME 含む) が消費済みで、表示領域は既に縮んでいる。
-    // Custom Tab / WebApp も edge-to-edge でウィンドウが縮まないため手動縮小を使う
-    //（IME 中のナビバー padding は GeckoBrowserTab 側で外す）。
+    // Custom Tab / WebApp も edge-to-edge でウィンドウが縮まないため手動縮小を使う。
+    // IME 中のナビバー padding は GeckoBrowserTab 側で外す。
     val density = LocalDensity.current
     var consumedBottomPx by remember { mutableIntStateOf(0) }
     val imeTargetBottomPx = WindowInsets.imeAnimationTarget.getBottom(density)
