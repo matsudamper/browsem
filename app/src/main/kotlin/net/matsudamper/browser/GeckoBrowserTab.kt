@@ -1342,13 +1342,11 @@ internal fun GeckoBrowserTab(
                     state.onUrlSubmit(url)
                     closeUrlInput(false)
                 },
+                // edge-to-edge ではどのモードでもウィンドウが縮まないため、
+                // 候補リストが IME に隠れないよう自前で余白を取る。
                 modifier = Modifier
                     .fillMaxSize()
-                    .then(
-                        // Custom Tab は adjustResize でウィンドウ自体が縮むため二重に縮めない。
-                        // 通常ブラウザ / WebApp はウィンドウが縮まず候補リストが IME に隠れる。
-                        if (customTabMode) Modifier else Modifier.imePadding(),
-                    ),
+                    .imePadding(),
             )
 
             val autofillBar = dialogState.addressAutofillBar
