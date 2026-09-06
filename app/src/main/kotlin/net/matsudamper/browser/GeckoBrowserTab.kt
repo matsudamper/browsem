@@ -1320,8 +1320,6 @@ internal fun GeckoBrowserTab(
                 session = session,
                 latestOnRefresh = latestOnRefresh,
                 browserTab = browserTab,
-                // Custom Tab は adjustResize のみ。WebApp / 通常ブラウザは手動縮小も使う。
-                shrinkViewportForKeyboard = !customTabMode,
                 updateGeckoView = {
                     geckoView = it
                 },
