@@ -30,6 +30,7 @@ import androidx.compose.foundation.layout.exclude
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.only
@@ -1343,7 +1344,13 @@ internal fun GeckoBrowserTab(
                     state.onUrlSubmit(url)
                     closeUrlInput(false)
                 },
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .then(
+                        // Custom Tab は adjustResize でウィンドウ自体が縮むため二重に縮めない。
+                        // 通常ブラウザ / WebApp はウィンドウが縮まず候補リストが IME に隠れる。
+                        if (customTabMode) Modifier else Modifier.imePadding(),
+                    ),
             )
 
             val autofillBar = dialogState.addressAutofillBar
