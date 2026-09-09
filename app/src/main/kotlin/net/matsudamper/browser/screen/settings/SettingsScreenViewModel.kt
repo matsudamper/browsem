@@ -80,7 +80,7 @@ internal class SettingsScreenViewModel(
         }
 
         override fun setWebAuthnPlatformAuthenticatorAvailableOverrideEnabled(enabled: Boolean) {
-            webAuthnCompatWebExtension.setEnabled(runtime, enabled).accept(
+            webAuthnCompatWebExtension.retrySetEnabled(runtime, enabled).accept(
                 {
                     viewModelScope.launch {
                         settingsRepository.setWebAuthnPlatformAuthenticatorAvailableOverrideEnabled(enabled)
