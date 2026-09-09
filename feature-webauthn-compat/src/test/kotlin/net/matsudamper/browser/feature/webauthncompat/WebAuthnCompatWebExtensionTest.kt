@@ -1,9 +1,9 @@
 package net.matsudamper.browser.feature.webauthncompat
 
+import java.util.concurrent.TimeoutException
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
-import java.util.concurrent.TimeoutException
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue

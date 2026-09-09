@@ -275,6 +275,7 @@ class MainActivity : ComponentActivity() {
     private fun awaitWebAuthnCompatInstallation(result: GeckoResult<WebExtension>) {
         when (val state = webAuthnCompatWebExtension.installationState()) {
             WebAuthnCompatInstallState.Installed -> completeGeckoInitialization()
+
             WebAuthnCompatInstallState.Pending -> {
                 result.accept(
                     { completeGeckoInitialization() },
