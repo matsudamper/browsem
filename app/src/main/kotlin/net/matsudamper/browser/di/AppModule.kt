@@ -27,6 +27,7 @@ import net.matsudamper.browser.data.forminput.FormInputRepository
 import net.matsudamper.browser.data.history.HistoryRepository
 import net.matsudamper.browser.data.resolvedExtensionsProcessEnabled
 import net.matsudamper.browser.data.resolvedInputAutoZoomEnabled
+import net.matsudamper.browser.data.resolvedWebAuthnPlatformAuthenticatorAvailableOverrideEnabled
 import net.matsudamper.browser.data.websuggestion.HttpWebSuggestionRepository
 import net.matsudamper.browser.data.websuggestion.WebSuggestionRepository
 import net.matsudamper.browser.feature.addressautofill.AddressAutofillCoordinator
@@ -94,9 +95,12 @@ val appModule = module {
         ).also {
             get<AddressAutofillWebExtension>().install(it)
             get<FormInputAutofillWebExtension>().install(it)
-            // MainActivity で保存済みの有効状態まで適用してから起動完了にする。
-            // ここでは GeckoRuntime 生成中の先行インストールだけ行う。
-            get<WebAuthnCompatWebExtension>().install(it)
+            // MainActivity の install() はこの設定反映まで含んだ同じ GeckoResult を待つ。
+            // retryInstall() も保存済みの有効状態を再適用する。
+            get<WebAuthnCompatWebExtension>().setEnabled(
+                it,
+                browserSettings.resolvedWebAuthnPlatformAuthenticatorAvailableOverrideEnabled(),
+            )
             val addressAutofillCoordinator = get<AddressAutofillCoordinator>()
             it.autocompleteStorageDelegate = AutocompleteStorageDelegate(
                 addressRepository = get(),
