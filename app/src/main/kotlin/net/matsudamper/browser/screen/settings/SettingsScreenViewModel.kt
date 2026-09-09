@@ -1,5 +1,6 @@
 package net.matsudamper.browser.screen.settings
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.channels.Channel
@@ -19,13 +20,20 @@ import net.matsudamper.browser.data.TranslationProvider
 import net.matsudamper.browser.data.resolvedEnableWebSuggestions
 import net.matsudamper.browser.data.resolvedExtensionsProcessEnabled
 import net.matsudamper.browser.data.resolvedInputAutoZoomEnabled
+import net.matsudamper.browser.data.resolvedWebAuthnPlatformAuthenticatorAvailableOverrideEnabled
 import net.matsudamper.browser.feature.mocklocation.MockLocationWebExtension
+import net.matsudamper.browser.feature.webauthncompat.WebAuthnCompatWebExtension
 import net.matsudamper.browser.ui.settings.SettingsScreenUiState
+import org.koin.core.component.KoinComponent
+import org.koin.core.component.inject
+import org.mozilla.geckoview.GeckoRuntime
 
 internal class SettingsScreenViewModel(
     private val settingsRepository: SettingsRepository,
-) : ViewModel() {
+) : ViewModel(), KoinComponent {
 
+    private val runtime: GeckoRuntime by inject()
+    private val webAuthnCompatWebExtension: WebAuthnCompatWebExtension by inject()
     private val viewModelStateFlow = MutableStateFlow(ViewModelState())
     val eventHandler = Channel<(Event) -> Unit>(Channel.UNLIMITED)
 
@@ -68,6 +76,16 @@ internal class SettingsScreenViewModel(
 
         override fun setInputAutoZoomEnabled(enabled: Boolean) {
             viewModelScope.launch { settingsRepository.setInputAutoZoomEnabled(enabled) }
+        }
+
+        override fun setWebAuthnPlatformAuthenticatorAvailableOverrideEnabled(enabled: Boolean) {
+            viewModelScope.launch {
+                settingsRepository.setWebAuthnPlatformAuthenticatorAvailableOverrideEnabled(enabled)
+                webAuthnCompatWebExtension.setEnabled(runtime, enabled).accept(
+                    {},
+                    { error -> Log.w("SettingsScreenViewModel", "WebAuthn 互換設定の反映に失敗", error) },
+                )
+            }
         }
 
         override fun setExtensionsProcessEnabled(enabled: Boolean) {
@@ -275,6 +293,8 @@ private fun BrowserSettings.toUiState(
         enableWebSuggestions = resolvedEnableWebSuggestions(),
         inputAutoZoomEnabled = resolvedInputAutoZoomEnabled(),
         extensionsProcessEnabled = resolvedExtensionsProcessEnabled(),
+        webAuthnPlatformAuthenticatorAvailableOverrideEnabled =
+            resolvedWebAuthnPlatformAuthenticatorAvailableOverrideEnabled(),
         mockLocationInput = mockLocationInput,
         mockLocationInputError = validateMockLocationInput(mockLocationInput),
         backupConfirmDialog = backupConfirmDialog,
