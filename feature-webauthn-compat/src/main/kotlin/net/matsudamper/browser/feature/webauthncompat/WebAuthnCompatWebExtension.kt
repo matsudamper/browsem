@@ -16,6 +16,7 @@ sealed interface WebAuthnCompatInstallState {
 
 class WebAuthnCompatWebExtension {
     private var installationResult: GeckoResult<WebExtension>? = null
+    private var desiredEnabled: Boolean? = null
 
     fun install(runtime: GeckoRuntime): GeckoResult<WebExtension> {
         val current = installationResult
@@ -24,19 +25,24 @@ class WebAuthnCompatWebExtension {
     }
 
     fun retryInstall(runtime: GeckoRuntime): GeckoResult<WebExtension> {
-        return createInstallation(runtime).also { installationResult = it }
+        val installation = createInstallation(runtime)
+        val configured = desiredEnabled?.let { enabled ->
+            applyEnabled(runtime, installation, enabled)
+        } ?: installation
+        return configured.also { installationResult = it }
     }
 
     fun setEnabled(runtime: GeckoRuntime, enabled: Boolean): GeckoResult<WebExtension> {
-        return install(runtime).then { extension ->
-            applyEnabled(runtime, extension, enabled)
-        }
+        desiredEnabled = enabled
+        val installation = installationResult ?: createInstallation(runtime)
+        return applyEnabled(runtime, installation, enabled)
+            .also { installationResult = it }
     }
 
     fun retrySetEnabled(runtime: GeckoRuntime, enabled: Boolean): GeckoResult<WebExtension> {
-        return retryInstall(runtime).then { extension ->
-            applyEnabled(runtime, extension, enabled)
-        }
+        desiredEnabled = enabled
+        return applyEnabled(runtime, createInstallation(runtime), enabled)
+            .also { installationResult = it }
     }
 
     fun installationState(): WebAuthnCompatInstallState {
@@ -54,30 +60,32 @@ class WebAuthnCompatWebExtension {
 
     private fun applyEnabled(
         runtime: GeckoRuntime,
-        extension: WebExtension?,
+        installation: GeckoResult<WebExtension>,
         enabled: Boolean,
     ): GeckoResult<WebExtension> {
-        val installedExtension = extension
-            ?: return GeckoResult.fromException(
-                IllegalStateException("WebAuthn 互換拡張機能のインストール結果が null です"),
-            )
-        if (!enabled) {
-            return runtime.webExtensionController.disable(
-                installedExtension,
-                WebExtensionController.EnableSource.APP,
-            )
-        }
-
-        // 以前に汎用の拡張機能画面から USER ソースで無効化されていた場合も、
-        // 専用設定を有効にすれば確実に動作する状態へ戻す。
-        return runtime.webExtensionController
-            .enable(installedExtension, WebExtensionController.EnableSource.USER)
-            .then { userEnabledExtension ->
-                runtime.webExtensionController.enable(
-                    userEnabledExtension ?: installedExtension,
+        return installation.then { extension ->
+            val installedExtension = extension
+                ?: return@then GeckoResult.fromException(
+                    IllegalStateException("WebAuthn 互換拡張機能のインストール結果が null です"),
+                )
+            if (!enabled) {
+                return@then runtime.webExtensionController.disable(
+                    installedExtension,
                     WebExtensionController.EnableSource.APP,
                 )
             }
+
+            // 以前に汎用の拡張機能画面から USER ソースで無効化されていた場合も、
+            // 専用設定を有効にすれば確実に動作する状態へ戻す。
+            runtime.webExtensionController
+                .enable(installedExtension, WebExtensionController.EnableSource.USER)
+                .then { userEnabledExtension ->
+                    runtime.webExtensionController.enable(
+                        userEnabledExtension ?: installedExtension,
+                        WebExtensionController.EnableSource.APP,
+                    )
+                }
+        }
     }
 
     private fun createInstallation(runtime: GeckoRuntime): GeckoResult<WebExtension> {
