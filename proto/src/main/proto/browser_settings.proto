@@ -48,4 +48,6 @@ message BrowserSettings {
   optional bool extensions_enabled = 17;
   // 入力欄フォーカス時の自動ズーム (Gecko pref: formhelper.autozoom)
   optional bool input_auto_zoom_enabled = 18;
+  // WebAuthn の UVPAA 判定を true に上書きする互換処理
+  optional bool webauthn_platform_authenticator_available_override_enabled = 19;
 }
