@@ -386,8 +386,10 @@ fun SettingsScreen(
                             .toggleable(
                                 value = uiState.webAuthnPlatformAuthenticatorAvailableOverrideEnabled,
                                 role = Role.Switch,
-                                onValueChange =
-                                    uiState.callbacks::setWebAuthnPlatformAuthenticatorAvailableOverrideEnabled,
+                                onValueChange = { enabled ->
+                                    uiState.callbacks
+                                        .setWebAuthnPlatformAuthenticatorAvailableOverrideEnabled(enabled)
+                                },
                             )
                             .padding(vertical = 4.dp),
                     ) {
@@ -397,7 +399,9 @@ fun SettingsScreen(
                                 style = MaterialTheme.typography.bodyLarge,
                             )
                             Text(
-                                text = "GeckoView の判定を上書きし、isUserVerifyingPlatformAuthenticatorAvailable() が true を返すようにします",
+                                text = "GeckoView の判定を上書きし、" +
+                                    "isUserVerifyingPlatformAuthenticatorAvailable() が " +
+                                    "true を返すようにします",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
