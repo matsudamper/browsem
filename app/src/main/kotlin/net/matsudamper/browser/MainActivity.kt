@@ -293,7 +293,7 @@ class MainActivity : ComponentActivity() {
         geckoInitialized = true
     }
 
-    private fun handleWebAuthnCompatInstallFailure(error: Throwable) {
+    private fun handleWebAuthnCompatInstallFailure(error: Throwable?) {
         geckoInitializationInProgress = false
         webAuthnCompatInstallRetryCount++
         Log.e(
