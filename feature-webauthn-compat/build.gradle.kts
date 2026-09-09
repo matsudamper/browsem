@@ -31,4 +31,5 @@ dependencies {
     implementation(libs.mozilla.geckoview)
 
     testImplementation(libs.junit4)
+    testImplementation(libs.mockk)
 }
