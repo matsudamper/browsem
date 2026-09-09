@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import net.matsudamper.browser.BrowserSessionRegistry
 import net.matsudamper.browser.data.BrowserSettings
 import net.matsudamper.browser.data.HomepageType
 import net.matsudamper.browser.data.SearchProvider
@@ -79,13 +80,21 @@ internal class SettingsScreenViewModel(
         }
 
         override fun setWebAuthnPlatformAuthenticatorAvailableOverrideEnabled(enabled: Boolean) {
-            viewModelScope.launch {
-                settingsRepository.setWebAuthnPlatformAuthenticatorAvailableOverrideEnabled(enabled)
-                webAuthnCompatWebExtension.setEnabled(runtime, enabled).accept(
-                    {},
-                    { error -> Log.w("SettingsScreenViewModel", "WebAuthn 互換設定の反映に失敗", error) },
-                )
-            }
+            webAuthnCompatWebExtension.setEnabled(runtime, enabled).accept(
+                {
+                    viewModelScope.launch {
+                        settingsRepository.setWebAuthnPlatformAuthenticatorAvailableOverrideEnabled(enabled)
+                        BrowserSessionRegistry.reloadOpenSessions()
+                    }
+                },
+                { error ->
+                    Log.w(
+                        "SettingsScreenViewModel",
+                        "WebAuthn 互換設定の反映に失敗",
+                        error,
+                    )
+                },
+            )
         }
 
         override fun setExtensionsProcessEnabled(enabled: Boolean) {
