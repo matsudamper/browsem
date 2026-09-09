@@ -43,6 +43,7 @@ import net.matsudamper.browser.feature.networklog.NetworkLogWebExtension
 import net.matsudamper.browser.feature.themecolor.ThemeColorWebExtension
 import net.matsudamper.browser.feature.twittershare.TwitterShareWebExtension
 import net.matsudamper.browser.feature.viewportscale.ViewportScaleWebExtension
+import net.matsudamper.browser.feature.webauthncompat.WebAuthnCompatWebExtension
 import net.matsudamper.browser.feature.websharefiles.WebShareFilesWebExtension
 import org.koin.android.ext.koin.androidContext
 import org.koin.androidx.workmanager.dsl.worker
@@ -70,6 +71,7 @@ val dataModule = module {
 val appModule = module {
     single { AddressAutofillWebExtension() }
     single { FormInputAutofillWebExtension() }
+    single { WebAuthnCompatWebExtension() }
     single { AddressAutofillCoordinator(get()) }
     factory { FormInputAutofillCoordinator(get()) }
     single<GeckoRuntime> {
@@ -92,6 +94,7 @@ val appModule = module {
         ).also {
             get<AddressAutofillWebExtension>().install(it)
             get<FormInputAutofillWebExtension>().install(it)
+            get<WebAuthnCompatWebExtension>().install(it)
             val addressAutofillCoordinator = get<AddressAutofillCoordinator>()
             it.autocompleteStorageDelegate = AutocompleteStorageDelegate(
                 addressRepository = get(),

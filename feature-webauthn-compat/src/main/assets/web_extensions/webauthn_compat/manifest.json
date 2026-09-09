@@ -1,0 +1,26 @@
+{
+  "manifest_version": 2,
+  "name": "WebAuthn Compat",
+  "version": "1.0",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "webauthn-compat@browsem"
+    }
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_start",
+      "all_frames": true
+    }
+  ],
+  "permissions": [
+    "geckoViewAddons"
+  ]
+}
