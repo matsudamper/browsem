@@ -3,6 +3,9 @@ package net.matsudamper.browser.screen.settings
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -28,6 +31,8 @@ import net.matsudamper.browser.ui.settings.SettingsScreenUiState
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 import org.mozilla.geckoview.GeckoRuntime
+
+private val webAuthnSettingsUpdateScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
 internal class SettingsScreenViewModel(
     private val settingsRepository: SettingsRepository,
@@ -82,7 +87,7 @@ internal class SettingsScreenViewModel(
         override fun setWebAuthnPlatformAuthenticatorAvailableOverrideEnabled(enabled: Boolean) {
             webAuthnCompatWebExtension.retrySetEnabled(runtime, enabled).accept(
                 {
-                    viewModelScope.launch {
+                    webAuthnSettingsUpdateScope.launch {
                         settingsRepository.setWebAuthnPlatformAuthenticatorAvailableOverrideEnabled(enabled)
                         BrowserSessionRegistry.reloadOpenSessions()
                     }
