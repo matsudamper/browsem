@@ -15,6 +15,22 @@ import org.mozilla.geckoview.WebExtensionController
 
 class WebAuthnCompatWebExtensionTest {
     @Test
+    fun `インストール完了後は Installed を返す`() {
+        val runtime = mockk<GeckoRuntime>()
+        val controller = mockk<WebExtensionController>()
+        val installed = mockk<GeckoResult<WebExtension>>()
+        val extension = mockk<WebExtension>()
+        every { runtime.webExtensionController } returns controller
+        every { controller.ensureBuiltIn(any(), any()) } returns installed
+        every { installed.poll(0) } returns extension
+        val target = WebAuthnCompatWebExtension()
+
+        target.install(runtime)
+
+        assertEquals(WebAuthnCompatInstallState.Installed, target.installationState())
+    }
+
+    @Test
     fun `インストール完了前は Pending のままで同じ結果を返す`() {
         val runtime = mockk<GeckoRuntime>()
         val controller = mockk<WebExtensionController>()
