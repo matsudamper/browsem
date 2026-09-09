@@ -68,4 +68,24 @@ class WebAuthnCompatWebExtensionTest {
         assertEquals(WebAuthnCompatInstallState.Pending, target.installationState())
         verify(exactly = 2) { controller.ensureBuiltIn(any(), any()) }
     }
+
+    @Test
+    fun `設定を無効にすると APP ソースで拡張機能を無効化する`() {
+        val runtime = mockk<GeckoRuntime>()
+        val controller = mockk<WebExtensionController>()
+        val extension = mockk<WebExtension>()
+        every { runtime.webExtensionController } returns controller
+        every { controller.ensureBuiltIn(any(), any()) } returns GeckoResult.fromValue(extension)
+        every {
+            controller.disable(extension, WebExtensionController.EnableSource.APP)
+        } returns GeckoResult.fromValue(extension)
+        val target = WebAuthnCompatWebExtension()
+
+        val result = target.setEnabled(runtime, enabled = false)
+
+        assertSame(extension, result.poll(0))
+        verify(exactly = 1) {
+            controller.disable(extension, WebExtensionController.EnableSource.APP)
+        }
+    }
 }
