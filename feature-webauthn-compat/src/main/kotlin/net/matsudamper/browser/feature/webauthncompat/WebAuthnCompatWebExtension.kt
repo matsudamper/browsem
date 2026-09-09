@@ -29,11 +29,13 @@ class WebAuthnCompatWebExtension {
 
     fun setEnabled(runtime: GeckoRuntime, enabled: Boolean): GeckoResult<WebExtension> {
         return install(runtime).then { extension ->
-            if (enabled) {
-                runtime.webExtensionController.enable(extension, WebExtensionController.EnableSource.APP)
-            } else {
-                runtime.webExtensionController.disable(extension, WebExtensionController.EnableSource.APP)
-            }
+            applyEnabled(runtime, extension, enabled)
+        }
+    }
+
+    fun retrySetEnabled(runtime: GeckoRuntime, enabled: Boolean): GeckoResult<WebExtension> {
+        return retryInstall(runtime).then { extension ->
+            applyEnabled(runtime, extension, enabled)
         }
     }
 
@@ -48,6 +50,34 @@ class WebAuthnCompatWebExtension {
         } catch (error: Throwable) {
             WebAuthnCompatInstallState.Failed(error)
         }
+    }
+
+    private fun applyEnabled(
+        runtime: GeckoRuntime,
+        extension: WebExtension?,
+        enabled: Boolean,
+    ): GeckoResult<WebExtension> {
+        val installedExtension = extension
+            ?: return GeckoResult.fromException(
+                IllegalStateException("WebAuthn 互換拡張機能のインストール結果が null です"),
+            )
+        if (!enabled) {
+            return runtime.webExtensionController.disable(
+                installedExtension,
+                WebExtensionController.EnableSource.APP,
+            )
+        }
+
+        // 以前に汎用の拡張機能画面から USER ソースで無効化されていた場合も、
+        // 専用設定を有効にすれば確実に動作する状態へ戻す。
+        return runtime.webExtensionController
+            .enable(installedExtension, WebExtensionController.EnableSource.USER)
+            .then { userEnabledExtension ->
+                runtime.webExtensionController.enable(
+                    userEnabledExtension ?: installedExtension,
+                    WebExtensionController.EnableSource.APP,
+                )
+            }
     }
 
     private fun createInstallation(runtime: GeckoRuntime): GeckoResult<WebExtension> {
