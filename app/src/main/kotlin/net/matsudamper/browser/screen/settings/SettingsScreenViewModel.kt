@@ -303,7 +303,7 @@ private fun BrowserSettings.toUiState(
         inputAutoZoomEnabled = resolvedInputAutoZoomEnabled(),
         extensionsProcessEnabled = resolvedExtensionsProcessEnabled(),
         webAuthnPlatformAuthenticatorAvailableOverrideEnabled =
-            resolvedWebAuthnPlatformAuthenticatorAvailableOverrideEnabled(),
+        resolvedWebAuthnPlatformAuthenticatorAvailableOverrideEnabled(),
         mockLocationInput = mockLocationInput,
         mockLocationInputError = validateMockLocationInput(mockLocationInput),
         backupConfirmDialog = backupConfirmDialog,
