@@ -304,7 +304,8 @@ class MainActivity : ComponentActivity() {
         )
         if (isFinishing || isDestroyed) return
         if (webAuthnCompatInstallRetryCount >= MAX_WEBAUTHN_COMPAT_INSTALL_RETRIES) {
-            Log.e("MainActivity", "WebAuthn 互換拡張機能のインストール再試行を終了")
+            Log.e("MainActivity", "WebAuthn 互換拡張機能のインストール再試行を終了。拡張なしで起動する")
+            completeGeckoInitialization()
             return
         }
         window.decorView.postDelayed(
