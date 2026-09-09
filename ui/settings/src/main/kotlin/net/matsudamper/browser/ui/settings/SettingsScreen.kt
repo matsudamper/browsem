@@ -362,21 +362,51 @@ fun SettingsScreen(
             Spacer(Modifier.height(betweenPadding))
 
             SettingSection(title = "セキュリティ") {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 4.dp),
-                ) {
-                    Text(
-                        text = "サードパーティーCAを有効化",
-                        style = MaterialTheme.typography.bodyLarge,
-                        modifier = Modifier.weight(1f),
-                    )
-                    Switch(
-                        checked = uiState.enableThirdPartyCa,
-                        onCheckedChange = uiState.callbacks::setEnableThirdPartyCa,
-                    )
+                Column {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp),
+                    ) {
+                        Text(
+                            text = "サードパーティーCAを有効化",
+                            style = MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Switch(
+                            checked = uiState.enableThirdPartyCa,
+                            onCheckedChange = uiState.callbacks::setEnableThirdPartyCa,
+                        )
+                    }
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .toggleable(
+                                value = uiState.webAuthnPlatformAuthenticatorAvailableOverrideEnabled,
+                                role = Role.Switch,
+                                onValueChange =
+                                    uiState.callbacks::setWebAuthnPlatformAuthenticatorAvailableOverrideEnabled,
+                            )
+                            .padding(vertical = 4.dp),
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "WebAuthn のプラットフォーム認証器を利用可能として扱う",
+                                style = MaterialTheme.typography.bodyLarge,
+                            )
+                            Text(
+                                text = "GeckoView の判定を上書きし、isUserVerifyingPlatformAuthenticatorAvailable() が true を返すようにします",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Switch(
+                            checked = uiState.webAuthnPlatformAuthenticatorAvailableOverrideEnabled,
+                            onCheckedChange = null,
+                        )
+                    }
                 }
             }
 
@@ -691,6 +721,7 @@ private fun SettingsScreenPreviewContent(showDefaultBrowserBanner: Boolean) {
                     override fun setEnableWebSuggestions(enabled: Boolean) = Unit
                     override fun setInputAutoZoomEnabled(enabled: Boolean) = Unit
                     override fun setExtensionsProcessEnabled(enabled: Boolean) = Unit
+                    override fun setWebAuthnPlatformAuthenticatorAvailableOverrideEnabled(enabled: Boolean) = Unit
                     override fun confirmExtensionsProcessRestart() = Unit
                     override fun dismissExtensionsProcessRestartDialog() = Unit
                     override fun setMockLocationInput(input: String) = Unit
@@ -711,6 +742,7 @@ private fun SettingsScreenPreviewContent(showDefaultBrowserBanner: Boolean) {
                 enableWebSuggestions = false,
                 inputAutoZoomEnabled = true,
                 extensionsProcessEnabled = true,
+                webAuthnPlatformAuthenticatorAvailableOverrideEnabled = true,
                 mockLocationInput = "35.685175,139.752797",
                 mockLocationInputError = null,
                 backupConfirmDialog = null,
