@@ -27,6 +27,7 @@ import net.matsudamper.browser.data.forminput.FormInputRepository
 import net.matsudamper.browser.data.history.HistoryRepository
 import net.matsudamper.browser.data.resolvedExtensionsProcessEnabled
 import net.matsudamper.browser.data.resolvedInputAutoZoomEnabled
+import net.matsudamper.browser.data.resolvedWebAuthnPlatformAuthenticatorAvailableOverrideEnabled
 import net.matsudamper.browser.data.websuggestion.HttpWebSuggestionRepository
 import net.matsudamper.browser.data.websuggestion.WebSuggestionRepository
 import net.matsudamper.browser.feature.addressautofill.AddressAutofillCoordinator
@@ -94,7 +95,15 @@ val appModule = module {
         ).also {
             get<AddressAutofillWebExtension>().install(it)
             get<FormInputAutofillWebExtension>().install(it)
-            get<WebAuthnCompatWebExtension>().install(it)
+            get<WebAuthnCompatWebExtension>()
+                .setEnabled(
+                    it,
+                    browserSettings.resolvedWebAuthnPlatformAuthenticatorAvailableOverrideEnabled(),
+                )
+                .accept(
+                    {},
+                    { error -> Log.w("AppModule", "WebAuthn 互換設定の反映に失敗", error) },
+                )
             val addressAutofillCoordinator = get<AddressAutofillCoordinator>()
             it.autocompleteStorageDelegate = AutocompleteStorageDelegate(
                 addressRepository = get(),
