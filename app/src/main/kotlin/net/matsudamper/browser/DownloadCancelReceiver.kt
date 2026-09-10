@@ -5,13 +5,13 @@ import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import androidx.core.app.NotificationCompat
 import androidx.work.WorkManager
 import java.util.UUID
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import net.matsudamper.browser.data.download.DownloadRecordStatus
 import net.matsudamper.browser.data.download.DownloadRepository
 import net.matsudamper.browser.download.PendingDownloadBodyStore
 
@@ -34,12 +34,19 @@ internal class DownloadCancelReceiver : BroadcastReceiver() {
                 val repository = DownloadRepository(applicationContext)
                 val workerId = currentWorkerId.toString()
 
-                // Worker の CancellationException ハンドラが CANCELLED と判定できるよう、
-                // WorkManager の停止要求より先に DB の状態を更新する。
-                repository.updateCancelled(workerId)
-                val record = repository.getByCurrentWorkerId(currentWorkerId)
-                if (record?.status != DownloadRecordStatus.CANCELLED.name) {
+                // SUCCEEDED/FAILED との状態遷移を DB 上で競合させる。
+                // 既に完了・失敗が確定している場合はキャンセル通知を出さない。
+                if (!repository.updateCancelled(workerId)) {
                     return@launch
+                }
+                val record = repository.getByCurrentWorkerId(currentWorkerId)
+
+                // 再開中は Worker が partialResultUri を設定する前でも DB に部分ファイル URI が残るため、
+                // キャンセルを確定した側で削除して MediaStore エントリを残さない。
+                record?.partialFileUri?.let { partialFileUri ->
+                    runCatching {
+                        applicationContext.contentResolver.delete(Uri.parse(partialFileUri), null, null)
+                    }
                 }
 
                 // Worker 起動前に保持しているレスポンスがあればここで破棄する。
@@ -54,7 +61,7 @@ internal class DownloadCancelReceiver : BroadcastReceiver() {
                     context = applicationContext,
                     currentWorkerId = currentWorkerId,
                     stableWorkerId = stableWorkerId,
-                    fileName = record.fileName,
+                    fileName = record?.fileName.orEmpty(),
                 )
             } finally {
                 pendingResult.finish()
