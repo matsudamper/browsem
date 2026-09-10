@@ -1,5 +1,7 @@
 package net.matsudamper.browser
 
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.widget.Toast
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -42,8 +44,8 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import kotlin.math.roundToInt
 import net.matsudamper.browser.data.ThemeMode
-import net.matsudamper.browser.ui.common.BrowserTheme
 import net.matsudamper.browser.resources.R as ResourcesR
+import net.matsudamper.browser.ui.common.BrowserTheme
 
 internal sealed interface CustomTabToolbarTestTags {
     val id: String
@@ -230,8 +232,8 @@ internal fun CustomTabToolbar(
 
 private fun copyUrlToClipboard(context: Context, url: String) {
     if (url.isBlank()) return
-    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-    clipboard.setPrimaryClip(android.content.ClipData.newPlainText("URL", url))
+    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+    clipboard.setPrimaryClip(ClipData.newPlainText("URL", url))
     Toast.makeText(context, "URLをコピーしました", Toast.LENGTH_SHORT).show()
 }
 
