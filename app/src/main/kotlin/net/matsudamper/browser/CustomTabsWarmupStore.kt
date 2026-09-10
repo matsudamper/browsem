@@ -48,6 +48,10 @@ object CustomTabsWarmupStore {
             synchronized(lock) {
                 cleanupLocked()
                 ensureEntryLocked(token).apply {
+                    if (preparedUrl != targetUrl) {
+                        preparedSession?.close()
+                        preparedSession = null
+                    }
                     preparedUrl = targetUrl
                     updatedAt = System.currentTimeMillis()
                 }
