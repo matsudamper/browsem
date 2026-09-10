@@ -60,6 +60,8 @@ class WebAuthnCompatWebExtension {
                     result = result,
                 ),
             )
+            // install() を呼ぶ別の起動経路も、常に最後に要求された状態の完了まで待機させる。
+            installationResult = result
             if (enabledRequestInProgress) {
                 false
             } else {
@@ -95,7 +97,6 @@ class WebAuthnCompatWebExtension {
             installation = createInstallation(request.runtime),
             enabled = request.enabled,
         )
-        installationResult = operation
         operation.accept(
             { extension ->
                 if (extension == null) {
