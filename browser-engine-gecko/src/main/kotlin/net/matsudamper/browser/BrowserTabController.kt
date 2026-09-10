@@ -301,10 +301,13 @@ class BrowserTabController(
             openerTabId = null,
             insertIndex = insertIndex,
         )
-        if (!session.isOpen) {
+        if (session.isOpen) {
+            // 未 open のまま open 済みとして記録すると、次の判定で「開いた後に閉じた」と
+            // みなされ、読み込みが始まる前に opener の保持が解かれてしまう。
+            HandedOffPopupRegistry.markAttachedToTab(session)
+        } else {
             tab.pendingInitialUrl = normalizedInitialUrl
         }
-        HandedOffPopupRegistry.markAttachedToTab(session)
         tab.openedViaNewSession = true
         publishRuntimeState()
         persistenceCoordinator.persistCreatedTab(
