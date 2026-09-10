@@ -327,9 +327,11 @@ internal class ExtensionsScreenViewModel(
                 viewModelStateFlow.update {
                     it.copy(
                         isLoading = false,
-                        extensions = (list ?: emptyList()).sortedBy { ext ->
-                            (ext.metaData.name?.takeIf { n -> n.isNotBlank() } ?: ext.id).lowercase()
-                        },
+                        extensions = (list ?: emptyList())
+                            .filter(ExtensionGlobalController::isUserManaged)
+                            .sortedBy { ext ->
+                                (ext.metaData.name?.takeIf { n -> n.isNotBlank() } ?: ext.id).lowercase()
+                            },
                     )
                 }
             },

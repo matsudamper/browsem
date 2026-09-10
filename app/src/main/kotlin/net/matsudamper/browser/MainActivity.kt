@@ -41,6 +41,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.resolvedExtensionsEnabled
+import net.matsudamper.browser.feature.webauthncompat.WebAuthnCompatInstallState
+import net.matsudamper.browser.feature.webauthncompat.WebAuthnCompatWebExtension
 import org.koin.android.ext.android.inject
 import org.koin.androidx.viewmodel.ext.android.viewModel
 import org.mozilla.geckoview.GeckoResult
@@ -54,10 +56,13 @@ class MainActivity : ComponentActivity() {
     private val settingsRepository: SettingsRepository by inject()
     private val extensionRuntimeCoordinator: ExtensionRuntimeCoordinator by inject()
     private val webExtensionActionController: WebExtensionActionController by inject()
+    private val webAuthnCompatWebExtension: WebAuthnCompatWebExtension by inject()
     private val browserViewModel: BrowserViewModel by viewModel()
     private lateinit var extensionInstaller: WebExtensionInstaller
     private var pendingActivityResult: GeckoResult<Intent>? = null
     private var geckoInitialized by mutableStateOf(false)
+    private var geckoInitializationInProgress = false
+    private var webAuthnCompatInstallRetryCount = 0
     private var webExtensionWarmUpCompleted = false
     private var webExtensionWarmUpInProgress = false
     private var webExtensionWarmUpRetryCount = 0
@@ -241,27 +246,77 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun initializeGeckoRuntime() {
-        if (geckoInitialized) {
+        if (geckoInitialized || geckoInitializationInProgress) {
             return
         }
-        extensionInstaller = WebExtensionInstaller(
-            runtime = runtime,
-            onExtensionReady = ::onExtensionReady,
-        )
+        geckoInitializationInProgress = true
+        if (!::extensionInstaller.isInitialized) {
+            extensionInstaller = WebExtensionInstaller(
+                runtime = runtime,
+                onExtensionReady = ::onExtensionReady,
+            )
 
-        runtime.setActivityDelegate(activityDelegate)
-        runtime.settings.setExtensionsWebAPIEnabled(true)
-        runtime.webExtensionController.setPromptDelegate(extensionInstaller.promptDelegate)
-        runtime.webExtensionController.setAddonManagerDelegate(extensionInstaller.addonManagerDelegate)
-        // 拡張プロセスのクラッシュ閾値超過時に spawning を再有効化するための delegate。
-        // これがないと一度プロセスがダウンすると webRequest 系 API が永続的に死んだままになる。
-        runtime.webExtensionController.setExtensionProcessDelegate(
-            extensionInstaller.extensionProcessDelegate,
-        )
-        warmUpWebExtensionController()
-        extensionRuntimeCoordinator.setOnExtensionReady(::setupDelegatesForExtension)
+            runtime.setActivityDelegate(activityDelegate)
+            runtime.settings.setExtensionsWebAPIEnabled(true)
+            runtime.webExtensionController.setPromptDelegate(extensionInstaller.promptDelegate)
+            runtime.webExtensionController.setAddonManagerDelegate(extensionInstaller.addonManagerDelegate)
+            // 拡張プロセスのクラッシュ閾値超過時に spawning を再有効化するための delegate。
+            // これがないと一度プロセスがダウンすると webRequest 系 API が永続的に死んだままになる。
+            runtime.webExtensionController.setExtensionProcessDelegate(
+                extensionInstaller.extensionProcessDelegate,
+            )
+            warmUpWebExtensionController()
+            extensionRuntimeCoordinator.setOnExtensionReady(::setupDelegatesForExtension)
+        }
 
+        awaitWebAuthnCompatInstallation(webAuthnCompatWebExtension.install(runtime))
+    }
+
+    private fun awaitWebAuthnCompatInstallation(result: GeckoResult<WebExtension>) {
+        when (val state = webAuthnCompatWebExtension.installationState()) {
+            WebAuthnCompatInstallState.Installed -> completeGeckoInitialization()
+
+            WebAuthnCompatInstallState.Pending -> {
+                result.accept(
+                    { completeGeckoInitialization() },
+                    { error -> handleWebAuthnCompatInstallFailure(error) },
+                )
+            }
+
+            is WebAuthnCompatInstallState.Failed -> handleWebAuthnCompatInstallFailure(state.error)
+        }
+    }
+
+    private fun completeGeckoInitialization() {
+        geckoInitializationInProgress = false
+        if (isFinishing || isDestroyed) return
+        webAuthnCompatInstallRetryCount = 0
         geckoInitialized = true
+    }
+
+    private fun handleWebAuthnCompatInstallFailure(error: Throwable?) {
+        geckoInitializationInProgress = false
+        webAuthnCompatInstallRetryCount++
+        Log.e(
+            "MainActivity",
+            "WebAuthn 互換拡張機能のインストールに失敗: $webAuthnCompatInstallRetryCount/$MAX_WEBAUTHN_COMPAT_INSTALL_RETRIES",
+            error,
+        )
+        if (isFinishing || isDestroyed) return
+        if (webAuthnCompatInstallRetryCount >= MAX_WEBAUTHN_COMPAT_INSTALL_RETRIES) {
+            Log.e("MainActivity", "WebAuthn 互換拡張機能のインストール再試行を終了。拡張なしで起動する")
+            completeGeckoInitialization()
+            return
+        }
+        window.decorView.postDelayed(
+            {
+                if (!isFinishing && !isDestroyed && !geckoInitialized && !geckoInitializationInProgress) {
+                    geckoInitializationInProgress = true
+                    awaitWebAuthnCompatInstallation(webAuthnCompatWebExtension.retryInstall(runtime))
+                }
+            },
+            WEBAUTHN_COMPAT_INSTALL_RETRY_DELAY_MS,
+        )
     }
 
     private fun onExtensionReady(extension: WebExtension) {
@@ -516,6 +571,8 @@ class MainActivity : ComponentActivity() {
 
     companion object {
         private const val MAX_WARMUP_RETRIES = 5
+        private const val MAX_WEBAUTHN_COMPAT_INSTALL_RETRIES = 5
+        private const val WEBAUTHN_COMPAT_INSTALL_RETRY_DELAY_MS = 1200L
         private const val EXTRA_CUSTOM_TABS_SESSION = "android.support.customtabs.extra.SESSION"
         private const val EXTRA_CUSTOM_TABS_SESSION_ID = "androidx.browser.customtabs.extra.SESSION_ID"
         private const val KEY_PROCESSED_DEEPLINK_URL = "processed_deeplink_url"

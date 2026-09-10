@@ -3,10 +3,12 @@ package net.matsudamper.browser
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import androidx.annotation.VisibleForTesting
 import androidx.browser.customtabs.CustomTabsSessionToken
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import net.matsudamper.browser.feature.webauthncompat.WebAuthnCompatWebExtension
 import org.koin.core.context.GlobalContext
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoSession
@@ -40,26 +42,42 @@ object CustomTabsWarmupStore {
         url: Uri?,
     ) {
         val targetUrl = url?.toString()?.takeIf { it.isNotBlank() } ?: return
-        runOnMainThreadBlocking {
-            val runtime = GlobalContext.get().get<GeckoRuntime>()
-            val session = synchronized(lock) {
+        val (runtime, webAuthnCompatWebExtension) = runOnMainThreadBlocking {
+            val koin = GlobalContext.get()
+            val resolvedRuntime = koin.get<GeckoRuntime>()
+            synchronized(lock) {
                 cleanupLocked()
-                val entry = ensureEntryLocked(token)
-                entry.updatedAt = System.currentTimeMillis()
-                val existing = entry.preparedSession
-                if (existing != null) {
-                    entry.preparedUrl = targetUrl
-                    existing
-                } else {
-                    GeckoSession().also { newSession ->
-                        newSession.open(runtime)
-                        entry.preparedSession = newSession
-                        entry.preparedUrl = targetUrl
+                ensureEntryLocked(token).apply {
+                    if (preparedUrl != targetUrl) {
+                        preparedSession?.close()
+                        preparedSession = null
                     }
+                    preparedUrl = targetUrl
+                    updatedAt = System.currentTimeMillis()
                 }
             }
-            session.loadUri(targetUrl)
+            resolvedRuntime to koin.get<WebAuthnCompatWebExtension>()
         }
+        webAuthnCompatWebExtension.install(runtime).accept(
+            {
+                prepareSessionIfCurrent(token, targetUrl, runtime)
+            },
+            { firstError ->
+                Log.w("CustomTabsWarmupStore", "WebAuthn 互換設定の反映待機に失敗。再試行します", firstError)
+                webAuthnCompatWebExtension.retryInstall(runtime).accept(
+                    {
+                        prepareSessionIfCurrent(token, targetUrl, runtime)
+                    },
+                    { retryError ->
+                        Log.w(
+                            "CustomTabsWarmupStore",
+                            "WebAuthn 互換設定の再試行に失敗したためプリウォームを中止します",
+                            retryError,
+                        )
+                    },
+                )
+            },
+        )
     }
 
     fun consumePreparedSession(
@@ -70,7 +88,11 @@ object CustomTabsWarmupStore {
             cleanupLocked()
             val entry = entries[token] ?: return null
             entry.updatedAt = System.currentTimeMillis()
-            val session = entry.preparedSession ?: return null
+            val session = entry.preparedSession
+            if (session == null) {
+                entries.remove(token)
+                return null
+            }
             val url = entry.preparedUrl
             entry.preparedSession = null
             entry.preparedUrl = null
@@ -118,6 +140,27 @@ object CustomTabsWarmupStore {
             runOnMainThreadBlocking {
                 runCatching { session.close() }
             }
+        }
+    }
+
+    private fun prepareSessionIfCurrent(
+        token: CustomTabsSessionToken,
+        targetUrl: String,
+        runtime: GeckoRuntime,
+    ) {
+        runOnMainThreadBlocking {
+            val session = synchronized(lock) {
+                cleanupLocked()
+                val entry = entries[token] ?: return@synchronized null
+                if (entry.preparedUrl != targetUrl) return@synchronized null
+                entry.updatedAt = System.currentTimeMillis()
+                entry.preparedSession ?: GeckoSession().also { newSession ->
+                    newSession.open(runtime)
+                    registerBrowserSessionForRuntimeUpdates(newSession)
+                    entry.preparedSession = newSession
+                }
+            } ?: return@runOnMainThreadBlocking
+            session.loadUri(targetUrl)
         }
     }
 

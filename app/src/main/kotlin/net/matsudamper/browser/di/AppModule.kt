@@ -27,6 +27,7 @@ import net.matsudamper.browser.data.forminput.FormInputRepository
 import net.matsudamper.browser.data.history.HistoryRepository
 import net.matsudamper.browser.data.resolvedExtensionsProcessEnabled
 import net.matsudamper.browser.data.resolvedInputAutoZoomEnabled
+import net.matsudamper.browser.data.resolvedWebAuthnPlatformAuthenticatorAvailableOverrideEnabled
 import net.matsudamper.browser.data.websuggestion.HttpWebSuggestionRepository
 import net.matsudamper.browser.data.websuggestion.WebSuggestionRepository
 import net.matsudamper.browser.feature.addressautofill.AddressAutofillCoordinator
@@ -43,6 +44,7 @@ import net.matsudamper.browser.feature.networklog.NetworkLogWebExtension
 import net.matsudamper.browser.feature.themecolor.ThemeColorWebExtension
 import net.matsudamper.browser.feature.twittershare.TwitterShareWebExtension
 import net.matsudamper.browser.feature.viewportscale.ViewportScaleWebExtension
+import net.matsudamper.browser.feature.webauthncompat.WebAuthnCompatWebExtension
 import net.matsudamper.browser.feature.websharefiles.WebShareFilesWebExtension
 import org.koin.android.ext.koin.androidContext
 import org.koin.androidx.workmanager.dsl.worker
@@ -70,6 +72,7 @@ val dataModule = module {
 val appModule = module {
     single { AddressAutofillWebExtension() }
     single { FormInputAutofillWebExtension() }
+    single { WebAuthnCompatWebExtension() }
     single { AddressAutofillCoordinator(get()) }
     factory { FormInputAutofillCoordinator(get()) }
     single<GeckoRuntime> {
@@ -92,6 +95,12 @@ val appModule = module {
         ).also {
             get<AddressAutofillWebExtension>().install(it)
             get<FormInputAutofillWebExtension>().install(it)
+            // MainActivity の install() はこの設定反映まで含んだ同じ GeckoResult を待つ。
+            // retryInstall() も保存済みの有効状態を再適用する。
+            get<WebAuthnCompatWebExtension>().setEnabled(
+                it,
+                browserSettings.resolvedWebAuthnPlatformAuthenticatorAvailableOverrideEnabled(),
+            )
             val addressAutofillCoordinator = get<AddressAutofillCoordinator>()
             it.autocompleteStorageDelegate = AutocompleteStorageDelegate(
                 addressRepository = get(),

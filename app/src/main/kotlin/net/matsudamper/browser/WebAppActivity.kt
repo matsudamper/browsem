@@ -66,136 +66,139 @@ class WebAppActivity : ComponentActivity() {
 
         val initialUrl = resolveInitialUrl()
         setContent {
-            val browserViewModel = viewModel(initializer = {
-                WebAppBrowserViewModel(
-                    tabRepository = tabRepository,
-                    runtime = runtime,
-                )
-            })
-            val browserTabController = browserViewModel.browserTabController
-            val browserSessionLifecycleController = browserViewModel.browserSessionLifecycleController
-            val popupController = browserViewModel.popupController
-            val retainOpenersAfterDetach: (BrowserTab) -> Unit = {
-                WindowOpenSessionPolicy.postAfterFrame {
-                    browserSessionLifecycleController.retainOpenersOfLivePopups(
-                        tabs = browserTabController.tabs,
-                        selectedTabId = browserTabController.selectedTabId,
-                    )
-                }
-            }
             val settings by settingsRepository.settings.collectAsState(initial = null)
             val browserSettings = settings ?: return@setContent
-            val resolvedInitialUrl = initialUrl ?: browserSettings.resolvedHomepageUrl()
-            val webAppPinnedHost = runCatching { java.net.URI(resolvedInitialUrl).host }.getOrNull()
-            val webAppScreenViewModel = viewModel(initializer = {
-                WebAppScreenViewModel(
-                    historyRepository = historyRepository,
-                    settingsRepository = settingsRepository,
-                    webSuggestionRepository = webSuggestionRepository,
-                )
-            })
-            val uiState by webAppScreenViewModel.uiState.collectAsState()
 
             LaunchedEffect(browserSettings.enableThirdPartyCa) {
                 runtime.settings.setEnterpriseRootsEnabled(browserSettings.enableThirdPartyCa)
             }
 
             BrowserTheme(themeMode = browserSettings.themeMode) {
-                BrowserAppShell(
-                    browserTabController = browserTabController,
-                    browserSessionLifecycleController = browserSessionLifecycleController,
-                    runtime = runtime,
-                ) { outerNavActions ->
-                    WebAppScreen(
-                        initialUrl = resolvedInitialUrl,
-                        browserTabController = browserTabController,
-                        uiState = uiState,
-                    ) { modifier, browserTab, webAppUiState ->
-                        val taskTitle = browserTab.title
-                        val taskFavicon = browserTab.faviconBitmap
-                        LaunchedEffect(taskTitle, taskFavicon) {
-                            updateTaskDescription(taskTitle, taskFavicon)
-                        }
-                        val currentUrl = browserTab.currentUrl
-                        LaunchedEffect(currentUrl) {
-                            fetchHighQualityFavicon(browserTab, currentUrl)
-                        }
-                        GeckoBrowserTab(
-                            modifier = modifier,
-                            browserTab = browserTab,
-                            homepageUrl = resolvedInitialUrl,
-                            searchTemplate = browserSettings.resolvedSearchTemplate(),
-                            translationProvider = browserSettings.translationProvider,
-                            themeColorExtension = themeColorExtension,
-                            mediaWebExtension = mediaWebExtension,
-                            browserSessionLifecycleController = browserSessionLifecycleController,
-                            tabCount = 1,
-                            onInstallExtensionRequest = {},
-                            onRequestDownloadNotificationPermission = { requestDownloadNotificationPermission() },
-                            onOpenSettings = {},
-                            onOpenSiteSettings = { url ->
-                                outerNavActions.openSiteSettings(url, browserTab.tabId)
-                            },
-                            onOpenDownloads = null,
-                            onOpenTabs = {},
-                            enableTabUi = false,
-                            showInstallExtensionItem = false,
-                            webAppMode = true,
-                            webAppPinnedHost = webAppPinnedHost,
-                            onWebAppCrossDomainNavigation = ::openInCustomTab,
-                            onOpenInBrowser = ::openInMainBrowser,
-                            onOpenNewSessionRequest = { uri ->
-                                popupController.open(uri, browserTab.tabId)
-                            },
-                            onOpenNewTabRequest = { uri, referrerUrl ->
-                                openNewTabInMainBrowser(uri, referrerUrl)
-                            },
-                            onHistoryRecord = webAppUiState.callbacks::onHistoryRecord,
-                            onHistoryTitleUpdate = webAppUiState.callbacks::onHistoryTitleUpdate,
-                            urlBarSuggestions = webAppUiState.urlBarSuggestions,
-                            onUrlInputChanged = webAppUiState.callbacks::onUrlInputChanged,
-                            onSessionDetachedFromView = retainOpenersAfterDetach,
+                WebAuthnCompatStartupGate(runtime = runtime) {
+                    val browserViewModel = viewModel(initializer = {
+                        WebAppBrowserViewModel(
+                            tabRepository = tabRepository,
+                            runtime = runtime,
                         )
-                        popupController.top?.let { popupTab ->
-                            WindowOpenOverlayDialog(onDismissRequest = popupController::dismissTop) {
-                                GeckoBrowserTab(
-                                    modifier = Modifier.fillMaxSize(),
-                                    browserTab = popupTab,
-                                    homepageUrl = resolvedInitialUrl,
-                                    searchTemplate = browserSettings.resolvedSearchTemplate(),
-                                    translationProvider = browserSettings.translationProvider,
-                                    themeColorExtension = themeColorExtension,
-                                    mediaWebExtension = mediaWebExtension,
-                                    browserSessionLifecycleController = browserSessionLifecycleController,
-                                    tabCount = 1,
-                                    onInstallExtensionRequest = {},
-                                    onRequestDownloadNotificationPermission = {
-                                        requestDownloadNotificationPermission()
-                                    },
-                                    onOpenSettings = {},
-                                    onOpenSiteSettings = { url ->
-                                        outerNavActions.openSiteSettings(url, popupTab.tabId)
-                                    },
-                                    onOpenDownloads = null,
-                                    onOpenTabs = {},
-                                    enableTabUi = false,
-                                    showInstallExtensionItem = false,
-                                    customTabMode = true,
-                                    onCloseCustomTab = popupController::dismissTop,
-                                    onCloseTab = popupController::dismissTop,
-                                    onOpenInBrowser = ::openInMainBrowser,
-                                    onOpenNewSessionRequest = { uri ->
-                                        popupController.open(uri, popupTab.tabId)
-                                    },
-                                    onOpenNewTabRequest = { uri, referrerUrl ->
-                                        openNewTabInMainBrowser(uri, referrerUrl)
-                                    },
-                                    onHistoryRecord = webAppUiState.callbacks::onHistoryRecord,
-                                    onHistoryTitleUpdate = webAppUiState.callbacks::onHistoryTitleUpdate,
-                                    urlBarSuggestions = webAppUiState.urlBarSuggestions,
-                                    onUrlInputChanged = webAppUiState.callbacks::onUrlInputChanged,
-                                    onSessionDetachedFromView = retainOpenersAfterDetach,
-                                )
+                    })
+                    val browserTabController = browserViewModel.browserTabController
+                    val browserSessionLifecycleController = browserViewModel.browserSessionLifecycleController
+                    val popupController = browserViewModel.popupController
+                    val retainOpenersAfterDetach: (BrowserTab) -> Unit = {
+                        WindowOpenSessionPolicy.postAfterFrame {
+                            browserSessionLifecycleController.retainOpenersOfLivePopups(
+                                tabs = browserTabController.tabs,
+                                selectedTabId = browserTabController.selectedTabId,
+                            )
+                        }
+                    }
+                    val resolvedInitialUrl = initialUrl ?: browserSettings.resolvedHomepageUrl()
+                    val webAppPinnedHost = runCatching { java.net.URI(resolvedInitialUrl).host }.getOrNull()
+                    val webAppScreenViewModel = viewModel(initializer = {
+                        WebAppScreenViewModel(
+                            historyRepository = historyRepository,
+                            settingsRepository = settingsRepository,
+                            webSuggestionRepository = webSuggestionRepository,
+                        )
+                    })
+                    val uiState by webAppScreenViewModel.uiState.collectAsState()
+
+                    BrowserAppShell(
+                        browserTabController = browserTabController,
+                        browserSessionLifecycleController = browserSessionLifecycleController,
+                        runtime = runtime,
+                    ) { outerNavActions ->
+                        WebAppScreen(
+                            initialUrl = resolvedInitialUrl,
+                            browserTabController = browserTabController,
+                            uiState = uiState,
+                        ) { modifier, browserTab, webAppUiState ->
+                            val taskTitle = browserTab.title
+                            val taskFavicon = browserTab.faviconBitmap
+                            LaunchedEffect(taskTitle, taskFavicon) {
+                                updateTaskDescription(taskTitle, taskFavicon)
+                            }
+                            val currentUrl = browserTab.currentUrl
+                            LaunchedEffect(currentUrl) {
+                                fetchHighQualityFavicon(browserTab, currentUrl)
+                            }
+                            GeckoBrowserTab(
+                                modifier = modifier,
+                                browserTab = browserTab,
+                                homepageUrl = resolvedInitialUrl,
+                                searchTemplate = browserSettings.resolvedSearchTemplate(),
+                                translationProvider = browserSettings.translationProvider,
+                                themeColorExtension = themeColorExtension,
+                                mediaWebExtension = mediaWebExtension,
+                                browserSessionLifecycleController = browserSessionLifecycleController,
+                                tabCount = 1,
+                                onInstallExtensionRequest = {},
+                                onRequestDownloadNotificationPermission = { requestDownloadNotificationPermission() },
+                                onOpenSettings = {},
+                                onOpenSiteSettings = { url ->
+                                    outerNavActions.openSiteSettings(url, browserTab.tabId)
+                                },
+                                onOpenDownloads = null,
+                                onOpenTabs = {},
+                                enableTabUi = false,
+                                showInstallExtensionItem = false,
+                                webAppMode = true,
+                                webAppPinnedHost = webAppPinnedHost,
+                                onWebAppCrossDomainNavigation = ::openInCustomTab,
+                                onOpenInBrowser = ::openInMainBrowser,
+                                onOpenNewSessionRequest = { uri ->
+                                    popupController.open(uri, browserTab.tabId)
+                                },
+                                onOpenNewTabRequest = { uri, referrerUrl ->
+                                    openNewTabInMainBrowser(uri, referrerUrl)
+                                },
+                                onHistoryRecord = webAppUiState.callbacks::onHistoryRecord,
+                                onHistoryTitleUpdate = webAppUiState.callbacks::onHistoryTitleUpdate,
+                                urlBarSuggestions = webAppUiState.urlBarSuggestions,
+                                onUrlInputChanged = webAppUiState.callbacks::onUrlInputChanged,
+                                onSessionDetachedFromView = retainOpenersAfterDetach,
+                            )
+                            popupController.top?.let { popupTab ->
+                                WindowOpenOverlayDialog(onDismissRequest = popupController::dismissTop) {
+                                    GeckoBrowserTab(
+                                        modifier = Modifier.fillMaxSize(),
+                                        browserTab = popupTab,
+                                        homepageUrl = resolvedInitialUrl,
+                                        searchTemplate = browserSettings.resolvedSearchTemplate(),
+                                        translationProvider = browserSettings.translationProvider,
+                                        themeColorExtension = themeColorExtension,
+                                        mediaWebExtension = mediaWebExtension,
+                                        browserSessionLifecycleController = browserSessionLifecycleController,
+                                        tabCount = 1,
+                                        onInstallExtensionRequest = {},
+                                        onRequestDownloadNotificationPermission = {
+                                            requestDownloadNotificationPermission()
+                                        },
+                                        onOpenSettings = {},
+                                        onOpenSiteSettings = { url ->
+                                            outerNavActions.openSiteSettings(url, popupTab.tabId)
+                                        },
+                                        onOpenDownloads = null,
+                                        onOpenTabs = {},
+                                        enableTabUi = false,
+                                        showInstallExtensionItem = false,
+                                        customTabMode = true,
+                                        onCloseCustomTab = popupController::dismissTop,
+                                        onCloseTab = popupController::dismissTop,
+                                        onOpenInBrowser = ::openInMainBrowser,
+                                        onOpenNewSessionRequest = { uri ->
+                                            popupController.open(uri, popupTab.tabId)
+                                        },
+                                        onOpenNewTabRequest = { uri, referrerUrl ->
+                                            openNewTabInMainBrowser(uri, referrerUrl)
+                                        },
+                                        onHistoryRecord = webAppUiState.callbacks::onHistoryRecord,
+                                        onHistoryTitleUpdate = webAppUiState.callbacks::onHistoryTitleUpdate,
+                                        urlBarSuggestions = webAppUiState.urlBarSuggestions,
+                                        onUrlInputChanged = webAppUiState.callbacks::onUrlInputChanged,
+                                        onSessionDetachedFromView = retainOpenersAfterDetach,
+                                    )
+                                }
                             }
                         }
                     }

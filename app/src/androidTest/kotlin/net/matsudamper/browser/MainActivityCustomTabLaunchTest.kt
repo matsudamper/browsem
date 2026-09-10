@@ -85,11 +85,17 @@ class MainActivityCustomTabLaunchTest {
                 token = sessionToken,
                 url = preloadUri,
             )
-            // CustomTabActivity 起動前に準備済みセッションが実際に存在することを確認する。
-            // これにより consumePreparedSession の null が「消費済み」であることを保証できる。
+            // WebAuthn 互換設定の反映完了後にセッションが非同期で準備されるため、その完了を待つ。
+            // CustomTabActivity 起動前に準備済みセッションが実際に存在することを確認することで、
+            // consumePreparedSession の null が「消費済み」であることを保証する。
             assertTrue(
                 "onMayLaunchUrl 後に準備済みセッションが存在しません",
-                CustomTabsWarmupStore.hasPreparedSessionForTesting(sessionToken, preloadUri.toString()),
+                waitUntil(timeoutMillis = 10_000) {
+                    CustomTabsWarmupStore.hasPreparedSessionForTesting(
+                        sessionToken,
+                        preloadUri.toString(),
+                    )
+                },
             )
 
             val intent = Intent(context, DeepLinkActivity::class.java).apply {

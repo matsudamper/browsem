@@ -55,6 +55,15 @@ class SettingsRepository(context: Context) {
                         clearInputAutoZoomEnabled()
                     }
                 }
+                .apply {
+                    if (settings.hasWebauthnPlatformAuthenticatorAvailableOverrideEnabled()) {
+                        setWebauthnPlatformAuthenticatorAvailableOverrideEnabled(
+                            settings.webauthnPlatformAuthenticatorAvailableOverrideEnabled,
+                        )
+                    } else {
+                        clearWebauthnPlatformAuthenticatorAvailableOverrideEnabled()
+                    }
+                }
                 .build()
         }
     }
@@ -147,6 +156,14 @@ class SettingsRepository(context: Context) {
         }
     }
 
+    suspend fun setWebAuthnPlatformAuthenticatorAvailableOverrideEnabled(enabled: Boolean) {
+        dataStore.updateData { current ->
+            current.toBuilder()
+                .setWebauthnPlatformAuthenticatorAvailableOverrideEnabled(enabled)
+                .build()
+        }
+    }
+
     /** ツールバーメニューに並べる拡張機能アイコンの表示順を保存する */
     suspend fun setExtensionActionOrder(extensionIds: List<String>) {
         dataStore.updateData { current ->
@@ -222,6 +239,14 @@ fun BrowserSettings.resolvedEnableWebSuggestions(): Boolean {
 fun BrowserSettings.resolvedInputAutoZoomEnabled(): Boolean {
     return if (hasInputAutoZoomEnabled()) {
         inputAutoZoomEnabled
+    } else {
+        true
+    }
+}
+
+fun BrowserSettings.resolvedWebAuthnPlatformAuthenticatorAvailableOverrideEnabled(): Boolean {
+    return if (hasWebauthnPlatformAuthenticatorAvailableOverrideEnabled()) {
+        webauthnPlatformAuthenticatorAvailableOverrideEnabled
     } else {
         true
     }

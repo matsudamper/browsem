@@ -93,4 +93,25 @@ class WebSuggestionRepositoryTest {
 
         assertEquals(false, settings.resolvedInputAutoZoomEnabled())
     }
+
+    @Test
+    fun webAuthnPlatformAuthenticatorOverrideDefaultsToEnabledWhenUnset() {
+        assertEquals(
+            true,
+            BrowserSettings.getDefaultInstance()
+                .resolvedWebAuthnPlatformAuthenticatorAvailableOverrideEnabled(),
+        )
+    }
+
+    @Test
+    fun explicitFalseDisablesWebAuthnPlatformAuthenticatorOverride() {
+        val settings = BrowserSettings.newBuilder()
+            .setWebauthnPlatformAuthenticatorAvailableOverrideEnabled(false)
+            .build()
+
+        assertEquals(
+            false,
+            settings.resolvedWebAuthnPlatformAuthenticatorAvailableOverrideEnabled(),
+        )
+    }
 }

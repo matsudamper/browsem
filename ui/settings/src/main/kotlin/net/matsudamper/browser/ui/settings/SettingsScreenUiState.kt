@@ -19,6 +19,7 @@ data class SettingsScreenUiState(
     val enableWebSuggestions: Boolean,
     val inputAutoZoomEnabled: Boolean,
     val extensionsProcessEnabled: Boolean,
+    val webAuthnPlatformAuthenticatorAvailableOverrideEnabled: Boolean,
     val mockLocationInput: String,
     val mockLocationInputError: String?,
     val backupConfirmDialog: BackupConfirmType?,
@@ -38,6 +39,7 @@ data class SettingsScreenUiState(
         fun setEnableWebSuggestions(enabled: Boolean)
         fun setInputAutoZoomEnabled(enabled: Boolean)
         fun setExtensionsProcessEnabled(enabled: Boolean)
+        fun setWebAuthnPlatformAuthenticatorAvailableOverrideEnabled(enabled: Boolean)
         fun confirmExtensionsProcessRestart()
         fun dismissExtensionsProcessRestartDialog()
         fun setMockLocationInput(input: String)
