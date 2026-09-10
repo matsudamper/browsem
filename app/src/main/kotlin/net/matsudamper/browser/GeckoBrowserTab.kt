@@ -436,6 +436,8 @@ internal fun GeckoBrowserTab(
         addressAutofillDelegate.bind(session)
         if (session.isOpen) {
             session.setActive(true)
+            // ポップアップを閉じて戻った直後は、拡張機能側のアクティブタブが閉じた子のまま残る
+            browserSessionLifecycleController.notifyExtensionsActiveTab(session)
         } else {
             // バックグラウンド中に onCrash/onKill でコンテンツプロセスが失われ、
             // isOpen=false のまま復帰したケース。setActive するだけでは何も描画されず
