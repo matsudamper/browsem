@@ -371,6 +371,10 @@ internal class BrowserTabSessionDelegateHost(
     private var cachedHistoryItems: List<HistoryStateItem> = emptyList()
     private var cachedHistoryCurrentIndex: Int = -1
 
+    // UI未接続中に届いた window.close を失わないように覚えておき、attachUi 時にリプレイする。
+    // タブ生成から UI 接続までの間に自己終了するポップアップが閉じないまま残るのを防ぐ。
+    private var hasPendingCloseRequest: Boolean = false
+
     // UI未接続中に届いた manifest を失わないようにキャッシュする。
     // onPageStart でクリアし、attachUi 時にリプレイする。
     private var cachedWebAppManifest: JSONObject? = null
@@ -576,9 +580,10 @@ internal class BrowserTabSessionDelegateHost(
             resolveNewSession(uri)
         },
         onCloseRequest = {
-            synchronized(lock) {
-                onCloseRequest
-            }?.invoke()
+            val handler = synchronized(lock) {
+                onCloseRequest.also { if (it == null) hasPendingCloseRequest = true }
+            }
+            handler?.invoke()
         },
     )
 
@@ -622,6 +627,7 @@ internal class BrowserTabSessionDelegateHost(
         val webAppManifest: JSONObject?
         val fullScreen: Boolean
         val isPageLoading: Boolean
+        val pendingCloseRequest: Boolean
         synchronized(lock) {
             this.callbacks = callbacks
             this.onOpenNewSessionRequest = onOpenNewSessionRequest
@@ -633,6 +639,8 @@ internal class BrowserTabSessionDelegateHost(
             webAppManifest = cachedWebAppManifest
             fullScreen = cachedFullScreen
             isPageLoading = cachedIsPageLoading
+            pendingCloseRequest = hasPendingCloseRequest
+            hasPendingCloseRequest = false
         }
         // GeckoSession はナビゲーション状態が変わらない限り onCanGoBack/onCanGoForward を再発火しないため、
         // キャッシュ済みの値をリプレイして UI 側の状態を同期する
@@ -649,6 +657,9 @@ internal class BrowserTabSessionDelegateHost(
         }
         callbacks.onFullScreen(fullScreen)
         flushPendingRequests()
+        if (pendingCloseRequest) {
+            onCloseRequest?.invoke()
+        }
     }
 
     /** SessionState から履歴キャッシュを初期化する（セッション復元時に呼ぶ） */

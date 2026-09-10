@@ -180,6 +180,7 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.test.manifest)
 
     testImplementation(libs.junit4)
+    testImplementation(libs.mockk)
     testImplementation(libs.composable.preview.scanner)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.robolectric)

@@ -49,12 +49,6 @@ class BrowserSessionController internal constructor(
 class BrowserSessionLifecycleController(
     private val geckoRuntime: GeckoRuntime,
 ) {
-    // 拡張機能 (AdGuard 等) に「現在アクティブなタブ」を通知するための追跡用。
-    // WebExtensionController.setTabActive(session, true) は同時に一つの session のみ
-    // active として扱うのが意図された使い方なので、直前の active session を覚えておき
-    // 切り替え時に false→true の順で更新する。
-    private var activeExtensionSession: GeckoSession? = null
-
     /**
      * タブを前面表示して利用可能にする直前に呼ぶ。
      *
@@ -152,15 +146,15 @@ class BrowserSessionLifecycleController(
     /**
      * onNewSession 由来の子タブが生きている opener は、GeckoView から外れても
      * JS を止めない。Surface 解放後に GeckoView が inactive にしても、ここで戻す。
+     *
+     * 別画面へ引き渡した子は [tabs] に並ばないため、[HandedOffPopupRegistry] からも
+     * 生きている opener を集める。
      */
     fun retainOpenersOfLivePopups(
         tabs: List<BrowserTab>,
         selectedTabId: String?,
     ) {
-        val liveOpenerIds = tabs
-            .filter { it.openedViaNewSession }
-            .mapNotNull { it.openerTabId }
-            .toSet()
+        val liveOpenerIds = liveOpenerTabIds(tabs)
         tabs.forEach { tab ->
             if (tab.tabId in liveOpenerIds) {
                 retainOpenerForLivePopup(tab)
@@ -168,6 +162,14 @@ class BrowserSessionLifecycleController(
                 releaseOpenerRetention(tab, selectedTabId)
             }
         }
+    }
+
+    /** `window.open` の子が生きている opener のタブ ID。子は同じ一覧にも別画面にも居る。 */
+    private fun liveOpenerTabIds(tabs: List<BrowserTab>): Set<String> {
+        return tabs
+            .filter { it.openedViaNewSession }
+            .mapNotNull { it.openerTabId }
+            .toSet() + HandedOffPopupRegistry.liveOpenerTabIds()
     }
 
     private fun retainOpenerForLivePopup(tab: BrowserTab) {
@@ -188,8 +190,18 @@ class BrowserSessionLifecycleController(
 
     /**
      * フォアグラウンド復帰時に呼び、セッション側の処理を再開させる。
+     *
+     * 別画面へ渡した子が閉じても opener のタブ一覧は変化しないため、保持の解除がどこからも
+     * 起きない。復帰のタイミングで見直し、子がもう居なければ優先度を戻す。同じ一覧に居る子は
+     * まだ生きていることがあるため、[tabs] も併せて判定する。
      */
-    fun resumeSession(tab: BrowserTab) {
+    fun resumeSession(tab: BrowserTab, tabs: List<BrowserTab>) {
+        if (tab.retainForLivePopup && tab.tabId !in liveOpenerTabIds(tabs)) {
+            tab.retainForLivePopup = false
+            if (tab.session.isOpen) {
+                tab.session.setPriorityHint(GeckoSession.PRIORITY_DEFAULT)
+            }
+        }
         if (tab.session.isOpen) {
             tab.session.setActive(true)
             markActiveForExtensions(tab.session)
@@ -197,19 +209,16 @@ class BrowserSessionLifecycleController(
     }
 
     /**
-     * 拡張機能側に「これがアクティブタブ」と通知する。直前の active session があれば
-     * 先に false で解除してから新しい session を true で設定する。webRequest 等が
-     * tabId を参照して動作する拡張 (AdGuard など) は、active タブが分からないと
-     * blocking をスキップすることがあるため必要。
+     * 拡張機能へ「これがアクティブタブ」と伝え直す。
+     *
+     * GeckoView へ再アタッチする経路は setActive(true) だけを呼ぶため、閉じたポップアップが
+     * アクティブ扱いのまま残る。アタッチ側から明示的に更新できるようにする。
      */
+    fun notifyExtensionsActiveTab(session: GeckoSession) {
+        markActiveForExtensions(session)
+    }
+
     private fun markActiveForExtensions(session: GeckoSession) {
-        if (!session.isOpen) return
-        if (activeExtensionSession === session) return
-        val previous = activeExtensionSession
-        if (previous != null && previous !== session && previous.isOpen) {
-            geckoRuntime.webExtensionController.setTabActive(previous, false)
-        }
-        geckoRuntime.webExtensionController.setTabActive(session, true)
-        activeExtensionSession = session
+        ActiveExtensionSessionTracker.markActive(runtime = geckoRuntime, session = session)
     }
 }
