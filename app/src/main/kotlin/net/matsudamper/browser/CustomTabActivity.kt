@@ -105,6 +105,7 @@ class CustomTabActivity : ComponentActivity() {
         // window.open から引き渡されたセッションは URL では作り直せないため、Activity ではなく
         // ViewModel が持ち主になる。構成変更をまたいでもタブに載せた内容が失われない。
         val handedOffPopupSession = browserViewModel.handoffSession
+        val handedOffPopupTabId = browserViewModel.handoffTabId
         // プロセスごと終了したあと OS がタスクを作り直すと、ストアは空でセッションを取り出せない。
         // opener も道連れに失われているため復元しようがなく、ホームページに化けるくらいなら閉じる。
         if (intent.hasExtra(WindowOpenHandoffStore.EXTRA_HANDOFF_TOKEN) &&
@@ -142,6 +143,7 @@ class CustomTabActivity : ComponentActivity() {
                                         ?: browserSettings.resolvedHomepageUrl()
                                 },
                                 handedOffPopupSession = handedOffPopupSession,
+                                handedOffPopupTabId = handedOffPopupTabId,
                                 onHandedOffPopupSessionAttached = {
                                     browserViewModel.onHandoffSessionAttached()
                                     // 載せる前に window.close が呼ばれていた場合はここで閉じる
@@ -272,6 +274,7 @@ class CustomTabActivity : ComponentActivity() {
 private fun CustomTabScreen(
     initialUrl: String,
     handedOffPopupSession: GeckoSession?,
+    handedOffPopupTabId: String?,
     onHandedOffPopupSessionAttached: () -> Unit,
     customTabsSessionToken: CustomTabsSessionToken?,
     homepageUrl: String,
@@ -322,10 +325,12 @@ private fun CustomTabScreen(
         // 既存タブを再利用する。WebAppScreen と同様、破棄は ViewModel に任せる。
         value = browserTabController.tabs.firstOrNull()
             ?: when {
-                handedOffPopupSession != null -> browserTabController.createTabWithHandedOffPopupSession(
-                    session = handedOffPopupSession,
-                    initialUrl = initialUrl,
-                ).also { currentOnHandedOffPopupSessionAttached() }
+                handedOffPopupSession != null && handedOffPopupTabId != null ->
+                    browserTabController.createTabWithHandedOffPopupSession(
+                        session = handedOffPopupSession,
+                        tabId = handedOffPopupTabId,
+                        initialUrl = initialUrl,
+                    ).also { currentOnHandedOffPopupSessionAttached() }
 
                 prewarmedSession != null -> browserTabController.createAndAppendTabWithSession(
                     session = prewarmedSession,

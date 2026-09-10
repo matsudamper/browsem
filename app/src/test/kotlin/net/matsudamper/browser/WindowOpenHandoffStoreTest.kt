@@ -27,6 +27,7 @@ class WindowOpenHandoffStoreTest {
         val token = WindowOpenHandoffStore.store(
             session = session,
             initialUrl = "https://example.com/popup",
+            tabId = "handed-off-tab",
             openerTabId = "opener",
             holdingDelegate = WindowOpenHandoffHoldingDelegate(onChainedWindowOpen = { mockk(relaxed = true) }),
         )
@@ -44,6 +45,7 @@ class WindowOpenHandoffStoreTest {
         val token = WindowOpenHandoffStore.store(
             session = session,
             initialUrl = "https://example.com/popup",
+            tabId = "handed-off-tab",
             openerTabId = "opener",
             holdingDelegate = WindowOpenHandoffHoldingDelegate(onChainedWindowOpen = { mockk(relaxed = true) }),
         )
@@ -63,12 +65,14 @@ class WindowOpenHandoffStoreTest {
         val firstToken = WindowOpenHandoffStore.store(
             session = first,
             initialUrl = "https://example.com/1",
+            tabId = "handed-off-tab",
             openerTabId = "opener",
             holdingDelegate = WindowOpenHandoffHoldingDelegate(onChainedWindowOpen = { mockk(relaxed = true) }),
         )
         val secondToken = WindowOpenHandoffStore.store(
             session = second,
             initialUrl = "https://example.com/2",
+            tabId = "handed-off-tab",
             openerTabId = "opener",
             holdingDelegate = WindowOpenHandoffHoldingDelegate(onChainedWindowOpen = { mockk(relaxed = true) }),
         )
@@ -86,6 +90,7 @@ class WindowOpenHandoffStoreTest {
         WindowOpenHandoffStore.store(
             session = session,
             initialUrl = "https://example.com/popup",
+            tabId = "handed-off-tab",
             openerTabId = "opener",
             holdingDelegate = WindowOpenHandoffHoldingDelegate(onChainedWindowOpen = { mockk(relaxed = true) }),
         )

@@ -31,6 +31,7 @@ internal object WindowOpenHandoffStore {
     private class Entry(
         val session: GeckoSession,
         val initialUrl: String,
+        val tabId: String,
         val holdingDelegate: WindowOpenHandoffHoldingDelegate,
         val createdAt: Long,
     )
@@ -38,6 +39,7 @@ internal object WindowOpenHandoffStore {
     class Handoff internal constructor(
         val session: GeckoSession,
         val initialUrl: String,
+        val tabId: String,
         val holdingDelegate: WindowOpenHandoffHoldingDelegate,
     )
 
@@ -45,6 +47,7 @@ internal object WindowOpenHandoffStore {
     fun store(
         session: GeckoSession,
         initialUrl: String,
+        tabId: String,
         openerTabId: String,
         holdingDelegate: WindowOpenHandoffHoldingDelegate,
     ): String {
@@ -59,6 +62,7 @@ internal object WindowOpenHandoffStore {
             entries[token] = Entry(
                 session = session,
                 initialUrl = initialUrl,
+                tabId = tabId,
                 holdingDelegate = holdingDelegate,
                 createdAt = System.currentTimeMillis(),
             )
@@ -78,6 +82,7 @@ internal object WindowOpenHandoffStore {
                 Handoff(
                     session = it.session,
                     initialUrl = it.initialUrl,
+                    tabId = it.tabId,
                     holdingDelegate = it.holdingDelegate,
                 )
             }

@@ -33,6 +33,7 @@ internal class CustomTabBrowserViewModel(
     private var unattachedHandoffSession: GeckoSession? = pendingHandoff?.session
 
     val handoffInitialUrl: String? = pendingHandoff?.initialUrl
+    val handoffTabId: String? = pendingHandoff?.tabId
 
     /** タブへ載せる前に window.close が呼ばれていたか。 */
     val isHandoffCloseRequested: Boolean

@@ -276,6 +276,9 @@ class BrowserTabController(
     /**
      * 別画面から引き渡された `window.open` のポップアップセッションをタブとして登録する。
      *
+     * [tabId] は引き渡し元が採番する。渡した先でさらに `window.open` が呼ばれたとき、その子の
+     * opener としてこのタブを指すために、画面が起動する前から ID が決まっている必要がある。
+     *
      * Gecko が opener 付きで open と読み込みを行うため、アプリ側から open / loadUri しない。
      * まだ open されていない場合のみ [BrowserTab.pendingInitialUrl] を立てて restoreSession に
      * 読み込ませないようにする。open 済みに立てると、初回の onLocationChange を delegate 登録前に
@@ -283,12 +286,13 @@ class BrowserTabController(
      */
     fun createTabWithHandedOffPopupSession(
         session: GeckoSession,
+        tabId: String,
         initialUrl: String,
     ): BrowserTab {
         val normalizedInitialUrl = initialUrl.ifBlank { "about:blank" }
         val insertIndex = tabs.size
         val tab = createRegisteredTab(
-            tabId = UUID.randomUUID().toString(),
+            tabId = tabId,
             session = session,
             initialUrl = normalizedInitialUrl,
             sessionState = "",

@@ -2,6 +2,7 @@ package net.matsudamper.browser
 
 import android.app.Activity
 import android.content.Intent
+import java.util.UUID
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
 
@@ -25,11 +26,14 @@ internal fun Activity.openWindowOpenRequestInCustomTab(
     browserSessionLifecycleController: BrowserSessionLifecycleController,
 ): GeckoSession {
     val session = GeckoSession()
+    // 渡した先のタブ ID をここで決める。載る前にさらに window.open が来た場合、その子の
+    // opener はこのセッションであって、こちらの opener ではない。
+    val handedOffTabId = UUID.randomUUID().toString()
     val holdingDelegate = WindowOpenHandoffHoldingDelegate(
         onChainedWindowOpen = { chainedUri ->
             openWindowOpenRequestInCustomTab(
                 uri = chainedUri,
-                openerTabId = openerTabId,
+                openerTabId = handedOffTabId,
                 browserTabController = browserTabController,
                 browserSessionLifecycleController = browserSessionLifecycleController,
             )
@@ -39,6 +43,7 @@ internal fun Activity.openWindowOpenRequestInCustomTab(
     val token = WindowOpenHandoffStore.store(
         session = session,
         initialUrl = uri,
+        tabId = handedOffTabId,
         openerTabId = openerTabId,
         holdingDelegate = holdingDelegate,
     )
