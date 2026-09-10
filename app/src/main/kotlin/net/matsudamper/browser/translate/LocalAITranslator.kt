@@ -1,21 +1,27 @@
 package net.matsudamper.browser.translate
 
+import android.os.SystemClock
+import android.util.Log
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import com.google.mlkit.common.model.DownloadConditions
 import com.google.mlkit.nl.languageid.LanguageIdentification
 import com.google.mlkit.nl.translate.TranslateLanguage
 import com.google.mlkit.nl.translate.Translation
 import com.google.mlkit.nl.translate.Translator as MlKitTranslator
 import com.google.mlkit.nl.translate.TranslatorOptions
+import net.matsudamper.browser.data.crashlog.CrashLogRepository
 import net.matsudamper.browser.resolveTranslationLanguagePair
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
@@ -27,6 +33,7 @@ class LocalAITranslator(
     private val toLanguage: String,
 ) : Translator, KoinComponent {
     private val pageTranslationWebExtension: PageTranslationWebExtension by inject()
+    private val crashLogRepository: CrashLogRepository by inject()
 
     override suspend fun translate(): TranslationLanguages? {
         val snapshot = try {
@@ -58,26 +65,134 @@ class LocalAITranslator(
                 .build(),
         )
         return try {
-            translator.downloadModelIfNeeded(DownloadConditions.Builder().build()).await()
+            prepareTranslationModel(
+                translator = translator,
+                sourceLanguage = effectiveSourceLanguage,
+                targetLanguage = effectiveTargetLanguage,
+                segmentCount = snapshot.segments.size,
+            )
             val translationCache = ConcurrentHashMap<String, String>()
-            translateAndApply(
+            val initialSegments = snapshot.segments.take(INITIAL_APPLY_SEGMENT_COUNT)
+            val remainingSegments = snapshot.segments.drop(INITIAL_APPLY_SEGMENT_COUNT)
+            translateInitialSegments(
                 translator = translator,
                 pageTranslationWebExtension = pageTranslationWebExtension,
                 documentId = snapshot.documentId,
-                segments = snapshot.segments,
+                segments = initialSegments,
                 translationCache = translationCache,
+                sourceLanguage = effectiveSourceLanguage,
+                targetLanguage = effectiveTargetLanguage,
             )
-            keepTranslatingDynamicContent(
+            val activated = keepTranslatingDynamicContent(
                 translator = translator,
                 pageTranslationWebExtension = pageTranslationWebExtension,
                 documentId = snapshot.documentId,
+                initialSegments = remainingSegments,
                 translationCache = translationCache,
             )
+            if (!activated) {
+                throw IllegalStateException("ページ翻訳ブリッジを継続翻訳状態へ移行できませんでした")
+            }
             TranslationLanguages(effectiveSourceLanguage, effectiveTargetLanguage)
         } catch (error: Exception) {
             translator.close()
             pageTranslationWebExtension.stopTranslation(session, restoreOriginal = true)
             throw error
+        }
+    }
+
+    private suspend fun prepareTranslationModel(
+        translator: MlKitTranslator,
+        sourceLanguage: String,
+        targetLanguage: String,
+        segmentCount: Int,
+    ) {
+        val startedAt = SystemClock.elapsedRealtime()
+        try {
+            withTimeout(MODEL_PREPARATION_TIMEOUT_MS) {
+                translator.downloadModelIfNeeded(DownloadConditions.Builder().build()).await()
+            }
+        } catch (error: TimeoutCancellationException) {
+            val elapsedMs = SystemClock.elapsedRealtime() - startedAt
+            saveInfo(
+                title = "ローカルAI翻訳モデル準備タイムアウト",
+                body = buildTranslationDiagnostics(
+                    stage = "model",
+                    elapsedMs = elapsedMs,
+                    sourceLanguage = sourceLanguage,
+                    targetLanguage = targetLanguage,
+                    segmentCount = segmentCount,
+                ),
+            )
+            throw IllegalStateException(
+                "ローカルAI翻訳モデルの準備が${MODEL_PREPARATION_TIMEOUT_MS}ms以内に完了しませんでした",
+                error,
+            )
+        }
+        val elapsedMs = SystemClock.elapsedRealtime() - startedAt
+        if (elapsedMs >= SLOW_MODEL_PREPARATION_THRESHOLD_MS) {
+            saveInfo(
+                title = "ローカルAI翻訳モデル準備遅延",
+                body = buildTranslationDiagnostics(
+                    stage = "model",
+                    elapsedMs = elapsedMs,
+                    sourceLanguage = sourceLanguage,
+                    targetLanguage = targetLanguage,
+                    segmentCount = segmentCount,
+                ),
+            )
+        }
+    }
+
+    private suspend fun translateInitialSegments(
+        translator: MlKitTranslator,
+        pageTranslationWebExtension: PageTranslationWebExtension,
+        documentId: String,
+        segments: List<PageTranslationWebExtension.Segment>,
+        translationCache: ConcurrentHashMap<String, String>,
+        sourceLanguage: String,
+        targetLanguage: String,
+    ) {
+        val startedAt = SystemClock.elapsedRealtime()
+        try {
+            withTimeout(INITIAL_TRANSLATION_TIMEOUT_MS) {
+                translateAndApply(
+                    translator = translator,
+                    pageTranslationWebExtension = pageTranslationWebExtension,
+                    documentId = documentId,
+                    segments = segments,
+                    translationCache = translationCache,
+                )
+            }
+        } catch (error: TimeoutCancellationException) {
+            val elapsedMs = SystemClock.elapsedRealtime() - startedAt
+            saveInfo(
+                title = "ローカルAI初期翻訳タイムアウト",
+                body = buildTranslationDiagnostics(
+                    stage = "initial",
+                    elapsedMs = elapsedMs,
+                    sourceLanguage = sourceLanguage,
+                    targetLanguage = targetLanguage,
+                    segmentCount = segments.size,
+                ),
+            )
+            throw IllegalStateException(
+                "ローカルAIの初期翻訳が${INITIAL_TRANSLATION_TIMEOUT_MS}ms以内に完了しませんでした",
+                error,
+            )
+        }
+        val elapsedMs = SystemClock.elapsedRealtime() - startedAt
+        if (elapsedMs >= SLOW_INITIAL_TRANSLATION_THRESHOLD_MS) {
+            saveInfo(
+                title = "ローカルAI初期翻訳遅延",
+                body = buildTranslationDiagnostics(
+                    stage = "initial",
+                    elapsedMs = elapsedMs,
+                    sourceLanguage = sourceLanguage,
+                    targetLanguage = targetLanguage,
+                    segmentCount = segments.size,
+                ),
+            )
         }
     }
 
@@ -124,13 +239,14 @@ class LocalAITranslator(
         translator: MlKitTranslator,
         pageTranslationWebExtension: PageTranslationWebExtension,
         documentId: String,
+        initialSegments: List<PageTranslationWebExtension.Segment>,
         translationCache: ConcurrentHashMap<String, String>,
-    ) {
+    ): Boolean {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         val queue = Channel<List<PageTranslationWebExtension.Segment>>(Channel.UNLIMITED)
         scope.launch {
             for (segments in queue) {
-                runCatching {
+                try {
                     translateAndApply(
                         translator = translator,
                         pageTranslationWebExtension = pageTranslationWebExtension,
@@ -138,10 +254,17 @@ class LocalAITranslator(
                         segments = segments,
                         translationCache = translationCache,
                     )
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (error: Exception) {
+                    saveInfo(
+                        title = "ローカルAI継続翻訳失敗",
+                        body = "stage=background\nsegmentCount=${segments.size}\nerror=${error.javaClass.name}\nmessage=${error.message.orEmpty()}",
+                    )
                 }
             }
         }
-        pageTranslationWebExtension.activateTranslation(
+        val activated = pageTranslationWebExtension.activateTranslation(
             session = session,
             documentId = documentId,
             onSegments = { segments ->
@@ -153,6 +276,11 @@ class LocalAITranslator(
                 translator.close()
             },
         )
+        if (!activated) return false
+        if (initialSegments.isNotEmpty()) {
+            queue.trySend(initialSegments)
+        }
+        return true
     }
 
     private suspend fun detectLanguage(text: String): String = withContext(Dispatchers.IO) {
@@ -169,9 +297,37 @@ class LocalAITranslator(
             ?: TranslateLanguage.fromLanguageTag(normalized.substringBefore('-'))
     }
 
+    private fun buildTranslationDiagnostics(
+        stage: String,
+        elapsedMs: Long,
+        sourceLanguage: String,
+        targetLanguage: String,
+        segmentCount: Int,
+    ): String = buildString {
+        appendLine("stage=$stage")
+        appendLine("elapsedMs=$elapsedMs")
+        appendLine("sourceLanguage=$sourceLanguage")
+        appendLine("targetLanguage=$targetLanguage")
+        append("segmentCount=$segmentCount")
+    }
+
+    private fun saveInfo(title: String, body: String) {
+        try {
+            crashLogRepository.saveInfoSync(title, body)
+        } catch (error: RuntimeException) {
+            Log.w(TAG, "翻訳診断ログの保存に失敗", error)
+        }
+    }
+
     companion object {
+        private const val TAG = "LocalAITranslator"
         private const val LANGUAGE_DETECTION_LIMIT = 2_000
         private const val APPLY_BATCH_SIZE = 16
+        private const val INITIAL_APPLY_SEGMENT_COUNT = 8
+        private const val MODEL_PREPARATION_TIMEOUT_MS = 30_000L
+        private const val INITIAL_TRANSLATION_TIMEOUT_MS = 15_000L
+        private const val SLOW_MODEL_PREPARATION_THRESHOLD_MS = 5_000L
+        private const val SLOW_INITIAL_TRANSLATION_THRESHOLD_MS = 5_000L
     }
 }
 

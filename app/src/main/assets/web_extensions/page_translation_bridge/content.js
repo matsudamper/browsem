@@ -2,6 +2,7 @@
   if (window !== window.top) return;
 
   const NATIVE_APP_ID = 'pageTranslationBridge';
+  const IMMEDIATE_CONNECT_MESSAGE = '__browsem_page_translation_connect__';
   const SEGMENT_BATCH_SIZE = 48;
   const SEGMENT_BATCH_CHAR_LIMIT = 32768;
   const DYNAMIC_FLUSH_DELAY_MS = 120;
@@ -482,6 +483,12 @@
       },
     );
   }
+
+  window.addEventListener('message', function (event) {
+    if (event.data !== IMMEDIATE_CONNECT_MESSAGE) return;
+    handshakeRetryCount = 0;
+    connect();
+  });
 
   waitForNative();
 })();

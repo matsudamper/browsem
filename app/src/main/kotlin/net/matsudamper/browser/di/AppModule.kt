@@ -74,7 +74,7 @@ val appModule = module {
     single { AddressAutofillWebExtension() }
     single { FormInputAutofillWebExtension() }
     single { WebAuthnCompatWebExtension() }
-    single { PageTranslationWebExtension() }
+    single { PageTranslationWebExtension(get()) }
     single { AddressAutofillCoordinator(get()) }
     factory { FormInputAutofillCoordinator(get()) }
     single<GeckoRuntime> {

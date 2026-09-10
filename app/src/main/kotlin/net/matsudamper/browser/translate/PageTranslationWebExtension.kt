@@ -1,11 +1,14 @@
 package net.matsudamper.browser.translate
 
+import android.os.SystemClock
 import android.util.Log
 import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.withTimeout
+import net.matsudamper.browser.data.crashlog.CrashLogRepository
 import org.json.JSONArray
 import org.json.JSONObject
 import org.mozilla.geckoview.GeckoResult
@@ -13,7 +16,9 @@ import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.WebExtension
 
-class PageTranslationWebExtension {
+class PageTranslationWebExtension(
+    private val crashLogRepository: CrashLogRepository,
+) {
     data class Segment(
         val id: String,
         val text: String,
@@ -34,6 +39,7 @@ class PageTranslationWebExtension {
     private data class PendingScan(
         val requestId: String,
         val deferred: CompletableDeferred<PageSnapshot>,
+        val startedAtElapsedRealtime: Long,
         val segments: MutableList<Segment> = mutableListOf(),
         var documentId: String? = null,
         var htmlLanguage: String? = null,
@@ -73,12 +79,17 @@ class PageTranslationWebExtension {
                     installationError = null
                     pendingScans.keys.forEach { session ->
                         attachSessionDelegate(session, installedExtension)
+                        requestImmediateConnection(session)
                     }
                 },
                 { error ->
                     val cause = error ?: IllegalStateException("ページ翻訳ブリッジのインストールに失敗しました")
                     installationError = cause
                     Log.e(TAG, "ページ翻訳ブリッジのインストールに失敗", cause)
+                    saveInfo(
+                        title = "ページ翻訳ブリッジのインストール失敗",
+                        body = "error=${cause.javaClass.name}\nmessage=${cause.message.orEmpty()}",
+                    )
                     pendingScans.values.forEach { pending ->
                         pending.deferred.completeExceptionally(cause)
                     }
@@ -96,17 +107,38 @@ class PageTranslationWebExtension {
         val pending = PendingScan(
             requestId = "scan-${requestSequence.incrementAndGet()}",
             deferred = CompletableDeferred(),
+            startedAtElapsedRealtime = SystemClock.elapsedRealtime(),
         )
         pendingScans.put(session, pending)?.deferred?.cancel()
-        extension?.also { installedExtension ->
+        val installedExtension = extension
+        if (installedExtension != null) {
             attachSessionDelegate(session, installedExtension)
+            requestImmediateConnection(session)
         }
         sendStartIfReady(session)
 
         return try {
-            withTimeout(SCAN_TIMEOUT_MS) {
+            val snapshot = withTimeout(SCAN_TIMEOUT_MS) {
                 pending.deferred.await()
             }
+            val elapsedMs = SystemClock.elapsedRealtime() - pending.startedAtElapsedRealtime
+            if (elapsedMs >= SLOW_SCAN_THRESHOLD_MS) {
+                saveInfo(
+                    title = "ページ翻訳DOMスキャン遅延",
+                    body = buildScanDiagnostics(session, pending, elapsedMs),
+                )
+            }
+            snapshot
+        } catch (error: TimeoutCancellationException) {
+            val elapsedMs = SystemClock.elapsedRealtime() - pending.startedAtElapsedRealtime
+            saveInfo(
+                title = "ページ翻訳DOMスキャンタイムアウト",
+                body = buildScanDiagnostics(session, pending, elapsedMs),
+            )
+            throw IllegalStateException(
+                "ページ翻訳DOMの取得が${SCAN_TIMEOUT_MS}ms以内に完了しませんでした",
+                error,
+            )
         } finally {
             pendingScans.remove(session, pending)
         }
@@ -210,9 +242,17 @@ class PageTranslationWebExtension {
                             override fun onDisconnect(port: WebExtension.Port) {
                                 if (!sessionPorts.remove(session, port)) return
                                 attachedSessions.remove(session)
-                                pendingScans.remove(session)?.deferred?.completeExceptionally(
-                                    IllegalStateException("ページ翻訳ブリッジとの接続が切断されました"),
-                                )
+                                val pending = pendingScans.remove(session)
+                                if (pending != null) {
+                                    pending.deferred.completeExceptionally(
+                                        IllegalStateException("ページ翻訳ブリッジとの接続が切断されました"),
+                                    )
+                                    val elapsedMs = SystemClock.elapsedRealtime() - pending.startedAtElapsedRealtime
+                                    saveInfo(
+                                        title = "ページ翻訳ブリッジ接続切断",
+                                        body = buildScanDiagnostics(session, pending, elapsedMs),
+                                    )
+                                }
                                 awaitingActivationDocuments.remove(session)
                                 bufferedDynamicSegments.remove(session)
                                 stopActiveTranslation(session)
@@ -308,6 +348,19 @@ class PageTranslationWebExtension {
         )
     }
 
+    private fun requestImmediateConnection(session: GeckoSession) {
+        if (sessionPorts[session] != null) return
+        try {
+            session.loadUri(CONNECT_SCRIPT_URI)
+        } catch (error: RuntimeException) {
+            Log.w(TAG, "ページ翻訳ブリッジの即時接続要求に失敗", error)
+            saveInfo(
+                title = "ページ翻訳ブリッジ即時接続要求失敗",
+                body = "error=${error.javaClass.name}\nmessage=${error.message.orEmpty()}",
+            )
+        }
+    }
+
     private fun sendMessage(session: GeckoSession, message: JSONObject): Boolean {
         val port = sessionPorts[session] ?: return false
         return try {
@@ -315,7 +368,33 @@ class PageTranslationWebExtension {
             true
         } catch (error: RuntimeException) {
             Log.w(TAG, "ページ翻訳ブリッジへの送信に失敗: action=${message.optString("action")}", error)
+            saveInfo(
+                title = "ページ翻訳ブリッジ送信失敗",
+                body = "action=${message.optString("action")}\nerror=${error.javaClass.name}\nmessage=${error.message.orEmpty()}",
+            )
             false
+        }
+    }
+
+    private fun buildScanDiagnostics(
+        session: GeckoSession,
+        pending: PendingScan,
+        elapsedMs: Long,
+    ): String = buildString {
+        appendLine("requestId=${pending.requestId}")
+        appendLine("elapsedMs=$elapsedMs")
+        appendLine("extensionInstalled=${extension != null}")
+        appendLine("delegateAttached=${attachedSessions.contains(session)}")
+        appendLine("portConnected=${sessionPorts[session] != null}")
+        appendLine("documentStarted=${pending.documentId != null}")
+        append("segmentCount=${pending.segments.size}")
+    }
+
+    private fun saveInfo(title: String, body: String) {
+        try {
+            crashLogRepository.saveInfoSync(title, body)
+        } catch (error: RuntimeException) {
+            Log.w(TAG, "翻訳診断ログの保存に失敗", error)
         }
     }
 
@@ -329,7 +408,10 @@ class PageTranslationWebExtension {
         private const val EXTENSION_ID = "page-translation-bridge@browsem"
         private const val EXTENSION_URI =
             "resource://android/assets/web_extensions/page_translation_bridge/"
+        private const val CONNECT_SCRIPT_URI =
+            "javascript:void(window.postMessage('__browsem_page_translation_connect__','*'))"
         private const val SCAN_TIMEOUT_MS = 10_000L
+        private const val SLOW_SCAN_THRESHOLD_MS = 2_000L
         private const val MAX_BUFFERED_DYNAMIC_SEGMENTS = 512
     }
 }

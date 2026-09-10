@@ -21,4 +21,14 @@ class CrashLogRepository(context: Context) {
         )
         dao.insert(entity)
     }
+
+    fun saveInfoSync(title: String, body: String) {
+        dao.insert(
+            CrashLogEntity(
+                occurredAt = System.currentTimeMillis(),
+                title = "INFO: $title",
+                body = body,
+            ),
+        )
+    }
 }
