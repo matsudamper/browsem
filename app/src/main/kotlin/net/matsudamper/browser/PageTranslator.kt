@@ -36,7 +36,7 @@ internal class PageTranslator(
             }
 
             TranslationProvider.TRANSLATION_PROVIDER_LOCAL_AI -> {
-                LocalAITranslator(session, currentPageUrl, toLanguage)
+                LocalAITranslator(session, fromLanguage, toLanguage)
             }
         }.translate()
     }
