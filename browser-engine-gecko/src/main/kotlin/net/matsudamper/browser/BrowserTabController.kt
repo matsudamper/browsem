@@ -273,6 +273,39 @@ class BrowserTabController(
         return tab
     }
 
+    /**
+     * 別画面から引き渡された `window.open` のポップアップセッションをタブとして登録する。
+     *
+     * Gecko が opener 付きで open と読み込みを行うため、アプリ側から open / loadUri しない。
+     * [BrowserTab.pendingInitialUrl] を立てて restoreSession に読み込ませないようにする。
+     */
+    fun createTabWithHandedOffPopupSession(
+        session: GeckoSession,
+        initialUrl: String,
+    ): BrowserTab {
+        val normalizedInitialUrl = initialUrl.ifBlank { "about:blank" }
+        val insertIndex = tabs.size
+        val tab = createRegisteredTab(
+            tabId = UUID.randomUUID().toString(),
+            session = session,
+            initialUrl = normalizedInitialUrl,
+            sessionState = "",
+            title = normalizedInitialUrl,
+            previewBitmapArray = null,
+            openerTabId = null,
+            insertIndex = insertIndex,
+        )
+        tab.pendingInitialUrl = normalizedInitialUrl
+        tab.openedViaNewSession = true
+        publishRuntimeState()
+        persistenceCoordinator.persistCreatedTab(
+            tab = tab,
+            insertIndex = insertIndex,
+            selected = false,
+        )
+        return tab
+    }
+
     fun createAndAppendTabWithSession(
         session: GeckoSession,
         tabId: String = UUID.randomUUID().toString(),

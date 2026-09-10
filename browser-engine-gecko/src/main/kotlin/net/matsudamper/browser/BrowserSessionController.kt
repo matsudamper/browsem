@@ -152,6 +152,9 @@ class BrowserSessionLifecycleController(
     /**
      * onNewSession 由来の子タブが生きている opener は、GeckoView から外れても
      * JS を止めない。Surface 解放後に GeckoView が inactive にしても、ここで戻す。
+     *
+     * 別画面へ引き渡した子は [tabs] に並ばないため、[HandedOffPopupRegistry] からも
+     * 生きている opener を集める。
      */
     fun retainOpenersOfLivePopups(
         tabs: List<BrowserTab>,
@@ -160,7 +163,7 @@ class BrowserSessionLifecycleController(
         val liveOpenerIds = tabs
             .filter { it.openedViaNewSession }
             .mapNotNull { it.openerTabId }
-            .toSet()
+            .toSet() + HandedOffPopupRegistry.liveOpenerTabIds()
         tabs.forEach { tab ->
             if (tab.tabId in liveOpenerIds) {
                 retainOpenerForLivePopup(tab)
