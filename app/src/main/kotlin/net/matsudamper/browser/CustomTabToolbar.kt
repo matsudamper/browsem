@@ -1,5 +1,7 @@
 package net.matsudamper.browser
 
+import android.content.Context
+import android.widget.Toast
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -30,6 +32,7 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.onLongClick
@@ -59,7 +62,7 @@ internal sealed interface CustomTabToolbarTestTags {
 internal fun CustomTabToolbar(
     title: String,
     url: String,
-    onLongClickUrl: (() -> Unit)?,
+    onLongClickUrl: (() -> Unit)? = null,
     onClose: () -> Unit,
     toolbarColor: Color?,
     onRefresh: () -> Unit,
@@ -100,7 +103,12 @@ internal fun CustomTabToolbar(
         Color.White
     }
     val toolbarSecondaryContentColor = toolbarContentColor.copy(alpha = 0.72f)
-    val longClickUrl = onLongClickUrl
+    val context = LocalContext.current
+    val longClickUrl = onLongClickUrl ?: if (showCloseButton) {
+        { copyUrlToClipboard(context, url) }
+    } else {
+        null
+    }
 
     Surface(
         color = resolvedToolbarColor,
@@ -215,4 +223,11 @@ internal fun CustomTabToolbar(
             }
         }
     }
+}
+
+private fun copyUrlToClipboard(context: Context, url: String) {
+    if (url.isBlank()) return
+    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+    clipboard.setPrimaryClip(android.content.ClipData.newPlainText("URL", url))
+    Toast.makeText(context, "URLをコピーしました", Toast.LENGTH_SHORT).show()
 }
