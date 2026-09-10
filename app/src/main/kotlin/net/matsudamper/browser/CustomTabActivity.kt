@@ -110,31 +110,36 @@ class CustomTabActivity : ComponentActivity() {
             }
 
             BrowserTheme(themeMode = browserSettings.themeMode) {
-                BrowserAppShell(
-                    browserTabController = browserTabController,
-                    browserSessionLifecycleController = browserSessionLifecycleController,
-                    runtime = runtime,
-                ) { outerNavActions ->
-                    CustomTabOpaqueShell {
-                        CustomTabScreen(
-                            initialUrl = initialUrl.takeIf { it.isNotBlank() } ?: browserSettings.resolvedHomepageUrl(),
-                            customTabsSessionToken = customTabsSessionToken,
-                            homepageUrl = browserSettings.resolvedHomepageUrl(),
-                            searchTemplate = browserSettings.resolvedSearchTemplate(),
-                            translationProvider = browserSettings.translationProvider,
-                            browserTabController = browserTabController,
-                            browserSessionLifecycleController = browserSessionLifecycleController,
-                            settingsRepository = settingsRepository,
-                            historyRepository = historyRepository,
-                            webSuggestionRepository = webSuggestionRepository,
-                            themeColorExtension = themeColorExtension,
-                            mediaWebExtension = mediaWebExtensionInstance,
-                            outerNavActions = outerNavActions,
-                            onClose = ::finish,
-                            onOpenInBrowser = ::openInMainBrowser,
-                            onOpenNewTabInBrowser = ::openNewTabInMainBrowser,
-                            onRequestDownloadNotificationPermission = { requestDownloadNotificationPermission() },
-                        )
+                WebAuthnCompatStartupGate(runtime = runtime) {
+                    BrowserAppShell(
+                        browserTabController = browserTabController,
+                        browserSessionLifecycleController = browserSessionLifecycleController,
+                        runtime = runtime,
+                    ) { outerNavActions ->
+                        CustomTabOpaqueShell {
+                            CustomTabScreen(
+                                initialUrl = initialUrl.takeIf { it.isNotBlank() }
+                                    ?: browserSettings.resolvedHomepageUrl(),
+                                customTabsSessionToken = customTabsSessionToken,
+                                homepageUrl = browserSettings.resolvedHomepageUrl(),
+                                searchTemplate = browserSettings.resolvedSearchTemplate(),
+                                translationProvider = browserSettings.translationProvider,
+                                browserTabController = browserTabController,
+                                browserSessionLifecycleController = browserSessionLifecycleController,
+                                settingsRepository = settingsRepository,
+                                historyRepository = historyRepository,
+                                webSuggestionRepository = webSuggestionRepository,
+                                themeColorExtension = themeColorExtension,
+                                mediaWebExtension = mediaWebExtensionInstance,
+                                outerNavActions = outerNavActions,
+                                onClose = ::finish,
+                                onOpenInBrowser = ::openInMainBrowser,
+                                onOpenNewTabInBrowser = ::openNewTabInMainBrowser,
+                                onRequestDownloadNotificationPermission = {
+                                    requestDownloadNotificationPermission()
+                                },
+                            )
+                        }
                     }
                 }
             }

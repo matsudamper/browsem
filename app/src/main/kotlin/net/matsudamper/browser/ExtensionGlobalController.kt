@@ -1,5 +1,6 @@
 package net.matsudamper.browser
 
+import net.matsudamper.browser.feature.webauthncompat.WebAuthnCompatWebExtension
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.WebExtension
 import org.mozilla.geckoview.WebExtensionController
@@ -12,6 +13,10 @@ internal object ExtensionGlobalController {
         return (extension.metaData.disabledFlags and WebExtension.DisabledFlags.USER) == 0
     }
 
+    fun isUserManaged(extension: WebExtension): Boolean {
+        return extension.id != WebAuthnCompatWebExtension.EXTENSION_ID
+    }
+
     fun applyGlobalEnabled(
         runtime: GeckoRuntime,
         extensions: List<WebExtension>,
@@ -21,7 +26,7 @@ internal object ExtensionGlobalController {
     ) {
         applySequentially(
             runtime = runtime,
-            extensions = extensions,
+            extensions = extensions.filter(::isUserManaged),
             globallyEnabled = globallyEnabled,
             index = 0,
             firstError = null,
