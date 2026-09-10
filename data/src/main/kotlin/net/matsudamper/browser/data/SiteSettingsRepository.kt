@@ -20,6 +20,13 @@ private val Context.siteSettingsDataStore: DataStore<SiteSettings> by dataStore(
 class SiteSettingsRepository(context: Context) {
     private val dataStore = context.siteSettingsDataStore
 
+    /** サイト別設定が保存されているホスト一覧を監視する */
+    fun siteHosts(): Flow<List<String>> {
+        return dataStore.data
+            .map { settings -> settings.hostPermissionsMap.keys.sorted() }
+            .distinctUntilChanged()
+    }
+
     /** 指定ホストのマイク権限の状態を監視する。未設定の場合は ASK を返す */
     fun microphonePermission(host: String): Flow<SitePermissionState> {
         return dataStore.data
