@@ -7,6 +7,8 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import java.security.cert.X509Certificate
+import java.util.Collections
+import java.util.WeakHashMap
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
 
@@ -15,6 +17,31 @@ data class TabSecurityInfo(
     val isSecure: Boolean,
     val certificate: X509Certificate?,
 )
+
+/**
+ * 現在生存しているブラウザタブの GeckoSession を弱参照で追跡する。
+ * ランタイム設定変更後に既存ドキュメントを再読み込みする用途で使用する。
+ */
+object BrowserSessionRegistry {
+    private val sessions = Collections.newSetFromMap(WeakHashMap<GeckoSession, Boolean>())
+
+    internal fun register(session: GeckoSession) {
+        synchronized(sessions) {
+            sessions.add(session)
+        }
+    }
+
+    fun reloadOpenSessions() {
+        val snapshot = synchronized(sessions) {
+            sessions.toList()
+        }
+        snapshot.forEach { session ->
+            if (session.isOpen) {
+                session.reload()
+            }
+        }
+    }
+}
 
 @Stable
 class BrowserTab(
@@ -35,6 +62,10 @@ class BrowserTab(
     private val onThemeColorChanged: (String, Int?) -> Unit = { _, _ -> },
     private val onPageZoomPercentChanged: (String, Int) -> Unit = { _, _ -> },
 ) {
+    init {
+        BrowserSessionRegistry.register(session)
+    }
+
     private var currentUrlState by mutableStateOf(currentUrl)
     private var sessionStateState by mutableStateOf(sessionState)
     private var titleState by mutableStateOf(title)

@@ -1,8 +1,14 @@
 package net.matsudamper.browser.screen.settings
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.channels.ReceiveChannel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -10,6 +16,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import net.matsudamper.browser.BrowserSessionRegistry
 import net.matsudamper.browser.data.BrowserSettings
 import net.matsudamper.browser.data.HomepageType
 import net.matsudamper.browser.data.SearchProvider
@@ -19,13 +26,58 @@ import net.matsudamper.browser.data.TranslationProvider
 import net.matsudamper.browser.data.resolvedEnableWebSuggestions
 import net.matsudamper.browser.data.resolvedExtensionsProcessEnabled
 import net.matsudamper.browser.data.resolvedInputAutoZoomEnabled
+import net.matsudamper.browser.data.resolvedWebAuthnPlatformAuthenticatorAvailableOverrideEnabled
 import net.matsudamper.browser.feature.mocklocation.MockLocationWebExtension
+import net.matsudamper.browser.feature.webauthncompat.WebAuthnCompatWebExtension
 import net.matsudamper.browser.ui.settings.SettingsScreenUiState
+import org.koin.core.component.KoinComponent
+import org.koin.core.component.inject
+import org.mozilla.geckoview.GeckoRuntime
+
+internal data class WebAuthnSettingsUpdate(
+    val persist: suspend () -> Unit,
+    val onPersisted: () -> Unit,
+)
+
+internal suspend fun processWebAuthnSettingsUpdates(
+    channel: ReceiveChannel<WebAuthnSettingsUpdate>,
+    onError: (Throwable) -> Unit,
+) {
+    for (update in channel) {
+        try {
+            update.persist()
+            update.onPersisted()
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Throwable) {
+            onError(error)
+        }
+    }
+}
+
+private val webAuthnSettingsUpdateScope by lazy {
+    CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+}
+private val webAuthnSettingsUpdateChannel by lazy {
+    Channel<WebAuthnSettingsUpdate>(Channel.UNLIMITED).also { channel ->
+        webAuthnSettingsUpdateScope.launch {
+            processWebAuthnSettingsUpdates(channel) { error ->
+                Log.w(
+                    "SettingsScreenViewModel",
+                    "WebAuthn 互換設定の保存または再読み込みに失敗",
+                    error,
+                )
+            }
+        }
+    }
+}
 
 internal class SettingsScreenViewModel(
     private val settingsRepository: SettingsRepository,
-) : ViewModel() {
+) : ViewModel(), KoinComponent {
 
+    private val runtime: GeckoRuntime by inject()
+    private val webAuthnCompatWebExtension: WebAuthnCompatWebExtension by inject()
     private val viewModelStateFlow = MutableStateFlow(ViewModelState())
     val eventHandler = Channel<(Event) -> Unit>(Channel.UNLIMITED)
 
@@ -68,6 +120,29 @@ internal class SettingsScreenViewModel(
 
         override fun setInputAutoZoomEnabled(enabled: Boolean) {
             viewModelScope.launch { settingsRepository.setInputAutoZoomEnabled(enabled) }
+        }
+
+        override fun setWebAuthnPlatformAuthenticatorAvailableOverrideEnabled(enabled: Boolean) {
+            webAuthnCompatWebExtension.retrySetEnabled(runtime, enabled).accept(
+                {
+                    webAuthnSettingsUpdateChannel.trySend(
+                        WebAuthnSettingsUpdate(
+                            persist = {
+                                settingsRepository
+                                    .setWebAuthnPlatformAuthenticatorAvailableOverrideEnabled(enabled)
+                            },
+                            onPersisted = BrowserSessionRegistry::reloadOpenSessions,
+                        ),
+                    )
+                },
+                { error ->
+                    Log.w(
+                        "SettingsScreenViewModel",
+                        "WebAuthn 互換設定の反映に失敗",
+                        error,
+                    )
+                },
+            )
         }
 
         override fun setExtensionsProcessEnabled(enabled: Boolean) {
@@ -275,6 +350,8 @@ private fun BrowserSettings.toUiState(
         enableWebSuggestions = resolvedEnableWebSuggestions(),
         inputAutoZoomEnabled = resolvedInputAutoZoomEnabled(),
         extensionsProcessEnabled = resolvedExtensionsProcessEnabled(),
+        webAuthnPlatformAuthenticatorAvailableOverrideEnabled =
+        resolvedWebAuthnPlatformAuthenticatorAvailableOverrideEnabled(),
         mockLocationInput = mockLocationInput,
         mockLocationInputError = validateMockLocationInput(mockLocationInput),
         backupConfirmDialog = backupConfirmDialog,
