@@ -4,7 +4,26 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
     <path
+        android:name="body"
         android:fillColor="#000000"
-        android:fillType="evenOdd"
-        android:pathData="M32,30 L54,44 L76,30 L82,55 L54,84 L26,55 Z M41.2,53 a3.3,3.3 0 1,0 6.6,0 a3.3,3.3 0 1,0 -6.6,0 Z M60.2,53 a3.3,3.3 0 1,0 6.6,0 a3.3,3.3 0 1,0 -6.6,0 Z" />
+        android:pathData="M26,60 a22,22 0 1,0 44,0 a22,22 0 1,0 -44,0 Z" />
+    <!-- 単色でも尾を体と区別できるよう 3dp の隙間を空ける -->
+    <path
+        android:name="tail"
+        android:fillColor="#000000"
+        android:pathData="M44.96,84.82 A29,29 0 0 0 84.56,63.04 A8,8 0 0 0 72.86,62.61 A25,25 0 0 1 44.96,84.82 Z" />
+    <path
+        android:name="ear_left"
+        android:fillColor="#000000"
+        android:pathData="M52,36 L54,22 L63,30 Z" />
+    <path
+        android:name="ear_right"
+        android:fillColor="#000000"
+        android:pathData="M65,30 L71,27 L73,40 Z" />
+    <!-- 目の穴抜き: 頭と鼻先を時計回り、目を反時計回りにして nonZero で打ち消す -->
+    <path
+        android:name="head_with_eye_hole"
+        android:fillColor="#000000"
+        android:fillType="nonZero"
+        android:pathData="M61,28 a13,13 0 1,1 0,26 a13,13 0 1,1 0,-26 Z M70,33 L79,49 L60,53 Z M67,37.5 a2.5,2.5 0 1,0 0,5 a2.5,2.5 0 1,0 0,-5 Z" />
 </vector>
