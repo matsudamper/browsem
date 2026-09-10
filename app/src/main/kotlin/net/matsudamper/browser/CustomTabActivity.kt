@@ -13,6 +13,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.viewModels
 import androidx.annotation.VisibleForTesting
 import androidx.browser.customtabs.CustomTabsSessionToken
 import androidx.compose.foundation.background
@@ -35,6 +36,8 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
 import java.util.concurrent.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.first
@@ -64,8 +67,16 @@ class CustomTabActivity : ComponentActivity() {
     private val historyRepository: HistoryRepository by inject()
     private val webSuggestionRepository: WebSuggestionRepository by inject()
 
-    private lateinit var browserTabController: BrowserTabController
-    private lateinit var browserSessionLifecycleController: BrowserSessionLifecycleController
+    private val browserViewModel: CustomTabBrowserViewModel by viewModels {
+        viewModelFactory {
+            initializer {
+                CustomTabBrowserViewModel(
+                    tabRepository = tabRepository,
+                    runtime = runtime,
+                )
+            }
+        }
+    }
 
     private var pendingDownloadNotificationPermissionDeferred: CompletableDeferred<Unit>? = null
 
@@ -85,19 +96,8 @@ class CustomTabActivity : ComponentActivity() {
         runtime.settings.setExtensionsWebAPIEnabled(true)
 
         // 拡張機能は Koin の single で管理されるため、ここではセッション管理のみ担当する
-        // カスタムタブは一時的なセッションのため、タブ状態をDBに永続化しない
-        browserTabController = BrowserTabController(
-            tabRepository = tabRepository,
-            tabGroupRepository = null,
-            isSinglePage = true,
-        )
-        browserSessionLifecycleController = BrowserSessionLifecycleController(runtime)
-        browserTabController.onTabListChanged = {
-            browserSessionLifecycleController.retainOpenersOfLivePopups(
-                tabs = browserTabController.tabs,
-                selectedTabId = browserTabController.selectedTabId,
-            )
-        }
+        val browserTabController = browserViewModel.browserTabController
+        val browserSessionLifecycleController = browserViewModel.browserSessionLifecycleController
 
         val initialUrl = ExternalInitialUrlPolicy.sanitize(intent.dataString).orEmpty()
         val customTabsSessionToken = CustomTabsSessionToken.getSessionTokenFromIntent(intent)
@@ -151,18 +151,12 @@ class CustomTabActivity : ComponentActivity() {
             CancellationException("Activity was destroyed before download notification permission completed."),
         )
         pendingDownloadNotificationPermissionDeferred = null
-        if (::browserTabController.isInitialized) {
-            browserTabController.close()
-        }
         super.onDestroy()
     }
 
     @VisibleForTesting
     internal fun browserTabControllerForTesting(): BrowserTabController {
-        check(::browserTabController.isInitialized) {
-            "browserTabController is not initialized"
-        }
-        return browserTabController
+        return browserViewModel.browserTabController
     }
 
     /**
@@ -280,7 +274,7 @@ private fun CustomTabScreen(
         key3 = prewarmedSession,
     ) {
         // BrowserAppShell の外側ナビ（サイトの設定など）で Root が一時的に外れるため、
-        // 既存タブを再利用する。WebAppScreen と同様、破棄は Activity.onDestroy に任せる。
+        // 既存タブを再利用する。WebAppScreen と同様、破棄は ViewModel に任せる。
         value = browserTabController.tabs.firstOrNull()
             ?: if (prewarmedSession != null) {
                 browserTabController.createAndAppendTabWithSession(
