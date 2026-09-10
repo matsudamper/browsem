@@ -4,4 +4,6 @@
     <string name="download_notification_complete">ダウンロード完了</string>
     <string name="download_notification_failed">ダウンロード失敗</string>
     <string name="download_notification_resuming">ダウンロードを再開中...</string>
+    <string name="download_notification_cancel">キャンセル</string>
+    <string name="download_notification_cancelled">ダウンロードをキャンセルしました</string>
 </resources>

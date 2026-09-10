@@ -119,6 +119,10 @@
             android:exported="true"
             android:windowSoftInputMode="adjustResize" />
 
+        <receiver
+            android:name=".DownloadCancelReceiver"
+            android:exported="false" />
+
         <service
             android:name=".BrowserCustomTabsService"
             android:exported="true">
