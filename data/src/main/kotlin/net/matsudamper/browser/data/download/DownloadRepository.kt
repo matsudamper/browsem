@@ -1,7 +1,9 @@
 package net.matsudamper.browser.data.download
 
 import android.content.Context
+import android.net.Uri
 import java.util.UUID
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
@@ -29,7 +31,8 @@ data class DownloadRecord(
 
 class DownloadRepository(context: Context) {
 
-    private val dao = DownloadDatabase.getInstance(context).downloadDao()
+    private val context = context.applicationContext
+    private val dao = DownloadDatabase.getInstance(this.context).downloadDao()
 
     fun observeDownloads(): Flow<List<DownloadRecord>> {
         return dao.observeAll().map { list -> list.map { it.toRecord() } }
@@ -101,8 +104,24 @@ class DownloadRepository(context: Context) {
         )
     }
 
+    /**
+     * RUNNING から SUCCEEDED への遷移に成功した場合だけ戻る。
+     * キャンセル/一時停止が先に確定していた場合は完成直後のファイルを削除してキャンセルとして扱う。
+     */
     suspend fun updateCompleted(currentWorkerId: String, fileName: String, fileUri: String) {
-        dao.updateCompleted(currentWorkerId = currentWorkerId, fileName = fileName, fileUri = fileUri)
+        if (dao.updateCompleted(currentWorkerId = currentWorkerId, fileName = fileName, fileUri = fileUri) > 0) {
+            return
+        }
+
+        val status = dao.getStatus(currentWorkerId)
+        if (status in listOf(DownloadRecordStatus.CANCELLED.name, DownloadRecordStatus.PAUSED.name)) {
+            runCatching { context.contentResolver.delete(Uri.parse(fileUri), null, null) }
+            throw CancellationException("ダウンロードがキャンセルまたは一時停止されました")
+        }
+        if (status != DownloadRecordStatus.SUCCEEDED.name) {
+            runCatching { context.contentResolver.delete(Uri.parse(fileUri), null, null) }
+            error("ダウンロード完了状態を更新できませんでした: $status")
+        }
     }
 
     suspend fun updateFailed(currentWorkerId: String, failureReason: String?) {
@@ -131,9 +150,9 @@ class DownloadRepository(context: Context) {
         )
     }
 
-    /** SUCCEEDED/FAILED 以外の状態のときのみキャンセル状態に更新する */
-    suspend fun updateCancelled(currentWorkerId: String) {
-        dao.cancelIfActive(currentWorkerId)
+    /** SUCCEEDED/FAILED 以外の状態のときのみキャンセル状態に更新する。遷移できた場合は true */
+    suspend fun updateCancelled(currentWorkerId: String): Boolean {
+        return dao.cancelIfActive(currentWorkerId) > 0
     }
 
     /** ENQUEUED/RUNNING のときのみ一時停止状態に更新する */
