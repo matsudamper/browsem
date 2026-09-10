@@ -112,7 +112,8 @@ internal object WindowOpenHandoffStore {
 
     private fun removeStaleLocked(): List<Entry> {
         val now = System.currentTimeMillis()
-        val stale = entries.filterValues { now - it.createdAt > STALE_ENTRY_MS }
+        // 掃除は期限ちょうどに走る。ここを厳密な比較にすると取りこぼして残り続ける。
+        val stale = entries.filterValues { now - it.createdAt >= STALE_ENTRY_MS }
         stale.keys.forEach { entries.remove(it) }
         return stale.values.toList()
     }
