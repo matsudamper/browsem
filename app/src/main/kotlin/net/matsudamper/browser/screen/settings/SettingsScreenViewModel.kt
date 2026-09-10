@@ -3,10 +3,12 @@ package net.matsudamper.browser.screen.settings
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.channels.ReceiveChannel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -32,18 +34,37 @@ import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 import org.mozilla.geckoview.GeckoRuntime
 
-private data class WebAuthnSettingsUpdate(
-    val settingsRepository: SettingsRepository,
-    val enabled: Boolean,
+internal data class WebAuthnSettingsUpdate(
+    val persist: suspend () -> Unit,
+    val onPersisted: () -> Unit,
 )
+
+internal suspend fun processWebAuthnSettingsUpdates(
+    channel: ReceiveChannel<WebAuthnSettingsUpdate>,
+    onError: (Throwable) -> Unit,
+) {
+    for (update in channel) {
+        try {
+            update.persist()
+            update.onPersisted()
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Throwable) {
+            onError(error)
+        }
+    }
+}
 
 private val webAuthnSettingsUpdateScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 private val webAuthnSettingsUpdateChannel =
     Channel<WebAuthnSettingsUpdate>(Channel.UNLIMITED).also { channel ->
         webAuthnSettingsUpdateScope.launch {
-            for (update in channel) {
-                update.settingsRepository.setWebAuthnPlatformAuthenticatorAvailableOverrideEnabled(update.enabled)
-                BrowserSessionRegistry.reloadOpenSessions()
+            processWebAuthnSettingsUpdates(channel) { error ->
+                Log.w(
+                    "SettingsScreenViewModel",
+                    "WebAuthn 互換設定の保存または再読み込みに失敗",
+                    error,
+                )
             }
         }
     }
@@ -103,8 +124,11 @@ internal class SettingsScreenViewModel(
                 {
                     webAuthnSettingsUpdateChannel.trySend(
                         WebAuthnSettingsUpdate(
-                            settingsRepository = settingsRepository,
-                            enabled = enabled,
+                            persist = {
+                                settingsRepository
+                                    .setWebAuthnPlatformAuthenticatorAvailableOverrideEnabled(enabled)
+                            },
+                            onPersisted = BrowserSessionRegistry::reloadOpenSessions,
                         ),
                     )
                 },
