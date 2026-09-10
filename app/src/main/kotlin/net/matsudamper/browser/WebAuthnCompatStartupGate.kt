@@ -12,6 +12,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.tooling.preview.Preview
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import net.matsudamper.browser.feature.webauthncompat.WebAuthnCompatWebExtension
@@ -59,14 +60,25 @@ internal fun WebAuthnCompatStartupGate(
         }
     }
 
-    if (!ready) {
-        Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center,
-        ) {
-            CircularProgressIndicator()
-        }
-        return
+    if (ready) {
+        content()
+    } else {
+        WebAuthnCompatStartupLoading()
     }
-    content()
+}
+
+@Composable
+private fun WebAuthnCompatStartupLoading() {
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center,
+    ) {
+        CircularProgressIndicator()
+    }
+}
+
+@Preview(name = "WebAuthn起動待機")
+@Composable
+private fun WebAuthnCompatStartupLoadingPreview() {
+    WebAuthnCompatStartupLoading()
 }
