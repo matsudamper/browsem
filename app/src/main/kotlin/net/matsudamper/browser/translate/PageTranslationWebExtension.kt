@@ -51,6 +51,8 @@ class PageTranslationWebExtension {
     )
 
     private var extension: WebExtension? = null
+    @Volatile
+    private var installationError: Throwable? = null
     private val requestSequence = AtomicLong(0)
     private val sessionPorts = ConcurrentHashMap<GeckoSession, WebExtension.Port>()
     private val attachedSessions: MutableSet<GeckoSession> =
@@ -67,14 +69,17 @@ class PageTranslationWebExtension {
                 { installedExtension ->
                     if (installedExtension == null) return@accept
                     extension = installedExtension
+                    installationError = null
                     pendingScans.keys.forEach { session ->
                         attachSessionDelegate(session, installedExtension)
                     }
                 },
                 { error ->
-                    Log.e(TAG, "ページ翻訳ブリッジのインストールに失敗", error)
+                    val cause = error ?: IllegalStateException("ページ翻訳ブリッジのインストールに失敗しました")
+                    installationError = cause
+                    Log.e(TAG, "ページ翻訳ブリッジのインストールに失敗", cause)
                     pendingScans.values.forEach { pending ->
-                        pending.deferred.completeExceptionally(error)
+                        pending.deferred.completeExceptionally(cause)
                     }
                     pendingScans.clear()
                 },
@@ -82,6 +87,7 @@ class PageTranslationWebExtension {
     }
 
     suspend fun scanPage(session: GeckoSession): PageSnapshot {
+        installationError?.let { throw it }
         stopActiveTranslation(session)
         awaitingActivationDocuments.remove(session)
         bufferedDynamicSegments.remove(session)
