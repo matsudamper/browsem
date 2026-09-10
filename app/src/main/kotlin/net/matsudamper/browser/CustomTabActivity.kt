@@ -133,8 +133,14 @@ class CustomTabActivity : ComponentActivity() {
                     ) { outerNavActions ->
                         CustomTabOpaqueShell {
                             CustomTabScreen(
-                                initialUrl = initialUrl.takeIf { it.isNotBlank() }
-                                    ?: browserSettings.resolvedHomepageUrl(),
+                                // 引き渡されたポップアップは window.open() の URL 省略で空になり得る。
+                                // ホームページで補うと別のページに化けるため、そのまま渡す。
+                                initialUrl = if (handedOffPopupSession != null) {
+                                    initialUrl
+                                } else {
+                                    initialUrl.takeIf { it.isNotBlank() }
+                                        ?: browserSettings.resolvedHomepageUrl()
+                                },
                                 handedOffPopupSession = handedOffPopupSession,
                                 onHandedOffPopupSessionAttached = {
                                     browserViewModel.onHandoffSessionAttached()
