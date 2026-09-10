@@ -55,8 +55,10 @@ internal suspend fun processWebAuthnSettingsUpdates(
     }
 }
 
-private val webAuthnSettingsUpdateScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-private val webAuthnSettingsUpdateChannel =
+private val webAuthnSettingsUpdateScope by lazy {
+    CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+}
+private val webAuthnSettingsUpdateChannel by lazy {
     Channel<WebAuthnSettingsUpdate>(Channel.UNLIMITED).also { channel ->
         webAuthnSettingsUpdateScope.launch {
             processWebAuthnSettingsUpdates(channel) { error ->
@@ -68,6 +70,7 @@ private val webAuthnSettingsUpdateChannel =
             }
         }
     }
+}
 
 internal class SettingsScreenViewModel(
     private val settingsRepository: SettingsRepository,
