@@ -15,6 +15,7 @@ import androidx.compose.ui.Modifier
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import net.matsudamper.browser.feature.webauthncompat.WebAuthnCompatWebExtension
+import org.koin.compose.koinInject
 import org.mozilla.geckoview.GeckoRuntime
 
 private const val MAX_WEBAUTHN_COMPAT_STARTUP_RETRIES = 5
@@ -27,9 +28,9 @@ private const val WEBAUTHN_COMPAT_STARTUP_RETRY_DELAY_MS = 1200L
 @Composable
 internal fun WebAuthnCompatStartupGate(
     runtime: GeckoRuntime,
-    webAuthnCompatWebExtension: WebAuthnCompatWebExtension,
     content: @Composable () -> Unit,
 ) {
+    val webAuthnCompatWebExtension: WebAuthnCompatWebExtension = koinInject()
     var ready by remember(runtime, webAuthnCompatWebExtension) { mutableStateOf(false) }
     LaunchedEffect(runtime, webAuthnCompatWebExtension) {
         var result = webAuthnCompatWebExtension.install(runtime)
