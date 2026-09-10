@@ -19,6 +19,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.MoreVert
@@ -38,6 +39,7 @@ import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
+import androidx.compose.material3.Surface
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Switch
@@ -390,27 +392,11 @@ private fun TabsScreenLoadedContent(
                 userScrollEnabled = !isTabDragging,
             ) { page ->
                 val tabsForPage = groupedTabs.getOrElse(page) { emptyList() }
-                Column(
+                Box(
                     modifier = Modifier
                         .fillMaxSize()
                         .testTag(TabsScreenTestTags.Page(page).testTag),
                 ) {
-                    TabGroupMenu(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 8.dp),
-                        page = page,
-                        groups = groups,
-                        onClickDelete = {
-                            deleteDialogGroupIndex = page
-                        },
-                        onClickRename = {
-                            renameDialogGroupIndex = page
-                        },
-                        onToggleDefaultGroup = {
-                            onToggleDefaultGroup(page)
-                        },
-                    )
                     GroupTabGrid(
                         tabs = tabsForPage,
                         selectedTabId = selectedTabId,
@@ -431,7 +417,23 @@ private fun TabsScreenLoadedContent(
                             moveDialogOnGroupSelected = tab.listener::onMoveToGroup
                         },
                         floatingActionButtonBoundsInRoot = floatingActionButtonBoundsInRoot,
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                    TabGroupMenu(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        page = page,
+                        groups = groups,
+                        onClickDelete = {
+                            deleteDialogGroupIndex = page
+                        },
+                        onClickRename = {
+                            renameDialogGroupIndex = page
+                        },
+                        onToggleDefaultGroup = {
+                            onToggleDefaultGroup(page)
+                        },
                     )
                 }
             }
@@ -500,50 +502,62 @@ private fun TabGroupMenu(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Spacer(modifier = Modifier.weight(1f))
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        Surface(
+            shape = RoundedCornerShape(24.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.78f),
+            tonalElevation = 3.dp,
+            shadowElevation = 6.dp,
         ) {
-            Text(
-                text = "デフォルト",
-                style = MaterialTheme.typography.labelMedium,
-            )
-            // 外部アプリ（Intent）経由でURLを開いた際に割り当てるグループを指定する。
-            // タブ一覧での新規追加・target=_blank など、アプリ内操作には適用されない。
-            Switch(
-                modifier = Modifier.testTag(TabsScreenTestTags.DefaultGroupSwitch(page).testTag),
-                checked = groups.getOrNull(page)?.isDefault ?: false,
-                onCheckedChange = { onToggleDefaultGroup(page) },
-            )
-        }
-        // グループの名前変更・削除を格納する3点メニュー
-        var groupMenuExpanded by remember { mutableStateOf(false) }
-        Box {
-            IconButton(onClick = { groupMenuExpanded = true }) {
-                Icon(
-                    imageVector = Icons.Default.MoreVert,
-                    contentDescription = "メニュー",
-                )
-            }
-            DropdownMenu(
-                expanded = groupMenuExpanded,
-                onDismissRequest = { groupMenuExpanded = false },
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                DropdownMenuItem(
-                    text = { Text("名前変更") },
-                    onClick = {
-                        groupMenuExpanded = false
-                        onClickRename()
-                    },
-                )
-                DropdownMenuItem(
-                    text = { Text("削除") },
-                    enabled = groups.size > 1,
-                    onClick = {
-                        groupMenuExpanded = false
-                        onClickDelete()
-                    },
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Text(
+                        text = "デフォルト",
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                    // 外部アプリ（Intent）経由でURLを開いた際に割り当てるグループを指定する。
+                    // タブ一覧での新規追加・target=_blank など、アプリ内操作には適用されない。
+                    Switch(
+                        modifier = Modifier.testTag(TabsScreenTestTags.DefaultGroupSwitch(page).testTag),
+                        checked = groups.getOrNull(page)?.isDefault ?: false,
+                        onCheckedChange = { onToggleDefaultGroup(page) },
+                    )
+                }
+                // グループの名前変更・削除を格納する3点メニュー
+                var groupMenuExpanded by remember { mutableStateOf(false) }
+                Box {
+                    IconButton(onClick = { groupMenuExpanded = true }) {
+                        Icon(
+                            imageVector = Icons.Default.MoreVert,
+                            contentDescription = "メニュー",
+                        )
+                    }
+                    DropdownMenu(
+                        expanded = groupMenuExpanded,
+                        onDismissRequest = { groupMenuExpanded = false },
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("名前変更") },
+                            onClick = {
+                                groupMenuExpanded = false
+                                onClickRename()
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("削除") },
+                            enabled = groups.size > 1,
+                            onClick = {
+                                groupMenuExpanded = false
+                                onClickDelete()
+                            },
+                        )
+                    }
+                }
             }
         }
     }
@@ -614,7 +628,7 @@ private fun PagerIndicator(
 }
 
 @Composable
-@Preview
+@Preview(name = "フローティンググループメニュー")
 private fun Preview() {
     val groups = remember {
         listOf(
