@@ -13,6 +13,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.viewModels
 import androidx.annotation.VisibleForTesting
 import androidx.browser.customtabs.CustomTabsSessionToken
 import androidx.compose.foundation.background
@@ -26,6 +27,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -35,6 +37,8 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
 import java.util.concurrent.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.first
@@ -54,6 +58,7 @@ import net.matsudamper.browser.screen.browser.CustomTabScreenViewModel
 import net.matsudamper.browser.ui.common.BrowserTheme
 import org.koin.android.ext.android.inject
 import org.mozilla.geckoview.GeckoRuntime
+import org.mozilla.geckoview.GeckoSession
 
 class CustomTabActivity : ComponentActivity() {
     private val runtime: GeckoRuntime by inject()
@@ -64,8 +69,17 @@ class CustomTabActivity : ComponentActivity() {
     private val historyRepository: HistoryRepository by inject()
     private val webSuggestionRepository: WebSuggestionRepository by inject()
 
-    private lateinit var browserTabController: BrowserTabController
-    private lateinit var browserSessionLifecycleController: BrowserSessionLifecycleController
+    private val browserViewModel: CustomTabBrowserViewModel by viewModels {
+        viewModelFactory {
+            initializer {
+                CustomTabBrowserViewModel(
+                    tabRepository = tabRepository,
+                    runtime = runtime,
+                    handoffToken = intent.getStringExtra(WindowOpenHandoffStore.EXTRA_HANDOFF_TOKEN),
+                )
+            }
+        }
+    }
 
     private var pendingDownloadNotificationPermissionDeferred: CompletableDeferred<Unit>? = null
 
@@ -85,20 +99,19 @@ class CustomTabActivity : ComponentActivity() {
         runtime.settings.setExtensionsWebAPIEnabled(true)
 
         // 拡張機能は Koin の single で管理されるため、ここではセッション管理のみ担当する
-        // カスタムタブは一時的なセッションのため、タブ状態をDBに永続化しない
-        browserTabController = BrowserTabController(
-            tabRepository = tabRepository,
-            tabGroupRepository = null,
-            isSinglePage = true,
-        )
-        browserSessionLifecycleController = BrowserSessionLifecycleController(runtime)
-        browserTabController.onTabListChanged = {
-            browserSessionLifecycleController.retainOpenersOfLivePopups(
-                tabs = browserTabController.tabs,
-                selectedTabId = browserTabController.selectedTabId,
-            )
-        }
+        val browserTabController = browserViewModel.browserTabController
+        val browserSessionLifecycleController = browserViewModel.browserSessionLifecycleController
 
+        // window.open から引き渡されたセッションは URL では作り直せないため、Activity ではなく
+        // ViewModel が持ち主になる。構成変更をまたいでもタブに載せた内容が失われない。
+        val handedOffPopupSession = browserViewModel.handoffSession
+        val handedOffPopupTabId = browserViewModel.handoffTabId
+        // プロセスごと終了したあと OS がタスクを作り直すと、ストアは空でセッションを取り出せない。
+        // opener も道連れに失われているため復元しようがなく、ホームページに化けるくらいなら閉じる。
+        if (intent.hasExtra(WindowOpenHandoffStore.EXTRA_HANDOFF_TOKEN) && !browserViewModel.hasHandoff) {
+            finish()
+            return
+        }
         val initialUrl = ExternalInitialUrlPolicy.sanitize(intent.dataString).orEmpty()
         val customTabsSessionToken = CustomTabsSessionToken.getSessionTokenFromIntent(intent)
         setContent {
@@ -120,6 +133,17 @@ class CustomTabActivity : ComponentActivity() {
                             CustomTabScreen(
                                 initialUrl = initialUrl.takeIf { it.isNotBlank() }
                                     ?: browserSettings.resolvedHomepageUrl(),
+                                handedOffPopupSession = handedOffPopupSession,
+                                handedOffPopupTabId = handedOffPopupTabId,
+                                // 待機中に遷移していることがあるため、載せる直前に読む。
+                                // window.open() の URL 省略で空になり得るので、ホームページで補わない。
+                                handedOffPopupInitialUrl = browserViewModel::currentHandoffInitialUrl,
+                                onHandedOffPopupSessionAttached = {
+                                    // 載せる前に window.close が呼ばれていた場合はここで閉じる
+                                    if (browserViewModel.onHandoffSessionAttached()) {
+                                        finish()
+                                    }
+                                },
                                 customTabsSessionToken = customTabsSessionToken,
                                 homepageUrl = browserSettings.resolvedHomepageUrl(),
                                 searchTemplate = browserSettings.resolvedSearchTemplate(),
@@ -135,6 +159,14 @@ class CustomTabActivity : ComponentActivity() {
                                 onClose = ::finish,
                                 onOpenInBrowser = ::openInMainBrowser,
                                 onOpenNewTabInBrowser = ::openNewTabInMainBrowser,
+                                onOpenPopupInCustomTab = { uri, openerTabId ->
+                                    openWindowOpenRequestInCustomTab(
+                                        uri = uri,
+                                        openerTabId = openerTabId,
+                                        browserTabController = browserTabController,
+                                        browserSessionLifecycleController = browserSessionLifecycleController,
+                                    )
+                                },
                                 onRequestDownloadNotificationPermission = {
                                     requestDownloadNotificationPermission()
                                 },
@@ -151,18 +183,12 @@ class CustomTabActivity : ComponentActivity() {
             CancellationException("Activity was destroyed before download notification permission completed."),
         )
         pendingDownloadNotificationPermissionDeferred = null
-        if (::browserTabController.isInitialized) {
-            browserTabController.close()
-        }
         super.onDestroy()
     }
 
     @VisibleForTesting
     internal fun browserTabControllerForTesting(): BrowserTabController {
-        check(::browserTabController.isInitialized) {
-            "browserTabController is not initialized"
-        }
-        return browserTabController
+        return browserViewModel.browserTabController
     }
 
     /**
@@ -240,6 +266,10 @@ class CustomTabActivity : ComponentActivity() {
 @Composable
 private fun CustomTabScreen(
     initialUrl: String,
+    handedOffPopupSession: GeckoSession?,
+    handedOffPopupTabId: String?,
+    handedOffPopupInitialUrl: () -> String?,
+    onHandedOffPopupSessionAttached: () -> Unit,
     customTabsSessionToken: CustomTabsSessionToken?,
     homepageUrl: String,
     searchTemplate: String,
@@ -255,6 +285,7 @@ private fun CustomTabScreen(
     onClose: () -> Unit,
     onOpenInBrowser: (url: String, tab: BrowserTab) -> Unit,
     onOpenNewTabInBrowser: (url: String, referrerUrl: String?) -> Unit,
+    onOpenPopupInCustomTab: (uri: String, openerTabId: String) -> GeckoSession,
     onRequestDownloadNotificationPermission: suspend () -> Unit,
 ) {
     val viewModel = viewModel(initializer = {
@@ -265,12 +296,18 @@ private fun CustomTabScreen(
         )
     })
     val uiState by viewModel.uiState.collectAsState()
+    val currentOnHandedOffPopupSessionAttached by rememberUpdatedState(onHandedOffPopupSessionAttached)
+    val currentHandedOffPopupInitialUrl by rememberUpdatedState(handedOffPopupInitialUrl)
     val prewarmedSession = remember(customTabsSessionToken, initialUrl) {
-        customTabsSessionToken?.let { token ->
-            CustomTabsWarmupStore.consumePreparedSession(
-                token = token,
-                launchUrl = initialUrl,
-            )
+        if (handedOffPopupSession != null) {
+            null
+        } else {
+            customTabsSessionToken?.let { token ->
+                CustomTabsWarmupStore.consumePreparedSession(
+                    token = token,
+                    launchUrl = initialUrl,
+                )
+            }
         }
     }
     val browserTab by produceState<BrowserTab?>(
@@ -280,15 +317,22 @@ private fun CustomTabScreen(
         key3 = prewarmedSession,
     ) {
         // BrowserAppShell の外側ナビ（サイトの設定など）で Root が一時的に外れるため、
-        // 既存タブを再利用する。WebAppScreen と同様、破棄は Activity.onDestroy に任せる。
+        // 既存タブを再利用する。WebAppScreen と同様、破棄は ViewModel に任せる。
         value = browserTabController.tabs.firstOrNull()
-            ?: if (prewarmedSession != null) {
-                browserTabController.createAndAppendTabWithSession(
+            ?: when {
+                handedOffPopupSession != null && handedOffPopupTabId != null ->
+                    browserTabController.createTabWithHandedOffPopupSession(
+                        session = handedOffPopupSession,
+                        tabId = handedOffPopupTabId,
+                        initialUrl = currentHandedOffPopupInitialUrl().orEmpty(),
+                    ).also { currentOnHandedOffPopupSessionAttached() }
+
+                prewarmedSession != null -> browserTabController.createAndAppendTabWithSession(
                     session = prewarmedSession,
                     initialUrl = initialUrl,
                 )
-            } else {
-                browserTabController.createAndAppendTab(initialUrl = initialUrl)
+
+                else -> browserTabController.createAndAppendTab(initialUrl = initialUrl)
             }
     }
     val activeTab = browserTab
@@ -302,8 +346,7 @@ private fun CustomTabScreen(
         return
     }
 
-    val popupController = rememberWindowOpenPopupController(browserTabController)
-    val retainOpenersAfterDetach: (BrowserTab) -> Unit = {
+    val reevaluateOpenerRetention: () -> Unit = {
         WindowOpenSessionPolicy.postAfterFrame {
             browserSessionLifecycleController.retainOpenersOfLivePopups(
                 tabs = browserTabController.tabs,
@@ -336,7 +379,7 @@ private fun CustomTabScreen(
         onCloseCustomTab = onClose,
         onOpenInBrowser = { url -> onOpenInBrowser(url, activeTab) },
         onOpenNewSessionRequest = { uri ->
-            popupController.open(uri, activeTab.tabId)
+            onOpenPopupInCustomTab(uri, activeTab.tabId)
         },
         onOpenNewTabRequest = { uri, referrerUrl ->
             onOpenNewTabInBrowser(uri, referrerUrl)
@@ -346,48 +389,8 @@ private fun CustomTabScreen(
         onHistoryTitleUpdate = uiState.callbacks::onHistoryTitleUpdate,
         urlBarSuggestions = uiState.urlBarSuggestions,
         onUrlInputChanged = uiState.callbacks::onUrlInputChanged,
-        onSessionDetachedFromView = retainOpenersAfterDetach,
+        onReevaluateOpenerRetention = reevaluateOpenerRetention,
     )
-    popupController.top?.let { popupTab ->
-        WindowOpenOverlayDialog(onDismissRequest = popupController::dismissTop) {
-            GeckoBrowserTab(
-                modifier = Modifier.fillMaxSize(),
-                browserTab = popupTab,
-                homepageUrl = homepageUrl,
-                searchTemplate = searchTemplate,
-                translationProvider = translationProvider,
-                themeColorExtension = themeColorExtension,
-                mediaWebExtension = mediaWebExtension,
-                browserSessionLifecycleController = browserSessionLifecycleController,
-                tabCount = 1,
-                onInstallExtensionRequest = {},
-                onRequestDownloadNotificationPermission = onRequestDownloadNotificationPermission,
-                onOpenSettings = {},
-                onOpenSiteSettings = { url ->
-                    outerNavActions.openSiteSettings(url, popupTab.tabId)
-                },
-                onOpenDownloads = null,
-                onOpenTabs = {},
-                enableTabUi = false,
-                showInstallExtensionItem = false,
-                customTabMode = true,
-                onCloseCustomTab = popupController::dismissTop,
-                onOpenInBrowser = { url -> onOpenInBrowser(url, popupTab) },
-                onOpenNewSessionRequest = { uri ->
-                    popupController.open(uri, popupTab.tabId)
-                },
-                onOpenNewTabRequest = { uri, referrerUrl ->
-                    onOpenNewTabInBrowser(uri, referrerUrl)
-                },
-                onCloseTab = popupController::dismissTop,
-                onHistoryRecord = uiState.callbacks::onHistoryRecord,
-                onHistoryTitleUpdate = uiState.callbacks::onHistoryTitleUpdate,
-                urlBarSuggestions = uiState.urlBarSuggestions,
-                onUrlInputChanged = uiState.callbacks::onUrlInputChanged,
-                onSessionDetachedFromView = retainOpenersAfterDetach,
-            )
-        }
-    }
 }
 
 @Composable
