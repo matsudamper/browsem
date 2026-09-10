@@ -67,7 +67,6 @@ internal sealed interface CustomTabToolbarTestTags {
 internal fun CustomTabToolbar(
     title: String,
     url: String,
-    onLongClickUrl: (() -> Unit)? = null,
     onClose: () -> Unit,
     toolbarColor: Color?,
     onRefresh: () -> Unit,
@@ -109,11 +108,6 @@ internal fun CustomTabToolbar(
     }
     val toolbarSecondaryContentColor = toolbarContentColor.copy(alpha = 0.72f)
     val context = LocalContext.current
-    val longClickUrl = onLongClickUrl ?: if (showCloseButton) {
-        { copyUrlToClipboard(context, url) }
-    } else {
-        null
-    }
 
     Surface(
         color = resolvedToolbarColor,
@@ -144,22 +138,22 @@ internal fun CustomTabToolbar(
                 modifier = Modifier
                     .weight(1f)
                     .then(
-                        if (longClickUrl == null) {
-                            Modifier
-                        } else {
+                        if (showCloseButton) {
                             Modifier
                                 .testTag(CustomTabToolbarTestTags.PageInfo.testTag)
-                                .pointerInput(longClickUrl) {
+                                .pointerInput(url) {
                                     detectTapGestures(
-                                        onLongPress = { longClickUrl() },
+                                        onLongPress = { copyUrlToClipboard(context, url) },
                                     )
                                 }
                                 .semantics {
                                     onLongClick(label = "URLをコピー") {
-                                        longClickUrl()
+                                        copyUrlToClipboard(context, url)
                                         true
                                     }
                                 }
+                        } else {
+                            Modifier
                         },
                     )
                     .padding(horizontal = 4.dp),
@@ -244,7 +238,6 @@ private fun PreviewCustomTabToolbarUrlLongPress() {
         CustomTabToolbar(
             title = "example.com",
             url = "https://example.com/page",
-            onLongClickUrl = {},
             onClose = {},
             toolbarColor = null,
             onRefresh = {},
