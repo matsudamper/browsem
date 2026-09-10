@@ -805,10 +805,11 @@ internal fun BrowserAppShell(
 
                     DisposableEffect(browserTabController, browserSessionLifecycleController) {
                         onDispose {
-                            browserTabController.tabs
+                            val tabs = browserTabController.tabs
+                            tabs
                                 .filter { it.tabId in pausedTabIds }
                                 .forEach { tab ->
-                                    browserSessionLifecycleController.resumeSession(tab)
+                                    browserSessionLifecycleController.resumeSession(tab, tabs)
                                 }
                         }
                     }

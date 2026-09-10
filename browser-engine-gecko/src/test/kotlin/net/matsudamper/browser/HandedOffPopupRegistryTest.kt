@@ -129,10 +129,44 @@ class HandedOffPopupRegistryTest {
         HandedOffPopupRegistry.liveOpenerTabIds()
         every { popupSession.isOpen } returns false
 
-        BrowserSessionLifecycleController(runtime).resumeSession(opener)
+        BrowserSessionLifecycleController(runtime).resumeSession(opener, listOf(opener))
 
         assertFalse(opener.retainForLivePopup)
         verify { openerSession.setPriorityHint(GeckoSession.PRIORITY_DEFAULT) }
         verify { openerSession.setActive(true) }
+    }
+
+    @Test
+    fun `同じ一覧に生きている子が居る opener は復帰しても保持を続ける`() {
+        val runtime = mockk<GeckoRuntime>(relaxed = true)
+        val openerSession = mockk<GeckoSession>(relaxed = true)
+        val childSession = mockk<GeckoSession>(relaxed = true)
+        every { openerSession.isOpen } returns true
+        every { childSession.isOpen } returns true
+        val opener = BrowserTab(
+            tabId = "opener",
+            session = openerSession,
+            openerTabId = null,
+            currentUrl = "",
+            sessionState = "",
+            title = "",
+            previewBitmap = null,
+        )
+        opener.retainForLivePopup = true
+        val child = BrowserTab(
+            tabId = "child",
+            session = childSession,
+            openerTabId = "opener",
+            currentUrl = "",
+            sessionState = "",
+            title = "",
+            previewBitmap = null,
+        )
+        child.openedViaNewSession = true
+
+        BrowserSessionLifecycleController(runtime).resumeSession(opener, listOf(opener, child))
+
+        assertTrue(opener.retainForLivePopup)
+        verify(exactly = 0) { openerSession.setPriorityHint(GeckoSession.PRIORITY_DEFAULT) }
     }
 }

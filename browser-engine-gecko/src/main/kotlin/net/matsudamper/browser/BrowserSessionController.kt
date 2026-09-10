@@ -154,10 +154,7 @@ class BrowserSessionLifecycleController(
         tabs: List<BrowserTab>,
         selectedTabId: String?,
     ) {
-        val liveOpenerIds = tabs
-            .filter { it.openedViaNewSession }
-            .mapNotNull { it.openerTabId }
-            .toSet() + HandedOffPopupRegistry.liveOpenerTabIds()
+        val liveOpenerIds = liveOpenerTabIds(tabs)
         tabs.forEach { tab ->
             if (tab.tabId in liveOpenerIds) {
                 retainOpenerForLivePopup(tab)
@@ -165,6 +162,14 @@ class BrowserSessionLifecycleController(
                 releaseOpenerRetention(tab, selectedTabId)
             }
         }
+    }
+
+    /** `window.open` の子が生きている opener のタブ ID。子は同じ一覧にも別画面にも居る。 */
+    private fun liveOpenerTabIds(tabs: List<BrowserTab>): Set<String> {
+        return tabs
+            .filter { it.openedViaNewSession }
+            .mapNotNull { it.openerTabId }
+            .toSet() + HandedOffPopupRegistry.liveOpenerTabIds()
     }
 
     private fun retainOpenerForLivePopup(tab: BrowserTab) {
@@ -187,10 +192,11 @@ class BrowserSessionLifecycleController(
      * フォアグラウンド復帰時に呼び、セッション側の処理を再開させる。
      *
      * 別画面へ渡した子が閉じても opener のタブ一覧は変化しないため、保持の解除がどこからも
-     * 起きない。復帰のタイミングで見直し、子がもう居なければ優先度を戻す。
+     * 起きない。復帰のタイミングで見直し、子がもう居なければ優先度を戻す。同じ一覧に居る子は
+     * まだ生きていることがあるため、[tabs] も併せて判定する。
      */
-    fun resumeSession(tab: BrowserTab) {
-        if (tab.retainForLivePopup && tab.tabId !in HandedOffPopupRegistry.liveOpenerTabIds()) {
+    fun resumeSession(tab: BrowserTab, tabs: List<BrowserTab>) {
+        if (tab.retainForLivePopup && tab.tabId !in liveOpenerTabIds(tabs)) {
             tab.retainForLivePopup = false
             if (tab.session.isOpen) {
                 tab.session.setPriorityHint(GeckoSession.PRIORITY_DEFAULT)
@@ -200,6 +206,16 @@ class BrowserSessionLifecycleController(
             tab.session.setActive(true)
             markActiveForExtensions(tab.session)
         }
+    }
+
+    /**
+     * 拡張機能へ「これがアクティブタブ」と伝え直す。
+     *
+     * GeckoView へ再アタッチする経路は setActive(true) だけを呼ぶため、閉じたポップアップが
+     * アクティブ扱いのまま残る。アタッチ側から明示的に更新できるようにする。
+     */
+    fun notifyExtensionsActiveTab(session: GeckoSession) {
+        markActiveForExtensions(session)
     }
 
     private fun markActiveForExtensions(session: GeckoSession) {
