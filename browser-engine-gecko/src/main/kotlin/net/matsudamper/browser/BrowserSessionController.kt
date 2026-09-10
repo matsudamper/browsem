@@ -185,8 +185,17 @@ class BrowserSessionLifecycleController(
 
     /**
      * フォアグラウンド復帰時に呼び、セッション側の処理を再開させる。
+     *
+     * 別画面へ渡した子が閉じても opener のタブ一覧は変化しないため、保持の解除がどこからも
+     * 起きない。復帰のタイミングで見直し、子がもう居なければ優先度を戻す。
      */
     fun resumeSession(tab: BrowserTab) {
+        if (tab.retainForLivePopup && tab.tabId !in HandedOffPopupRegistry.liveOpenerTabIds()) {
+            tab.retainForLivePopup = false
+            if (tab.session.isOpen) {
+                tab.session.setPriorityHint(GeckoSession.PRIORITY_DEFAULT)
+            }
+        }
         if (tab.session.isOpen) {
             tab.session.setActive(true)
             markActiveForExtensions(tab.session)

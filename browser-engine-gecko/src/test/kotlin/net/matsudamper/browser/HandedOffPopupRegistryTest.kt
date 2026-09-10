@@ -107,4 +107,32 @@ class HandedOffPopupRegistryTest {
         assertFalse(opener.retainForLivePopup)
         verify { openerSession.setActive(false) }
     }
+
+    @Test
+    fun `渡した子が閉じたあとの復帰で opener の優先度を戻す`() {
+        val runtime = mockk<GeckoRuntime>(relaxed = true)
+        val openerSession = mockk<GeckoSession>(relaxed = true)
+        val popupSession = mockk<GeckoSession>(relaxed = true)
+        every { openerSession.isOpen } returns true
+        every { popupSession.isOpen } returns true
+        val opener = BrowserTab(
+            tabId = "opener",
+            session = openerSession,
+            openerTabId = null,
+            currentUrl = "",
+            sessionState = "",
+            title = "",
+            previewBitmap = null,
+        )
+        opener.retainForLivePopup = true
+        HandedOffPopupRegistry.register(openerTabId = "opener", session = popupSession)
+        HandedOffPopupRegistry.liveOpenerTabIds()
+        every { popupSession.isOpen } returns false
+
+        BrowserSessionLifecycleController(runtime).resumeSession(opener)
+
+        assertFalse(opener.retainForLivePopup)
+        verify { openerSession.setPriorityHint(GeckoSession.PRIORITY_DEFAULT) }
+        verify { openerSession.setActive(true) }
+    }
 }
