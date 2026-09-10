@@ -27,6 +27,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -74,6 +75,7 @@ class CustomTabActivity : ComponentActivity() {
                 CustomTabBrowserViewModel(
                     tabRepository = tabRepository,
                     runtime = runtime,
+                    handoffToken = intent.getStringExtra(WindowOpenHandoffStore.EXTRA_HANDOFF_TOKEN),
                 )
             }
         }
@@ -100,11 +102,10 @@ class CustomTabActivity : ComponentActivity() {
         val browserTabController = browserViewModel.browserTabController
         val browserSessionLifecycleController = browserViewModel.browserSessionLifecycleController
 
-        // window.open から引き渡されたセッションは URL では作り直せないため、Activity が
-        // 作り直されても失われないよう ViewModel のタブへ載せてから消費する。
-        val handoff = intent.getStringExtra(WindowOpenHandoffStore.EXTRA_HANDOFF_TOKEN)
-            ?.let { WindowOpenHandoffStore.consume(it) }
-        val initialUrl = handoff?.initialUrl
+        // window.open から引き渡されたセッションは URL では作り直せないため、Activity ではなく
+        // ViewModel が持ち主になる。構成変更をまたいでもタブに載せた内容が失われない。
+        val handedOffPopupSession = browserViewModel.handoffSession
+        val initialUrl = browserViewModel.handoffInitialUrl
             ?: ExternalInitialUrlPolicy.sanitize(intent.dataString).orEmpty()
         val customTabsSessionToken = CustomTabsSessionToken.getSessionTokenFromIntent(intent)
         setContent {
@@ -126,7 +127,8 @@ class CustomTabActivity : ComponentActivity() {
                             CustomTabScreen(
                                 initialUrl = initialUrl.takeIf { it.isNotBlank() }
                                     ?: browserSettings.resolvedHomepageUrl(),
-                                handedOffPopupSession = handoff?.session,
+                                handedOffPopupSession = handedOffPopupSession,
+                                onHandedOffPopupSessionAttached = browserViewModel::onHandoffSessionAttached,
                                 customTabsSessionToken = customTabsSessionToken,
                                 homepageUrl = browserSettings.resolvedHomepageUrl(),
                                 searchTemplate = browserSettings.resolvedSearchTemplate(),
@@ -250,6 +252,7 @@ class CustomTabActivity : ComponentActivity() {
 private fun CustomTabScreen(
     initialUrl: String,
     handedOffPopupSession: GeckoSession?,
+    onHandedOffPopupSessionAttached: () -> Unit,
     customTabsSessionToken: CustomTabsSessionToken?,
     homepageUrl: String,
     searchTemplate: String,
@@ -276,6 +279,7 @@ private fun CustomTabScreen(
         )
     })
     val uiState by viewModel.uiState.collectAsState()
+    val currentOnHandedOffPopupSessionAttached by rememberUpdatedState(onHandedOffPopupSessionAttached)
     val prewarmedSession = remember(customTabsSessionToken, initialUrl) {
         if (handedOffPopupSession != null) {
             null
@@ -301,7 +305,7 @@ private fun CustomTabScreen(
                 handedOffPopupSession != null -> browserTabController.createTabWithHandedOffPopupSession(
                     session = handedOffPopupSession,
                     initialUrl = initialUrl,
-                )
+                ).also { currentOnHandedOffPopupSessionAttached() }
 
                 prewarmedSession != null -> browserTabController.createAndAppendTabWithSession(
                     session = prewarmedSession,
