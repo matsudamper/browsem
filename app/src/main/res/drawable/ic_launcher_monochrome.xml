@@ -20,10 +20,10 @@
         android:name="ear_right"
         android:fillColor="#000000"
         android:pathData="M65,30 L71,27 L73,40 Z" />
-    <!-- 目の穴抜き: 頭と鼻先を時計回り、目を反時計回りにして nonZero で打ち消す -->
+    <!-- 目の穴抜き: 頭と鼻先の輪郭を 1 つの時計回り外周にまとめ、目を反時計回りで打ち消す（別図形の重なりだと winding が 2 になり穴が残らない） -->
     <path
         android:name="head_with_eye_hole"
         android:fillColor="#000000"
         android:fillType="nonZero"
-        android:pathData="M61,28 a13,13 0 1,1 0,26 a13,13 0 1,1 0,-26 Z M70,33 L79,49 L60,53 Z M67,37.5 a2.5,2.5 0 1,0 0,5 a2.5,2.5 0 1,0 0,-5 Z" />
+        android:pathData="M73.97,40.05 L79,49 L69.24,51.05 A13,13 0 1 1 73.97,40.05 Z M67,37.5 a2.5,2.5 0 1,0 0,5 a2.5,2.5 0 1,0 0,-5 Z" />
 </vector>
