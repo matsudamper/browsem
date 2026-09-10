@@ -7,9 +7,12 @@ data class SiteSettingsListScreenUiState(
     val callbacks: Callbacks,
     val query: String,
     val hosts: List<String>,
+    val hasNextPage: Boolean,
 ) {
     interface Callbacks {
         fun setQuery(query: String)
+
+        fun loadNextPage()
 
         fun openSiteSettings(host: String)
     }

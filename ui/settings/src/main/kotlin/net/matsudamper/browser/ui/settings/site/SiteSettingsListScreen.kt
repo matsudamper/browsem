@@ -10,7 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -21,6 +21,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -106,10 +107,15 @@ fun SiteSettingsListScreen(
                 }
             } else {
                 LazyColumn(modifier = Modifier.fillMaxSize()) {
-                    items(
+                    itemsIndexed(
                         items = uiState.hosts,
-                        key = { host -> host },
-                    ) { host ->
+                        key = { _, host -> host },
+                    ) { index, host ->
+                        if (index == uiState.hosts.lastIndex && uiState.hasNextPage) {
+                            LaunchedEffect(uiState.query, uiState.hosts.size) {
+                                uiState.callbacks.loadNextPage()
+                            }
+                        }
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier
@@ -139,6 +145,8 @@ private fun SiteSettingsListScreenPreview() {
                 callbacks = object : SiteSettingsListScreenUiState.Callbacks {
                     override fun setQuery(query: String) = Unit
 
+                    override fun loadNextPage() = Unit
+
                     override fun openSiteSettings(host: String) = Unit
                 },
                 query = "example",
@@ -147,6 +155,7 @@ private fun SiteSettingsListScreenPreview() {
                     "news.example.jp",
                     "shop.example.net",
                 ),
+                hasNextPage = false,
             ),
             onBack = {},
         )
