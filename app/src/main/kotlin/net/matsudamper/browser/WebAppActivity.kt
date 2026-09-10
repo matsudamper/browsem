@@ -12,6 +12,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.browser.customtabs.CustomTabsIntent
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -225,12 +226,10 @@ class WebAppActivity : ComponentActivity() {
      * 別ドメインの URL を Custom Tabs で開く。
      */
     private fun openInCustomTab(url: String) {
-        startActivity(
-            Intent(this, CustomTabActivity::class.java).apply {
-                action = Intent.ACTION_VIEW
-                data = Uri.parse(url)
-            },
-        )
+        CustomTabsIntent.Builder()
+            .build()
+            .apply { intent.setPackage(packageName) }
+            .launchUrl(this, Uri.parse(url))
     }
 
     /**
