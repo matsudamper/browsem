@@ -1,5 +1,6 @@
 package net.matsudamper.browser.feature.webauthncompat
 
+import java.util.ArrayDeque
 import java.util.concurrent.TimeoutException
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoRuntime
@@ -15,6 +16,15 @@ sealed interface WebAuthnCompatInstallState {
 }
 
 class WebAuthnCompatWebExtension {
+    private data class EnabledRequest(
+        val runtime: GeckoRuntime,
+        val enabled: Boolean,
+        val result: GeckoResult<WebExtension>,
+    )
+
+    private val enabledRequestLock = Any()
+    private val enabledRequests = ArrayDeque<EnabledRequest>()
+    private var enabledRequestInProgress = false
     private var installationResult: GeckoResult<WebExtension>? = null
     private var desiredEnabled: Boolean? = null
 
@@ -40,9 +50,27 @@ class WebAuthnCompatWebExtension {
     }
 
     fun retrySetEnabled(runtime: GeckoRuntime, enabled: Boolean): GeckoResult<WebExtension> {
-        desiredEnabled = enabled
-        return applyEnabled(runtime, createInstallation(runtime), enabled)
-            .also { installationResult = it }
+        val result = GeckoResult<WebExtension>()
+        val shouldStart = synchronized(enabledRequestLock) {
+            desiredEnabled = enabled
+            enabledRequests.addLast(
+                EnabledRequest(
+                    runtime = runtime,
+                    enabled = enabled,
+                    result = result,
+                ),
+            )
+            if (enabledRequestInProgress) {
+                false
+            } else {
+                enabledRequestInProgress = true
+                true
+            }
+        }
+        if (shouldStart) {
+            startNextEnabledRequest()
+        }
+        return result
     }
 
     fun installationState(): WebAuthnCompatInstallState {
@@ -55,6 +83,52 @@ class WebAuthnCompatWebExtension {
             WebAuthnCompatInstallState.Pending
         } catch (error: Throwable) {
             WebAuthnCompatInstallState.Failed(error)
+        }
+    }
+
+    private fun startNextEnabledRequest() {
+        val request = synchronized(enabledRequestLock) {
+            enabledRequests.firstOrNull()
+        } ?: return
+        val operation = applyEnabled(
+            runtime = request.runtime,
+            installation = createInstallation(request.runtime),
+            enabled = request.enabled,
+        )
+        installationResult = operation
+        operation.accept(
+            { extension ->
+                if (extension == null) {
+                    request.result.completeExceptionally(
+                        IllegalStateException("WebAuthn 互換拡張機能の設定結果が null です"),
+                    )
+                } else {
+                    request.result.complete(extension)
+                }
+                finishEnabledRequest(request)
+            },
+            { error ->
+                request.result.completeExceptionally(
+                    error ?: IllegalStateException("WebAuthn 互換拡張機能の設定に失敗しました"),
+                )
+                finishEnabledRequest(request)
+            },
+        )
+    }
+
+    private fun finishEnabledRequest(request: EnabledRequest) {
+        val hasNext = synchronized(enabledRequestLock) {
+            check(enabledRequests.firstOrNull() === request)
+            enabledRequests.removeFirst()
+            if (enabledRequests.isEmpty()) {
+                enabledRequestInProgress = false
+                false
+            } else {
+                true
+            }
+        }
+        if (hasNext) {
+            startNextEnabledRequest()
         }
     }
 
