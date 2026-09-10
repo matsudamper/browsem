@@ -2,6 +2,7 @@ package net.matsudamper.browser
 
 import android.content.ClipData
 import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.ui.semantics.SemanticsActions
@@ -26,7 +27,7 @@ class CustomTabUrlCopyTest {
     fun pageInfoLongPressCopiesCurrentUrl() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val expectedUrl = "https://customtab-copy-url-test.invalid/"
-        val clipboard = context.getSystemService(ClipboardManager::class.java)
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         clipboard.setPrimaryClip(ClipData.newPlainText("test", "before"))
         val intent = Intent(context, CustomTabActivity::class.java).apply {
             action = Intent.ACTION_VIEW
