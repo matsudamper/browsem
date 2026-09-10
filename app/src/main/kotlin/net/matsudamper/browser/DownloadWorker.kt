@@ -484,6 +484,12 @@ internal class DownloadWorker(
             openDownloadsIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
+        val cancelPendingIntent = DownloadCancelReceiver.createPendingIntent(
+            context = context,
+            currentWorkerId = id,
+            stableWorkerId = stableWorkerId,
+            notificationId = notificationId,
+        )
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_sys_download)
             .setContentTitle(title)
@@ -491,6 +497,11 @@ internal class DownloadWorker(
             .setProgress(100, progress, indeterminate)
             .setOnlyAlertOnce(true)
             .setContentIntent(pendingIntent)
+            .addAction(
+                android.R.drawable.ic_menu_close_clear_cancel,
+                context.getString(R.string.download_notification_cancel),
+                cancelPendingIntent,
+            )
             .build()
         return ForegroundInfo(
             notificationId,
@@ -523,6 +534,9 @@ internal class DownloadWorker(
 
         /** 失敗通知IDのベース。ワークIDのhashCodeを加算して使用する */
         const val NOTIFICATION_ID_FAILURE_BASE = 20000
+
+        /** キャンセル通知IDのベース。ワークIDのhashCodeを加算して使用する */
+        const val NOTIFICATION_ID_CANCELLED_BASE = 30000
         const val TAG_DOWNLOAD = "download"
 
         /** ダウンロード管理画面を開くためのActionキー */
