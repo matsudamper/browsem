@@ -1,11 +1,5 @@
 package net.matsudamper.browser.translate
 
-import com.google.mlkit.common.model.DownloadConditions
-import com.google.mlkit.nl.languageid.LanguageIdentification
-import com.google.mlkit.nl.translate.TranslateLanguage
-import com.google.mlkit.nl.translate.Translation
-import com.google.mlkit.nl.translate.Translator as MlKitTranslator
-import com.google.mlkit.nl.translate.TranslatorOptions
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CoroutineScope
@@ -16,6 +10,12 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
+import com.google.mlkit.common.model.DownloadConditions
+import com.google.mlkit.nl.languageid.LanguageIdentification
+import com.google.mlkit.nl.translate.TranslateLanguage
+import com.google.mlkit.nl.translate.Translation
+import com.google.mlkit.nl.translate.Translator as MlKitTranslator
+import com.google.mlkit.nl.translate.TranslatorOptions
 import net.matsudamper.browser.resolveTranslationLanguagePair
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
