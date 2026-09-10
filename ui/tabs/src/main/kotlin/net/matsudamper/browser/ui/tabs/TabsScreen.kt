@@ -77,6 +77,7 @@ internal object TabsLayoutDefaults {
     val minCellWidth: Dp = 220.dp
     val gridPadding: Dp = 12.dp
     val gridSpacing: Dp = 12.dp
+    val floatingMenuPadding: Dp = 4.dp
     const val cardAspectRatio: Float = 1f
 
     fun calculateColumns(availableWidth: Dp): Int {
@@ -422,7 +423,10 @@ private fun TabsScreenLoadedContent(
                     TabGroupMenu(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                            .padding(
+                                horizontal = TabsLayoutDefaults.gridPadding,
+                                vertical = TabsLayoutDefaults.floatingMenuPadding,
+                            ),
                         page = page,
                         groups = groups,
                         onClickDelete = {
@@ -504,11 +508,12 @@ private fun TabGroupMenu(
         Spacer(modifier = Modifier.weight(1f))
         Surface(
             shape = RoundedCornerShape(24.dp),
-            color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.78f),
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
             tonalElevation = 3.dp,
             shadowElevation = 6.dp,
         ) {
             Row(
+                modifier = Modifier.padding(TabsLayoutDefaults.floatingMenuPadding),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
