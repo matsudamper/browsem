@@ -45,6 +45,7 @@ import net.matsudamper.browser.download.proceedDownloadFromResponse
 import net.matsudamper.browser.feature.devtools.DevToolsWebExtension
 import net.matsudamper.browser.feature.findinpage.FindInPageWebExtension
 import net.matsudamper.browser.translate.TranslationPriorityLanguage
+import net.matsudamper.browser.translate.Translator
 import net.matsudamper.browser.ui.browser.BrowserScreenUiState
 import org.json.JSONObject
 import org.koin.compose.koinInject
@@ -911,6 +912,10 @@ internal class BrowserTabScreenState(
             }
 
             TranslationState.Loading,
+            TranslationState.ScanningPage,
+            TranslationState.DetectingLanguage,
+            TranslationState.PreparingModel,
+            TranslationState.Translating,
             TranslationState.Translated,
             -> {
                 closeTranslationBar(revertPage = true)
@@ -924,7 +929,7 @@ internal class BrowserTabScreenState(
 
     /** ステータスバーの言語ドロップダウンから再翻訳を実行する */
     fun onRetranslate(translationProvider: TranslationProvider, fromLanguage: String?, toLanguage: String) {
-        if (translationState == TranslationState.Loading) return
+        if (translationState.isInProgress) return
         runTranslation(translationProvider, fromLanguage = fromLanguage, toLanguage = toLanguage)
     }
 
@@ -944,7 +949,11 @@ internal class BrowserTabScreenState(
                     translationProvider,
                     fromLanguage,
                     toLanguage,
-                )
+                ) { translateState ->
+                    if (originalPageUrlForRevert == translationStartUrl) {
+                        translationState = translateState.toTranslationState()
+                    }
+                }
             }
             // CancellationException は runCatching で握りつぶさずに伝播させる。
             // キャンセル済みジョブが新ジョブの状態を上書きするのを防ぐ。
@@ -1874,6 +1883,16 @@ internal class BrowserTabScreenState(
         clipboard.setPrimaryClip(android.content.ClipData.newPlainText("URL", url))
         Toast.makeText(context, "URLをコピーしました", Toast.LENGTH_SHORT).show()
     }
+}
+
+private fun Translator.TranslateState.toTranslationState(): TranslationState = when (this) {
+    Translator.TranslateState.PAGE_SCAN -> TranslationState.ScanningPage
+
+    Translator.TranslateState.LANGUAGE_DETECTION -> TranslationState.DetectingLanguage
+
+    Translator.TranslateState.MODEL_DOWNLOAD -> TranslationState.PreparingModel
+
+    Translator.TranslateState.TRANSLATING -> TranslationState.Translating
 }
 
 /** WebApp のピン留めホストと異なるホストへの遷移かどうかを判定する */

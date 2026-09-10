@@ -9,6 +9,7 @@ import net.matsudamper.browser.translate.GeckoTranslator
 import net.matsudamper.browser.translate.LocalAITranslator
 import net.matsudamper.browser.translate.TranslationLanguages
 import net.matsudamper.browser.translate.TranslationPriorityLanguage
+import net.matsudamper.browser.translate.Translator
 import org.mozilla.geckoview.GeckoSession
 
 internal class PageTranslator(
@@ -19,6 +20,7 @@ internal class PageTranslator(
         provider: TranslationProvider,
         fromLanguage: String?,
         toLanguage: String,
+        onTranslateStateChanged: (Translator.TranslateState) -> Unit,
     ): TranslationLanguages? {
         return when (provider) {
             TranslationProvider.TRANSLATION_PROVIDER_GECKO,
@@ -32,11 +34,17 @@ internal class PageTranslator(
                     rawFromLang
                 }
                 val (effectiveFrom, effectiveTo) = resolveTranslationLanguagePair(resolvedFromLang, toLanguage)
-                GeckoTranslator(session, effectiveFrom, effectiveTo)
+                onTranslateStateChanged(Translator.TranslateState.TRANSLATING)
+            GeckoTranslator(session, effectiveFrom, effectiveTo)
             }
 
             TranslationProvider.TRANSLATION_PROVIDER_LOCAL_AI -> {
-                LocalAITranslator(session, fromLanguage, toLanguage)
+                LocalAITranslator(
+                session = session,
+                fromLanguage = fromLanguage,
+                toLanguage = toLanguage,
+                onTranslateStateChanged = onTranslateStateChanged,
+            )
             }
         }.translate()
     }

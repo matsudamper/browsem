@@ -31,11 +31,13 @@ class LocalAITranslator(
     private val session: GeckoSession,
     private val fromLanguage: String?,
     private val toLanguage: String,
+    private val onTranslateStateChanged: (Translator.TranslateState) -> Unit,
 ) : Translator, KoinComponent {
     private val pageTranslationWebExtension: PageTranslationWebExtension by inject()
     private val crashLogRepository: CrashLogRepository by inject()
 
     override suspend fun translate(): TranslationLanguages? {
+        onTranslateStateChanged(Translator.TranslateState.PAGE_SCAN)
         val snapshot = try {
             pageTranslationWebExtension.scanPage(session)
         } catch (error: Exception) {
@@ -47,6 +49,7 @@ class LocalAITranslator(
             return null
         }
 
+        onTranslateStateChanged(Translator.TranslateState.LANGUAGE_DETECTION)
         val sourceTranslateLanguage = resolveSourceLanguage(snapshot)
         val targetTranslateLanguage = toTranslateLanguageTag(toLanguage)
         if (sourceTranslateLanguage == null || targetTranslateLanguage == null) {
@@ -65,6 +68,7 @@ class LocalAITranslator(
                 .build(),
         )
         return try {
+            onTranslateStateChanged(Translator.TranslateState.MODEL_DOWNLOAD)
             prepareTranslationModel(
                 translator = translator,
                 sourceLanguage = effectiveSourceLanguage,
@@ -74,6 +78,7 @@ class LocalAITranslator(
             val translationCache = ConcurrentHashMap<String, String>()
             val initialSegments = snapshot.segments.take(INITIAL_APPLY_SEGMENT_COUNT)
             val remainingSegments = snapshot.segments.drop(INITIAL_APPLY_SEGMENT_COUNT)
+            onTranslateStateChanged(Translator.TranslateState.TRANSLATING)
             translateInitialSegments(
                 translator = translator,
                 pageTranslationWebExtension = pageTranslationWebExtension,
