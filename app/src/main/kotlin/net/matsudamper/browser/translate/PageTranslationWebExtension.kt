@@ -51,6 +51,7 @@ class PageTranslationWebExtension {
     )
 
     private var extension: WebExtension? = null
+
     @Volatile
     private var installationError: Throwable? = null
     private val requestSequence = AtomicLong(0)
