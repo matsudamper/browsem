@@ -18,7 +18,8 @@ import org.mozilla.geckoview.GeckoSession
 internal object WindowOpenHandoffStore {
     const val EXTRA_HANDOFF_TOKEN = "net.matsudamper.browser.extra.WINDOW_OPEN_HANDOFF_TOKEN"
 
-    // 受け渡しは startActivity 直後に消費される想定だが、コールドスタートに備えて余裕を持たせる
+    // 受け渡しは startActivity 直後に消費される想定だが、コールドスタートに備えて余裕を持たせる。
+    // HandedOffPopupRegistry の未 open 保持期間と揃える（先に切れると opener の保持が解かれる）。
     private const val STALE_ENTRY_MS = 2 * 60 * 1000L
 
     // 取り出されないまま溜まり続けないよう、保持件数に上限を設ける

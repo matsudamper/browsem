@@ -13,10 +13,11 @@ import org.mozilla.geckoview.GeckoSession
  *
  * 引き渡した直後は Gecko がセッションを open する前のため、一度でも open を確認するまでは
  * 生存扱いにする。open されないまま [UNOPENED_TIMEOUT_MS] を過ぎた登録は、引き渡し先の画面が
- * 起動しなかったとみなして捨てる。
+ * 起動しなかったとみなして捨てる。この時間は引き渡し自体の保持期間より短くしてはいけない。
+ * 先に切れると、画面がセッションを受け取る前に opener の保持が解かれる。
  */
 object HandedOffPopupRegistry {
-    private const val UNOPENED_TIMEOUT_MS = 60 * 1000L
+    private const val UNOPENED_TIMEOUT_MS = 2 * 60 * 1000L
 
     private val lock = Any()
     private val entries = mutableListOf<Entry>()
