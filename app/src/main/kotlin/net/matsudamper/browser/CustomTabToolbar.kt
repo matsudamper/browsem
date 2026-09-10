@@ -38,8 +38,11 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.onLongClick
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import kotlin.math.roundToInt
+import net.matsudamper.browser.data.ThemeMode
+import net.matsudamper.browser.ui.common.BrowserTheme
 import net.matsudamper.browser.resources.R as ResourcesR
 
 internal sealed interface CustomTabToolbarTestTags {
@@ -230,4 +233,41 @@ private fun copyUrlToClipboard(context: Context, url: String) {
     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
     clipboard.setPrimaryClip(android.content.ClipData.newPlainText("URL", url))
     Toast.makeText(context, "URLをコピーしました", Toast.LENGTH_SHORT).show()
+}
+
+@Preview(name = "CustomTabToolbarUrlLongPress", widthDp = 412)
+@Composable
+private fun PreviewCustomTabToolbarUrlLongPress() {
+    BrowserTheme(themeMode = ThemeMode.THEME_SYSTEM) {
+        CustomTabToolbar(
+            title = "example.com",
+            url = "https://example.com/page",
+            onLongClickUrl = {},
+            onClose = {},
+            toolbarColor = null,
+            onRefresh = {},
+            onSuperRefresh = {},
+            onHome = {},
+            onForward = {},
+            canGoForward = false,
+            onBack = {},
+            canGoBack = true,
+            onLongPressHistory = {},
+            isPcMode = false,
+            onPcModeToggle = {},
+            showInstallExtensionItem = false,
+            onInstallExtension = {},
+            onTranslatePage = {},
+            onShare = {},
+            onFindInPage = {},
+            onAddToHomeScreen = {},
+            showAddToHomeScreen = true,
+            onOpenInBrowser = {},
+            onOpenSiteSettings = {},
+            pageZoomPercent = 100,
+            onPageZoomIn = {},
+            onPageZoomOut = {},
+            onResetPageZoom = {},
+        )
+    }
 }
