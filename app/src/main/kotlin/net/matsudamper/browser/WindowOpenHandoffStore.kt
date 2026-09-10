@@ -1,5 +1,7 @@
 package net.matsudamper.browser
 
+import android.os.Handler
+import android.os.Looper
 import androidx.annotation.VisibleForTesting
 import java.util.UUID
 import org.mozilla.geckoview.GeckoSession
@@ -27,6 +29,11 @@ internal object WindowOpenHandoffStore {
 
     private val lock = Any()
     private val entries = linkedMapOf<String, Entry>()
+
+    // 期限切れの掃除は store / consume でしか走らないため、消費されないまま次の
+    // ポップアップも開かれないと、開いたセッションと暫定 delegate が捕まえている
+    // 起動元一式がプロセス終了まで残る。登録時に掃除を予約しておく。
+    private val staleEntryCleanupHandler = Handler(Looper.getMainLooper())
 
     private class Entry(
         val session: GeckoSession,
@@ -70,7 +77,18 @@ internal object WindowOpenHandoffStore {
         }
         evicted.forEach { discard(it) }
         HandedOffPopupRegistry.register(openerTabId = openerTabId, session = session)
+        scheduleStaleEntryCleanup()
         return token
+    }
+
+    private fun scheduleStaleEntryCleanup() {
+        staleEntryCleanupHandler.postDelayed(
+            {
+                val staleEntries = synchronized(lock) { removeStaleLocked() }
+                staleEntries.forEach { discard(it) }
+            },
+            STALE_ENTRY_MS,
+        )
     }
 
     /** トークンに対応するセッションを取り出して削除する。存在しなければ null。 */

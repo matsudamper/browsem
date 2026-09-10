@@ -9,8 +9,12 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Test
+import org.junit.runner.RunWith
 import org.mozilla.geckoview.GeckoSession
+import org.robolectric.RobolectricTestRunner
 
+// 期限切れの掃除を Handler で予約するため Robolectric 上で実行する
+@RunWith(RobolectricTestRunner::class)
 class WindowOpenHandoffStoreTest {
 
     @After
