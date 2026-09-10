@@ -1,5 +1,6 @@
 package net.matsudamper.browser.feature.webauthncompat
 
+import android.os.Looper
 import java.util.concurrent.TimeoutException
 import io.mockk.every
 import io.mockk.mockk
@@ -8,11 +9,15 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.junit.runner.RunWith
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.WebExtension
 import org.mozilla.geckoview.WebExtensionController
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
 
+@RunWith(RobolectricTestRunner::class)
 class WebAuthnCompatWebExtensionTest {
     @Test
     fun `インストール完了後は Installed を返す`() {
@@ -51,12 +56,11 @@ class WebAuthnCompatWebExtensionTest {
         val runtime = mockk<GeckoRuntime>()
         val controller = mockk<WebExtensionController>()
         val failedResult = mockk<GeckoResult<WebExtension>>()
-        val retryResult = mockk<GeckoResult<WebExtension>>()
+        val retryResult = GeckoResult<WebExtension>()
         val failure = IllegalStateException("install failed")
         every { runtime.webExtensionController } returns controller
         every { controller.ensureBuiltIn(any(), any()) } returnsMany listOf(failedResult, retryResult)
         every { failedResult.poll(0) } throws failure
-        every { retryResult.poll(0) } throws TimeoutException()
         val target = WebAuthnCompatWebExtension()
 
         target.install(runtime)
@@ -64,7 +68,8 @@ class WebAuthnCompatWebExtensionTest {
         assertTrue(failedState is WebAuthnCompatInstallState.Failed)
         assertSame(failure, (failedState as WebAuthnCompatInstallState.Failed).error)
 
-        assertSame(retryResult, target.retryInstall(runtime))
+        target.retryInstall(runtime)
+
         assertEquals(WebAuthnCompatInstallState.Pending, target.installationState())
         verify(exactly = 2) { controller.ensureBuiltIn(any(), any()) }
     }
@@ -74,7 +79,7 @@ class WebAuthnCompatWebExtensionTest {
         val runtime = mockk<GeckoRuntime>()
         val controller = mockk<WebExtensionController>()
         val installed = mockk<GeckoResult<WebExtension>>()
-        val disabled = mockk<GeckoResult<WebExtension>>()
+        val disabled = GeckoResult<WebExtension>()
         val extension = mockk<WebExtension>()
         every { runtime.webExtensionController } returns controller
         every { controller.ensureBuiltIn(any(), any()) } returns installed
@@ -87,8 +92,11 @@ class WebAuthnCompatWebExtensionTest {
         } returns disabled
         val target = WebAuthnCompatWebExtension()
 
-        assertSame(disabled, target.setEnabled(runtime, enabled = false))
+        val result = target.setEnabled(runtime, enabled = false)
+        disabled.complete(extension)
+        idleMainLooper()
 
+        assertSame(extension, result.poll(0))
         verify(exactly = 1) {
             controller.disable(extension, WebExtensionController.EnableSource.APP)
         }
@@ -100,8 +108,8 @@ class WebAuthnCompatWebExtensionTest {
         val controller = mockk<WebExtensionController>()
         val firstInstall = mockk<GeckoResult<WebExtension>>()
         val retryInstall = mockk<GeckoResult<WebExtension>>()
-        val firstDisabled = mockk<GeckoResult<WebExtension>>()
-        val retryDisabled = mockk<GeckoResult<WebExtension>>()
+        val firstDisabled = GeckoResult<WebExtension>()
+        val retryDisabled = GeckoResult<WebExtension>()
         val firstExtension = mockk<WebExtension>()
         val retryExtension = mockk<WebExtension>()
         every { runtime.webExtensionController } returns controller
@@ -122,9 +130,16 @@ class WebAuthnCompatWebExtensionTest {
         } returns retryDisabled
         val target = WebAuthnCompatWebExtension()
 
-        assertSame(firstDisabled, target.setEnabled(runtime, enabled = false))
-        assertSame(retryDisabled, target.retryInstall(runtime))
+        val firstResult = target.setEnabled(runtime, enabled = false)
+        firstDisabled.complete(firstExtension)
+        idleMainLooper()
+        assertSame(firstExtension, firstResult.poll(0))
 
+        val retryResult = target.retryInstall(runtime)
+        retryDisabled.complete(retryExtension)
+        idleMainLooper()
+
+        assertSame(retryExtension, retryResult.poll(0))
         verify(exactly = 1) {
             controller.disable(firstExtension, WebExtensionController.EnableSource.APP)
         }
@@ -134,7 +149,7 @@ class WebAuthnCompatWebExtensionTest {
     }
 
     @Test
-    fun `重複した設定変更は先行操作の完了後に次の要求を適用する`() {
+    fun `重複した状態変更は先行操作の完了後に次の要求を適用する`() {
         val runtime = mockk<GeckoRuntime>()
         val controller = mockk<WebExtensionController>()
         val firstInstall = mockk<GeckoResult<WebExtension>>()
@@ -169,7 +184,7 @@ class WebAuthnCompatWebExtensionTest {
         } returns secondDisabled
         val target = WebAuthnCompatWebExtension()
 
-        target.retrySetEnabled(runtime, enabled = true)
+        target.setEnabled(runtime, enabled = true)
         val latestResult = target.retrySetEnabled(runtime, enabled = false)
 
         verify(exactly = 1) { controller.ensureBuiltIn(any(), any()) }
@@ -178,6 +193,7 @@ class WebAuthnCompatWebExtensionTest {
         }
 
         firstAppEnabled.complete(firstExtension)
+        idleMainLooper()
 
         verify(exactly = 2) { controller.ensureBuiltIn(any(), any()) }
         verify(exactly = 1) {
@@ -185,6 +201,95 @@ class WebAuthnCompatWebExtensionTest {
         }
 
         secondDisabled.complete(secondExtension)
+        idleMainLooper()
         assertSame(secondExtension, latestResult.poll(0))
+    }
+
+    @Test
+    fun `retryInstall の再適用中も後続の設定変更を直列化する`() {
+        val runtime = mockk<GeckoRuntime>()
+        val controller = mockk<WebExtensionController>()
+        val initialInstall = mockk<GeckoResult<WebExtension>>()
+        val retryInstall = mockk<GeckoResult<WebExtension>>()
+        val disableInstall = mockk<GeckoResult<WebExtension>>()
+        val initialUserEnabled = mockk<GeckoResult<WebExtension>>()
+        val retryUserEnabled = mockk<GeckoResult<WebExtension>>()
+        val initialAppEnabled = GeckoResult<WebExtension>()
+        val retryAppEnabled = GeckoResult<WebExtension>()
+        val disabled = GeckoResult<WebExtension>()
+        val initialExtension = mockk<WebExtension>()
+        val retryExtension = mockk<WebExtension>()
+        val disableExtension = mockk<WebExtension>()
+        every { runtime.webExtensionController } returns controller
+        every { controller.ensureBuiltIn(any(), any()) } returnsMany listOf(
+            initialInstall,
+            retryInstall,
+            disableInstall,
+        )
+        every { initialInstall.then<WebExtension>(any()) } answers {
+            firstArg<GeckoResult.OnValueListener<WebExtension, WebExtension>>()
+                .onValue(initialExtension)!!
+        }
+        every { retryInstall.then<WebExtension>(any()) } answers {
+            firstArg<GeckoResult.OnValueListener<WebExtension, WebExtension>>()
+                .onValue(retryExtension)!!
+        }
+        every { disableInstall.then<WebExtension>(any()) } answers {
+            firstArg<GeckoResult.OnValueListener<WebExtension, WebExtension>>()
+                .onValue(disableExtension)!!
+        }
+        every {
+            controller.enable(initialExtension, WebExtensionController.EnableSource.USER)
+        } returns initialUserEnabled
+        every { initialUserEnabled.then<WebExtension>(any()) } answers {
+            firstArg<GeckoResult.OnValueListener<WebExtension, WebExtension>>()
+                .onValue(initialExtension)!!
+        }
+        every {
+            controller.enable(initialExtension, WebExtensionController.EnableSource.APP)
+        } returns initialAppEnabled
+        every {
+            controller.enable(retryExtension, WebExtensionController.EnableSource.USER)
+        } returns retryUserEnabled
+        every { retryUserEnabled.then<WebExtension>(any()) } answers {
+            firstArg<GeckoResult.OnValueListener<WebExtension, WebExtension>>()
+                .onValue(retryExtension)!!
+        }
+        every {
+            controller.enable(retryExtension, WebExtensionController.EnableSource.APP)
+        } returns retryAppEnabled
+        every {
+            controller.disable(disableExtension, WebExtensionController.EnableSource.APP)
+        } returns disabled
+        val target = WebAuthnCompatWebExtension()
+
+        val initialResult = target.setEnabled(runtime, enabled = true)
+        initialAppEnabled.complete(initialExtension)
+        idleMainLooper()
+        assertSame(initialExtension, initialResult.poll(0))
+
+        target.retryInstall(runtime)
+        val latestResult = target.retrySetEnabled(runtime, enabled = false)
+
+        verify(exactly = 2) { controller.ensureBuiltIn(any(), any()) }
+        verify(exactly = 0) {
+            controller.disable(disableExtension, WebExtensionController.EnableSource.APP)
+        }
+
+        retryAppEnabled.complete(retryExtension)
+        idleMainLooper()
+
+        verify(exactly = 3) { controller.ensureBuiltIn(any(), any()) }
+        verify(exactly = 1) {
+            controller.disable(disableExtension, WebExtensionController.EnableSource.APP)
+        }
+
+        disabled.complete(disableExtension)
+        idleMainLooper()
+        assertSame(disableExtension, latestResult.poll(0))
+    }
+
+    private fun idleMainLooper() {
+        shadowOf(Looper.getMainLooper()).idle()
     }
 }
