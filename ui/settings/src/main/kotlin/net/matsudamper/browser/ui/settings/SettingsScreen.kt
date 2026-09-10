@@ -362,55 +362,58 @@ fun SettingsScreen(
             Spacer(Modifier.height(betweenPadding))
 
             SettingSection(title = "セキュリティ") {
-                Column {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 4.dp),
-                    ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp),
+                ) {
+                    Text(
+                        text = "サードパーティーCAを有効化",
+                        style = MaterialTheme.typography.bodyLarge,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Switch(
+                        checked = uiState.enableThirdPartyCa,
+                        onCheckedChange = uiState.callbacks::setEnableThirdPartyCa,
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(betweenPadding))
+
+            SettingSection(title = "WebAuthn") {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .toggleable(
+                            value = uiState.webAuthnPlatformAuthenticatorAvailableOverrideEnabled,
+                            role = Role.Switch,
+                            onValueChange = { enabled ->
+                                uiState.callbacks
+                                    .setWebAuthnPlatformAuthenticatorAvailableOverrideEnabled(enabled)
+                            },
+                        )
+                        .padding(vertical = 4.dp),
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "サードパーティーCAを有効化",
+                            text = "WebAuthn のプラットフォーム認証器を利用可能として扱う",
                             style = MaterialTheme.typography.bodyLarge,
-                            modifier = Modifier.weight(1f),
                         )
-                        Switch(
-                            checked = uiState.enableThirdPartyCa,
-                            onCheckedChange = uiState.callbacks::setEnableThirdPartyCa,
-                        )
-                    }
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .toggleable(
-                                value = uiState.webAuthnPlatformAuthenticatorAvailableOverrideEnabled,
-                                role = Role.Switch,
-                                onValueChange = { enabled ->
-                                    uiState.callbacks
-                                        .setWebAuthnPlatformAuthenticatorAvailableOverrideEnabled(enabled)
-                                },
-                            )
-                            .padding(vertical = 4.dp),
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "WebAuthn のプラットフォーム認証器を利用可能として扱う",
-                                style = MaterialTheme.typography.bodyLarge,
-                            )
-                            Text(
-                                text = "GeckoView の判定を上書きし、" +
-                                    "isUserVerifyingPlatformAuthenticatorAvailable() が " +
-                                    "true を返すようにします",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                        Switch(
-                            checked = uiState.webAuthnPlatformAuthenticatorAvailableOverrideEnabled,
-                            onCheckedChange = null,
+                        Text(
+                            text = "GeckoView の判定を上書きし、" +
+                                "isUserVerifyingPlatformAuthenticatorAvailable() が " +
+                                "true を返すようにします",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
+                    Switch(
+                        checked = uiState.webAuthnPlatformAuthenticatorAvailableOverrideEnabled,
+                        onCheckedChange = null,
+                    )
                 }
             }
 
