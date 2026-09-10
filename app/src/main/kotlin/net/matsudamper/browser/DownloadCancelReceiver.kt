@@ -21,7 +21,7 @@ internal class DownloadCancelReceiver : BroadcastReceiver() {
         if (intent.action != ACTION_CANCEL_DOWNLOAD) return
 
         val currentWorkerId = intent.getStringExtra(EXTRA_CURRENT_WORKER_ID)
-            ?.let { runCatching(UUID::fromString).getOrNull() }
+            ?.let { workerId -> runCatching { UUID.fromString(workerId) }.getOrNull() }
             ?: return
         val stableWorkerId = intent.getStringExtra(EXTRA_STABLE_WORKER_ID) ?: currentWorkerId.toString()
         val notificationId = intent.getIntExtra(EXTRA_NOTIFICATION_ID, INVALID_NOTIFICATION_ID)
