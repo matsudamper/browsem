@@ -105,6 +105,14 @@ class CustomTabActivity : ComponentActivity() {
         // window.open から引き渡されたセッションは URL では作り直せないため、Activity ではなく
         // ViewModel が持ち主になる。構成変更をまたいでもタブに載せた内容が失われない。
         val handedOffPopupSession = browserViewModel.handoffSession
+        // プロセスごと終了したあと OS がタスクを作り直すと、ストアは空でセッションを取り出せない。
+        // opener も道連れに失われているため復元しようがなく、ホームページに化けるくらいなら閉じる。
+        if (intent.hasExtra(WindowOpenHandoffStore.EXTRA_HANDOFF_TOKEN) &&
+            browserViewModel.handoffInitialUrl == null
+        ) {
+            finish()
+            return
+        }
         val initialUrl = browserViewModel.handoffInitialUrl
             ?: ExternalInitialUrlPolicy.sanitize(intent.dataString).orEmpty()
         val customTabsSessionToken = CustomTabsSessionToken.getSessionTokenFromIntent(intent)
@@ -128,7 +136,13 @@ class CustomTabActivity : ComponentActivity() {
                                 initialUrl = initialUrl.takeIf { it.isNotBlank() }
                                     ?: browserSettings.resolvedHomepageUrl(),
                                 handedOffPopupSession = handedOffPopupSession,
-                                onHandedOffPopupSessionAttached = browserViewModel::onHandoffSessionAttached,
+                                onHandedOffPopupSessionAttached = {
+                                    browserViewModel.onHandoffSessionAttached()
+                                    // 載せる前に window.close が呼ばれていた場合はここで閉じる
+                                    if (browserViewModel.isHandoffCloseRequested) {
+                                        finish()
+                                    }
+                                },
                                 customTabsSessionToken = customTabsSessionToken,
                                 homepageUrl = browserSettings.resolvedHomepageUrl(),
                                 searchTemplate = browserSettings.resolvedSearchTemplate(),
