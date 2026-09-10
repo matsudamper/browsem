@@ -132,4 +132,59 @@ class WebAuthnCompatWebExtensionTest {
             controller.disable(retryExtension, WebExtensionController.EnableSource.APP)
         }
     }
+
+    @Test
+    fun `重複した設定変更は先行操作の完了後に次の要求を適用する`() {
+        val runtime = mockk<GeckoRuntime>()
+        val controller = mockk<WebExtensionController>()
+        val firstInstall = mockk<GeckoResult<WebExtension>>()
+        val secondInstall = mockk<GeckoResult<WebExtension>>()
+        val firstUserEnabled = mockk<GeckoResult<WebExtension>>()
+        val firstAppEnabled = GeckoResult<WebExtension>()
+        val secondDisabled = GeckoResult<WebExtension>()
+        val firstExtension = mockk<WebExtension>()
+        val secondExtension = mockk<WebExtension>()
+        every { runtime.webExtensionController } returns controller
+        every { controller.ensureBuiltIn(any(), any()) } returnsMany listOf(firstInstall, secondInstall)
+        every { firstInstall.then<WebExtension>(any()) } answers {
+            firstArg<GeckoResult.OnValueListener<WebExtension, WebExtension>>()
+                .onValue(firstExtension)!!
+        }
+        every { secondInstall.then<WebExtension>(any()) } answers {
+            firstArg<GeckoResult.OnValueListener<WebExtension, WebExtension>>()
+                .onValue(secondExtension)!!
+        }
+        every {
+            controller.enable(firstExtension, WebExtensionController.EnableSource.USER)
+        } returns firstUserEnabled
+        every { firstUserEnabled.then<WebExtension>(any()) } answers {
+            firstArg<GeckoResult.OnValueListener<WebExtension, WebExtension>>()
+                .onValue(firstExtension)!!
+        }
+        every {
+            controller.enable(firstExtension, WebExtensionController.EnableSource.APP)
+        } returns firstAppEnabled
+        every {
+            controller.disable(secondExtension, WebExtensionController.EnableSource.APP)
+        } returns secondDisabled
+        val target = WebAuthnCompatWebExtension()
+
+        target.retrySetEnabled(runtime, enabled = true)
+        val latestResult = target.retrySetEnabled(runtime, enabled = false)
+
+        verify(exactly = 1) { controller.ensureBuiltIn(any(), any()) }
+        verify(exactly = 0) {
+            controller.disable(secondExtension, WebExtensionController.EnableSource.APP)
+        }
+
+        firstAppEnabled.complete(firstExtension)
+
+        verify(exactly = 2) { controller.ensureBuiltIn(any(), any()) }
+        verify(exactly = 1) {
+            controller.disable(secondExtension, WebExtensionController.EnableSource.APP)
+        }
+
+        secondDisabled.complete(secondExtension)
+        assertSame(secondExtension, latestResult.poll(0))
+    }
 }
