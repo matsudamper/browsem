@@ -89,6 +89,8 @@ internal class WindowOpenHandoffHoldingDelegate(
 
     override fun onCloseRequest(session: GeckoSession) {
         isCloseRequested = true
+        // 載る前に閉じたポップアップのために opener を保持し続ける必要はない
+        HandedOffPopupRegistry.unregister(session)
     }
 
     override fun onLocationChange(

@@ -304,6 +304,7 @@ class BrowserTabController(
         if (!session.isOpen) {
             tab.pendingInitialUrl = normalizedInitialUrl
         }
+        HandedOffPopupRegistry.markAttachedToTab(session)
         tab.openedViaNewSession = true
         publishRuntimeState()
         persistenceCoordinator.persistCreatedTab(

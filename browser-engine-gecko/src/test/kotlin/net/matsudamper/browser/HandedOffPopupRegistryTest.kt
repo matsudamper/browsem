@@ -169,4 +169,16 @@ class HandedOffPopupRegistryTest {
         assertTrue(opener.retainForLivePopup)
         verify(exactly = 0) { openerSession.setPriorityHint(GeckoSession.PRIORITY_DEFAULT) }
     }
+
+    @Test
+    fun `タブへ載せた登録は閉じた時点で生存から外れる`() {
+        val session = mockk<GeckoSession>(relaxed = true)
+        every { session.isOpen } returns true
+        HandedOffPopupRegistry.register(openerTabId = "opener", session = session)
+
+        HandedOffPopupRegistry.markAttachedToTab(session)
+        every { session.isOpen } returns false
+
+        assertTrue(HandedOffPopupRegistry.liveOpenerTabIds().isEmpty())
+    }
 }

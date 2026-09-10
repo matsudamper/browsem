@@ -41,6 +41,18 @@ object HandedOffPopupRegistry {
         }
     }
 
+    /**
+     * タブへ載ったことを記録する。以降は open されたものとして扱い、閉じたら生存から外す。
+     *
+     * 登録直後に open されて、生存判定が一度も走らないまま閉じると、`isOpen` の観測だけでは
+     * 未 open と区別できず期限切れまで生存扱いが続く。
+     */
+    fun markAttachedToTab(session: GeckoSession) {
+        synchronized(lock) {
+            entries.firstOrNull { it.session === session }?.hasBeenOpened = true
+        }
+    }
+
     fun unregister(session: GeckoSession) {
         synchronized(lock) {
             entries.removeAll { it.session === session }
