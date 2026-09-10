@@ -83,7 +83,6 @@ class WebAppActivity : ComponentActivity() {
                     })
                     val browserTabController = browserViewModel.browserTabController
                     val browserSessionLifecycleController = browserViewModel.browserSessionLifecycleController
-                    val popupController = browserViewModel.popupController
                     val retainOpenersAfterDetach: (BrowserTab) -> Unit = {
                         WindowOpenSessionPolicy.postAfterFrame {
                             browserSessionLifecycleController.retainOpenersOfLivePopups(
@@ -147,7 +146,12 @@ class WebAppActivity : ComponentActivity() {
                                 onWebAppCrossDomainNavigation = ::openInCustomTab,
                                 onOpenInBrowser = ::openInMainBrowser,
                                 onOpenNewSessionRequest = { uri ->
-                                    popupController.open(uri, browserTab.tabId)
+                                    openWindowOpenRequestInCustomTab(
+                                        uri = uri,
+                                        openerTabId = browserTab.tabId,
+                                        browserTabController = browserTabController,
+                                        browserSessionLifecycleController = browserSessionLifecycleController,
+                                    )
                                 },
                                 onOpenNewTabRequest = { uri, referrerUrl ->
                                     openNewTabInMainBrowser(uri, referrerUrl)
@@ -158,48 +162,6 @@ class WebAppActivity : ComponentActivity() {
                                 onUrlInputChanged = webAppUiState.callbacks::onUrlInputChanged,
                                 onSessionDetachedFromView = retainOpenersAfterDetach,
                             )
-                            popupController.top?.let { popupTab ->
-                                WindowOpenOverlayDialog(onDismissRequest = popupController::dismissTop) {
-                                    GeckoBrowserTab(
-                                        modifier = Modifier.fillMaxSize(),
-                                        browserTab = popupTab,
-                                        homepageUrl = resolvedInitialUrl,
-                                        searchTemplate = browserSettings.resolvedSearchTemplate(),
-                                        translationProvider = browserSettings.translationProvider,
-                                        themeColorExtension = themeColorExtension,
-                                        mediaWebExtension = mediaWebExtension,
-                                        browserSessionLifecycleController = browserSessionLifecycleController,
-                                        tabCount = 1,
-                                        onInstallExtensionRequest = {},
-                                        onRequestDownloadNotificationPermission = {
-                                            requestDownloadNotificationPermission()
-                                        },
-                                        onOpenSettings = {},
-                                        onOpenSiteSettings = { url ->
-                                            outerNavActions.openSiteSettings(url, popupTab.tabId)
-                                        },
-                                        onOpenDownloads = null,
-                                        onOpenTabs = {},
-                                        enableTabUi = false,
-                                        showInstallExtensionItem = false,
-                                        customTabMode = true,
-                                        onCloseCustomTab = popupController::dismissTop,
-                                        onCloseTab = popupController::dismissTop,
-                                        onOpenInBrowser = ::openInMainBrowser,
-                                        onOpenNewSessionRequest = { uri ->
-                                            popupController.open(uri, popupTab.tabId)
-                                        },
-                                        onOpenNewTabRequest = { uri, referrerUrl ->
-                                            openNewTabInMainBrowser(uri, referrerUrl)
-                                        },
-                                        onHistoryRecord = webAppUiState.callbacks::onHistoryRecord,
-                                        onHistoryTitleUpdate = webAppUiState.callbacks::onHistoryTitleUpdate,
-                                        urlBarSuggestions = webAppUiState.urlBarSuggestions,
-                                        onUrlInputChanged = webAppUiState.callbacks::onUrlInputChanged,
-                                        onSessionDetachedFromView = retainOpenersAfterDetach,
-                                    )
-                                }
-                            }
                         }
                     }
                 }

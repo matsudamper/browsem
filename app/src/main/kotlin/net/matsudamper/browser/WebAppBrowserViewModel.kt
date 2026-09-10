@@ -14,7 +14,6 @@ internal class WebAppBrowserViewModel(
         isSinglePage = true,
     )
     val browserSessionLifecycleController = BrowserSessionLifecycleController(runtime)
-    val popupController = WindowOpenPopupController(browserTabController)
 
     init {
         browserTabController.onTabListChanged = {
@@ -26,7 +25,6 @@ internal class WebAppBrowserViewModel(
     }
 
     override fun onCleared() {
-        popupController.dismissAll()
         browserTabController.close()
     }
 }

@@ -57,6 +57,7 @@ import net.matsudamper.browser.screen.browser.CustomTabScreenViewModel
 import net.matsudamper.browser.ui.common.BrowserTheme
 import org.koin.android.ext.android.inject
 import org.mozilla.geckoview.GeckoRuntime
+import org.mozilla.geckoview.GeckoSession
 
 class CustomTabActivity : ComponentActivity() {
     private val runtime: GeckoRuntime by inject()
@@ -99,7 +100,12 @@ class CustomTabActivity : ComponentActivity() {
         val browserTabController = browserViewModel.browserTabController
         val browserSessionLifecycleController = browserViewModel.browserSessionLifecycleController
 
-        val initialUrl = ExternalInitialUrlPolicy.sanitize(intent.dataString).orEmpty()
+        // window.open から引き渡されたセッションは URL では作り直せないため、Activity が
+        // 作り直されても失われないよう ViewModel のタブへ載せてから消費する。
+        val handoff = intent.getStringExtra(WindowOpenHandoffStore.EXTRA_HANDOFF_TOKEN)
+            ?.let { WindowOpenHandoffStore.consume(it) }
+        val initialUrl = handoff?.initialUrl
+            ?: ExternalInitialUrlPolicy.sanitize(intent.dataString).orEmpty()
         val customTabsSessionToken = CustomTabsSessionToken.getSessionTokenFromIntent(intent)
         setContent {
             val settings by settingsRepository.settings.collectAsState(initial = null)
@@ -120,6 +126,7 @@ class CustomTabActivity : ComponentActivity() {
                             CustomTabScreen(
                                 initialUrl = initialUrl.takeIf { it.isNotBlank() }
                                     ?: browserSettings.resolvedHomepageUrl(),
+                                handedOffPopupSession = handoff?.session,
                                 customTabsSessionToken = customTabsSessionToken,
                                 homepageUrl = browserSettings.resolvedHomepageUrl(),
                                 searchTemplate = browserSettings.resolvedSearchTemplate(),
@@ -135,6 +142,14 @@ class CustomTabActivity : ComponentActivity() {
                                 onClose = ::finish,
                                 onOpenInBrowser = ::openInMainBrowser,
                                 onOpenNewTabInBrowser = ::openNewTabInMainBrowser,
+                                onOpenPopupInCustomTab = { uri, openerTabId ->
+                                    openWindowOpenRequestInCustomTab(
+                                        uri = uri,
+                                        openerTabId = openerTabId,
+                                        browserTabController = browserTabController,
+                                        browserSessionLifecycleController = browserSessionLifecycleController,
+                                    )
+                                },
                                 onRequestDownloadNotificationPermission = {
                                     requestDownloadNotificationPermission()
                                 },
@@ -234,6 +249,7 @@ class CustomTabActivity : ComponentActivity() {
 @Composable
 private fun CustomTabScreen(
     initialUrl: String,
+    handedOffPopupSession: GeckoSession?,
     customTabsSessionToken: CustomTabsSessionToken?,
     homepageUrl: String,
     searchTemplate: String,
@@ -249,6 +265,7 @@ private fun CustomTabScreen(
     onClose: () -> Unit,
     onOpenInBrowser: (url: String, tab: BrowserTab) -> Unit,
     onOpenNewTabInBrowser: (url: String, referrerUrl: String?) -> Unit,
+    onOpenPopupInCustomTab: (uri: String, openerTabId: String) -> GeckoSession,
     onRequestDownloadNotificationPermission: suspend () -> Unit,
 ) {
     val viewModel = viewModel(initializer = {
@@ -260,11 +277,15 @@ private fun CustomTabScreen(
     })
     val uiState by viewModel.uiState.collectAsState()
     val prewarmedSession = remember(customTabsSessionToken, initialUrl) {
-        customTabsSessionToken?.let { token ->
-            CustomTabsWarmupStore.consumePreparedSession(
-                token = token,
-                launchUrl = initialUrl,
-            )
+        if (handedOffPopupSession != null) {
+            null
+        } else {
+            customTabsSessionToken?.let { token ->
+                CustomTabsWarmupStore.consumePreparedSession(
+                    token = token,
+                    launchUrl = initialUrl,
+                )
+            }
         }
     }
     val browserTab by produceState<BrowserTab?>(
@@ -276,13 +297,18 @@ private fun CustomTabScreen(
         // BrowserAppShell の外側ナビ（サイトの設定など）で Root が一時的に外れるため、
         // 既存タブを再利用する。WebAppScreen と同様、破棄は ViewModel に任せる。
         value = browserTabController.tabs.firstOrNull()
-            ?: if (prewarmedSession != null) {
-                browserTabController.createAndAppendTabWithSession(
+            ?: when {
+                handedOffPopupSession != null -> browserTabController.createTabWithHandedOffPopupSession(
+                    session = handedOffPopupSession,
+                    initialUrl = initialUrl,
+                )
+
+                prewarmedSession != null -> browserTabController.createAndAppendTabWithSession(
                     session = prewarmedSession,
                     initialUrl = initialUrl,
                 )
-            } else {
-                browserTabController.createAndAppendTab(initialUrl = initialUrl)
+
+                else -> browserTabController.createAndAppendTab(initialUrl = initialUrl)
             }
     }
     val activeTab = browserTab
@@ -296,7 +322,6 @@ private fun CustomTabScreen(
         return
     }
 
-    val popupController = rememberWindowOpenPopupController(browserTabController)
     val retainOpenersAfterDetach: (BrowserTab) -> Unit = {
         WindowOpenSessionPolicy.postAfterFrame {
             browserSessionLifecycleController.retainOpenersOfLivePopups(
@@ -330,7 +355,7 @@ private fun CustomTabScreen(
         onCloseCustomTab = onClose,
         onOpenInBrowser = { url -> onOpenInBrowser(url, activeTab) },
         onOpenNewSessionRequest = { uri ->
-            popupController.open(uri, activeTab.tabId)
+            onOpenPopupInCustomTab(uri, activeTab.tabId)
         },
         onOpenNewTabRequest = { uri, referrerUrl ->
             onOpenNewTabInBrowser(uri, referrerUrl)
@@ -342,46 +367,6 @@ private fun CustomTabScreen(
         onUrlInputChanged = uiState.callbacks::onUrlInputChanged,
         onSessionDetachedFromView = retainOpenersAfterDetach,
     )
-    popupController.top?.let { popupTab ->
-        WindowOpenOverlayDialog(onDismissRequest = popupController::dismissTop) {
-            GeckoBrowserTab(
-                modifier = Modifier.fillMaxSize(),
-                browserTab = popupTab,
-                homepageUrl = homepageUrl,
-                searchTemplate = searchTemplate,
-                translationProvider = translationProvider,
-                themeColorExtension = themeColorExtension,
-                mediaWebExtension = mediaWebExtension,
-                browserSessionLifecycleController = browserSessionLifecycleController,
-                tabCount = 1,
-                onInstallExtensionRequest = {},
-                onRequestDownloadNotificationPermission = onRequestDownloadNotificationPermission,
-                onOpenSettings = {},
-                onOpenSiteSettings = { url ->
-                    outerNavActions.openSiteSettings(url, popupTab.tabId)
-                },
-                onOpenDownloads = null,
-                onOpenTabs = {},
-                enableTabUi = false,
-                showInstallExtensionItem = false,
-                customTabMode = true,
-                onCloseCustomTab = popupController::dismissTop,
-                onOpenInBrowser = { url -> onOpenInBrowser(url, popupTab) },
-                onOpenNewSessionRequest = { uri ->
-                    popupController.open(uri, popupTab.tabId)
-                },
-                onOpenNewTabRequest = { uri, referrerUrl ->
-                    onOpenNewTabInBrowser(uri, referrerUrl)
-                },
-                onCloseTab = popupController::dismissTop,
-                onHistoryRecord = uiState.callbacks::onHistoryRecord,
-                onHistoryTitleUpdate = uiState.callbacks::onHistoryTitleUpdate,
-                urlBarSuggestions = uiState.urlBarSuggestions,
-                onUrlInputChanged = uiState.callbacks::onUrlInputChanged,
-                onSessionDetachedFromView = retainOpenersAfterDetach,
-            )
-        }
-    }
 }
 
 @Composable
