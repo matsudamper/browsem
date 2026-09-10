@@ -32,7 +32,21 @@ import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 import org.mozilla.geckoview.GeckoRuntime
 
+private data class WebAuthnSettingsUpdate(
+    val settingsRepository: SettingsRepository,
+    val enabled: Boolean,
+)
+
 private val webAuthnSettingsUpdateScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+private val webAuthnSettingsUpdateChannel =
+    Channel<WebAuthnSettingsUpdate>(Channel.UNLIMITED).also { channel ->
+        webAuthnSettingsUpdateScope.launch {
+            for (update in channel) {
+                update.settingsRepository.setWebAuthnPlatformAuthenticatorAvailableOverrideEnabled(update.enabled)
+                BrowserSessionRegistry.reloadOpenSessions()
+            }
+        }
+    }
 
 internal class SettingsScreenViewModel(
     private val settingsRepository: SettingsRepository,
@@ -87,10 +101,12 @@ internal class SettingsScreenViewModel(
         override fun setWebAuthnPlatformAuthenticatorAvailableOverrideEnabled(enabled: Boolean) {
             webAuthnCompatWebExtension.retrySetEnabled(runtime, enabled).accept(
                 {
-                    webAuthnSettingsUpdateScope.launch {
-                        settingsRepository.setWebAuthnPlatformAuthenticatorAvailableOverrideEnabled(enabled)
-                        BrowserSessionRegistry.reloadOpenSessions()
-                    }
+                    webAuthnSettingsUpdateChannel.trySend(
+                        WebAuthnSettingsUpdate(
+                            settingsRepository = settingsRepository,
+                            enabled = enabled,
+                        ),
+                    )
                 },
                 { error ->
                     Log.w(
