@@ -1,5 +1,6 @@
 package net.matsudamper.browser
 
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -26,10 +27,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.onLongClick
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlin.math.roundToInt
@@ -42,6 +46,9 @@ internal sealed interface CustomTabToolbarTestTags {
     object Toolbar : CustomTabToolbarTestTags {
         override val id = "custom_tab_toolbar"
     }
+    object PageInfo : CustomTabToolbarTestTags {
+        override val id = "custom_tab_page_info"
+    }
     object MenuButton : CustomTabToolbarTestTags {
         override val id = "custom_tab_menu_button"
     }
@@ -52,6 +59,7 @@ internal sealed interface CustomTabToolbarTestTags {
 internal fun CustomTabToolbar(
     title: String,
     url: String,
+    onLongClickUrl: (() -> Unit)?,
     onClose: () -> Unit,
     toolbarColor: Color?,
     onRefresh: () -> Unit,
@@ -92,6 +100,7 @@ internal fun CustomTabToolbar(
         Color.White
     }
     val toolbarSecondaryContentColor = toolbarContentColor.copy(alpha = 0.72f)
+    val longClickUrl = onLongClickUrl
 
     Surface(
         color = resolvedToolbarColor,
@@ -121,6 +130,25 @@ internal fun CustomTabToolbar(
             Column(
                 modifier = Modifier
                     .weight(1f)
+                    .then(
+                        if (longClickUrl == null) {
+                            Modifier
+                        } else {
+                            Modifier
+                                .testTag(CustomTabToolbarTestTags.PageInfo.testTag)
+                                .pointerInput(longClickUrl) {
+                                    detectTapGestures(
+                                        onLongPress = { longClickUrl() },
+                                    )
+                                }
+                                .semantics {
+                                    onLongClick(label = "URLをコピー") {
+                                        longClickUrl()
+                                        true
+                                    }
+                                }
+                        },
+                    )
                     .padding(horizontal = 4.dp),
             ) {
                 Text(
