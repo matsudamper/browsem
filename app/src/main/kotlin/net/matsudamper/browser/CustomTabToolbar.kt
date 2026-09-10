@@ -4,7 +4,8 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.widget.Toast
-import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -31,14 +32,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.semantics.onLongClick
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -63,7 +61,7 @@ internal sealed interface CustomTabToolbarTestTags {
 }
 
 @Composable
-@OptIn(ExperimentalLayoutApi::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
 internal fun CustomTabToolbar(
     title: String,
     url: String,
@@ -137,24 +135,14 @@ internal fun CustomTabToolbar(
             Column(
                 modifier = Modifier
                     .weight(1f)
-                    .then(
-                        if (showCloseButton) {
-                            Modifier
-                                .testTag(CustomTabToolbarTestTags.PageInfo.testTag)
-                                .pointerInput(url) {
-                                    detectTapGestures(
-                                        onLongPress = { copyUrlToClipboard(context, url) },
-                                    )
-                                }
-                                .semantics {
-                                    onLongClick(label = "URLをコピー") {
-                                        copyUrlToClipboard(context, url)
-                                        true
-                                    }
-                                }
-                        } else {
-                            Modifier
-                        },
+                    .testTag(CustomTabToolbarTestTags.PageInfo.testTag)
+                    .combinedClickable(
+                        interactionSource = null,
+                        indication = null,
+                        onLongClickLabel = "URLをコピー",
+                        onLongClick = { copyUrlToClipboard(context, url) },
+                        hapticFeedbackEnabled = true,
+                        onClick = {},
                     )
                     .padding(horizontal = 4.dp),
             ) {
@@ -234,6 +222,26 @@ private fun copyUrlToClipboard(context: Context, url: String) {
 @Preview(name = "CustomTabToolbarUrlLongPress", widthDp = 412)
 @Composable
 private fun PreviewCustomTabToolbarUrlLongPress() {
+    PreviewCustomTabToolbar(
+        showCloseButton = true,
+        showHome = false,
+    )
+}
+
+@Preview(name = "WebAppToolbarUrlLongPress", widthDp = 412)
+@Composable
+private fun PreviewWebAppToolbarUrlLongPress() {
+    PreviewCustomTabToolbar(
+        showCloseButton = false,
+        showHome = true,
+    )
+}
+
+@Composable
+private fun PreviewCustomTabToolbar(
+    showCloseButton: Boolean,
+    showHome: Boolean,
+) {
     BrowserTheme(themeMode = ThemeMode.THEME_SYSTEM) {
         CustomTabToolbar(
             title = "example.com",
@@ -263,6 +271,8 @@ private fun PreviewCustomTabToolbarUrlLongPress() {
             onPageZoomIn = {},
             onPageZoomOut = {},
             onResetPageZoom = {},
+            showCloseButton = showCloseButton,
+            showHome = showHome,
         )
     }
 }
