@@ -29,22 +29,32 @@ internal class CustomTabBrowserViewModel(
     // 取り出したセッションはタブへ載せるまでどこからも参照されない。設定の読み込み待ちなどで
     // 載せる前に画面が終わると、開いたままのセッションと opener の保持が残るため、
     // 載せるまでの間はこの ViewModel が持ち主になる。
-    private val pendingHandoff = handoffToken?.let { WindowOpenHandoffStore.consume(it) }
-    private var unattachedHandoffSession: GeckoSession? = pendingHandoff?.session
+    private var pendingHandoff = handoffToken?.let { WindowOpenHandoffStore.consume(it) }
 
-    // 載せるまでに遷移していれば、要求時の URL ではなく遷移先をタブの初期 URL にする
-    val handoffInitialUrl: String?
-        get() = pendingHandoff?.let { it.holdingDelegate.latestLocation ?: it.initialUrl }
+    /** 引き渡しを受け取れたか。載せ終えた後も、構成変更で作り直された画面から見て変わらない。 */
+    val hasHandoff: Boolean = pendingHandoff != null
     val handoffTabId: String? = pendingHandoff?.tabId
 
-    /** タブへ載せる前に window.close が呼ばれていたか。 */
-    val isHandoffCloseRequested: Boolean
-        get() = pendingHandoff?.holdingDelegate?.isCloseRequested == true
     val handoffSession: GeckoSession?
-        get() = unattachedHandoffSession
+        get() = pendingHandoff?.session
 
-    fun onHandoffSessionAttached() {
-        unattachedHandoffSession = null
+    /**
+     * タブへ載せる URL。載せるまでに遷移していれば要求時の URL ではなく遷移先を使うため、
+     * 載せる直前に読む必要がある。
+     */
+    fun currentHandoffInitialUrl(): String? {
+        return pendingHandoff?.let { it.holdingDelegate.latestLocation ?: it.initialUrl }
+    }
+
+    /**
+     * タブへ載せ終えたことを記録し、載せる前に window.close が呼ばれていたかを返す。
+     *
+     * 暫定 delegate は起動元の Activity を捕まえているため、載せたら参照を手放す。
+     */
+    fun onHandoffSessionAttached(): Boolean {
+        val closeRequested = pendingHandoff?.holdingDelegate?.isCloseRequested == true
+        pendingHandoff = null
+        return closeRequested
     }
 
     init {
@@ -57,13 +67,13 @@ internal class CustomTabBrowserViewModel(
     }
 
     override fun onCleared() {
-        unattachedHandoffSession?.let { session ->
+        pendingHandoff?.session?.let { session ->
             HandedOffPopupRegistry.unregister(session)
             if (session.isOpen) {
                 session.close()
             }
         }
-        unattachedHandoffSession = null
+        pendingHandoff = null
         browserTabController.close()
     }
 }

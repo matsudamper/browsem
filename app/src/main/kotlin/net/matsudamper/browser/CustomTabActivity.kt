@@ -108,14 +108,11 @@ class CustomTabActivity : ComponentActivity() {
         val handedOffPopupTabId = browserViewModel.handoffTabId
         // プロセスごと終了したあと OS がタスクを作り直すと、ストアは空でセッションを取り出せない。
         // opener も道連れに失われているため復元しようがなく、ホームページに化けるくらいなら閉じる。
-        if (intent.hasExtra(WindowOpenHandoffStore.EXTRA_HANDOFF_TOKEN) &&
-            browserViewModel.handoffInitialUrl == null
-        ) {
+        if (intent.hasExtra(WindowOpenHandoffStore.EXTRA_HANDOFF_TOKEN) && !browserViewModel.hasHandoff) {
             finish()
             return
         }
-        val initialUrl = browserViewModel.handoffInitialUrl
-            ?: ExternalInitialUrlPolicy.sanitize(intent.dataString).orEmpty()
+        val initialUrl = ExternalInitialUrlPolicy.sanitize(intent.dataString).orEmpty()
         val customTabsSessionToken = CustomTabsSessionToken.getSessionTokenFromIntent(intent)
         setContent {
             val settings by settingsRepository.settings.collectAsState(initial = null)
@@ -134,20 +131,16 @@ class CustomTabActivity : ComponentActivity() {
                     ) { outerNavActions ->
                         CustomTabOpaqueShell {
                             CustomTabScreen(
-                                // 引き渡されたポップアップは window.open() の URL 省略で空になり得る。
-                                // ホームページで補うと別のページに化けるため、そのまま渡す。
-                                initialUrl = if (handedOffPopupSession != null) {
-                                    initialUrl
-                                } else {
-                                    initialUrl.takeIf { it.isNotBlank() }
-                                        ?: browserSettings.resolvedHomepageUrl()
-                                },
+                                initialUrl = initialUrl.takeIf { it.isNotBlank() }
+                                    ?: browserSettings.resolvedHomepageUrl(),
                                 handedOffPopupSession = handedOffPopupSession,
                                 handedOffPopupTabId = handedOffPopupTabId,
+                                // 待機中に遷移していることがあるため、載せる直前に読む。
+                                // window.open() の URL 省略で空になり得るので、ホームページで補わない。
+                                handedOffPopupInitialUrl = browserViewModel::currentHandoffInitialUrl,
                                 onHandedOffPopupSessionAttached = {
-                                    browserViewModel.onHandoffSessionAttached()
                                     // 載せる前に window.close が呼ばれていた場合はここで閉じる
-                                    if (browserViewModel.isHandoffCloseRequested) {
+                                    if (browserViewModel.onHandoffSessionAttached()) {
                                         finish()
                                     }
                                 },
@@ -275,6 +268,7 @@ private fun CustomTabScreen(
     initialUrl: String,
     handedOffPopupSession: GeckoSession?,
     handedOffPopupTabId: String?,
+    handedOffPopupInitialUrl: () -> String?,
     onHandedOffPopupSessionAttached: () -> Unit,
     customTabsSessionToken: CustomTabsSessionToken?,
     homepageUrl: String,
@@ -303,6 +297,7 @@ private fun CustomTabScreen(
     })
     val uiState by viewModel.uiState.collectAsState()
     val currentOnHandedOffPopupSessionAttached by rememberUpdatedState(onHandedOffPopupSessionAttached)
+    val currentHandedOffPopupInitialUrl by rememberUpdatedState(handedOffPopupInitialUrl)
     val prewarmedSession = remember(customTabsSessionToken, initialUrl) {
         if (handedOffPopupSession != null) {
             null
@@ -329,7 +324,7 @@ private fun CustomTabScreen(
                     browserTabController.createTabWithHandedOffPopupSession(
                         session = handedOffPopupSession,
                         tabId = handedOffPopupTabId,
-                        initialUrl = initialUrl,
+                        initialUrl = currentHandedOffPopupInitialUrl().orEmpty(),
                     ).also { currentOnHandedOffPopupSessionAttached() }
 
                 prewarmedSession != null -> browserTabController.createAndAppendTabWithSession(
