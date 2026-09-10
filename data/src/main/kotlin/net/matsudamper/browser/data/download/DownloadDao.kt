@@ -28,7 +28,7 @@ interface DownloadDao {
         "UPDATE download SET status = 'FAILED', failureReason = :failureReason " +
             "WHERE currentWorkerId = :currentWorkerId AND status IN ('ENQUEUED', 'RUNNING')",
     )
-    suspend fun updateFailed(currentWorkerId: String, failureReason: String?)
+    suspend fun updateFailed(currentWorkerId: String, failureReason: String?): Int
 
     /** SUCCEEDED/FAILED 以外の状態のときのみキャンセルする。完了済みの上書きを防ぐ */
     @Query("UPDATE download SET status = 'CANCELLED' WHERE currentWorkerId = :currentWorkerId AND status NOT IN ('SUCCEEDED', 'FAILED', 'CANCELLED')")
@@ -88,11 +88,11 @@ interface DownloadDao {
         totalRead: Long,
         contentLength: Long,
         failureReason: String?,
-    )
+    ): Int
 
     /**
      * 一時停止時に部分ファイルURIを保存する。
-     * 再開可能なダウンロードとしてPAUSEDステータスで記録する
+     * 再開可能なPAUSEDステータスで記録する
      */
     @Query(
         "UPDATE download SET partialFileUri = :partialFileUri, " +

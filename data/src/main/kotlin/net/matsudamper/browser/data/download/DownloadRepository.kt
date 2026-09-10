@@ -125,7 +125,10 @@ class DownloadRepository(context: Context) {
     }
 
     suspend fun updateFailed(currentWorkerId: String, failureReason: String?) {
-        dao.updateFailed(currentWorkerId = currentWorkerId, failureReason = failureReason)
+        val updated = dao.updateFailed(currentWorkerId = currentWorkerId, failureReason = failureReason)
+        if (updated == 0) {
+            handleFailedTransitionConflict(currentWorkerId = currentWorkerId, partialFileUri = null)
+        }
     }
 
     /**
@@ -140,7 +143,7 @@ class DownloadRepository(context: Context) {
         contentLength: Long,
         failureReason: String?,
     ) {
-        dao.updatePartialFailed(
+        val updated = dao.updatePartialFailed(
             currentWorkerId = currentWorkerId,
             partialFileUri = partialFileUri,
             fileName = fileName,
@@ -148,6 +151,9 @@ class DownloadRepository(context: Context) {
             contentLength = contentLength,
             failureReason = failureReason,
         )
+        if (updated == 0) {
+            handleFailedTransitionConflict(currentWorkerId = currentWorkerId, partialFileUri = partialFileUri)
+        }
     }
 
     /** SUCCEEDED/FAILED 以外の状態のときのみキャンセル状態に更新する。遷移できた場合は true */
@@ -221,6 +227,16 @@ class DownloadRepository(context: Context) {
     /** 実行中以外のダウンロード履歴を削除する。ファイル自体は削除しない */
     suspend fun clearHistory() {
         dao.deleteHistory()
+    }
+
+    private suspend fun handleFailedTransitionConflict(currentWorkerId: String, partialFileUri: String?) {
+        if (!isStopRequested(currentWorkerId)) {
+            return
+        }
+        if (partialFileUri != null) {
+            runCatching { context.contentResolver.delete(Uri.parse(partialFileUri), null, null) }
+        }
+        throw CancellationException("ダウンロードがキャンセルまたは一時停止されました")
     }
 
     private fun DownloadEntity.toRecord(): DownloadRecord {
