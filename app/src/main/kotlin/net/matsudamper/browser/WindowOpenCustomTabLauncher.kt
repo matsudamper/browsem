@@ -2,6 +2,7 @@ package net.matsudamper.browser
 
 import android.app.Activity
 import android.content.Intent
+import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
 
 /**
@@ -24,10 +25,22 @@ internal fun Activity.openWindowOpenRequestInCustomTab(
     browserSessionLifecycleController: BrowserSessionLifecycleController,
 ): GeckoSession {
     val session = GeckoSession()
+    val holdingDelegate = WindowOpenHandoffHoldingDelegate(
+        onChainedWindowOpen = { chainedUri ->
+            openWindowOpenRequestInCustomTab(
+                uri = chainedUri,
+                openerTabId = openerTabId,
+                browserTabController = browserTabController,
+                browserSessionLifecycleController = browserSessionLifecycleController,
+            )
+        },
+    )
+    holdingDelegate.bindTo(session)
     val token = WindowOpenHandoffStore.store(
         session = session,
         initialUrl = uri,
         openerTabId = openerTabId,
+        holdingDelegate = holdingDelegate,
     )
     browserSessionLifecycleController.retainOpenersOfLivePopups(
         tabs = browserTabController.tabs,
@@ -41,4 +54,32 @@ internal fun Activity.openWindowOpenRequestInCustomTab(
         )
     }
     return session
+}
+
+/**
+ * セッションを Gecko へ返してから、起動先の画面がタブへ載せて本来の delegate を張るまでの間に
+ * 届くイベントを受け止める。この間は delegate が無いため、ポップアップの自己終了や、さらに
+ * ポップアップを開く要求が握り潰される。
+ *
+ * タブに載ると `bindToSession` が delegate を差し替えるので、役目はそこまで。
+ */
+internal class WindowOpenHandoffHoldingDelegate(
+    private val onChainedWindowOpen: (String) -> GeckoSession,
+) : GeckoSession.ContentDelegate, GeckoSession.NavigationDelegate {
+    /** タブへ載る前に `window.close` が呼ばれたか。載せた直後に画面を閉じるために使う。 */
+    var isCloseRequested: Boolean = false
+        private set
+
+    fun bindTo(session: GeckoSession) {
+        session.contentDelegate = this
+        session.navigationDelegate = this
+    }
+
+    override fun onCloseRequest(session: GeckoSession) {
+        isCloseRequested = true
+    }
+
+    override fun onNewSession(session: GeckoSession, uri: String): GeckoResult<GeckoSession> {
+        return GeckoResult.fromValue(onChainedWindowOpen(uri))
+    }
 }

@@ -15,7 +15,7 @@ import org.mozilla.geckoview.GeckoSession
  * 引き渡しと同時に [HandedOffPopupRegistry] へ登録し、opener 側の画面が背面に回っても
  * JS が止まらないようにする。
  */
-object WindowOpenHandoffStore {
+internal object WindowOpenHandoffStore {
     const val EXTRA_HANDOFF_TOKEN = "net.matsudamper.browser.extra.WINDOW_OPEN_HANDOFF_TOKEN"
 
     // 受け渡しは startActivity 直後に消費される想定だが、コールドスタートに備えて余裕を持たせる
@@ -30,16 +30,23 @@ object WindowOpenHandoffStore {
     private class Entry(
         val session: GeckoSession,
         val initialUrl: String,
+        val holdingDelegate: WindowOpenHandoffHoldingDelegate,
         val createdAt: Long,
     )
 
-    class Handoff(
+    class Handoff internal constructor(
         val session: GeckoSession,
         val initialUrl: String,
+        val holdingDelegate: WindowOpenHandoffHoldingDelegate,
     )
 
     /** 引き渡すセッションを登録し、Intent に載せるトークンを返す。 */
-    fun store(session: GeckoSession, initialUrl: String, openerTabId: String): String {
+    fun store(
+        session: GeckoSession,
+        initialUrl: String,
+        openerTabId: String,
+        holdingDelegate: WindowOpenHandoffHoldingDelegate,
+    ): String {
         val token = UUID.randomUUID().toString()
         val evicted = synchronized(lock) {
             val staleEntries = removeStaleLocked()
@@ -51,6 +58,7 @@ object WindowOpenHandoffStore {
             entries[token] = Entry(
                 session = session,
                 initialUrl = initialUrl,
+                holdingDelegate = holdingDelegate,
                 createdAt = System.currentTimeMillis(),
             )
             staleEntries + listOfNotNull(overflowEntry)
@@ -65,7 +73,13 @@ object WindowOpenHandoffStore {
         val (handoff, staleEntries) = synchronized(lock) {
             val staleEntries = removeStaleLocked()
             val entry = entries.remove(token)
-            val handoff = entry?.let { Handoff(session = it.session, initialUrl = it.initialUrl) }
+            val handoff = entry?.let {
+                Handoff(
+                    session = it.session,
+                    initialUrl = it.initialUrl,
+                    holdingDelegate = it.holdingDelegate,
+                )
+            }
             handoff to staleEntries
         }
         staleEntries.forEach { discard(it) }
