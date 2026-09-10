@@ -83,7 +83,7 @@ class WebAppActivity : ComponentActivity() {
                     })
                     val browserTabController = browserViewModel.browserTabController
                     val browserSessionLifecycleController = browserViewModel.browserSessionLifecycleController
-                    val retainOpenersAfterDetach: (BrowserTab) -> Unit = {
+                    val reevaluateOpenerRetention: () -> Unit = {
                         WindowOpenSessionPolicy.postAfterFrame {
                             browserSessionLifecycleController.retainOpenersOfLivePopups(
                                 tabs = browserTabController.tabs,
@@ -160,7 +160,7 @@ class WebAppActivity : ComponentActivity() {
                                 onHistoryTitleUpdate = webAppUiState.callbacks::onHistoryTitleUpdate,
                                 urlBarSuggestions = webAppUiState.urlBarSuggestions,
                                 onUrlInputChanged = webAppUiState.callbacks::onUrlInputChanged,
-                                onSessionDetachedFromView = retainOpenersAfterDetach,
+                                onReevaluateOpenerRetention = reevaluateOpenerRetention,
                             )
                         }
                     }

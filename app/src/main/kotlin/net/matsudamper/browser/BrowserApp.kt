@@ -1221,7 +1221,7 @@ private fun MainBrowserContent(
                                 onHistoryTitleUpdate = browserScreenUiState.callbacks::onHistoryTitleUpdate,
                                 urlBarSuggestions = browserScreenUiState.urlBarSuggestions,
                                 onUrlInputChanged = browserScreenUiState.callbacks::onUrlInputChanged,
-                                onSessionDetachedFromView = {
+                                onReevaluateOpenerRetention = {
                                     WindowOpenSessionPolicy.postAfterFrame {
                                         browserSessionLifecycleController.retainOpenersOfLivePopups(
                                             tabs = browserTabController.tabs,

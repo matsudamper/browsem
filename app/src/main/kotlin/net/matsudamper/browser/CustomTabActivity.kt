@@ -351,7 +351,7 @@ private fun CustomTabScreen(
         return
     }
 
-    val retainOpenersAfterDetach: (BrowserTab) -> Unit = {
+    val reevaluateOpenerRetention: () -> Unit = {
         WindowOpenSessionPolicy.postAfterFrame {
             browserSessionLifecycleController.retainOpenersOfLivePopups(
                 tabs = browserTabController.tabs,
@@ -394,7 +394,7 @@ private fun CustomTabScreen(
         onHistoryTitleUpdate = uiState.callbacks::onHistoryTitleUpdate,
         urlBarSuggestions = uiState.urlBarSuggestions,
         onUrlInputChanged = uiState.callbacks::onUrlInputChanged,
-        onSessionDetachedFromView = retainOpenersAfterDetach,
+        onReevaluateOpenerRetention = reevaluateOpenerRetention,
     )
 }
 

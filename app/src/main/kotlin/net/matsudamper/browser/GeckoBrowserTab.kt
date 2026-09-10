@@ -128,7 +128,7 @@ internal fun GeckoBrowserTab(
     onOpenTabs: () -> Unit,
     onOpenNewSessionRequest: (String) -> GeckoSession?,
     onOpenNewTabRequest: (url: String, referrerUrl: String?) -> Unit,
-    onSessionDetachedFromView: (BrowserTab) -> Unit,
+    onReevaluateOpenerRetention: () -> Unit,
     modifier: Modifier = Modifier,
     onRequestDownloadNotificationPermission: suspend () -> Unit = {},
     enableTabUi: Boolean = true,
@@ -363,7 +363,7 @@ internal fun GeckoBrowserTab(
     val currentOnCloseTab by rememberUpdatedState(onCloseTab)
     val currentOnOpenNewSessionRequest by rememberUpdatedState(onOpenNewSessionRequest)
     val currentOnOpenNewTabRequest by rememberUpdatedState(onOpenNewTabRequest)
-    val currentOnSessionDetachedFromView by rememberUpdatedState(onSessionDetachedFromView)
+    val currentOnReevaluateOpenerRetention by rememberUpdatedState(onReevaluateOpenerRetention)
     val closeUrlInput: (Boolean) -> Unit = { restoreCurrentUrl ->
         state.isUrlInputFocused = false
         if (restoreCurrentUrl) {
@@ -438,6 +438,8 @@ internal fun GeckoBrowserTab(
             session.setActive(true)
             // ポップアップを閉じて戻った直後は、拡張機能側のアクティブタブが閉じた子のまま残る
             browserSessionLifecycleController.notifyExtensionsActiveTab(session)
+            // 別画面へ渡した子が閉じていれば、ここで opener の保持を解く
+            currentOnReevaluateOpenerRetention()
         } else {
             // バックグラウンド中に onCrash/onKill でコンテンツプロセスが失われ、
             // isOpen=false のまま復帰したケース。setActive するだけでは何も描画されず
@@ -656,7 +658,7 @@ internal fun GeckoBrowserTab(
                             addressAutofillDelegate.unbindBeforeViewRelease(session)
                             target.releaseSession()
                             // View から外れると Gecko が opener を inactive にするため保持し直す。
-                            currentOnSessionDetachedFromView(browserTab)
+                            currentOnReevaluateOpenerRetention()
                             // releaseSession だけでは Mozilla 側に古い surface 参照が残るらしく、
                             // 復帰時の setSession 直後に GPU プロセスが kill される事象が観測された。
                             // SurfaceView を INVISIBLE にすると内部 Surface を破棄するため、
@@ -701,7 +703,7 @@ internal fun GeckoBrowserTab(
                                 addressAutofillDelegate.unbindBeforeViewRelease(session)
                                 target.releaseSession()
                                 // View から外れると Gecko が opener を inactive にするため保持し直す。
-                                currentOnSessionDetachedFromView(browserTab)
+                                currentOnReevaluateOpenerRetention()
                                 target.visibility = View.INVISIBLE
                                 surfaceResumeState = SurfaceResumeState.RELEASED
                             }
@@ -955,7 +957,7 @@ internal fun GeckoBrowserTab(
             }
             // View が外れたあとに Gecko が opener を inactive にするため、
             // 次メッセージで live popup の opener を再 active する。
-            currentOnSessionDetachedFromView(browserTab)
+            currentOnReevaluateOpenerRetention()
         }
     }
 
