@@ -645,12 +645,16 @@ internal fun GeckoBrowserTab(
                                 TAG_SURFACE_RESUME,
                                 "ON_PAUSE: releaseSession + INVISIBLE 実行 gv.size=${target.width}x${target.height}",
                             )
-                            session.setActive(false)
+                            // window.open のポップアップを別画面へ渡した opener は止めない。
+                            // 止めると決済ウィンドウなどが window.opener 越しに親へ戻れなくなる。
+                            browserSessionLifecycleController.pauseSession(browserTab)
                             // best-effort capture（非同期 GeckoResult、release 後に失敗する可能性あり）。
                             state.captureTabPreview(target)
                             // surface 再作成時の自動 compositor resume を防ぐため即 detach。
                             addressAutofillDelegate.unbindBeforeViewRelease(session)
                             target.releaseSession()
+                            // View から外れると Gecko が opener を inactive にするため保持し直す。
+                            currentOnSessionDetachedFromView(browserTab)
                             // releaseSession だけでは Mozilla 側に古い surface 参照が残るらしく、
                             // 復帰時の setSession 直後に GPU プロセスが kill される事象が観測された。
                             // SurfaceView を INVISIBLE にすると内部 Surface を破棄するため、
@@ -690,9 +694,12 @@ internal fun GeckoBrowserTab(
                                         " gv.size=${target.width}x${target.height}",
                                 )
                                 // 不可視になったので Mozilla の契約どおり deactivate してよい。
-                                session.setActive(false)
+                                // ただし live popup の opener は JS を止めない。
+                                browserSessionLifecycleController.pauseSession(browserTab)
                                 addressAutofillDelegate.unbindBeforeViewRelease(session)
                                 target.releaseSession()
+                                // View から外れると Gecko が opener を inactive にするため保持し直す。
+                                currentOnSessionDetachedFromView(browserTab)
                                 target.visibility = View.INVISIBLE
                                 surfaceResumeState = SurfaceResumeState.RELEASED
                             }
