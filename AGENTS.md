@@ -89,7 +89,7 @@ GeckoView ベースの Android ブラウザ。Kotlin / Jetpack Compose / Materia
 - amend / squash で異なる目的を混ぜない
 
 ## PR / レビュー
-- PR は同時に1つまで（明示指示がなければ）
+- PR は1セッションにつき1つまで（明示指示がなければ）
 - 作成前にマージ先最新を取り込む
 
 ### レビューへの返信（必須）
