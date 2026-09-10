@@ -24,33 +24,66 @@ class CustomTabUrlCopyTest {
     val composeRule = createEmptyComposeRule()
 
     @Test(timeout = 45_000L)
-    fun pageInfoLongPressCopiesCurrentUrl() {
+    fun customTabPageInfoLongPressCopiesCurrentUrl() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val expectedUrl = "https://customtab-copy-url-test.invalid/"
-        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        clipboard.setPrimaryClip(ClipData.newPlainText("test", "before"))
+        val clipboard = prepareClipboard(context)
         val intent = Intent(context, CustomTabActivity::class.java).apply {
             action = Intent.ACTION_VIEW
             data = Uri.parse(expectedUrl)
         }
 
         ActivityScenario.launch<CustomTabActivity>(intent).use {
-            composeRule.waitUntil(timeoutMillis = 20_000) {
-                composeRule.onAllNodesWithTag(CustomTabToolbarTestTags.PageInfo.testTag)
-                    .fetchSemanticsNodes()
-                    .isNotEmpty()
-            }
-
-            composeRule.onNodeWithTag(CustomTabToolbarTestTags.PageInfo.testTag)
-                .performSemanticsAction(SemanticsActions.OnLongClick)
-
-            composeRule.waitUntil(timeoutMillis = 5_000) {
-                clipboard.primaryClip?.getItemAt(0)?.coerceToText(context)?.toString() == expectedUrl
-            }
-            assertEquals(
-                expectedUrl,
-                clipboard.primaryClip?.getItemAt(0)?.coerceToText(context)?.toString(),
-            )
+            performPageInfoLongClick()
+            assertClipboardUrl(context, clipboard, expectedUrl)
         }
+    }
+
+    @Test(timeout = 45_000L)
+    fun webAppPageInfoLongPressCopiesCurrentUrl() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val expectedUrl = "https://webapp-copy-url-test.invalid/"
+        val clipboard = prepareClipboard(context)
+        val intent = Intent(context, WebAppActivity::class.java).apply {
+            action = Intent.ACTION_VIEW
+            data = Uri.parse(expectedUrl)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_DOCUMENT)
+        }
+
+        ActivityScenario.launch<WebAppActivity>(intent).use {
+            performPageInfoLongClick()
+            assertClipboardUrl(context, clipboard, expectedUrl)
+        }
+    }
+
+    private fun performPageInfoLongClick() {
+        composeRule.waitUntil(timeoutMillis = 20_000) {
+            composeRule.onAllNodesWithTag(CustomTabToolbarTestTags.PageInfo.testTag)
+                .fetchSemanticsNodes()
+                .isNotEmpty()
+        }
+
+        composeRule.onNodeWithTag(CustomTabToolbarTestTags.PageInfo.testTag)
+            .performSemanticsAction(SemanticsActions.OnLongClick)
+    }
+
+    private fun prepareClipboard(context: Context): ClipboardManager {
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        clipboard.setPrimaryClip(ClipData.newPlainText("test", "before"))
+        return clipboard
+    }
+
+    private fun assertClipboardUrl(
+        context: Context,
+        clipboard: ClipboardManager,
+        expectedUrl: String,
+    ) {
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            clipboard.primaryClip?.getItemAt(0)?.coerceToText(context)?.toString() == expectedUrl
+        }
+        assertEquals(
+            expectedUrl,
+            clipboard.primaryClip?.getItemAt(0)?.coerceToText(context)?.toString(),
+        )
     }
 }
