@@ -75,6 +75,13 @@ internal class WindowOpenHandoffHoldingDelegate(
     var isCloseRequested: Boolean = false
         private set
 
+    /**
+     * タブへ載る前に遷移が済んだ場合の遷移先。過去の onLocationChange は新しい delegate へ
+     * 再送されないため、ここで覚えておかないとタブの URL が要求時のまま食い違う。
+     */
+    var latestLocation: String? = null
+        private set
+
     fun bindTo(session: GeckoSession) {
         session.contentDelegate = this
         session.navigationDelegate = this
@@ -82,6 +89,16 @@ internal class WindowOpenHandoffHoldingDelegate(
 
     override fun onCloseRequest(session: GeckoSession) {
         isCloseRequested = true
+    }
+
+    override fun onLocationChange(
+        session: GeckoSession,
+        url: String?,
+        perms: MutableList<GeckoSession.PermissionDelegate.ContentPermission>,
+        hasUserGesture: Boolean,
+    ) {
+        if (url.isNullOrBlank() || url == "about:blank") return
+        latestLocation = url
     }
 
     override fun onNewSession(session: GeckoSession, uri: String): GeckoResult<GeckoSession> {

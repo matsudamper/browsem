@@ -32,7 +32,9 @@ internal class CustomTabBrowserViewModel(
     private val pendingHandoff = handoffToken?.let { WindowOpenHandoffStore.consume(it) }
     private var unattachedHandoffSession: GeckoSession? = pendingHandoff?.session
 
-    val handoffInitialUrl: String? = pendingHandoff?.initialUrl
+    // 載せるまでに遷移していれば、要求時の URL ではなく遷移先をタブの初期 URL にする
+    val handoffInitialUrl: String?
+        get() = pendingHandoff?.let { it.holdingDelegate.latestLocation ?: it.initialUrl }
     val handoffTabId: String? = pendingHandoff?.tabId
 
     /** タブへ載せる前に window.close が呼ばれていたか。 */
