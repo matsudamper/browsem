@@ -46,6 +46,7 @@ import net.matsudamper.browser.feature.twittershare.TwitterShareWebExtension
 import net.matsudamper.browser.feature.viewportscale.ViewportScaleWebExtension
 import net.matsudamper.browser.feature.webauthncompat.WebAuthnCompatWebExtension
 import net.matsudamper.browser.feature.websharefiles.WebShareFilesWebExtension
+import net.matsudamper.browser.translate.PageTranslationWebExtension
 import org.koin.android.ext.koin.androidContext
 import org.koin.androidx.workmanager.dsl.worker
 import org.koin.core.module.dsl.viewModel
@@ -73,6 +74,7 @@ val appModule = module {
     single { AddressAutofillWebExtension() }
     single { FormInputAutofillWebExtension() }
     single { WebAuthnCompatWebExtension() }
+    single { PageTranslationWebExtension() }
     single { AddressAutofillCoordinator(get()) }
     factory { FormInputAutofillCoordinator(get()) }
     single<GeckoRuntime> {
@@ -95,6 +97,7 @@ val appModule = module {
         ).also {
             get<AddressAutofillWebExtension>().install(it)
             get<FormInputAutofillWebExtension>().install(it)
+            get<PageTranslationWebExtension>().install(it)
             // MainActivity の install() はこの設定反映まで含んだ同じ GeckoResult を待つ。
             // retryInstall() も保存済みの有効状態を再適用する。
             get<WebAuthnCompatWebExtension>().setEnabled(
