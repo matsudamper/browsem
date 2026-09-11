@@ -311,6 +311,10 @@ private fun TabsScreenLoadedContent(
 
     var floatingActionButtonBoundsInRoot by remember { mutableStateOf<Rect?>(null) }
 
+    // フローティング表示のグループ操作メニューはグリッドに重なるため、
+    // 先頭行がメニューへ隠れないよう実測した高さをグリッドの上端余白へ渡す。
+    var floatingMenuHeight by remember { mutableStateOf(0.dp) }
+
     Scaffold(
         modifier = modifier
             .fillMaxSize(),
@@ -418,11 +422,15 @@ private fun TabsScreenLoadedContent(
                             moveDialogOnGroupSelected = tab.listener::onMoveToGroup
                         },
                         floatingActionButtonBoundsInRoot = floatingActionButtonBoundsInRoot,
+                        topOverlayHeight = floatingMenuHeight,
                         modifier = Modifier.fillMaxSize(),
                     )
                     TabGroupMenu(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .onGloballyPositioned { coordinates ->
+                                floatingMenuHeight = with(density) { coordinates.size.height.toDp() }
+                            }
                             .padding(
                                 horizontal = TabsLayoutDefaults.gridPadding,
                                 vertical = TabsLayoutDefaults.floatingMenuPadding,
