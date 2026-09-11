@@ -1,9 +1,5 @@
 package net.matsudamper.browser
 
-import android.content.ClipData
-import android.content.ClipboardManager
-import android.content.Context
-import android.widget.Toast
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -112,8 +108,10 @@ internal fun CustomTabToolbar(
     val context = LocalContext.current
     val hapticFeedback = LocalHapticFeedback.current
     val onLongClickUrl: () -> Unit = {
-        hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
-        copyUrlToClipboard(context, url)
+        if (url.isNotBlank()) {
+            hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
+            copyUrlToClipboard(context, url)
+        }
     }
 
     Surface(
@@ -222,13 +220,6 @@ internal fun CustomTabToolbar(
             }
         }
     }
-}
-
-private fun copyUrlToClipboard(context: Context, url: String) {
-    if (url.isBlank()) return
-    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-    clipboard.setPrimaryClip(ClipData.newPlainText("URL", url))
-    Toast.makeText(context, "URLをコピーしました", Toast.LENGTH_SHORT).show()
 }
 
 @Preview(name = "CustomTabToolbarUrlLongPress", widthDp = 412)
