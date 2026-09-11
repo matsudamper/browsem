@@ -846,9 +846,11 @@ internal class BrowserTabScreenState(
         findQueryError = null
         if (findQuery.isNotEmpty()) {
             if (newFindInPageState == FindInPageState.Regex) {
+                // 通常 → 正規表現: finder をクリアして拡張機能で再検索
                 session.finder.clear()
                 findInPageWebExtension.search(session, findQuery, isRegex = true)
             } else {
+                // 正規表現 → 通常: 拡張機能をクリアして finder で再検索
                 findInPageWebExtension.clear(session)
                 session.finder.find(findQuery, 0).then<Void?> { result ->
                     findMatchCurrent = result?.current ?: 0
@@ -859,11 +861,13 @@ internal class BrowserTabScreenState(
         }
     }
 
+    /** 開発者ツールダイアログを開き、最新のフォーカス情報を問い合わせる */
     fun openDevTools() {
         showDevTools = true
         devToolsWebExtension.requestFocusedInput(session)
     }
 
+    /** フォーカス中の input の id をクリップボードにコピーする */
     fun copyFocusedInputId() {
         val id = devToolsFocusedInput?.id?.takeIf { it.isNotBlank() } ?: return
         val clipboard =
@@ -876,6 +880,7 @@ internal class BrowserTabScreenState(
         showDevTools = false
     }
 
+    /** ネットワークログ画面を開く。開発者ツールのダイアログは閉じる */
     fun openNetworkLog() {
         showDevTools = false
         showNetworkLog = true
@@ -885,6 +890,7 @@ internal class BrowserTabScreenState(
         showNetworkLog = false
     }
 
+    /** コンソール画面を開く。開発者ツールのダイアログは閉じる */
     fun openDevToolsConsole() {
         showDevTools = false
         showDevToolsConsole = true
@@ -916,6 +922,7 @@ internal class BrowserTabScreenState(
         }
     }
 
+    /** ステータスバーの言語ドロップダウンから再翻訳を実行する */
     fun onRetranslate(translationProvider: TranslationProvider, fromLanguage: String?, toLanguage: String) {
         if (translationState == TranslationState.Loading) return
         runTranslation(translationProvider, fromLanguage = fromLanguage, toLanguage = toLanguage)
@@ -924,9 +931,11 @@ internal class BrowserTabScreenState(
     private fun runTranslation(translationProvider: TranslationProvider, fromLanguage: String?, toLanguage: String) {
         translationJob?.cancel()
         translationJob = coroutineScope.launch {
+            // 初回翻訳時のみ元URLを保存する
             if (originalPageUrlForRevert == null) {
                 originalPageUrlForRevert = currentPageUrl
             }
+            // 非同期処理完了後にページ遷移済みかを検出するために翻訳開始時のURLを保持する
             val translationStartUrl = originalPageUrlForRevert
             translationState = TranslationState.Loading
             val pageUrl = translationStartUrl ?: currentPageUrl
@@ -937,7 +946,11 @@ internal class BrowserTabScreenState(
                     toLanguage,
                 )
             }
+            // CancellationException は runCatching で握りつぶさずに伝播させる。
+            // キャンセル済みジョブが新ジョブの状態を上書きするのを防ぐ。
             result.exceptionOrNull()?.let { if (it is CancellationException) throw it }
+            // 翻訳中にページ遷移が発生した場合（onLocationChange が originalPageUrlForRevert をクリア済み）は
+            // 翻訳結果を破棄して翻訳バーを表示しない
             if (originalPageUrlForRevert != translationStartUrl) return@launch
             if (result.isSuccess) {
                 val langs = result.getOrNull()
@@ -984,6 +997,7 @@ internal class BrowserTabScreenState(
         shareText("$currentPageTitle\n$currentPageUrl")
     }
 
+    /** 任意のテキストを OS の共有シート（text/plain）で共有する */
     fun shareText(text: String) {
         launchPlainTextShare(body = text)
     }
@@ -993,6 +1007,7 @@ internal class BrowserTabScreenState(
             val intent = buildPlainTextShareIntent(body, subject)
             context.startActivity(Intent.createChooser(intent, null))
         } catch (_: ActivityNotFoundException) {
+            // ツールバー共有は Web Share API ではないため、起動失敗時は何もしない
         }
     }
 
@@ -1032,6 +1047,8 @@ internal class BrowserTabScreenState(
         }
     }
 
+    // GeckoViewがレンダリングできないレスポンス（ダウンロードリンク等）を受け取った際に呼ばれる
+    // 重複がある場合は重複ダイアログを直接表示し、なければ通常の確認ダイアログを表示する
     fun downloadFileFromResponse(response: WebResponse) {
         val referrerUrl = currentPageUrl
         coroutineScope.launch {
@@ -1149,6 +1166,12 @@ internal class BrowserTabScreenState(
         promoteQueuedExternalAppLaunch()
     }
 
+    /**
+     * 外部アプリ確認ダイアログでキャンセルされた際に、
+     * ブラウザ内で（deep linkではなく）URLを読み込む。
+     * http/https の場合は sourceUri をそのまま使い、
+     * intent:// 等のカスタムスキームの場合は fallbackUrl を使用する。
+     */
     fun dismissPendingExternalAppLaunchAndLoadInBrowser() {
         val request = pendingExternalAppLaunch ?: return
         pendingExternalAppLaunch = null
@@ -1198,6 +1221,9 @@ internal class BrowserTabScreenState(
             isIconLoading = true,
         )
         addToHomeIconJob = coroutineScope.launch {
+            // CancellationException は runCatching で握りつぶさずに呼び出し側へ伝播させる。
+            // 同一URLで requestAddToHomeScreen() を再送した際、旧ジョブの cancel() 後に
+            // このコルーチンが継続して新リクエストの isIconLoading=false を書き戻すのを防ぐ。
             val fetchedIcon = try {
                 HomeScreenIconFetcher.fetchIcon(
                     pageUrl = pageUrl,
@@ -1219,6 +1245,7 @@ internal class BrowserTabScreenState(
                     browserTab.faviconBitmap = fetchedIcon
                 }
             } finally {
+                // 予期せぬ例外でもスピナー表示が残らないようロード中状態を必ず解除する
                 val current = addToHomeScreenState
                 if (current != null && current.url == pageUrl && current.isIconLoading) {
                     addToHomeScreenState = current.copy(
@@ -1260,13 +1287,18 @@ internal class BrowserTabScreenState(
                     onCaptured?.invoke()
                     return@accept
                 }
+                // ビットマップ取得済みのため、セッションリリースはこの後でも問題ない
                 onCaptured?.invoke()
+                // coroutineScope はタブ切替ナビゲーション直後に Composable が composition から
+                // 外れるとキャンセルされる。compress〜保存は独立したスコープで完走させる。
                 val tabIdForLog = browserTab.tabId
                 CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
                     if (previewBitmap.isRecycled) {
                         Log.w(TAG, "previewBitmap recycled before compress (tabId=$tabIdForLog)")
                         return@launch
                     }
+                    // HARDWARE configはcompress()できないためソフトウェアBitmapにコピーする
+                    // copy()はメモリ不足時にnullを返す（例外ではない）
                     val copiedBitmap: Bitmap? = if (previewBitmap.config == Bitmap.Config.HARDWARE) {
                         runCatching { previewBitmap.copy(Bitmap.Config.ARGB_8888, false) }
                             .getOrElse {
@@ -1312,6 +1344,7 @@ internal class BrowserTabScreenState(
 
     override fun onCanGoBackChanged(value: Boolean) {
         canGoBack = value
+        // BrowserScreen 側で opener タブへの予測型バック可否を判定するため BrowserTab にも反映する
         browserTab.canGoBack = value
     }
 
@@ -1343,15 +1376,28 @@ internal class BrowserTabScreenState(
             return
         }
         if (url.startsWith("javascript:")) return
+        // visualViewportScale はここではリセットしない。SPA の pushState 遷移
+        // （X のタブ内遷移等）ではピンチズームが維持されたまま onLocationChange が
+        // 発火するため、リセットすると拡大中なのに PullToRefresh が許可されてしまう。
+        // フルページロードでは onPageStart でリセットされる。
         if (pageLoadError?.failingUrl != url) {
             clearPageLoadError()
         }
+        // フルページロード（onPageStart が先行した場合）のみ色をリセット
+        // SPA 遷移（pushState）では onPageStart が発火しないためリセットしない
+        // ダウンロードリンクのように onPageStart だけ発火して onLocationChange が呼ばれない
+        // ケースは isFullPageLoadPending が onPageStop でクリアされるため色をリセットしない
         val wasFullPageLoad = isFullPageLoadPending
         if (isFullPageLoadPending) {
             maybeResetToolbarColorOnPageStart(url)
             isFullPageLoadPending = false
         } else {
+            // SPA 遷移（pushState / 同一ドキュメント内 history 移動）では
+            // onPageStart / onPageStop が発火しないため両フラグを復帰させる
             markRenderingDone()
+            // onPageStop が発火しないため、ここでズームを再適用する。
+            // onLocationChange コールバック内から同期的に loadUri すると注入が失敗することがあるため、
+            // 次のメインスレッド dispatch まで遅延する（UI dispatcher の launch では即時実行される）。
             if (shouldReapplyPageZoomOnSpaLocationChange(pageZoomPercent, wasFullPageLoad)) {
                 val zoomToApply = pageZoomPercent
                 mainHandler.post {
@@ -1370,10 +1416,13 @@ internal class BrowserTabScreenState(
         if (!url.startsWith("data:")) {
             detectedPageLanguage = null
         }
+        // 履歴を記録（about:blank や data: URL は除外）
+        // goBack / goForward 時はカウンタをデクリメントしてスキップする
         val shouldRecord = url.isNotBlank() && !url.startsWith("about:") && !url.startsWith("data:")
         val skip = skipHistoryRecordCount > 0
         if (skip) skipHistoryRecordCount--
         if (shouldRecord && !skip) {
+            // onHistoryStateChange の発火は遅延するため、楽観的にタブ履歴を更新する
             val newItem = TabHistoryItem(uri = url, title = "")
             tabHistoryItems = tabHistoryItems.take(tabHistoryCurrentIndex + 1) + newItem
             tabHistoryCurrentIndex = tabHistoryItems.lastIndex
@@ -1442,6 +1491,7 @@ internal class BrowserTabScreenState(
 
             isImage && srcUri != null -> ContextMenuState.Image(srcUrl = srcUri)
 
+            // AUDIO / VIDEO / NONE は未対応
             else -> null
         }
     }
@@ -1455,6 +1505,9 @@ internal class BrowserTabScreenState(
         renderReady = true
         previewCaptureReady = true
         maybeApplyPersistedPageZoomAfterRender()
+        // 新ページの初回描画 (onFirstContentfulPaint) 時点でキャプチャを更新する。
+        // ロード完了 (onPageStop) まで待つと、ロードの長いページでタブ切替した際に
+        // 前のページ（別ドメイン）のプレビューが表示され続けるため。
         capturePreviewRequestCount++
     }
 
@@ -1473,24 +1526,42 @@ internal class BrowserTabScreenState(
     override fun onPageStart(url: String) {
         clearPageLoadError()
         visualViewportScale = 1f
+        // previewCaptureReady は false に戻さない。
+        // GeckoView は新ページの描画が始まるまで古いページを表示し続けるため、
+        // ロード中のキャプチャは古いページの画像となり問題ない。
+        // 一方、外部アプリ遷移・ダウンロード判定・onLoadRequest DENY 等で
+        // onPageStop が発火しないケースで flag が false のまま固まる問題を回避する。
+        // 新しいページへの遷移時にfaviconをリセット
         browserTab.faviconBitmap = null
         webAppManifestJson = null
         isFullPageLoadPending = true
     }
 
     override fun onPageStop(success: Boolean) {
+        // ダウンロードリンク等で onLocationChange が来ない場合のフラグをクリア
         isFullPageLoadPending = false
         renderReady = true
+        // onFirstContentfulPaint が発火しないページ（エラー、リダイレクト、キャッシュ等）でも
+        // ページロード完了時点でキャプチャを許可する。これがないと previewCaptureReady が
+        // false のまま戻らず、以降のタブのキャプチャが全て拒否される。
         previewCaptureReady = true
+        // ページロード完了時に毎回キャプチャをリクエストする。
+        // 「プレビュー未取得時のみ」に絞ると、別ドメインへ遷移しても古いプレビューが
+        // 残り続けるため、取得済みでも常に最新の表示内容で上書きする。
         capturePreviewRequestCount++
         if (success) {
             fetchFavicon(currentPageUrl)
+            // ページ遷移後もズームを維持する
             if (pageZoomPercent != 100) {
                 injectViewportZoom(pageZoomPercent)
             }
         }
     }
 
+    /**
+     * ページのfaviconを非同期でフェッチしてBrowserTabに保存する。
+     * <origin>/favicon.ico を試みる。失敗した場合はnullのままにする。
+     */
     private fun fetchFavicon(pageUrl: String) {
         val uri = runCatching { java.net.URI(pageUrl) }.getOrNull() ?: return
         val scheme = uri.scheme ?: return
@@ -1511,12 +1582,17 @@ internal class BrowserTabScreenState(
                     connection.disconnect()
                 }
             }.getOrNull()
+            // ナビゲーション後の古いfetchが後から完了しても上書きしないようにチェック
             if (bitmap != null && currentPageUrl == pageUrl) {
                 browserTab.faviconBitmap = bitmap
             }
         }
     }
 
+    /**
+     * WebApp のピン留めドメイン外への遷移を Custom Tabs で開く。
+     * インターセプトした場合は true を返す。
+     */
     internal fun handleWebAppCrossDomainNavigation(url: String): Boolean {
         if (!isWebAppCrossDomainNavigation(url, webAppPinnedHost)) return false
         onWebAppCrossDomainNavigation?.invoke(url)
@@ -1530,6 +1606,9 @@ internal class BrowserTabScreenState(
             skipExternalAppCheckForNextLoad = false
             return null
         }
+        // 外部アプリ確認ダイアログを表示中に後続のナビゲーションが来た場合、
+        // ダイアログを上書きせずキューに入れる。ダイアログをキャンセルした場合に
+        // キューの内容（Play Store 等）を表示し、アプリ起動した場合は破棄する。
         if (pendingExternalAppLaunch != null) {
             val externalAction = resolveExternalAppNavigationAction(context, request.uri)
             if (externalAction is ExternalAppNavigationAction.Launch) {
@@ -1538,6 +1617,9 @@ internal class BrowserTabScreenState(
             return GeckoResult.fromValue(AllowOrDeny.DENY)
         }
         val externalAction = resolveExternalAppNavigationAction(context, request.uri)
+        // single-page でも TARGET_WINDOW_NEW は現在タブへ畳み込まない。
+        // DENY + loadUri すると onNewSession が呼ばれず overlay が出せない。
+        // 外部アプリ判定だけ行い、ブラウザ内なら ALLOW して onNewSession に渡す。
         if (isSinglePageMode && request.target == GeckoSession.NavigationDelegate.TARGET_WINDOW_NEW) {
             return when (externalAction) {
                 ExternalAppNavigationAction.AllowInBrowser -> null
@@ -1605,6 +1687,8 @@ internal class BrowserTabScreenState(
 
     override fun onSessionClosedUnexpectedly() {
         Log.w(TAG, "onSessionClosedUnexpectedly: コンテンツプロセスが失われました。復元をリクエストします")
+        // GeckoView 自身の初回描画コールバックが再度発火するまで、フリーズした最終フレームを
+        // 上に重ねて隠す（BrowserTabSurface は renderReady=false の間プレビュー/スピナーを表示する）。
         renderReady = false
         sessionRecoveryRequestCount++
     }
@@ -1619,6 +1703,7 @@ internal class BrowserTabScreenState(
             return
         }
         coroutineScope.launch {
+            // OS の権限要求の前に、サイトごとのマイク許可を確認する
             if (Manifest.permission.RECORD_AUDIO in perms) {
                 val host = extractSiteHost(currentPageUrl)
                 if (host == null || !resolveMicrophonePermission(host)) {
@@ -1642,11 +1727,14 @@ internal class BrowserTabScreenState(
         hasAudio: Boolean,
         onResult: (grantVideo: Boolean, grantAudio: Boolean) -> Unit,
     ) {
+        // マイクを含まない要求（カメラのみ等）は従来通り許可する
         if (!hasAudio) {
             onResult(hasVideo, false)
             return
         }
         coroutineScope.launch {
+            // OS 権限が許可済みの場合は onAndroidPermissionsRequest を経由しないため、
+            // ここでもサイトごとのマイク許可を確認する（未設定ならダイアログを表示する）
             val host = extractSiteHost(uri) ?: extractSiteHost(currentPageUrl)
             val grantAudio = host != null && resolveMicrophonePermission(host)
             onResult(hasVideo, grantAudio)
@@ -1657,8 +1745,13 @@ internal class BrowserTabScreenState(
         uri: String?,
         onResult: (allow: Boolean) -> Unit,
     ) {
+        // Gecko の GeckoResult を未解決のまま残さないよう、onResult は必ず一度呼ぶ
         val completed = AtomicBoolean(false)
         val job = coroutineScope.launch {
+            // モック/拒否はコンテンツスクリプトが処理するため、Gecko 本体の位置情報は
+            // サイトごとの設定が「実際の位置情報」の場合のみ許可する。
+            // 許可は標準ブラウザと同様にトップレベルサイト基準のため、iframe からの
+            // 要求（uri が iframe のオリジン）も表示中ページのホストで判定する
             val host = extractSiteHost(currentPageUrl) ?: uri?.let { extractSiteHost(it) }
             val allow = host != null &&
                 runCatching { siteSettingsRepository.getGeolocationState(host) }.getOrNull() ==
@@ -1668,6 +1761,7 @@ internal class BrowserTabScreenState(
             }
         }
         job.invokeOnCompletion { cause ->
+            // スコープのキャンセル等で onResult まで到達しなかった場合は拒否として完了させる
             if (cause != null && completed.compareAndSet(false, true)) {
                 onResult(false)
             }
@@ -1678,8 +1772,11 @@ internal class BrowserTabScreenState(
         uri: String?,
         onResult: (allow: Boolean) -> Unit,
     ) {
+        // Gecko の GeckoResult を未解決のまま残さないよう、onResult は必ず一度呼ぶ
         val completed = AtomicBoolean(false)
         val job = coroutineScope.launch {
+            // 自動再生の許可はトップレベルサイト基準のため、iframe からの要求
+            // （uri が iframe のオリジン）も表示中ページのホストで判定する
             val host = extractSiteHost(currentPageUrl) ?: uri?.let { extractSiteHost(it) }
             val allow = host != null && resolveAutoplayPermission(host)
             if (completed.compareAndSet(false, true)) {
@@ -1687,6 +1784,7 @@ internal class BrowserTabScreenState(
             }
         }
         job.invokeOnCompletion { cause ->
+            // スコープのキャンセル等で onResult まで到達しなかった場合は拒否として完了させる
             if (cause != null && completed.compareAndSet(false, true)) {
                 onResult(false)
             }
@@ -1714,6 +1812,7 @@ internal class BrowserTabScreenState(
     }
 
     private fun superRefreshCurrentPage() {
+        // キャッシュを完全にバイパスして再読み込みする
         val retryUrl = pageLoadError?.failingUrl?.takeIf { it.isNotBlank() }
         clearPageLoadError()
         if (retryUrl != null) {
@@ -1770,7 +1869,10 @@ internal class BrowserTabScreenState(
     }
 
     private fun copyUrlToClipboard(url: String) {
-        copyUrlToClipboard(context, url)
+        val clipboard =
+            context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+        clipboard.setPrimaryClip(android.content.ClipData.newPlainText("URL", url))
+        Toast.makeText(context, "URLをコピーしました", Toast.LENGTH_SHORT).show()
     }
 }
 
