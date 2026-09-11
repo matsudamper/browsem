@@ -5,8 +5,10 @@ import java.net.URL
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import net.matsudamper.browser.data.TranslationProvider
+import net.matsudamper.browser.data.crashlog.CrashLogRepository
 import net.matsudamper.browser.translate.GeckoTranslator
 import net.matsudamper.browser.translate.LocalAITranslator
+import net.matsudamper.browser.translate.PageTranslationWebExtension
 import net.matsudamper.browser.translate.TranslationLanguages
 import net.matsudamper.browser.translate.TranslationPriorityLanguage
 import net.matsudamper.browser.translate.Translator
@@ -15,6 +17,8 @@ import org.mozilla.geckoview.GeckoSession
 internal class PageTranslator(
     private val session: GeckoSession,
     private val currentPageUrl: String,
+    private val pageTranslationWebExtension: PageTranslationWebExtension,
+    private val crashLogRepository: CrashLogRepository,
 ) {
     suspend fun translatePage(
         provider: TranslationProvider,
@@ -43,6 +47,8 @@ internal class PageTranslator(
                     session = session,
                     fromLanguage = fromLanguage,
                     toLanguage = toLanguage,
+                    pageTranslationWebExtension = pageTranslationWebExtension,
+                    crashLogRepository = crashLogRepository,
                     onTranslateStateChanged = onTranslateStateChanged,
                 )
             }

@@ -25,18 +25,16 @@ import com.google.mlkit.nl.translate.Translator as MlKitTranslator
 import com.google.mlkit.nl.translate.TranslatorOptions
 import net.matsudamper.browser.data.crashlog.CrashLogRepository
 import net.matsudamper.browser.resolveTranslationLanguagePair
-import org.koin.core.component.KoinComponent
-import org.koin.core.component.inject
 import org.mozilla.geckoview.GeckoSession
 
 class LocalAITranslator(
     private val session: GeckoSession,
     private val fromLanguage: String?,
     private val toLanguage: String,
+    private val pageTranslationWebExtension: PageTranslationWebExtension,
+    private val crashLogRepository: CrashLogRepository,
     private val onTranslateStateChanged: (Translator.TranslateState) -> Unit,
-) : Translator, KoinComponent {
-    private val pageTranslationWebExtension: PageTranslationWebExtension by inject()
-    private val crashLogRepository: CrashLogRepository by inject()
+) : Translator {
 
     override suspend fun translate(): TranslationLanguages? {
         onTranslateStateChanged(Translator.TranslateState.PAGE_SCAN)

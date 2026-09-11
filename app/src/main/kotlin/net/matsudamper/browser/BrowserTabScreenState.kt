@@ -39,11 +39,13 @@ import net.matsudamper.browser.data.SiteGeolocationState
 import net.matsudamper.browser.data.SitePermissionState
 import net.matsudamper.browser.data.SiteSettingsRepository
 import net.matsudamper.browser.data.TranslationProvider
+import net.matsudamper.browser.data.crashlog.CrashLogRepository
 import net.matsudamper.browser.data.download.DownloadRecordStatus
 import net.matsudamper.browser.data.extractSiteHost
 import net.matsudamper.browser.download.proceedDownloadFromResponse
 import net.matsudamper.browser.feature.devtools.DevToolsWebExtension
 import net.matsudamper.browser.feature.findinpage.FindInPageWebExtension
+import net.matsudamper.browser.translate.PageTranslationWebExtension
 import net.matsudamper.browser.translate.TranslationPriorityLanguage
 import net.matsudamper.browser.translate.Translator
 import net.matsudamper.browser.ui.browser.BrowserScreenUiState
@@ -91,6 +93,8 @@ internal fun rememberBrowserTabScreenState(
     val siteSettingsRepository: SiteSettingsRepository = koinInject()
     val settingsRepository: SettingsRepository = koinInject()
     val webExtensionActionController: WebExtensionActionController = koinInject()
+    val pageTranslationWebExtension: PageTranslationWebExtension = koinInject()
+    val crashLogRepository: CrashLogRepository = koinInject()
     val state = remember(browserTab) {
         BrowserTabScreenState(
             browserTab = browserTab,
@@ -106,6 +110,8 @@ internal fun rememberBrowserTabScreenState(
             siteSettingsRepository = siteSettingsRepository,
             settingsRepository = settingsRepository,
             webExtensionActionController = webExtensionActionController,
+            pageTranslationWebExtension = pageTranslationWebExtension,
+            crashLogRepository = crashLogRepository,
             context = context,
             onHistoryRecord = onHistoryRecord,
             onHistoryTitleUpdate = onHistoryTitleUpdate,
@@ -141,6 +147,8 @@ internal class BrowserTabScreenState(
     private val siteSettingsRepository: SiteSettingsRepository,
     private val settingsRepository: SettingsRepository,
     private val webExtensionActionController: WebExtensionActionController,
+    private val pageTranslationWebExtension: PageTranslationWebExtension,
+    private val crashLogRepository: CrashLogRepository,
     private val context: Context,
     private val onRequestDownloadNotificationPermission: suspend () -> Unit = {},
     private val onRequestAndroidPermissions: suspend (Array<String>) -> Array<String> = { emptyArray() },
@@ -945,7 +953,12 @@ internal class BrowserTabScreenState(
             translationState = TranslationState.Loading
             val pageUrl = translationStartUrl ?: currentPageUrl
             val result = runCatching {
-                PageTranslator(session, pageUrl).translatePage(
+                PageTranslator(
+                    session = session,
+                    currentPageUrl = pageUrl,
+                    pageTranslationWebExtension = pageTranslationWebExtension,
+                    crashLogRepository = crashLogRepository,
+                ).translatePage(
                     translationProvider,
                     fromLanguage,
                     toLanguage,
