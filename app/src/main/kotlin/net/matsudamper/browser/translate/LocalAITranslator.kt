@@ -16,8 +16,10 @@ import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import com.google.mlkit.common.model.DownloadConditions
+import com.google.mlkit.common.model.RemoteModelManager
 import com.google.mlkit.nl.languageid.LanguageIdentification
 import com.google.mlkit.nl.translate.TranslateLanguage
+import com.google.mlkit.nl.translate.TranslateRemoteModel
 import com.google.mlkit.nl.translate.Translation
 import com.google.mlkit.nl.translate.Translator as MlKitTranslator
 import com.google.mlkit.nl.translate.TranslatorOptions
@@ -112,6 +114,9 @@ class LocalAITranslator(
         targetLanguage: String,
         segmentCount: Int,
     ) {
+        // 初回ダウンロードは秒単位かかるのが正常で、遅延として残すと言語ペアごとに必ずログが出る。
+        // モデルが揃っているのに遅いときだけ診断の価値があるため、事前の状態を見て切り分ける。
+        val isModelDownloadedBeforePreparation = isTranslationModelDownloaded(sourceLanguage, targetLanguage)
         val startedAt = SystemClock.elapsedRealtime()
         try {
             withTimeout(MODEL_PREPARATION_TIMEOUT_MS) {
@@ -135,7 +140,7 @@ class LocalAITranslator(
             )
         }
         val elapsedMs = SystemClock.elapsedRealtime() - startedAt
-        if (elapsedMs >= SLOW_MODEL_PREPARATION_THRESHOLD_MS) {
+        if (isModelDownloadedBeforePreparation && elapsedMs >= SLOW_MODEL_PREPARATION_THRESHOLD_MS) {
             saveInfo(
                 title = "ローカルAI翻訳モデル準備遅延",
                 body = buildTranslationDiagnostics(
@@ -146,6 +151,21 @@ class LocalAITranslator(
                     segmentCount = segmentCount,
                 ),
             )
+        }
+    }
+
+    /** 翻訳に必要なモデルが両方ダウンロード済みかを返す。判定できない場合は未ダウンロード扱いにする */
+    private suspend fun isTranslationModelDownloaded(sourceLanguage: String, targetLanguage: String): Boolean {
+        val remoteModelManager = RemoteModelManager.getInstance()
+        return try {
+            listOf(sourceLanguage, targetLanguage).all { language ->
+                remoteModelManager.isModelDownloaded(TranslateRemoteModel.Builder(language).build()).await()
+            }
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            Log.w(TAG, "翻訳モデルのダウンロード状態を取得できませんでした", error)
+            false
         }
     }
 
