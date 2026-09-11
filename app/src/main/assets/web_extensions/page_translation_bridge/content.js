@@ -8,6 +8,7 @@
   const DYNAMIC_FLUSH_DELAY_MS = 120;
   const HANDSHAKE_RETRY_MIN_MS = 500;
   const HANDSHAKE_RETRY_MAX_MS = 30000;
+  const HANDSHAKE_MAX_RETRY_COUNT = 5;
   const TRANSLATED_ATTRIBUTES = ['title', 'aria-label', 'aria-description', 'placeholder', 'alt'];
   const OBSERVED_ATTRIBUTES = TRANSLATED_ATTRIBUTES.concat(['value']);
   const EXCLUDED_TAGS = new Set([
@@ -448,11 +449,17 @@
     port.onDisconnect.addListener(function () {
       port = null;
       stopObserver();
+      // 一度つながった相手なので、切断後は改めて上限まで再試行してよい
+      handshakeRetryCount = 0;
       waitForNative();
     });
   }
 
   function scheduleNativeHandshake() {
+    // 翻訳を使わないページではネイティブ側が MessageDelegate を張らないため handshake は必ず失敗する。
+    // 無制限に再試行すると全タブ・全ページでタイマーが回り続けるので、数回で諦める。
+    // 翻訳開始時はネイティブ側が接続要求メッセージを注入するため、そこからの connect() で復帰できる。
+    if (handshakeRetryCount >= HANDSHAKE_MAX_RETRY_COUNT) return;
     const delay = Math.min(
       HANDSHAKE_RETRY_MIN_MS * Math.pow(2, handshakeRetryCount),
       HANDSHAKE_RETRY_MAX_MS,
