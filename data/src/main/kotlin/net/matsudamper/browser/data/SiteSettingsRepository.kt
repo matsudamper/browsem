@@ -1,40 +1,52 @@
 package net.matsudamper.browser.data
 
 import android.content.Context
-import androidx.datastore.core.DataStore
-import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
-import androidx.datastore.dataStore
+import androidx.room.withTransaction
+import java.io.File
 import java.net.URI
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
-
-private val Context.siteSettingsDataStore: DataStore<SiteSettings> by dataStore(
-    fileName = "site_settings.pb",
-    serializer = SiteSettingsSerializer,
-    corruptionHandler = ReplaceFileCorruptionHandler { SiteSettings.getDefaultInstance() },
-)
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import net.matsudamper.browser.data.sitesettings.SiteSettingsDatabase
+import net.matsudamper.browser.data.sitesettings.SiteSettingsEntity
 
 /** サイト（ホスト）ごとの設定を保存するリポジトリ */
 class SiteSettingsRepository(context: Context) {
-    private val dataStore = context.siteSettingsDataStore
+    private val applicationContext = context.applicationContext
+    private val database = SiteSettingsDatabase.getInstance(applicationContext)
+    private val dao = database.siteSettingsDao()
+    private val legacyFile = File(applicationContext.filesDir, "datastore/site_settings.pb")
+    private val migrationMutex = Mutex()
+
+    @Volatile
+    private var legacyMigrationChecked = false
 
     /** サイト別設定が保存されているホスト一覧を監視する */
     fun siteHosts(): Flow<List<String>> {
-        return dataStore.data
-            .map { settings -> settings.hostPermissionsMap.keys.sorted() }
-            .distinctUntilChanged()
+        return migratedFlow { dao.observeHosts() }
+    }
+
+    /** サイト別設定が保存されているホストを検索し、指定範囲を監視する */
+    fun siteHosts(query: String, limit: Int, offset: Int): Flow<List<String>> {
+        return migratedFlow {
+            dao.observeHosts(
+                query = query.trim(),
+                limit = limit,
+                offset = offset,
+            )
+        }
     }
 
     /** 指定ホストのマイク権限の状態を監視する。未設定の場合は ASK を返す */
     fun microphonePermission(host: String): Flow<SitePermissionState> {
-        return dataStore.data
-            .map { settings ->
-                settings.hostPermissionsMap[host]?.microphone
-                    ?: SitePermissionState.SITE_PERMISSION_ASK
-            }
-            .distinctUntilChanged()
+        return migratedFlow {
+            dao.observe(host).map { settings -> settings?.microphone.toSitePermissionState() }
+        }.distinctUntilChanged()
     }
 
     /**
@@ -42,32 +54,28 @@ class SiteSettingsRepository(context: Context) {
      * サイトから一度も要求されていない場合は null を返す
      */
     fun requestedMicrophonePermission(host: String): Flow<SitePermissionState?> {
-        return dataStore.data
-            .map { settings ->
-                val permissions = settings.hostPermissionsMap[host] ?: return@map null
-                // microphoneRequested 追加前に保存された ALLOW/DENY も要求済みとして扱う
-                if (permissions.microphoneRequested ||
-                    permissions.microphone != SitePermissionState.SITE_PERMISSION_ASK
-                ) {
-                    permissions.microphone
-                } else {
+        return migratedFlow {
+            dao.observe(host).map { settings ->
+                if (settings == null) {
                     null
+                } else {
+                    val state = settings.microphone.toSitePermissionState()
+                    if (settings.microphoneRequested || state != SitePermissionState.SITE_PERMISSION_ASK) {
+                        state
+                    } else {
+                        null
+                    }
                 }
             }
-            .distinctUntilChanged()
+        }.distinctUntilChanged()
     }
 
     /** 指定ホストがマイク権限を要求したことを記録する */
     suspend fun markMicrophonePermissionRequested(host: String) {
-        dataStore.updateData { current ->
-            val permissions = current.hostPermissionsMap[host] ?: SitePermissionSettings.getDefaultInstance()
-            if (permissions.microphoneRequested) return@updateData current
-            current.toBuilder()
-                .putHostPermissions(
-                    host,
-                    permissions.toBuilder().setMicrophoneRequested(true).build(),
-                )
-                .build()
+        ensureLegacyMigration()
+        database.withTransaction {
+            dao.ensureHost(host)
+            dao.markMicrophonePermissionRequested(host)
         }
     }
 
@@ -77,14 +85,10 @@ class SiteSettingsRepository(context: Context) {
     }
 
     suspend fun setMicrophonePermission(host: String, state: SitePermissionState) {
-        dataStore.updateData { current ->
-            val permissions = (current.hostPermissionsMap[host] ?: SitePermissionSettings.getDefaultInstance())
-                .toBuilder()
-                .setMicrophone(state)
-                .build()
-            current.toBuilder()
-                .putHostPermissions(host, permissions)
-                .build()
+        ensureLegacyMigration()
+        database.withTransaction {
+            dao.ensureHost(host)
+            dao.updateMicrophonePermission(host, state.toStoredValue())
         }
     }
 
@@ -93,12 +97,9 @@ class SiteSettingsRepository(context: Context) {
      * 消音メディアの自動再生は常に許可するため、この設定の対象外
      */
     fun autoplayPermission(host: String): Flow<SitePermissionState> {
-        return dataStore.data
-            .map { settings ->
-                settings.hostPermissionsMap[host]?.autoplay
-                    ?: SitePermissionState.SITE_PERMISSION_ASK
-            }
-            .distinctUntilChanged()
+        return migratedFlow {
+            dao.observe(host).map { settings -> settings?.autoplay.toSitePermissionState() }
+        }.distinctUntilChanged()
     }
 
     /**
@@ -106,29 +107,23 @@ class SiteSettingsRepository(context: Context) {
      * サイトから一度も要求されていない場合は null を返す
      */
     fun requestedAutoplayPermission(host: String): Flow<SitePermissionState?> {
-        return dataStore.data
-            .map { settings ->
-                val permissions = settings.hostPermissionsMap[host] ?: return@map null
-                if (permissions.autoplayRequested) {
-                    permissions.autoplay
+        return migratedFlow {
+            dao.observe(host).map { settings ->
+                if (settings?.autoplayRequested == true) {
+                    settings.autoplay.toSitePermissionState()
                 } else {
                     null
                 }
             }
-            .distinctUntilChanged()
+        }.distinctUntilChanged()
     }
 
     /** 指定ホストが音声付きメディアの自動再生を要求したことを記録する */
     suspend fun markAutoplayPermissionRequested(host: String) {
-        dataStore.updateData { current ->
-            val permissions = current.hostPermissionsMap[host] ?: SitePermissionSettings.getDefaultInstance()
-            if (permissions.autoplayRequested) return@updateData current
-            current.toBuilder()
-                .putHostPermissions(
-                    host,
-                    permissions.toBuilder().setAutoplayRequested(true).build(),
-                )
-                .build()
+        ensureLegacyMigration()
+        database.withTransaction {
+            dao.ensureHost(host)
+            dao.markAutoplayPermissionRequested(host)
         }
     }
 
@@ -138,25 +133,18 @@ class SiteSettingsRepository(context: Context) {
     }
 
     suspend fun setAutoplayPermission(host: String, state: SitePermissionState) {
-        dataStore.updateData { current ->
-            val permissions = (current.hostPermissionsMap[host] ?: SitePermissionSettings.getDefaultInstance())
-                .toBuilder()
-                .setAutoplay(state)
-                .build()
-            current.toBuilder()
-                .putHostPermissions(host, permissions)
-                .build()
+        ensureLegacyMigration()
+        database.withTransaction {
+            dao.ensureHost(host)
+            dao.updateAutoplayPermission(host, state.toStoredValue())
         }
     }
 
     /** 指定ホストの位置情報の扱いを監視する。未設定の場合は MOCK を返す */
     fun geolocationState(host: String): Flow<SiteGeolocationState> {
-        return dataStore.data
-            .map { settings ->
-                settings.hostPermissionsMap[host]?.geolocation
-                    ?: SiteGeolocationState.SITE_GEOLOCATION_MOCK
-            }
-            .distinctUntilChanged()
+        return migratedFlow {
+            dao.observe(host).map { settings -> settings?.geolocation.toSiteGeolocationState() }
+        }.distinctUntilChanged()
     }
 
     /** 指定ホストの現在の位置情報の扱いを取得する */
@@ -166,11 +154,11 @@ class SiteSettingsRepository(context: Context) {
 
     /** 全ホストの位置情報の扱いを監視する。key はホスト名 */
     fun geolocationStates(): Flow<Map<String, SiteGeolocationState>> {
-        return dataStore.data
-            .map { settings ->
-                settings.hostPermissionsMap.mapValues { (_, permissions) -> permissions.geolocation }
+        return migratedFlow {
+            dao.observeAll().map { settings ->
+                settings.associate { item -> item.host to item.geolocation.toSiteGeolocationState() }
             }
-            .distinctUntilChanged()
+        }.distinctUntilChanged()
     }
 
     /**
@@ -178,44 +166,113 @@ class SiteSettingsRepository(context: Context) {
      * サイトから一度も要求されていない場合は null を返す
      */
     fun requestedGeolocationState(host: String): Flow<SiteGeolocationState?> {
-        return dataStore.data
-            .map { settings ->
-                val permissions = settings.hostPermissionsMap[host] ?: return@map null
-                if (permissions.geolocationRequested ||
-                    permissions.geolocation != SiteGeolocationState.SITE_GEOLOCATION_MOCK
-                ) {
-                    permissions.geolocation
-                } else {
+        return migratedFlow {
+            dao.observe(host).map { settings ->
+                if (settings == null) {
                     null
+                } else {
+                    val state = settings.geolocation.toSiteGeolocationState()
+                    if (settings.geolocationRequested || state != SiteGeolocationState.SITE_GEOLOCATION_MOCK) {
+                        state
+                    } else {
+                        null
+                    }
                 }
             }
-            .distinctUntilChanged()
+        }.distinctUntilChanged()
     }
 
     /** 指定ホストが位置情報を要求したことを記録する */
     suspend fun markGeolocationRequested(host: String) {
-        dataStore.updateData { current ->
-            val permissions = current.hostPermissionsMap[host] ?: SitePermissionSettings.getDefaultInstance()
-            if (permissions.geolocationRequested) return@updateData current
-            current.toBuilder()
-                .putHostPermissions(
-                    host,
-                    permissions.toBuilder().setGeolocationRequested(true).build(),
-                )
-                .build()
+        ensureLegacyMigration()
+        database.withTransaction {
+            dao.ensureHost(host)
+            dao.markGeolocationRequested(host)
         }
     }
 
     suspend fun setGeolocationState(host: String, state: SiteGeolocationState) {
-        dataStore.updateData { current ->
-            val permissions = (current.hostPermissionsMap[host] ?: SitePermissionSettings.getDefaultInstance())
-                .toBuilder()
-                .setGeolocation(state)
-                .build()
-            current.toBuilder()
-                .putHostPermissions(host, permissions)
-                .build()
+        ensureLegacyMigration()
+        database.withTransaction {
+            dao.ensureHost(host)
+            dao.updateGeolocationState(host, state.toStoredValue())
         }
+    }
+
+    private fun <T> migratedFlow(source: () -> Flow<T>): Flow<T> {
+        return flow {
+            ensureLegacyMigration()
+            emitAll(source())
+        }
+    }
+
+    private suspend fun ensureLegacyMigration() {
+        if (legacyMigrationChecked) return
+        migrationMutex.withLock {
+            if (!legacyMigrationChecked) {
+                if (!dao.isLegacyMigrationCompleted()) {
+                    val legacySettings = readLegacySettings()
+                    val legacyEntities = legacySettings.hostPermissionsMap.map { (host, permissions) ->
+                        SiteSettingsEntity(
+                            host = host,
+                            microphone = permissions.microphoneValue,
+                            microphoneRequested = permissions.microphoneRequested,
+                            geolocation = permissions.geolocationValue,
+                            geolocationRequested = permissions.geolocationRequested,
+                            autoplay = permissions.autoplayValue,
+                            autoplayRequested = permissions.autoplayRequested,
+                        )
+                    }
+                    database.withTransaction {
+                        if (!dao.isLegacyMigrationCompleted()) {
+                            dao.upsertAll(legacyEntities)
+                            dao.markLegacyMigrationCompleted()
+                        }
+                    }
+                }
+                legacyMigrationChecked = true
+            }
+        }
+    }
+
+    private fun readLegacySettings(): SiteSettings {
+        if (!legacyFile.exists()) return SiteSettings.getDefaultInstance()
+        // 移行元ファイルはロールバックや調査に使えるよう、移行後も削除・更新しない。
+        return runCatching {
+            legacyFile.inputStream().use { inputStream -> SiteSettings.parseFrom(inputStream) }
+        }.getOrDefault(SiteSettings.getDefaultInstance())
+    }
+}
+
+private fun Int?.toSitePermissionState(): SitePermissionState {
+    return when (this) {
+        1 -> SitePermissionState.SITE_PERMISSION_ALLOW
+        2 -> SitePermissionState.SITE_PERMISSION_DENY
+        else -> SitePermissionState.SITE_PERMISSION_ASK
+    }
+}
+
+private fun Int?.toSiteGeolocationState(): SiteGeolocationState {
+    return when (this) {
+        1 -> SiteGeolocationState.SITE_GEOLOCATION_DENY
+        2 -> SiteGeolocationState.SITE_GEOLOCATION_REAL
+        else -> SiteGeolocationState.SITE_GEOLOCATION_MOCK
+    }
+}
+
+private fun SitePermissionState.toStoredValue(): Int {
+    return when (this) {
+        SitePermissionState.SITE_PERMISSION_ALLOW -> 1
+        SitePermissionState.SITE_PERMISSION_DENY -> 2
+        else -> 0
+    }
+}
+
+private fun SiteGeolocationState.toStoredValue(): Int {
+    return when (this) {
+        SiteGeolocationState.SITE_GEOLOCATION_DENY -> 1
+        SiteGeolocationState.SITE_GEOLOCATION_REAL -> 2
+        else -> 0
     }
 }
 
