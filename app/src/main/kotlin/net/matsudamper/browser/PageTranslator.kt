@@ -35,16 +35,16 @@ internal class PageTranslator(
                 }
                 val (effectiveFrom, effectiveTo) = resolveTranslationLanguagePair(resolvedFromLang, toLanguage)
                 onTranslateStateChanged(Translator.TranslateState.TRANSLATING)
-            GeckoTranslator(session, effectiveFrom, effectiveTo)
+                GeckoTranslator(session, effectiveFrom, effectiveTo)
             }
 
             TranslationProvider.TRANSLATION_PROVIDER_LOCAL_AI -> {
                 LocalAITranslator(
-                session = session,
-                fromLanguage = fromLanguage,
-                toLanguage = toLanguage,
-                onTranslateStateChanged = onTranslateStateChanged,
-            )
+                    session = session,
+                    fromLanguage = fromLanguage,
+                    toLanguage = toLanguage,
+                    onTranslateStateChanged = onTranslateStateChanged,
+                )
             }
         }.translate()
     }

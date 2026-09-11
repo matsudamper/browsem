@@ -1887,11 +1887,8 @@ internal class BrowserTabScreenState(
 
 private fun Translator.TranslateState.toTranslationState(): TranslationState = when (this) {
     Translator.TranslateState.PAGE_SCAN -> TranslationState.ScanningPage
-
     Translator.TranslateState.LANGUAGE_DETECTION -> TranslationState.DetectingLanguage
-
     Translator.TranslateState.MODEL_DOWNLOAD -> TranslationState.PreparingModel
-
     Translator.TranslateState.TRANSLATING -> TranslationState.Translating
 }
 

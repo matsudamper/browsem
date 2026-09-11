@@ -245,7 +245,6 @@ private fun languageDisplayName(tag: String?): String {
     return if (name.isBlank()) tag else name
 }
 
-
 @Preview(name = "ML翻訳モデル準備中", widthDp = 360)
 @Composable
 private fun PreviewTranslationStatusBarPreparingModel() {
