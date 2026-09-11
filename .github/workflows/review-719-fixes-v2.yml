@@ -1,0 +1,514 @@
+name: PR 719 Review Fixes v2
+
+on:
+  push:
+    branches:
+      - chatgpt/review-719-helper
+
+permissions:
+  contents: write
+
+jobs:
+  apply-verify-and-push:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+
+    steps:
+      - name: Checkout target branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: chatgpt/improve-html-ai-translation
+          fetch-depth: 0
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4.0.1
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+
+      - name: Apply review fixes
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: str, old: str, new: str) -> None:
+              file = Path(path)
+              text = file.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise RuntimeError(f"{path}: expected exactly one match, found {count}: {old[:140]!r}")
+              file.write_text(text.replace(old, new, 1))
+
+          page_translator = "app/src/main/kotlin/net/matsudamper/browser/PageTranslator.kt"
+          replace_once(
+              page_translator,
+              "import net.matsudamper.browser.data.TranslationProvider\n",
+              "import net.matsudamper.browser.data.TranslationProvider\nimport net.matsudamper.browser.data.crashlog.CrashLogRepository\n",
+          )
+          replace_once(
+              page_translator,
+              "import net.matsudamper.browser.translate.LocalAITranslator\n",
+              "import net.matsudamper.browser.translate.LocalAITranslator\nimport net.matsudamper.browser.translate.PageTranslationWebExtension\n",
+          )
+          replace_once(
+              page_translator,
+              """internal class PageTranslator(
+              private val session: GeckoSession,
+              private val currentPageUrl: String,
+          ) {""",
+              """internal class PageTranslator(
+              private val session: GeckoSession,
+              private val currentPageUrl: String,
+              private val pageTranslationWebExtension: PageTranslationWebExtension,
+              private val crashLogRepository: CrashLogRepository,
+          ) {""",
+          )
+          replace_once(
+              page_translator,
+              """                onTranslateStateChanged(Translator.TranslateState.TRANSLATING)
+              GeckoTranslator(session, effectiveFrom, effectiveTo)""",
+              """                onTranslateStateChanged(Translator.TranslateState.TRANSLATING)
+                      GeckoTranslator(session, effectiveFrom, effectiveTo)""",
+          )
+          replace_once(
+              page_translator,
+              """            TranslationProvider.TRANSLATION_PROVIDER_LOCAL_AI -> {
+                  LocalAITranslator(
+                  session = session,
+                  fromLanguage = fromLanguage,
+                  toLanguage = toLanguage,
+                  onTranslateStateChanged = onTranslateStateChanged,
+              )
+              }""",
+              """            TranslationProvider.TRANSLATION_PROVIDER_LOCAL_AI -> {
+                  LocalAITranslator(
+                      session = session,
+                      fromLanguage = fromLanguage,
+                      toLanguage = toLanguage,
+                      pageTranslationWebExtension = pageTranslationWebExtension,
+                      crashLogRepository = crashLogRepository,
+                      onTranslateStateChanged = onTranslateStateChanged,
+                  )
+              }""",
+          )
+
+          status_bar = "app/src/main/kotlin/net/matsudamper/browser/TranslationStatusBar.kt"
+          replace_once(status_bar, "}\n\n\n@Preview", "}\n\n@Preview")
+
+          content_js = "app/src/main/assets/web_extensions/page_translation_bridge/content.js"
+          replace_once(content_js, "  const IMMEDIATE_CONNECT_MESSAGE = '__browsem_page_translation_connect__';\n", "")
+          replace_once(
+              content_js,
+              "  const HANDSHAKE_RETRY_MAX_MS = 30000;\n",
+              "  const HANDSHAKE_RETRY_MAX_MS = 30000;\n  const HANDSHAKE_RETRY_LIMIT = 7;\n",
+          )
+          replace_once(
+              content_js,
+              """    port.onDisconnect.addListener(function () {
+                  port = null;
+                  stopObserver();
+                  waitForNative();
+                });""",
+              """    port.onDisconnect.addListener(function () {
+                  port = null;
+                  stopObserver();
+                  handshakeRetryCount = 0;
+                  waitForNative();
+                });""",
+          )
+          replace_once(
+              content_js,
+              """  function scheduleNativeHandshake() {
+              const delay = Math.min(""",
+              """  function scheduleNativeHandshake() {
+              if (handshakeRetryCount >= HANDSHAKE_RETRY_LIMIT) return;
+              const delay = Math.min(""",
+          )
+          replace_once(
+              content_js,
+              """  window.addEventListener('message', function (event) {
+              if (event.data !== IMMEDIATE_CONNECT_MESSAGE) return;
+              handshakeRetryCount = 0;
+              connect();
+            });
+
+            waitForNative();""",
+              """  function retryNativeHandshakeWhenVisible() {
+              if (document.visibilityState !== 'visible' || port !== null) return;
+              handshakeRetryCount = 0;
+              waitForNative();
+            }
+
+            document.addEventListener('visibilitychange', retryNativeHandshakeWhenVisible);
+            window.addEventListener('pageshow', retryNativeHandshakeWhenVisible);
+            waitForNative();""",
+          )
+
+          extension = "app/src/main/kotlin/net/matsudamper/browser/translate/PageTranslationWebExtension.kt"
+          replace_once(
+              extension,
+              "    private var extension: WebExtension? = null\n\n    @Volatile\n    private var installationError: Throwable? = null",
+              "    @Volatile\n    private var extension: WebExtension? = null\n\n    @Volatile\n    private var installationError: Throwable? = null",
+          )
+          replace_once(
+              extension,
+              """    private val attachedSessions: MutableSet<GeckoSession> =
+                  Collections.newSetFromMap(ConcurrentHashMap())
+              private val pendingScans = ConcurrentHashMap<GeckoSession, PendingScan>()""",
+              """    private val attachedSessions: MutableSet<GeckoSession> =
+                  Collections.newSetFromMap(ConcurrentHashMap())
+              private val sessionsWaitingForExtension: MutableSet<GeckoSession> =
+                  Collections.newSetFromMap(ConcurrentHashMap())
+              private val pendingScans = ConcurrentHashMap<GeckoSession, PendingScan>()""",
+          )
+          replace_once(
+              extension,
+              """                    extension = installedExtension
+                          installationError = null
+                          pendingScans.keys.forEach { session ->
+                              attachSessionDelegate(session, installedExtension)
+                              requestImmediateConnection(session)
+                          }""",
+              """                    extension = installedExtension
+                          installationError = null
+                          sessionsWaitingForExtension.toList().forEach { session ->
+                              if (sessionsWaitingForExtension.remove(session)) {
+                                  attachSessionDelegate(session, installedExtension)
+                              }
+                          }
+                          pendingScans.keys.forEach { session ->
+                              attachSessionDelegate(session, installedExtension)
+                          }""",
+          )
+          replace_once(
+              extension,
+              """                    pendingScans.clear()
+                      },""",
+              """                    pendingScans.clear()
+                          sessionsWaitingForExtension.clear()
+                      },""",
+          )
+          replace_once(
+              extension,
+              """    suspend fun scanPage(session: GeckoSession): PageSnapshot {""",
+              """    fun registerSession(session: GeckoSession) {
+              val installedExtension = extension
+              if (installedExtension != null) {
+                  attachSessionDelegate(session, installedExtension)
+                  return
+              }
+
+              sessionsWaitingForExtension.add(session)
+              extension?.let { installedAfterRegistration ->
+                  if (sessionsWaitingForExtension.remove(session)) {
+                      attachSessionDelegate(session, installedAfterRegistration)
+                  }
+              }
+          }
+
+              suspend fun scanPage(session: GeckoSession): PageSnapshot {""".replace("  suspend", "suspend"),
+          )
+          replace_once(
+              extension,
+              """        val installedExtension = extension
+              if (installedExtension != null) {
+                  attachSessionDelegate(session, installedExtension)
+                  requestImmediateConnection(session)
+              }
+              sendStartIfReady(session)""",
+              """        registerSession(session)
+              sendStartIfReady(session)""",
+          )
+          replace_once(
+              extension,
+              """    private fun requestImmediateConnection(session: GeckoSession) {
+              if (sessionPorts[session] != null) return
+              try {
+                  session.loadUri(CONNECT_SCRIPT_URI)
+              } catch (error: RuntimeException) {
+                  Log.w(TAG, "ページ翻訳ブリッジの即時接続要求に失敗", error)
+                  saveInfo(
+                      title = "ページ翻訳ブリッジ即時接続要求失敗",
+                      body = "error=${error.javaClass.name}\\nmessage=${error.message.orEmpty()}",
+                  )
+              }
+          }
+
+          """,
+              "",
+          )
+          replace_once(
+              extension,
+              """        private const val CONNECT_SCRIPT_URI =
+                  "javascript:void(window.postMessage('__browsem_page_translation_connect__','*'))"
+          """,
+              "",
+          )
+
+          local_ai = "app/src/main/kotlin/net/matsudamper/browser/translate/LocalAITranslator.kt"
+          replace_once(local_ai, "import org.koin.core.component.KoinComponent\nimport org.koin.core.component.inject\n", "")
+          replace_once(
+              local_ai,
+              """    private val toLanguage: String,
+              private val onTranslateStateChanged: (Translator.TranslateState) -> Unit,
+          ) : Translator, KoinComponent {
+              private val pageTranslationWebExtension: PageTranslationWebExtension by inject()
+              private val crashLogRepository: CrashLogRepository by inject()
+          """,
+              """    private val toLanguage: String,
+              private val pageTranslationWebExtension: PageTranslationWebExtension,
+              private val crashLogRepository: CrashLogRepository,
+              private val onTranslateStateChanged: (Translator.TranslateState) -> Unit,
+          ) : Translator {
+          """,
+          )
+          replace_once(
+              local_ai,
+              """        val elapsedMs = SystemClock.elapsedRealtime() - startedAt
+              if (elapsedMs >= SLOW_MODEL_PREPARATION_THRESHOLD_MS) {
+                  saveInfo(
+                      title = "ローカルAI翻訳モデル準備遅延",
+                      body = buildTranslationDiagnostics(
+                          stage = "model",
+                          elapsedMs = elapsedMs,
+                          sourceLanguage = sourceLanguage,
+                          targetLanguage = targetLanguage,
+                          segmentCount = segmentCount,
+                      ),
+                  )
+              }
+          """,
+              "",
+          )
+          replace_once(local_ai, "        private const val SLOW_MODEL_PREPARATION_THRESHOLD_MS = 5_000L\n", "")
+
+          screen = "app/src/main/kotlin/net/matsudamper/browser/BrowserTabScreenState.kt"
+          replace_once(
+              screen,
+              "import androidx.compose.runtime.Composable\n",
+              "import androidx.compose.runtime.Composable\nimport androidx.compose.runtime.DisposableEffect\n",
+          )
+          replace_once(
+              screen,
+              "import net.matsudamper.browser.data.TranslationProvider\n",
+              "import net.matsudamper.browser.data.TranslationProvider\nimport net.matsudamper.browser.data.crashlog.CrashLogRepository\n",
+          )
+          replace_once(
+              screen,
+              "import net.matsudamper.browser.translate.TranslationPriorityLanguage\n",
+              "import net.matsudamper.browser.translate.PageTranslationWebExtension\nimport net.matsudamper.browser.translate.TranslationPriorityLanguage\n",
+          )
+          replace_once(
+              screen,
+              """    val webExtensionActionController: WebExtensionActionController = koinInject()
+              val state = remember(browserTab) {""",
+              """    val webExtensionActionController: WebExtensionActionController = koinInject()
+              val pageTranslationWebExtension: PageTranslationWebExtension = koinInject()
+              val crashLogRepository: CrashLogRepository = koinInject()
+              val state = remember(browserTab) {""",
+          )
+          replace_once(
+              screen,
+              """            webExtensionActionController = webExtensionActionController,
+                  context = context,""",
+              """            webExtensionActionController = webExtensionActionController,
+                  pageTranslationWebExtension = pageTranslationWebExtension,
+                  crashLogRepository = crashLogRepository,
+                  context = context,""",
+          )
+          replace_once(
+              screen,
+              """    state.externalTabInitialUrl = externalTabInitialUrl
+              return state""",
+              """    state.externalTabInitialUrl = externalTabInitialUrl
+              DisposableEffect(state) {
+                  onDispose { state.dispose() }
+              }
+              return state""",
+          )
+          replace_once(
+              screen,
+              """    private val webExtensionActionController: WebExtensionActionController,
+              private val context: Context,""",
+              """    private val webExtensionActionController: WebExtensionActionController,
+              private val pageTranslationWebExtension: PageTranslationWebExtension,
+              private val crashLogRepository: CrashLogRepository,
+              private val context: Context,""",
+          )
+          replace_once(
+              screen,
+              """    val session: GeckoSession get() = browserTab.session
+
+              // --- URL / Navigation state ---""",
+              """    val session: GeckoSession get() = browserTab.session
+
+              init {
+                  pageTranslationWebExtension.registerSession(browserTab.session)
+              }
+
+              // --- URL / Navigation state ---""",
+          )
+          replace_once(
+              screen,
+              """    var translationToLanguage by mutableStateOf<String?>(null)
+              private var translationJob: Job? = null""",
+              """    var translationToLanguage by mutableStateOf<String?>(null)
+              private var translationJob: Job? = null
+              private var activeTranslationProvider: TranslationProvider? = null""",
+          )
+          replace_once(
+              screen,
+              """        if (shouldResetTranslationOnLocationChange(translationState, url, originalPageUrlForRevert, wasFullPageLoad)) {
+                  translationState = TranslationState.Idle
+                  originalPageUrlForRevert = null
+              }""",
+              """        if (shouldResetTranslationOnLocationChange(translationState, url, originalPageUrlForRevert, wasFullPageLoad)) {
+                  translationJob?.cancel()
+                  translationJob = null
+                  if (activeTranslationProvider == TranslationProvider.TRANSLATION_PROVIDER_LOCAL_AI) {
+                      pageTranslationWebExtension.stopTranslation(session, restoreOriginal = false)
+                  }
+                  activeTranslationProvider = null
+                  translationState = TranslationState.Idle
+                  originalPageUrlForRevert = null
+              }""",
+          )
+          replace_once(
+              screen,
+              """    private fun runTranslation(translationProvider: TranslationProvider, fromLanguage: String?, toLanguage: String) {
+              translationJob?.cancel()
+              translationJob = coroutineScope.launch {""",
+              """    private fun runTranslation(translationProvider: TranslationProvider, fromLanguage: String?, toLanguage: String) {
+              translationJob?.cancel()
+              if (activeTranslationProvider == TranslationProvider.TRANSLATION_PROVIDER_LOCAL_AI) {
+                  pageTranslationWebExtension.stopTranslation(session, restoreOriginal = true)
+              }
+              activeTranslationProvider = translationProvider
+              translationJob = coroutineScope.launch {""",
+          )
+          replace_once(
+              screen,
+              """                PageTranslator(session, pageUrl).translatePage(""",
+              """                PageTranslator(
+                      session = session,
+                      currentPageUrl = pageUrl,
+                      pageTranslationWebExtension = pageTranslationWebExtension,
+                      crashLogRepository = crashLogRepository,
+                  ).translatePage(""",
+          )
+          replace_once(
+              screen,
+              """    fun onRevertTranslation() {
+              val savedUrl = originalPageUrlForRevert
+              closeTranslationBar(revertPage = false)
+              if (savedUrl != null) {
+                  clearPageLoadError()
+                  session.loadUri(savedUrl)
+              }
+          }""",
+              """    fun onRevertTranslation() {
+              closeTranslationBar(revertPage = true)
+          }""",
+          )
+          replace_once(
+              screen,
+              """        val savedUrl = originalPageUrlForRevert
+              translationState = TranslationState.Idle
+              originalPageUrlForRevert = null
+              translationFromLanguage = null
+              translationToLanguage = null
+              if (revertPage && savedUrl != null) {
+                  clearPageLoadError()
+                  session.loadUri(savedUrl)
+              }""",
+              """        val savedUrl = originalPageUrlForRevert
+              val provider = activeTranslationProvider
+              val stateBeforeClose = translationState
+              translationState = TranslationState.Idle
+              originalPageUrlForRevert = null
+              translationFromLanguage = null
+              translationToLanguage = null
+              activeTranslationProvider = null
+              if (provider == TranslationProvider.TRANSLATION_PROVIDER_LOCAL_AI) {
+                  val restoreOriginal = revertPage || stateBeforeClose == TranslationState.Error
+                  pageTranslationWebExtension.stopTranslation(session, restoreOriginal = restoreOriginal)
+              } else if (revertPage && savedUrl != null) {
+                  clearPageLoadError()
+                  session.loadUri(savedUrl)
+              }""",
+          )
+          replace_once(
+              screen,
+              """    fun sharePage() {
+              shareText("$currentPageTitle\\n$currentPageUrl")
+              }""",
+              """    fun dispose() {
+              translationJob?.cancel()
+              translationJob = null
+              if (activeTranslationProvider == TranslationProvider.TRANSLATION_PROVIDER_LOCAL_AI) {
+                  pageTranslationWebExtension.stopTranslation(session, restoreOriginal = false)
+              }
+              activeTranslationProvider = null
+          }
+
+              fun sharePage() {
+              shareText("$currentPageTitle\\n$currentPageUrl")
+              }""".replace("  fun sharePage", "fun sharePage"),
+          )
+          PY
+
+      - name: Assemble debug
+        run: ./gradlew --console=plain --no-daemon :app:assembleDebug
+
+      - name: Run detekt
+        run: ./gradlew --console=plain --no-daemon detekt
+
+      - name: Run tests
+        run: ./gradlew --console=plain --no-daemon test
+
+      - name: Check JavaScript syntax
+        run: node --check app/src/main/assets/web_extensions/page_translation_bridge/content.js
+
+      - name: Run ktlint
+        run: ./gradlew --console=plain --no-daemon ktlintCheck
+
+      - name: Record Paparazzi preview
+        run: ./gradlew --console=plain --no-daemon :app:recordPaparazziDebug -Dpaparazzi.filter=PreviewTranslationStatusBarPreparingModel
+
+      - name: Collect Paparazzi image
+        shell: bash
+        run: |
+          mkdir -p "${RUNNER_TEMP}/translation-status-paparazzi"
+          find app/src/test/snapshots/images -type f -name '*.png' -mmin -10 -exec cp {} "${RUNNER_TEMP}/translation-status-paparazzi/" \;
+          test -n "$(find "${RUNNER_TEMP}/translation-status-paparazzi" -type f -name '*.png' -print -quit)"
+          git clean -f app/src/test/snapshots/images || true
+
+      - name: Commit and push review fixes
+        shell: bash
+        run: |
+          git config user.name "ChatGPT"
+          git config user.email "chatgpt@users.noreply.github.com"
+          git add \
+            app/src/main/kotlin/net/matsudamper/browser/PageTranslator.kt \
+            app/src/main/kotlin/net/matsudamper/browser/TranslationStatusBar.kt \
+            app/src/main/assets/web_extensions/page_translation_bridge/content.js \
+            app/src/main/kotlin/net/matsudamper/browser/translate/PageTranslationWebExtension.kt \
+            app/src/main/kotlin/net/matsudamper/browser/translate/LocalAITranslator.kt \
+            app/src/main/kotlin/net/matsudamper/browser/BrowserTabScreenState.kt
+          git diff --cached --check
+          git commit -m "レビュー指摘に沿って翻訳処理のライフサイクルを修正"
+          git push origin HEAD:refs/heads/chatgpt/improve-html-ai-translation
+
+      - name: Upload Paparazzi image
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4.6.2
+        with:
+          name: translation-status-paparazzi-review-fixes
+          path: ${{ runner.temp }}/translation-status-paparazzi/*.png
+          if-no-files-found: error
