@@ -28,11 +28,11 @@ interface DownloadDao {
         "UPDATE download SET status = 'FAILED', failureReason = :failureReason " +
             "WHERE currentWorkerId = :currentWorkerId AND status IN ('ENQUEUED', 'RUNNING')",
     )
-    suspend fun updateFailed(currentWorkerId: String, failureReason: String?)
+    suspend fun updateFailed(currentWorkerId: String, failureReason: String?): Int
 
     /** SUCCEEDED/FAILED 以外の状態のときのみキャンセルする。完了済みの上書きを防ぐ */
     @Query("UPDATE download SET status = 'CANCELLED' WHERE currentWorkerId = :currentWorkerId AND status NOT IN ('SUCCEEDED', 'FAILED', 'CANCELLED')")
-    suspend fun cancelIfActive(currentWorkerId: String)
+    suspend fun cancelIfActive(currentWorkerId: String): Int
 
     /** 実行中（ENQUEUED/RUNNING）のときのみ一時停止する。完了・失敗・キャンセル済みの上書きを防ぐ */
     @Query("UPDATE download SET status = 'PAUSED' WHERE currentWorkerId = :currentWorkerId AND status IN ('ENQUEUED', 'RUNNING')")
@@ -55,12 +55,12 @@ interface DownloadDao {
         contentLength: Long,
     )
 
-    /** キャンセル/一時停止済みレコードを完了で上書きしない（停止要求とWorker完了の競合対策） */
+    /** RUNNING のときだけ完了へ遷移し、キャンセル/一時停止との競合結果を呼び出し側へ返す */
     @Query(
         "UPDATE download SET fileName = :fileName, fileUri = :fileUri, status = 'SUCCEEDED' " +
-            "WHERE currentWorkerId = :currentWorkerId AND status NOT IN ('CANCELLED', 'PAUSED')",
+            "WHERE currentWorkerId = :currentWorkerId AND status = 'RUNNING'",
     )
-    suspend fun updateCompleted(currentWorkerId: String, fileName: String, fileUri: String)
+    suspend fun updateCompleted(currentWorkerId: String, fileName: String, fileUri: String): Int
 
     @Query("SELECT * FROM download ORDER BY enqueuedAt DESC")
     fun observeAll(): Flow<List<DownloadEntity>>
@@ -88,11 +88,11 @@ interface DownloadDao {
         totalRead: Long,
         contentLength: Long,
         failureReason: String?,
-    )
+    ): Int
 
     /**
      * 一時停止時に部分ファイルURIを保存する。
-     * 再開可能なダウンロードとしてPAUSEDステータスで記録する
+     * 再開可能なPAUSEDステータスで記録する
      */
     @Query(
         "UPDATE download SET partialFileUri = :partialFileUri, " +

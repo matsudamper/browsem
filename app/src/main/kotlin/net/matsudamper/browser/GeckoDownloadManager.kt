@@ -125,11 +125,22 @@ internal class GeckoDownloadManager(
             downloadRepository.updateCancelled(workRequest.id.toString())
             throw e
         }
+        val cancelPendingIntent = DownloadCancelReceiver.createPendingIntent(
+            context = context,
+            currentWorkerId = workId,
+            stableWorkerId = workId.toString(),
+            notificationId = notificationId,
+        )
         val notification = NotificationCompat.Builder(context, DownloadWorker.CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_sys_download)
             .setContentTitle(context.getString(R.string.download_notification_starting))
             .setProgress(100, 0, true)
             .setOnlyAlertOnce(true)
+            .addAction(
+                android.R.drawable.ic_menu_close_clear_cancel,
+                context.getString(R.string.download_notification_cancel),
+                cancelPendingIntent,
+            )
             .build()
         context.getSystemService(NotificationManager::class.java)
             .notify(notificationId, notification)
@@ -190,11 +201,22 @@ internal class GeckoDownloadManager(
             // 既存レコードを新しいワーカーIDへ付け替えてENQUEUEDに戻す（削除・再作成しない）
             downloadRepository.updateResumed(workerId = workerId, newWorkerId = newWorkId.toString())
             WorkManager.getInstance(context).enqueue(workRequest)
+            val cancelPendingIntent = DownloadCancelReceiver.createPendingIntent(
+                context = context,
+                currentWorkerId = newWorkId,
+                stableWorkerId = workerId,
+                notificationId = notificationId,
+            )
             val notification = NotificationCompat.Builder(context, DownloadWorker.CHANNEL_ID)
                 .setSmallIcon(android.R.drawable.stat_sys_download)
                 .setContentTitle(context.getString(R.string.download_notification_resuming))
                 .setProgress(100, 0, true)
                 .setOnlyAlertOnce(true)
+                .addAction(
+                    android.R.drawable.ic_menu_close_clear_cancel,
+                    context.getString(R.string.download_notification_cancel),
+                    cancelPendingIntent,
+                )
                 .build()
             context.getSystemService(NotificationManager::class.java)
                 .notify(notificationId, notification)
