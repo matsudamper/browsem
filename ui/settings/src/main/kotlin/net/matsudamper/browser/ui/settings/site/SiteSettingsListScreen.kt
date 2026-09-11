@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -90,7 +91,14 @@ fun SiteSettingsListScreen(
                     .testTag(SiteSettingsListScreenTestTags.SearchInput.testTag),
             )
             Spacer(Modifier.height(8.dp))
-            if (uiState.hosts.isEmpty()) {
+            if (uiState.isLoading) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    CircularProgressIndicator()
+                }
+            } else if (uiState.hosts.isEmpty()) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center,
@@ -155,6 +163,7 @@ private fun SiteSettingsListScreenPreview() {
                     "news.example.jp",
                     "shop.example.net",
                 ),
+                isLoading = false,
                 hasNextPage = false,
             ),
             onBack = {},

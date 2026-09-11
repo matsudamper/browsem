@@ -3,11 +3,14 @@ package net.matsudamper.browser.screen.sitesettings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.launch
 import net.matsudamper.browser.data.SiteSettingsRepository
 import net.matsudamper.browser.ui.settings.site.SiteSettingsListScreenUiState
@@ -22,6 +25,11 @@ internal class SiteSettingsListScreenViewModel(
     private data class SearchState(
         val query: String,
         val loadedPageCount: Int,
+    )
+
+    private data class PageResult(
+        val searchState: SearchState,
+        val hosts: List<String>?,
     )
 
     val eventHandler = Channel<(Event) -> Unit>(Channel.UNLIMITED)
@@ -62,30 +70,57 @@ internal class SiteSettingsListScreenViewModel(
             callbacks = callbacks,
             query = "",
             hosts = listOf(),
+            isLoading = true,
             hasNextPage = false,
         ),
     ).also { uiStateFlow ->
         viewModelScope.launch {
-            combine(
-                siteSettingsRepository.siteHosts(),
-                searchStateFlow,
-            ) { hosts, searchState ->
-                val normalizedQuery = searchState.query.trim()
-                val filteredHosts = if (normalizedQuery.isEmpty()) {
-                    hosts
-                } else {
-                    hosts.filter { host -> host.contains(normalizedQuery, ignoreCase = true) }
+            searchStateFlow
+                .flatMapLatest(::observePage)
+                .collectLatest { result ->
+                    val hosts = result.hosts
+                    if (hosts == null) {
+                        val current = uiStateFlow.value
+                        val canKeepCurrentPage = current.query == result.searchState.query
+                        uiStateFlow.value = SiteSettingsListScreenUiState(
+                            callbacks = callbacks,
+                            query = result.searchState.query,
+                            hosts = if (canKeepCurrentPage) current.hosts else listOf(),
+                            isLoading = !canKeepCurrentPage || current.hosts.isEmpty(),
+                            hasNextPage = if (canKeepCurrentPage) current.hasNextPage else false,
+                        )
+                    } else {
+                        val loadedHostCount = result.searchState.loadedPageCount * PAGE_SIZE
+                        uiStateFlow.value = SiteSettingsListScreenUiState(
+                            callbacks = callbacks,
+                            query = result.searchState.query,
+                            hosts = hosts.take(loadedHostCount),
+                            isLoading = false,
+                            hasNextPage = hosts.size > loadedHostCount,
+                        )
+                    }
                 }
-                val loadedHostCount = searchState.loadedPageCount * PAGE_SIZE
-                SiteSettingsListScreenUiState(
-                    callbacks = callbacks,
-                    query = searchState.query,
-                    hosts = filteredHosts.take(loadedHostCount),
-                    hasNextPage = filteredHosts.size > loadedHostCount,
-                )
-            }.collectLatest { state ->
-                uiStateFlow.value = state
-            }
         }
     }.asStateFlow()
+
+    private fun observePage(searchState: SearchState): Flow<PageResult> {
+        val loadedHostCount = searchState.loadedPageCount * PAGE_SIZE
+        return siteSettingsRepository.siteHosts(
+            query = searchState.query,
+            limit = loadedHostCount + 1,
+            offset = 0,
+        ).map { hosts ->
+            PageResult(
+                searchState = searchState,
+                hosts = hosts,
+            )
+        }.onStart {
+            emit(
+                PageResult(
+                    searchState = searchState,
+                    hosts = null,
+                ),
+            )
+        }
+    }
 }

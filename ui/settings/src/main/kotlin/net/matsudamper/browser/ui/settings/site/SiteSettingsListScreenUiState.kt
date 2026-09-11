@@ -7,6 +7,7 @@ data class SiteSettingsListScreenUiState(
     val callbacks: Callbacks,
     val query: String,
     val hosts: List<String>,
+    val isLoading: Boolean,
     val hasNextPage: Boolean,
 ) {
     interface Callbacks {
