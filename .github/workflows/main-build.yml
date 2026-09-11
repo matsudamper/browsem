@@ -42,27 +42,43 @@ jobs:
           DEBUG_KEYSTORE_PATH: ${{ runner.temp }}/debug.keystore
         run: ./gradlew :app:assembleDebug
 
+      - name: Build release APK
+        env:
+          DEBUG_KEYSTORE_PATH: ${{ runner.temp }}/debug.keystore
+        run: ./gradlew :app:assembleRelease
+
       - name: Determine release version
         run: |
           VERSION="$(TZ=Asia/Tokyo date +%Y-%m-%d_%H-%M)"
           echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
 
-      - name: Rename APK with release version
+      - name: Rename APKs with release version
         env:
           REPOSITORY: ${{ github.repository }}
         run: |
           SAFE_REPO="${REPOSITORY##*/}"
           APK_NAME="app-${SAFE_REPO}-${VERSION}.apk"
+          RELEASE_APK_NAME="app-${SAFE_REPO}-${VERSION}-release.apk"
           mv app/build/outputs/apk/debug/app-debug.apk \
              "app/build/outputs/apk/debug/${APK_NAME}"
+          mv app/build/outputs/apk/release/app-release.apk \
+             "app/build/outputs/apk/release/${RELEASE_APK_NAME}"
           echo "APK_NAME=${APK_NAME}" >> "$GITHUB_ENV"
           echo "APK_PATH=app/build/outputs/apk/debug/${APK_NAME}" >> "$GITHUB_ENV"
+          echo "RELEASE_APK_NAME=${RELEASE_APK_NAME}" >> "$GITHUB_ENV"
+          echo "RELEASE_APK_PATH=app/build/outputs/apk/release/${RELEASE_APK_NAME}" >> "$GITHUB_ENV"
 
-      - name: Upload release APK to GitHub Artifacts
+      - name: Upload debug APK to GitHub Artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ${{ env.APK_NAME }}
           path: ${{ env.APK_PATH }}
+
+      - name: Upload release APK to GitHub Artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ env.RELEASE_APK_NAME }}
+          path: ${{ env.RELEASE_APK_PATH }}
 
       - name: Run Android Lint
         run: ./gradlew :app:lintDebug
@@ -79,7 +95,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           COMMIT_URL: ${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}
         run: |
-          gh release create "${VERSION}" "${APK_PATH}" \
+          gh release create "${VERSION}" "${APK_PATH}" "${RELEASE_APK_PATH}" \
             --title "${VERSION}" \
             --notes "Commit: ${COMMIT_URL}"
 
