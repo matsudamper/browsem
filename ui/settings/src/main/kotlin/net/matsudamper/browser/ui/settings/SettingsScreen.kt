@@ -77,6 +77,7 @@ fun SettingsScreen(
     onOpenExtensions: () -> Unit,
     onOpenHistory: () -> Unit,
     onOpenAddresses: () -> Unit,
+    onOpenSiteSettings: () -> Unit,
     onOpenCrashLogs: () -> Unit,
     onOpenReleases: () -> Unit,
     onBack: () -> Unit,
@@ -505,6 +506,17 @@ fun SettingsScreen(
 
             Spacer(Modifier.height(betweenPadding))
 
+            SettingSection(title = "サイトの設定") {
+                TextButton(
+                    onClick = onOpenSiteSettings,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("サイトごとの設定を管理")
+                }
+            }
+
+            Spacer(Modifier.height(betweenPadding))
+
             SettingSection(title = "履歴") {
                 TextButton(
                     onClick = onOpenHistory,
@@ -700,13 +712,13 @@ internal fun CollapsibleSettingSection(
 }
 
 // 設定項目が縦に長いため、全体が見えるように高さを広げて Preview する
-@Preview(showBackground = true, heightDp = 2400)
+@Preview(showBackground = true, heightDp = 2500)
 @Composable
 private fun SettingsScreenPreview() {
     SettingsScreenPreviewContent(showDefaultBrowserBanner = false)
 }
 
-@Preview(showBackground = true, heightDp = 2400)
+@Preview(showBackground = true, heightDp = 2500)
 @Composable
 private fun SettingsScreenDefaultBrowserBannerPreview() {
     SettingsScreenPreviewContent(showDefaultBrowserBanner = true)
@@ -759,6 +771,7 @@ private fun SettingsScreenPreviewContent(showDefaultBrowserBanner: Boolean) {
             onOpenExtensions = {},
             onOpenHistory = {},
             onOpenAddresses = {},
+            onOpenSiteSettings = {},
             onOpenCrashLogs = {},
             onOpenReleases = {},
             onBack = {},

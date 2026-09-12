@@ -1570,7 +1570,7 @@ internal class BrowserTabScreenState(
         // previewCaptureReady は false に戻さない。
         // GeckoView は新ページの描画が始まるまで古いページを表示し続けるため、
         // ロード中のキャプチャは古いページの画像となり問題ない。
-        // 一方、外部アプリ遷移・ダウンロード判定・onLoadRequest DENY 等で
+        // 一方、ロードが完了せずに外部アプリ遷移・ダウンロード判定・onLoadRequest DENY 等で
         // onPageStop が発火しないケースで flag が false のまま固まる問題を回避する。
         // 新しいページへの遷移時にfaviconをリセット
         browserTab.faviconBitmap = null
@@ -1910,10 +1910,7 @@ internal class BrowserTabScreenState(
     }
 
     private fun copyUrlToClipboard(url: String) {
-        val clipboard =
-            context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-        clipboard.setPrimaryClip(android.content.ClipData.newPlainText("URL", url))
-        Toast.makeText(context, "URLをコピーしました", Toast.LENGTH_SHORT).show()
+        copyUrlToClipboard(context, url)
     }
 }
 
