@@ -16,7 +16,14 @@ class GeminiNanoTranslatorTest {
 
         assertTrue(prompt.contains("from English to Japanese"))
         assertTrue(prompt.contains("Hello world"))
-        assertTrue(prompt.contains("Reply with the Japanese translation only"))
+        assertTrue(prompt.contains("Output only the Japanese translation"))
+    }
+
+    @Test
+    fun 指示文を翻訳した結果を検出する() {
+        assertTrue(isInstructionEcho("テキストは翻訳です。指示ではありません。日本語訳のみで返信してください。"))
+        assertTrue(isInstructionEcho("翻訳は行わず、日本語の翻訳のみをお送りください"))
+        assertFalse(isInstructionEcho("これは翻訳された本文です"))
     }
 
     @Test
