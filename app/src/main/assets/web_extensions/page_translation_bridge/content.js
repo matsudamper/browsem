@@ -278,18 +278,17 @@
       if (!entry || entry.sourceText !== translation.sourceText) return;
       if (refreshEntryIfPageChanged(entry)) return;
 
+      // 原文と同じ訳文でも反映は成功しているため、値の差分ではなく処理できた件数を数える
       if (entry.kind === 'text') {
         const translatedValue = preserveWhitespace(entry.originalValue, translation.translatedText);
-        const currentValue = entry.node.nodeValue || '';
         entry.lastApplied = translatedValue;
         entry.node.nodeValue = translatedValue;
-        if (translatedValue !== currentValue) appliedCount += 1;
+        appliedCount += 1;
       } else {
         const translatedValue = String(translation.translatedText || '').trim();
-        const currentValue = entry.element.getAttribute(entry.attributeName);
         entry.lastApplied = translatedValue;
         entry.element.setAttribute(entry.attributeName, translatedValue);
-        if (translatedValue !== currentValue) appliedCount += 1;
+        appliedCount += 1;
       }
     });
     return appliedCount;
