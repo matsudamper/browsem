@@ -1,4 +1,4 @@
-name: PR 719 Native Translation Connection Fix
+name: PR 719 Remove Obsolete Translation Handshake Handler
 
 on:
   push:
@@ -29,7 +29,7 @@ jobs:
 
       - name: Verify target HEAD
         working-directory: target
-        run: test "$(git rev-parse HEAD)" = "434d72f1ef00922a2cc287940a33abc82b73293e"
+        run: test "$(git rev-parse HEAD)" = "118f328e5bf3600445403aa32700897eacfbbb75"
 
       - name: Set up JDK 21
         uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
@@ -43,16 +43,9 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
 
-      - name: Apply native connection fix
+      - name: Remove obsolete handshake handler
         working-directory: target
         run: python3 ../helper/.github/scripts/review_719_lifecycle_fixes.py
-
-      - name: Check JavaScript syntax
-        working-directory: target
-        run: |
-          node --check app/src/main/assets/web_extensions/page_translation_bridge/content.js
-          ! grep -q "sendNativeMessage" app/src/main/assets/web_extensions/page_translation_bridge/content.js
-          grep -q "connectNative(NATIVE_APP_ID)" app/src/main/assets/web_extensions/page_translation_bridge/content.js
 
       - name: Assemble debug
         working-directory: target
@@ -70,7 +63,7 @@ jobs:
         working-directory: target
         run: ./gradlew ktlintCheck
 
-      - name: Commit and push native connection fix
+      - name: Commit and push handshake cleanup
         working-directory: target
         shell: bash
         run: |
@@ -78,6 +71,6 @@ jobs:
           git status --short
           git config user.name "matsudamper"
           git config user.email "matsudamper971227@gmail.com"
-          git add app/src/main/assets/web_extensions/page_translation_bridge/content.js
-          git commit -m "翻訳ブリッジをNative Messagingへ直接接続する" -m "sendNativeMessage の事前 handshake が MessageDelegate 登録後も応答せず portConnected=false のまま scanPage がタイムアウトしていた。既存の DevTools と同様に content script から connectNative を直接実行し、delegate 未登録時は表示中だけ1秒間隔で再接続する。ページ側 postMessage は使用しない。"
+          git add app/src/main/kotlin/net/matsudamper/browser/translate/PageTranslationWebExtension.kt
+          git commit -m "不要になった翻訳handshakeハンドラを削除" -m "content script を connectNative 直接接続へ変更したため、sendNativeMessage の ready 要求へ応答する MessageDelegate.onMessage は到達不能になった。未使用の GeckoResult import とあわせて削除する。"
           git push origin HEAD:chatgpt/improve-html-ai-translation
