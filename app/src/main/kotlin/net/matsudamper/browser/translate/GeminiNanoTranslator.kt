@@ -7,6 +7,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -15,6 +16,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import com.google.mlkit.genai.common.DownloadStatus
 import com.google.mlkit.genai.common.FeatureStatus
+import com.google.mlkit.genai.prompt.Candidate
 import com.google.mlkit.genai.prompt.Generation
 import com.google.mlkit.genai.prompt.GenerativeModel
 import com.google.mlkit.genai.prompt.TextPart
@@ -43,46 +45,50 @@ class GeminiNanoTranslator(
             return null
         }
 
-        onTranslateStateChanged(Translator.TranslateState.LANGUAGE_DETECTION)
-        val sourceLanguage = resolveSourceLanguage(snapshot)
-        val (effectiveSourceLanguage, effectiveTargetLanguage) = resolveTranslationLanguagePair(
-            sourceLanguage,
-            toLanguage,
-        )
-        val generativeModel = Generation.getClient()
         return try {
-            onTranslateStateChanged(Translator.TranslateState.MODEL_DOWNLOAD)
-            prepareModel(generativeModel)
-            val translationCache = ConcurrentHashMap<String, String>()
-            val initialSegments = snapshot.segments.take(INITIAL_APPLY_SEGMENT_COUNT)
-            val remainingSegments = snapshot.segments.drop(INITIAL_APPLY_SEGMENT_COUNT)
-            onTranslateStateChanged(Translator.TranslateState.TRANSLATING)
-            withTimeout(INITIAL_TRANSLATION_TIMEOUT_MS) {
-                translateAndApply(
+            onTranslateStateChanged(Translator.TranslateState.LANGUAGE_DETECTION)
+            val sourceLanguage = resolveSourceLanguage(snapshot)
+            val (effectiveSourceLanguage, effectiveTargetLanguage) = resolveTranslationLanguagePair(
+                sourceLanguage,
+                toLanguage,
+            )
+            val generativeModel = Generation.getClient()
+            try {
+                onTranslateStateChanged(Translator.TranslateState.MODEL_DOWNLOAD)
+                prepareModel(generativeModel)
+                val translationCache = ConcurrentHashMap<String, String>()
+                val initialSegments = snapshot.segments.take(INITIAL_APPLY_SEGMENT_COUNT)
+                val remainingSegments = snapshot.segments.drop(INITIAL_APPLY_SEGMENT_COUNT)
+                onTranslateStateChanged(Translator.TranslateState.TRANSLATING)
+                withTimeout(INITIAL_TRANSLATION_TIMEOUT_MS) {
+                    translateAndApply(
+                        generativeModel = generativeModel,
+                        pageTranslationWebExtension = pageTranslationWebExtension,
+                        documentId = snapshot.documentId,
+                        segments = initialSegments,
+                        translationCache = translationCache,
+                        sourceLanguage = effectiveSourceLanguage,
+                        targetLanguage = effectiveTargetLanguage,
+                    )
+                }
+                val activated = keepTranslatingDynamicContent(
                     generativeModel = generativeModel,
                     pageTranslationWebExtension = pageTranslationWebExtension,
                     documentId = snapshot.documentId,
-                    segments = initialSegments,
+                    initialSegments = remainingSegments,
                     translationCache = translationCache,
                     sourceLanguage = effectiveSourceLanguage,
                     targetLanguage = effectiveTargetLanguage,
                 )
+                if (!activated) {
+                    throw IllegalStateException("ページ翻訳ブリッジを継続翻訳状態へ移行できませんでした")
+                }
+                TranslationLanguages(effectiveSourceLanguage, effectiveTargetLanguage)
+            } catch (error: Exception) {
+                generativeModel.close()
+                throw error
             }
-            val activated = keepTranslatingDynamicContent(
-                generativeModel = generativeModel,
-                pageTranslationWebExtension = pageTranslationWebExtension,
-                documentId = snapshot.documentId,
-                initialSegments = remainingSegments,
-                translationCache = translationCache,
-                sourceLanguage = effectiveSourceLanguage,
-                targetLanguage = effectiveTargetLanguage,
-            )
-            if (!activated) {
-                throw IllegalStateException("ページ翻訳ブリッジを継続翻訳状態へ移行できませんでした")
-            }
-            TranslationLanguages(effectiveSourceLanguage, effectiveTargetLanguage)
         } catch (error: Exception) {
-            generativeModel.close()
             pageTranslationWebExtension.stopTranslation(session, restoreOriginal = true)
             throw error
         }
@@ -171,7 +177,10 @@ class GeminiNanoTranslator(
         targetLanguage: String,
     ): Boolean {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-        val queue = Channel<List<PageTranslationWebExtension.Segment>>(Channel.UNLIMITED)
+        val queue = Channel<List<PageTranslationWebExtension.Segment>>(
+            capacity = DYNAMIC_TRANSLATION_QUEUE_CAPACITY,
+            onBufferOverflow = BufferOverflow.DROP_OLDEST,
+        )
         scope.launch {
             for (segments in queue) {
                 try {
@@ -216,19 +225,120 @@ class GeminiNanoTranslator(
         targetLanguage: String,
         text: String,
     ): String {
-        val request = generateContentRequest(
-            TextPart(buildGeminiNanoTranslationPrompt(sourceLanguage, targetLanguage, text)),
-        ) {
-            temperature = 0f
-            candidateCount = 1
-            maxOutputTokens = MAX_OUTPUT_TOKENS
+        val tokenLimit = generativeModel.getTokenLimit()
+        val chunks = splitTextToTokenLimit(
+            generativeModel = generativeModel,
+            sourceLanguage = sourceLanguage,
+            targetLanguage = targetLanguage,
+            text = text,
+            tokenLimit = tokenLimit,
+        )
+        val translatedChunks = chunks.map { chunk ->
+            translateTextChunk(
+                generativeModel = generativeModel,
+                sourceLanguage = sourceLanguage,
+                targetLanguage = targetLanguage,
+                text = chunk,
+            )
         }
-        val response = generativeModel.generateContent(request)
-        val translatedText = response.candidates.first().text.trim()
+        return buildString {
+            translatedChunks.forEachIndexed { index, translatedChunk ->
+                if (index > 0) {
+                    val previousSourceChunk = chunks[index - 1]
+                    val sourceChunk = chunks[index]
+                    when {
+                        previousSourceChunk.endsWith('\n') || sourceChunk.startsWith('\n') -> append('\n')
+                        previousSourceChunk.lastOrNull()?.isWhitespace() == true ||
+                            sourceChunk.firstOrNull()?.isWhitespace() == true -> append(' ')
+                    }
+                }
+                append(translatedChunk)
+            }
+        }
+    }
+
+    private suspend fun splitTextToTokenLimit(
+        generativeModel: GenerativeModel,
+        sourceLanguage: String,
+        targetLanguage: String,
+        text: String,
+        tokenLimit: Int,
+    ): List<String> {
+        val request = buildTranslationRequest(sourceLanguage, targetLanguage, text)
+        val inputTokens = generativeModel.countTokens(request).totalTokens
+        if (inputTokens + MAX_OUTPUT_TOKENS <= tokenLimit) {
+            return listOf(text)
+        }
+        if (text.length <= 1) {
+            throw IllegalStateException("Gemini Nanoの入力トークン上限内に翻訳テキストを分割できませんでした")
+        }
+        val splitIndex = findTranslationSplitIndex(text)
+        return splitTextToTokenLimit(
+            generativeModel = generativeModel,
+            sourceLanguage = sourceLanguage,
+            targetLanguage = targetLanguage,
+            text = text.substring(0, splitIndex),
+            tokenLimit = tokenLimit,
+        ) + splitTextToTokenLimit(
+            generativeModel = generativeModel,
+            sourceLanguage = sourceLanguage,
+            targetLanguage = targetLanguage,
+            text = text.substring(splitIndex),
+            tokenLimit = tokenLimit,
+        )
+    }
+
+    private suspend fun translateTextChunk(
+        generativeModel: GenerativeModel,
+        sourceLanguage: String,
+        targetLanguage: String,
+        text: String,
+    ): String {
+        val response = generativeModel.generateContent(
+            buildTranslationRequest(sourceLanguage, targetLanguage, text),
+        )
+        val candidate = response.candidates.firstOrNull()
+            ?: throw IllegalStateException("Gemini Nanoから翻訳候補を取得できませんでした")
+        if (candidate.finishReason != Candidate.FinishReason.STOP) {
+            throw IllegalStateException("Gemini Nanoの翻訳生成が完了しませんでした: ${candidate.finishReason}")
+        }
+        val translatedText = candidate.text.trim()
         if (translatedText.isBlank()) {
             throw IllegalStateException("Gemini Nanoから翻訳結果を取得できませんでした")
         }
         return translatedText
+    }
+
+    private fun buildTranslationRequest(
+        sourceLanguage: String,
+        targetLanguage: String,
+        text: String,
+    ) = generateContentRequest(
+        TextPart(buildGeminiNanoTranslationPrompt(sourceLanguage, targetLanguage, text)),
+    ) {
+        temperature = 0f
+        candidateCount = 1
+        maxOutputTokens = MAX_OUTPUT_TOKENS
+    }
+
+    private fun findTranslationSplitIndex(text: String): Int {
+        val midpoint = text.length / 2
+        val forwardWhitespace = (midpoint until text.length).firstOrNull { text[it].isWhitespace() }
+        val backwardWhitespace = (midpoint downTo 1).firstOrNull { text[it - 1].isWhitespace() }
+        val splitIndex = when {
+            forwardWhitespace != null && forwardWhitespace + 1 < text.length -> forwardWhitespace + 1
+            backwardWhitespace != null -> backwardWhitespace
+            else -> midpoint.coerceAtLeast(1)
+        }
+        return if (
+            splitIndex < text.length &&
+            Character.isLowSurrogate(text[splitIndex]) &&
+            Character.isHighSurrogate(text[splitIndex - 1])
+        ) {
+            splitIndex + 1
+        } else {
+            splitIndex
+        }
     }
 
     private suspend fun detectLanguage(text: String): String = withContext(Dispatchers.IO) {
@@ -243,10 +353,35 @@ class GeminiNanoTranslator(
         private const val LANGUAGE_DETECTION_LIMIT = 2_000
         private const val APPLY_BATCH_SIZE = 8
         private const val INITIAL_APPLY_SEGMENT_COUNT = 4
+        private const val DYNAMIC_TRANSLATION_QUEUE_CAPACITY = 16
         private const val MAX_OUTPUT_TOKENS = 2_048
         private const val MODEL_PREPARATION_TIMEOUT_MS = 180_000L
         private const val MODEL_STATUS_POLL_INTERVAL_MS = 500L
         private const val INITIAL_TRANSLATION_TIMEOUT_MS = 30_000L
+    }
+}
+
+internal suspend fun isGeminiNanoAvailable(): Boolean {
+    val generativeModel = try {
+        Generation.getClient()
+    } catch (error: Exception) {
+        return false
+    }
+    return try {
+        when (generativeModel.checkStatus()) {
+            FeatureStatus.AVAILABLE,
+            FeatureStatus.DOWNLOADABLE,
+            FeatureStatus.DOWNLOADING,
+            -> true
+
+            else -> false
+        }
+    } catch (error: CancellationException) {
+        throw error
+    } catch (error: Exception) {
+        false
+    } finally {
+        generativeModel.close()
     }
 }
 
