@@ -202,11 +202,20 @@ replace_once(
     suspend fun scanPage(session: GeckoSession): PageSnapshot {
 """,
 )
-replace_between(
+replace_once(
     extension,
-    "        val installedExtension = extension\n",
-    "        sendStartIfReady(session)\n",
-    "        registerSession(session)\n",
+    """        pendingScans.put(session, pending)?.deferred?.cancel()
+        val installedExtension = extension
+        if (installedExtension != null) {
+            attachSessionDelegate(session, installedExtension)
+            requestImmediateConnection(session)
+        }
+        sendStartIfReady(session)
+""",
+    """        pendingScans.put(session, pending)?.deferred?.cancel()
+        registerSession(session)
+        sendStartIfReady(session)
+""",
 )
 replace_once(
     extension,
