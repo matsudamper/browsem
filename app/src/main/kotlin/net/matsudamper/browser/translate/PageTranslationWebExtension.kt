@@ -2,6 +2,8 @@ package net.matsudamper.browser.translate
 
 import android.os.SystemClock
 import android.util.Log
+import java.net.URI
+import java.security.MessageDigest
 import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
@@ -29,6 +31,18 @@ class PageTranslationWebExtension(
         val segments: List<Segment>,
     )
 
+    /**
+     * 翻訳結果のDOM反映結果。
+     *
+     * [requeuedCount] はページ側が書き換えたため反映せず、動的セグメントとして
+     * 翻訳し直す件数を示す。
+     */
+    data class ApplyResult(
+        val documentMatched: Boolean,
+        val appliedCount: Int,
+        val requeuedCount: Int,
+    )
+
     data class TranslationResult(
         val id: String,
         val sourceText: String,
@@ -37,11 +51,18 @@ class PageTranslationWebExtension(
 
     private data class PendingScan(
         val requestId: String,
+        val expectedUrl: String?,
         val deferred: CompletableDeferred<PageSnapshot>,
         val startedAtElapsedRealtime: Long,
         val segments: MutableList<Segment> = mutableListOf(),
         var documentId: String? = null,
         var htmlLanguage: String? = null,
+    )
+
+    private data class PendingApply(
+        val session: GeckoSession,
+        val documentId: String,
+        val deferred: CompletableDeferred<ApplyResult>,
     )
 
     private data class ActiveTranslation(
@@ -67,6 +88,7 @@ class PageTranslationWebExtension(
     private val sessionsWaitingForExtension: MutableSet<GeckoSession> =
         Collections.newSetFromMap(ConcurrentHashMap())
     private val pendingScans = ConcurrentHashMap<GeckoSession, PendingScan>()
+    private val pendingApplies = ConcurrentHashMap<String, PendingApply>()
     private val awaitingActivationDocuments = ConcurrentHashMap<GeckoSession, String>()
     private val activeTranslations = ConcurrentHashMap<GeckoSession, ActiveTranslation>()
     private val bufferedDynamicSegments = ConcurrentHashMap<GeckoSession, BufferedSegments>()
@@ -100,6 +122,10 @@ class PageTranslationWebExtension(
                         pending.deferred.completeExceptionally(cause)
                     }
                     pendingScans.clear()
+                    pendingApplies.values.forEach { pending ->
+                        pending.deferred.completeExceptionally(cause)
+                    }
+                    pendingApplies.clear()
                     sessionsWaitingForExtension.clear()
                 },
             )
@@ -131,7 +157,12 @@ class PageTranslationWebExtension(
         }
     }
 
-    suspend fun scanPage(session: GeckoSession): PageSnapshot {
+    /**
+     * 表示中のページの翻訳対象テキストを取得する。
+     *
+     * [expectedUrl] を渡すと、bfcache へ退避したドキュメントなど別ページからの応答を弾く。
+     */
+    suspend fun scanPage(session: GeckoSession, expectedUrl: String?): PageSnapshot {
         installationError?.let { throw it }
         stopActiveTranslation(session)
         awaitingActivationDocuments.remove(session)
@@ -139,6 +170,7 @@ class PageTranslationWebExtension(
 
         val pending = PendingScan(
             requestId = "scan-${requestSequence.incrementAndGet()}",
+            expectedUrl = expectedUrl,
             deferred = CompletableDeferred(),
             startedAtElapsedRealtime = SystemClock.elapsedRealtime(),
         )
@@ -165,7 +197,8 @@ class PageTranslationWebExtension(
                 body = buildScanDiagnostics(session, pending, elapsedMs),
             )
             throw IllegalStateException(
-                "ページ翻訳DOMの取得が${SCAN_TIMEOUT_MS}ms以内に完了しませんでした",
+                "ページ翻訳DOMの取得が${SCAN_TIMEOUT_MS}ms以内に完了しませんでした" +
+                    "(ブリッジ接続=${sessionPorts[session] != null}, 受信セグメント=${pending.segments.size})",
                 error,
             )
         } finally {
@@ -206,28 +239,60 @@ class PageTranslationWebExtension(
         translations: List<TranslationResult>,
     ) {
         if (translations.isEmpty()) return
-        val payload = JSONArray()
-        translations.forEach { translation ->
-            payload.put(
-                JSONObject().apply {
-                    put("id", translation.id)
-                    put("sourceText", translation.sourceText)
-                    put("translatedText", translation.translatedText)
-                },
+        val sent = sendApplyMessage(
+            session = session,
+            documentId = documentId,
+            translations = translations,
+            requestId = null,
+        )
+        if (!sent) {
+            saveInfo(
+                title = "ページ翻訳結果の送信失敗",
+                body = "documentId=$documentId\ntranslationCount=${translations.size}",
             )
         }
-        sendMessage(
-            session,
-            JSONObject().apply {
-                put("action", "apply")
-                put("documentId", documentId)
-                put("translations", payload)
-            },
+    }
+
+    suspend fun applyTranslationsAndAwait(
+        session: GeckoSession,
+        documentId: String,
+        translations: List<TranslationResult>,
+    ): ApplyResult {
+        if (translations.isEmpty()) return ApplyResult(documentMatched = true, appliedCount = 0, requeuedCount = 0)
+        val requestId = "apply-${requestSequence.incrementAndGet()}"
+        val pending = PendingApply(
+            session = session,
+            documentId = documentId,
+            deferred = CompletableDeferred(),
         )
+        pendingApplies[requestId] = pending
+        val sent = sendApplyMessage(
+            session = session,
+            documentId = documentId,
+            translations = translations,
+            requestId = requestId,
+        )
+        if (!sent) {
+            pendingApplies.remove(requestId, pending)
+            throw IllegalStateException("ページ翻訳結果をDOMへ送信できませんでした")
+        }
+        return try {
+            withTimeout(APPLY_TIMEOUT_MS) {
+                pending.deferred.await()
+            }
+        } catch (error: TimeoutCancellationException) {
+            throw IllegalStateException(
+                "ページ翻訳DOM反映の確認が${APPLY_TIMEOUT_MS}ms以内に完了しませんでした",
+                error,
+            )
+        } finally {
+            pendingApplies.remove(requestId, pending)
+        }
     }
 
     fun stopTranslation(session: GeckoSession, restoreOriginal: Boolean) {
         stopActiveTranslation(session)
+        cancelPendingApplies(session)
         awaitingActivationDocuments.remove(session)
         bufferedDynamicSegments.remove(session)
         pendingScans.remove(session)?.deferred?.cancel()
@@ -256,20 +321,25 @@ class PageTranslationWebExtension(
 
                             override fun onDisconnect(port: WebExtension.Port) {
                                 if (!sessionPorts.remove(session, port)) return
+                                val cause = IllegalStateException("ページ翻訳ブリッジとの接続が切断されました")
                                 val pending = pendingScans.remove(session)
                                 if (pending != null) {
-                                    pending.deferred.completeExceptionally(
-                                        IllegalStateException("ページ翻訳ブリッジとの接続が切断されました"),
-                                    )
+                                    pending.deferred.completeExceptionally(cause)
                                     val elapsedMs = SystemClock.elapsedRealtime() - pending.startedAtElapsedRealtime
                                     saveInfo(
                                         title = "ページ翻訳ブリッジ接続切断",
                                         body = buildScanDiagnostics(session, pending, elapsedMs),
                                     )
                                 }
-                                awaitingActivationDocuments.remove(session)
-                                bufferedDynamicSegments.remove(session)
-                                stopActiveTranslation(session)
+                                failPendingApplies(session, cause)
+                                // 継続翻訳は content script の再接続で再開できるため、
+                                // 切断だけでは終了させない
+                                if (activeTranslations.containsKey(session)) {
+                                    saveInfo(
+                                        title = "ページ翻訳ブリッジ再接続待ち",
+                                        body = "documentId=${activeTranslations[session]?.documentId.orEmpty()}",
+                                    )
+                                }
                             }
                         },
                     )
@@ -285,6 +355,8 @@ class PageTranslationWebExtension(
             "scanStart" -> handleScanStart(session, json)
             "scanSegments" -> handleScanSegments(session, json)
             "scanComplete" -> handleScanComplete(session, json)
+            "scanFailed" -> handleScanFailed(session, json)
+            "applyResult" -> handleApplyResult(session, json)
             "dynamicSegments" -> handleDynamicSegments(session, json)
         }
     }
@@ -292,8 +364,59 @@ class PageTranslationWebExtension(
     private fun handleScanStart(session: GeckoSession, json: JSONObject) {
         val pending = pendingScans[session] ?: return
         if (pending.requestId != json.optString("requestId")) return
+        val documentUrl = json.optString("documentUrl").takeIf { it.isNotBlank() }
+        if (!isExpectedDocument(pending.expectedUrl, documentUrl)) {
+            pendingScans.remove(session, pending)
+            pending.deferred.completeExceptionally(
+                IllegalStateException("表示中のページとは別のドキュメントから応答されました"),
+            )
+            saveInfo(
+                title = "ページ翻訳スキャン対象不一致",
+                body = "expected=${toDiagnosticUrl(pending.expectedUrl)}\ndocument=${toDiagnosticUrl(documentUrl)}",
+            )
+            return
+        }
         pending.documentId = json.optString("documentId").takeIf { it.isNotBlank() }
         pending.htmlLanguage = json.optString("htmlLanguage").takeIf { it.isNotBlank() }
+    }
+
+    /** 診断ログに閲覧内容が残らないよう、オリジンと不可逆ハッシュだけにする */
+    private fun toDiagnosticUrl(url: String?): String {
+        if (url.isNullOrBlank()) return ""
+        val origin = runCatching {
+            val parsed = URI(url)
+            val port = if (parsed.port >= 0) ":${parsed.port}" else ""
+            "${parsed.scheme.orEmpty()}://${parsed.host.orEmpty()}$port"
+        }.getOrDefault("")
+        val hash = MessageDigest.getInstance("SHA-256")
+            .digest(url.substringBefore('#').toByteArray())
+            .take(DIAGNOSTIC_HASH_BYTE_COUNT)
+            .joinToString("") { byte -> "%02x".format(byte) }
+        return "$origin#$hash"
+    }
+
+    /** ページ内リンク（#）やクエリ差分は同じドキュメントとして扱う */
+    private fun isExpectedDocument(expectedUrl: String?, documentUrl: String?): Boolean {
+        if (expectedUrl.isNullOrBlank() || documentUrl.isNullOrBlank()) return true
+        return expectedUrl.substringBefore('#') == documentUrl.substringBefore('#')
+    }
+
+    private fun handleScanFailed(session: GeckoSession, json: JSONObject) {
+        val pending = pendingScans[session] ?: return
+        if (pending.requestId != json.optString("requestId")) return
+        pendingScans.remove(session, pending)
+        val reason = json.optString("reason").takeIf { it.isNotBlank() }.orEmpty()
+        pending.deferred.completeExceptionally(
+            IllegalStateException("ページ翻訳DOMの取得に失敗しました: $reason"),
+        )
+        saveInfo(
+            title = "ページ翻訳DOMスキャン失敗",
+            body = buildScanDiagnostics(
+                session = session,
+                pending = pending,
+                elapsedMs = SystemClock.elapsedRealtime() - pending.startedAtElapsedRealtime,
+            ) + "\nreason=$reason",
+        )
     }
 
     private fun handleScanSegments(session: GeckoSession, json: JSONObject) {
@@ -312,6 +435,20 @@ class PageTranslationWebExtension(
                 documentId = documentId,
                 htmlLanguage = pending.htmlLanguage,
                 segments = pending.segments.toList(),
+            ),
+        )
+    }
+
+    private fun handleApplyResult(session: GeckoSession, json: JSONObject) {
+        val requestId = json.optString("requestId")
+        if (requestId.isBlank()) return
+        val pending = pendingApplies[requestId] ?: return
+        if (pending.session !== session) return
+        pending.deferred.complete(
+            ApplyResult(
+                documentMatched = json.optBoolean("documentMatched", false),
+                appliedCount = json.optInt("appliedCount", 0).coerceAtLeast(0),
+                requeuedCount = json.optInt("requeuedCount", 0).coerceAtLeast(0),
             ),
         )
     }
@@ -362,6 +499,35 @@ class PageTranslationWebExtension(
         )
     }
 
+    private fun sendApplyMessage(
+        session: GeckoSession,
+        documentId: String,
+        translations: List<TranslationResult>,
+        requestId: String?,
+    ): Boolean {
+        val payload = JSONArray()
+        translations.forEach { translation ->
+            payload.put(
+                JSONObject().apply {
+                    put("id", translation.id)
+                    put("sourceText", translation.sourceText)
+                    put("translatedText", translation.translatedText)
+                },
+            )
+        }
+        return sendMessage(
+            session,
+            JSONObject().apply {
+                put("action", "apply")
+                put("documentId", documentId)
+                put("translations", payload)
+                if (requestId != null) {
+                    put("requestId", requestId)
+                }
+            },
+        )
+    }
+
     private fun sendMessage(session: GeckoSession, message: JSONObject): Boolean {
         val port = sessionPorts[session] ?: return false
         return try {
@@ -399,6 +565,22 @@ class PageTranslationWebExtension(
         }
     }
 
+    private fun cancelPendingApplies(session: GeckoSession) {
+        pendingApplies.forEach { (requestId, pending) ->
+            if (pending.session === session && pendingApplies.remove(requestId, pending)) {
+                pending.deferred.cancel()
+            }
+        }
+    }
+
+    private fun failPendingApplies(session: GeckoSession, cause: Throwable) {
+        pendingApplies.forEach { (requestId, pending) ->
+            if (pending.session === session && pendingApplies.remove(requestId, pending)) {
+                pending.deferred.completeExceptionally(cause)
+            }
+        }
+    }
+
     private fun stopActiveTranslation(session: GeckoSession) {
         activeTranslations.remove(session)?.onStopped?.invoke()
     }
@@ -409,7 +591,9 @@ class PageTranslationWebExtension(
         private const val EXTENSION_ID = "page-translation-bridge@browsem"
         private const val EXTENSION_URI =
             "resource://android/assets/web_extensions/page_translation_bridge/"
-        private const val SCAN_TIMEOUT_MS = 10_000L
+        private const val DIAGNOSTIC_HASH_BYTE_COUNT = 8
+        private const val SCAN_TIMEOUT_MS = 20_000L
+        private const val APPLY_TIMEOUT_MS = 5_000L
         private const val SLOW_SCAN_THRESHOLD_MS = 2_000L
         private const val MAX_BUFFERED_DYNAMIC_SEGMENTS = 512
     }

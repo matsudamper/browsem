@@ -47,6 +47,7 @@ import net.matsudamper.browser.feature.devtools.DevToolsWebExtension
 import net.matsudamper.browser.feature.findinpage.FindInPageWebExtension
 import net.matsudamper.browser.translate.PageTranslationWebExtension
 import net.matsudamper.browser.translate.TranslationPriorityLanguage
+import net.matsudamper.browser.translate.TranslationProgress
 import net.matsudamper.browser.translate.Translator
 import net.matsudamper.browser.ui.browser.BrowserScreenUiState
 import org.json.JSONObject
@@ -207,6 +208,12 @@ internal class BrowserTabScreenState(
 
     // --- Translation state ---
     var translationState by mutableStateOf(TranslationState.Idle)
+
+    /** 翻訳失敗時の理由。どの段階で失敗したかを翻訳バーへ表示する */
+    var translationErrorMessage: String? by mutableStateOf(null)
+
+    /** ページ内テキストの翻訳進捗。初期反映後も継続翻訳が進むため、完了まで表示する */
+    var translationProgress: TranslationProgress? by mutableStateOf(null)
     var originalPageUrlForRevert by mutableStateOf<String?>(null)
     var detectedPageLanguage by mutableStateOf<String?>(null)
 
@@ -944,7 +951,7 @@ internal class BrowserTabScreenState(
 
     private fun runTranslation(translationProvider: TranslationProvider, fromLanguage: String?, toLanguage: String) {
         translationJob?.cancel()
-        if (activeTranslationProvider == TranslationProvider.TRANSLATION_PROVIDER_LOCAL_AI) {
+        if (usesPageTranslationBridge(activeTranslationProvider)) {
             pageTranslationWebExtension.stopTranslation(session, restoreOriginal = true)
         }
         activeTranslationProvider = translationProvider
@@ -956,6 +963,8 @@ internal class BrowserTabScreenState(
             // 非同期処理完了後にページ遷移済みかを検出するために翻訳開始時のURLを保持する
             val translationStartUrl = originalPageUrlForRevert
             translationState = TranslationState.Loading
+            translationErrorMessage = null
+            translationProgress = null
             val pageUrl = translationStartUrl ?: currentPageUrl
             val result = runCatching {
                 PageTranslator(
@@ -964,14 +973,20 @@ internal class BrowserTabScreenState(
                     pageTranslationWebExtension = pageTranslationWebExtension,
                     crashLogRepository = crashLogRepository,
                 ).translatePage(
-                    translationProvider,
-                    fromLanguage,
-                    toLanguage,
-                ) { translateState ->
-                    if (originalPageUrlForRevert == translationStartUrl) {
-                        translationState = translateState.toTranslationState()
-                    }
-                }
+                    provider = translationProvider,
+                    fromLanguage = fromLanguage,
+                    toLanguage = toLanguage,
+                    onTranslateStateChanged = { translateState ->
+                        if (originalPageUrlForRevert == translationStartUrl) {
+                            translationState = translateState.toTranslationState()
+                        }
+                    },
+                    onTranslateProgressChanged = { progress ->
+                        if (originalPageUrlForRevert == translationStartUrl) {
+                            translationProgress = progress
+                        }
+                    },
+                )
             }
             // CancellationException は runCatching で握りつぶさずに伝播させる。
             // キャンセル済みジョブが新ジョブの状態を上書きするのを防ぐ。
@@ -983,11 +998,14 @@ internal class BrowserTabScreenState(
                 val langs = result.getOrNull()
                 translationFromLanguage = langs?.fromLanguage
                 translationToLanguage = langs?.toLanguage
+                translationErrorMessage = null
                 translationState = TranslationState.Translated
             } else {
-                Log.e(TAG, "翻訳に失敗しました", result.exceptionOrNull())
+                val error = result.exceptionOrNull()
+                Log.e(TAG, "翻訳に失敗しました", error)
                 translationFromLanguage = null
                 translationToLanguage = null
+                translationErrorMessage = error?.message?.takeIf { it.isNotBlank() }
                 translationState = TranslationState.Error
             }
         }
@@ -1011,7 +1029,9 @@ internal class BrowserTabScreenState(
         originalPageUrlForRevert = null
         translationFromLanguage = null
         translationToLanguage = null
-        if (provider == TranslationProvider.TRANSLATION_PROVIDER_LOCAL_AI) {
+        translationErrorMessage = null
+        translationProgress = null
+        if (usesPageTranslationBridge(provider)) {
             pageTranslationWebExtension.stopTranslation(session, restoreOriginal = revertPage)
         } else if (revertPage && savedUrl != null) {
             clearPageLoadError()
@@ -1445,7 +1465,7 @@ internal class BrowserTabScreenState(
         ) {
             translationJob?.cancel()
             translationJob = null
-            if (activeTranslationProvider == TranslationProvider.TRANSLATION_PROVIDER_LOCAL_AI) {
+            if (usesPageTranslationBridge(activeTranslationProvider)) {
                 pageTranslationWebExtension.stopTranslation(session, restoreOriginal = false)
             }
             activeTranslationProvider = null
@@ -1453,6 +1473,8 @@ internal class BrowserTabScreenState(
             originalPageUrlForRevert = null
             translationFromLanguage = null
             translationToLanguage = null
+            translationErrorMessage = null
+            translationProgress = null
         }
         if (!url.startsWith("data:")) {
             detectedPageLanguage = null
@@ -1912,6 +1934,18 @@ internal class BrowserTabScreenState(
     private fun copyUrlToClipboard(url: String) {
         copyUrlToClipboard(context, url)
     }
+}
+
+/** ページ内 DOM を書き換えて翻訳するプロバイダーかどうかを判定する */
+internal fun usesPageTranslationBridge(provider: TranslationProvider?): Boolean = when (provider) {
+    TranslationProvider.TRANSLATION_PROVIDER_LOCAL_AI,
+    TranslationProvider.TRANSLATION_PROVIDER_GEMINI_NANO,
+    -> true
+
+    TranslationProvider.TRANSLATION_PROVIDER_GECKO,
+    TranslationProvider.UNRECOGNIZED,
+    null,
+    -> false
 }
 
 private fun Translator.TranslateState.toTranslationState(): TranslationState = when (this) {

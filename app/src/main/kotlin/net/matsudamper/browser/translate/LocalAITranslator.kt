@@ -4,6 +4,7 @@ import android.os.SystemClock
 import android.util.Log
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -29,24 +30,29 @@ import org.mozilla.geckoview.GeckoSession
 
 class LocalAITranslator(
     private val session: GeckoSession,
+    private val currentPageUrl: String,
     private val fromLanguage: String?,
     private val toLanguage: String,
     private val pageTranslationWebExtension: PageTranslationWebExtension,
     private val crashLogRepository: CrashLogRepository,
     private val onTranslateStateChanged: (Translator.TranslateState) -> Unit,
+    private val onTranslateProgressChanged: (TranslationProgress) -> Unit,
 ) : Translator {
+    private val translatedSegmentCount = AtomicInteger(0)
+    private val totalSegmentCount = AtomicInteger(0)
 
     override suspend fun translate(): TranslationLanguages? {
         onTranslateStateChanged(Translator.TranslateState.PAGE_SCAN)
         val snapshot = try {
-            pageTranslationWebExtension.scanPage(session)
+            pageTranslationWebExtension.scanPage(session, currentPageUrl)
         } catch (error: Exception) {
             pageTranslationWebExtension.stopTranslation(session, restoreOriginal = true)
             throw error
         }
         if (snapshot.segments.isEmpty()) {
+            // 何も翻訳していないのに翻訳済みと表示されると、失敗に気付けない
             pageTranslationWebExtension.stopTranslation(session, restoreOriginal = false)
-            return null
+            throw IllegalStateException("ページから翻訳対象のテキストを取得できませんでした")
         }
 
         onTranslateStateChanged(Translator.TranslateState.LANGUAGE_DETECTION)
@@ -76,6 +82,8 @@ class LocalAITranslator(
                 segmentCount = snapshot.segments.size,
             )
             val translationCache = ConcurrentHashMap<String, String>()
+            totalSegmentCount.set(snapshot.segments.size)
+            notifyProgress()
             val initialSegments = snapshot.segments.take(INITIAL_APPLY_SEGMENT_COUNT)
             val remainingSegments = snapshot.segments.drop(INITIAL_APPLY_SEGMENT_COUNT)
             onTranslateStateChanged(Translator.TranslateState.TRANSLATING)
@@ -178,15 +186,17 @@ class LocalAITranslator(
     ) {
         val startedAt = SystemClock.elapsedRealtime()
         try {
-            withTimeout(INITIAL_TRANSLATION_TIMEOUT_MS) {
+            val applyResult = withTimeout(INITIAL_TRANSLATION_TIMEOUT_MS) {
                 translateAndApply(
                     translator = translator,
                     pageTranslationWebExtension = pageTranslationWebExtension,
                     documentId = documentId,
                     segments = segments,
                     translationCache = translationCache,
+                    awaitDomApply = true,
                 )
             }
+            verifyInitialApply(applyResult)
         } catch (error: TimeoutCancellationException) {
             val elapsedMs = SystemClock.elapsedRealtime() - startedAt
             saveInfo(
@@ -238,23 +248,57 @@ class LocalAITranslator(
         documentId: String,
         segments: List<PageTranslationWebExtension.Segment>,
         translationCache: ConcurrentHashMap<String, String>,
-    ) {
+        awaitDomApply: Boolean = false,
+    ): PageTranslationWebExtension.ApplyResult {
+        var documentMatched = true
+        var appliedCount = 0
+        var requeuedCount = 0
         segments.chunked(APPLY_BATCH_SIZE).forEach { batch ->
             val translations = batch.map { segment ->
                 val translatedText = translationCache[segment.text] ?: translator.translate(segment.text).await().also {
                     translationCache[segment.text] = it
                 }
+                translatedSegmentCount.incrementAndGet()
+                notifyProgress()
                 PageTranslationWebExtension.TranslationResult(
                     id = segment.id,
                     sourceText = segment.text,
                     translatedText = translatedText,
                 )
             }
-            pageTranslationWebExtension.applyTranslations(
-                session = session,
-                documentId = documentId,
-                translations = translations,
-            )
+            if (awaitDomApply) {
+                val batchResult = pageTranslationWebExtension.applyTranslationsAndAwait(
+                    session = session,
+                    documentId = documentId,
+                    translations = translations,
+                )
+                documentMatched = documentMatched && batchResult.documentMatched
+                appliedCount += batchResult.appliedCount
+                requeuedCount += batchResult.requeuedCount
+            } else {
+                pageTranslationWebExtension.applyTranslations(
+                    session = session,
+                    documentId = documentId,
+                    translations = translations,
+                )
+            }
+        }
+        return PageTranslationWebExtension.ApplyResult(
+            documentMatched = documentMatched,
+            appliedCount = appliedCount,
+            requeuedCount = requeuedCount,
+        )
+    }
+
+    /**
+     * 反映件数が0でも、ページ側が書き換えたノードは継続翻訳で訳し直されるため失敗にしない。
+     */
+    private fun verifyInitialApply(applyResult: PageTranslationWebExtension.ApplyResult) {
+        if (!applyResult.documentMatched) {
+            throw IllegalStateException("翻訳結果の反映先が別のページに切り替わりました")
+        }
+        if (applyResult.appliedCount == 0 && applyResult.requeuedCount == 0) {
+            throw IllegalStateException("ローカルAIの翻訳結果をページへ反映できませんでした")
         }
     }
 
@@ -291,6 +335,8 @@ class LocalAITranslator(
             session = session,
             documentId = documentId,
             onSegments = { segments ->
+                totalSegmentCount.addAndGet(segments.size)
+                notifyProgress()
                 queue.trySend(segments)
             },
             onStopped = {
@@ -304,6 +350,15 @@ class LocalAITranslator(
             queue.trySend(initialSegments)
         }
         return true
+    }
+
+    private fun notifyProgress() {
+        onTranslateProgressChanged(
+            TranslationProgress(
+                translatedCount = translatedSegmentCount.get(),
+                totalCount = totalSegmentCount.get(),
+            ),
+        )
     }
 
     private suspend fun detectLanguage(text: String): String = withContext(Dispatchers.IO) {

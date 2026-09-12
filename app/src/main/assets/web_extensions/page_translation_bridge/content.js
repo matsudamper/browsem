@@ -37,6 +37,8 @@
   const pendingDynamicSegments = new Map();
   let dynamicFlushTimer = null;
   let nativeReconnectTimer = null;
+  // 再接続時に監視を張り直すため、翻訳中かどうかを保持する
+  let translationActive = false;
 
   function postMessage(message) {
     if (port === null) return false;
@@ -272,21 +274,31 @@
   }
 
   function applyTranslations(translations) {
+    let appliedCount = 0;
+    let requeuedCount = 0;
     translations.forEach(function (translation) {
       const entry = entries.get(translation.id);
       if (!entry || entry.sourceText !== translation.sourceText) return;
-      if (refreshEntryIfPageChanged(entry)) return;
+      // ページ側が書き換えたノードは動的セグメントとして翻訳し直される
+      if (refreshEntryIfPageChanged(entry)) {
+        requeuedCount += 1;
+        return;
+      }
 
+      // 原文と同じ訳文でも反映は成功しているため、値の差分ではなく処理できた件数を数える
       if (entry.kind === 'text') {
         const translatedValue = preserveWhitespace(entry.originalValue, translation.translatedText);
         entry.lastApplied = translatedValue;
         entry.node.nodeValue = translatedValue;
+        appliedCount += 1;
       } else {
         const translatedValue = String(translation.translatedText || '').trim();
         entry.lastApplied = translatedValue;
         entry.element.setAttribute(entry.attributeName, translatedValue);
+        appliedCount += 1;
       }
     });
+    return { appliedCount: appliedCount, requeuedCount: requeuedCount };
   }
 
   function restoreAll() {
@@ -396,18 +408,44 @@
       action: 'scanStart',
       requestId: requestId,
       documentId: documentId,
+      documentUrl: location.href,
       htmlLanguage: document.documentElement ? (document.documentElement.lang || '') : '',
     });
 
     const segments = [];
-    collectRoot(document.body, segments);
+    try {
+      collectRoot(document.body, segments);
+    } catch (error) {
+      // 収集が途中で落ちると scanComplete が送られず、アプリ側は待ち続けてしまう
+      postMessage({
+        action: 'scanFailed',
+        requestId: requestId,
+        documentId: documentId,
+        reason: String((error && error.message) || error),
+      });
+      return;
+    }
     sendSegmentBatches('scanSegments', requestId, segments);
     postMessage({
       action: 'scanComplete',
       requestId: requestId,
       documentId: documentId,
+      segmentCount: segments.length,
     });
+    translationActive = true;
     startObserver();
+  }
+
+  /** 反映済みと一致しないテキストだけが textSegment から返るため、再走査で未同期分を拾える */
+  function resendUnsyncedSegments() {
+    const segments = [];
+    try {
+      collectRoot(document.body, segments);
+    } catch (error) {
+      return;
+    }
+    if (segments.length === 0) return;
+    sendSegmentBatches('dynamicSegments', null, segments);
   }
 
   function onNativeMessage(message) {
@@ -416,17 +454,32 @@
       startTranslation(message.requestId || '');
       return;
     }
-    if (message.action === 'apply' && message.documentId === documentId) {
-      applyTranslations(Array.isArray(message.translations) ? message.translations : []);
+    if (message.action === 'apply') {
+      const documentMatched = message.documentId === documentId;
+      const result = documentMatched
+        ? applyTranslations(Array.isArray(message.translations) ? message.translations : [])
+        : { appliedCount: 0, requeuedCount: 0 };
+      if (message.requestId) {
+        postMessage({
+          action: 'applyResult',
+          requestId: message.requestId,
+          documentId: documentId,
+          documentMatched: documentMatched,
+          appliedCount: result.appliedCount,
+          requeuedCount: result.requeuedCount,
+        });
+      }
       return;
     }
     if (message.action === 'revert') {
+      translationActive = false;
       stopObserver();
       restoreAll();
       resetEntries();
       return;
     }
     if (message.action === 'stop') {
+      translationActive = false;
       stopObserver();
       pendingDynamicSegments.clear();
     }
@@ -451,6 +504,12 @@
     }
     port = connectedPort;
     connectedPort.onMessage.addListener(onNativeMessage);
+    // 切断中の DOM 更新は MutationObserver に通知されないため、
+    // 再走査して未反映のテキストを送り直す
+    if (translationActive) {
+      resendUnsyncedSegments();
+      startObserver();
+    }
     connectedPort.onDisconnect.addListener(function () {
       if (port !== connectedPort) return;
       port = null;
@@ -464,8 +523,27 @@
     connect();
   }
 
+  // bfcache へ入ったドキュメントが接続を保持すると、表示中のページではなく
+  // 退避済みのページを翻訳してしまうため、離脱時に必ず切断する
+  function disconnectOnPageHide() {
+    if (nativeReconnectTimer !== null) {
+      clearTimeout(nativeReconnectTimer);
+      nativeReconnectTimer = null;
+    }
+    stopObserver();
+    if (port === null) return;
+    const disconnectingPort = port;
+    port = null;
+    try {
+      disconnectingPort.disconnect();
+    } catch (error) {
+      // 切断済みの場合は何もしない
+    }
+  }
+
   document.addEventListener('visibilitychange', connectWhenVisible);
   window.addEventListener('pageshow', connectWhenVisible);
+  window.addEventListener('pagehide', disconnectOnPageHide);
 
   connect();
 })();

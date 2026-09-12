@@ -15,6 +15,7 @@ protobufPlugin = "0.10.0"
 paparazzi = "2.0.0-alpha05"
 composablePreviewScanner = "0.9.3"
 mlkitTranslate = "17.0.3"
+mlkitGenaiPrompt = "1.0.0-beta4"
 coroutinesPlayServices = "1.11.0"
 mlkitLanguageId = "17.0.6"
 swiperefreshlayout = "1.2.0"
@@ -60,8 +61,10 @@ protobuf-javalite = { module = "com.google.protobuf:protobuf-javalite", version.
 
 composable-preview-scanner = { module = "io.github.sergio-sastre.ComposablePreviewScanner:android", version.ref = "composablePreviewScanner" }
 mlkit-translate = { module = "com.google.mlkit:translate", version.ref = "mlkitTranslate" }
+mlkit-genai-prompt = { module = "com.google.mlkit:genai-prompt", version.ref = "mlkitGenaiPrompt" }
 mlkit-language-id = { module = "com.google.mlkit:language-id", version.ref = "mlkitLanguageId" }
 kotlinx-coroutines-play-services = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-play-services", version.ref = "coroutinesPlayServices" }
+kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "coroutinesPlayServices" }
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutinesPlayServices" }
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutinesPlayServices" }
 androidx-swiperefreshlayout = { group = "androidx.swiperefreshlayout", name = "swiperefreshlayout", version.ref = "swiperefreshlayout" }

@@ -29,6 +29,7 @@ import net.matsudamper.browser.data.resolvedInputAutoZoomEnabled
 import net.matsudamper.browser.data.resolvedWebAuthnPlatformAuthenticatorAvailableOverrideEnabled
 import net.matsudamper.browser.feature.mocklocation.MockLocationWebExtension
 import net.matsudamper.browser.feature.webauthncompat.WebAuthnCompatWebExtension
+import net.matsudamper.browser.translate.isGeminiNanoAvailable
 import net.matsudamper.browser.ui.settings.SettingsScreenUiState
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
@@ -85,6 +86,13 @@ internal class SettingsScreenViewModel(
     // isEmpty() では空文字入力と未初期化を区別できないため専用フラグを使用する
     private var mockLocationInputInitialized = false
 
+    init {
+        viewModelScope.launch {
+            val geminiNanoAvailable = isGeminiNanoAvailable()
+            viewModelStateFlow.update { it.copy(geminiNanoAvailable = geminiNanoAvailable) }
+        }
+    }
+
     private val callbacks = object : SettingsScreenUiState.Callbacks {
         override fun setHomepageType(type: HomepageType) {
             viewModelScope.launch { settingsRepository.setHomepageType(type) }
@@ -107,6 +115,12 @@ internal class SettingsScreenViewModel(
         }
 
         override fun setTranslationProvider(provider: TranslationProvider) {
+            if (
+                provider == TranslationProvider.TRANSLATION_PROVIDER_GEMINI_NANO &&
+                viewModelStateFlow.value.geminiNanoAvailable != true
+            ) {
+                return
+            }
             viewModelScope.launch { settingsRepository.setTranslationProvider(provider) }
         }
 
@@ -249,6 +263,15 @@ internal class SettingsScreenViewModel(
                         mockLocationInputInitialized = true
                         return@collectLatest
                     }
+                    if (
+                        state.geminiNanoAvailable == false &&
+                        settings.translationProvider == TranslationProvider.TRANSLATION_PROVIDER_GEMINI_NANO
+                    ) {
+                        settingsRepository.setTranslationProvider(
+                            TranslationProvider.TRANSLATION_PROVIDER_GECKO,
+                        )
+                        return@collectLatest
+                    }
                     uiStateFlow.update {
                         settings.toUiState(
                             callbacks = callbacks,
@@ -256,6 +279,7 @@ internal class SettingsScreenViewModel(
                             backupConfirmDialog = state.backupConfirmDialog,
                             extensionsProcessRestartDialog = state.extensionsProcessRestartDialog,
                             showDefaultBrowserBanner = state.showDefaultBrowserBanner,
+                            geminiNanoAvailable = state.geminiNanoAvailable == true,
                         )
                     }
                     // 拡張機能への反映は BrowserViewModel が設定の Flow を監視して行う
@@ -285,6 +309,7 @@ internal class SettingsScreenViewModel(
         val extensionsProcessRestartDialog: Boolean = false,
         val pendingExtensionsProcessEnabled: Boolean? = null,
         val showDefaultBrowserBanner: Boolean = false,
+        val geminiNanoAvailable: Boolean? = null,
     )
 }
 
@@ -337,6 +362,7 @@ private fun BrowserSettings.toUiState(
     backupConfirmDialog: SettingsScreenUiState.BackupConfirmType?,
     extensionsProcessRestartDialog: Boolean,
     showDefaultBrowserBanner: Boolean,
+    geminiNanoAvailable: Boolean,
 ): SettingsScreenUiState {
     return SettingsScreenUiState(
         callbacks = callbacks,
@@ -346,6 +372,7 @@ private fun BrowserSettings.toUiState(
         customSearchUrl = customSearchUrl,
         themeMode = themeMode,
         translationProvider = translationProvider,
+        geminiNanoAvailable = geminiNanoAvailable,
         enableThirdPartyCa = enableThirdPartyCa,
         enableWebSuggestions = resolvedEnableWebSuggestions(),
         inputAutoZoomEnabled = resolvedInputAutoZoomEnabled(),

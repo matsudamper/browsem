@@ -24,6 +24,7 @@ enum ThemeMode {
 enum TranslationProvider {
   TRANSLATION_PROVIDER_GECKO = 0;
   TRANSLATION_PROVIDER_LOCAL_AI = 1;
+  TRANSLATION_PROVIDER_GEMINI_NANO = 2;
 }
 
 message BrowserSettings {

@@ -26,6 +26,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -308,6 +309,16 @@ fun SettingsScreen(
                         onClick = {
                             uiState.callbacks.setTranslationProvider(
                                 TranslationProvider.TRANSLATION_PROVIDER_LOCAL_AI,
+                            )
+                        },
+                    )
+                    SettingsRadioOption(
+                        label = "Gemini Nano (対応端末のみ)",
+                        selected = uiState.translationProvider == TranslationProvider.TRANSLATION_PROVIDER_GEMINI_NANO,
+                        enabled = uiState.geminiNanoAvailable,
+                        onClick = {
+                            uiState.callbacks.setTranslationProvider(
+                                TranslationProvider.TRANSLATION_PROVIDER_GEMINI_NANO,
                             )
                         },
                     )
@@ -712,13 +723,13 @@ internal fun CollapsibleSettingSection(
 }
 
 // 設定項目が縦に長いため、全体が見えるように高さを広げて Preview する
-@Preview(showBackground = true, heightDp = 2500)
+@Preview(showBackground = true, heightDp = 2600)
 @Composable
 private fun SettingsScreenPreview() {
     SettingsScreenPreviewContent(showDefaultBrowserBanner = false)
 }
 
-@Preview(showBackground = true, heightDp = 2500)
+@Preview(showBackground = true, heightDp = 2600)
 @Composable
 private fun SettingsScreenDefaultBrowserBannerPreview() {
     SettingsScreenPreviewContent(showDefaultBrowserBanner = true)
@@ -757,6 +768,7 @@ private fun SettingsScreenPreviewContent(showDefaultBrowserBanner: Boolean) {
                 customSearchUrl = "",
                 themeMode = ThemeMode.THEME_SYSTEM,
                 translationProvider = TranslationProvider.TRANSLATION_PROVIDER_GECKO,
+                geminiNanoAvailable = false,
                 enableThirdPartyCa = false,
                 enableWebSuggestions = false,
                 inputAutoZoomEnabled = true,
@@ -784,18 +796,33 @@ internal fun SettingsRadioOption(
     label: String,
     selected: Boolean,
     onClick: () -> Unit,
+    enabled: Boolean = true,
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
-            .selectable(selected = selected, role = Role.RadioButton, onClick = onClick)
+            .selectable(
+                selected = selected,
+                enabled = enabled,
+                role = Role.RadioButton,
+                onClick = onClick,
+            )
             .padding(vertical = 4.dp),
     ) {
-        RadioButton(selected = selected, onClick = null)
+        RadioButton(
+            selected = selected,
+            onClick = null,
+            enabled = enabled,
+        )
         Text(
             text = label,
             style = MaterialTheme.typography.bodyLarge,
+            color = if (enabled) {
+                LocalContentColor.current
+            } else {
+                LocalContentColor.current.copy(alpha = 0.38f)
+            },
             modifier = Modifier.padding(start = 8.dp),
         )
     }

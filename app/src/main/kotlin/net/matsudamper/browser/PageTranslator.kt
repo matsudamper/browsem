@@ -7,10 +7,12 @@ import kotlinx.coroutines.withContext
 import net.matsudamper.browser.data.TranslationProvider
 import net.matsudamper.browser.data.crashlog.CrashLogRepository
 import net.matsudamper.browser.translate.GeckoTranslator
+import net.matsudamper.browser.translate.GeminiNanoTranslator
 import net.matsudamper.browser.translate.LocalAITranslator
 import net.matsudamper.browser.translate.PageTranslationWebExtension
 import net.matsudamper.browser.translate.TranslationLanguages
 import net.matsudamper.browser.translate.TranslationPriorityLanguage
+import net.matsudamper.browser.translate.TranslationProgress
 import net.matsudamper.browser.translate.Translator
 import org.mozilla.geckoview.GeckoSession
 
@@ -25,6 +27,7 @@ internal class PageTranslator(
         fromLanguage: String?,
         toLanguage: String,
         onTranslateStateChanged: (Translator.TranslateState) -> Unit,
+        onTranslateProgressChanged: (TranslationProgress) -> Unit,
     ): TranslationLanguages? {
         return when (provider) {
             TranslationProvider.TRANSLATION_PROVIDER_GECKO,
@@ -45,11 +48,26 @@ internal class PageTranslator(
             TranslationProvider.TRANSLATION_PROVIDER_LOCAL_AI -> {
                 LocalAITranslator(
                     session = session,
+                    currentPageUrl = currentPageUrl,
                     fromLanguage = fromLanguage,
                     toLanguage = toLanguage,
                     pageTranslationWebExtension = pageTranslationWebExtension,
                     crashLogRepository = crashLogRepository,
                     onTranslateStateChanged = onTranslateStateChanged,
+                    onTranslateProgressChanged = onTranslateProgressChanged,
+                )
+            }
+
+            TranslationProvider.TRANSLATION_PROVIDER_GEMINI_NANO -> {
+                GeminiNanoTranslator(
+                    session = session,
+                    currentPageUrl = currentPageUrl,
+                    fromLanguage = fromLanguage,
+                    toLanguage = toLanguage,
+                    pageTranslationWebExtension = pageTranslationWebExtension,
+                    crashLogRepository = crashLogRepository,
+                    onTranslateStateChanged = onTranslateStateChanged,
+                    onTranslateProgressChanged = onTranslateProgressChanged,
                 )
             }
         }.translate()
