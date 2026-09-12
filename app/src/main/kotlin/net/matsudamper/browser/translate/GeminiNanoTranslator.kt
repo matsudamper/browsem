@@ -16,7 +16,6 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import com.google.mlkit.genai.common.DownloadStatus
 import com.google.mlkit.genai.common.FeatureStatus
-import com.google.mlkit.genai.common.GenAiException
 import com.google.mlkit.genai.prompt.Candidate
 import com.google.mlkit.genai.prompt.Generation
 import com.google.mlkit.genai.prompt.GenerativeModel
@@ -296,37 +295,19 @@ class GeminiNanoTranslator(
         targetLanguage: String,
         text: String,
     ): String {
-        val request = buildTranslationRequest(sourceLanguage, targetLanguage, text)
-        var retryCount = 0
-        while (true) {
-            try {
-                val response = generativeModel.generateContent(request)
-                val candidate = response.candidates.firstOrNull()
-                    ?: throw IllegalStateException("Gemini Nanoから翻訳候補を取得できませんでした")
-                if (candidate.finishReason != Candidate.FinishReason.STOP) {
-                    throw IllegalStateException("Gemini Nanoの翻訳生成が完了しませんでした: ${candidate.finishReason}")
-                }
-                val translatedText = candidate.text.trim()
-                if (translatedText.isBlank()) {
-                    throw IllegalStateException("Gemini Nanoから翻訳結果を取得できませんでした")
-                }
-                return translatedText
-            } catch (error: CancellationException) {
-                throw error
-            } catch (error: GenAiException) {
-                if (error.errorCode != GenAiException.ErrorCode.BUSY || retryCount >= BUSY_RETRY_COUNT) {
-                    throw error
-                }
-                val apiRetryDelayMillis = error.retryDelay.toMillis()
-                val retryDelayMillis = if (apiRetryDelayMillis > 0L) {
-                    apiRetryDelayMillis
-                } else {
-                    BUSY_RETRY_BASE_DELAY_MS * (1L shl retryCount)
-                }
-                retryCount += 1
-                delay(retryDelayMillis)
-            }
+        val response = generativeModel.generateContent(
+            buildTranslationRequest(sourceLanguage, targetLanguage, text),
+        )
+        val candidate = response.candidates.firstOrNull()
+            ?: throw IllegalStateException("Gemini Nanoから翻訳候補を取得できませんでした")
+        if (candidate.finishReason != Candidate.FinishReason.STOP) {
+            throw IllegalStateException("Gemini Nanoの翻訳生成が完了しませんでした: ${candidate.finishReason}")
         }
+        val translatedText = candidate.text.trim()
+        if (translatedText.isBlank()) {
+            throw IllegalStateException("Gemini Nanoから翻訳結果を取得できませんでした")
+        }
+        return translatedText
     }
 
     private fun buildTranslationRequest(
@@ -372,14 +353,12 @@ class GeminiNanoTranslator(
         private const val TAG = "GeminiNanoTranslator"
         private const val LANGUAGE_DETECTION_LIMIT = 2_000
         private const val APPLY_BATCH_SIZE = 8
-        private const val INITIAL_APPLY_SEGMENT_COUNT = 1
+        private const val INITIAL_APPLY_SEGMENT_COUNT = 4
         private const val DYNAMIC_TRANSLATION_QUEUE_CAPACITY = 16
         private const val MAX_OUTPUT_TOKENS = 2_048
-        private const val BUSY_RETRY_COUNT = 3
-        private const val BUSY_RETRY_BASE_DELAY_MS = 1_000L
         private const val MODEL_PREPARATION_TIMEOUT_MS = 180_000L
         private const val MODEL_STATUS_POLL_INTERVAL_MS = 500L
-        private const val INITIAL_TRANSLATION_TIMEOUT_MS = 90_000L
+        private const val INITIAL_TRANSLATION_TIMEOUT_MS = 30_000L
     }
 }
 
