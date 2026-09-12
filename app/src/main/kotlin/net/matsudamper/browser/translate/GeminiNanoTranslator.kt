@@ -9,6 +9,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -180,7 +181,10 @@ class GeminiNanoTranslator(
         translationCache: ConcurrentHashMap<String, String>,
     ): Boolean {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-        val queue = Channel<List<PageTranslationWebExtension.Segment>>(Channel.UNLIMITED)
+        val queue = Channel<List<PageTranslationWebExtension.Segment>>(
+            capacity = DYNAMIC_TRANSLATION_QUEUE_CAPACITY,
+            onBufferOverflow = BufferOverflow.DROP_OLDEST,
+        )
         scope.launch {
             for (segments in queue) {
                 val targets = segments.filter { isTranslatableText(it.text) }
@@ -254,6 +258,9 @@ class GeminiNanoTranslator(
         private const val UNDETERMINED_LANGUAGE = "und"
         private const val LANGUAGE_DETECTION_LIMIT = 2_000
         private const val APPLY_BATCH_SIZE = 4
+
+        /** DOM更新が推論速度を上回っても未処理セグメントを溜め込まないようにする */
+        private const val DYNAMIC_TRANSLATION_QUEUE_CAPACITY = 16
 
         /** 生成が1件ずつ逐次実行になるため、最初の反映までの待ち時間を短くする */
         private const val INITIAL_APPLY_SEGMENT_COUNT = 2
