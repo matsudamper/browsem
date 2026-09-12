@@ -46,6 +46,7 @@ internal class PageTranslator(
             TranslationProvider.TRANSLATION_PROVIDER_LOCAL_AI -> {
                 LocalAITranslator(
                     session = session,
+                    currentPageUrl = currentPageUrl,
                     fromLanguage = fromLanguage,
                     toLanguage = toLanguage,
                     pageTranslationWebExtension = pageTranslationWebExtension,
@@ -57,6 +58,7 @@ internal class PageTranslator(
             TranslationProvider.TRANSLATION_PROVIDER_GEMINI_NANO -> {
                 GeminiNanoTranslator(
                     session = session,
+                    currentPageUrl = currentPageUrl,
                     fromLanguage = fromLanguage,
                     toLanguage = toLanguage,
                     pageTranslationWebExtension = pageTranslationWebExtension,

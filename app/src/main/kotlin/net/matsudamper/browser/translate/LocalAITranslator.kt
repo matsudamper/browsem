@@ -29,6 +29,7 @@ import org.mozilla.geckoview.GeckoSession
 
 class LocalAITranslator(
     private val session: GeckoSession,
+    private val currentPageUrl: String,
     private val fromLanguage: String?,
     private val toLanguage: String,
     private val pageTranslationWebExtension: PageTranslationWebExtension,
@@ -39,14 +40,15 @@ class LocalAITranslator(
     override suspend fun translate(): TranslationLanguages? {
         onTranslateStateChanged(Translator.TranslateState.PAGE_SCAN)
         val snapshot = try {
-            pageTranslationWebExtension.scanPage(session)
+            pageTranslationWebExtension.scanPage(session, currentPageUrl)
         } catch (error: Exception) {
             pageTranslationWebExtension.stopTranslation(session, restoreOriginal = true)
             throw error
         }
         if (snapshot.segments.isEmpty()) {
+            // 何も翻訳していないのに翻訳済みと表示されると、失敗に気付けない
             pageTranslationWebExtension.stopTranslation(session, restoreOriginal = false)
-            return null
+            throw IllegalStateException("ページから翻訳対象のテキストを取得できませんでした")
         }
 
         onTranslateStateChanged(Translator.TranslateState.LANGUAGE_DETECTION)
