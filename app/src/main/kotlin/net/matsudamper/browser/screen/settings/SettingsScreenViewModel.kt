@@ -115,6 +115,12 @@ internal class SettingsScreenViewModel(
         }
 
         override fun setTranslationProvider(provider: TranslationProvider) {
+            if (
+                provider == TranslationProvider.TRANSLATION_PROVIDER_GEMINI_NANO &&
+                viewModelStateFlow.value.geminiNanoAvailable != true
+            ) {
+                return
+            }
             viewModelScope.launch { settingsRepository.setTranslationProvider(provider) }
         }
 
@@ -273,7 +279,6 @@ internal class SettingsScreenViewModel(
                             backupConfirmDialog = state.backupConfirmDialog,
                             extensionsProcessRestartDialog = state.extensionsProcessRestartDialog,
                             showDefaultBrowserBanner = state.showDefaultBrowserBanner,
-                            geminiNanoAvailable = state.geminiNanoAvailable == true,
                         )
                     }
                     // 拡張機能への反映は BrowserViewModel が設定の Flow を監視して行う
@@ -356,7 +361,6 @@ private fun BrowserSettings.toUiState(
     backupConfirmDialog: SettingsScreenUiState.BackupConfirmType?,
     extensionsProcessRestartDialog: Boolean,
     showDefaultBrowserBanner: Boolean,
-    geminiNanoAvailable: Boolean,
 ): SettingsScreenUiState {
     return SettingsScreenUiState(
         callbacks = callbacks,
@@ -366,7 +370,6 @@ private fun BrowserSettings.toUiState(
         customSearchUrl = customSearchUrl,
         themeMode = themeMode,
         translationProvider = translationProvider,
-        geminiNanoAvailable = geminiNanoAvailable,
         enableThirdPartyCa = enableThirdPartyCa,
         enableWebSuggestions = resolvedEnableWebSuggestions(),
         inputAutoZoomEnabled = resolvedInputAutoZoomEnabled(),
