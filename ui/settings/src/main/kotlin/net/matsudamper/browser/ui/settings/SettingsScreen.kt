@@ -314,6 +314,7 @@ fun SettingsScreen(
                     SettingsRadioOption(
                         label = "Gemini Nano (対応端末のみ)",
                         selected = uiState.translationProvider == TranslationProvider.TRANSLATION_PROVIDER_GEMINI_NANO,
+                        enabled = uiState.geminiNanoAvailable,
                         onClick = {
                             uiState.callbacks.setTranslationProvider(
                                 TranslationProvider.TRANSLATION_PROVIDER_GEMINI_NANO,
@@ -766,6 +767,7 @@ private fun SettingsScreenPreviewContent(showDefaultBrowserBanner: Boolean) {
                 customSearchUrl = "",
                 themeMode = ThemeMode.THEME_SYSTEM,
                 translationProvider = TranslationProvider.TRANSLATION_PROVIDER_GECKO,
+                geminiNanoAvailable = true,
                 enableThirdPartyCa = false,
                 enableWebSuggestions = false,
                 inputAutoZoomEnabled = true,
@@ -793,15 +795,25 @@ internal fun SettingsRadioOption(
     label: String,
     selected: Boolean,
     onClick: () -> Unit,
+    enabled: Boolean = true,
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
-            .selectable(selected = selected, role = Role.RadioButton, onClick = onClick)
+            .selectable(
+                selected = selected,
+                enabled = enabled,
+                role = Role.RadioButton,
+                onClick = onClick,
+            )
             .padding(vertical = 4.dp),
     ) {
-        RadioButton(selected = selected, onClick = null)
+        RadioButton(
+            selected = selected,
+            onClick = null,
+            enabled = enabled,
+        )
         Text(
             text = label,
             style = MaterialTheme.typography.bodyLarge,
