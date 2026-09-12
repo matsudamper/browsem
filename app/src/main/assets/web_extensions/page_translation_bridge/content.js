@@ -2,7 +2,6 @@
   if (window !== window.top) return;
 
   const NATIVE_APP_ID = 'pageTranslationBridge';
-  const IMMEDIATE_CONNECT_MESSAGE = '__browsem_page_translation_connect__';
   const SEGMENT_BATCH_SIZE = 48;
   const SEGMENT_BATCH_CHAR_LIMIT = 32768;
   const DYNAMIC_FLUSH_DELAY_MS = 120;
@@ -456,9 +455,8 @@
   }
 
   function scheduleNativeHandshake() {
-    // 翻訳を使わないページではネイティブ側が MessageDelegate を張らないため handshake は必ず失敗する。
-    // 無制限に再試行すると全タブ・全ページでタイマーが回り続けるので、数回で諦める。
-    // 翻訳開始時はネイティブ側が接続要求メッセージを注入するため、そこからの connect() で復帰できる。
+    // ネイティブ側は表示中セッションへ先に MessageDelegate を登録する。
+    // Compose と content script の開始順序の差を吸収するため、有限回だけ再試行する。
     if (handshakeRetryCount >= HANDSHAKE_MAX_RETRY_COUNT) return;
     const delay = Math.min(
       HANDSHAKE_RETRY_MIN_MS * Math.pow(2, handshakeRetryCount),
@@ -491,11 +489,14 @@
     );
   }
 
-  window.addEventListener('message', function (event) {
-    if (event.data !== IMMEDIATE_CONNECT_MESSAGE) return;
+  function retryNativeHandshakeWhenVisible() {
+    if (document.visibilityState !== 'visible' || port !== null) return;
     handshakeRetryCount = 0;
-    connect();
-  });
+    waitForNative();
+  }
+
+  document.addEventListener('visibilitychange', retryNativeHandshakeWhenVisible);
+  window.addEventListener('pageshow', retryNativeHandshakeWhenVisible);
 
   waitForNative();
 })();

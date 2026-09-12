@@ -216,6 +216,7 @@ internal class BrowserTabScreenState(
     /** 翻訳先言語タグ（例: "ja"） */
     var translationToLanguage by mutableStateOf<String?>(null)
     private var translationJob: Job? = null
+    private var activeTranslationProvider: TranslationProvider? = null
 
     // --- Find-in-page state ---
     private var findInPageState by mutableStateOf(FindInPageState.Closed)
@@ -943,6 +944,10 @@ internal class BrowserTabScreenState(
 
     private fun runTranslation(translationProvider: TranslationProvider, fromLanguage: String?, toLanguage: String) {
         translationJob?.cancel()
+        if (activeTranslationProvider == TranslationProvider.TRANSLATION_PROVIDER_LOCAL_AI) {
+            pageTranslationWebExtension.stopTranslation(session, restoreOriginal = true)
+        }
+        activeTranslationProvider = translationProvider
         translationJob = coroutineScope.launch {
             // 初回翻訳時のみ元URLを保存する
             if (originalPageUrlForRevert == null) {
@@ -989,12 +994,7 @@ internal class BrowserTabScreenState(
     }
 
     fun onRevertTranslation() {
-        val savedUrl = originalPageUrlForRevert
-        closeTranslationBar(revertPage = false)
-        if (savedUrl != null) {
-            clearPageLoadError()
-            session.loadUri(savedUrl)
-        }
+        closeTranslationBar(revertPage = true)
     }
 
     fun onDismissTranslationError() {
@@ -1005,11 +1005,15 @@ internal class BrowserTabScreenState(
         translationJob?.cancel()
         translationJob = null
         val savedUrl = originalPageUrlForRevert
+        val provider = activeTranslationProvider
+        activeTranslationProvider = null
         translationState = TranslationState.Idle
         originalPageUrlForRevert = null
         translationFromLanguage = null
         translationToLanguage = null
-        if (revertPage && savedUrl != null) {
+        if (provider == TranslationProvider.TRANSLATION_PROVIDER_LOCAL_AI) {
+            pageTranslationWebExtension.stopTranslation(session, restoreOriginal = revertPage)
+        } else if (revertPage && savedUrl != null) {
             clearPageLoadError()
             session.loadUri(savedUrl)
         }
@@ -1431,9 +1435,24 @@ internal class BrowserTabScreenState(
         if (!isUrlInputFocused) {
             urlInput = url
         }
-        if (shouldResetTranslationOnLocationChange(translationState, url, originalPageUrlForRevert, wasFullPageLoad)) {
+        if (
+            shouldResetTranslationOnLocationChange(
+                translationState,
+                url,
+                originalPageUrlForRevert,
+                wasFullPageLoad,
+            )
+        ) {
+            translationJob?.cancel()
+            translationJob = null
+            if (activeTranslationProvider == TranslationProvider.TRANSLATION_PROVIDER_LOCAL_AI) {
+                pageTranslationWebExtension.stopTranslation(session, restoreOriginal = false)
+            }
+            activeTranslationProvider = null
             translationState = TranslationState.Idle
             originalPageUrlForRevert = null
+            translationFromLanguage = null
+            translationToLanguage = null
         }
         if (!url.startsWith("data:")) {
             detectedPageLanguage = null

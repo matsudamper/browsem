@@ -56,6 +56,7 @@ class PageTranslationWebExtension(
         val segments: List<Segment>,
     )
 
+    @Volatile
     private var extension: WebExtension? = null
 
     @Volatile
@@ -63,6 +64,8 @@ class PageTranslationWebExtension(
     private val requestSequence = AtomicLong(0)
     private val sessionPorts = ConcurrentHashMap<GeckoSession, WebExtension.Port>()
     private val attachedSessions: MutableSet<GeckoSession> =
+        Collections.newSetFromMap(ConcurrentHashMap())
+    private val sessionsWaitingForExtension: MutableSet<GeckoSession> =
         Collections.newSetFromMap(ConcurrentHashMap())
     private val pendingScans = ConcurrentHashMap<GeckoSession, PendingScan>()
     private val awaitingActivationDocuments = ConcurrentHashMap<GeckoSession, String>()
@@ -77,9 +80,13 @@ class PageTranslationWebExtension(
                     if (installedExtension == null) return@accept
                     extension = installedExtension
                     installationError = null
+                    sessionsWaitingForExtension.toList().forEach { session ->
+                        if (sessionsWaitingForExtension.remove(session)) {
+                            attachSessionDelegate(session, installedExtension)
+                        }
+                    }
                     pendingScans.keys.forEach { session ->
                         attachSessionDelegate(session, installedExtension)
-                        requestImmediateConnection(session)
                     }
                 },
                 { error ->
@@ -94,8 +101,35 @@ class PageTranslationWebExtension(
                         pending.deferred.completeExceptionally(cause)
                     }
                     pendingScans.clear()
+                    sessionsWaitingForExtension.clear()
                 },
             )
+    }
+
+    fun registerSession(session: GeckoSession) {
+        if (installationError != null) return
+        val installedExtension = extension
+        if (installedExtension != null) {
+            attachSessionDelegate(session, installedExtension)
+            return
+        }
+
+        sessionsWaitingForExtension.add(session)
+        extension?.let { installedAfterRegistration ->
+            if (sessionsWaitingForExtension.remove(session)) {
+                attachSessionDelegate(session, installedAfterRegistration)
+            }
+        }
+    }
+
+    fun unregisterSession(session: GeckoSession) {
+        sessionsWaitingForExtension.remove(session)
+        stopTranslation(session, restoreOriginal = false)
+        sessionPorts.remove(session)
+        attachedSessions.remove(session)
+        extension?.let { installedExtension ->
+            session.webExtensionController.setMessageDelegate(installedExtension, null, NATIVE_APP_ID)
+        }
     }
 
     suspend fun scanPage(session: GeckoSession): PageSnapshot {
@@ -110,11 +144,7 @@ class PageTranslationWebExtension(
             startedAtElapsedRealtime = SystemClock.elapsedRealtime(),
         )
         pendingScans.put(session, pending)?.deferred?.cancel()
-        val installedExtension = extension
-        if (installedExtension != null) {
-            attachSessionDelegate(session, installedExtension)
-            requestImmediateConnection(session)
-        }
+        registerSession(session)
         sendStartIfReady(session)
 
         return try {
@@ -241,7 +271,6 @@ class PageTranslationWebExtension(
 
                             override fun onDisconnect(port: WebExtension.Port) {
                                 if (!sessionPorts.remove(session, port)) return
-                                attachedSessions.remove(session)
                                 val pending = pendingScans.remove(session)
                                 if (pending != null) {
                                     pending.deferred.completeExceptionally(
@@ -348,19 +377,6 @@ class PageTranslationWebExtension(
         )
     }
 
-    private fun requestImmediateConnection(session: GeckoSession) {
-        if (sessionPorts[session] != null) return
-        try {
-            session.loadUri(CONNECT_SCRIPT_URI)
-        } catch (error: RuntimeException) {
-            Log.w(TAG, "ページ翻訳ブリッジの即時接続要求に失敗", error)
-            saveInfo(
-                title = "ページ翻訳ブリッジ即時接続要求失敗",
-                body = "error=${error.javaClass.name}\nmessage=${error.message.orEmpty()}",
-            )
-        }
-    }
-
     private fun sendMessage(session: GeckoSession, message: JSONObject): Boolean {
         val port = sessionPorts[session] ?: return false
         return try {
@@ -408,8 +424,6 @@ class PageTranslationWebExtension(
         private const val EXTENSION_ID = "page-translation-bridge@browsem"
         private const val EXTENSION_URI =
             "resource://android/assets/web_extensions/page_translation_bridge/"
-        private const val CONNECT_SCRIPT_URI =
-            "javascript:void(window.postMessage('__browsem_page_translation_connect__','*'))"
         private const val SCAN_TIMEOUT_MS = 10_000L
         private const val SLOW_SCAN_THRESHOLD_MS = 2_000L
         private const val MAX_BUFFERED_DYNAMIC_SEGMENTS = 512

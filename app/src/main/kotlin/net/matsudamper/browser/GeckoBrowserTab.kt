@@ -96,6 +96,7 @@ import net.matsudamper.browser.feature.themecolor.ThemeColorWebExtension
 import net.matsudamper.browser.feature.twittershare.TwitterShareWebExtension
 import net.matsudamper.browser.feature.viewportscale.ViewportScaleWebExtension
 import net.matsudamper.browser.feature.websharefiles.WebShareFilesWebExtension
+import net.matsudamper.browser.translate.PageTranslationWebExtension
 import net.matsudamper.browser.translate.TranslationPriorityLanguage
 import net.matsudamper.browser.ui.browser.BrowserScreenUiState
 import net.matsudamper.browser.ui.browser.UrlBarSuggestionsUiState
@@ -151,6 +152,7 @@ internal fun GeckoBrowserTab(
 ) {
     val context = LocalContext.current
     val findInPageWebExtension: FindInPageWebExtension = koinInject()
+    val pageTranslationWebExtension: PageTranslationWebExtension = koinInject()
     val addressRepository: AddressRepository = koinInject()
     val formInputRepository: FormInputRepository = koinInject()
     val addressAutofillCoordinator: AddressAutofillCoordinator = koinInject()
@@ -764,6 +766,15 @@ internal fun GeckoBrowserTab(
         }
         onDispose {
             viewportScaleWebExtension.unregisterSession(session)
+        }
+    }
+
+    // ページ側へ接続トリガーを露出せず Native Messaging を開始できるよう、
+    // 表示中セッションには content script より先に MessageDelegate を登録する。
+    DisposableEffect(session, pageTranslationWebExtension) {
+        pageTranslationWebExtension.registerSession(session)
+        onDispose {
+            pageTranslationWebExtension.unregisterSession(session)
         }
     }
 
