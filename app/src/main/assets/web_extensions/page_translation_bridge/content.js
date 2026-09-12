@@ -436,6 +436,18 @@
     startObserver();
   }
 
+  /** 反映済みと一致しないテキストだけが textSegment から返るため、再走査で未同期分を拾える */
+  function resendUnsyncedSegments() {
+    const segments = [];
+    try {
+      collectRoot(document.body, segments);
+    } catch (error) {
+      return;
+    }
+    if (segments.length === 0) return;
+    sendSegmentBatches('dynamicSegments', null, segments);
+  }
+
   function onNativeMessage(message) {
     if (!message) return;
     if (message.action === 'start') {
@@ -491,9 +503,13 @@
       return;
     }
     port = connectedPort;
-    // 切断中に監視が外れているため、翻訳中なら張り直して動的翻訳を継続する
-    if (translationActive) startObserver();
     connectedPort.onMessage.addListener(onNativeMessage);
+    // 切断中の DOM 更新は MutationObserver に通知されないため、
+    // 再走査して未反映のテキストを送り直す
+    if (translationActive) {
+      resendUnsyncedSegments();
+      startObserver();
+    }
     connectedPort.onDisconnect.addListener(function () {
       if (port !== connectedPort) return;
       port = null;

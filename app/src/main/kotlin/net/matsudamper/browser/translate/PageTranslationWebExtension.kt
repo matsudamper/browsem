@@ -2,6 +2,8 @@ package net.matsudamper.browser.translate
 
 import android.os.SystemClock
 import android.util.Log
+import java.net.URI
+import java.security.MessageDigest
 import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
@@ -370,12 +372,27 @@ class PageTranslationWebExtension(
             )
             saveInfo(
                 title = "ページ翻訳スキャン対象不一致",
-                body = "expectedUrl=${pending.expectedUrl.orEmpty()}\ndocumentUrl=${documentUrl.orEmpty()}",
+                body = "expected=${toDiagnosticUrl(pending.expectedUrl)}\ndocument=${toDiagnosticUrl(documentUrl)}",
             )
             return
         }
         pending.documentId = json.optString("documentId").takeIf { it.isNotBlank() }
         pending.htmlLanguage = json.optString("htmlLanguage").takeIf { it.isNotBlank() }
+    }
+
+    /** 診断ログに閲覧内容が残らないよう、オリジンと不可逆ハッシュだけにする */
+    private fun toDiagnosticUrl(url: String?): String {
+        if (url.isNullOrBlank()) return ""
+        val origin = runCatching {
+            val parsed = URI(url)
+            val port = if (parsed.port >= 0) ":${parsed.port}" else ""
+            "${parsed.scheme.orEmpty()}://${parsed.host.orEmpty()}$port"
+        }.getOrDefault("")
+        val hash = MessageDigest.getInstance("SHA-256")
+            .digest(url.substringBefore('#').toByteArray())
+            .take(DIAGNOSTIC_HASH_BYTE_COUNT)
+            .joinToString("") { byte -> "%02x".format(byte) }
+        return "$origin#$hash"
     }
 
     /** ページ内リンク（#）やクエリ差分は同じドキュメントとして扱う */
@@ -574,6 +591,7 @@ class PageTranslationWebExtension(
         private const val EXTENSION_ID = "page-translation-bridge@browsem"
         private const val EXTENSION_URI =
             "resource://android/assets/web_extensions/page_translation_bridge/"
+        private const val DIAGNOSTIC_HASH_BYTE_COUNT = 8
         private const val SCAN_TIMEOUT_MS = 20_000L
         private const val APPLY_TIMEOUT_MS = 5_000L
         private const val SLOW_SCAN_THRESHOLD_MS = 2_000L
