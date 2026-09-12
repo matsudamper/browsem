@@ -1,0 +1,88 @@
+name: PR 719 Lifecycle Review Fixes v4
+
+on:
+  push:
+    branches:
+      - chatgpt/review-719-helper
+
+permissions:
+  contents: write
+
+jobs:
+  verify-and-push:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    steps:
+      - name: Checkout helper
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: chatgpt/review-719-helper
+          path: helper
+
+      - name: Checkout target branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: chatgpt/improve-html-ai-translation
+          fetch-depth: 0
+          path: target
+
+      - name: Verify target HEAD
+        working-directory: target
+        run: test "$(git rev-parse HEAD)" = "f4b9252c5145f0f455f73c84c283d93d819964ac"
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4.0.1
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+
+      - name: Apply review fixes
+        working-directory: target
+        run: python3 ../helper/.github/scripts/review_719_lifecycle_fixes.py
+
+      - name: Format Kotlin
+        working-directory: target
+        run: ./gradlew ktlintFormat
+
+      - name: Check JavaScript syntax
+        working-directory: target
+        run: node --check app/src/main/assets/web_extensions/page_translation_bridge/content.js
+
+      - name: Assemble debug
+        working-directory: target
+        run: ./gradlew :app:assembleDebug
+
+      - name: Run detekt
+        working-directory: target
+        run: ./gradlew detekt
+
+      - name: Run tests
+        working-directory: target
+        run: ./gradlew test
+
+      - name: Run ktlint
+        working-directory: target
+        run: ./gradlew ktlintCheck
+
+      - name: Commit and push review fixes
+        working-directory: target
+        shell: bash
+        run: |
+          git diff --check
+          git status --short
+          git config user.name "matsudamper"
+          git config user.email "matsudamper971227@gmail.com"
+          git add \
+            app/src/main/assets/web_extensions/page_translation_bridge/content.js \
+            app/src/main/kotlin/net/matsudamper/browser/BrowserTabScreenState.kt \
+            app/src/main/kotlin/net/matsudamper/browser/GeckoBrowserTab.kt \
+            app/src/main/kotlin/net/matsudamper/browser/translate/PageTranslationWebExtension.kt
+          git commit -m "レビュー指摘の翻訳ライフサイクルを修正"
+          git push origin HEAD:chatgpt/improve-html-ai-translation
