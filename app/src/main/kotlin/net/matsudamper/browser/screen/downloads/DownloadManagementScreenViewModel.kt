@@ -10,6 +10,7 @@ import android.os.Build
 import android.provider.MediaStore
 import android.provider.Settings
 import android.util.Size
+import android.widget.Toast
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.core.graphics.drawable.toBitmap
@@ -420,6 +421,13 @@ internal class DownloadManagementScreenViewModel(
     private fun openFile(fileUri: String) {
         val app = getApplication<Application>()
         val uri = fileUri.toUri()
+        val canReadFile = runCatching {
+            app.contentResolver.openFileDescriptor(uri, "r")?.use { true } ?: false
+        }.getOrDefault(false)
+        if (!canReadFile) {
+            Toast.makeText(app, "ファイルがありません", Toast.LENGTH_SHORT).show()
+            return
+        }
         val mimeType = getMimeType(uri) ?: "*/*"
         // MIME タイプが APK でなくても拡張子で判定できるようファイル名も見る
         val isApk = isApk(mimeType, getDisplayName(uri))
