@@ -5,9 +5,7 @@
   const SEGMENT_BATCH_SIZE = 48;
   const SEGMENT_BATCH_CHAR_LIMIT = 32768;
   const DYNAMIC_FLUSH_DELAY_MS = 120;
-  const HANDSHAKE_RETRY_MIN_MS = 500;
-  const HANDSHAKE_RETRY_MAX_MS = 30000;
-  const HANDSHAKE_MAX_RETRY_COUNT = 5;
+  const HANDSHAKE_RETRY_MS = 1000;
   const TRANSLATED_ATTRIBUTES = ['title', 'aria-label', 'aria-description', 'placeholder', 'alt'];
   const OBSERVED_ATTRIBUTES = TRANSLATED_ATTRIBUTES.concat(['value']);
   const EXCLUDED_TAGS = new Set([
@@ -39,7 +37,6 @@
   const pendingDynamicSegments = new Map();
   let dynamicFlushTimer = null;
   let nativeHandshakePending = false;
-  let handshakeRetryCount = 0;
 
   function postMessage(message) {
     if (port === null) return false;
@@ -448,26 +445,18 @@
     port.onDisconnect.addListener(function () {
       port = null;
       stopObserver();
-      // 一度つながった相手なので、切断後は改めて上限まで再試行してよい
-      handshakeRetryCount = 0;
       waitForNative();
     });
   }
 
   function scheduleNativeHandshake() {
-    // ネイティブ側は表示中セッションへ先に MessageDelegate を登録する。
-    // Compose と content script の開始順序の差を吸収するため、有限回だけ再試行する。
-    if (handshakeRetryCount >= HANDSHAKE_MAX_RETRY_COUNT) return;
-    const delay = Math.min(
-      HANDSHAKE_RETRY_MIN_MS * Math.pow(2, handshakeRetryCount),
-      HANDSHAKE_RETRY_MAX_MS,
-    );
-    handshakeRetryCount += 1;
-    setTimeout(waitForNative, delay);
+    // MessageDelegate の登録が document_start より後になることがあるため、表示中だけ再試行する。
+    if (document.visibilityState !== 'visible') return;
+    setTimeout(waitForNative, HANDSHAKE_RETRY_MS);
   }
 
   function waitForNative() {
-    if (port !== null || nativeHandshakePending) return;
+    if (document.visibilityState !== 'visible' || port !== null || nativeHandshakePending) return;
     nativeHandshakePending = true;
     browser.runtime.sendNativeMessage(NATIVE_APP_ID, {
       action: 'ready',
@@ -491,7 +480,6 @@
 
   function retryNativeHandshakeWhenVisible() {
     if (document.visibilityState !== 'visible' || port !== null) return;
-    handshakeRetryCount = 0;
     waitForNative();
   }
 
