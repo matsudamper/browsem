@@ -7,6 +7,7 @@ import kotlinx.coroutines.withContext
 import net.matsudamper.browser.data.TranslationProvider
 import net.matsudamper.browser.data.crashlog.CrashLogRepository
 import net.matsudamper.browser.translate.GeckoTranslator
+import net.matsudamper.browser.translate.GeminiNanoTranslator
 import net.matsudamper.browser.translate.LocalAITranslator
 import net.matsudamper.browser.translate.PageTranslationWebExtension
 import net.matsudamper.browser.translate.TranslationLanguages
@@ -49,6 +50,16 @@ internal class PageTranslator(
                     toLanguage = toLanguage,
                     pageTranslationWebExtension = pageTranslationWebExtension,
                     crashLogRepository = crashLogRepository,
+                    onTranslateStateChanged = onTranslateStateChanged,
+                )
+            }
+
+            TranslationProvider.TRANSLATION_PROVIDER_GEMINI_NANO -> {
+                GeminiNanoTranslator(
+                    session = session,
+                    fromLanguage = fromLanguage,
+                    toLanguage = toLanguage,
+                    pageTranslationWebExtension = pageTranslationWebExtension,
                     onTranslateStateChanged = onTranslateStateChanged,
                 )
             }
