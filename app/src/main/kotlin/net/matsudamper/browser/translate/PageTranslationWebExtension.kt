@@ -11,7 +11,6 @@ import kotlinx.coroutines.withTimeout
 import net.matsudamper.browser.data.crashlog.CrashLogRepository
 import org.json.JSONArray
 import org.json.JSONObject
-import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.WebExtension
@@ -245,20 +244,6 @@ class PageTranslationWebExtension(
         session.webExtensionController.setMessageDelegate(
             installedExtension,
             object : WebExtension.MessageDelegate {
-                override fun onMessage(
-                    nativeApp: String,
-                    message: Any,
-                    sender: WebExtension.MessageSender,
-                ): GeckoResult<Any>? {
-                    val json = message as? JSONObject ?: return null
-                    if (json.optString("action") != "ready") return null
-                    return GeckoResult.fromValue<Any>(
-                        JSONObject().apply {
-                            put("connect", true)
-                        },
-                    )
-                }
-
                 override fun onConnect(port: WebExtension.Port) {
                     sessionPorts[session] = port
                     port.setDelegate(
