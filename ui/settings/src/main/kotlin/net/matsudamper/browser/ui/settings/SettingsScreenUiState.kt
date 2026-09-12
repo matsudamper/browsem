@@ -15,7 +15,6 @@ data class SettingsScreenUiState(
     val customSearchUrl: String,
     val themeMode: ThemeMode,
     val translationProvider: TranslationProvider,
-    val geminiNanoAvailable: Boolean,
     val enableThirdPartyCa: Boolean,
     val enableWebSuggestions: Boolean,
     val inputAutoZoomEnabled: Boolean,
