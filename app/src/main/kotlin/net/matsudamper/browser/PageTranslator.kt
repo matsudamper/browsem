@@ -60,6 +60,7 @@ internal class PageTranslator(
                     fromLanguage = fromLanguage,
                     toLanguage = toLanguage,
                     pageTranslationWebExtension = pageTranslationWebExtension,
+                    crashLogRepository = crashLogRepository,
                     onTranslateStateChanged = onTranslateStateChanged,
                 )
             }
