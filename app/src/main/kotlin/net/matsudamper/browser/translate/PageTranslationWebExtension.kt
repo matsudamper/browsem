@@ -37,6 +37,7 @@ class PageTranslationWebExtension(
 
     private data class PendingScan(
         val requestId: String,
+        val expectedUrl: String?,
         val deferred: CompletableDeferred<PageSnapshot>,
         val startedAtElapsedRealtime: Long,
         val segments: MutableList<Segment> = mutableListOf(),
@@ -142,7 +143,12 @@ class PageTranslationWebExtension(
         }
     }
 
-    suspend fun scanPage(session: GeckoSession): PageSnapshot {
+    /**
+     * 表示中のページの翻訳対象テキストを取得する。
+     *
+     * [expectedUrl] を渡すと、bfcache へ退避したドキュメントなど別ページからの応答を弾く。
+     */
+    suspend fun scanPage(session: GeckoSession, expectedUrl: String?): PageSnapshot {
         installationError?.let { throw it }
         stopActiveTranslation(session)
         awaitingActivationDocuments.remove(session)
@@ -150,6 +156,7 @@ class PageTranslationWebExtension(
 
         val pending = PendingScan(
             requestId = "scan-${requestSequence.incrementAndGet()}",
+            expectedUrl = expectedUrl,
             deferred = CompletableDeferred(),
             startedAtElapsedRealtime = SystemClock.elapsedRealtime(),
         )
@@ -176,7 +183,8 @@ class PageTranslationWebExtension(
                 body = buildScanDiagnostics(session, pending, elapsedMs),
             )
             throw IllegalStateException(
-                "ページ翻訳DOMの取得が${SCAN_TIMEOUT_MS}ms以内に完了しませんでした",
+                "ページ翻訳DOMの取得が${SCAN_TIMEOUT_MS}ms以内に完了しませんでした" +
+                    "(ブリッジ接続=${sessionPorts[session] != null}, 受信セグメント=${pending.segments.size})",
                 error,
             )
         } finally {
@@ -322,6 +330,7 @@ class PageTranslationWebExtension(
             "scanStart" -> handleScanStart(session, json)
             "scanSegments" -> handleScanSegments(session, json)
             "scanComplete" -> handleScanComplete(session, json)
+            "scanFailed" -> handleScanFailed(session, json)
             "applyResult" -> handleApplyResult(session, json)
             "dynamicSegments" -> handleDynamicSegments(session, json)
         }
@@ -330,8 +339,44 @@ class PageTranslationWebExtension(
     private fun handleScanStart(session: GeckoSession, json: JSONObject) {
         val pending = pendingScans[session] ?: return
         if (pending.requestId != json.optString("requestId")) return
+        val documentUrl = json.optString("documentUrl").takeIf { it.isNotBlank() }
+        if (!isExpectedDocument(pending.expectedUrl, documentUrl)) {
+            pendingScans.remove(session, pending)
+            pending.deferred.completeExceptionally(
+                IllegalStateException("表示中のページとは別のドキュメントから応答されました"),
+            )
+            saveInfo(
+                title = "ページ翻訳スキャン対象不一致",
+                body = "expectedUrl=${pending.expectedUrl.orEmpty()}\ndocumentUrl=${documentUrl.orEmpty()}",
+            )
+            return
+        }
         pending.documentId = json.optString("documentId").takeIf { it.isNotBlank() }
         pending.htmlLanguage = json.optString("htmlLanguage").takeIf { it.isNotBlank() }
+    }
+
+    /** ページ内リンク（#）やクエリ差分は同じドキュメントとして扱う */
+    private fun isExpectedDocument(expectedUrl: String?, documentUrl: String?): Boolean {
+        if (expectedUrl.isNullOrBlank() || documentUrl.isNullOrBlank()) return true
+        return expectedUrl.substringBefore('#') == documentUrl.substringBefore('#')
+    }
+
+    private fun handleScanFailed(session: GeckoSession, json: JSONObject) {
+        val pending = pendingScans[session] ?: return
+        if (pending.requestId != json.optString("requestId")) return
+        pendingScans.remove(session, pending)
+        val reason = json.optString("reason").takeIf { it.isNotBlank() }.orEmpty()
+        pending.deferred.completeExceptionally(
+            IllegalStateException("ページ翻訳DOMの取得に失敗しました: $reason"),
+        )
+        saveInfo(
+            title = "ページ翻訳DOMスキャン失敗",
+            body = buildScanDiagnostics(
+                session = session,
+                pending = pending,
+                elapsedMs = SystemClock.elapsedRealtime() - pending.startedAtElapsedRealtime,
+            ) + "\nreason=$reason",
+        )
     }
 
     private fun handleScanSegments(session: GeckoSession, json: JSONObject) {
@@ -500,7 +545,7 @@ class PageTranslationWebExtension(
         private const val EXTENSION_ID = "page-translation-bridge@browsem"
         private const val EXTENSION_URI =
             "resource://android/assets/web_extensions/page_translation_bridge/"
-        private const val SCAN_TIMEOUT_MS = 10_000L
+        private const val SCAN_TIMEOUT_MS = 20_000L
         private const val APPLY_TIMEOUT_MS = 5_000L
         private const val SLOW_SCAN_THRESHOLD_MS = 2_000L
         private const val MAX_BUFFERED_DYNAMIC_SEGMENTS = 512

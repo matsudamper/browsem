@@ -401,16 +401,29 @@
       action: 'scanStart',
       requestId: requestId,
       documentId: documentId,
+      documentUrl: location.href,
       htmlLanguage: document.documentElement ? (document.documentElement.lang || '') : '',
     });
 
     const segments = [];
-    collectRoot(document.body, segments);
+    try {
+      collectRoot(document.body, segments);
+    } catch (error) {
+      // 収集が途中で落ちると scanComplete が送られず、アプリ側は待ち続けてしまう
+      postMessage({
+        action: 'scanFailed',
+        requestId: requestId,
+        documentId: documentId,
+        reason: String((error && error.message) || error),
+      });
+      return;
+    }
     sendSegmentBatches('scanSegments', requestId, segments);
     postMessage({
       action: 'scanComplete',
       requestId: requestId,
       documentId: documentId,
+      segmentCount: segments.length,
     });
     startObserver();
   }
@@ -479,8 +492,27 @@
     connect();
   }
 
+  // bfcache へ入ったドキュメントが接続を保持すると、表示中のページではなく
+  // 退避済みのページを翻訳してしまうため、離脱時に必ず切断する
+  function disconnectOnPageHide() {
+    if (nativeReconnectTimer !== null) {
+      clearTimeout(nativeReconnectTimer);
+      nativeReconnectTimer = null;
+    }
+    stopObserver();
+    if (port === null) return;
+    const disconnectingPort = port;
+    port = null;
+    try {
+      disconnectingPort.disconnect();
+    } catch (error) {
+      // 切断済みの場合は何もしない
+    }
+  }
+
   document.addEventListener('visibilitychange', connectWhenVisible);
   window.addEventListener('pageshow', connectWhenVisible);
+  window.addEventListener('pagehide', disconnectOnPageHide);
 
   connect();
 })();
