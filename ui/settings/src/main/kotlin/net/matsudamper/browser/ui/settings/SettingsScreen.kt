@@ -311,6 +311,15 @@ fun SettingsScreen(
                             )
                         },
                     )
+                    SettingsRadioOption(
+                        label = "Gemini Nano (対応端末のみ)",
+                        selected = uiState.translationProvider == TranslationProvider.TRANSLATION_PROVIDER_GEMINI_NANO,
+                        onClick = {
+                            uiState.callbacks.setTranslationProvider(
+                                TranslationProvider.TRANSLATION_PROVIDER_GEMINI_NANO,
+                            )
+                        },
+                    )
                 }
             }
 
@@ -712,13 +721,13 @@ internal fun CollapsibleSettingSection(
 }
 
 // 設定項目が縦に長いため、全体が見えるように高さを広げて Preview する
-@Preview(showBackground = true, heightDp = 2500)
+@Preview(showBackground = true, heightDp = 2600)
 @Composable
 private fun SettingsScreenPreview() {
     SettingsScreenPreviewContent(showDefaultBrowserBanner = false)
 }
 
-@Preview(showBackground = true, heightDp = 2500)
+@Preview(showBackground = true, heightDp = 2600)
 @Composable
 private fun SettingsScreenDefaultBrowserBannerPreview() {
     SettingsScreenPreviewContent(showDefaultBrowserBanner = true)
