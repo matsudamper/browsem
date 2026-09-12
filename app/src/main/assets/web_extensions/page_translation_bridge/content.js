@@ -5,7 +5,7 @@
   const SEGMENT_BATCH_SIZE = 48;
   const SEGMENT_BATCH_CHAR_LIMIT = 32768;
   const DYNAMIC_FLUSH_DELAY_MS = 120;
-  const HANDSHAKE_RETRY_MS = 1000;
+  const NATIVE_RECONNECT_DELAY_MS = 1000;
   const TRANSLATED_ATTRIBUTES = ['title', 'aria-label', 'aria-description', 'placeholder', 'alt'];
   const OBSERVED_ATTRIBUTES = TRANSLATED_ATTRIBUTES.concat(['value']);
   const EXCLUDED_TAGS = new Set([
@@ -36,7 +36,7 @@
   const entries = new Map();
   const pendingDynamicSegments = new Map();
   let dynamicFlushTimer = null;
-  let nativeHandshakePending = false;
+  let nativeReconnectTimer = null;
 
   function postMessage(message) {
     if (port === null) return false;
@@ -432,59 +432,40 @@
     }
   }
 
+  function scheduleNativeReconnect() {
+    if (document.visibilityState !== 'visible' || port !== null || nativeReconnectTimer !== null) return;
+    nativeReconnectTimer = setTimeout(function () {
+      nativeReconnectTimer = null;
+      connect();
+    }, NATIVE_RECONNECT_DELAY_MS);
+  }
+
   function connect() {
-    if (port !== null) return;
+    if (document.visibilityState !== 'visible' || port !== null) return;
+    let connectedPort;
     try {
-      port = browser.runtime.connectNative(NATIVE_APP_ID);
+      connectedPort = browser.runtime.connectNative(NATIVE_APP_ID);
     } catch (error) {
-      port = null;
-      waitForNative();
+      scheduleNativeReconnect();
       return;
     }
-    port.onMessage.addListener(onNativeMessage);
-    port.onDisconnect.addListener(function () {
+    port = connectedPort;
+    connectedPort.onMessage.addListener(onNativeMessage);
+    connectedPort.onDisconnect.addListener(function () {
+      if (port !== connectedPort) return;
       port = null;
       stopObserver();
-      waitForNative();
+      scheduleNativeReconnect();
     });
   }
 
-  function scheduleNativeHandshake() {
-    // MessageDelegate の登録が document_start より後になることがあるため、表示中だけ再試行する。
+  function connectWhenVisible() {
     if (document.visibilityState !== 'visible') return;
-    setTimeout(waitForNative, HANDSHAKE_RETRY_MS);
+    connect();
   }
 
-  function waitForNative() {
-    if (document.visibilityState !== 'visible' || port !== null || nativeHandshakePending) return;
-    nativeHandshakePending = true;
-    browser.runtime.sendNativeMessage(NATIVE_APP_ID, {
-      action: 'ready',
-      documentId: documentId,
-    }).then(
-      function (response) {
-        nativeHandshakePending = false;
-        if (response && response.connect) {
-          handshakeRetryCount = 0;
-          connect();
-          return;
-        }
-        scheduleNativeHandshake();
-      },
-      function () {
-        nativeHandshakePending = false;
-        scheduleNativeHandshake();
-      },
-    );
-  }
+  document.addEventListener('visibilitychange', connectWhenVisible);
+  window.addEventListener('pageshow', connectWhenVisible);
 
-  function retryNativeHandshakeWhenVisible() {
-    if (document.visibilityState !== 'visible' || port !== null) return;
-    waitForNative();
-  }
-
-  document.addEventListener('visibilitychange', retryNativeHandshakeWhenVisible);
-  window.addEventListener('pageshow', retryNativeHandshakeWhenVisible);
-
-  waitForNative();
+  connect();
 })();
