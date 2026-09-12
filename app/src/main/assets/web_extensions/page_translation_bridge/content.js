@@ -37,6 +37,8 @@
   const pendingDynamicSegments = new Map();
   let dynamicFlushTimer = null;
   let nativeReconnectTimer = null;
+  // 再接続時に監視を張り直すため、翻訳中かどうかを保持する
+  let translationActive = false;
 
   function postMessage(message) {
     if (port === null) return false;
@@ -430,6 +432,7 @@
       documentId: documentId,
       segmentCount: segments.length,
     });
+    translationActive = true;
     startObserver();
   }
 
@@ -457,12 +460,14 @@
       return;
     }
     if (message.action === 'revert') {
+      translationActive = false;
       stopObserver();
       restoreAll();
       resetEntries();
       return;
     }
     if (message.action === 'stop') {
+      translationActive = false;
       stopObserver();
       pendingDynamicSegments.clear();
     }
@@ -486,6 +491,8 @@
       return;
     }
     port = connectedPort;
+    // 切断中に監視が外れているため、翻訳中なら張り直して動的翻訳を継続する
+    if (translationActive) startObserver();
     connectedPort.onMessage.addListener(onNativeMessage);
     connectedPort.onDisconnect.addListener(function () {
       if (port !== connectedPort) return;

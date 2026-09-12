@@ -237,12 +237,18 @@ class PageTranslationWebExtension(
         translations: List<TranslationResult>,
     ) {
         if (translations.isEmpty()) return
-        sendApplyMessage(
+        val sent = sendApplyMessage(
             session = session,
             documentId = documentId,
             translations = translations,
             requestId = null,
         )
+        if (!sent) {
+            saveInfo(
+                title = "ページ翻訳結果の送信失敗",
+                body = "documentId=$documentId\ntranslationCount=${translations.size}",
+            )
+        }
     }
 
     suspend fun applyTranslationsAndAwait(
@@ -324,9 +330,14 @@ class PageTranslationWebExtension(
                                     )
                                 }
                                 failPendingApplies(session, cause)
-                                awaitingActivationDocuments.remove(session)
-                                bufferedDynamicSegments.remove(session)
-                                stopActiveTranslation(session)
+                                // 継続翻訳は content script の再接続で再開できるため、
+                                // 切断だけでは終了させない
+                                if (activeTranslations.containsKey(session)) {
+                                    saveInfo(
+                                        title = "ページ翻訳ブリッジ再接続待ち",
+                                        body = "documentId=${activeTranslations[session]?.documentId.orEmpty()}",
+                                    )
+                                }
                             }
                         },
                     )
