@@ -180,15 +180,17 @@ class LocalAITranslator(
     ) {
         val startedAt = SystemClock.elapsedRealtime()
         try {
-            withTimeout(INITIAL_TRANSLATION_TIMEOUT_MS) {
+            val applyResult = withTimeout(INITIAL_TRANSLATION_TIMEOUT_MS) {
                 translateAndApply(
                     translator = translator,
                     pageTranslationWebExtension = pageTranslationWebExtension,
                     documentId = documentId,
                     segments = segments,
                     translationCache = translationCache,
+                    awaitDomApply = true,
                 )
             }
+            verifyInitialApply(applyResult)
         } catch (error: TimeoutCancellationException) {
             val elapsedMs = SystemClock.elapsedRealtime() - startedAt
             saveInfo(
@@ -240,7 +242,11 @@ class LocalAITranslator(
         documentId: String,
         segments: List<PageTranslationWebExtension.Segment>,
         translationCache: ConcurrentHashMap<String, String>,
-    ) {
+        awaitDomApply: Boolean = false,
+    ): PageTranslationWebExtension.ApplyResult {
+        var documentMatched = true
+        var appliedCount = 0
+        var requeuedCount = 0
         segments.chunked(APPLY_BATCH_SIZE).forEach { batch ->
             val translations = batch.map { segment ->
                 val translatedText = translationCache[segment.text] ?: translator.translate(segment.text).await().also {
@@ -252,11 +258,39 @@ class LocalAITranslator(
                     translatedText = translatedText,
                 )
             }
-            pageTranslationWebExtension.applyTranslations(
-                session = session,
-                documentId = documentId,
-                translations = translations,
-            )
+            if (awaitDomApply) {
+                val batchResult = pageTranslationWebExtension.applyTranslationsAndAwait(
+                    session = session,
+                    documentId = documentId,
+                    translations = translations,
+                )
+                documentMatched = documentMatched && batchResult.documentMatched
+                appliedCount += batchResult.appliedCount
+                requeuedCount += batchResult.requeuedCount
+            } else {
+                pageTranslationWebExtension.applyTranslations(
+                    session = session,
+                    documentId = documentId,
+                    translations = translations,
+                )
+            }
+        }
+        return PageTranslationWebExtension.ApplyResult(
+            documentMatched = documentMatched,
+            appliedCount = appliedCount,
+            requeuedCount = requeuedCount,
+        )
+    }
+
+    /**
+     * 反映件数が0でも、ページ側が書き換えたノードは継続翻訳で訳し直されるため失敗にしない。
+     */
+    private fun verifyInitialApply(applyResult: PageTranslationWebExtension.ApplyResult) {
+        if (!applyResult.documentMatched) {
+            throw IllegalStateException("翻訳結果の反映先が別のページに切り替わりました")
+        }
+        if (applyResult.appliedCount == 0 && applyResult.requeuedCount == 0) {
+            throw IllegalStateException("ローカルAIの翻訳結果をページへ反映できませんでした")
         }
     }
 

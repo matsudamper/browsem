@@ -29,6 +29,18 @@ class PageTranslationWebExtension(
         val segments: List<Segment>,
     )
 
+    /**
+     * 翻訳結果のDOM反映結果。
+     *
+     * [requeuedCount] はページ側が書き換えたため反映せず、動的セグメントとして
+     * 翻訳し直す件数を示す。
+     */
+    data class ApplyResult(
+        val documentMatched: Boolean,
+        val appliedCount: Int,
+        val requeuedCount: Int,
+    )
+
     data class TranslationResult(
         val id: String,
         val sourceText: String,
@@ -48,7 +60,7 @@ class PageTranslationWebExtension(
     private data class PendingApply(
         val session: GeckoSession,
         val documentId: String,
-        val deferred: CompletableDeferred<Int>,
+        val deferred: CompletableDeferred<ApplyResult>,
     )
 
     private data class ActiveTranslation(
@@ -237,8 +249,8 @@ class PageTranslationWebExtension(
         session: GeckoSession,
         documentId: String,
         translations: List<TranslationResult>,
-    ): Int {
-        if (translations.isEmpty()) return 0
+    ): ApplyResult {
+        if (translations.isEmpty()) return ApplyResult(documentMatched = true, appliedCount = 0, requeuedCount = 0)
         val requestId = "apply-${requestSequence.incrementAndGet()}"
         val pending = PendingApply(
             session = session,
@@ -403,8 +415,14 @@ class PageTranslationWebExtension(
         val requestId = json.optString("requestId")
         if (requestId.isBlank()) return
         val pending = pendingApplies[requestId] ?: return
-        if (pending.session !== session || pending.documentId != json.optString("documentId")) return
-        pending.deferred.complete(json.optInt("appliedCount", 0).coerceAtLeast(0))
+        if (pending.session !== session) return
+        pending.deferred.complete(
+            ApplyResult(
+                documentMatched = json.optBoolean("documentMatched", false),
+                appliedCount = json.optInt("appliedCount", 0).coerceAtLeast(0),
+                requeuedCount = json.optInt("requeuedCount", 0).coerceAtLeast(0),
+            ),
+        )
     }
 
     private fun handleDynamicSegments(session: GeckoSession, json: JSONObject) {

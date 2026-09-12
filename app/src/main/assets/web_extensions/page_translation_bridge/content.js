@@ -273,10 +273,15 @@
 
   function applyTranslations(translations) {
     let appliedCount = 0;
+    let requeuedCount = 0;
     translations.forEach(function (translation) {
       const entry = entries.get(translation.id);
       if (!entry || entry.sourceText !== translation.sourceText) return;
-      if (refreshEntryIfPageChanged(entry)) return;
+      // ページ側が書き換えたノードは動的セグメントとして翻訳し直される
+      if (refreshEntryIfPageChanged(entry)) {
+        requeuedCount += 1;
+        return;
+      }
 
       // 原文と同じ訳文でも反映は成功しているため、値の差分ではなく処理できた件数を数える
       if (entry.kind === 'text') {
@@ -291,7 +296,7 @@
         appliedCount += 1;
       }
     });
-    return appliedCount;
+    return { appliedCount: appliedCount, requeuedCount: requeuedCount };
   }
 
   function restoreAll() {
@@ -435,15 +440,18 @@
       return;
     }
     if (message.action === 'apply') {
-      const appliedCount = message.documentId === documentId
+      const documentMatched = message.documentId === documentId;
+      const result = documentMatched
         ? applyTranslations(Array.isArray(message.translations) ? message.translations : [])
-        : 0;
+        : { appliedCount: 0, requeuedCount: 0 };
       if (message.requestId) {
         postMessage({
           action: 'applyResult',
           requestId: message.requestId,
           documentId: documentId,
-          appliedCount: appliedCount,
+          documentMatched: documentMatched,
+          appliedCount: result.appliedCount,
+          requeuedCount: result.requeuedCount,
         });
       }
       return;

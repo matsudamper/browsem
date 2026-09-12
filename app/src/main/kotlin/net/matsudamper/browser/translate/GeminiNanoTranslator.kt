@@ -96,16 +96,14 @@ class GeminiNanoTranslator(
                 val translationCache = ConcurrentHashMap<String, String>()
                 val initialSegments = translatableSegments.take(INITIAL_APPLY_SEGMENT_COUNT)
                 val remainingSegments = translatableSegments.drop(INITIAL_APPLY_SEGMENT_COUNT)
-                val appliedCount = translateAndApply(
+                val applyResult = translateAndApply(
                     inference = inference,
                     documentId = snapshot.documentId,
                     segments = initialSegments,
                     translationCache = translationCache,
                     awaitDomApply = true,
                 )
-                if (appliedCount == 0) {
-                    throw IllegalStateException("Gemini Nanoの翻訳結果をページへ反映できませんでした")
-                }
+                verifyInitialApply(applyResult)
 
                 currentStage = STAGE_ACTIVATE
                 val activated = keepTranslatingDynamicContent(
@@ -145,8 +143,10 @@ class GeminiNanoTranslator(
         segments: List<PageTranslationWebExtension.Segment>,
         translationCache: ConcurrentHashMap<String, String>,
         awaitDomApply: Boolean,
-    ): Int {
+    ): PageTranslationWebExtension.ApplyResult {
+        var documentMatched = true
         var appliedCount = 0
+        var requeuedCount = 0
         segments.chunked(APPLY_BATCH_SIZE).forEach { batch ->
             val translations = batch.map { segment ->
                 val translatedText = translationCache[segment.text]
@@ -160,11 +160,14 @@ class GeminiNanoTranslator(
                 )
             }
             if (awaitDomApply) {
-                appliedCount += pageTranslationWebExtension.applyTranslationsAndAwait(
+                val batchResult = pageTranslationWebExtension.applyTranslationsAndAwait(
                     session = session,
                     documentId = documentId,
                     translations = translations,
                 )
+                documentMatched = documentMatched && batchResult.documentMatched
+                appliedCount += batchResult.appliedCount
+                requeuedCount += batchResult.requeuedCount
             } else {
                 pageTranslationWebExtension.applyTranslations(
                     session = session,
@@ -173,7 +176,23 @@ class GeminiNanoTranslator(
                 )
             }
         }
-        return appliedCount
+        return PageTranslationWebExtension.ApplyResult(
+            documentMatched = documentMatched,
+            appliedCount = appliedCount,
+            requeuedCount = requeuedCount,
+        )
+    }
+
+    /**
+     * 反映件数が0でも、ページ側が書き換えたノードは継続翻訳で訳し直されるため失敗にしない。
+     */
+    private fun verifyInitialApply(applyResult: PageTranslationWebExtension.ApplyResult) {
+        if (!applyResult.documentMatched) {
+            throw IllegalStateException("翻訳結果の反映先が別のページに切り替わりました")
+        }
+        if (applyResult.appliedCount == 0 && applyResult.requeuedCount == 0) {
+            throw IllegalStateException("Gemini Nanoの翻訳結果をページへ反映できませんでした")
+        }
     }
 
     private fun keepTranslatingDynamicContent(
@@ -259,7 +278,9 @@ class GeminiNanoTranslator(
         private const val TAG = "GeminiNanoTranslator"
         private const val UNDETERMINED_LANGUAGE = "und"
         private const val LANGUAGE_DETECTION_LIMIT = 2_000
-        private const val APPLY_BATCH_SIZE = 4
+
+        /** 生成1件ごとに反映し、推論中のDOM書き換えで結果が捨てられる時間を短くする */
+        private const val APPLY_BATCH_SIZE = 1
 
         /** DOM更新が推論速度を上回っても未処理セグメントを溜め込まないようにする */
         private const val DYNAMIC_TRANSLATION_QUEUE_CAPACITY = 16
