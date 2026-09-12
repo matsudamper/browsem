@@ -238,9 +238,7 @@ class SiteSettingsRepository(context: Context) {
     private fun readLegacySettings(): SiteSettings {
         if (!legacyFile.exists()) return SiteSettings.getDefaultInstance()
         // 移行元ファイルはロールバックや調査に使えるよう、移行後も削除・更新しない。
-        return runCatching {
-            legacyFile.inputStream().use { inputStream -> SiteSettings.parseFrom(inputStream) }
-        }.getOrDefault(SiteSettings.getDefaultInstance())
+        return legacyFile.inputStream().use { inputStream -> SiteSettings.parseFrom(inputStream) }
     }
 }
 
