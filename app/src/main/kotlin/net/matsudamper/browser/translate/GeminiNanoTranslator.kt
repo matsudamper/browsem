@@ -60,7 +60,7 @@ class GeminiNanoTranslator(
                 val initialSegments = snapshot.segments.take(INITIAL_APPLY_SEGMENT_COUNT)
                 val remainingSegments = snapshot.segments.drop(INITIAL_APPLY_SEGMENT_COUNT)
                 onTranslateStateChanged(Translator.TranslateState.TRANSLATING)
-                withTimeout(INITIAL_TRANSLATION_TIMEOUT_MS) {
+                val appliedCount = withTimeout(INITIAL_TRANSLATION_TIMEOUT_MS) {
                     translateAndApply(
                         generativeModel = generativeModel,
                         pageTranslationWebExtension = pageTranslationWebExtension,
@@ -69,7 +69,11 @@ class GeminiNanoTranslator(
                         translationCache = translationCache,
                         sourceLanguage = effectiveSourceLanguage,
                         targetLanguage = effectiveTargetLanguage,
+                        awaitDomApply = true,
                     )
+                }
+                if (appliedCount == 0) {
+                    throw IllegalStateException("Gemini Nanoの翻訳結果をページへ反映できませんでした")
                 }
                 val activated = keepTranslatingDynamicContent(
                     generativeModel = generativeModel,
@@ -142,7 +146,9 @@ class GeminiNanoTranslator(
         translationCache: ConcurrentHashMap<String, String>,
         sourceLanguage: String,
         targetLanguage: String,
-    ) {
+        awaitDomApply: Boolean = false,
+    ): Int {
+        var appliedCount = 0
         segments.chunked(APPLY_BATCH_SIZE).forEach { batch ->
             val translations = batch.map { segment ->
                 val translatedText = translationCache[segment.text] ?: translateText(
@@ -159,12 +165,21 @@ class GeminiNanoTranslator(
                     translatedText = translatedText,
                 )
             }
-            pageTranslationWebExtension.applyTranslations(
-                session = session,
-                documentId = documentId,
-                translations = translations,
-            )
+            if (awaitDomApply) {
+                appliedCount += pageTranslationWebExtension.applyTranslationsAndAwait(
+                    session = session,
+                    documentId = documentId,
+                    translations = translations,
+                )
+            } else {
+                pageTranslationWebExtension.applyTranslations(
+                    session = session,
+                    documentId = documentId,
+                    translations = translations,
+                )
+            }
         }
+        return appliedCount
     }
 
     private fun keepTranslatingDynamicContent(

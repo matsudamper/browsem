@@ -272,6 +272,7 @@
   }
 
   function applyTranslations(translations) {
+    let appliedCount = 0;
     translations.forEach(function (translation) {
       const entry = entries.get(translation.id);
       if (!entry || entry.sourceText !== translation.sourceText) return;
@@ -279,14 +280,19 @@
 
       if (entry.kind === 'text') {
         const translatedValue = preserveWhitespace(entry.originalValue, translation.translatedText);
+        const currentValue = entry.node.nodeValue || '';
         entry.lastApplied = translatedValue;
         entry.node.nodeValue = translatedValue;
+        if (translatedValue !== currentValue) appliedCount += 1;
       } else {
         const translatedValue = String(translation.translatedText || '').trim();
+        const currentValue = entry.element.getAttribute(entry.attributeName);
         entry.lastApplied = translatedValue;
         entry.element.setAttribute(entry.attributeName, translatedValue);
+        if (translatedValue !== currentValue) appliedCount += 1;
       }
     });
+    return appliedCount;
   }
 
   function restoreAll() {
@@ -416,8 +422,18 @@
       startTranslation(message.requestId || '');
       return;
     }
-    if (message.action === 'apply' && message.documentId === documentId) {
-      applyTranslations(Array.isArray(message.translations) ? message.translations : []);
+    if (message.action === 'apply') {
+      const appliedCount = message.documentId === documentId
+        ? applyTranslations(Array.isArray(message.translations) ? message.translations : [])
+        : 0;
+      if (message.requestId) {
+        postMessage({
+          action: 'applyResult',
+          requestId: message.requestId,
+          documentId: documentId,
+          appliedCount: appliedCount,
+        });
+      }
       return;
     }
     if (message.action === 'revert') {
