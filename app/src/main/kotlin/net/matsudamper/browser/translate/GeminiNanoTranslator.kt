@@ -1,5 +1,6 @@
 package net.matsudamper.browser.translate
 
+import android.util.Log
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -9,6 +10,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import com.google.mlkit.genai.common.DownloadStatus
@@ -183,8 +185,8 @@ class GeminiNanoTranslator(
                     )
                 } catch (error: CancellationException) {
                     throw error
-                } catch (_: Exception) {
-                    // 継続翻訳の失敗でページ全体の翻訳状態を解除しない。
+                } catch (error: Exception) {
+                    Log.w(TAG, "Gemini Nanoの継続翻訳に失敗", error)
                 }
             }
         }
@@ -236,6 +238,7 @@ class GeminiNanoTranslator(
     }
 
     companion object {
+        private const val TAG = "GeminiNanoTranslator"
         private const val LANGUAGE_DETECTION_LIMIT = 2_000
         private const val APPLY_BATCH_SIZE = 8
         private const val INITIAL_APPLY_SEGMENT_COUNT = 4
