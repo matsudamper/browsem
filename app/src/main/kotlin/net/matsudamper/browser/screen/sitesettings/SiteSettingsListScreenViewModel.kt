@@ -44,9 +44,11 @@ internal class SiteSettingsListScreenViewModel(
             loadedPageCount = 1,
         ),
     )
+    private var isPageLoadInProgress = false
 
     private val callbacks = object : SiteSettingsListScreenUiState.Callbacks {
         override fun setQuery(query: String) {
+            isPageLoadInProgress = true
             searchStateFlow.value = SearchState(
                 query = query,
                 loadedPageCount = 1,
@@ -54,6 +56,8 @@ internal class SiteSettingsListScreenViewModel(
         }
 
         override fun loadNextPage() {
+            if (isPageLoadInProgress) return
+            isPageLoadInProgress = true
             val current = searchStateFlow.value
             searchStateFlow.value = current.copy(
                 loadedPageCount = current.loadedPageCount + 1,
@@ -90,6 +94,7 @@ internal class SiteSettingsListScreenViewModel(
                             hasNextPage = if (canKeepCurrentPage) current.hasNextPage else false,
                         )
                     } else {
+                        isPageLoadInProgress = false
                         val loadedHostCount = result.searchState.loadedPageCount * PAGE_SIZE
                         uiStateFlow.value = SiteSettingsListScreenUiState(
                             callbacks = callbacks,
