@@ -106,6 +106,7 @@ class GeminiNanoTranslator(
                     }
 
                     FeatureStatus.DOWNLOADING -> delay(MODEL_STATUS_POLL_INTERVAL_MS)
+
                     FeatureStatus.UNAVAILABLE -> {
                         throw IllegalStateException("Gemini Nanoを利用できない端末です")
                     }
