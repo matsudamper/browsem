@@ -1,6 +1,7 @@
 package net.matsudamper.browser.translate
 
 import android.util.Log
+import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -42,40 +43,41 @@ class GeminiNanoTranslator(
         }
         if (snapshot.segments.isEmpty()) {
             pageTranslationWebExtension.stopTranslation(session, restoreOriginal = false)
-            return null
+            throw IllegalStateException("Gemini Nanoで翻訳できるページテキストが見つかりませんでした")
         }
 
         return try {
             onTranslateStateChanged(Translator.TranslateState.LANGUAGE_DETECTION)
-            val sourceLanguage = resolveSourceLanguage(snapshot)
+            val sourceLanguage = normalizeLanguageTag(resolveSourceLanguage(snapshot))
+            val targetLanguage = normalizeLanguageTag(toLanguage)
             val (effectiveSourceLanguage, effectiveTargetLanguage) = resolveTranslationLanguagePair(
                 sourceLanguage,
-                toLanguage,
+                targetLanguage,
             )
             val generativeModel = Generation.getClient()
             try {
                 onTranslateStateChanged(Translator.TranslateState.MODEL_DOWNLOAD)
                 prepareModel(generativeModel)
                 val translationCache = ConcurrentHashMap<String, String>()
-                val initialSegments = snapshot.segments.take(INITIAL_APPLY_SEGMENT_COUNT)
-                val remainingSegments = snapshot.segments.drop(INITIAL_APPLY_SEGMENT_COUNT)
                 onTranslateStateChanged(Translator.TranslateState.TRANSLATING)
-                withTimeout(INITIAL_TRANSLATION_TIMEOUT_MS) {
+                val changedTranslationCount = withTimeout(PAGE_TRANSLATION_TIMEOUT_MS) {
                     translateAndApply(
                         generativeModel = generativeModel,
                         pageTranslationWebExtension = pageTranslationWebExtension,
                         documentId = snapshot.documentId,
-                        segments = initialSegments,
+                        segments = snapshot.segments,
                         translationCache = translationCache,
                         sourceLanguage = effectiveSourceLanguage,
                         targetLanguage = effectiveTargetLanguage,
                     )
                 }
+                if (changedTranslationCount == 0) {
+                    throw IllegalStateException("Gemini Nanoの翻訳結果でページテキストが変更されませんでした")
+                }
                 val activated = keepTranslatingDynamicContent(
                     generativeModel = generativeModel,
                     pageTranslationWebExtension = pageTranslationWebExtension,
                     documentId = snapshot.documentId,
-                    initialSegments = remainingSegments,
                     translationCache = translationCache,
                     sourceLanguage = effectiveSourceLanguage,
                     targetLanguage = effectiveTargetLanguage,
@@ -142,7 +144,8 @@ class GeminiNanoTranslator(
         translationCache: ConcurrentHashMap<String, String>,
         sourceLanguage: String,
         targetLanguage: String,
-    ) {
+    ): Int {
+        var changedTranslationCount = 0
         segments.chunked(APPLY_BATCH_SIZE).forEach { batch ->
             val translations = batch.map { segment ->
                 val translatedText = translationCache[segment.text] ?: translateText(
@@ -152,6 +155,9 @@ class GeminiNanoTranslator(
                     text = segment.text,
                 ).also { translated ->
                     translationCache[segment.text] = translated
+                }
+                if (translatedText != segment.text) {
+                    changedTranslationCount += 1
                 }
                 PageTranslationWebExtension.TranslationResult(
                     id = segment.id,
@@ -165,13 +171,13 @@ class GeminiNanoTranslator(
                 translations = translations,
             )
         }
+        return changedTranslationCount
     }
 
     private fun keepTranslatingDynamicContent(
         generativeModel: GenerativeModel,
         pageTranslationWebExtension: PageTranslationWebExtension,
         documentId: String,
-        initialSegments: List<PageTranslationWebExtension.Segment>,
         translationCache: ConcurrentHashMap<String, String>,
         sourceLanguage: String,
         targetLanguage: String,
@@ -200,7 +206,7 @@ class GeminiNanoTranslator(
                 }
             }
         }
-        val activated = pageTranslationWebExtension.activateTranslation(
+        return pageTranslationWebExtension.activateTranslation(
             session = session,
             documentId = documentId,
             onSegments = { segments ->
@@ -212,11 +218,6 @@ class GeminiNanoTranslator(
                 generativeModel.close()
             },
         )
-        if (!activated) return false
-        if (initialSegments.isNotEmpty()) {
-            queue.trySend(initialSegments)
-        }
-        return true
     }
 
     private suspend fun translateText(
@@ -349,16 +350,19 @@ class GeminiNanoTranslator(
         }
     }
 
+    private fun normalizeLanguageTag(languageTag: String): String {
+        return Locale.forLanguageTag(languageTag).language.ifBlank { languageTag }
+    }
+
     companion object {
         private const val TAG = "GeminiNanoTranslator"
         private const val LANGUAGE_DETECTION_LIMIT = 2_000
         private const val APPLY_BATCH_SIZE = 8
-        private const val INITIAL_APPLY_SEGMENT_COUNT = 4
         private const val DYNAMIC_TRANSLATION_QUEUE_CAPACITY = 16
         private const val MAX_OUTPUT_TOKENS = 2_048
         private const val MODEL_PREPARATION_TIMEOUT_MS = 180_000L
         private const val MODEL_STATUS_POLL_INTERVAL_MS = 500L
-        private const val INITIAL_TRANSLATION_TIMEOUT_MS = 30_000L
+        private const val PAGE_TRANSLATION_TIMEOUT_MS = 180_000L
     }
 }
 
