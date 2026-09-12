@@ -1,0 +1,337 @@
+name: PR 719 Lifecycle Review Fixes
+
+on:
+  push:
+    branches:
+      - chatgpt/review-719-helper
+
+permissions:
+  contents: write
+
+jobs:
+  verify-and-push:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    steps:
+      - name: Checkout target branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: chatgpt/improve-html-ai-translation
+          fetch-depth: 0
+
+      - name: Verify target HEAD
+        shell: bash
+        run: |
+          test "$(git rev-parse HEAD)" = "f4b9252c5145f0f455f73c84c283d93d819964ac"
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4.0.1
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+
+      - name: Apply review fixes
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: str, old: str, new: str) -> None:
+              file = Path(path)
+              text = file.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise RuntimeError(f"{path}: expected exactly one match, found {count}: {old[:120]!r}")
+              file.write_text(text.replace(old, new, 1))
+
+          gecko_tab = "app/src/main/kotlin/net/matsudamper/browser/GeckoBrowserTab.kt"
+          replace_once(
+              gecko_tab,
+              "import net.matsudamper.browser.translate.TranslationPriorityLanguage\n",
+              "import net.matsudamper.browser.translate.PageTranslationWebExtension\nimport net.matsudamper.browser.translate.TranslationPriorityLanguage\n",
+          )
+          replace_once(
+              gecko_tab,
+              "    val findInPageWebExtension: FindInPageWebExtension = koinInject()\n",
+              "    val findInPageWebExtension: FindInPageWebExtension = koinInject()\n    val pageTranslationWebExtension: PageTranslationWebExtension = koinInject()\n",
+          )
+          replace_once(
+              gecko_tab,
+              "    // FindInPageWebExtension のセッション登録\n",
+              """    // ページ翻訳 content script がページ側へ接続トリガーを露出せず Native Messaging を開始できるよう、
+              // 表示中のセッションには先に MessageDelegate を登録する。
+              DisposableEffect(session, pageTranslationWebExtension) {
+                  pageTranslationWebExtension.registerSession(session)
+                  onDispose {
+                      pageTranslationWebExtension.unregisterSession(session)
+                  }
+              }
+
+              // FindInPageWebExtension のセッション登録
+              """,
+          )
+
+          screen = "app/src/main/kotlin/net/matsudamper/browser/BrowserTabScreenState.kt"
+          replace_once(
+              screen,
+              "    private var translationJob: Job? = null\n",
+              "    private var translationJob: Job? = null\n    private var activeTranslationProvider: TranslationProvider? = null\n",
+          )
+          replace_once(
+              screen,
+              """        if (shouldResetTranslationOnLocationChange(translationState, url, originalPageUrlForRevert, wasFullPageLoad)) {
+                  translationState = TranslationState.Idle
+                  originalPageUrlForRevert = null
+              }""",
+              """        if (shouldResetTranslationOnLocationChange(translationState, url, originalPageUrlForRevert, wasFullPageLoad)) {
+                  translationJob?.cancel()
+                  translationJob = null
+                  if (activeTranslationProvider == TranslationProvider.TRANSLATION_PROVIDER_LOCAL_AI) {
+                      pageTranslationWebExtension.stopTranslation(session, restoreOriginal = false)
+                  }
+                  activeTranslationProvider = null
+                  translationState = TranslationState.Idle
+                  originalPageUrlForRevert = null
+                  translationFromLanguage = null
+                  translationToLanguage = null
+              }""",
+          )
+          replace_once(
+              screen,
+              """    private fun runTranslation(translationProvider: TranslationProvider, fromLanguage: String?, toLanguage: String) {
+              translationJob?.cancel()
+              translationJob = coroutineScope.launch {""",
+              """    private fun runTranslation(translationProvider: TranslationProvider, fromLanguage: String?, toLanguage: String) {
+              translationJob?.cancel()
+              if (activeTranslationProvider == TranslationProvider.TRANSLATION_PROVIDER_LOCAL_AI) {
+                  pageTranslationWebExtension.stopTranslation(session, restoreOriginal = true)
+              }
+              activeTranslationProvider = translationProvider
+              translationJob = coroutineScope.launch {""",
+          )
+          replace_once(
+              screen,
+              """    fun onRevertTranslation() {
+              val savedUrl = originalPageUrlForRevert
+              closeTranslationBar(revertPage = false)
+              if (savedUrl != null) {
+                  clearPageLoadError()
+                  session.loadUri(savedUrl)
+              }
+          }""",
+              """    fun onRevertTranslation() {
+              closeTranslationBar(revertPage = true)
+          }""",
+          )
+          replace_once(
+              screen,
+              """    private fun closeTranslationBar(revertPage: Boolean) {
+              translationJob?.cancel()
+              translationJob = null
+              val savedUrl = originalPageUrlForRevert
+              translationState = TranslationState.Idle
+              originalPageUrlForRevert = null
+              translationFromLanguage = null
+              translationToLanguage = null
+              if (revertPage && savedUrl != null) {
+                  clearPageLoadError()
+                  session.loadUri(savedUrl)
+              }
+          }""",
+              """    private fun closeTranslationBar(revertPage: Boolean) {
+              translationJob?.cancel()
+              translationJob = null
+              val savedUrl = originalPageUrlForRevert
+              val provider = activeTranslationProvider
+              activeTranslationProvider = null
+              translationState = TranslationState.Idle
+              originalPageUrlForRevert = null
+              translationFromLanguage = null
+              translationToLanguage = null
+              if (provider == TranslationProvider.TRANSLATION_PROVIDER_LOCAL_AI) {
+                  pageTranslationWebExtension.stopTranslation(session, restoreOriginal = revertPage)
+              } else if (revertPage && savedUrl != null) {
+                  clearPageLoadError()
+                  session.loadUri(savedUrl)
+              }
+          }""",
+          )
+
+          extension = "app/src/main/kotlin/net/matsudamper/browser/translate/PageTranslationWebExtension.kt"
+          replace_once(
+              extension,
+              "    private var extension: WebExtension? = null\n\n    @Volatile\n    private var installationError: Throwable? = null",
+              "    @Volatile\n    private var extension: WebExtension? = null\n\n    @Volatile\n    private var installationError: Throwable? = null",
+          )
+          replace_once(
+              extension,
+              """    private val attachedSessions: MutableSet<GeckoSession> =
+                  Collections.newSetFromMap(ConcurrentHashMap())
+              private val pendingScans = ConcurrentHashMap<GeckoSession, PendingScan>()""",
+              """    private val attachedSessions: MutableSet<GeckoSession> =
+                  Collections.newSetFromMap(ConcurrentHashMap())
+              private val sessionsWaitingForExtension: MutableSet<GeckoSession> =
+                  Collections.newSetFromMap(ConcurrentHashMap())
+              private val pendingScans = ConcurrentHashMap<GeckoSession, PendingScan>()""",
+          )
+          replace_once(
+              extension,
+              """                    extension = installedExtension
+                          installationError = null
+                          pendingScans.keys.forEach { session ->
+                              attachSessionDelegate(session, installedExtension)
+                              requestImmediateConnection(session)
+                          }""",
+              """                    extension = installedExtension
+                          installationError = null
+                          sessionsWaitingForExtension.toList().forEach { session ->
+                              if (sessionsWaitingForExtension.remove(session)) {
+                                  attachSessionDelegate(session, installedExtension)
+                              }
+                          }
+                          pendingScans.keys.forEach { session ->
+                              attachSessionDelegate(session, installedExtension)
+                          }""",
+          )
+          replace_once(
+              extension,
+              """                    pendingScans.clear()
+                      },""",
+              """                    pendingScans.clear()
+                          sessionsWaitingForExtension.clear()
+                      },""",
+          )
+          replace_once(
+              extension,
+              "    suspend fun scanPage(session: GeckoSession): PageSnapshot {\n",
+              """    fun registerSession(session: GeckoSession) {
+              val installedExtension = extension
+              if (installedExtension != null) {
+                  attachSessionDelegate(session, installedExtension)
+                  return
+              }
+
+              sessionsWaitingForExtension.add(session)
+              extension?.let { installedAfterRegistration ->
+                  if (sessionsWaitingForExtension.remove(session)) {
+                      attachSessionDelegate(session, installedAfterRegistration)
+                  }
+              }
+          }
+
+              fun unregisterSession(session: GeckoSession) {
+              sessionsWaitingForExtension.remove(session)
+              pendingScans.remove(session)?.deferred?.cancel()
+              awaitingActivationDocuments.remove(session)
+              bufferedDynamicSegments.remove(session)
+              stopActiveTranslation(session)
+              sessionPorts.remove(session)
+              attachedSessions.remove(session)
+              extension?.let { installedExtension ->
+                  session.webExtensionController.setMessageDelegate(installedExtension, null, NATIVE_APP_ID)
+              }
+          }
+
+              suspend fun scanPage(session: GeckoSession): PageSnapshot {
+              """,
+          )
+          replace_once(
+              extension,
+              """        val installedExtension = extension
+              if (installedExtension != null) {
+                  attachSessionDelegate(session, installedExtension)
+                  requestImmediateConnection(session)
+              }
+              sendStartIfReady(session)""",
+              """        registerSession(session)
+              sendStartIfReady(session)""",
+          )
+          replace_once(
+              extension,
+              "                                attachedSessions.remove(session)\n",
+              "",
+          )
+          request_start = "    private fun requestImmediateConnection(session: GeckoSession) {\n"
+          request_end = "\n    private fun sendMessage(session: GeckoSession, message: JSONObject): Boolean {"
+          extension_text = Path(extension).read_text()
+          start = extension_text.index(request_start)
+          end = extension_text.index(request_end, start)
+          Path(extension).write_text(extension_text[:start] + request_end.lstrip("\n") + extension_text[end + len(request_end):])
+          replace_once(
+              extension,
+              """        private const val CONNECT_SCRIPT_URI =
+                  "javascript:void(window.postMessage('__browsem_page_translation_connect__','*'))"
+          """,
+              "",
+          )
+
+          content_js = "app/src/main/assets/web_extensions/page_translation_bridge/content.js"
+          replace_once(content_js, "  const IMMEDIATE_CONNECT_MESSAGE = '__browsem_page_translation_connect__';\n", "")
+          replace_once(
+              content_js,
+              """    // 翻訳を使わないページではネイティブ側が MessageDelegate を張らないため handshake は必ず失敗する。
+              // 無制限に再試行すると全タブ・全ページでタイマーが回り続けるので、数回で諦める。
+              // 翻訳開始時はネイティブ側が接続要求メッセージを注入するため、そこからの connect() で復帰できる。""",
+              """    // ネイティブ側は表示中セッションへ先に MessageDelegate を登録するが、
+              // Compose と content script の開始順序の差を吸収するため有限回だけ再試行する。""",
+          )
+          replace_once(
+              content_js,
+              """  window.addEventListener('message', function (event) {
+              if (event.data !== IMMEDIATE_CONNECT_MESSAGE) return;
+              handshakeRetryCount = 0;
+              connect();
+            });
+
+            waitForNative();""",
+              """  function retryNativeHandshakeWhenVisible() {
+              if (document.visibilityState !== 'visible' || port !== null) return;
+              handshakeRetryCount = 0;
+              waitForNative();
+            }
+
+            document.addEventListener('visibilitychange', retryNativeHandshakeWhenVisible);
+            window.addEventListener('pageshow', retryNativeHandshakeWhenVisible);
+            waitForNative();""",
+          )
+          PY
+
+      - name: Format Kotlin
+        run: ./gradlew ktlintFormat
+
+      - name: Check JavaScript syntax
+        run: node --check app/src/main/assets/web_extensions/page_translation_bridge/content.js
+
+      - name: Assemble debug
+        run: ./gradlew :app:assembleDebug
+
+      - name: Run detekt
+        run: ./gradlew detekt
+
+      - name: Run tests
+        run: ./gradlew test
+
+      - name: Run ktlint
+        run: ./gradlew ktlintCheck
+
+      - name: Commit and push review fixes
+        shell: bash
+        run: |
+          git diff --check
+          git status --short
+          git config user.name "matsudamper"
+          git config user.email "matsudamper971227@gmail.com"
+          git add \
+            app/src/main/assets/web_extensions/page_translation_bridge/content.js \
+            app/src/main/kotlin/net/matsudamper/browser/BrowserTabScreenState.kt \
+            app/src/main/kotlin/net/matsudamper/browser/GeckoBrowserTab.kt \
+            app/src/main/kotlin/net/matsudamper/browser/translate/PageTranslationWebExtension.kt
+          git commit -m "レビュー指摘の翻訳ライフサイクルを修正"
+          git push origin HEAD:chatgpt/improve-html-ai-translation
