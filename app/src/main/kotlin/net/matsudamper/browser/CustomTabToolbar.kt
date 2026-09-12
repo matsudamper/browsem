@@ -1,5 +1,6 @@
 package net.matsudamper.browser
 
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -26,14 +27,23 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.onLongClick
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import kotlin.math.roundToInt
+import net.matsudamper.browser.data.ThemeMode
 import net.matsudamper.browser.resources.R as ResourcesR
+import net.matsudamper.browser.ui.common.BrowserTheme
 
 internal sealed interface CustomTabToolbarTestTags {
     val id: String
@@ -41,6 +51,9 @@ internal sealed interface CustomTabToolbarTestTags {
 
     object Toolbar : CustomTabToolbarTestTags {
         override val id = "custom_tab_toolbar"
+    }
+    object PageInfo : CustomTabToolbarTestTags {
+        override val id = "custom_tab_page_info"
     }
     object MenuButton : CustomTabToolbarTestTags {
         override val id = "custom_tab_menu_button"
@@ -92,6 +105,14 @@ internal fun CustomTabToolbar(
         Color.White
     }
     val toolbarSecondaryContentColor = toolbarContentColor.copy(alpha = 0.72f)
+    val context = LocalContext.current
+    val hapticFeedback = LocalHapticFeedback.current
+    val onLongClickUrl: () -> Unit = {
+        if (url.isNotBlank()) {
+            hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
+            copyUrlToClipboard(context, url)
+        }
+    }
 
     Surface(
         color = resolvedToolbarColor,
@@ -121,6 +142,18 @@ internal fun CustomTabToolbar(
             Column(
                 modifier = Modifier
                     .weight(1f)
+                    .testTag(CustomTabToolbarTestTags.PageInfo.testTag)
+                    .pointerInput(url) {
+                        detectTapGestures(
+                            onLongPress = { onLongClickUrl() },
+                        )
+                    }
+                    .semantics {
+                        onLongClick(label = "URLをコピー") {
+                            onLongClickUrl()
+                            true
+                        }
+                    }
                     .padding(horizontal = 4.dp),
             ) {
                 Text(
@@ -186,5 +219,63 @@ internal fun CustomTabToolbar(
                 )
             }
         }
+    }
+}
+
+@Preview(name = "CustomTabToolbarUrlLongPress", widthDp = 412)
+@Composable
+private fun PreviewCustomTabToolbarUrlLongPress() {
+    PreviewCustomTabToolbar(
+        showCloseButton = true,
+        showHome = false,
+    )
+}
+
+@Preview(name = "WebAppToolbarUrlLongPress", widthDp = 412)
+@Composable
+private fun PreviewWebAppToolbarUrlLongPress() {
+    PreviewCustomTabToolbar(
+        showCloseButton = false,
+        showHome = true,
+    )
+}
+
+@Composable
+private fun PreviewCustomTabToolbar(
+    showCloseButton: Boolean,
+    showHome: Boolean,
+) {
+    BrowserTheme(themeMode = ThemeMode.THEME_SYSTEM) {
+        CustomTabToolbar(
+            title = "example.com",
+            url = "https://example.com/page",
+            onClose = {},
+            toolbarColor = null,
+            onRefresh = {},
+            onSuperRefresh = {},
+            onHome = {},
+            onForward = {},
+            canGoForward = false,
+            onBack = {},
+            canGoBack = true,
+            onLongPressHistory = {},
+            isPcMode = false,
+            onPcModeToggle = {},
+            showInstallExtensionItem = false,
+            onInstallExtension = {},
+            onTranslatePage = {},
+            onShare = {},
+            onFindInPage = {},
+            onAddToHomeScreen = {},
+            showAddToHomeScreen = true,
+            onOpenInBrowser = {},
+            onOpenSiteSettings = {},
+            pageZoomPercent = 100,
+            onPageZoomIn = {},
+            onPageZoomOut = {},
+            onResetPageZoom = {},
+            showCloseButton = showCloseButton,
+            showHome = showHome,
+        )
     }
 }
