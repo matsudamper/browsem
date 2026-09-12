@@ -207,6 +207,9 @@ internal class BrowserTabScreenState(
 
     // --- Translation state ---
     var translationState by mutableStateOf(TranslationState.Idle)
+
+    /** 翻訳失敗時の理由。どの段階で失敗したかを翻訳バーへ表示する */
+    var translationErrorMessage: String? by mutableStateOf(null)
     var originalPageUrlForRevert by mutableStateOf<String?>(null)
     var detectedPageLanguage by mutableStateOf<String?>(null)
 
@@ -956,6 +959,7 @@ internal class BrowserTabScreenState(
             // 非同期処理完了後にページ遷移済みかを検出するために翻訳開始時のURLを保持する
             val translationStartUrl = originalPageUrlForRevert
             translationState = TranslationState.Loading
+            translationErrorMessage = null
             val pageUrl = translationStartUrl ?: currentPageUrl
             val result = runCatching {
                 PageTranslator(
@@ -983,11 +987,14 @@ internal class BrowserTabScreenState(
                 val langs = result.getOrNull()
                 translationFromLanguage = langs?.fromLanguage
                 translationToLanguage = langs?.toLanguage
+                translationErrorMessage = null
                 translationState = TranslationState.Translated
             } else {
-                Log.e(TAG, "翻訳に失敗しました", result.exceptionOrNull())
+                val error = result.exceptionOrNull()
+                Log.e(TAG, "翻訳に失敗しました", error)
                 translationFromLanguage = null
                 translationToLanguage = null
+                translationErrorMessage = error?.message?.takeIf { it.isNotBlank() }
                 translationState = TranslationState.Error
             }
         }
@@ -1011,6 +1018,7 @@ internal class BrowserTabScreenState(
         originalPageUrlForRevert = null
         translationFromLanguage = null
         translationToLanguage = null
+        translationErrorMessage = null
         if (usesPageTranslationBridge(provider)) {
             pageTranslationWebExtension.stopTranslation(session, restoreOriginal = revertPage)
         } else if (revertPage && savedUrl != null) {
@@ -1453,6 +1461,7 @@ internal class BrowserTabScreenState(
             originalPageUrlForRevert = null
             translationFromLanguage = null
             translationToLanguage = null
+            translationErrorMessage = null
         }
         if (!url.startsWith("data:")) {
             detectedPageLanguage = null

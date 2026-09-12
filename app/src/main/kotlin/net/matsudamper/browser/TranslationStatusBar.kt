@@ -59,6 +59,8 @@ internal fun TranslationStatusBar(
     state: TranslationState,
     onRevert: () -> Unit,
     onDismissError: () -> Unit,
+    /** 失敗理由。どの段階で失敗したかを利用者が判別できるようにする */
+    errorMessage: String? = null,
     fromLanguage: String? = null,
     toLanguage: String? = null,
     /** 翻訳元の選択肢（言語タグ一覧）。nullなら言語変更UIを表示しない。 */
@@ -142,8 +144,10 @@ internal fun TranslationStatusBar(
 
                     TranslationState.Error -> {
                         Text(
-                            text = "翻訳に失敗しました",
-                            modifier = Modifier.padding(vertical = 8.dp),
+                            text = translationErrorLabel(errorMessage),
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(vertical = 8.dp),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onErrorContainer,
                         )
@@ -174,6 +178,11 @@ internal fun TranslationStatusBar(
             }
         }
     }
+}
+
+internal fun translationErrorLabel(errorMessage: String?): String {
+    if (errorMessage.isNullOrBlank()) return "翻訳に失敗しました"
+    return "翻訳に失敗しました: $errorMessage"
 }
 
 internal fun translationProgressLabel(state: TranslationState): String = when (state) {
@@ -253,6 +262,19 @@ private fun PreviewTranslationStatusBarPreparingModel() {
             state = TranslationState.PreparingModel,
             onRevert = {},
             onDismissError = {},
+        )
+    }
+}
+
+@Preview(name = "翻訳失敗", widthDp = 360)
+@Composable
+private fun PreviewTranslationStatusBarError() {
+    BrowserTheme(themeMode = ThemeMode.THEME_LIGHT) {
+        TranslationStatusBar(
+            state = TranslationState.Error,
+            onRevert = {},
+            onDismissError = {},
+            errorMessage = "ページ翻訳DOMの取得が10000ms以内に完了しませんでした",
         )
     }
 }

@@ -1316,6 +1316,7 @@ internal fun GeckoBrowserTab(
                 state = state.translationState,
                 onRevert = state::onRevertTranslation,
                 onDismissError = state::onDismissTranslationError,
+                errorMessage = state.translationErrorMessage,
                 fromLanguage = state.translationFromLanguage,
                 toLanguage = state.translationToLanguage,
                 fromLanguageOptions = languageOptions,
