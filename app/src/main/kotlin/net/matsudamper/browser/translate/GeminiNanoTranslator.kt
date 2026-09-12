@@ -193,6 +193,12 @@ class GeminiNanoTranslator(
         if (applyResult.appliedCount == 0 && applyResult.requeuedCount == 0) {
             throw IllegalStateException("Gemini Nanoの翻訳結果をページへ反映できませんでした")
         }
+        if (applyResult.appliedCount == 0) {
+            saveInfo(
+                title = "Gemini Nano初期反映0件",
+                body = "requeuedCount=${applyResult.requeuedCount}",
+            )
+        }
     }
 
     private fun keepTranslatingDynamicContent(
@@ -285,8 +291,8 @@ class GeminiNanoTranslator(
         /** DOM更新が推論速度を上回っても未処理セグメントを溜め込まないようにする */
         private const val DYNAMIC_TRANSLATION_QUEUE_CAPACITY = 16
 
-        /** 生成が1件ずつ逐次実行になるため、最初の反映までの待ち時間を短くする */
-        private const val INITIAL_APPLY_SEGMENT_COUNT = 2
+        /** 画面に見える範囲が訳される前に翻訳済みと表示されないよう、初回でまとめて反映する */
+        private const val INITIAL_APPLY_SEGMENT_COUNT = 8
         private const val STAGE_SCAN = "scan"
         private const val STAGE_LANGUAGE = "language"
         private const val STAGE_MODEL = "model"
