@@ -11,6 +11,18 @@ interface Translator {
     }
 }
 
+/**
+ * ページ内テキストの翻訳進捗。
+ *
+ * [totalCount] は動的に追加されたテキストの分だけ増えるため、完了後も増えることがある。
+ */
+data class TranslationProgress(
+    val translatedCount: Int,
+    val totalCount: Int,
+) {
+    val isCompleted: Boolean get() = translatedCount >= totalCount
+}
+
 /** 翻訳元・翻訳先の言語タグペア */
 data class TranslationLanguages(val fromLanguage: String, val toLanguage: String)
 

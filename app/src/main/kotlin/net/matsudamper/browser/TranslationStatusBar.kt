@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import java.util.Locale
 import net.matsudamper.browser.data.ThemeMode
 import net.matsudamper.browser.resources.R as ResourcesR
+import net.matsudamper.browser.translate.TranslationProgress
 import net.matsudamper.browser.ui.common.BrowserTheme
 
 internal enum class TranslationState {
@@ -61,6 +62,8 @@ internal fun TranslationStatusBar(
     onDismissError: () -> Unit,
     /** 失敗理由。どの段階で失敗したかを利用者が判別できるようにする */
     errorMessage: String? = null,
+    /** 継続翻訳の進捗。未完了の間は翻訳済みではなく進捗を表示する */
+    progress: TranslationProgress? = null,
     fromLanguage: String? = null,
     toLanguage: String? = null,
     /** 翻訳元の選択肢（言語タグ一覧）。nullなら言語変更UIを表示しない。 */
@@ -72,6 +75,9 @@ internal fun TranslationStatusBar(
     modifier: Modifier = Modifier,
 ) {
     if (state == TranslationState.Idle) return
+
+    // 初期反映が終わってもページ全体は訳し終わっていないため、完了まで進捗を出す
+    val isTranslatingRemaining = state == TranslationState.Translated && progress?.isCompleted == false
 
     val backgroundColor = when (state) {
         TranslationState.Loading,
@@ -92,7 +98,7 @@ internal fun TranslationStatusBar(
         modifier = modifier.fillMaxWidth(),
     ) {
         Column {
-            if (state.isInProgress) {
+            if (state.isInProgress || isTranslatingRemaining) {
                 LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
             }
             Row(
@@ -100,7 +106,16 @@ internal fun TranslationStatusBar(
                 modifier = Modifier.padding(horizontal = 8.dp),
             ) {
                 when (state) {
-                    TranslationState.Translated -> {
+                    TranslationState.Translated -> if (isTranslatingRemaining) {
+                        Text(
+                            text = translationProgressLabel(TranslationState.Translating, progress),
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(vertical = 8.dp),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        )
+                    } else {
                         Text(
                             text = "翻訳済み: ",
                             style = MaterialTheme.typography.bodySmall,
@@ -135,7 +150,7 @@ internal fun TranslationStatusBar(
                     TranslationState.Translating,
                     -> {
                         Text(
-                            text = translationProgressLabel(state),
+                            text = translationProgressLabel(state, progress),
                             modifier = Modifier.padding(vertical = 8.dp),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSecondaryContainer,
@@ -185,7 +200,10 @@ internal fun translationErrorLabel(errorMessage: String?): String {
     return "翻訳に失敗しました: $errorMessage"
 }
 
-internal fun translationProgressLabel(state: TranslationState): String = when (state) {
+internal fun translationProgressLabel(
+    state: TranslationState,
+    progress: TranslationProgress? = null,
+): String = when (state) {
     TranslationState.Loading -> "翻訳を開始中..."
 
     TranslationState.ScanningPage -> "ページを解析中..."
@@ -194,7 +212,13 @@ internal fun translationProgressLabel(state: TranslationState): String = when (s
 
     TranslationState.PreparingModel -> "ML翻訳モデルを準備中..."
 
-    TranslationState.Translating -> "翻訳中..."
+    TranslationState.Translating -> {
+        if (progress == null || progress.totalCount <= 0) {
+            "翻訳中..."
+        } else {
+            "翻訳中 (${progress.translatedCount}/${progress.totalCount})..."
+        }
+    }
 
     TranslationState.Idle,
     TranslationState.Translated,
@@ -275,6 +299,21 @@ private fun PreviewTranslationStatusBarError() {
             onRevert = {},
             onDismissError = {},
             errorMessage = "ページ翻訳DOMの取得が10000ms以内に完了しませんでした",
+        )
+    }
+}
+
+@Preview(name = "残りを翻訳中", widthDp = 360)
+@Composable
+private fun PreviewTranslationStatusBarTranslatingRemaining() {
+    BrowserTheme(themeMode = ThemeMode.THEME_LIGHT) {
+        TranslationStatusBar(
+            state = TranslationState.Translated,
+            onRevert = {},
+            onDismissError = {},
+            progress = TranslationProgress(translatedCount = 12, totalCount = 57),
+            fromLanguage = "en",
+            toLanguage = "ja",
         )
     }
 }

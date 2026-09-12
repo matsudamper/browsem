@@ -4,6 +4,7 @@ import android.os.SystemClock
 import android.util.Log
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -41,8 +42,11 @@ class GeminiNanoTranslator(
     private val pageTranslationWebExtension: PageTranslationWebExtension,
     private val crashLogRepository: CrashLogRepository,
     private val onTranslateStateChanged: (Translator.TranslateState) -> Unit,
+    private val onTranslateProgressChanged: (TranslationProgress) -> Unit,
 ) : Translator {
     private var currentStage: String = STAGE_SCAN
+    private val translatedSegmentCount = AtomicInteger(0)
+    private val totalSegmentCount = AtomicInteger(0)
 
     override suspend fun translate(): TranslationLanguages? {
         val startedAt = SystemClock.elapsedRealtime()
@@ -98,6 +102,8 @@ class GeminiNanoTranslator(
                 currentStage = STAGE_INITIAL
                 onTranslateStateChanged(Translator.TranslateState.TRANSLATING)
                 val translationCache = ConcurrentHashMap<String, String>()
+                totalSegmentCount.set(translatableSegments.size)
+                notifyProgress()
                 val initialSegments = translatableSegments.take(INITIAL_APPLY_SEGMENT_COUNT)
                 val remainingSegments = translatableSegments.drop(INITIAL_APPLY_SEGMENT_COUNT)
                 val applyResult = try {
@@ -166,6 +172,8 @@ class GeminiNanoTranslator(
                     ?: inference.translateTextOrKeepSource(segment.text).also { translated ->
                         translationCache[segment.text] = translated
                     }
+                translatedSegmentCount.incrementAndGet()
+                notifyProgress()
                 PageTranslationWebExtension.TranslationResult(
                     id = segment.id,
                     sourceText = segment.text,
@@ -257,6 +265,8 @@ class GeminiNanoTranslator(
             session = session,
             documentId = documentId,
             onSegments = { segments ->
+                totalSegmentCount.addAndGet(segments.count { isTranslatableText(it.text) })
+                notifyProgress()
                 queue.trySend(segments)
             },
             onStopped = {
@@ -270,6 +280,15 @@ class GeminiNanoTranslator(
             queue.trySend(remainingSegments)
         }
         return true
+    }
+
+    private fun notifyProgress() {
+        onTranslateProgressChanged(
+            TranslationProgress(
+                translatedCount = translatedSegmentCount.get(),
+                totalCount = totalSegmentCount.get(),
+            ),
+        )
     }
 
     private suspend fun detectLanguage(text: String): String = withContext(Dispatchers.IO) {
@@ -439,8 +458,8 @@ private class GeminiNanoInference(
             throw IllegalStateException("Gemini Nanoの翻訳が出力上限で途切れました")
         }
         val translatedText = sanitizeTranslatedText(candidate.text)
-        if (isInstructionEcho(translatedText)) {
-            throw IllegalStateException("Gemini Nanoが指示文を翻訳して返しました")
+        if (isUnusableTranslation(translatedText)) {
+            throw IllegalStateException("Gemini Nanoが訳文ではない返答をしました")
         }
         return translatedText
     }
@@ -550,7 +569,8 @@ internal fun buildGeminiNanoTranslationInstruction(
     val sourceName = toLanguageDisplayName(sourceLanguage)
     val targetName = toLanguageDisplayName(targetLanguage)
     return "Translate the user text from $sourceName to $targetName. " +
-        "Output only the $targetName translation of that text."
+        "Output only the $targetName translation of that text. " +
+        "If you cannot translate it, output the text unchanged and never explain why."
 }
 
 internal fun buildGeminiNanoTranslationPrompt(
@@ -568,21 +588,38 @@ internal fun buildGeminiNanoTranslationPrompt(
     }
 }
 
-/** 指示文そのものを翻訳して返した結果を、ページへ差し込まないための判定 */
-internal fun isInstructionEcho(text: String): Boolean {
+/**
+ * 訳文ではなく指示文の翻訳や翻訳拒否の返答を、ページへ差し込まないための判定。
+ *
+ * 小型モデルはこの手の返答を避けきれないため、訳文として採用せず原文を残す。
+ */
+internal fun isUnusableTranslation(text: String): Boolean {
     val normalized = text.replace(" ", "").replace("　", "")
-    return INSTRUCTION_ECHO_MARKERS.any { marker -> normalized.contains(marker) }
+    return UNUSABLE_TRANSLATION_MARKERS.any { marker -> normalized.contains(marker) }
 }
 
-private val INSTRUCTION_ECHO_MARKERS = listOf(
+private val UNUSABLE_TRANSLATION_MARKERS = listOf(
     "翻訳のみ",
     "訳のみ",
     "指示ではありません",
     "指示ではなく",
     "翻訳してください",
+    "翻訳できません",
+    "翻訳できない",
+    "翻訳することはできません",
+    "申し訳ありませんが",
+    "申し訳ございませんが",
+    "AIアシスタント",
     "translationonly",
     "Outputonlythe",
     "Translatetheusertext",
+    "cannottranslate",
+    "can'ttranslate",
+    "unabletotranslate",
+    "I'msorry",
+    "Iamsorry",
+    "Asanailanguagemodel",
+    "Asanaimodel",
 )
 
 private fun toLanguageDisplayName(languageTag: String): String =

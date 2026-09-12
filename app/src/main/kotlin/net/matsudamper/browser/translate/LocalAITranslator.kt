@@ -4,6 +4,7 @@ import android.os.SystemClock
 import android.util.Log
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -35,7 +36,10 @@ class LocalAITranslator(
     private val pageTranslationWebExtension: PageTranslationWebExtension,
     private val crashLogRepository: CrashLogRepository,
     private val onTranslateStateChanged: (Translator.TranslateState) -> Unit,
+    private val onTranslateProgressChanged: (TranslationProgress) -> Unit,
 ) : Translator {
+    private val translatedSegmentCount = AtomicInteger(0)
+    private val totalSegmentCount = AtomicInteger(0)
 
     override suspend fun translate(): TranslationLanguages? {
         onTranslateStateChanged(Translator.TranslateState.PAGE_SCAN)
@@ -78,6 +82,8 @@ class LocalAITranslator(
                 segmentCount = snapshot.segments.size,
             )
             val translationCache = ConcurrentHashMap<String, String>()
+            totalSegmentCount.set(snapshot.segments.size)
+            notifyProgress()
             val initialSegments = snapshot.segments.take(INITIAL_APPLY_SEGMENT_COUNT)
             val remainingSegments = snapshot.segments.drop(INITIAL_APPLY_SEGMENT_COUNT)
             onTranslateStateChanged(Translator.TranslateState.TRANSLATING)
@@ -252,6 +258,8 @@ class LocalAITranslator(
                 val translatedText = translationCache[segment.text] ?: translator.translate(segment.text).await().also {
                     translationCache[segment.text] = it
                 }
+                translatedSegmentCount.incrementAndGet()
+                notifyProgress()
                 PageTranslationWebExtension.TranslationResult(
                     id = segment.id,
                     sourceText = segment.text,
@@ -327,6 +335,8 @@ class LocalAITranslator(
             session = session,
             documentId = documentId,
             onSegments = { segments ->
+                totalSegmentCount.addAndGet(segments.size)
+                notifyProgress()
                 queue.trySend(segments)
             },
             onStopped = {
@@ -340,6 +350,15 @@ class LocalAITranslator(
             queue.trySend(initialSegments)
         }
         return true
+    }
+
+    private fun notifyProgress() {
+        onTranslateProgressChanged(
+            TranslationProgress(
+                translatedCount = translatedSegmentCount.get(),
+                totalCount = totalSegmentCount.get(),
+            ),
+        )
     }
 
     private suspend fun detectLanguage(text: String): String = withContext(Dispatchers.IO) {

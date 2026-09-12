@@ -47,6 +47,7 @@ import net.matsudamper.browser.feature.devtools.DevToolsWebExtension
 import net.matsudamper.browser.feature.findinpage.FindInPageWebExtension
 import net.matsudamper.browser.translate.PageTranslationWebExtension
 import net.matsudamper.browser.translate.TranslationPriorityLanguage
+import net.matsudamper.browser.translate.TranslationProgress
 import net.matsudamper.browser.translate.Translator
 import net.matsudamper.browser.ui.browser.BrowserScreenUiState
 import org.json.JSONObject
@@ -210,6 +211,9 @@ internal class BrowserTabScreenState(
 
     /** 翻訳失敗時の理由。どの段階で失敗したかを翻訳バーへ表示する */
     var translationErrorMessage: String? by mutableStateOf(null)
+
+    /** ページ内テキストの翻訳進捗。初期反映後も継続翻訳が進むため、完了まで表示する */
+    var translationProgress: TranslationProgress? by mutableStateOf(null)
     var originalPageUrlForRevert by mutableStateOf<String?>(null)
     var detectedPageLanguage by mutableStateOf<String?>(null)
 
@@ -960,6 +964,7 @@ internal class BrowserTabScreenState(
             val translationStartUrl = originalPageUrlForRevert
             translationState = TranslationState.Loading
             translationErrorMessage = null
+            translationProgress = null
             val pageUrl = translationStartUrl ?: currentPageUrl
             val result = runCatching {
                 PageTranslator(
@@ -968,14 +973,20 @@ internal class BrowserTabScreenState(
                     pageTranslationWebExtension = pageTranslationWebExtension,
                     crashLogRepository = crashLogRepository,
                 ).translatePage(
-                    translationProvider,
-                    fromLanguage,
-                    toLanguage,
-                ) { translateState ->
-                    if (originalPageUrlForRevert == translationStartUrl) {
-                        translationState = translateState.toTranslationState()
-                    }
-                }
+                    provider = translationProvider,
+                    fromLanguage = fromLanguage,
+                    toLanguage = toLanguage,
+                    onTranslateStateChanged = { translateState ->
+                        if (originalPageUrlForRevert == translationStartUrl) {
+                            translationState = translateState.toTranslationState()
+                        }
+                    },
+                    onTranslateProgressChanged = { progress ->
+                        if (originalPageUrlForRevert == translationStartUrl) {
+                            translationProgress = progress
+                        }
+                    },
+                )
             }
             // CancellationException は runCatching で握りつぶさずに伝播させる。
             // キャンセル済みジョブが新ジョブの状態を上書きするのを防ぐ。
@@ -1019,6 +1030,7 @@ internal class BrowserTabScreenState(
         translationFromLanguage = null
         translationToLanguage = null
         translationErrorMessage = null
+        translationProgress = null
         if (usesPageTranslationBridge(provider)) {
             pageTranslationWebExtension.stopTranslation(session, restoreOriginal = revertPage)
         } else if (revertPage && savedUrl != null) {
@@ -1462,6 +1474,7 @@ internal class BrowserTabScreenState(
             translationFromLanguage = null
             translationToLanguage = null
             translationErrorMessage = null
+            translationProgress = null
         }
         if (!url.startsWith("data:")) {
             detectedPageLanguage = null

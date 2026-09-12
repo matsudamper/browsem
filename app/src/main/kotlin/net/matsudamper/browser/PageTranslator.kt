@@ -12,6 +12,7 @@ import net.matsudamper.browser.translate.LocalAITranslator
 import net.matsudamper.browser.translate.PageTranslationWebExtension
 import net.matsudamper.browser.translate.TranslationLanguages
 import net.matsudamper.browser.translate.TranslationPriorityLanguage
+import net.matsudamper.browser.translate.TranslationProgress
 import net.matsudamper.browser.translate.Translator
 import org.mozilla.geckoview.GeckoSession
 
@@ -26,6 +27,7 @@ internal class PageTranslator(
         fromLanguage: String?,
         toLanguage: String,
         onTranslateStateChanged: (Translator.TranslateState) -> Unit,
+        onTranslateProgressChanged: (TranslationProgress) -> Unit,
     ): TranslationLanguages? {
         return when (provider) {
             TranslationProvider.TRANSLATION_PROVIDER_GECKO,
@@ -52,6 +54,7 @@ internal class PageTranslator(
                     pageTranslationWebExtension = pageTranslationWebExtension,
                     crashLogRepository = crashLogRepository,
                     onTranslateStateChanged = onTranslateStateChanged,
+                    onTranslateProgressChanged = onTranslateProgressChanged,
                 )
             }
 
@@ -64,6 +67,7 @@ internal class PageTranslator(
                     pageTranslationWebExtension = pageTranslationWebExtension,
                     crashLogRepository = crashLogRepository,
                     onTranslateStateChanged = onTranslateStateChanged,
+                    onTranslateProgressChanged = onTranslateProgressChanged,
                 )
             }
         }.translate()
