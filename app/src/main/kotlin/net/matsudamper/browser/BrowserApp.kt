@@ -100,6 +100,7 @@ import net.matsudamper.browser.screen.settings.SettingsScreenViewModel
 import net.matsudamper.browser.screen.siteforminput.SiteFormInputFieldScreenViewModel
 import net.matsudamper.browser.screen.siteforminput.SiteFormInputPathScreenViewModel
 import net.matsudamper.browser.screen.siteforminput.SiteFormInputPathsScreenViewModel
+import net.matsudamper.browser.screen.sitesettings.SiteSettingsListScreenViewModel
 import net.matsudamper.browser.screen.sitesettings.SiteSettingsScreenViewModel
 import net.matsudamper.browser.screen.tab.TabsScreenViewModel
 import net.matsudamper.browser.ui.browser.BrowserScreen
@@ -117,6 +118,7 @@ import net.matsudamper.browser.ui.settings.crash.CrashLogsRoute
 import net.matsudamper.browser.ui.settings.form.SiteFormInputFieldScreen
 import net.matsudamper.browser.ui.settings.form.SiteFormInputPathScreen
 import net.matsudamper.browser.ui.settings.form.SiteFormInputPathsScreen
+import net.matsudamper.browser.ui.settings.site.SiteSettingsListScreen
 import net.matsudamper.browser.ui.settings.site.SiteSettingsScreen
 import net.matsudamper.browser.ui.tabs.TabsScreen
 import org.koin.compose.koinInject
@@ -347,6 +349,7 @@ internal fun BrowserAppShell(
                             onOpenExtensions = { outerBackStack.add(AppDestination.Extensions) },
                             onOpenHistory = { outerBackStack.add(AppDestination.History) },
                             onOpenAddresses = { outerBackStack.add(AppDestination.Addresses) },
+                            onOpenSiteSettings = { outerBackStack.add(AppDestination.SiteSettingsList) },
                             onOpenCrashLogs = { outerBackStack.add(AppDestination.CrashLogs) },
                             onOpenReleases = {
                                 context.startActivity(
@@ -361,6 +364,27 @@ internal fun BrowserAppShell(
                             onBack = { outerBackStack.removeLastOrNull() },
                         )
                     }
+                }
+
+                AppDestination.SiteSettingsList -> navEntry(key) {
+                    val siteSettingsRepository: SiteSettingsRepository = koinInject()
+                    val siteSettingsListViewModel = composeViewModel(initializer = {
+                        SiteSettingsListScreenViewModel(siteSettingsRepository)
+                    })
+                    val siteSettingsListUiState by siteSettingsListViewModel.uiState.collectAsState()
+                    LaunchedEffect(siteSettingsListViewModel) {
+                        siteSettingsListViewModel.eventHandler.receiveAsFlow().collect { handler ->
+                            handler(object : SiteSettingsListScreenViewModel.Event {
+                                override fun navigateToSiteSettings(host: String) {
+                                    outerBackStack.add(AppDestination.SiteSettings(host = host))
+                                }
+                            })
+                        }
+                    }
+                    SiteSettingsListScreen(
+                        uiState = siteSettingsListUiState,
+                        onBack = { outerBackStack.removeLastOrNull() },
+                    )
                 }
 
                 is AppDestination.SiteSettings -> navEntry(key) {

@@ -16,6 +16,9 @@ sealed interface AppDestination : NavKey, java.io.Serializable {
     data object Settings : AppDestination, java.io.Serializable
 
     @Serializable
+    data object SiteSettingsList : AppDestination, java.io.Serializable
+
+    @Serializable
     data class SiteSettings(
         val host: String,
         val scheme: String = "https",
