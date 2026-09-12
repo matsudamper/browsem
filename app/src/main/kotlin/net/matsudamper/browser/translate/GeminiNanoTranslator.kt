@@ -248,6 +248,7 @@ class GeminiNanoTranslator(
                     val sourceChunk = chunks[index]
                     when {
                         previousSourceChunk.endsWith('\n') || sourceChunk.startsWith('\n') -> append('\n')
+
                         previousSourceChunk.lastOrNull()?.isWhitespace() == true ||
                             sourceChunk.firstOrNull()?.isWhitespace() == true -> append(' ')
                     }
