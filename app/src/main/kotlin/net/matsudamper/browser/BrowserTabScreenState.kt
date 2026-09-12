@@ -39,12 +39,15 @@ import net.matsudamper.browser.data.SiteGeolocationState
 import net.matsudamper.browser.data.SitePermissionState
 import net.matsudamper.browser.data.SiteSettingsRepository
 import net.matsudamper.browser.data.TranslationProvider
+import net.matsudamper.browser.data.crashlog.CrashLogRepository
 import net.matsudamper.browser.data.download.DownloadRecordStatus
 import net.matsudamper.browser.data.extractSiteHost
 import net.matsudamper.browser.download.proceedDownloadFromResponse
 import net.matsudamper.browser.feature.devtools.DevToolsWebExtension
 import net.matsudamper.browser.feature.findinpage.FindInPageWebExtension
+import net.matsudamper.browser.translate.PageTranslationWebExtension
 import net.matsudamper.browser.translate.TranslationPriorityLanguage
+import net.matsudamper.browser.translate.Translator
 import net.matsudamper.browser.ui.browser.BrowserScreenUiState
 import org.json.JSONObject
 import org.koin.compose.koinInject
@@ -90,6 +93,8 @@ internal fun rememberBrowserTabScreenState(
     val siteSettingsRepository: SiteSettingsRepository = koinInject()
     val settingsRepository: SettingsRepository = koinInject()
     val webExtensionActionController: WebExtensionActionController = koinInject()
+    val pageTranslationWebExtension: PageTranslationWebExtension = koinInject()
+    val crashLogRepository: CrashLogRepository = koinInject()
     val state = remember(browserTab) {
         BrowserTabScreenState(
             browserTab = browserTab,
@@ -105,6 +110,8 @@ internal fun rememberBrowserTabScreenState(
             siteSettingsRepository = siteSettingsRepository,
             settingsRepository = settingsRepository,
             webExtensionActionController = webExtensionActionController,
+            pageTranslationWebExtension = pageTranslationWebExtension,
+            crashLogRepository = crashLogRepository,
             context = context,
             onHistoryRecord = onHistoryRecord,
             onHistoryTitleUpdate = onHistoryTitleUpdate,
@@ -140,6 +147,8 @@ internal class BrowserTabScreenState(
     private val siteSettingsRepository: SiteSettingsRepository,
     private val settingsRepository: SettingsRepository,
     private val webExtensionActionController: WebExtensionActionController,
+    private val pageTranslationWebExtension: PageTranslationWebExtension,
+    private val crashLogRepository: CrashLogRepository,
     private val context: Context,
     private val onRequestDownloadNotificationPermission: suspend () -> Unit = {},
     private val onRequestAndroidPermissions: suspend (Array<String>) -> Array<String> = { emptyArray() },
@@ -207,6 +216,7 @@ internal class BrowserTabScreenState(
     /** 翻訳先言語タグ（例: "ja"） */
     var translationToLanguage by mutableStateOf<String?>(null)
     private var translationJob: Job? = null
+    private var activeTranslationProvider: TranslationProvider? = null
 
     // --- Find-in-page state ---
     private var findInPageState by mutableStateOf(FindInPageState.Closed)
@@ -911,6 +921,10 @@ internal class BrowserTabScreenState(
             }
 
             TranslationState.Loading,
+            TranslationState.ScanningPage,
+            TranslationState.DetectingLanguage,
+            TranslationState.PreparingModel,
+            TranslationState.Translating,
             TranslationState.Translated,
             -> {
                 closeTranslationBar(revertPage = true)
@@ -924,12 +938,16 @@ internal class BrowserTabScreenState(
 
     /** ステータスバーの言語ドロップダウンから再翻訳を実行する */
     fun onRetranslate(translationProvider: TranslationProvider, fromLanguage: String?, toLanguage: String) {
-        if (translationState == TranslationState.Loading) return
+        if (translationState.isInProgress) return
         runTranslation(translationProvider, fromLanguage = fromLanguage, toLanguage = toLanguage)
     }
 
     private fun runTranslation(translationProvider: TranslationProvider, fromLanguage: String?, toLanguage: String) {
         translationJob?.cancel()
+        if (activeTranslationProvider == TranslationProvider.TRANSLATION_PROVIDER_LOCAL_AI) {
+            pageTranslationWebExtension.stopTranslation(session, restoreOriginal = true)
+        }
+        activeTranslationProvider = translationProvider
         translationJob = coroutineScope.launch {
             // 初回翻訳時のみ元URLを保存する
             if (originalPageUrlForRevert == null) {
@@ -940,11 +958,20 @@ internal class BrowserTabScreenState(
             translationState = TranslationState.Loading
             val pageUrl = translationStartUrl ?: currentPageUrl
             val result = runCatching {
-                PageTranslator(session, pageUrl).translatePage(
+                PageTranslator(
+                    session = session,
+                    currentPageUrl = pageUrl,
+                    pageTranslationWebExtension = pageTranslationWebExtension,
+                    crashLogRepository = crashLogRepository,
+                ).translatePage(
                     translationProvider,
                     fromLanguage,
                     toLanguage,
-                )
+                ) { translateState ->
+                    if (originalPageUrlForRevert == translationStartUrl) {
+                        translationState = translateState.toTranslationState()
+                    }
+                }
             }
             // CancellationException は runCatching で握りつぶさずに伝播させる。
             // キャンセル済みジョブが新ジョブの状態を上書きするのを防ぐ。
@@ -967,12 +994,7 @@ internal class BrowserTabScreenState(
     }
 
     fun onRevertTranslation() {
-        val savedUrl = originalPageUrlForRevert
-        closeTranslationBar(revertPage = false)
-        if (savedUrl != null) {
-            clearPageLoadError()
-            session.loadUri(savedUrl)
-        }
+        closeTranslationBar(revertPage = true)
     }
 
     fun onDismissTranslationError() {
@@ -983,11 +1005,15 @@ internal class BrowserTabScreenState(
         translationJob?.cancel()
         translationJob = null
         val savedUrl = originalPageUrlForRevert
+        val provider = activeTranslationProvider
+        activeTranslationProvider = null
         translationState = TranslationState.Idle
         originalPageUrlForRevert = null
         translationFromLanguage = null
         translationToLanguage = null
-        if (revertPage && savedUrl != null) {
+        if (provider == TranslationProvider.TRANSLATION_PROVIDER_LOCAL_AI) {
+            pageTranslationWebExtension.stopTranslation(session, restoreOriginal = revertPage)
+        } else if (revertPage && savedUrl != null) {
             clearPageLoadError()
             session.loadUri(savedUrl)
         }
@@ -1409,9 +1435,24 @@ internal class BrowserTabScreenState(
         if (!isUrlInputFocused) {
             urlInput = url
         }
-        if (shouldResetTranslationOnLocationChange(translationState, url, originalPageUrlForRevert, wasFullPageLoad)) {
+        if (
+            shouldResetTranslationOnLocationChange(
+                translationState,
+                url,
+                originalPageUrlForRevert,
+                wasFullPageLoad,
+            )
+        ) {
+            translationJob?.cancel()
+            translationJob = null
+            if (activeTranslationProvider == TranslationProvider.TRANSLATION_PROVIDER_LOCAL_AI) {
+                pageTranslationWebExtension.stopTranslation(session, restoreOriginal = false)
+            }
+            activeTranslationProvider = null
             translationState = TranslationState.Idle
             originalPageUrlForRevert = null
+            translationFromLanguage = null
+            translationToLanguage = null
         }
         if (!url.startsWith("data:")) {
             detectedPageLanguage = null
@@ -1871,6 +1912,13 @@ internal class BrowserTabScreenState(
     private fun copyUrlToClipboard(url: String) {
         copyUrlToClipboard(context, url)
     }
+}
+
+private fun Translator.TranslateState.toTranslationState(): TranslationState = when (this) {
+    Translator.TranslateState.PAGE_SCAN -> TranslationState.ScanningPage
+    Translator.TranslateState.LANGUAGE_DETECTION -> TranslationState.DetectingLanguage
+    Translator.TranslateState.MODEL_DOWNLOAD -> TranslationState.PreparingModel
+    Translator.TranslateState.TRANSLATING -> TranslationState.Translating
 }
 
 /** WebApp のピン留めホストと異なるホストへの遷移かどうかを判定する */

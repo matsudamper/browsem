@@ -5,20 +5,26 @@ import java.net.URL
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import net.matsudamper.browser.data.TranslationProvider
+import net.matsudamper.browser.data.crashlog.CrashLogRepository
 import net.matsudamper.browser.translate.GeckoTranslator
 import net.matsudamper.browser.translate.LocalAITranslator
+import net.matsudamper.browser.translate.PageTranslationWebExtension
 import net.matsudamper.browser.translate.TranslationLanguages
 import net.matsudamper.browser.translate.TranslationPriorityLanguage
+import net.matsudamper.browser.translate.Translator
 import org.mozilla.geckoview.GeckoSession
 
 internal class PageTranslator(
     private val session: GeckoSession,
     private val currentPageUrl: String,
+    private val pageTranslationWebExtension: PageTranslationWebExtension,
+    private val crashLogRepository: CrashLogRepository,
 ) {
     suspend fun translatePage(
         provider: TranslationProvider,
         fromLanguage: String?,
         toLanguage: String,
+        onTranslateStateChanged: (Translator.TranslateState) -> Unit,
     ): TranslationLanguages? {
         return when (provider) {
             TranslationProvider.TRANSLATION_PROVIDER_GECKO,
@@ -32,11 +38,19 @@ internal class PageTranslator(
                     rawFromLang
                 }
                 val (effectiveFrom, effectiveTo) = resolveTranslationLanguagePair(resolvedFromLang, toLanguage)
+                onTranslateStateChanged(Translator.TranslateState.TRANSLATING)
                 GeckoTranslator(session, effectiveFrom, effectiveTo)
             }
 
             TranslationProvider.TRANSLATION_PROVIDER_LOCAL_AI -> {
-                LocalAITranslator(session, currentPageUrl, toLanguage)
+                LocalAITranslator(
+                    session = session,
+                    fromLanguage = fromLanguage,
+                    toLanguage = toLanguage,
+                    pageTranslationWebExtension = pageTranslationWebExtension,
+                    crashLogRepository = crashLogRepository,
+                    onTranslateStateChanged = onTranslateStateChanged,
+                )
             }
         }.translate()
     }

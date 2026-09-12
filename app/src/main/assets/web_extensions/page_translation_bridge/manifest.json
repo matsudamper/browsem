@@ -1,0 +1,26 @@
+{
+  "manifest_version": 2,
+  "name": "Page Translation Bridge",
+  "version": "1.0",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "page-translation-bridge@browsem"
+    }
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "permissions": [
+    "geckoViewAddons",
+    "nativeMessaging",
+    "nativeMessagingFromContent"
+  ]
+}

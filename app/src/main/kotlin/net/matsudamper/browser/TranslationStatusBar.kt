@@ -21,11 +21,38 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import java.util.Locale
+import net.matsudamper.browser.data.ThemeMode
 import net.matsudamper.browser.resources.R as ResourcesR
+import net.matsudamper.browser.ui.common.BrowserTheme
 
-internal enum class TranslationState { Idle, Loading, Translated, Error }
+internal enum class TranslationState {
+    Idle,
+    Loading,
+    ScanningPage,
+    DetectingLanguage,
+    PreparingModel,
+    Translating,
+    Translated,
+    Error,
+}
+
+internal val TranslationState.isInProgress: Boolean
+    get() = when (this) {
+        TranslationState.Loading,
+        TranslationState.ScanningPage,
+        TranslationState.DetectingLanguage,
+        TranslationState.PreparingModel,
+        TranslationState.Translating,
+        -> true
+
+        TranslationState.Idle,
+        TranslationState.Translated,
+        TranslationState.Error,
+        -> false
+    }
 
 @Composable
 internal fun TranslationStatusBar(
@@ -46,6 +73,10 @@ internal fun TranslationStatusBar(
 
     val backgroundColor = when (state) {
         TranslationState.Loading,
+        TranslationState.ScanningPage,
+        TranslationState.DetectingLanguage,
+        TranslationState.PreparingModel,
+        TranslationState.Translating,
         TranslationState.Translated,
         -> MaterialTheme.colorScheme.secondaryContainer
 
@@ -59,7 +90,7 @@ internal fun TranslationStatusBar(
         modifier = modifier.fillMaxWidth(),
     ) {
         Column {
-            if (state == TranslationState.Loading) {
+            if (state.isInProgress) {
                 LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
             }
             Row(
@@ -95,9 +126,14 @@ internal fun TranslationStatusBar(
                         )
                     }
 
-                    TranslationState.Loading -> {
+                    TranslationState.Loading,
+                    TranslationState.ScanningPage,
+                    TranslationState.DetectingLanguage,
+                    TranslationState.PreparingModel,
+                    TranslationState.Translating,
+                    -> {
                         Text(
-                            text = "翻訳中...",
+                            text = translationProgressLabel(state),
                             modifier = Modifier.padding(vertical = 8.dp),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSecondaryContainer,
@@ -138,6 +174,23 @@ internal fun TranslationStatusBar(
             }
         }
     }
+}
+
+internal fun translationProgressLabel(state: TranslationState): String = when (state) {
+    TranslationState.Loading -> "翻訳を開始中..."
+
+    TranslationState.ScanningPage -> "ページを解析中..."
+
+    TranslationState.DetectingLanguage -> "翻訳言語を確認中..."
+
+    TranslationState.PreparingModel -> "ML翻訳モデルを準備中..."
+
+    TranslationState.Translating -> "翻訳中..."
+
+    TranslationState.Idle,
+    TranslationState.Translated,
+    TranslationState.Error,
+    -> ""
 }
 
 /** 言語タグを表示名で示すTextButton。クリックでDropdownMenuを展開する。 */
@@ -190,4 +243,16 @@ private fun languageDisplayName(tag: String?): String {
     val locale = Locale.forLanguageTag(tag)
     val name = locale.getDisplayLanguage(Locale.JAPANESE)
     return if (name.isBlank()) tag else name
+}
+
+@Preview(name = "ML翻訳モデル準備中", widthDp = 360)
+@Composable
+private fun PreviewTranslationStatusBarPreparingModel() {
+    BrowserTheme(themeMode = ThemeMode.THEME_LIGHT) {
+        TranslationStatusBar(
+            state = TranslationState.PreparingModel,
+            onRevert = {},
+            onDismissError = {},
+        )
+    }
 }

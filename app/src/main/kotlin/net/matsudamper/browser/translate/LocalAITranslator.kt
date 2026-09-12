@@ -1,146 +1,371 @@
 package net.matsudamper.browser.translate
 
-import android.text.Html
-import java.net.HttpURLConnection
-import java.net.URL
+import android.os.SystemClock
+import android.util.Log
 import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import com.google.mlkit.common.model.DownloadConditions
+import com.google.mlkit.common.model.RemoteModelManager
 import com.google.mlkit.nl.languageid.LanguageIdentification
 import com.google.mlkit.nl.translate.TranslateLanguage
+import com.google.mlkit.nl.translate.TranslateRemoteModel
 import com.google.mlkit.nl.translate.Translation
+import com.google.mlkit.nl.translate.Translator as MlKitTranslator
 import com.google.mlkit.nl.translate.TranslatorOptions
+import net.matsudamper.browser.data.crashlog.CrashLogRepository
 import net.matsudamper.browser.resolveTranslationLanguagePair
 import org.mozilla.geckoview.GeckoSession
 
 class LocalAITranslator(
     private val session: GeckoSession,
-    private val currentPageUrl: String,
+    private val fromLanguage: String?,
     private val toLanguage: String,
+    private val pageTranslationWebExtension: PageTranslationWebExtension,
+    private val crashLogRepository: CrashLogRepository,
+    private val onTranslateStateChanged: (Translator.TranslateState) -> Unit,
 ) : Translator {
+
     override suspend fun translate(): TranslationLanguages? {
-        // 1. HTMLを取得（タイムアウト付き）
-        val rawHtml = withContext(Dispatchers.IO) {
-            val connection = URL(currentPageUrl).openConnection() as HttpURLConnection
-            connection.connectTimeout = NETWORK_TIMEOUT_MS
-            connection.readTimeout = NETWORK_TIMEOUT_MS
-            try {
-                connection.inputStream.bufferedReader().readText()
-            } finally {
-                connection.disconnect()
-            }
+        onTranslateStateChanged(Translator.TranslateState.PAGE_SCAN)
+        val snapshot = try {
+            pageTranslationWebExtension.scanPage(session)
+        } catch (error: Exception) {
+            pageTranslationWebExtension.stopTranslation(session, restoreOriginal = true)
+            throw error
+        }
+        if (snapshot.segments.isEmpty()) {
+            pageTranslationWebExtension.stopTranslation(session, restoreOriginal = false)
+            return null
         }
 
-        // 2. <script>/<style>/<noscript>/<template> を除去してJSON-LD汚染を防ぐ
-        val cleanedHtml = rawHtml
-            .replace(Regex("<script[^>]*>[\\s\\S]*?</script>", RegexOption.IGNORE_CASE), "")
-            .replace(Regex("<style[^>]*>[\\s\\S]*?</style>", RegexOption.IGNORE_CASE), "")
-            .replace(Regex("<noscript[^>]*>[\\s\\S]*?</noscript>", RegexOption.IGNORE_CASE), "")
-            .replace(Regex("<template[^>]*>[\\s\\S]*?</template>", RegexOption.IGNORE_CASE), "")
-
-        val plainText = Html.fromHtml(cleanedHtml, Html.FROM_HTML_MODE_COMPACT)
-            .toString()
-            .take(4500)
-        if (plainText.isBlank()) return null
-
-        // 3. 言語検出（不明な場合はHTMLのlang属性にフォールバック、それでも不明なら優先翻訳元言語を使用）
-        val detectedLang = detectLanguage(plainText)
-        val sourceLang = if (detectedLang.isBlank() || detectedLang == "und") {
-            extractHtmlLang(rawHtml)
-        } else {
-            detectedLang
+        onTranslateStateChanged(Translator.TranslateState.LANGUAGE_DETECTION)
+        val sourceTranslateLanguage = resolveSourceLanguage(snapshot)
+        val targetTranslateLanguage = toTranslateLanguageTag(toLanguage)
+        if (sourceTranslateLanguage == null || targetTranslateLanguage == null) {
+            pageTranslationWebExtension.stopTranslation(session, restoreOriginal = false)
+            return null
         }
-        val sourceTranslateLang = toTranslateLanguageTag(sourceLang)
-            ?: toTranslateLanguageTag(TranslationPriorityLanguage.FROM)
-            ?: return null
-        val toTranslateLanguage = toLanguage.let { lang ->
-            TranslateLanguage.fromLanguageTag(lang)
-                ?: TranslateLanguage.fromLanguageTag(lang.substringBefore('-'))
-        } ?: return null
-        // 翻訳元と翻訳先が同じ場合、優先言語でない方を優先言語に切り替える
-        val (effectiveSourceLang, effectiveToLang) = resolveTranslationLanguagePair(sourceTranslateLang, toTranslateLanguage)
-        if (effectiveSourceLang == effectiveToLang) return null
-
-        // 4. 翻訳
-        val translated = translateWithLocalAi(
-            text = plainText,
-            sourceLanguage = effectiveSourceLang,
-            targetLanguage = effectiveToLang,
+        val (effectiveSourceLanguage, effectiveTargetLanguage) = resolveTranslationLanguagePair(
+            sourceTranslateLanguage,
+            targetTranslateLanguage,
         )
 
-        // 5. javascript: URI でURLを変えずにDOMを置換
-        //    各文字をUnicode エスケープにすることで単引用符・制御文字の問題を回避
-        val escapedText = translated.asSequence()
-            .joinToString("") { c ->
-                when {
-                    c == '\\' -> "\\\\"
-                    c.code < 0x20 || c.code > 0x7E -> "\\u${c.code.toString(16).padStart(4, '0')}"
-                    c == '\'' -> "\\'"
-                    else -> c.toString()
-                }
+        val translator = Translation.getClient(
+            TranslatorOptions.Builder()
+                .setSourceLanguage(effectiveSourceLanguage)
+                .setTargetLanguage(effectiveTargetLanguage)
+                .build(),
+        )
+        return try {
+            onTranslateStateChanged(Translator.TranslateState.MODEL_DOWNLOAD)
+            prepareTranslationModel(
+                translator = translator,
+                sourceLanguage = effectiveSourceLanguage,
+                targetLanguage = effectiveTargetLanguage,
+                segmentCount = snapshot.segments.size,
+            )
+            val translationCache = ConcurrentHashMap<String, String>()
+            val initialSegments = snapshot.segments.take(INITIAL_APPLY_SEGMENT_COUNT)
+            val remainingSegments = snapshot.segments.drop(INITIAL_APPLY_SEGMENT_COUNT)
+            onTranslateStateChanged(Translator.TranslateState.TRANSLATING)
+            translateInitialSegments(
+                translator = translator,
+                pageTranslationWebExtension = pageTranslationWebExtension,
+                documentId = snapshot.documentId,
+                segments = initialSegments,
+                translationCache = translationCache,
+                sourceLanguage = effectiveSourceLanguage,
+                targetLanguage = effectiveTargetLanguage,
+            )
+            val activated = keepTranslatingDynamicContent(
+                translator = translator,
+                pageTranslationWebExtension = pageTranslationWebExtension,
+                documentId = snapshot.documentId,
+                initialSegments = remainingSegments,
+                translationCache = translationCache,
+            )
+            if (!activated) {
+                throw IllegalStateException("ページ翻訳ブリッジを継続翻訳状態へ移行できませんでした")
             }
-        // 翻訳（ローカルAI） の各文字をUnicodeエスケープ済みリテラル
-        val title = "\\u7ffb\\u8a33\\uff08\\u30ed\\u30fc\\u30ab\\u30ebAI\\uff09"
-        val script = "javascript:void((function(){" +
-            "var d=document;" +
-            "var div=d.createElement('div');" +
-            "div.style='font-family:sans-serif;padding:16px;line-height:1.6';" +
-            "var h=d.createElement('h2');" +
-            "h.textContent='$title';" +
-            "var p=d.createElement('p');" +
-            "p.style='white-space:pre-wrap';" +
-            "p.textContent='$escapedText';" +
-            "div.appendChild(h);" +
-            "div.appendChild(p);" +
-            "d.body.innerHTML='';" +
-            "d.body.appendChild(div);" +
-            "})())"
-        session.loadUri(script)
-        return TranslationLanguages(effectiveSourceLang, effectiveToLang)
+            TranslationLanguages(effectiveSourceLanguage, effectiveTargetLanguage)
+        } catch (error: Exception) {
+            translator.close()
+            pageTranslationWebExtension.stopTranslation(session, restoreOriginal = true)
+            throw error
+        }
     }
 
-    /** HTMLの&lt;html lang="..."&gt;属性から言語タグを抽出する */
-    private fun extractHtmlLang(html: String): String {
-        val match = Regex("<html[^>]+lang=[\"']([^\"']+)[\"']", RegexOption.IGNORE_CASE).find(html)
-        return match?.groupValues?.getOrNull(1).orEmpty()
+    private suspend fun prepareTranslationModel(
+        translator: MlKitTranslator,
+        sourceLanguage: String,
+        targetLanguage: String,
+        segmentCount: Int,
+    ) {
+        // 初回ダウンロードは秒単位かかるのが正常で、遅延として残すと言語ペアごとに必ずログが出る。
+        // モデルが揃っているのに遅いときだけ診断の価値があるため、事前の状態を見て切り分ける。
+        val isModelDownloadedBeforePreparation = isTranslationModelDownloaded(sourceLanguage, targetLanguage)
+        val startedAt = SystemClock.elapsedRealtime()
+        try {
+            withTimeout(MODEL_PREPARATION_TIMEOUT_MS) {
+                translator.downloadModelIfNeeded(DownloadConditions.Builder().build()).await()
+            }
+        } catch (error: TimeoutCancellationException) {
+            val elapsedMs = SystemClock.elapsedRealtime() - startedAt
+            saveInfo(
+                title = "ローカルAI翻訳モデル準備タイムアウト",
+                body = buildTranslationDiagnostics(
+                    stage = "model",
+                    elapsedMs = elapsedMs,
+                    sourceLanguage = sourceLanguage,
+                    targetLanguage = targetLanguage,
+                    segmentCount = segmentCount,
+                ),
+            )
+            throw IllegalStateException(
+                "ローカルAI翻訳モデルの準備が${MODEL_PREPARATION_TIMEOUT_MS}ms以内に完了しませんでした",
+                error,
+            )
+        }
+        val elapsedMs = SystemClock.elapsedRealtime() - startedAt
+        if (isModelDownloadedBeforePreparation && elapsedMs >= SLOW_MODEL_PREPARATION_THRESHOLD_MS) {
+            saveInfo(
+                title = "ローカルAI翻訳モデル準備遅延",
+                body = buildTranslationDiagnostics(
+                    stage = "model",
+                    elapsedMs = elapsedMs,
+                    sourceLanguage = sourceLanguage,
+                    targetLanguage = targetLanguage,
+                    segmentCount = segmentCount,
+                ),
+            )
+        }
+    }
+
+    /** 翻訳に必要なモデルが両方ダウンロード済みかを返す。判定できない場合は未ダウンロード扱いにする */
+    private suspend fun isTranslationModelDownloaded(sourceLanguage: String, targetLanguage: String): Boolean {
+        val remoteModelManager = RemoteModelManager.getInstance()
+        return try {
+            listOf(sourceLanguage, targetLanguage).all { language ->
+                remoteModelManager.isModelDownloaded(TranslateRemoteModel.Builder(language).build()).await()
+            }
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            Log.w(TAG, "翻訳モデルのダウンロード状態を取得できませんでした", error)
+            false
+        }
+    }
+
+    private suspend fun translateInitialSegments(
+        translator: MlKitTranslator,
+        pageTranslationWebExtension: PageTranslationWebExtension,
+        documentId: String,
+        segments: List<PageTranslationWebExtension.Segment>,
+        translationCache: ConcurrentHashMap<String, String>,
+        sourceLanguage: String,
+        targetLanguage: String,
+    ) {
+        val startedAt = SystemClock.elapsedRealtime()
+        try {
+            withTimeout(INITIAL_TRANSLATION_TIMEOUT_MS) {
+                translateAndApply(
+                    translator = translator,
+                    pageTranslationWebExtension = pageTranslationWebExtension,
+                    documentId = documentId,
+                    segments = segments,
+                    translationCache = translationCache,
+                )
+            }
+        } catch (error: TimeoutCancellationException) {
+            val elapsedMs = SystemClock.elapsedRealtime() - startedAt
+            saveInfo(
+                title = "ローカルAI初期翻訳タイムアウト",
+                body = buildTranslationDiagnostics(
+                    stage = "initial",
+                    elapsedMs = elapsedMs,
+                    sourceLanguage = sourceLanguage,
+                    targetLanguage = targetLanguage,
+                    segmentCount = segments.size,
+                ),
+            )
+            throw IllegalStateException(
+                "ローカルAIの初期翻訳が${INITIAL_TRANSLATION_TIMEOUT_MS}ms以内に完了しませんでした",
+                error,
+            )
+        }
+        val elapsedMs = SystemClock.elapsedRealtime() - startedAt
+        if (elapsedMs >= SLOW_INITIAL_TRANSLATION_THRESHOLD_MS) {
+            saveInfo(
+                title = "ローカルAI初期翻訳遅延",
+                body = buildTranslationDiagnostics(
+                    stage = "initial",
+                    elapsedMs = elapsedMs,
+                    sourceLanguage = sourceLanguage,
+                    targetLanguage = targetLanguage,
+                    segmentCount = segments.size,
+                ),
+            )
+        }
+    }
+
+    private suspend fun resolveSourceLanguage(snapshot: PageTranslationWebExtension.PageSnapshot): String? {
+        if (!fromLanguage.isNullOrBlank() && fromLanguage != "und") {
+            return toTranslateLanguageTag(fromLanguage)
+        }
+        val sample = buildLanguageDetectionSample(snapshot.segments, LANGUAGE_DETECTION_LIMIT)
+        val detectedLanguage = if (sample.isBlank()) "" else detectLanguage(sample)
+        val resolvedLanguage = detectedLanguage.takeUnless { it.isBlank() || it == "und" }
+            ?: snapshot.htmlLanguage
+            ?: TranslationPriorityLanguage.FROM
+        return toTranslateLanguageTag(resolvedLanguage)
+            ?: toTranslateLanguageTag(TranslationPriorityLanguage.FROM)
+    }
+
+    private suspend fun translateAndApply(
+        translator: MlKitTranslator,
+        pageTranslationWebExtension: PageTranslationWebExtension,
+        documentId: String,
+        segments: List<PageTranslationWebExtension.Segment>,
+        translationCache: ConcurrentHashMap<String, String>,
+    ) {
+        segments.chunked(APPLY_BATCH_SIZE).forEach { batch ->
+            val translations = batch.map { segment ->
+                val translatedText = translationCache[segment.text] ?: translator.translate(segment.text).await().also {
+                    translationCache[segment.text] = it
+                }
+                PageTranslationWebExtension.TranslationResult(
+                    id = segment.id,
+                    sourceText = segment.text,
+                    translatedText = translatedText,
+                )
+            }
+            pageTranslationWebExtension.applyTranslations(
+                session = session,
+                documentId = documentId,
+                translations = translations,
+            )
+        }
+    }
+
+    private fun keepTranslatingDynamicContent(
+        translator: MlKitTranslator,
+        pageTranslationWebExtension: PageTranslationWebExtension,
+        documentId: String,
+        initialSegments: List<PageTranslationWebExtension.Segment>,
+        translationCache: ConcurrentHashMap<String, String>,
+    ): Boolean {
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        val queue = Channel<List<PageTranslationWebExtension.Segment>>(Channel.UNLIMITED)
+        scope.launch {
+            for (segments in queue) {
+                try {
+                    translateAndApply(
+                        translator = translator,
+                        pageTranslationWebExtension = pageTranslationWebExtension,
+                        documentId = documentId,
+                        segments = segments,
+                        translationCache = translationCache,
+                    )
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (error: Exception) {
+                    saveInfo(
+                        title = "ローカルAI継続翻訳失敗",
+                        body = "stage=background\nsegmentCount=${segments.size}\nerror=${error.javaClass.name}\nmessage=${error.message.orEmpty()}",
+                    )
+                }
+            }
+        }
+        val activated = pageTranslationWebExtension.activateTranslation(
+            session = session,
+            documentId = documentId,
+            onSegments = { segments ->
+                queue.trySend(segments)
+            },
+            onStopped = {
+                queue.close()
+                scope.cancel()
+                translator.close()
+            },
+        )
+        if (!activated) return false
+        if (initialSegments.isNotEmpty()) {
+            queue.trySend(initialSegments)
+        }
+        return true
     }
 
     private suspend fun detectLanguage(text: String): String = withContext(Dispatchers.IO) {
         val languageIdentifier = LanguageIdentification.getClient()
-        languageIdentifier.use { languageIdentifier ->
-            languageIdentifier.identifyLanguage(text.take(1000)).await().orEmpty()
+        languageIdentifier.use { identifier ->
+            identifier.identifyLanguage(text.take(LANGUAGE_DETECTION_LIMIT)).await().orEmpty()
         }
     }
 
     private fun toTranslateLanguageTag(languageTag: String): String? {
-        if (languageTag.isBlank() || languageTag == "und") {
-            return null
-        }
+        if (languageTag.isBlank() || languageTag == "und") return null
         val normalized = languageTag.lowercase(Locale.ROOT)
         return TranslateLanguage.fromLanguageTag(normalized)
             ?: TranslateLanguage.fromLanguageTag(normalized.substringBefore('-'))
     }
 
-    private suspend fun translateWithLocalAi(
-        text: String,
+    private fun buildTranslationDiagnostics(
+        stage: String,
+        elapsedMs: Long,
         sourceLanguage: String,
         targetLanguage: String,
-    ): String = withContext(Dispatchers.IO) {
-        val options = TranslatorOptions.Builder()
-            .setSourceLanguage(sourceLanguage)
-            .setTargetLanguage(targetLanguage)
-            .build()
-        val translator = Translation.getClient(options)
-        translator.use { translator ->
-            val conditions = DownloadConditions.Builder().build()
-            translator.downloadModelIfNeeded(conditions).await()
-            translator.translate(text).await()
+        segmentCount: Int,
+    ): String = buildString {
+        appendLine("stage=$stage")
+        appendLine("elapsedMs=$elapsedMs")
+        appendLine("sourceLanguage=$sourceLanguage")
+        appendLine("targetLanguage=$targetLanguage")
+        append("segmentCount=$segmentCount")
+    }
+
+    private fun saveInfo(title: String, body: String) {
+        try {
+            crashLogRepository.saveInfoSync(title, body)
+        } catch (error: RuntimeException) {
+            Log.w(TAG, "翻訳診断ログの保存に失敗", error)
         }
     }
 
     companion object {
-        private const val NETWORK_TIMEOUT_MS = 15_000
+        private const val TAG = "LocalAITranslator"
+        private const val LANGUAGE_DETECTION_LIMIT = 2_000
+        private const val APPLY_BATCH_SIZE = 16
+        private const val INITIAL_APPLY_SEGMENT_COUNT = 8
+        private const val MODEL_PREPARATION_TIMEOUT_MS = 30_000L
+        private const val INITIAL_TRANSLATION_TIMEOUT_MS = 15_000L
+        private const val SLOW_MODEL_PREPARATION_THRESHOLD_MS = 5_000L
+        private const val SLOW_INITIAL_TRANSLATION_THRESHOLD_MS = 5_000L
     }
+}
+
+internal fun buildLanguageDetectionSample(
+    segments: List<PageTranslationWebExtension.Segment>,
+    maxLength: Int,
+): String {
+    if (maxLength <= 0) return ""
+    val builder = StringBuilder()
+    for (segment in segments) {
+        if (builder.isNotEmpty()) builder.append('\n')
+        val remaining = maxLength - builder.length
+        if (remaining <= 0) break
+        builder.append(segment.text.take(remaining))
+        if (builder.length >= maxLength) break
+    }
+    return builder.toString()
 }
