@@ -39,6 +39,7 @@ import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -59,6 +60,7 @@ internal fun GroupTabGrid(
     onTabDropped: (TabsScreenTabData) -> Unit,
     onTabLongPressWithoutDrag: (TabsScreenTabData) -> Unit,
     floatingActionButtonBoundsInRoot: Rect?,
+    topOverlayHeight: Dp,
     modifier: Modifier = Modifier,
 ) {
     if (tabs.isEmpty()) {
@@ -167,7 +169,7 @@ internal fun GroupTabGrid(
                 },
             contentPadding = PaddingValues(
                 start = TabsLayoutDefaults.gridPadding,
-                top = TabsLayoutDefaults.gridPadding,
+                top = TabsLayoutDefaults.gridPadding + topOverlayHeight,
                 end = TabsLayoutDefaults.gridPadding,
                 bottom = TabsLayoutDefaults.gridPadding + floatingActionButtonBottomPadding,
             ),
