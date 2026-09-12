@@ -944,7 +944,7 @@ internal class BrowserTabScreenState(
 
     private fun runTranslation(translationProvider: TranslationProvider, fromLanguage: String?, toLanguage: String) {
         translationJob?.cancel()
-        if (activeTranslationProvider == TranslationProvider.TRANSLATION_PROVIDER_LOCAL_AI) {
+        if (usesPageTranslationBridge(activeTranslationProvider)) {
             pageTranslationWebExtension.stopTranslation(session, restoreOriginal = true)
         }
         activeTranslationProvider = translationProvider
@@ -1011,7 +1011,7 @@ internal class BrowserTabScreenState(
         originalPageUrlForRevert = null
         translationFromLanguage = null
         translationToLanguage = null
-        if (provider == TranslationProvider.TRANSLATION_PROVIDER_LOCAL_AI) {
+        if (usesPageTranslationBridge(provider)) {
             pageTranslationWebExtension.stopTranslation(session, restoreOriginal = revertPage)
         } else if (revertPage && savedUrl != null) {
             clearPageLoadError()
@@ -1445,7 +1445,7 @@ internal class BrowserTabScreenState(
         ) {
             translationJob?.cancel()
             translationJob = null
-            if (activeTranslationProvider == TranslationProvider.TRANSLATION_PROVIDER_LOCAL_AI) {
+            if (usesPageTranslationBridge(activeTranslationProvider)) {
                 pageTranslationWebExtension.stopTranslation(session, restoreOriginal = false)
             }
             activeTranslationProvider = null
@@ -1912,6 +1912,18 @@ internal class BrowserTabScreenState(
     private fun copyUrlToClipboard(url: String) {
         copyUrlToClipboard(context, url)
     }
+}
+
+/** ページ内 DOM を書き換えて翻訳するプロバイダーかどうかを判定する */
+internal fun usesPageTranslationBridge(provider: TranslationProvider?): Boolean = when (provider) {
+    TranslationProvider.TRANSLATION_PROVIDER_LOCAL_AI,
+    TranslationProvider.TRANSLATION_PROVIDER_GEMINI_NANO,
+    -> true
+
+    TranslationProvider.TRANSLATION_PROVIDER_GECKO,
+    TranslationProvider.UNRECOGNIZED,
+    null,
+    -> false
 }
 
 private fun Translator.TranslateState.toTranslationState(): TranslationState = when (this) {
