@@ -137,6 +137,21 @@ class IcoDecoderTest {
     }
 
     @Test
+    fun decodeLargestFrame_andMaskTruncated_returnsNull() {
+        val frame = indexed8Frame(
+            width = 2,
+            height = 2,
+            palette = listOf(OPAQUE_RED, OPAQUE_BLUE),
+            paletteIndices = listOf(0, 1, 1, 0),
+            transparentPixels = listOf(false, true, false, false),
+        )
+        // AND マスクの途中でフレームが切れている ICO
+        val truncated = frame.copy(data = frame.data.copyOf(frame.data.size - andMaskRowSize(2)))
+
+        assertNull(IcoDecoder.decodeLargestFrame(buildIco(listOf(truncated))))
+    }
+
+    @Test
     fun decodeLargestFrame_tooManyFrames_上限までしか試さない() {
         // 先頭に上限と同数の壊れたフレームを並べ、その後ろに有効なフレームを置く
         val brokenFrames = List(DECODE_ATTEMPT_LIMIT) {

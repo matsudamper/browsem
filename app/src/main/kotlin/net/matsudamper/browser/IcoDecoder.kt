@@ -170,8 +170,8 @@ internal object IcoDecoder {
             for (index in pixels.indices) {
                 pixels[index] = pixels[index] or (OPAQUE_ALPHA shl 24)
             }
-            if (header.hasAndMask) {
-                applyAndMask(buffer, maskOffset, frameEnd, header, pixels)
+            if (header.hasAndMask && !applyAndMask(buffer, maskOffset, frameEnd, header, pixels)) {
+                return null
             }
         }
         return Bitmap.createBitmap(pixels, header.width, header.height, Bitmap.Config.ARGB_8888)
@@ -291,15 +291,16 @@ internal object IcoDecoder {
         return palette.getOrNull(paletteIndex)
     }
 
+    /** マスクデータが途中で切れている場合は false を返し、中途半端な結果を成功扱いさせない。 */
     private fun applyAndMask(
         buffer: ByteBuffer,
         maskOffset: Int,
         frameEnd: Int,
         header: DibHeader,
         pixels: IntArray,
-    ) {
+    ): Boolean {
         val maskRowSize = rowSizeOf(header.width, bitCount = 1)
-        if (maskOffset + maskRowSize * header.height > frameEnd) return
+        if (maskOffset + maskRowSize * header.height > frameEnd) return false
         for (row in 0 until header.height) {
             val rowOffset = maskOffset + (header.height - 1 - row) * maskRowSize
             for (column in 0 until header.width) {
@@ -310,6 +311,7 @@ internal object IcoDecoder {
                 }
             }
         }
+        return true
     }
 
     private fun rowSizeOf(width: Int, bitCount: Int): Int {
