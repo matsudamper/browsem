@@ -471,6 +471,12 @@ internal class BrowserTabScreenState(
     // 同じ外部アプリ遷移ログを繰り返し保存しないための記録。ページ遷移でクリアする。
     private val savedExternalAppNavigationKeys = mutableSetOf<String>()
 
+    // 確認ダイアログを閉じたときに、その要求の URL を現在のタブで読み込んでよいか。
+    // 現在ページを置き換えるはずだった遷移だけが対象。新規ウィンドウやサブフレームからの
+    // 要求で読み込むと、そのまま残るはずの現在ページが失われる。
+    private var canLoadPendingLaunchInCurrentTab = false
+    private var canLoadQueuedLaunchInCurrentTab = false
+
     // 外部アプリ確認ダイアログ表示中に到着した後続の外部アプリナビゲーション。
     // ダイアログをキャンセルした場合にこちらを表示する（アプリ起動した場合は破棄する）。
     private var queuedExternalAppLaunch: PendingExternalAppLaunch? = null
@@ -1203,7 +1209,7 @@ internal class BrowserTabScreenState(
         }
 
         val fallbackUrl = request.fallbackUrl
-        if (fallbackUrl != null) {
+        if (fallbackUrl != null && canLoadPendingLaunchInCurrentTab) {
             queuedExternalAppLaunch = null
             openFallbackUrl(fallbackUrl)
             return
@@ -1222,14 +1228,17 @@ internal class BrowserTabScreenState(
      */
     fun dismissPendingExternalAppLaunchAndLoadInBrowser() {
         val request = pendingExternalAppLaunch ?: return
+        val loadsCurrentTab = canLoadPendingLaunchInCurrentTab
         pendingExternalAppLaunch = null
 
         val queued = queuedExternalAppLaunch
         queuedExternalAppLaunch = null
         if (queued != null) {
             pendingExternalAppLaunch = queued
+            canLoadPendingLaunchInCurrentTab = canLoadQueuedLaunchInCurrentTab
             return
         }
+        if (!loadsCurrentTab) return
 
         val url = if (request.sourceUri.startsWith("http://") || request.sourceUri.startsWith("https://")) {
             request.sourceUri
@@ -1246,6 +1255,7 @@ internal class BrowserTabScreenState(
         val queued = queuedExternalAppLaunch ?: return
         queuedExternalAppLaunch = null
         pendingExternalAppLaunch = queued
+        canLoadPendingLaunchInCurrentTab = canLoadQueuedLaunchInCurrentTab
     }
 
     fun restoreCurrentPageUrlToInput() {
@@ -1679,6 +1689,7 @@ internal class BrowserTabScreenState(
             val externalAction = resolveExternalAppNavigationAction(context, request.uri)
             if (externalAction is ExternalAppNavigationAction.Launch) {
                 queuedExternalAppLaunch = externalAction.request
+                canLoadQueuedLaunchInCurrentTab = !request.isNewWindowTarget()
             }
             return GeckoResult.fromValue(AllowOrDeny.DENY)
         }
@@ -1695,15 +1706,23 @@ internal class BrowserTabScreenState(
         // single-page でも TARGET_WINDOW_NEW は現在タブへ畳み込まない。
         // DENY + loadUri すると onNewSession が呼ばれず overlay が出せない。
         // 外部アプリ判定だけ行い、ブラウザ内なら ALLOW して onNewSession に渡す。
-        if (isSinglePageMode && request.target == GeckoSession.NavigationDelegate.TARGET_WINDOW_NEW) {
-            return applyExternalAppNavigationAction(uri = request.uri, action = externalAction)
+        if (isSinglePageMode && request.isNewWindowTarget()) {
+            return applyExternalAppNavigationAction(
+                uri = request.uri,
+                action = externalAction,
+                loadsCurrentTab = false,
+            )
         }
         if (externalAction == ExternalAppNavigationAction.AllowInBrowser &&
             handleWebAppCrossDomainNavigation(request.uri)
         ) {
             return GeckoResult.fromValue(AllowOrDeny.DENY)
         }
-        return applyExternalAppNavigationAction(uri = request.uri, action = externalAction)
+        return applyExternalAppNavigationAction(
+            uri = request.uri,
+            action = externalAction,
+            loadsCurrentTab = !request.isNewWindowTarget(),
+        )
     }
 
     /**
@@ -1727,12 +1746,21 @@ internal class BrowserTabScreenState(
             saveExternalAppNavigationInfo(uri = request.uri, action = action)
             return GeckoResult.fromValue(AllowOrDeny.DENY)
         }
-        return applyExternalAppNavigationAction(uri = request.uri, action = action)
+        return applyExternalAppNavigationAction(
+            uri = request.uri,
+            action = action,
+            loadsCurrentTab = false,
+        )
     }
 
+    /**
+     * @param loadsCurrentTab 現在ページを置き換えるはずだった遷移かどうか。ダイアログを閉じた
+     * ときに読み込み直してよいかの判断に使う。
+     */
     private fun applyExternalAppNavigationAction(
         uri: String,
         action: ExternalAppNavigationAction,
+        loadsCurrentTab: Boolean,
     ): GeckoResult<AllowOrDeny>? {
         saveExternalAppNavigationInfo(uri = uri, action = action)
         return when (action) {
@@ -1745,6 +1773,7 @@ internal class BrowserTabScreenState(
 
             is ExternalAppNavigationAction.Launch -> {
                 pendingExternalAppLaunch = action.request
+                canLoadPendingLaunchInCurrentTab = loadsCurrentTab
                 GeckoResult.fromValue(AllowOrDeny.DENY)
             }
 
@@ -2026,4 +2055,9 @@ internal fun isWebAppCrossDomainNavigation(url: String, pinnedHost: String?): Bo
     if (pinnedHost.isNullOrBlank()) return false
     val targetHost = extractSiteHost(url) ?: return false
     return !targetHost.equals(pinnedHost, ignoreCase = true)
+}
+
+/** `window.open` や target=_blank のように、現在ページを置き換えない遷移かどうか */
+private fun GeckoSession.NavigationDelegate.LoadRequest.isNewWindowTarget(): Boolean {
+    return target == GeckoSession.NavigationDelegate.TARGET_WINDOW_NEW
 }
