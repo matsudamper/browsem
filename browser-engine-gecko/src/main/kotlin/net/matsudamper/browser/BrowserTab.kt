@@ -24,11 +24,27 @@ data class TabSecurityInfo(
  */
 object BrowserSessionRegistry {
     private val sessions = Collections.newSetFromMap(WeakHashMap<GeckoSession, Boolean>())
+    private var sessionDisposedListener: ((GeckoSession) -> Unit)? = null
 
     internal fun register(session: GeckoSession) {
         synchronized(sessions) {
             sessions.add(session)
         }
+    }
+
+    /** BrowserTab がセッションを破棄するときに通知するリスナーを登録する。 */
+    fun setSessionDisposedListener(listener: (GeckoSession) -> Unit) {
+        synchronized(sessions) {
+            sessionDisposedListener = listener
+        }
+    }
+
+    internal fun unregister(session: GeckoSession) {
+        val listener = synchronized(sessions) {
+            sessions.remove(session)
+            sessionDisposedListener
+        }
+        listener?.invoke(session)
     }
 
     fun reloadOpenSessions() {
@@ -209,6 +225,7 @@ class BrowserTab(
     internal fun disposeSessionDelegates(cause: Throwable) {
         sessionDelegateHost.failPendingRequests(cause)
         sessionDelegateHost.detachUi()
+        BrowserSessionRegistry.unregister(session)
     }
 
     /**
