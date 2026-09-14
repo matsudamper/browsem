@@ -195,7 +195,9 @@ class AddressAutofillCoordinator(
                     kind = kind,
                     shouldAbort = {
                         synchronized(lock) {
-                            attachedSessions[target.session] !== target ||
+                            // 待機中にセッション付きのフォーカスが来ると宛先が変わる。
+                            // 推測で選んだ宛先が末尾でなくなったら、その画面には出さない。
+                            attachedSessions.values.lastOrNull() !== target ||
                                 shouldAbortAddressFetchAfterFocusSettled(target) ||
                                 target.isFocusSuppressed(FIELD_KIND_ADDRESS)
                         }
