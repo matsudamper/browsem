@@ -1679,7 +1679,17 @@ internal class BrowserTabScreenState(
             }
             return GeckoResult.fromValue(AllowOrDeny.DENY)
         }
-        val externalAction = resolveExternalAppNavigationAction(context, request.uri)
+        val externalAction = if (
+            shouldCheckExternalAppForNavigation(
+                uri = request.uri,
+                hasUserGesture = request.hasUserGesture,
+                isDirectNavigation = request.isDirectNavigation,
+            )
+        ) {
+            resolveExternalAppNavigationAction(context, request.uri)
+        } else {
+            ExternalAppNavigationAction.AllowInBrowser
+        }
         // single-page でも TARGET_WINDOW_NEW は現在タブへ畳み込まない。
         // DENY + loadUri すると onNewSession が呼ばれず overlay が出せない。
         // 外部アプリ判定だけ行い、ブラウザ内なら ALLOW して onNewSession に渡す。

@@ -303,3 +303,21 @@ internal fun isHttpUri(uri: String): Boolean {
     val scheme = uri.substringBefore(':', missingDelimiterValue = "").lowercase(Locale.US)
     return scheme == "http" || scheme == "https"
 }
+
+/**
+ * http/https の遷移で App Links 判定を行ってよいかどうかを返す。
+ *
+ * SSO のようにサーバーのリダイレクトやページの JS だけで進む遷移まで App Links とみなすと、
+ * 対象アプリを持つホストを経由しただけで遷移が握り潰され、白画面で止まる。ユーザー操作起因の
+ * 遷移と、アプリ自身が発行したロードに限定する。
+ *
+ * 独自スキームはページの自動遷移からアプリへ受け渡す作りがあるため、この制限をかけない。
+ */
+internal fun shouldCheckExternalAppForNavigation(
+    uri: String,
+    hasUserGesture: Boolean,
+    isDirectNavigation: Boolean,
+): Boolean {
+    if (!isHttpUri(uri)) return true
+    return hasUserGesture || isDirectNavigation
+}
