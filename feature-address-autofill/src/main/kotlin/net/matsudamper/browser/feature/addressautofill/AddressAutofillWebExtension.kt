@@ -152,16 +152,17 @@ class AddressAutofillWebExtension {
                     port.setDelegate(object : WebExtension.PortDelegate {
                         override fun onPortMessage(message: Any, port: WebExtension.Port) {
                             val json = message as? JSONObject ?: return
-                            val listener = sessionListeners[session] ?: return
+                            if (!sessionListeners.containsKey(session)) return
                             when (json.optString("action")) {
                                 "field-focus" -> {
                                     val kind = json.optString("kind")
                                     lastFocusPorts[session] = port
-                                    mainHandler.post { listener.onFieldFocus(kind) }
+                                    // 解除済みのリスナーへ届けないよう、実行時に引き直す
+                                    mainHandler.post { sessionListeners[session]?.onFieldFocus(kind) }
                                 }
 
                                 "field-blur" -> {
-                                    mainHandler.post { listener.onFieldBlur() }
+                                    mainHandler.post { sessionListeners[session]?.onFieldBlur() }
                                 }
                             }
                         }
@@ -170,8 +171,9 @@ class AddressAutofillWebExtension {
                             sessionPorts[session]?.remove(connectedPort)
                             if (lastFocusPorts[session] === connectedPort) {
                                 lastFocusPorts.remove(session)
-                                val listener = sessionListeners[session]
-                                mainHandler.post { listener?.onFocusPortDisconnected() }
+                                mainHandler.post {
+                                    sessionListeners[session]?.onFocusPortDisconnected()
+                                }
                             }
                         }
                     })
