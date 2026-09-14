@@ -91,7 +91,9 @@ class NetworkLogWebExtension(
         registeredSessions.remove(session)
         attachedSessions.remove(session)
         _sessionTabIds.update { it - session }
-        _sessionTabIdHistories.update { it - session }
+        if (!session.isOpen) {
+            _sessionTabIdHistories.update { it - session }
+        }
         extension?.let { ext ->
             session.webExtensionController.setMessageDelegate(ext, null, TAB_NATIVE_APP_ID)
         }
@@ -99,6 +101,24 @@ class NetworkLogWebExtension(
 
     /** セッションに対応する webRequest 上の tabId。未取得の場合は null */
     fun tabIdOf(session: GeckoSession): Int? = _sessionTabIds.value[session]
+
+    /** Store から消えた過去の tabId を履歴から外す。開いているセッションの最新 ID は保持する。 */
+    fun pruneTabIdHistories() {
+        val liveTabIds = store.entries.value.map { it.tabId }.toSet()
+        _sessionTabIdHistories.update { histories ->
+            histories.mapNotNull { (session, history) ->
+                val latestTabId = history.lastOrNull()
+                val prunedHistory = history.filter { tabId ->
+                    tabId in liveTabIds || (session.isOpen && tabId == latestTabId)
+                }
+                if (prunedHistory.isEmpty()) {
+                    null
+                } else {
+                    session to prunedHistory
+                }
+            }.toMap()
+        }
+    }
 
     /**
      * プレビュー用にレスポンス本文を取得する。
@@ -228,6 +248,7 @@ class NetworkLogWebExtension(
         }
         mainHandler.post {
             store.record(entries)
+            pruneTabIdHistories()
         }
     }
 
