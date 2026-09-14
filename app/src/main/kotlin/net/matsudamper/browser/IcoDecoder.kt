@@ -16,6 +16,7 @@ internal object IcoDecoder {
     private const val ICON_DIR_SIZE = 6
     private const val ICON_DIR_ENTRY_SIZE = 16
     private const val ICON_TYPE = 1
+
     // ICONDIRENTRY の幅・高さは 1 バイトのため 256 を 0 で表す
     private const val IMPLICIT_MAX_DIMENSION = 256
     private const val DIB_HEADER_MIN_SIZE = 40
@@ -23,9 +24,7 @@ internal object IcoDecoder {
     private const val PALETTE_ENTRY_SIZE = 4
     private const val OPAQUE_ALPHA = 0xFF
 
-    private val pngSignature = byteArrayOf(
-        0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
-    )
+    private val pngSignature = byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A)
 
     fun isIcoData(bytes: ByteArray): Boolean {
         if (bytes.size < ICON_DIR_SIZE) return false
