@@ -184,6 +184,11 @@ internal fun NetworkLogScreen(
     }
 }
 
+private data class NetworkLogClearConfirmation(
+    val message: String,
+    val onConfirm: () -> Unit,
+)
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun NetworkLogList(
@@ -197,7 +202,7 @@ private fun NetworkLogList(
             entryItemKey(entry.id) to index
         }.toMap()
     }
-    var showClearConfirmation by remember { mutableStateOf(false) }
+    var clearConfirmation by remember { mutableStateOf<NetworkLogClearConfirmation?>(null) }
     // sticky header が LazyColumn の item index に含まれるため、
     // 可視範囲は entry の key から一覧上の index へ戻して通知する。
     LaunchedEffect(listState, callbacks, entryIndexesByKey) {
@@ -250,16 +255,33 @@ private fun NetworkLogList(
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
                 text = uiState.summary.countLabel,
                 style = MaterialTheme.typography.labelLarge,
             )
             Text(
+                modifier = Modifier.weight(1f),
                 text = uiState.summary.sizeLabel,
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            IconButton(
+                modifier = Modifier.testTag(NetworkLogScreenTestTags.ClearAllButton.testTag),
+                enabled = uiState.canClear,
+                onClick = {
+                    clearConfirmation = NetworkLogClearConfirmation(
+                        message = "このタブで記録したすべてのドメインの通信ログを消去します。",
+                        onConfirm = callbacks::onClickClear,
+                    )
+                },
+            ) {
+                Icon(
+                    painter = painterResource(ResourcesR.drawable.ic_delete_24dp),
+                    contentDescription = "すべてのログを消去",
+                )
+            }
         }
         uiState.notice?.let { notice ->
             Text(
@@ -289,13 +311,19 @@ private fun NetworkLogList(
                 modifier = Modifier.fillMaxSize(),
                 state = listState,
             ) {
-                uiState.entries.forEachIndexed { index, entry ->
-                    entry.domainHeader?.let { domain ->
-                        stickyHeader(key = domainHeaderItemKey(index)) {
+                uiState.entries.forEach { entry ->
+                    val domain = entry.domainHeader
+                    val sectionKey = entry.domainHeaderKey
+                    if (domain != null && sectionKey != null) {
+                        stickyHeader(key = domainHeaderItemKey(sectionKey)) {
                             NetworkLogDomainHeader(
                                 domain = domain,
-                                canClear = uiState.canClear,
-                                onClearRequest = { showClearConfirmation = true },
+                                onClearRequest = {
+                                    clearConfirmation = NetworkLogClearConfirmation(
+                                        message = "$domain の通信ログを消去します。",
+                                        onConfirm = { callbacks.onClickClearDomain(sectionKey) },
+                                    )
+                                },
                             )
                         }
                     }
@@ -310,13 +338,14 @@ private fun NetworkLogList(
             }
         }
     }
-    if (showClearConfirmation) {
+    clearConfirmation?.let { confirmation ->
         NetworkLogClearConfirmationDialog(
+            message = confirmation.message,
             onConfirm = {
-                callbacks.onClickClear()
-                showClearConfirmation = false
+                confirmation.onConfirm()
+                clearConfirmation = null
             },
-            onDismiss = { showClearConfirmation = false },
+            onDismiss = { clearConfirmation = null },
         )
     }
 }
@@ -324,7 +353,6 @@ private fun NetworkLogList(
 @Composable
 private fun NetworkLogDomainHeader(
     domain: String,
-    canClear: Boolean,
     onClearRequest: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -350,12 +378,11 @@ private fun NetworkLogDomainHeader(
                 modifier = Modifier
                     .align(Alignment.CenterEnd)
                     .testTag(NetworkLogScreenTestTags.ClearButton.testTag),
-                enabled = canClear,
                 onClick = onClearRequest,
             ) {
                 Icon(
                     painter = painterResource(ResourcesR.drawable.ic_delete_24dp),
-                    contentDescription = "ログを消去",
+                    contentDescription = "このドメインのログを消去",
                 )
             }
         }
@@ -364,13 +391,14 @@ private fun NetworkLogDomainHeader(
 
 @Composable
 private fun NetworkLogClearConfirmationDialog(
+    message: String,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("ネットワークログを消去しますか？") },
-        text = { Text("このタブで記録したすべてのドメインの通信ログを消去します。") },
+        text = { Text(message) },
         confirmButton = {
             TextButton(
                 modifier = Modifier.testTag(NetworkLogScreenTestTags.ClearConfirmButton.testTag),
@@ -715,7 +743,7 @@ private fun SectionTitle(
 
 private fun entryItemKey(id: String): String = "entry:$id"
 
-private fun domainHeaderItemKey(index: Int): String = "domain:$index"
+private fun domainHeaderItemKey(sectionKey: String): String = "domain:$sectionKey"
 
 private const val BADGE_BACKGROUND_ALPHA = 0.15f
 private val THUMBNAIL_SIZE = 32.dp
@@ -732,6 +760,9 @@ sealed interface NetworkLogScreenTestTags {
     }
     object ClearButton : NetworkLogScreenTestTags {
         override val id = "clear_button"
+    }
+    object ClearAllButton : NetworkLogScreenTestTags {
+        override val id = "clear_all_button"
     }
     object ClearConfirmButton : NetworkLogScreenTestTags {
         override val id = "clear_confirm_button"
@@ -767,6 +798,7 @@ private object PreviewNetworkLogCallbacks : NetworkLogUiState.Callbacks {
     override fun onClickReloadPreview() = Unit
     override fun onClickSaveImage() = Unit
     override fun onClickClear() = Unit
+    override fun onClickClearDomain(sectionKey: String) = Unit
     override fun onVisibleRangeChange(firstIndex: Int, lastIndex: Int) = Unit
     override fun onDismiss() = Unit
 }
@@ -776,6 +808,7 @@ private fun previewEntries(): List<NetworkLogUiState.Entry> {
         NetworkLogUiState.Entry(
             id = "1",
             domainHeader = "shop.example.com",
+            domainHeaderKey = "tab:2",
             method = "GET",
             statusLabel = "200",
             statusKind = NetworkLogUiState.StatusKind.Success,
@@ -791,6 +824,7 @@ private fun previewEntries(): List<NetworkLogUiState.Entry> {
         NetworkLogUiState.Entry(
             id = "2",
             domainHeader = null,
+            domainHeaderKey = null,
             method = "GET",
             statusLabel = "200",
             statusKind = NetworkLogUiState.StatusKind.Success,
@@ -806,6 +840,7 @@ private fun previewEntries(): List<NetworkLogUiState.Entry> {
         NetworkLogUiState.Entry(
             id = "3",
             domainHeader = "example.com",
+            domainHeaderKey = "tab:1",
             method = "GET",
             statusLabel = "200",
             statusKind = NetworkLogUiState.StatusKind.Success,
@@ -821,6 +856,7 @@ private fun previewEntries(): List<NetworkLogUiState.Entry> {
         NetworkLogUiState.Entry(
             id = "4",
             domainHeader = null,
+            domainHeaderKey = null,
             method = "POST",
             statusLabel = "404",
             statusKind = NetworkLogUiState.StatusKind.ClientError,
@@ -836,6 +872,7 @@ private fun previewEntries(): List<NetworkLogUiState.Entry> {
         NetworkLogUiState.Entry(
             id = "5",
             domainHeader = null,
+            domainHeaderKey = null,
             method = "GET",
             statusLabel = "失敗",
             statusKind = NetworkLogUiState.StatusKind.Failed,
@@ -934,6 +971,7 @@ private fun previewImageEntries(): List<NetworkLogUiState.Entry> {
         NetworkLogUiState.Entry(
             id = "3",
             domainHeader = "example.com",
+            domainHeaderKey = "tab:1",
             method = "GET",
             statusLabel = "200",
             statusKind = NetworkLogUiState.StatusKind.Success,
@@ -949,6 +987,7 @@ private fun previewImageEntries(): List<NetworkLogUiState.Entry> {
         NetworkLogUiState.Entry(
             id = "6",
             domainHeader = null,
+            domainHeaderKey = null,
             method = "GET",
             statusLabel = "200",
             statusKind = NetworkLogUiState.StatusKind.Success,
@@ -964,6 +1003,7 @@ private fun previewImageEntries(): List<NetworkLogUiState.Entry> {
         NetworkLogUiState.Entry(
             id = "7",
             domainHeader = null,
+            domainHeaderKey = null,
             method = "GET",
             statusLabel = "200",
             statusKind = NetworkLogUiState.StatusKind.Success,
@@ -1106,6 +1146,7 @@ private fun PreviewNetworkLogScreenTextDetail() {
 private fun PreviewNetworkLogClearConfirmationDialog() {
     BrowserTheme(themeMode = ThemeMode.THEME_SYSTEM) {
         NetworkLogClearConfirmationDialog(
+            message = "example.com の通信ログを消去します。",
             onConfirm = {},
             onDismiss = {},
         )
