@@ -448,7 +448,7 @@ internal class NetworkLogStateHolder(
                 entries = visibleSectionEntries,
             )
         }.sortedByDescending { it.startedAtMillis }
-        val mergedSections = buildList {
+        val mergedSections = buildList<ShownSection> {
             sections.forEach { section ->
                 val previous = lastOrNull()
                 if (previous?.domain == section.domain) {
