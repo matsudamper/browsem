@@ -73,7 +73,10 @@ class ExternalAppNavigationTest {
         )
         assertEquals("https://example.com", redactUrlForLog("https://user:pass@example.com/path"))
         assertEquals("okta-verify:", redactUrlForLog("okta-verify:token"))
+        // クエリに絶対 URL を持つ独自スキームでも、内側の :// を区切りと誤認しない
+        assertEquals("myapp:", redactUrlForLog("myapp:callback?code=secret&redirect=https://example.com/"))
         assertEquals("(スキームなし)", redactUrlForLog(""))
+        assertEquals("(スキームなし)", redactUrlForLog("example.com"))
     }
 
     @Test

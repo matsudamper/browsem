@@ -264,13 +264,14 @@ private fun buildExternalIntent(
  * できるため、そのまま残すと診断情報の共有で認証情報まで渡ってしまう。
  */
 internal fun redactUrlForLog(url: String): String {
-    val schemeEnd = url.indexOf("://")
-    if (schemeEnd < 0) {
-        val scheme = url.substringBefore(':', missingDelimiterValue = "")
-        return if (scheme.isEmpty()) "(スキームなし)" else "$scheme:"
-    }
+    // 区切りは最初の : で決める。"://" を探すと、クエリに絶対 URL を持つ独自スキーム
+    // (myapp:cb?redirect=https://example.com) の内側を区切りと誤認して中身が残る。
+    val schemeEnd = url.indexOf(':')
+    if (schemeEnd <= 0) return "(スキームなし)"
     val scheme = url.take(schemeEnd)
-    val authority = url.drop(schemeEnd + "://".length)
+    val rest = url.drop(schemeEnd + 1)
+    if (!rest.startsWith("//")) return "$scheme:"
+    val authority = rest.drop("//".length)
         .takeWhile { it != '/' && it != '?' && it != '#' }
         .substringAfterLast('@')
     return "$scheme://$authority"
