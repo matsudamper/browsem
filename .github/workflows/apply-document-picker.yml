@@ -61,16 +61,42 @@ jobs:
 
           prompt_path = Path('app/src/main/kotlin/net/matsudamper/browser/PromptDialogState.kt')
           prompt = prompt_path.read_text()
-          old = '''                // ACTION_GET_CONTENT が返す content URI は一時的な読み取り権限しか持たない場合があり、
-                // GeckoView が非同期で読み取る際に権限が失効する可能性がある。
-                // そのため、コンテンツをキャッシュファイルにコピーしてから GeckoView に渡す。'''
-          new = '''                // ピッカーが返す content URI は GeckoView が非同期で読み取るまで権限が有効とは限らないため、
-                // コンテンツをキャッシュファイルにコピーしてから GeckoView に渡す。'''
+          old = 'ACTION_GET_CONTENT が返す content URI は一時的な読み取り権限しか持たない場合があり、'
+          new = 'ピッカーが返す content URI は一時的な読み取り権限しか持たない場合があり、'
           count = prompt.count(old)
           if count != 1:
               raise SystemExit(f'expected file prompt comment once, found {count}')
           prompt_path.write_text(prompt.replace(old, new))
           PY
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4.0.1
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+
+      - name: Decode debug keystore
+        shell: bash
+        run: |
+          echo "${{ secrets.DEBUG_KEYSTORE_BASE64 }}" | base64 --decode > "${RUNNER_TEMP}/debug.keystore"
+
+      - name: Build debug APK
+        env:
+          DEBUG_KEYSTORE_PATH: ${{ runner.temp }}/debug.keystore
+          CI_ABI_FILTER: arm64-v8a
+        run: ./gradlew :app:assembleDebug
+
+      - name: Run detekt
+        run: ./gradlew detekt
+
+      - name: Run unit tests
+        run: ./gradlew test
 
       - name: Commit source change and remove helper workflow
         shell: bash
