@@ -720,6 +720,8 @@ internal fun GeckoBrowserTab(
                 }
 
                 Lifecycle.Event.ON_RESUME -> {
+                    // 前面へ戻った画面を、セッションを伴わない住所取得の宛先にする
+                    addressAutofillCoordinator.onSessionResumed(session)
                     geckoView?.also(::resumeFromPauseIfNeeded)
                 }
 

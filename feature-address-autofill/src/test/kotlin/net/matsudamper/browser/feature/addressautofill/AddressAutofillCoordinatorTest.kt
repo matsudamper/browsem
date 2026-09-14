@@ -187,6 +187,19 @@ class AddressAutofillCoordinatorTest {
         assertFalse(opened.host.isBarVisible)
     }
 
+    @Test
+    fun 前面へ戻った画面が住所取得の宛先になる() = runTest {
+        val env = createEnv()
+        val background = attachSurface(env)
+
+        env.coordinator.onSessionResumed(env.session)
+        env.coordinator.onAddressFetch(1)
+        advanceTimeBy(ADDRESS_AUTOFILL_IME_READY_WAIT_MS)
+        advanceUntilIdle()
+        assertTrue(env.host.isBarVisible)
+        assertFalse(background.host.isBarVisible)
+    }
+
     private fun TestScope.attachSurface(env: TestEnv): Surface {
         val host = FakeHost(this)
         val session = mockk<GeckoSession>(relaxed = true)

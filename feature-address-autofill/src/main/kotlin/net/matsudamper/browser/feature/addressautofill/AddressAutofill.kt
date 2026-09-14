@@ -170,6 +170,18 @@ class AddressAutofillCoordinator(
         fillExtension.fill(attached.session, address, mode)
     }
 
+    /**
+     * 画面が前面へ戻ったときに呼ぶ。
+     * 停止中の画面はセッションが登録されたまま残るため、復帰を利用順へ反映しないと
+     * セッションを伴わない住所取得が背面の画面へ届いてしまう。
+     */
+    fun onSessionResumed(session: GeckoSession) {
+        synchronized(lock) {
+            val attached = attachedSessions[session] ?: return
+            moveToMostRecent(session, attached)
+        }
+    }
+
     fun onAddressFetch(count: Int) {
         if (count <= 0) return
         val target = synchronized(lock) {
