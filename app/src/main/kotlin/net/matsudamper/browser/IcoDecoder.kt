@@ -23,6 +23,7 @@ internal object IcoDecoder {
     private const val BI_RGB = 0
     private const val PALETTE_ENTRY_SIZE = 4
     private const val OPAQUE_ALPHA = 0xFF
+    private const val BITS_PER_PIXEL_WITH_ALPHA = 32
 
     private val pngSignature = byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A)
 
@@ -102,19 +103,19 @@ internal object IcoDecoder {
         if (maskOffset > frameEnd) return null
 
         val pixels = IntArray(header.width * header.height)
-        var hasTranslucentPixel = false
+        var hasNonZeroAlpha = false
         for (row in 0 until header.height) {
             // DIB はボトムアップ格納なので最終行から読み出す
             val rowOffset = pixelOffset + (header.height - 1 - row) * rowSize
             for (column in 0 until header.width) {
                 val color = readPixel(buffer, rowOffset, column, header.bitCount, palette) ?: return null
-                if (color ushr 24 != OPAQUE_ALPHA) hasTranslucentPixel = true
+                if (color ushr 24 != 0) hasNonZeroAlpha = true
                 pixels[row * header.width + column] = color
             }
         }
         // 32bpp でもアルファを全て 0 で埋めた ICO が実在するため、その場合は AND マスクへ委ねる
-        val needsAndMask = header.bitCount != 32 || !hasTranslucentPixel
-        if (needsAndMask && header.hasAndMask) {
+        val usesAlphaChannel = header.bitCount == BITS_PER_PIXEL_WITH_ALPHA && hasNonZeroAlpha
+        if (!usesAlphaChannel && header.hasAndMask) {
             applyAndMask(buffer, maskOffset, frameEnd, header, pixels)
         }
         return Bitmap.createBitmap(pixels, header.width, header.height, Bitmap.Config.ARGB_8888)

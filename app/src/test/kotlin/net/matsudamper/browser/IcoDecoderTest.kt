@@ -59,6 +59,18 @@ class IcoDecoderTest {
     }
 
     @Test
+    fun decodeLargestFrame_bgra32WithZeroAlpha_マスクに従って不透明になる() {
+        val transparentRed = 0x00FF0000
+        val ico = buildIco(listOf(bgra32Frame(width = 2, height = 2, colors = List(4) { transparentRed })))
+
+        val bitmap = IcoDecoder.decodeLargestFrame(ico)
+
+        assertNotNull(bitmap)
+        assertEquals(OPAQUE_RED, bitmap!!.getPixel(0, 0))
+        assertEquals(OPAQUE_RED, bitmap.getPixel(1, 1))
+    }
+
+    @Test
     fun decodeLargestFrame_paletteWithAndMask_マスクされた画素は透明になる() {
         val ico = buildIco(
             listOf(
