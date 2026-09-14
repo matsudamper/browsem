@@ -63,6 +63,9 @@ import org.mozilla.geckoview.WebResponse
 
 private const val TAG = "BrowserTabScreenState"
 
+/** 1 ページあたりに残す外部アプリ遷移ログの上限 */
+private const val MAX_EXTERNAL_APP_NAVIGATION_LOGS = 20
+
 private val PAGE_ZOOM_STEPS = listOf(20, 25, 33, 50, 67, 75, 80, 90, 100, 110, 125, 150, 175, 200)
 
 private enum class FindInPageState {
@@ -464,6 +467,9 @@ internal class BrowserTabScreenState(
     // --- ファイルダウンロード確認ダイアログ用state ---
     var pendingDownloadResponse by mutableStateOf<WebResponse?>(null)
     var pendingExternalAppLaunch by mutableStateOf<PendingExternalAppLaunch?>(null)
+
+    // 同じ外部アプリ遷移ログを繰り返し保存しないための記録。ページ遷移でクリアする。
+    private val savedExternalAppNavigationKeys = mutableSetOf<String>()
 
     // 外部アプリ確認ダイアログ表示中に到着した後続の外部アプリナビゲーション。
     // ダイアログをキャンセルした場合にこちらを表示する（アプリ起動した場合は破棄する）。
@@ -1584,6 +1590,7 @@ internal class BrowserTabScreenState(
 
     override fun onPageStart(url: String) {
         clearPageLoadError()
+        savedExternalAppNavigationKeys.clear()
         visualViewportScale = 1f
         // previewCaptureReady は false に戻さない。
         // GeckoView は新ページの描画が始まるまで古いページを表示し続けるため、
@@ -1754,11 +1761,15 @@ internal class BrowserTabScreenState(
      *
      * URL は scheme とホストだけに切り詰め、Intent の中身も残さない。認証の受け渡しでは
      * パス・クエリ・フラグメントや extras に認可コードやトークンが載るため。
+     *
+     * iframe から同じ要求を繰り返すページがあるため、同じ内容とページあたりの件数で絞る。
+     * クラッシュログには件数上限も自動削除も無く、メインスレッドで書き込むため。
      */
     private fun saveExternalAppNavigationInfo(
         uri: String,
         action: ExternalAppNavigationAction,
     ) {
+        if (savedExternalAppNavigationKeys.size >= MAX_EXTERNAL_APP_NAVIGATION_LOGS) return
         val detail = when (action) {
             ExternalAppNavigationAction.AllowInBrowser -> return
 
@@ -1772,10 +1783,12 @@ internal class BrowserTabScreenState(
                 "openFallback url=${redactUrlForLog(action.url)}"
             }
         }
+        val body = "uri=${redactUrlForLog(uri)}\naction=$detail\npageUrl=${redactUrlForLog(currentPageUrl)}"
+        if (!savedExternalAppNavigationKeys.add(body)) return
         try {
             crashLogRepository.saveInfoSync(
                 title = "外部アプリ遷移",
-                body = "uri=${redactUrlForLog(uri)}\naction=$detail\npageUrl=${redactUrlForLog(currentPageUrl)}",
+                body = body,
             )
         } catch (error: RuntimeException) {
             Log.w(TAG, "外部アプリ遷移ログの保存に失敗", error)
