@@ -1207,14 +1207,10 @@ internal class BrowserTabScreenState(
         Toast.makeText(context, "対応するアプリを開けませんでした", Toast.LENGTH_SHORT).show()
     }
 
-    fun dismissPendingExternalAppLaunch() {
-        pendingExternalAppLaunch = null
-        promoteQueuedExternalAppLaunch()
-    }
-
     /**
-     * 外部アプリ確認ダイアログでキャンセルされた際に、
+     * 外部アプリ確認ダイアログを閉じた際に、
      * ブラウザ内で（deep linkではなく）URLを読み込む。
+     * 読み込み直さないと、起動を取りやめた遷移がそのまま消えて白画面で止まる。
      * http/https の場合は sourceUri をそのまま使い、
      * intent:// 等のカスタムスキームの場合は fallbackUrl を使用する。
      */

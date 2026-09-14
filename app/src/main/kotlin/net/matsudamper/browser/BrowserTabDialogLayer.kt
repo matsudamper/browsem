@@ -180,7 +180,7 @@ internal fun BrowserTabDialogLayer(
     state.pendingExternalAppLaunch?.let { request ->
         AlertDialog(
             onDismissRequest = {
-                state.dismissPendingExternalAppLaunch()
+                state.dismissPendingExternalAppLaunchAndLoadInBrowser()
             },
             title = { Text("アプリを開く") },
             text = {
