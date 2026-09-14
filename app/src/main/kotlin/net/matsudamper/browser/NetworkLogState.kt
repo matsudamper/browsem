@@ -33,7 +33,6 @@ import net.matsudamper.browser.feature.networklog.NetworkLogBody
 import net.matsudamper.browser.feature.networklog.NetworkLogEntry
 import net.matsudamper.browser.feature.networklog.NetworkLogStore
 import net.matsudamper.browser.feature.networklog.NetworkLogWebExtension
-import net.matsudamper.browser.feature.networklog.NetworkResourceType
 import org.koin.compose.koinInject
 import org.mozilla.geckoview.GeckoSession
 
@@ -134,16 +133,22 @@ internal class NetworkLogStateHolder(
     private data class ShownEntry(
         val entry: NetworkLogEntry,
         val domainHeader: String?,
+        val domainHeaderKey: String?,
+        val clearTabIds: List<Int>?,
     )
 
     private data class ShownSection(
         val domain: String,
         val startedAtMillis: Long,
+        val tabIds: List<Int>,
         val entries: List<NetworkLogEntry>,
     )
 
     // 表示対象の tabId。null の場合は全タブ分を表示する
     private var currentTabIds: List<Int>? = null
+
+    // 表示中のドメインセクションごとの消去対象 tabId
+    private var currentSectionTabIds: Map<String, List<Int>> = mapOf()
 
     private val callbacks = object : NetworkLogUiState.Callbacks {
         override fun onSearchQueryChange(query: String) {
@@ -182,7 +187,23 @@ internal class NetworkLogStateHolder(
             tabIds.forEach { tabId ->
                 store.clear(tabId)
             }
+            extension.pruneTabIdHistories()
             selectedId = null
+            clearPreviewBody()
+        }
+
+        override fun onClickClearDomain(sectionKey: String) {
+            val tabIds = currentSectionTabIds[sectionKey].orEmpty()
+            if (tabIds.isEmpty()) return
+            val selectedTabId = selectedEntry()?.tabId
+            tabIds.forEach { tabId ->
+                store.clear(tabId)
+            }
+            extension.pruneTabIdHistories()
+            if (selectedTabId != null && selectedTabId in tabIds) {
+                selectedId = null
+                clearPreviewBody()
+            }
         }
 
         override fun onVisibleRangeChange(firstIndex: Int, lastIndex: Int) {
@@ -217,12 +238,19 @@ internal class NetworkLogStateHolder(
             tabEntries = tabEntries,
             tabIds = tabIds,
         )
+        currentSectionTabIds = shown.mapNotNull { shownEntry ->
+            val key = shownEntry.domainHeaderKey ?: return@mapNotNull null
+            key to shownEntry.clearTabIds.orEmpty()
+        }.toMap()
         showsThumbnail = filter == NetworkLogUiState.ResourceFilter.Image
         shownEntries = shown.map { it.entry }
         return NetworkLogUiState(
             callbacks = callbacks,
             entries = shown.map { shownEntry ->
-                shownEntry.entry.toUiStateEntry(domainHeader = shownEntry.domainHeader)
+                shownEntry.entry.toUiStateEntry(
+                    domainHeader = shownEntry.domainHeader,
+                    domainHeaderKey = shownEntry.domainHeaderKey,
+                )
             },
             filters = createFilters(tabEntries),
             searchQuery = searchQuery,
@@ -235,7 +263,7 @@ internal class NetworkLogStateHolder(
             } else {
                 null
             },
-            canClear = !tabIds.isNullOrEmpty(),
+            canClear = tabIds != null && tabEntries.isNotEmpty(),
             detail = detail,
         )
     }
@@ -299,7 +327,7 @@ internal class NetworkLogStateHolder(
         }
     }
 
-    /** サムネイルを記録する。上限を超えた分は古いものから捨てる */
+    /** サムネイルを記録する。上限を超えた分を古い方から捨てる */
     private fun putThumbnail(requestId: String, state: ThumbnailState) {
         if (thumbnails.put(requestId, state) == null) {
             thumbnailOrder.addLast(requestId)
@@ -432,7 +460,12 @@ internal class NetworkLogStateHolder(
     ): List<ShownEntry> {
         if (tabIds == null) {
             return filteredEntries.asReversed().map { entry ->
-                ShownEntry(entry = entry, domainHeader = null)
+                ShownEntry(
+                    entry = entry,
+                    domainHeader = null,
+                    domainHeaderKey = null,
+                    clearTabIds = null,
+                )
             }
         }
         val sections = tabIds.mapNotNull { tabId ->
@@ -444,6 +477,7 @@ internal class NetworkLogStateHolder(
             ShownSection(
                 domain = sectionDomain(allSectionEntries),
                 startedAtMillis = visibleSectionEntries.maxOf { it.startedAtMillis },
+                tabIds = listOf(tabId),
                 entries = visibleSectionEntries,
             )
         }.sortedByDescending { it.startedAtMillis }
@@ -452,6 +486,7 @@ internal class NetworkLogStateHolder(
                 val previous = lastOrNull()
                 if (previous?.domain == section.domain) {
                     this[lastIndex] = previous.copy(
+                        tabIds = previous.tabIds + section.tabIds,
                         entries = (previous.entries + section.entries)
                             .sortedByDescending { it.startedAtMillis },
                     )
@@ -461,24 +496,30 @@ internal class NetworkLogStateHolder(
             }
         }
         return mergedSections.flatMap { section ->
+            val key = sectionKey(section.tabIds)
             section.entries.mapIndexed { index, entry ->
+                val isFirst = index == 0
                 ShownEntry(
                     entry = entry,
-                    domainHeader = section.domain.takeIf { index == 0 },
+                    domainHeader = section.domain.takeIf { isFirst },
+                    domainHeaderKey = key.takeIf { isFirst },
+                    clearTabIds = section.tabIds.takeIf { isFirst },
                 )
             }
         }
     }
 
+    private fun sectionKey(tabIds: List<Int>): String = "tab:${tabIds.last()}"
+
     private fun sectionDomain(entries: List<NetworkLogEntry>): String {
-        val documentHost = entries.firstNotNullOfOrNull { entry ->
-            if (entry.resourceType == NetworkResourceType.Document) {
+        val mainFrameHost = entries.firstNotNullOfOrNull { entry ->
+            if (entry.isMainFrame) {
                 NetworkLogFormat.hostOf(entry.url).takeIf { it.isNotEmpty() }
             } else {
                 null
             }
         }
-        if (documentHost != null) return documentHost
+        if (mainFrameHost != null) return mainFrameHost
         return entries.firstNotNullOfOrNull { entry ->
             NetworkLogFormat.hostOf(entry.url).takeIf { it.isNotEmpty() }
         } ?: "不明なドメイン"
@@ -575,11 +616,15 @@ internal class NetworkLogStateHolder(
         }
     }
 
-    private fun NetworkLogEntry.toUiStateEntry(domainHeader: String?): NetworkLogUiState.Entry {
+    private fun NetworkLogEntry.toUiStateEntry(
+        domainHeader: String?,
+        domainHeaderKey: String?,
+    ): NetworkLogUiState.Entry {
         val requestId = requestId
         return NetworkLogUiState.Entry(
             id = requestId,
             domainHeader = domainHeader,
+            domainHeaderKey = domainHeaderKey,
             method = method,
             statusLabel = NetworkLogFormat.statusLabel(statusCode, error),
             statusKind = NetworkLogFormat.statusKind(statusCode, error),
