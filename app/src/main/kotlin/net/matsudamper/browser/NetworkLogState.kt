@@ -218,6 +218,7 @@ internal class NetworkLogStateHolder(
             onDismiss.invoke()
         }
     }
+
     /** 表示用の UiState を組み立てる */
     fun createUiState(allEntries: List<NetworkLogEntry>, tabIds: List<Int>?): NetworkLogUiState {
         currentTabIds = tabIds
