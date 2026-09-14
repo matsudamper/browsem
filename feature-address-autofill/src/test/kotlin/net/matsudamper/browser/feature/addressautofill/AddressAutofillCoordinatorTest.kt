@@ -31,7 +31,7 @@ class AddressAutofillCoordinatorTest {
         val env = createEnv()
         showNameSuggestions(env)
 
-        env.coordinator.onFieldBlur()
+        env.coordinator.onFieldBlur(env.session)
         advanceTimeBy(ADDRESS_AUTOFILL_BLUR_HIDE_WAIT_MS - 1)
         runCurrent()
         assertTrue(env.host.isBarVisible)
@@ -47,12 +47,12 @@ class AddressAutofillCoordinatorTest {
         val env = createEnv()
         showNameSuggestions(env)
 
-        env.coordinator.onFieldBlur()
+        env.coordinator.onFieldBlur(env.session)
         advanceTimeBy(ADDRESS_AUTOFILL_BLUR_HIDE_WAIT_MS / 2)
         runCurrent()
         assertTrue(env.host.isBarVisible)
 
-        env.coordinator.onFieldFocus(FIELD_KIND_NAME)
+        env.coordinator.onFieldFocus(env.session, FIELD_KIND_NAME)
         advanceTimeBy(ADDRESS_AUTOFILL_IME_READY_WAIT_MS)
         runCurrent()
         assertTrue(env.host.isBarVisible)
@@ -68,7 +68,7 @@ class AddressAutofillCoordinatorTest {
         val env = createEnv()
         showNameSuggestions(env)
 
-        env.coordinator.onFieldBlur()
+        env.coordinator.onFieldBlur(env.session)
         env.coordinator.onAddressFetch(1)
         advanceTimeBy(ADDRESS_AUTOFILL_BLUR_HIDE_WAIT_MS)
         advanceTimeBy(ADDRESS_AUTOFILL_IME_READY_WAIT_MS)
@@ -83,7 +83,7 @@ class AddressAutofillCoordinatorTest {
         )
         showNameSuggestions(env)
 
-        env.coordinator.onFieldFocus(FIELD_KIND_EMAIL)
+        env.coordinator.onFieldFocus(env.session, FIELD_KIND_EMAIL)
         advanceTimeBy(ADDRESS_AUTOFILL_IME_READY_WAIT_MS)
         advanceUntilIdle()
         assertFalse(env.host.isBarVisible)
@@ -94,7 +94,7 @@ class AddressAutofillCoordinatorTest {
         val env = createEnv()
         showNameSuggestions(env)
 
-        env.coordinator.onFocusPortDisconnected()
+        env.coordinator.onFocusPortDisconnected(env.session)
         runCurrent()
         assertFalse(env.host.isBarVisible)
         assertEquals(FIELD_KIND_OTHER, env.host.focusedAutofillKind)
@@ -113,7 +113,7 @@ class AddressAutofillCoordinatorTest {
     @Test
     fun 非住所欄フォーカス後の住所取得では候補バーを出さない() = runTest {
         val env = createEnv()
-        env.coordinator.onFieldFocus(FIELD_KIND_OTHER)
+        env.coordinator.onFieldFocus(env.session, FIELD_KIND_OTHER)
 
         env.coordinator.onAddressFetch(1)
         advanceTimeBy(ADDRESS_AUTOFILL_IME_READY_WAIT_MS)
@@ -126,10 +126,28 @@ class AddressAutofillCoordinatorTest {
         val env = createEnv()
         showNameSuggestions(env)
 
-        env.coordinator.onFieldFocus(FIELD_KIND_OTHER)
+        env.coordinator.onFieldFocus(env.session, FIELD_KIND_OTHER)
         runCurrent()
         assertFalse(env.host.isBarVisible)
         assertEquals(FIELD_KIND_OTHER, env.host.focusedAutofillKind)
+    }
+
+    @Test
+    fun 別画面を接続しても元の画面に候補バーを出す() = runTest {
+        val env = createEnv()
+        val otherHost = FakeHost(this)
+        val otherSession = mockk<GeckoSession>(relaxed = true)
+        env.coordinator.attach(
+            session = otherSession,
+            host = otherHost,
+            addressRepository = env.repository,
+        )
+
+        env.coordinator.onFieldFocus(env.session, FIELD_KIND_EMAIL)
+        advanceTimeBy(ADDRESS_AUTOFILL_IME_READY_WAIT_MS)
+        advanceUntilIdle()
+        assertTrue(env.host.isBarVisible)
+        assertFalse(otherHost.isBarVisible)
     }
 
     private fun TestScope.createEnv(
@@ -143,16 +161,17 @@ class AddressAutofillCoordinatorTest {
             fillExtension = mockk(relaxed = true),
             ioDispatcher = dispatcher,
         )
+        val session = mockk<GeckoSession>(relaxed = true)
         coordinator.attach(
-            session = mockk<GeckoSession>(relaxed = true),
+            session = session,
             host = host,
             addressRepository = repository,
         )
-        return TestEnv(coordinator, host)
+        return TestEnv(coordinator, host, session, repository)
     }
 
     private fun TestScope.showNameSuggestions(env: TestEnv) {
-        env.coordinator.onFieldFocus(FIELD_KIND_NAME)
+        env.coordinator.onFieldFocus(env.session, FIELD_KIND_NAME)
         advanceTimeBy(ADDRESS_AUTOFILL_IME_READY_WAIT_MS)
         advanceUntilIdle()
         assertTrue(env.host.isBarVisible)
@@ -162,6 +181,8 @@ class AddressAutofillCoordinatorTest {
     private class TestEnv(
         val coordinator: AddressAutofillCoordinator,
         val host: FakeHost,
+        val session: GeckoSession,
+        val repository: AddressRepository,
     )
 
     private class FakeHost(

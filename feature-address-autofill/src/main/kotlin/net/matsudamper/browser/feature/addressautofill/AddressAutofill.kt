@@ -66,165 +66,202 @@ class AddressAutofillCoordinator(
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) {
     private val lock = Any()
-    private var attached: Attached? = null
-    private var showJob: Job? = null
-    private var hideJob: Job? = null
-    private var lastFieldKind: String? = null
-    private var focusGeneration: Int = 0
-    private var suppressFocusUntilElapsed: Long = 0L
-    private var suppressFocusKind: String? = null
+
+    /**
+     * Custom Tab・ウェブアプリは通常ブラウザと同一プロセスで同時に生存する。
+     * 接続を 1 つしか持たないと後から開いた画面が候補バーの宛先を奪い、
+     * 先に開いていた画面では候補が出なくなるため、セッション単位で保持する。
+     */
+    private val attachedSessions = LinkedHashMap<GeckoSession, Attached>()
+
+    /** 住所取得は通知にセッションが含まれないため、直近でフォーカスがあった画面へ向ける。 */
+    private var lastFocusedSession: GeckoSession? = null
 
     private class Attached(
         val session: GeckoSession,
         val host: AddressAutofillHost,
         val addressRepository: AddressRepository,
-    )
+    ) {
+        var showJob: Job? = null
+        var hideJob: Job? = null
+        var lastFieldKind: String? = null
+        var suppressFocusUntilElapsed: Long = 0L
+        var suppressFocusKind: String? = null
+
+        fun cancelJobs() {
+            showJob?.cancel()
+            showJob = null
+            hideJob?.cancel()
+            hideJob = null
+        }
+
+        fun isFocusSuppressed(kind: String): Boolean {
+            if (SystemClock.elapsedRealtime() >= suppressFocusUntilElapsed) return false
+            return when (suppressFocusKind) {
+                FIELD_KIND_EMAIL -> kind == FIELD_KIND_EMAIL
+                else -> kind == FIELD_KIND_ADDRESS || kind == FIELD_KIND_NAME
+            }
+        }
+    }
 
     fun attach(
         session: GeckoSession,
         host: AddressAutofillHost,
         addressRepository: AddressRepository,
     ) {
-        synchronized(lock) {
-            showJob?.cancel()
-            showJob = null
-            hideJob?.cancel()
-            hideJob = null
-            attached = Attached(session, host, addressRepository)
-            host.focusedAutofillKind = lastFieldKind
-            host.onAddressSelectOptions = { options ->
-                val kind = suggestionKindFromFieldKind(synchronized(lock) { lastFieldKind })
-                presentCompletions(options.map { it.value }, kind)
+        val attached = synchronized(lock) {
+            val previous = attachedSessions.remove(session)
+            previous?.cancelJobs()
+            Attached(session, host, addressRepository).also {
+                it.lastFieldKind = previous?.lastFieldKind
+                attachedSessions[session] = it
             }
         }
-        fillExtension.onFieldFocus = { kind -> onFieldFocus(kind) }
-        fillExtension.onFieldBlur = { onFieldBlur() }
-        fillExtension.onFocusPortDisconnected = { onFocusPortDisconnected() }
-        fillExtension.registerSession(session)
+        host.focusedAutofillKind = attached.lastFieldKind
+        host.onAddressSelectOptions = { options ->
+            val kind = suggestionKindFromFieldKind(synchronized(lock) { attached.lastFieldKind })
+            presentCompletions(attached, options.map { it.value }, kind)
+        }
+        fillExtension.registerSession(
+            session,
+            object : AddressAutofillWebExtension.SessionListener {
+                override fun onFieldFocus(kind: String) {
+                    this@AddressAutofillCoordinator.onFieldFocus(session, kind)
+                }
+
+                override fun onFieldBlur() {
+                    this@AddressAutofillCoordinator.onFieldBlur(session)
+                }
+
+                override fun onFocusPortDisconnected() {
+                    this@AddressAutofillCoordinator.onFocusPortDisconnected(session)
+                }
+            },
+        )
     }
 
     fun detach(session: GeckoSession) {
         fillExtension.unregisterSession(session)
-        synchronized(lock) {
-            if (attached?.session !== session) return
-            fillExtension.onFieldFocus = null
-            fillExtension.onFieldBlur = null
-            fillExtension.onFocusPortDisconnected = null
-            showJob?.cancel()
-            showJob = null
-            hideJob?.cancel()
-            hideJob = null
-            focusGeneration += 1
-            attached?.host?.focusedAutofillKind = null
-            attached?.host?.onAddressSelectOptions = null
-            attached?.host?.hideAddressAutofillBar()
-            attached = null
-            lastFieldKind = null
-        }
+        val attached = synchronized(lock) {
+            if (lastFocusedSession === session) {
+                lastFocusedSession = null
+            }
+            attachedSessions.remove(session)?.also { it.cancelJobs() }
+        } ?: return
+        attached.host.focusedAutofillKind = null
+        attached.host.onAddressSelectOptions = null
+        attached.host.hideAddressAutofillBar()
     }
 
     private fun fillSelectedAddress(
+        attached: Attached,
         address: Autocomplete.Address,
         mode: AddressAutofillFillMode,
     ) {
-        val current = synchronized(lock) {
-            showJob?.cancel()
-            showJob = null
-            hideJob?.cancel()
-            hideJob = null
-            focusGeneration += 1
-            suppressFocusUntilElapsed = SystemClock.elapsedRealtime() + FILL_FOCUS_SUPPRESS_MS
-            suppressFocusKind = when (mode) {
+        synchronized(lock) {
+            if (attachedSessions[attached.session] !== attached) return
+            attached.cancelJobs()
+            attached.suppressFocusUntilElapsed =
+                SystemClock.elapsedRealtime() + FILL_FOCUS_SUPPRESS_MS
+            attached.suppressFocusKind = when (mode) {
                 AddressAutofillFillMode.Email -> FIELD_KIND_EMAIL
                 AddressAutofillFillMode.Address -> FIELD_KIND_ADDRESS
             }
-            attached
-        } ?: return
-        current.host.hideAddressAutofillBar()
-        fillAddressOnSession(current.session, address, mode)
-        fillExtension.fill(current.session, address, mode)
+        }
+        attached.host.hideAddressAutofillBar()
+        fillAddressOnSession(attached.session, address, mode)
+        fillExtension.fill(attached.session, address, mode)
     }
 
     fun onAddressFetch(count: Int) {
         if (count <= 0) return
-        val current = synchronized(lock) {
+        val target = synchronized(lock) {
+            val attached = lastFocusedSession?.let { attachedSessions[it] }
+                ?: attachedSessions.values.lastOrNull()
+                ?: return
             // メール欄では住所候補を出さない。それ以外はフォーカス判定まで保留する。
-            if (lastFieldKind == FIELD_KIND_EMAIL) {
+            if (attached.lastFieldKind == FIELD_KIND_EMAIL) {
                 Log.i(TAG, "onAddressFetch skipped: last field is email")
                 return
             }
-            if (isFocusSuppressed(FIELD_KIND_ADDRESS)) {
+            if (attached.isFocusSuppressed(FIELD_KIND_ADDRESS)) {
                 Log.i(TAG, "onAddressFetch ignored after address fill")
                 return
             }
             attached
-        } ?: return
+        }
         Log.i(TAG, "onAddressFetch schedule suggestion bar count=$count")
-        val kind = suggestionKindFromFieldKind(synchronized(lock) { lastFieldKind })
+        val kind = suggestionKindFromFieldKind(synchronized(lock) { target.lastFieldKind })
         synchronized(lock) {
-            showJob?.cancel()
-            showJob = current.host.coroutineScope.launch {
+            target.showJob?.cancel()
+            target.showJob = target.host.coroutineScope.launch {
                 scheduleSuggestionBar(
-                    addressRepository = current.addressRepository,
+                    addressRepository = target.addressRepository,
                     kind = kind,
                     shouldAbort = {
                         synchronized(lock) {
-                            shouldAbortAddressFetchAfterFocusSettled() ||
-                                isFocusSuppressed(FIELD_KIND_ADDRESS)
+                            attachedSessions[target.session] !== target ||
+                                shouldAbortAddressFetchAfterFocusSettled(target) ||
+                                target.isFocusSuppressed(FIELD_KIND_ADDRESS)
                         }
                     },
-                    present = ::presentCompletions,
+                    present = { addresses, suggestionKind ->
+                        presentCompletions(target, addresses, suggestionKind)
+                    },
                     ioDispatcher = ioDispatcher,
                 )
             }
         }
     }
 
-    fun onFieldFocus(kind: String) {
+    fun onFieldFocus(session: GeckoSession, kind: String) {
         if (kind == FIELD_KIND_OTHER) {
-            val current = synchronized(lock) {
-                attached?.host?.autofillBarHideGeneration += 1
-                lastFieldKind = kind
-                focusGeneration += 1
-                showJob?.cancel()
-                showJob = null
-                hideJob?.cancel()
-                hideJob = null
+            val attached = synchronized(lock) {
+                val attached = attachedSessions[session] ?: return
+                attached.host.autofillBarHideGeneration += 1
+                attached.lastFieldKind = kind
+                attached.cancelJobs()
+                lastFocusedSession = session
                 attached
-            } ?: return
-            current.host.focusedAutofillKind = kind
-            current.host.hideAddressAutofillBar()
+            }
+            attached.host.focusedAutofillKind = kind
+            attached.host.hideAddressAutofillBar()
             Log.i(TAG, "field-focus kind=other")
             return
         }
         if (kind != FIELD_KIND_ADDRESS && kind != FIELD_KIND_NAME && kind != FIELD_KIND_EMAIL) return
-        val current = synchronized(lock) {
-            attached?.host?.autofillBarHideGeneration += 1
-            if (isFocusSuppressed(kind)) {
+        val attached = synchronized(lock) {
+            val attached = attachedSessions[session] ?: return
+            attached.host.autofillBarHideGeneration += 1
+            if (attached.isFocusSuppressed(kind)) {
                 Log.i(TAG, "field-focus ignored after fill kind=$kind")
                 return
             }
-            lastFieldKind = kind
-            focusGeneration += 1
-            hideJob?.cancel()
-            hideJob = null
+            attached.lastFieldKind = kind
+            attached.hideJob?.cancel()
+            attached.hideJob = null
+            lastFocusedSession = session
             attached
-        } ?: return
-        current.host.focusedAutofillKind = kind
+        }
+        attached.host.focusedAutofillKind = kind
         Log.i(TAG, "field-focus kind=$kind")
         val suggestionKind = suggestionKindFromFieldKind(kind)
         synchronized(lock) {
-            showJob?.cancel()
-            showJob = current.host.coroutineScope.launch {
+            attached.showJob?.cancel()
+            attached.showJob = attached.host.coroutineScope.launch {
                 scheduleSuggestionBar(
-                    addressRepository = current.addressRepository,
+                    addressRepository = attached.addressRepository,
                     kind = suggestionKind,
                     shouldAbort = {
                         synchronized(lock) {
-                            lastFieldKind != kind || isFocusSuppressed(kind)
+                            attachedSessions[session] !== attached ||
+                                attached.lastFieldKind != kind ||
+                                attached.isFocusSuppressed(kind)
                         }
                     },
-                    present = ::presentCompletions,
+                    present = { addresses, presentKind ->
+                        presentCompletions(attached, addresses, presentKind)
+                    },
                     ioDispatcher = ioDispatcher,
                 )
             }
@@ -236,20 +273,21 @@ class AddressAutofillCoordinator(
      * バーをタップすると Gecko 側は先に blur するため、即消しせず短時間待ってから消す。
      * 待ち時間内に候補タップや再フォーカスがあれば hide を取り消す。
      */
-    fun onFieldBlur() {
+    fun onFieldBlur(session: GeckoSession) {
         synchronized(lock) {
-            val current = attached ?: return
-            showJob?.cancel()
-            showJob = null
-            lastFieldKind = FIELD_KIND_OTHER
-            val hideGeneration = current.host.autofillBarHideGeneration
-            hideJob?.cancel()
-            hideJob = current.host.coroutineScope.launch {
+            val attached = attachedSessions[session] ?: return
+            attached.showJob?.cancel()
+            attached.showJob = null
+            attached.lastFieldKind = FIELD_KIND_OTHER
+            val hideGeneration = attached.host.autofillBarHideGeneration
+            attached.hideJob?.cancel()
+            attached.hideJob = attached.host.coroutineScope.launch {
                 delay(ADDRESS_AUTOFILL_BLUR_HIDE_WAIT_MS)
                 val host = synchronized(lock) {
-                    if (attached?.host?.autofillBarHideGeneration != hideGeneration) return@launch
-                    attached?.host
-                } ?: return@launch
+                    if (attachedSessions[session] !== attached) return@launch
+                    if (attached.host.autofillBarHideGeneration != hideGeneration) return@launch
+                    attached.host
+                }
                 host.focusedAutofillKind = FIELD_KIND_OTHER
                 host.hideAddressAutofillBar()
             }
@@ -261,26 +299,24 @@ class AddressAutofillCoordinator(
      * フォーカス中フレームのドキュメントが破棄されたとき。
      * 遷移後のページに古い候補バーを残さない。
      */
-    fun onFocusPortDisconnected() {
-        val current = synchronized(lock) {
-            showJob?.cancel()
-            showJob = null
-            hideJob?.cancel()
-            hideJob = null
-            lastFieldKind = FIELD_KIND_OTHER
-            focusGeneration += 1
+    fun onFocusPortDisconnected(session: GeckoSession) {
+        val attached = synchronized(lock) {
+            val attached = attachedSessions[session] ?: return
+            attached.cancelJobs()
+            attached.lastFieldKind = FIELD_KIND_OTHER
             attached
-        } ?: return
-        current.host.focusedAutofillKind = FIELD_KIND_OTHER
-        current.host.hideAddressAutofillBar()
+        }
+        attached.host.focusedAutofillKind = FIELD_KIND_OTHER
+        attached.host.hideAddressAutofillBar()
         Log.i(TAG, "focus port disconnected")
     }
 
     private fun presentCompletions(
+        attached: Attached,
         addresses: List<Autocomplete.Address>,
         kind: AddressAutofillSuggestionKind,
     ) {
-        val current = synchronized(lock) { attached } ?: return
+        if (synchronized(lock) { attachedSessions[attached.session] !== attached }) return
         val fillMode = kind.toFillMode()
         val items = if (kind == AddressAutofillSuggestionKind.Email) {
             addresses.filter { it.email.isNotBlank() }.distinctBy { it.email }
@@ -294,35 +330,27 @@ class AddressAutofillCoordinator(
                 AddressAutofillSuggestionItem(
                     label = label,
                     kind = kind,
-                    onClick = { fillSelectedAddress(address, fillMode) },
+                    onClick = { fillSelectedAddress(attached, address, fillMode) },
                 )
             }
         }
         if (items.isEmpty()) {
-            current.host.hideAddressAutofillBar()
+            attached.host.hideAddressAutofillBar()
             return
         }
         Log.i(TAG, "suggestion bar kind=$kind count=${items.size}")
-        current.host.showAddressAutofillBar(items)
+        attached.host.showAddressAutofillBar(items)
     }
 
     /**
      * [onAddressFetch] は shadow DOM 等でフォーカス通知が来ない場合のフォールバック。
      * 未確定 (null) のままなら出す。OTHER / EMAIL に確定したら出さない。
      */
-    private fun shouldAbortAddressFetchAfterFocusSettled(): Boolean {
-        return when (lastFieldKind) {
+    private fun shouldAbortAddressFetchAfterFocusSettled(attached: Attached): Boolean {
+        return when (attached.lastFieldKind) {
             FIELD_KIND_ADDRESS, FIELD_KIND_NAME, null -> false
             FIELD_KIND_EMAIL, FIELD_KIND_OTHER -> true
             else -> true
-        }
-    }
-
-    private fun isFocusSuppressed(kind: String): Boolean {
-        if (SystemClock.elapsedRealtime() >= suppressFocusUntilElapsed) return false
-        return when (suppressFocusKind) {
-            FIELD_KIND_EMAIL -> kind == FIELD_KIND_EMAIL
-            else -> kind == FIELD_KIND_ADDRESS || kind == FIELD_KIND_NAME
         }
     }
 }
@@ -424,7 +452,7 @@ class AddressAutofillDelegate(
         }
         // Gecko の Autofill 通知はメインスレッドではないことがある。
         // 候補バーは Compose 状態なので、ここでメインへ載せる。
-        mainHandler.post { coordinator.onFieldFocus(kind) }
+        mainHandler.post { coordinator.onFieldFocus(session, kind) }
     }
 
     override fun onNodeBlur(
@@ -434,7 +462,7 @@ class AddressAutofillDelegate(
     ) {
         wrapped?.onNodeBlur(session, node, data)
         // バーをタップすると Gecko 側は blur するため、即消しせず Coordinator 側で遅延 hide する
-        mainHandler.post { coordinator.onFieldBlur() }
+        mainHandler.post { coordinator.onFieldBlur(session) }
     }
 }
 
