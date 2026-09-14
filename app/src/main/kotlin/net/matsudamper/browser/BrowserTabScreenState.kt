@@ -1714,10 +1714,14 @@ internal class BrowserTabScreenState(
         if (pendingExternalAppLaunch != null) {
             return GeckoResult.fromValue(AllowOrDeny.DENY)
         }
-        return applyExternalAppNavigationAction(
-            uri = request.uri,
-            action = resolveExternalAppNavigationAction(context, request.uri),
-        )
+        val action = resolveExternalAppNavigationAction(context, request.uri)
+        if (action is ExternalAppNavigationAction.OpenFallback) {
+            // fallback URL をトップレベルで読み込むと、iframe の第三者コンテンツが確認も
+            // ユーザー操作もなくタブごと任意の URL へ遷移させられる。読み込まずに止める。
+            saveExternalAppNavigationInfo(uri = request.uri, action = action)
+            return GeckoResult.fromValue(AllowOrDeny.DENY)
+        }
+        return applyExternalAppNavigationAction(uri = request.uri, action = action)
     }
 
     private fun applyExternalAppNavigationAction(
