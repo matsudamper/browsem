@@ -17,6 +17,9 @@ internal object IcoDecoder {
     private const val ICON_DIR_ENTRY_SIZE = 16
     private const val ICON_TYPE = 1
 
+    // 壊れた ICO に数万件のエントリを並べられてもデコードを繰り返さないための上限
+    private const val MAX_DECODE_ATTEMPTS = 64
+
     // ICONDIRENTRY の幅・高さは 1 バイトのため 256 を 0 で表す
     private const val IMPLICIT_MAX_DIMENSION = 256
     private const val DIB_HEADER_MIN_SIZE = 40
@@ -51,13 +54,21 @@ internal object IcoDecoder {
         val buffer = bytes.littleEndianBuffer()
         val frameCount = buffer.getShort(4).toInt() and 0xFFFF
         if (frameCount <= 0) return null
-        return (0 until frameCount)
+        val frames = (0 until frameCount.coerceAtMost(MAX_DECODE_ATTEMPTS))
             .mapNotNull { index -> parseFrame(bytes, buffer, index) }
+            // 同じ範囲を指す ICONDIRENTRY を大量に並べた ICO で、同一データのデコードを繰り返さない
+            .distinctBy { it.dataOffset to it.dataLength }
             .sortedWith(
                 compareByDescending<IcoFrame> { it.width * it.height }
                     .thenByDescending { it.bitCount },
             )
-            .firstNotNullOfOrNull { frame -> decodeFrame(bytes, frame) }
+        for (frame in frames) {
+            // 呼び出し元のタイムアウトで interrupt された後もデコードを続けない
+            if (Thread.currentThread().isInterrupted) return null
+            val bitmap = decodeFrame(bytes, frame)
+            if (bitmap != null) return bitmap
+        }
+        return null
     }
 
     private fun parseFrame(bytes: ByteArray, buffer: ByteBuffer, index: Int): IcoFrame? {

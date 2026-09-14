@@ -137,6 +137,22 @@ class IcoDecoderTest {
     }
 
     @Test
+    fun decodeLargestFrame_tooManyFrames_上限までしか試さない() {
+        // 先頭に上限と同数の壊れたフレームを並べ、その後ろに有効なフレームを置く
+        val brokenFrames = List(DECODE_ATTEMPT_LIMIT) {
+            IcoFrameSource(width = 1, height = 1, bitCount = 1, data = ByteArray(4))
+        }
+        val validFrame = bgra32Frame(
+            width = 2,
+            height = 2,
+            colors = List(4) { OPAQUE_BLUE },
+            withAndMask = true,
+        )
+
+        assertNull(IcoDecoder.decodeLargestFrame(buildIco(brokenFrames + validFrame)))
+    }
+
+    @Test
     fun decodeLargestFrame_frameDataOutOfRange_returnsNull() {
         val ico = buildIco(listOf(bgra32Frame(width = 1, height = 1, colors = listOf(OPAQUE_RED), withAndMask = true)))
         val broken = ico.copyOf()
@@ -272,6 +288,7 @@ class IcoDecoderTest {
         const val ICON_DIR_SIZE = 6
         const val ICON_DIR_ENTRY_SIZE = 16
         const val DIB_HEADER_SIZE = 40
+        const val DECODE_ATTEMPT_LIMIT = 64
         const val OPAQUE_RED = 0xFFFF0000.toInt()
         const val OPAQUE_BLUE = 0xFF0000FF.toInt()
         const val TRANSLUCENT_GREEN = 0x8000FF00.toInt()
