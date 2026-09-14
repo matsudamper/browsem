@@ -8,6 +8,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import mozilla.components.lib.publicsuffixlist.PublicSuffixList
+import net.matsudamper.browser.BrowserSessionRegistry
 import net.matsudamper.browser.BrowserViewModel
 import net.matsudamper.browser.DownloadWorker
 import net.matsudamper.browser.ExtensionRuntimeCoordinator
@@ -126,7 +127,12 @@ val appModule = module {
     single { MockLocationWebExtension().also { it.install(get()) } }
     // 通信ログはランタイム単位で収集するため、ストア・拡張機能ともに single で管理
     single { NetworkLogStore() }
-    single { NetworkLogWebExtension(get()).also { it.install(get()) } }
+    single {
+        NetworkLogWebExtension(get()).also { extension ->
+            BrowserSessionRegistry.setSessionDisposedListener(extension::disposeSession)
+            extension.install(get())
+        }
+    }
     single { ViewportScaleWebExtension().also { it.install(get()) } }
     single { TwitterShareWebExtension().also { it.install(get()) } }
     single { WebShareFilesWebExtension().also { it.install(get()) } }
