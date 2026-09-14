@@ -1,0 +1,83 @@
+name: Apply document picker change
+
+on:
+  push:
+    branches:
+      - chatgpt/use-document-picker
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: chatgpt/use-document-picker
+
+      - name: Apply minimal source change
+        shell: bash
+        run: |
+          python <<'PY'
+          from pathlib import Path
+
+          tab_path = Path('app/src/main/kotlin/net/matsudamper/browser/GeckoBrowserTab.kt')
+          text = tab_path.read_text()
+          replacements = [
+              (
+                  '// ファイルピッカー（単一ファイル選択）Google Photos を含むピッカーを表示するため ACTION_GET_CONTENT を使用',
+                  '// ファイルピッカー（単一ファイル選択）クラウドの DocumentsProvider も一覧できる ACTION_OPEN_DOCUMENT を使用',
+              ),
+              ('GetContentWithMimeTypes()', 'OpenDocumentWithMimeTypes()'),
+              (
+                  '// ファイルピッカー（複数ファイル選択）Google Photos を含むピッカーを表示するため ACTION_GET_CONTENT を使用',
+                  '// ファイルピッカー（複数ファイル選択）クラウドの DocumentsProvider も一覧できる ACTION_OPEN_DOCUMENT を使用',
+              ),
+              ('GetMultipleContentsWithMimeTypes()', 'OpenMultipleDocumentsWithMimeTypes()'),
+              (
+                  ' * ACTION_GET_CONTENT を使った単一ファイル選択コントラクト。\n * OpenDocument と異なり Google Photos などのフォトアプリもピッカーに表示される。',
+                  ' * ACTION_OPEN_DOCUMENT を使った単一ファイル選択コントラクト。\n * DocumentsUI 上でローカルとクラウドの DocumentsProvider をまとめて選択できる。',
+              ),
+              ('private class GetContentWithMimeTypes :', 'private class OpenDocumentWithMimeTypes :'),
+              (
+                  ' * ACTION_GET_CONTENT を使った複数ファイル選択コントラクト。\n * OpenMultipleDocuments と異なり Google Photos などのフォトアプリもピッカーに表示される。',
+                  ' * ACTION_OPEN_DOCUMENT を使った複数ファイル選択コントラクト。\n * DocumentsUI 上でローカルとクラウドの DocumentsProvider をまとめて選択できる。',
+              ),
+              ('private class GetMultipleContentsWithMimeTypes :', 'private class OpenMultipleDocumentsWithMimeTypes :'),
+          ]
+          for old, new in replacements:
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'expected exactly one occurrence: {old!r}, found {count}')
+              text = text.replace(old, new)
+
+          action_count = text.count('Intent.ACTION_GET_CONTENT')
+          if action_count != 2:
+              raise SystemExit(f'expected two ACTION_GET_CONTENT occurrences, found {action_count}')
+          text = text.replace('Intent.ACTION_GET_CONTENT', 'Intent.ACTION_OPEN_DOCUMENT')
+          tab_path.write_text(text)
+
+          prompt_path = Path('app/src/main/kotlin/net/matsudamper/browser/PromptDialogState.kt')
+          prompt = prompt_path.read_text()
+          old = '''                // ACTION_GET_CONTENT が返す content URI は一時的な読み取り権限しか持たない場合があり、
+                // GeckoView が非同期で読み取る際に権限が失効する可能性がある。
+                // そのため、コンテンツをキャッシュファイルにコピーしてから GeckoView に渡す。'''
+          new = '''                // ピッカーが返す content URI は GeckoView が非同期で読み取るまで権限が有効とは限らないため、
+                // コンテンツをキャッシュファイルにコピーしてから GeckoView に渡す。'''
+          count = prompt.count(old)
+          if count != 1:
+              raise SystemExit(f'expected file prompt comment once, found {count}')
+          prompt_path.write_text(prompt.replace(old, new))
+          PY
+
+      - name: Commit source change and remove helper workflow
+        shell: bash
+        run: |
+          rm .github/workflows/apply-document-picker.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app/src/main/kotlin/net/matsudamper/browser/GeckoBrowserTab.kt app/src/main/kotlin/net/matsudamper/browser/PromptDialogState.kt .github/workflows/apply-document-picker.yml
+          git commit -m 'ファイルピッカーをクラウド対応のドキュメントピッカーへ変更'
+          git push origin HEAD:chatgpt/use-document-picker
