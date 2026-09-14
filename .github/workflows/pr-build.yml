@@ -138,6 +138,11 @@ jobs:
   android-test:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # TODO: flaky 修正の確認用。10 回すべて緑を確認したら matrix ごと削除する。
+    strategy:
+      fail-fast: false
+      matrix:
+        attempt: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
     steps:
       - name: Checkout
@@ -182,7 +187,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: app-androidtest-report
+          name: app-androidtest-report-${{ matrix.attempt }}
           path: |
             app/build/reports/androidTests/managedDevice/debug/pixel6Api34
             app/build/outputs/androidTest-results/managedDevice/debug/pixel6Api34
