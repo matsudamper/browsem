@@ -26,6 +26,8 @@ internal data class NetworkLogUiState(
     @Immutable
     data class Entry(
         val id: String,
+        /** この行の直前に表示するドメイン見出し。セクション先頭以外は null */
+        val domainHeader: String?,
         val method: String,
         val statusLabel: String,
         val statusKind: StatusKind,

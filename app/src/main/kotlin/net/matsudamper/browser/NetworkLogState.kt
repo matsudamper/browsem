@@ -33,13 +33,14 @@ import net.matsudamper.browser.feature.networklog.NetworkLogBody
 import net.matsudamper.browser.feature.networklog.NetworkLogEntry
 import net.matsudamper.browser.feature.networklog.NetworkLogStore
 import net.matsudamper.browser.feature.networklog.NetworkLogWebExtension
+import net.matsudamper.browser.feature.networklog.NetworkResourceType
 import org.koin.compose.koinInject
 import org.mozilla.geckoview.GeckoSession
 
 /**
  * ネットワークログ画面の UiState を組み立てる。
  * 通信ログの収集自体は [NetworkLogWebExtension] が常時行っており、
- * ここでは表示中のタブの分を絞り込んで表示に変換する。
+ * ここでは表示中のセッションに紐づく tabId の履歴で絞り込んで表示に変換する。
  */
 @Composable
 internal fun rememberNetworkLogUiState(
@@ -61,14 +62,14 @@ internal fun rememberNetworkLogUiState(
         )
     }
     val entries by store.entries.collectAsState()
-    val tabIds by extension.sessionTabIds.collectAsState()
-    val tabId = tabIds[session]
+    val tabIdHistories by extension.sessionTabIdHistories.collectAsState()
+    val tabIds = tabIdHistories[session]
 
     // 詳細を開いた時と再取得を押した時にプレビューを読み込む
     LaunchedEffect(holder, holder.selectedId, holder.previewReloadCount) {
         holder.loadPreview()
     }
-    val uiState = holder.createUiState(allEntries = entries, tabId = tabId)
+    val uiState = holder.createUiState(allEntries = entries, tabIds = tabIds)
     // 画像フィルタ選択中は一覧のサムネイルを読み込む。
     // 読み込み結果で entries 自体が変わるため、対象が変わったときだけ動くようキーを絞る
     val thumbnailKey = uiState.filters.firstOrNull { it.isSelected }?.type to
@@ -130,8 +131,19 @@ internal class NetworkLogStateHolder(
     /** サムネイルの取得状態 */
     private class ThumbnailState(val bitmap: ImageBitmap?)
 
-    // 表示対象のタブ ID。null の場合は全タブ分を表示する
-    private var currentTabId: Int? = null
+    private data class ShownEntry(
+        val entry: NetworkLogEntry,
+        val domainHeader: String?,
+    )
+
+    private data class ShownSection(
+        val domain: String,
+        val startedAtMillis: Long,
+        val entries: List<NetworkLogEntry>,
+    )
+
+    // 表示対象の tabId。null の場合は全タブ分を表示する
+    private var currentTabIds: List<Int>? = null
 
     private val callbacks = object : NetworkLogUiState.Callbacks {
         override fun onSearchQueryChange(query: String) {
@@ -164,10 +176,12 @@ internal class NetworkLogStateHolder(
         }
 
         override fun onClickClear() {
-            // タブを特定できていない間は全タブ分を表示しているため、
+            // tabId を特定できていない間は全タブ分を表示しているため、
             // ここでクリアすると他のタブのログまで消えてしまう
-            val tabId = currentTabId ?: return
-            store.clear(tabId)
+            val tabIds = currentTabIds ?: return
+            tabIds.forEach { tabId ->
+                store.clear(tabId)
+            }
             selectedId = null
         }
 
@@ -185,12 +199,12 @@ internal class NetworkLogStateHolder(
     }
 
     /** 表示用の UiState を組み立てる */
-    fun createUiState(allEntries: List<NetworkLogEntry>, tabId: Int?): NetworkLogUiState {
-        currentTabId = tabId
-        val tabEntries = if (tabId == null) {
+    fun createUiState(allEntries: List<NetworkLogEntry>, tabIds: List<Int>?): NetworkLogUiState {
+        currentTabIds = tabIds
+        val tabEntries = if (tabIds == null) {
             allEntries
         } else {
-            allEntries.filter { it.tabId == tabId }
+            allEntries.filter { it.tabId in tabIds }
         }
         val filtered = tabEntries.filter {
             NetworkLogFormat.matches(entry = it, filter = filter, query = searchQuery)
@@ -199,24 +213,30 @@ internal class NetworkLogStateHolder(
             ?.let { id -> tabEntries.firstOrNull { it.requestId == id } }
             ?.toDetail()
         // サムネイルは画像フィルタを選んでいるときだけ出す
-        val shown = filtered.asReversed()
+        val shown = createShownEntries(
+            filteredEntries = filtered,
+            tabEntries = tabEntries,
+            tabIds = tabIds,
+        )
         showsThumbnail = filter == NetworkLogUiState.ResourceFilter.Image
-        shownEntries = shown
+        shownEntries = shown.map { it.entry }
         return NetworkLogUiState(
             callbacks = callbacks,
-            entries = shown.map { it.toUiStateEntry() },
+            entries = shown.map { shownEntry ->
+                shownEntry.entry.toUiStateEntry(domainHeader = shownEntry.domainHeader)
+            },
             filters = createFilters(tabEntries),
             searchQuery = searchQuery,
             summary = NetworkLogUiState.Summary(
                 countLabel = "${filtered.size} 件",
                 sizeLabel = NetworkLogFormat.formatBytes(filtered.sumOf { it.sizeBytes }),
             ),
-            notice = if (tabId == null) {
+            notice = if (tabIds == null) {
                 "タブを特定中のため、すべてのタブの通信を表示しています"
             } else {
                 null
             },
-            canClear = tabId != null,
+            canClear = !tabIds.isNullOrEmpty(),
             detail = detail,
         )
     }
@@ -406,6 +426,65 @@ internal class NetworkLogStateHolder(
         return store.entries.value.firstOrNull { it.requestId == id }
     }
 
+    private fun createShownEntries(
+        filteredEntries: List<NetworkLogEntry>,
+        tabEntries: List<NetworkLogEntry>,
+        tabIds: List<Int>?,
+    ): List<ShownEntry> {
+        if (tabIds == null) {
+            return filteredEntries.asReversed().map { entry ->
+                ShownEntry(entry = entry, domainHeader = null)
+            }
+        }
+        val sections = tabIds.mapNotNull { tabId ->
+            val allSectionEntries = tabEntries.filter { it.tabId == tabId }
+            val visibleSectionEntries = filteredEntries
+                .filter { it.tabId == tabId }
+                .sortedByDescending { it.startedAtMillis }
+            if (visibleSectionEntries.isEmpty()) return@mapNotNull null
+            ShownSection(
+                domain = sectionDomain(allSectionEntries),
+                startedAtMillis = allSectionEntries.minOfOrNull { it.startedAtMillis } ?: 0L,
+                entries = visibleSectionEntries,
+            )
+        }.sortedByDescending { it.startedAtMillis }
+        val mergedSections = buildList {
+            sections.forEach { section ->
+                val previous = lastOrNull()
+                if (previous?.domain == section.domain) {
+                    this[lastIndex] = previous.copy(
+                        entries = (previous.entries + section.entries)
+                            .sortedByDescending { it.startedAtMillis },
+                    )
+                } else {
+                    add(section)
+                }
+            }
+        }
+        return mergedSections.flatMap { section ->
+            section.entries.mapIndexed { index, entry ->
+                ShownEntry(
+                    entry = entry,
+                    domainHeader = section.domain.takeIf { index == 0 },
+                )
+            }
+        }
+    }
+
+    private fun sectionDomain(entries: List<NetworkLogEntry>): String {
+        val documentHost = entries.firstNotNullOfOrNull { entry ->
+            if (entry.resourceType == NetworkResourceType.Document) {
+                NetworkLogFormat.hostOf(entry.url).takeIf { it.isNotEmpty() }
+            } else {
+                null
+            }
+        }
+        if (documentHost != null) return documentHost
+        return entries.firstNotNullOfOrNull { entry ->
+            NetworkLogFormat.hostOf(entry.url).takeIf { it.isNotEmpty() }
+        } ?: "不明なドメイン"
+    }
+
     private fun createFilters(entries: List<NetworkLogEntry>): List<NetworkLogUiState.Filter> {
         return NetworkLogUiState.ResourceFilter.entries.mapNotNull { candidate ->
             val count = if (candidate == NetworkLogUiState.ResourceFilter.All) {
@@ -497,10 +576,11 @@ internal class NetworkLogStateHolder(
         }
     }
 
-    private fun NetworkLogEntry.toUiStateEntry(): NetworkLogUiState.Entry {
+    private fun NetworkLogEntry.toUiStateEntry(domainHeader: String?): NetworkLogUiState.Entry {
         val requestId = requestId
         return NetworkLogUiState.Entry(
             id = requestId,
+            domainHeader = domainHeader,
             method = method,
             statusLabel = NetworkLogFormat.statusLabel(statusCode, error),
             statusKind = NetworkLogFormat.statusKind(statusCode, error),

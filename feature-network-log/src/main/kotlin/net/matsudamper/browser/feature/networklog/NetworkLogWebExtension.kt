@@ -34,10 +34,17 @@ class NetworkLogWebExtension(
     // バックグラウンドスクリプトとのポート
     private var backgroundPort: WebExtension.Port? = null
 
-    // セッションごとの webRequest 上の tabId。
+    // セッションごとの現在の webRequest 上の tabId。
     // 対応付けは非同期に確定するため、UI が購読できるよう Flow で公開する
     private val _sessionTabIds = MutableStateFlow<Map<GeckoSession, Int>>(emptyMap())
     val sessionTabIds: StateFlow<Map<GeckoSession, Int>> = _sessionTabIds.asStateFlow()
+
+    // ドメイン遷移等で tabId が変わっても過去のログを同じセッションとして表示するため、
+    // セッションが生存している間に通知された tabId を保持する。
+    private val _sessionTabIdHistories =
+        MutableStateFlow<Map<GeckoSession, List<Int>>>(mapOf())
+    val sessionTabIdHistories: StateFlow<Map<GeckoSession, List<Int>>> =
+        _sessionTabIdHistories.asStateFlow()
 
     // 登録済みセッション（拡張のインストール完了後にデリゲートを張るために保持）
     private val registeredSessions: MutableSet<GeckoSession> =
@@ -84,6 +91,7 @@ class NetworkLogWebExtension(
         registeredSessions.remove(session)
         attachedSessions.remove(session)
         _sessionTabIds.update { it - session }
+        _sessionTabIdHistories.update { it - session }
         extension?.let { ext ->
             session.webExtensionController.setMessageDelegate(ext, null, TAB_NATIVE_APP_ID)
         }
@@ -192,6 +200,14 @@ class NetworkLogWebExtension(
                             val tabId = json.optInt("tabId", -1)
                             if (tabId < 0) return
                             _sessionTabIds.update { it + (session to tabId) }
+                            _sessionTabIdHistories.update { histories ->
+                                val history = histories[session].orEmpty()
+                                if (tabId in history) {
+                                    histories
+                                } else {
+                                    histories + (session to (history + tabId))
+                                }
+                            }
                         }
 
                         override fun onDisconnect(port: WebExtension.Port) = Unit
