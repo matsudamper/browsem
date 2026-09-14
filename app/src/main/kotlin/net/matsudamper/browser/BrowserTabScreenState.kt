@@ -63,7 +63,7 @@ import org.mozilla.geckoview.WebResponse
 
 private const val TAG = "BrowserTabScreenState"
 
-/** 1 ページあたりに残す外部アプリ遷移ログの上限 */
+/** タブ 1 つあたりに残す外部アプリ遷移ログの上限 */
 private const val MAX_EXTERNAL_APP_NAVIGATION_LOGS = 20
 
 private val PAGE_ZOOM_STEPS = listOf(20, 25, 33, 50, 67, 75, 80, 90, 100, 110, 125, 150, 175, 200)
@@ -468,7 +468,9 @@ internal class BrowserTabScreenState(
     var pendingDownloadResponse by mutableStateOf<WebResponse?>(null)
     var pendingExternalAppLaunch by mutableStateOf<PendingExternalAppLaunch?>(null)
 
-    // 同じ外部アプリ遷移ログを繰り返し保存しないための記録。ページ遷移でクリアする。
+    // 同じ外部アプリ遷移ログを繰り返し保存しないための記録。
+    // ページ遷移ではクリアしない。読み込みごとに違う要求を出すページが自動リロードを
+    // 繰り返すと、そのたびに上限まで保存できてしまうため。
     private val savedExternalAppNavigationKeys = mutableSetOf<String>()
 
     // 確認ダイアログを閉じたときに、その要求の URL を現在のタブで読み込んでよいか。
@@ -1600,7 +1602,6 @@ internal class BrowserTabScreenState(
 
     override fun onPageStart(url: String) {
         clearPageLoadError()
-        savedExternalAppNavigationKeys.clear()
         visualViewportScale = 1f
         // previewCaptureReady は false に戻さない。
         // GeckoView は新ページの描画が始まるまで古いページを表示し続けるため、
@@ -1791,7 +1792,7 @@ internal class BrowserTabScreenState(
      * URL は scheme とホストだけに切り詰め、Intent の中身も残さない。認証の受け渡しでは
      * パス・クエリ・フラグメントや extras に認可コードやトークンが載るため。
      *
-     * iframe から同じ要求を繰り返すページがあるため、同じ内容とページあたりの件数で絞る。
+     * iframe から要求を繰り返すページがあるため、同じ内容とタブあたりの件数で絞る。
      * クラッシュログには件数上限も自動削除も無く、メインスレッドで書き込むため。
      */
     private fun saveExternalAppNavigationInfo(
