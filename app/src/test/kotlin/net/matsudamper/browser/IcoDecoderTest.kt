@@ -46,6 +46,25 @@ class IcoDecoderTest {
     }
 
     @Test
+    fun decodeLargestFrame_declaredBitCountIsZero_実ビット深度で優先度を決める() {
+        val indexed = indexed8Frame(
+            width = 2,
+            height = 2,
+            palette = listOf(OPAQUE_RED),
+            paletteIndices = List(4) { 0 },
+            transparentPixels = List(4) { false },
+        )
+        val trueColor = bgra32Frame(width = 2, height = 2, colors = List(4) { OPAQUE_BLUE })
+        // ICONDIRENTRY の wBitCount を 0 にしても実データ側の深度で 32bpp が勝つ
+        val ico = buildIco(listOf(indexed.copy(bitCount = 0), trueColor.copy(bitCount = 0)))
+
+        val bitmap = IcoDecoder.decodeLargestFrame(ico)
+
+        assertNotNull(bitmap)
+        assertEquals(OPAQUE_BLUE, bitmap!!.getPixel(0, 0))
+    }
+
+    @Test
     fun decodeLargestFrame_bgra32_ピクセルの色とアルファを保持する() {
         val colors = listOf(OPAQUE_RED, OPAQUE_BLUE, TRANSLUCENT_GREEN, OPAQUE_RED)
         val ico = buildIco(listOf(bgra32Frame(width = 2, height = 2, colors = colors)))

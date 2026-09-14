@@ -25,6 +25,15 @@ internal object IcoDecoder {
     private const val OPAQUE_ALPHA = 0xFF
     private const val BITS_PER_PIXEL_WITH_ALPHA = 32
 
+    // PNG シグネチャ(8) + IHDR の length(4) と type(4) を挟んで width(4) と height(4) が続く
+    private const val PNG_BIT_DEPTH_OFFSET = 24
+    private const val PNG_COLOR_TYPE_OFFSET = 25
+    private const val PNG_COLOR_TYPE_GRAYSCALE = 0
+    private const val PNG_COLOR_TYPE_TRUE_COLOR = 2
+    private const val PNG_COLOR_TYPE_PALETTE = 3
+    private const val PNG_COLOR_TYPE_GRAYSCALE_ALPHA = 4
+    private const val PNG_COLOR_TYPE_TRUE_COLOR_ALPHA = 6
+
     private val pngSignature = byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A)
 
     fun isIcoData(bytes: ByteArray): Boolean {
@@ -43,7 +52,7 @@ internal object IcoDecoder {
         val frameCount = buffer.getShort(4).toInt() and 0xFFFF
         if (frameCount <= 0) return null
         return (0 until frameCount)
-            .mapNotNull { index -> parseFrame(buffer, bytes.size, index) }
+            .mapNotNull { index -> parseFrame(bytes, buffer, index) }
             .sortedWith(
                 compareByDescending<IcoFrame> { it.width * it.height }
                     .thenByDescending { it.bitCount },
@@ -51,20 +60,47 @@ internal object IcoDecoder {
             .firstNotNullOfOrNull { frame -> decodeFrame(bytes, frame) }
     }
 
-    private fun parseFrame(buffer: ByteBuffer, totalBytes: Int, index: Int): IcoFrame? {
+    private fun parseFrame(bytes: ByteArray, buffer: ByteBuffer, index: Int): IcoFrame? {
         val entryOffset = ICON_DIR_SIZE + index * ICON_DIR_ENTRY_SIZE
-        if (entryOffset + ICON_DIR_ENTRY_SIZE > totalBytes) return null
+        if (entryOffset + ICON_DIR_ENTRY_SIZE > bytes.size) return null
         val dataLength = buffer.getInt(entryOffset + 8)
         val dataOffset = buffer.getInt(entryOffset + 12)
         if (dataLength <= 0 || dataOffset < 0) return null
-        if (dataOffset.toLong() + dataLength.toLong() > totalBytes.toLong()) return null
+        if (dataOffset.toLong() + dataLength.toLong() > bytes.size.toLong()) return null
+        val declaredBitCount = buffer.getShort(entryOffset + 6).toInt() and 0xFFFF
         return IcoFrame(
             width = buffer.get(entryOffset).toDimension(),
             height = buffer.get(entryOffset + 1).toDimension(),
-            bitCount = buffer.getShort(entryOffset + 6).toInt() and 0xFFFF,
+            bitCount = if (declaredBitCount > 0) {
+                declaredBitCount
+            } else {
+                readImageBitCount(bytes, buffer, dataOffset, dataLength)
+            },
             dataOffset = dataOffset,
             dataLength = dataLength,
         )
+    }
+
+    /**
+     * ICONDIRENTRY の wBitCount を 0 にした ICO が実在する。
+     * 同一寸法のフレームを取り違えないよう、画像データ側の実ビット深度を読む。
+     */
+    private fun readImageBitCount(bytes: ByteArray, buffer: ByteBuffer, dataOffset: Int, dataLength: Int): Int {
+        if (bytes.startsWithPngSignature(dataOffset)) {
+            if (dataLength < PNG_COLOR_TYPE_OFFSET + 1) return 0
+            val bitDepth = bytes[dataOffset + PNG_BIT_DEPTH_OFFSET].toUnsignedInt()
+            val channelCount = when (bytes[dataOffset + PNG_COLOR_TYPE_OFFSET].toUnsignedInt()) {
+                PNG_COLOR_TYPE_GRAYSCALE -> 1
+                PNG_COLOR_TYPE_TRUE_COLOR -> 3
+                PNG_COLOR_TYPE_PALETTE -> 1
+                PNG_COLOR_TYPE_GRAYSCALE_ALPHA -> 2
+                PNG_COLOR_TYPE_TRUE_COLOR_ALPHA -> 4
+                else -> return 0
+            }
+            return bitDepth * channelCount
+        }
+        if (dataLength < DIB_HEADER_MIN_SIZE) return 0
+        return buffer.getShort(dataOffset + 14).toInt() and 0xFFFF
     }
 
     private fun decodeFrame(bytes: ByteArray, frame: IcoFrame): Bitmap? {
