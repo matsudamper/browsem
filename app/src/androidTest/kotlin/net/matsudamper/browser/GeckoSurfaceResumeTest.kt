@@ -37,9 +37,7 @@ class GeckoSurfaceResumeTest {
             val pageUrl = server.pageUrl
 
             Log.d(TAG, "ページロード開始: $pageUrl")
-            composeRule.openUrlFromUrlBar(pageUrl)
-            composeRule.waitForUrlBarContains(SURFACE_RESUME_FILE_NAME, timeoutMillis = 60_000)
-            composeRule.waitForUrlBarNotFocused(timeoutMillis = 30_000)
+            composeRule.openLocalPageAndStabilize(pageUrl)
             waitForGeckoContainer()
             Log.d(TAG, "初期レンダリング確認開始")
             waitForFixtureBackgroundGeckoPixels()
@@ -77,9 +75,7 @@ class GeckoSurfaceResumeTest {
             val pageUrl = server.pageUrl
 
             Log.d(TAG, "ページロード開始: $pageUrl")
-            composeRule.openUrlFromUrlBar(pageUrl)
-            composeRule.waitForUrlBarContains(SURFACE_RESUME_FILE_NAME, timeoutMillis = 60_000)
-            composeRule.waitForUrlBarNotFocused(timeoutMillis = 30_000)
+            composeRule.openLocalPageAndStabilize(pageUrl)
             waitForGeckoContainer()
             waitForFixtureBackgroundGeckoPixels()
 
