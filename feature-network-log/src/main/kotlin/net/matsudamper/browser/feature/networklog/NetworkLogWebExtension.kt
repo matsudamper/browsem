@@ -88,15 +88,20 @@ class NetworkLogWebExtension(
     }
 
     fun unregisterSession(session: GeckoSession) {
+        val isClosed = !session.isOpen
+        val tabIds = if (isClosed) tabIdsOf(session) else listOf()
         detachSession(session)
-        if (!session.isOpen) {
+        if (isClosed) {
+            tabIds.forEach { tabId -> store.clear(tabId) }
             _sessionTabIdHistories.update { it - session }
         }
     }
 
     /** BrowserTab が実際に破棄されたセッションの参照と tabId 履歴を削除する。 */
     fun disposeSession(session: GeckoSession) {
+        val tabIds = tabIdsOf(session)
         detachSession(session)
+        tabIds.forEach { tabId -> store.clear(tabId) }
         _sessionTabIdHistories.update { it - session }
     }
 
@@ -164,6 +169,10 @@ class NetworkLogWebExtension(
             }
         }
     }
+
+    private fun tabIdsOf(session: GeckoSession): List<Int> =
+        (_sessionTabIdHistories.value[session].orEmpty() + listOfNotNull(_sessionTabIds.value[session]))
+            .distinct()
 
     private fun detachSession(session: GeckoSession) {
         registeredSessions.remove(session)
