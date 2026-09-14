@@ -105,6 +105,7 @@ class NetworkLogFormatTest {
             url = url,
             method = "GET",
             resourceType = type,
+            isMainFrame = false,
             statusCode = 200,
             mimeType = "application/javascript",
             startedAtMillis = 0,

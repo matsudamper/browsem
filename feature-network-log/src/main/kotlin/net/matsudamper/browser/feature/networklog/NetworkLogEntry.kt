@@ -12,6 +12,8 @@ data class NetworkLogEntry(
     val url: String,
     val method: String,
     val resourceType: NetworkResourceType,
+    /** 最上位フレームのドキュメント通信の場合は true */
+    val isMainFrame: Boolean,
     /** HTTP ステータス。未受信・失敗時は 0 */
     val statusCode: Int,
     /** Content-Type ヘッダの値。未取得の場合は空文字 */

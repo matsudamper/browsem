@@ -278,12 +278,14 @@ class NetworkLogWebExtension(
     }
 
     private fun JSONObject.toNetworkLogEntry(): NetworkLogEntry {
+        val type = optString("type")
         return NetworkLogEntry(
             requestId = optString("requestId"),
             tabId = optInt("tabId", -1),
             url = optString("url"),
             method = optString("method"),
-            resourceType = NetworkResourceType.fromWebRequestType(optString("type")),
+            resourceType = NetworkResourceType.fromWebRequestType(type),
+            isMainFrame = type == "main_frame",
             statusCode = optInt("statusCode", 0),
             mimeType = optString("mimeType"),
             startedAtMillis = optDouble("startedAt", 0.0).toLong(),

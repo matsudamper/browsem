@@ -85,6 +85,7 @@ class NetworkLogStoreTest {
             url = "https://example.com/$requestId",
             method = "GET",
             resourceType = NetworkResourceType.Other,
+            isMainFrame = false,
             statusCode = statusCode,
             mimeType = "text/plain",
             startedAtMillis = 0,
