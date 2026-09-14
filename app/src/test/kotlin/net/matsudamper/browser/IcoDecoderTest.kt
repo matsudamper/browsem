@@ -5,7 +5,6 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -38,10 +37,9 @@ class IcoDecoderTest {
             ),
         )
 
-        val bitmap = IcoDecoder.decodeLargestFrame(ico)
+        val bitmap = checkNotNull(IcoDecoder.decodeLargestFrame(ico))
 
-        assertNotNull(bitmap)
-        assertEquals(2, bitmap!!.width)
+        assertEquals(2, bitmap.width)
         assertEquals(2, bitmap.height)
     }
 
@@ -58,10 +56,9 @@ class IcoDecoderTest {
         // ICONDIRENTRY の wBitCount を 0 にしても実データ側の深度で 32bpp が勝つ
         val ico = buildIco(listOf(indexed.copy(bitCount = 0), trueColor.copy(bitCount = 0)))
 
-        val bitmap = IcoDecoder.decodeLargestFrame(ico)
+        val bitmap = checkNotNull(IcoDecoder.decodeLargestFrame(ico))
 
-        assertNotNull(bitmap)
-        assertEquals(OPAQUE_BLUE, bitmap!!.getPixel(0, 0))
+        assertEquals(OPAQUE_BLUE, bitmap.getPixel(0, 0))
     }
 
     @Test
@@ -69,10 +66,9 @@ class IcoDecoderTest {
         val colors = listOf(OPAQUE_RED, OPAQUE_BLUE, TRANSLUCENT_GREEN, OPAQUE_RED)
         val ico = buildIco(listOf(bgra32Frame(width = 2, height = 2, colors = colors)))
 
-        val bitmap = IcoDecoder.decodeLargestFrame(ico)
+        val bitmap = checkNotNull(IcoDecoder.decodeLargestFrame(ico))
 
-        assertNotNull(bitmap)
-        assertEquals(OPAQUE_RED, bitmap!!.getPixel(0, 0))
+        assertEquals(OPAQUE_RED, bitmap.getPixel(0, 0))
         assertEquals(OPAQUE_BLUE, bitmap.getPixel(1, 0))
         assertEquals(TRANSLUCENT_GREEN, bitmap.getPixel(0, 1))
     }
@@ -82,10 +78,9 @@ class IcoDecoderTest {
         val transparentRed = 0x00FF0000
         val ico = buildIco(listOf(bgra32Frame(width = 2, height = 2, colors = List(4) { transparentRed })))
 
-        val bitmap = IcoDecoder.decodeLargestFrame(ico)
+        val bitmap = checkNotNull(IcoDecoder.decodeLargestFrame(ico))
 
-        assertNotNull(bitmap)
-        assertEquals(OPAQUE_RED, bitmap!!.getPixel(0, 0))
+        assertEquals(OPAQUE_RED, bitmap.getPixel(0, 0))
         assertEquals(OPAQUE_RED, bitmap.getPixel(1, 1))
     }
 
@@ -103,10 +98,9 @@ class IcoDecoderTest {
             ),
         )
 
-        val bitmap = IcoDecoder.decodeLargestFrame(ico)
+        val bitmap = checkNotNull(IcoDecoder.decodeLargestFrame(ico))
 
-        assertNotNull(bitmap)
-        assertEquals(OPAQUE_RED, bitmap!!.getPixel(0, 0))
+        assertEquals(OPAQUE_RED, bitmap.getPixel(0, 0))
         assertEquals(0, bitmap.getPixel(1, 0))
         assertEquals(OPAQUE_BLUE, bitmap.getPixel(0, 1))
     }
