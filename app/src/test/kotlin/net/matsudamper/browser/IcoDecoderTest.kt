@@ -126,9 +126,9 @@ class IcoDecoderTest {
     }
 
     @Test
-    fun decodeLargestFrame_dibDimensionExceedsIcoLimit_returnsNull() {
+    fun decodeLargestFrame_dibDimensionMismatch_returnsNull() {
         val body = ByteArrayOutputStream()
-        // ICO の上限 256px を大きく超える寸法を宣言した壊れたフレーム
+        // ICONDIRENTRY の寸法と一致しない、ICO の上限 256px も超えた DIB ヘッダー
         body.write(dibHeader(width = 65535, storedHeight = 510, bitCount = 1, paletteColorCount = 2))
         body.write(ByteArray(8))
         val frame = IcoFrameSource(width = 1, height = 1, bitCount = 1, data = body.toByteArray())

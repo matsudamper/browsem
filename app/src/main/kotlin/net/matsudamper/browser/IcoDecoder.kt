@@ -190,13 +190,17 @@ internal object IcoDecoder {
         if (width <= 0 || storedHeight <= 0) return null
         if (bitCount !in supportedBitCounts) return null
         // 高さは XOR 画像と AND マスクを縦に連結した値で格納されるのが通例だが、
-        // マスクを持たず実高さをそのまま書く ICO もあるため ICONDIRENTRY の高さと突き合わせる
-        val hasAndMask = storedHeight != frame.height
-        val height = if (hasAndMask) storedHeight / 2 else storedHeight
-        if (height <= 0) return null
-        // ICO の 1 フレームは 256px 角までと決まっている。ネットワーク越しの壊れた ICO に
-        // 巨大な寸法を宣言されても、展開前に弾いて確保するメモリを抑える。
-        if (width > IMPLICIT_MAX_DIMENSION || height > IMPLICIT_MAX_DIMENSION) return null
+        // マスクを持たず実高さをそのまま書く ICO もある。
+        // どちらでもない寸法はフレーム選択の順位付けが実体とずれるため受け付けない。
+        val hasAndMask = when (storedHeight) {
+            frame.height -> false
+            frame.height * 2 -> true
+            else -> return null
+        }
+        if (width != frame.width) return null
+        // ICONDIRENTRY 由来の寸法に一致させることで、1 フレーム 256px 角という
+        // ICO の上限も満たす。壊れた ICO に巨大な配列を確保させない。
+        val height = frame.height
         val paletteColorCount = if (bitCount > 8) {
             0
         } else {
