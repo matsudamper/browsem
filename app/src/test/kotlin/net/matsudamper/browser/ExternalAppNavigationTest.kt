@@ -45,45 +45,31 @@ class ExternalAppNavigationTest {
     }
 
     @Test
-    fun `ユーザー操作の遷移は App Links 判定を行う`() {
+    fun `リダイレクトでない遷移は App Links 判定を行う`() {
         assertTrue(
             shouldCheckExternalAppForNavigation(
                 uri = "https://example.com/",
-                hasUserGesture = true,
-                isDirectNavigation = false,
+                isRedirect = false,
             ),
         )
     }
 
     @Test
-    fun `アプリが発行したロードは App Links 判定を行う`() {
-        assertTrue(
-            shouldCheckExternalAppForNavigation(
-                uri = "https://example.com/",
-                hasUserGesture = false,
-                isDirectNavigation = true,
-            ),
-        )
-    }
-
-    @Test
-    fun `自動リダイレクトは App Links 判定を行わない`() {
+    fun `リダイレクト先は App Links 判定を行わない`() {
         assertFalse(
             shouldCheckExternalAppForNavigation(
                 uri = "https://example.com/",
-                hasUserGesture = false,
-                isDirectNavigation = false,
+                isRedirect = true,
             ),
         )
     }
 
     @Test
-    fun `独自スキームは自動遷移でも外部アプリ判定を行う`() {
+    fun `独自スキームはリダイレクト先でも外部アプリ判定を行う`() {
         assertTrue(
             shouldCheckExternalAppForNavigation(
                 uri = "okta-verify://enroll",
-                hasUserGesture = false,
-                isDirectNavigation = false,
+                isRedirect = true,
             ),
         )
     }

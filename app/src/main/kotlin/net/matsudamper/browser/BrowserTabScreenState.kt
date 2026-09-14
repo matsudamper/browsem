@@ -1678,8 +1678,7 @@ internal class BrowserTabScreenState(
         val externalAction = if (
             shouldCheckExternalAppForNavigation(
                 uri = request.uri,
-                hasUserGesture = request.hasUserGesture,
-                isDirectNavigation = request.isDirectNavigation,
+                isRedirect = request.isRedirect,
             )
         ) {
             resolveExternalAppNavigationAction(context, request.uri)

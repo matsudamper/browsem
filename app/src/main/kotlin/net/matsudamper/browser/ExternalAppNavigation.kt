@@ -307,17 +307,19 @@ internal fun isHttpUri(uri: String): Boolean {
 /**
  * http/https の遷移で App Links 判定を行ってよいかどうかを返す。
  *
- * SSO のようにサーバーのリダイレクトやページの JS だけで進む遷移まで App Links とみなすと、
- * 対象アプリを持つホストを経由しただけで遷移が握り潰され、白画面で止まる。ユーザー操作起因の
- * 遷移と、アプリ自身が発行したロードに限定する。
+ * SSO の受け渡しはサーバーのリダイレクトを連ねて進むため、途中の 1 ホップでも App Links と
+ * みなして遷移を DENY すると、認証フローごと失われて白画面で止まる。リダイレクト先は
+ * ユーザーが選んだ遷移先ではないため、判定の対象外にする。
+ *
+ * ユーザー操作の有無では絞らない。JavaScript のリダイレクトや setTimeout からの App Links が
+ * 開けなくなるため、その条件は過去に撤廃されている。
  *
  * 独自スキームはページの自動遷移からアプリへ受け渡す作りがあるため、この制限をかけない。
  */
 internal fun shouldCheckExternalAppForNavigation(
     uri: String,
-    hasUserGesture: Boolean,
-    isDirectNavigation: Boolean,
+    isRedirect: Boolean,
 ): Boolean {
     if (!isHttpUri(uri)) return true
-    return hasUserGesture || isDirectNavigation
+    return !isRedirect
 }
