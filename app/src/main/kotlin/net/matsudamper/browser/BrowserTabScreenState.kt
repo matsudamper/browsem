@@ -1690,14 +1690,14 @@ internal class BrowserTabScreenState(
         // DENY + loadUri すると onNewSession が呼ばれず overlay が出せない。
         // 外部アプリ判定だけ行い、ブラウザ内なら ALLOW して onNewSession に渡す。
         if (isSinglePageMode && request.target == GeckoSession.NavigationDelegate.TARGET_WINDOW_NEW) {
-            return applyExternalAppNavigationAction(externalAction)
+            return applyExternalAppNavigationAction(uri = request.uri, action = externalAction)
         }
         if (externalAction == ExternalAppNavigationAction.AllowInBrowser &&
             handleWebAppCrossDomainNavigation(request.uri)
         ) {
             return GeckoResult.fromValue(AllowOrDeny.DENY)
         }
-        return applyExternalAppNavigationAction(externalAction)
+        return applyExternalAppNavigationAction(uri = request.uri, action = externalAction)
     }
 
     /**
@@ -1715,13 +1715,16 @@ internal class BrowserTabScreenState(
             return GeckoResult.fromValue(AllowOrDeny.DENY)
         }
         return applyExternalAppNavigationAction(
-            resolveExternalAppNavigationAction(context, request.uri),
+            uri = request.uri,
+            action = resolveExternalAppNavigationAction(context, request.uri),
         )
     }
 
     private fun applyExternalAppNavigationAction(
+        uri: String,
         action: ExternalAppNavigationAction,
     ): GeckoResult<AllowOrDeny>? {
+        saveExternalAppNavigationInfo(uri = uri, action = action)
         return when (action) {
             ExternalAppNavigationAction.AllowInBrowser -> null
 
@@ -1739,6 +1742,35 @@ internal class BrowserTabScreenState(
                 openFallbackUrl(action.url)
                 GeckoResult.fromValue(AllowOrDeny.DENY)
             }
+        }
+    }
+
+    /**
+     * ブラウザ内で処理しなかった遷移をクラッシュログ画面へ INFO として残す。
+     * 認証アプリへの受け渡しのように端末でしか再現しない遷移を後から追えるようにする。
+     */
+    private fun saveExternalAppNavigationInfo(
+        uri: String,
+        action: ExternalAppNavigationAction,
+    ) {
+        val detail = when (action) {
+            ExternalAppNavigationAction.AllowInBrowser -> return
+
+            ExternalAppNavigationAction.AppNotFound -> "appNotFound"
+
+            is ExternalAppNavigationAction.Launch -> {
+                "launch app=${action.request.appName} intent=${action.request.intent}"
+            }
+
+            is ExternalAppNavigationAction.OpenFallback -> "openFallback url=${action.url}"
+        }
+        try {
+            crashLogRepository.saveInfoSync(
+                title = "外部アプリ遷移",
+                body = "uri=$uri\naction=$detail\npageUrl=$currentPageUrl",
+            )
+        } catch (error: RuntimeException) {
+            Log.w(TAG, "外部アプリ遷移ログの保存に失敗", error)
         }
     }
 
