@@ -151,10 +151,17 @@ internal object IcoDecoder {
                 pixels[row * header.width + column] = color
             }
         }
-        // 32bpp でもアルファを全て 0 で埋めた ICO が実在するため、その場合は AND マスクへ委ねる
+        // 32bpp でもアルファを全て 0 で埋めた ICO が実在する。透過の根拠が無い画素を
+        // そのまま採用すると全面透明のアイコンになるため、一度不透明に倒してから
+        // AND マスクがあればそれで抜く。
         val usesAlphaChannel = header.bitCount == BITS_PER_PIXEL_WITH_ALPHA && hasNonZeroAlpha
-        if (!usesAlphaChannel && header.hasAndMask) {
-            applyAndMask(buffer, maskOffset, frameEnd, header, pixels)
+        if (!usesAlphaChannel) {
+            for (index in pixels.indices) {
+                pixels[index] = pixels[index] or (OPAQUE_ALPHA shl 24)
+            }
+            if (header.hasAndMask) {
+                applyAndMask(buffer, maskOffset, frameEnd, header, pixels)
+            }
         }
         return Bitmap.createBitmap(pixels, header.width, header.height, Bitmap.Config.ARGB_8888)
     }
@@ -283,11 +290,8 @@ internal object IcoDecoder {
             for (column in 0 until header.width) {
                 val byteValue = buffer.get(rowOffset + column / 8).toUnsignedInt()
                 val isTransparent = (byteValue shr (7 - column % 8)) and 1 == 1
-                val index = row * header.width + column
-                pixels[index] = if (isTransparent) {
-                    0
-                } else {
-                    pixels[index] or (OPAQUE_ALPHA shl 24)
+                if (isTransparent) {
+                    pixels[row * header.width + column] = 0
                 }
             }
         }

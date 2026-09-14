@@ -23,7 +23,7 @@ class IcoDecoderTest {
 
     @Test
     fun isIcoData_icoHeader_returnsTrue() {
-        val ico = buildIco(listOf(bgra32Frame(width = 1, height = 1, colors = listOf(OPAQUE_RED))))
+        val ico = buildIco(listOf(bgra32Frame(width = 1, height = 1, colors = listOf(OPAQUE_RED), withAndMask = true)))
 
         assertTrue(IcoDecoder.isIcoData(ico))
     }
@@ -32,8 +32,8 @@ class IcoDecoderTest {
     fun decodeLargestFrame_multipleFrames_選ぶのは最大解像度() {
         val ico = buildIco(
             listOf(
-                bgra32Frame(width = 1, height = 1, colors = listOf(OPAQUE_RED)),
-                bgra32Frame(width = 2, height = 2, colors = List(4) { OPAQUE_BLUE }),
+                bgra32Frame(width = 1, height = 1, colors = listOf(OPAQUE_RED), withAndMask = true),
+                bgra32Frame(width = 2, height = 2, colors = List(4) { OPAQUE_BLUE }, withAndMask = true),
             ),
         )
 
@@ -52,7 +52,7 @@ class IcoDecoderTest {
             paletteIndices = List(4) { 0 },
             transparentPixels = List(4) { false },
         )
-        val trueColor = bgra32Frame(width = 2, height = 2, colors = List(4) { OPAQUE_BLUE })
+        val trueColor = bgra32Frame(width = 2, height = 2, colors = List(4) { OPAQUE_BLUE }, withAndMask = true)
         // ICONDIRENTRY の wBitCount を 0 にしても実データ側の深度で 32bpp が勝つ
         val ico = buildIco(listOf(indexed.copy(bitCount = 0), trueColor.copy(bitCount = 0)))
 
@@ -64,7 +64,7 @@ class IcoDecoderTest {
     @Test
     fun decodeLargestFrame_bgra32_ピクセルの色とアルファを保持する() {
         val colors = listOf(OPAQUE_RED, OPAQUE_BLUE, TRANSLUCENT_GREEN, OPAQUE_RED)
-        val ico = buildIco(listOf(bgra32Frame(width = 2, height = 2, colors = colors)))
+        val ico = buildIco(listOf(bgra32Frame(width = 2, height = 2, colors = colors, withAndMask = true)))
 
         val bitmap = checkNotNull(IcoDecoder.decodeLargestFrame(ico))
 
@@ -76,12 +76,32 @@ class IcoDecoderTest {
     @Test
     fun decodeLargestFrame_bgra32WithZeroAlpha_マスクに従って不透明になる() {
         val transparentRed = 0x00FF0000
-        val ico = buildIco(listOf(bgra32Frame(width = 2, height = 2, colors = List(4) { transparentRed })))
+        val ico = buildIco(listOf(bgra32Frame(width = 2, height = 2, colors = List(4) { transparentRed }, withAndMask = true)))
 
         val bitmap = checkNotNull(IcoDecoder.decodeLargestFrame(ico))
 
         assertEquals(OPAQUE_RED, bitmap.getPixel(0, 0))
         assertEquals(OPAQUE_RED, bitmap.getPixel(1, 1))
+    }
+
+    @Test
+    fun decodeLargestFrame_bgra32WithZeroAlphaAndNoMask_不透明として扱う() {
+        val transparentBlue = 0x000000FF
+        val ico = buildIco(
+            listOf(
+                bgra32Frame(
+                    width = 2,
+                    height = 2,
+                    colors = List(4) { transparentBlue },
+                    withAndMask = false,
+                ),
+            ),
+        )
+
+        val bitmap = checkNotNull(IcoDecoder.decodeLargestFrame(ico))
+
+        assertEquals(OPAQUE_BLUE, bitmap.getPixel(0, 0))
+        assertEquals(OPAQUE_BLUE, bitmap.getPixel(1, 1))
     }
 
     @Test
@@ -118,7 +138,7 @@ class IcoDecoderTest {
 
     @Test
     fun decodeLargestFrame_frameDataOutOfRange_returnsNull() {
-        val ico = buildIco(listOf(bgra32Frame(width = 1, height = 1, colors = listOf(OPAQUE_RED))))
+        val ico = buildIco(listOf(bgra32Frame(width = 1, height = 1, colors = listOf(OPAQUE_RED), withAndMask = true)))
         val broken = ico.copyOf()
         // ICONDIRENTRY のデータサイズをファイル長より大きく書き換える
         ByteBuffer.wrap(broken).order(ByteOrder.LITTLE_ENDIAN).putInt(ICON_DIR_SIZE + 8, Int.MAX_VALUE)
@@ -126,9 +146,15 @@ class IcoDecoderTest {
         assertNull(IcoDecoder.decodeLargestFrame(broken))
     }
 
-    private fun bgra32Frame(width: Int, height: Int, colors: List<Int>): IcoFrameSource {
+    private fun bgra32Frame(
+        width: Int,
+        height: Int,
+        colors: List<Int>,
+        withAndMask: Boolean,
+    ): IcoFrameSource {
         val body = ByteArrayOutputStream()
-        body.write(dibHeader(width = width, storedHeight = height * 2, bitCount = 32, paletteColorCount = 0))
+        val storedHeight = if (withAndMask) height * 2 else height
+        body.write(dibHeader(width = width, storedHeight = storedHeight, bitCount = 32, paletteColorCount = 0))
         // DIB はボトムアップ格納
         for (row in height - 1 downTo 0) {
             for (column in 0 until width) {
@@ -139,7 +165,9 @@ class IcoDecoderTest {
                 body.write((color ushr 24) and 0xFF)
             }
         }
-        body.write(ByteArray(andMaskRowSize(width) * height))
+        if (withAndMask) {
+            body.write(ByteArray(andMaskRowSize(width) * height))
+        }
         return IcoFrameSource(width = width, height = height, bitCount = 32, data = body.toByteArray())
     }
 
