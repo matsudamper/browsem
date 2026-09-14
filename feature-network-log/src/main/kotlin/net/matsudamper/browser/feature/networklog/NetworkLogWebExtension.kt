@@ -88,15 +88,16 @@ class NetworkLogWebExtension(
     }
 
     fun unregisterSession(session: GeckoSession) {
-        registeredSessions.remove(session)
-        attachedSessions.remove(session)
-        _sessionTabIds.update { it - session }
+        detachSession(session)
         if (!session.isOpen) {
             _sessionTabIdHistories.update { it - session }
         }
-        extension?.let { ext ->
-            session.webExtensionController.setMessageDelegate(ext, null, TAB_NATIVE_APP_ID)
-        }
+    }
+
+    /** BrowserTab が実際に破棄されたセッションの参照と tabId 履歴を削除する。 */
+    fun disposeSession(session: GeckoSession) {
+        detachSession(session)
+        _sessionTabIdHistories.update { it - session }
     }
 
     /** セッションに対応する webRequest 上の tabId。未取得の場合は null */
@@ -161,6 +162,15 @@ class NetworkLogWebExtension(
             callbacks.forEach { callback ->
                 callback(NetworkLogBody.Failure(NetworkLogBody.Failure.Reason.Unavailable))
             }
+        }
+    }
+
+    private fun detachSession(session: GeckoSession) {
+        registeredSessions.remove(session)
+        attachedSessions.remove(session)
+        _sessionTabIds.update { it - session }
+        extension?.let { ext ->
+            session.webExtensionController.setMessageDelegate(ext, null, TAB_NATIVE_APP_ID)
         }
     }
 
