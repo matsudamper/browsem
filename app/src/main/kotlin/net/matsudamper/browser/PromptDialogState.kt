@@ -246,7 +246,7 @@ internal class PromptDialogState(
         pendingFileResult = null
         coroutineScope.launch {
             try {
-                // ACTION_GET_CONTENT が返す content URI は一時的な読み取り権限しか持たない場合があり、
+                // ピッカーが返す content URI は一時的な読み取り権限しか持たない場合があり、
                 // GeckoView が非同期で読み取る際に権限が失効する可能性がある。
                 // そのため、コンテンツをキャッシュファイルにコピーしてから GeckoView に渡す。
                 val cachedUris = withContext(Dispatchers.IO) {
