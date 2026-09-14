@@ -273,6 +273,8 @@ internal object HomeScreenIconFetcher {
     }
 
     private fun decodeBoundedBitmap(bytes: ByteArray): Bitmap? {
+        // BitmapFactory は ICO コンテナを解釈できないため、自前デコーダで最大フレームを取り出す
+        if (IcoDecoder.isIcoData(bytes)) return IcoDecoder.decodeLargestFrame(bytes)
         val boundsOptions = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeByteArray(bytes, 0, bytes.size, boundsOptions)
         val width = boundsOptions.outWidth
