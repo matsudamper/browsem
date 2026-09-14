@@ -112,6 +112,17 @@ class IcoDecoderTest {
     }
 
     @Test
+    fun decodeLargestFrame_dibDimensionExceedsIcoLimit_returnsNull() {
+        val body = ByteArrayOutputStream()
+        // ICO の上限 256px を大きく超える寸法を宣言した壊れたフレーム
+        body.write(dibHeader(width = 65535, storedHeight = 510, bitCount = 1, paletteColorCount = 2))
+        body.write(ByteArray(8))
+        val frame = IcoFrameSource(width = 1, height = 1, bitCount = 1, data = body.toByteArray())
+
+        assertNull(IcoDecoder.decodeLargestFrame(buildIco(listOf(frame))))
+    }
+
+    @Test
     fun decodeLargestFrame_frameDataOutOfRange_returnsNull() {
         val ico = buildIco(listOf(bgra32Frame(width = 1, height = 1, colors = listOf(OPAQUE_RED))))
         val broken = ico.copyOf()

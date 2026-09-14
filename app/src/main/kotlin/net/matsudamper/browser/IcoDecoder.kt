@@ -174,14 +174,20 @@ internal object IcoDecoder {
         val hasAndMask = storedHeight != frame.height
         val height = if (hasAndMask) storedHeight / 2 else storedHeight
         if (height <= 0) return null
-        val colorsUsed = buffer.getInt(offset + 32)
-        val paletteColorCount = when {
-            bitCount > 8 -> 0
-            colorsUsed > 0 -> colorsUsed
-            else -> 1 shl bitCount
+        // ICO の 1 フレームは 256px 角までと決まっている。ネットワーク越しの壊れた ICO に
+        // 巨大な寸法を宣言されても、展開前に弾いて確保するメモリを抑える。
+        if (width > IMPLICIT_MAX_DIMENSION || height > IMPLICIT_MAX_DIMENSION) return null
+        val paletteColorCount = if (bitCount > 8) {
+            0
+        } else {
+            val maxPaletteColorCount = 1 shl bitCount
+            val colorsUsed = buffer.getInt(offset + 32)
+            // biClrUsed が 0 のときはビット深度いっぱいのパレットを意味する
+            if (colorsUsed in 1 until maxPaletteColorCount) colorsUsed else maxPaletteColorCount
         }
-        val pixelOffset = offset + headerSize + paletteColorCount * PALETTE_ENTRY_SIZE
-        if (pixelOffset + rowSizeOf(width, bitCount) * height > offset + frame.dataLength) return null
+        val pixelOffset = offset.toLong() + headerSize + paletteColorCount.toLong() * PALETTE_ENTRY_SIZE
+        val pixelEnd = pixelOffset + rowSizeOf(width, bitCount).toLong() * height
+        if (pixelEnd > offset.toLong() + frame.dataLength) return null
         return DibHeader(
             headerSize = headerSize,
             width = width,
