@@ -114,6 +114,8 @@ internal object IcoDecoder {
     /**
      * ICO のフレームサイズは 256 が上限のため、それを超える PNG が埋め込まれていても
      * 縮小してからデコードし、メモリ使用量を抑える。
+     * ただし縮小後が 256px を割るサンプルサイズは選ばない。ショートカット用に
+     * 必要な解像度を、元画像が持っているのに落としてしまうため。
      */
     private fun decodeEmbeddedPng(bytes: ByteArray, frame: IcoFrame): Bitmap? {
         val boundsOptions = BitmapFactory.Options().apply { inJustDecodeBounds = true }
@@ -121,7 +123,7 @@ internal object IcoDecoder {
         val maxDimension = maxOf(boundsOptions.outWidth, boundsOptions.outHeight)
         if (maxDimension <= 0) return null
         var sampleSize = 1
-        while (maxDimension / sampleSize > IMPLICIT_MAX_DIMENSION) {
+        while (maxDimension / (sampleSize * 2) >= IMPLICIT_MAX_DIMENSION) {
             sampleSize *= 2
         }
         val decodeOptions = BitmapFactory.Options().apply { inSampleSize = sampleSize }
