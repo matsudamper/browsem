@@ -1,5 +1,6 @@
 package net.matsudamper.browser
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -23,10 +24,12 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.stickyHeader
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -42,6 +45,10 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -127,18 +134,6 @@ internal fun NetworkLogScreen(
                             )
                         }
                     },
-                    actions = {
-                        IconButton(
-                            modifier = Modifier.testTag(NetworkLogScreenTestTags.ClearButton.testTag),
-                            enabled = uiState.canClear,
-                            onClick = uiState.callbacks::onClickClear,
-                        ) {
-                            Icon(
-                                painter = painterResource(ResourcesR.drawable.ic_delete_24dp),
-                                contentDescription = "ログを消去",
-                            )
-                        }
-                    },
                 )
             } else {
                 TopAppBar(
@@ -190,6 +185,7 @@ internal fun NetworkLogScreen(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun NetworkLogList(
     uiState: NetworkLogUiState,
@@ -197,22 +193,32 @@ private fun NetworkLogList(
     modifier: Modifier = Modifier,
 ) {
     val callbacks = uiState.callbacks
-    // 見えている範囲を伝えて、その範囲のサムネイルだけ取得させる
-    LaunchedEffect(listState, callbacks) {
+    val entryIndexesByKey = remember(uiState.entries) {
+        uiState.entries.mapIndexed { index, entry ->
+            entryItemKey(entry.id) to index
+        }.toMap()
+    }
+    var showClearConfirmation by remember { mutableStateOf(false) }
+    // sticky header が LazyColumn の item index に含まれるため、
+    // 可視範囲は entry の key から一覧上の index へ戻して通知する。
+    LaunchedEffect(listState, callbacks, entryIndexesByKey) {
         snapshotFlow {
-            val visibleItems = listState.layoutInfo.visibleItemsInfo
-            if (visibleItems.isEmpty()) {
+            val visibleEntryIndexes = listState.layoutInfo.visibleItemsInfo.mapNotNull { item ->
+                entryIndexesByKey[item.key]
+            }
+            if (visibleEntryIndexes.isEmpty()) {
                 null
             } else {
-                visibleItems.first().index to visibleItems.last().index
+                visibleEntryIndexes.minOrNull() to visibleEntryIndexes.maxOrNull()
             }
         }
             .distinctUntilChanged()
             .collect { range ->
-                if (range == null) return@collect
+                val firstIndex = range?.first ?: return@collect
+                val lastIndex = range.second ?: return@collect
                 callbacks.onVisibleRangeChange(
-                    firstIndex = range.first,
-                    lastIndex = range.second,
+                    firstIndex = firstIndex,
+                    lastIndex = lastIndex,
                 )
             }
     }
@@ -284,16 +290,102 @@ private fun NetworkLogList(
                 modifier = Modifier.fillMaxSize(),
                 state = listState,
             ) {
-                items(uiState.entries, key = { it.id }) { entry ->
-                    NetworkLogRow(
-                        entry = entry,
-                        onClick = entry.listener::onClick,
-                    )
-                    HorizontalDivider()
+                uiState.entries.forEachIndexed { index, entry ->
+                    entry.domainHeader?.let { domain ->
+                        stickyHeader(key = domainHeaderItemKey(index)) {
+                            NetworkLogDomainHeader(
+                                domain = domain,
+                                canClear = uiState.canClear,
+                                onClearRequest = { showClearConfirmation = true },
+                            )
+                        }
+                    }
+                    item(key = entryItemKey(entry.id)) {
+                        NetworkLogRow(
+                            entry = entry,
+                            onClick = entry.listener::onClick,
+                        )
+                        HorizontalDivider()
+                    }
                 }
             }
         }
     }
+    if (showClearConfirmation) {
+        NetworkLogClearConfirmationDialog(
+            onConfirm = {
+                callbacks.onClickClear()
+                showClearConfirmation = false
+            },
+            onDismiss = { showClearConfirmation = false },
+        )
+    }
+}
+
+@Composable
+private fun NetworkLogDomainHeader(
+    domain: String,
+    canClear: Boolean,
+    onClearRequest: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        tonalElevation = 2.dp,
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 16.dp),
+        ) {
+            Text(
+                modifier = Modifier
+                    .align(Alignment.CenterStart)
+                    .padding(end = 56.dp),
+                text = domain,
+                style = MaterialTheme.typography.titleSmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            IconButton(
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .testTag(NetworkLogScreenTestTags.ClearButton.testTag),
+                enabled = canClear,
+                onClick = onClearRequest,
+            ) {
+                Icon(
+                    painter = painterResource(ResourcesR.drawable.ic_delete_24dp),
+                    contentDescription = "ログを消去",
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun NetworkLogClearConfirmationDialog(
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("ネットワークログを消去しますか？") },
+        text = { Text("このタブで記録したすべてのドメインの通信ログを消去します。") },
+        confirmButton = {
+            TextButton(
+                modifier = Modifier.testTag(NetworkLogScreenTestTags.ClearConfirmButton.testTag),
+                onClick = onConfirm,
+            ) {
+                Text("消去")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("キャンセル")
+            }
+        },
+    )
 }
 
 @Composable
@@ -622,6 +714,10 @@ private fun SectionTitle(
     )
 }
 
+private fun entryItemKey(id: String): String = "entry:$id"
+
+private fun domainHeaderItemKey(index: Int): String = "domain:$index"
+
 private const val BADGE_BACKGROUND_ALPHA = 0.15f
 private val THUMBNAIL_SIZE = 32.dp
 
@@ -637,6 +733,9 @@ sealed interface NetworkLogScreenTestTags {
     }
     object ClearButton : NetworkLogScreenTestTags {
         override val id = "clear_button"
+    }
+    object ClearConfirmButton : NetworkLogScreenTestTags {
+        override val id = "clear_confirm_button"
     }
     object Entry : NetworkLogScreenTestTags {
         override val id = "entry"
@@ -677,12 +776,13 @@ private fun previewEntries(): List<NetworkLogUiState.Entry> {
     return listOf(
         NetworkLogUiState.Entry(
             id = "1",
+            domainHeader = "shop.example.com",
             method = "GET",
             statusLabel = "200",
             statusKind = NetworkLogUiState.StatusKind.Success,
             typeLabel = "文書",
             name = "index.html",
-            host = "example.com",
+            host = "shop.example.com",
             sizeLabel = "12.4 KB",
             durationLabel = "231 ms",
             fromCache = false,
@@ -691,6 +791,7 @@ private fun previewEntries(): List<NetworkLogUiState.Entry> {
         ),
         NetworkLogUiState.Entry(
             id = "2",
+            domainHeader = null,
             method = "GET",
             statusLabel = "200",
             statusKind = NetworkLogUiState.StatusKind.Success,
@@ -705,6 +806,7 @@ private fun previewEntries(): List<NetworkLogUiState.Entry> {
         ),
         NetworkLogUiState.Entry(
             id = "3",
+            domainHeader = "example.com",
             method = "GET",
             statusLabel = "200",
             statusKind = NetworkLogUiState.StatusKind.Success,
@@ -719,6 +821,7 @@ private fun previewEntries(): List<NetworkLogUiState.Entry> {
         ),
         NetworkLogUiState.Entry(
             id = "4",
+            domainHeader = null,
             method = "POST",
             statusLabel = "404",
             statusKind = NetworkLogUiState.StatusKind.ClientError,
@@ -733,6 +836,7 @@ private fun previewEntries(): List<NetworkLogUiState.Entry> {
         ),
         NetworkLogUiState.Entry(
             id = "5",
+            domainHeader = null,
             method = "GET",
             statusLabel = "失敗",
             statusKind = NetworkLogUiState.StatusKind.Failed,
@@ -830,6 +934,7 @@ private fun previewImageEntries(): List<NetworkLogUiState.Entry> {
     return listOf(
         NetworkLogUiState.Entry(
             id = "3",
+            domainHeader = "example.com",
             method = "GET",
             statusLabel = "200",
             statusKind = NetworkLogUiState.StatusKind.Success,
@@ -844,6 +949,7 @@ private fun previewImageEntries(): List<NetworkLogUiState.Entry> {
         ),
         NetworkLogUiState.Entry(
             id = "6",
+            domainHeader = null,
             method = "GET",
             statusLabel = "200",
             statusKind = NetworkLogUiState.StatusKind.Success,
@@ -858,6 +964,7 @@ private fun previewImageEntries(): List<NetworkLogUiState.Entry> {
         ),
         NetworkLogUiState.Entry(
             id = "7",
+            domainHeader = null,
             method = "GET",
             statusLabel = "200",
             statusKind = NetworkLogUiState.StatusKind.Success,
@@ -991,6 +1098,17 @@ private fun PreviewNetworkLogScreenTextDetail() {
                     ),
                 ),
             ),
+        )
+    }
+}
+
+@Preview(name = "消去確認")
+@Composable
+private fun PreviewNetworkLogClearConfirmationDialog() {
+    BrowserTheme(themeMode = ThemeMode.THEME_SYSTEM) {
+        NetworkLogClearConfirmationDialog(
+            onConfirm = {},
+            onDismiss = {},
         )
     }
 }
