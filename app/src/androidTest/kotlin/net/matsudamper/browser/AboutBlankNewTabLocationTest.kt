@@ -147,11 +147,14 @@ class AboutBlankNewTabLocationTest {
         }
 
         group("ローカル HTTP の index.html を読み込む") {
+            // 新規タブの初回ロードは GeckoView のサイズ確定後に走る。確定前に URL を投入すると
+            // 遅れて来たホームページのロードで上書きされるため、収束を待ってから開く。
+            composeRule.waitForSessionNavigationSettled()
             composeRule.openUrlFromUrlBar(localServer.indexUrl)
+            composeRule.waitForStableLocalPage(localServer.indexUrl)
             composeRule.waitUntil(timeoutMillis = 30_000) {
                 localServer.hasRequest("/$INDEX_FILE_NAME")
             }
-            composeRule.waitForUrlBarContains(INDEX_FILE_NAME, timeoutMillis = 30_000)
             composeRule.waitForUrlBarNotFocused(timeoutMillis = 30_000)
             val loadedUrl = composeRule.currentUrlBarText()
             assertTrue("index ページが期待URLで開かれていない: $loadedUrl", loadedUrl.contains("127.0.0.1"))
