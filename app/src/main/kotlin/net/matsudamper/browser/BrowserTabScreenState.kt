@@ -1751,6 +1751,9 @@ internal class BrowserTabScreenState(
     /**
      * ブラウザ内で処理しなかった遷移をクラッシュログ画面へ INFO として残す。
      * 認証アプリへの受け渡しのように端末でしか再現しない遷移を後から追えるようにする。
+     *
+     * URL は scheme とホストだけに切り詰め、Intent の中身も残さない。認証の受け渡しでは
+     * パス・クエリ・フラグメントや extras に認可コードやトークンが載るため。
      */
     private fun saveExternalAppNavigationInfo(
         uri: String,
@@ -1762,15 +1765,17 @@ internal class BrowserTabScreenState(
             ExternalAppNavigationAction.AppNotFound -> "appNotFound"
 
             is ExternalAppNavigationAction.Launch -> {
-                "launch app=${action.request.appName} intent=${action.request.intent}"
+                "launch app=${action.request.appName} package=${action.request.intent.`package`}"
             }
 
-            is ExternalAppNavigationAction.OpenFallback -> "openFallback url=${action.url}"
+            is ExternalAppNavigationAction.OpenFallback -> {
+                "openFallback url=${redactUrlForLog(action.url)}"
+            }
         }
         try {
             crashLogRepository.saveInfoSync(
                 title = "外部アプリ遷移",
-                body = "uri=$uri\naction=$detail\npageUrl=$currentPageUrl",
+                body = "uri=${redactUrlForLog(uri)}\naction=$detail\npageUrl=${redactUrlForLog(currentPageUrl)}",
             )
         } catch (error: RuntimeException) {
             Log.w(TAG, "外部アプリ遷移ログの保存に失敗", error)

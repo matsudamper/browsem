@@ -257,6 +257,25 @@ private fun buildExternalIntent(
     }
 }
 
+/**
+ * 診断ログへ残す URL を scheme とホストだけに切り詰める。
+ *
+ * 認証の受け渡しではパス・クエリ・フラグメントに認可コードやトークンが載る。ログは全文コピー
+ * できるため、そのまま残すと診断情報の共有で認証情報まで渡ってしまう。
+ */
+internal fun redactUrlForLog(url: String): String {
+    val schemeEnd = url.indexOf("://")
+    if (schemeEnd < 0) {
+        val scheme = url.substringBefore(':', missingDelimiterValue = "")
+        return if (scheme.isEmpty()) "(スキームなし)" else "$scheme:"
+    }
+    val scheme = url.take(schemeEnd)
+    val authority = url.drop(schemeEnd + "://".length)
+        .takeWhile { it != '/' && it != '?' && it != '#' }
+        .substringAfterLast('@')
+    return "$scheme://$authority"
+}
+
 private const val INTENT_SCHEME = "intent"
 private const val EXTRA_BROWSER_FALLBACK_URL = "browser_fallback_url"
 
