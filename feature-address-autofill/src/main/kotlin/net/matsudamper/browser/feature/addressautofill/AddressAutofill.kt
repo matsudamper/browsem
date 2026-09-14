@@ -71,11 +71,11 @@ class AddressAutofillCoordinator(
      * Custom Tab・ウェブアプリは通常ブラウザと同一プロセスで同時に生存する。
      * 接続を 1 つしか持たないと後から開いた画面が候補バーの宛先を奪い、
      * 先に開いていた画面では候補が出なくなるため、セッション単位で保持する。
+     *
+     * 住所取得はセッションを伴わない通知のため、末尾ほど新しい利用順で並べ、
+     * 最後に接続またはフォーカスした画面へ向ける。
      */
     private val attachedSessions = LinkedHashMap<GeckoSession, Attached>()
-
-    /** 住所取得は通知にセッションが含まれないため、直近でフォーカスがあった画面へ向ける。 */
-    private var lastFocusedSession: GeckoSession? = null
 
     private class Attached(
         val session: GeckoSession,
@@ -143,9 +143,6 @@ class AddressAutofillCoordinator(
     fun detach(session: GeckoSession) {
         fillExtension.unregisterSession(session)
         val attached = synchronized(lock) {
-            if (lastFocusedSession === session) {
-                lastFocusedSession = null
-            }
             attachedSessions.remove(session)?.also { it.cancelJobs() }
         } ?: return
         attached.host.focusedAutofillKind = null
@@ -176,9 +173,7 @@ class AddressAutofillCoordinator(
     fun onAddressFetch(count: Int) {
         if (count <= 0) return
         val target = synchronized(lock) {
-            val attached = lastFocusedSession?.let { attachedSessions[it] }
-                ?: attachedSessions.values.lastOrNull()
-                ?: return
+            val attached = attachedSessions.values.lastOrNull() ?: return
             // メール欄では住所候補を出さない。それ以外はフォーカス判定まで保留する。
             if (attached.lastFieldKind == FIELD_KIND_EMAIL) {
                 Log.i(TAG, "onAddressFetch skipped: last field is email")
@@ -221,7 +216,7 @@ class AddressAutofillCoordinator(
                 attached.host.autofillBarHideGeneration += 1
                 attached.lastFieldKind = kind
                 attached.cancelJobs()
-                lastFocusedSession = session
+                moveToMostRecent(session, attached)
                 attached
             }
             attached.host.focusedAutofillKind = kind
@@ -240,7 +235,7 @@ class AddressAutofillCoordinator(
             attached.lastFieldKind = kind
             attached.hideJob?.cancel()
             attached.hideJob = null
-            lastFocusedSession = session
+            moveToMostRecent(session, attached)
             attached
         }
         attached.host.focusedAutofillKind = kind
@@ -340,6 +335,12 @@ class AddressAutofillCoordinator(
         }
         Log.i(TAG, "suggestion bar kind=$kind count=${items.size}")
         attached.host.showAddressAutofillBar(items)
+    }
+
+    /** [attachedSessions] の末尾へ動かし、セッションを伴わない通知の宛先にする。 */
+    private fun moveToMostRecent(session: GeckoSession, attached: Attached) {
+        attachedSessions.remove(session)
+        attachedSessions[session] = attached
     }
 
     /**

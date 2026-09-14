@@ -135,19 +135,54 @@ class AddressAutofillCoordinatorTest {
     @Test
     fun 別画面を接続しても元の画面に候補バーを出す() = runTest {
         val env = createEnv()
-        val otherHost = FakeHost(this)
-        val otherSession = mockk<GeckoSession>(relaxed = true)
-        env.coordinator.attach(
-            session = otherSession,
-            host = otherHost,
-            addressRepository = env.repository,
-        )
+        val other = attachSurface(env)
 
         env.coordinator.onFieldFocus(env.session, FIELD_KIND_EMAIL)
         advanceTimeBy(ADDRESS_AUTOFILL_IME_READY_WAIT_MS)
         advanceUntilIdle()
         assertTrue(env.host.isBarVisible)
-        assertFalse(otherHost.isBarVisible)
+        assertFalse(other.host.isBarVisible)
+    }
+
+    @Test
+    fun 新しく接続した画面の住所取得は新しい画面へ届く() = runTest {
+        val env = createEnv()
+        env.coordinator.onFieldFocus(env.session, FIELD_KIND_OTHER)
+        val opened = attachSurface(env)
+
+        env.coordinator.onAddressFetch(1)
+        advanceTimeBy(ADDRESS_AUTOFILL_IME_READY_WAIT_MS)
+        advanceUntilIdle()
+        assertTrue(opened.host.isBarVisible)
+        assertFalse(env.host.isBarVisible)
+    }
+
+    @Test
+    fun 直近フォーカスの画面を閉じたら次に古いフォーカス先へ届く() = runTest {
+        val env = createEnv()
+        val later = attachSurface(env)
+        val closing = attachSurface(env)
+        env.coordinator.onFieldFocus(env.session, FIELD_KIND_NAME)
+        env.coordinator.onFieldFocus(closing.session, FIELD_KIND_NAME)
+        advanceUntilIdle()
+        env.coordinator.detach(closing.session)
+
+        env.coordinator.onAddressFetch(1)
+        advanceTimeBy(ADDRESS_AUTOFILL_IME_READY_WAIT_MS)
+        advanceUntilIdle()
+        assertTrue(env.host.isBarVisible)
+        assertFalse(later.host.isBarVisible)
+    }
+
+    private fun TestScope.attachSurface(env: TestEnv): Surface {
+        val host = FakeHost(this)
+        val session = mockk<GeckoSession>(relaxed = true)
+        env.coordinator.attach(
+            session = session,
+            host = host,
+            addressRepository = env.repository,
+        )
+        return Surface(host, session)
     }
 
     private fun TestScope.createEnv(
@@ -177,6 +212,11 @@ class AddressAutofillCoordinatorTest {
         assertTrue(env.host.isBarVisible)
         assertEquals(0, env.host.hideCount)
     }
+
+    private class Surface(
+        val host: FakeHost,
+        val session: GeckoSession,
+    )
 
     private class TestEnv(
         val coordinator: AddressAutofillCoordinator,
