@@ -197,7 +197,6 @@ internal class NetworkLogStateHolder(
             onDismiss.invoke()
         }
     }
-
     /** 表示用の UiState を組み立てる */
     fun createUiState(allEntries: List<NetworkLogEntry>, tabIds: List<Int>?): NetworkLogUiState {
         currentTabIds = tabIds
@@ -444,7 +443,7 @@ internal class NetworkLogStateHolder(
             if (visibleSectionEntries.isEmpty()) return@mapNotNull null
             ShownSection(
                 domain = sectionDomain(allSectionEntries),
-                startedAtMillis = allSectionEntries.minOfOrNull { it.startedAtMillis } ?: 0L,
+                startedAtMillis = visibleSectionEntries.maxOf { it.startedAtMillis },
                 entries = visibleSectionEntries,
             )
         }.sortedByDescending { it.startedAtMillis }
