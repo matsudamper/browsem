@@ -28,6 +28,8 @@ internal data class NetworkLogUiState(
         val id: String,
         /** この行の直前に表示するドメイン見出し。セクション先頭以外は null */
         val domainHeader: String?,
+        /** sticky header とセクション操作に使う安定キー。セクション先頭以外は null */
+        val domainHeaderKey: String?,
         val method: String,
         val statusLabel: String,
         val statusKind: StatusKind,
@@ -165,6 +167,7 @@ internal data class NetworkLogUiState(
         /** プレビュー中の画像を端末に保存する */
         fun onClickSaveImage()
         fun onClickClear()
+        fun onClickClearDomain(sectionKey: String)
 
         /** 一覧で見えている範囲。サムネイルの取得対象を決めるために使う */
         fun onVisibleRangeChange(firstIndex: Int, lastIndex: Int)
