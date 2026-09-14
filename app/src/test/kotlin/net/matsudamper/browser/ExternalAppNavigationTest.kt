@@ -34,4 +34,13 @@ class ExternalAppNavigationTest {
         assertFalse(isBrowserPinnedHost("fakepay.google.com.example.com"))
         assertFalse(isBrowserPinnedHost("notpay.google.com.evil.test"))
     }
+
+    @Test
+    fun `http と https のみ http スキームと判定される`() {
+        assertTrue(isHttpUri("https://example.com/"))
+        assertTrue(isHttpUri("HTTP://example.com/"))
+        assertFalse(isHttpUri("okta-verify://enroll"))
+        assertFalse(isHttpUri("intent://example.com/#Intent;scheme=https;end"))
+        assertFalse(isHttpUri("example.com"))
+    }
 }

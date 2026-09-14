@@ -1684,33 +1684,40 @@ internal class BrowserTabScreenState(
         // DENY + loadUri すると onNewSession が呼ばれず overlay が出せない。
         // 外部アプリ判定だけ行い、ブラウザ内なら ALLOW して onNewSession に渡す。
         if (isSinglePageMode && request.target == GeckoSession.NavigationDelegate.TARGET_WINDOW_NEW) {
-            return when (externalAction) {
-                ExternalAppNavigationAction.AllowInBrowser -> null
-
-                ExternalAppNavigationAction.AppNotFound -> {
-                    Toast.makeText(context, "対応するアプリが見つかりません", Toast.LENGTH_SHORT).show()
-                    GeckoResult.fromValue(AllowOrDeny.DENY)
-                }
-
-                is ExternalAppNavigationAction.Launch -> {
-                    pendingExternalAppLaunch = externalAction.request
-                    GeckoResult.fromValue(AllowOrDeny.DENY)
-                }
-
-                is ExternalAppNavigationAction.OpenFallback -> {
-                    openFallbackUrl(externalAction.url)
-                    GeckoResult.fromValue(AllowOrDeny.DENY)
-                }
-            }
+            return applyExternalAppNavigationAction(externalAction)
         }
-        return when (externalAction) {
-            ExternalAppNavigationAction.AllowInBrowser -> {
-                if (handleWebAppCrossDomainNavigation(request.uri)) {
-                    GeckoResult.fromValue(AllowOrDeny.DENY)
-                } else {
-                    null
-                }
-            }
+        if (externalAction == ExternalAppNavigationAction.AllowInBrowser &&
+            handleWebAppCrossDomainNavigation(request.uri)
+        ) {
+            return GeckoResult.fromValue(AllowOrDeny.DENY)
+        }
+        return applyExternalAppNavigationAction(externalAction)
+    }
+
+    /**
+     * iframe からの遷移。独自スキームでアプリへ受け渡す認証フローがあり、Gecko はそれを
+     * 読み込めずに黙って失敗するため、ここで外部アプリ起動へ回す。
+     *
+     * http/https は埋め込みコンテンツそのものなので App Links 判定をしない。広告や埋め込み
+     * 動画の読み込みでアプリが起動してしまう。
+     */
+    override fun onSubframeLoadRequest(
+        request: GeckoSession.NavigationDelegate.LoadRequest,
+    ): GeckoResult<AllowOrDeny>? {
+        if (isHttpUri(request.uri)) return null
+        if (pendingExternalAppLaunch != null) {
+            return GeckoResult.fromValue(AllowOrDeny.DENY)
+        }
+        return applyExternalAppNavigationAction(
+            resolveExternalAppNavigationAction(context, request.uri),
+        )
+    }
+
+    private fun applyExternalAppNavigationAction(
+        action: ExternalAppNavigationAction,
+    ): GeckoResult<AllowOrDeny>? {
+        return when (action) {
+            ExternalAppNavigationAction.AllowInBrowser -> null
 
             ExternalAppNavigationAction.AppNotFound -> {
                 Toast.makeText(context, "対応するアプリが見つかりません", Toast.LENGTH_SHORT).show()
@@ -1718,12 +1725,12 @@ internal class BrowserTabScreenState(
             }
 
             is ExternalAppNavigationAction.Launch -> {
-                pendingExternalAppLaunch = externalAction.request
+                pendingExternalAppLaunch = action.request
                 GeckoResult.fromValue(AllowOrDeny.DENY)
             }
 
             is ExternalAppNavigationAction.OpenFallback -> {
-                openFallbackUrl(externalAction.url)
+                openFallbackUrl(action.url)
                 GeckoResult.fromValue(AllowOrDeny.DENY)
             }
         }

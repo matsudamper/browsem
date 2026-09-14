@@ -37,6 +37,11 @@ interface BrowserSessionStateCallbacks {
     fun onLoadRequest(
         request: GeckoSession.NavigationDelegate.LoadRequest,
     ): GeckoResult<AllowOrDeny>?
+
+    /** iframe など、トップレベル以外のフレームからの遷移要求 */
+    fun onSubframeLoadRequest(
+        request: GeckoSession.NavigationDelegate.LoadRequest,
+    ): GeckoResult<AllowOrDeny>?
     fun onHistoryStateChange(items: List<HistoryStateItem>, currentIndex: Int)
     fun onAndroidPermissionsRequest(
         permissions: Array<String>?,
@@ -230,6 +235,13 @@ fun createGeckoSessionDelegateBundle(
                 request: GeckoSession.NavigationDelegate.LoadRequest,
             ): GeckoResult<AllowOrDeny>? {
                 return callbacks.onLoadRequest(request)
+            }
+
+            override fun onSubframeLoadRequest(
+                session: GeckoSession,
+                request: GeckoSession.NavigationDelegate.LoadRequest,
+            ): GeckoResult<AllowOrDeny>? {
+                return callbacks.onSubframeLoadRequest(request)
             }
 
             override fun onLocationChange(
@@ -513,6 +525,12 @@ internal class BrowserTabSessionDelegateHost(
                 request: GeckoSession.NavigationDelegate.LoadRequest,
             ): GeckoResult<AllowOrDeny>? {
                 return currentCallbacks()?.onLoadRequest(request)
+            }
+
+            override fun onSubframeLoadRequest(
+                request: GeckoSession.NavigationDelegate.LoadRequest,
+            ): GeckoResult<AllowOrDeny>? {
+                return currentCallbacks()?.onSubframeLoadRequest(request)
             }
 
             override fun onHistoryStateChange(items: List<HistoryStateItem>, currentIndex: Int) {

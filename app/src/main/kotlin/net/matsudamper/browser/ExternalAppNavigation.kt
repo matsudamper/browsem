@@ -295,3 +295,11 @@ private val browserHandledSchemes = setOf(
     "resource",
     "view-source",
 )
+
+/**
+ * http/https のスキームかどうかを返す。
+ */
+internal fun isHttpUri(uri: String): Boolean {
+    val scheme = uri.substringBefore(':', missingDelimiterValue = "").lowercase(Locale.US)
+    return scheme == "http" || scheme == "https"
+}
