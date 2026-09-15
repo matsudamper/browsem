@@ -257,6 +257,26 @@ private fun buildExternalIntent(
     }
 }
 
+/**
+ * 診断ログへ残す URL を scheme とホストだけに切り詰める。
+ *
+ * 認証の受け渡しではパス・クエリ・フラグメントに認可コードやトークンが載る。ログは全文コピー
+ * できるため、そのまま残すと診断情報の共有で認証情報まで渡ってしまう。
+ */
+internal fun redactUrlForLog(url: String): String {
+    // 区切りは最初の : で決める。"://" を探すと、クエリに絶対 URL を持つ独自スキーム
+    // (myapp:cb?redirect=https://example.com) の内側を区切りと誤認して中身が残る。
+    val schemeEnd = url.indexOf(':')
+    if (schemeEnd <= 0) return "(スキームなし)"
+    val scheme = url.take(schemeEnd)
+    val rest = url.drop(schemeEnd + 1)
+    if (!rest.startsWith("//")) return "$scheme:"
+    val authority = rest.drop("//".length)
+        .takeWhile { it != '/' && it != '?' && it != '#' }
+        .substringAfterLast('@')
+    return "$scheme://$authority"
+}
+
 private const val INTENT_SCHEME = "intent"
 private const val EXTRA_BROWSER_FALLBACK_URL = "browser_fallback_url"
 
@@ -295,3 +315,31 @@ private val browserHandledSchemes = setOf(
     "resource",
     "view-source",
 )
+
+/**
+ * http/https のスキームかどうかを返す。
+ */
+internal fun isHttpUri(uri: String): Boolean {
+    val scheme = uri.substringBefore(':', missingDelimiterValue = "").lowercase(Locale.US)
+    return scheme == "http" || scheme == "https"
+}
+
+/**
+ * http/https の遷移で App Links 判定を行ってよいかどうかを返す。
+ *
+ * SSO の受け渡しはサーバーのリダイレクトを連ねて進むため、途中の 1 ホップでも App Links と
+ * みなして遷移を DENY すると、認証フローごと失われて白画面で止まる。リダイレクト先は
+ * ユーザーが選んだ遷移先ではないため、判定の対象外にする。
+ *
+ * ユーザー操作の有無では絞らない。JavaScript のリダイレクトや setTimeout からの App Links が
+ * 開けなくなるため、その条件は過去に撤廃されている。
+ *
+ * 独自スキームはページの自動遷移からアプリへ受け渡す作りがあるため、この制限をかけない。
+ */
+internal fun shouldCheckExternalAppForNavigation(
+    uri: String,
+    isRedirect: Boolean,
+): Boolean {
+    if (!isHttpUri(uri)) return true
+    return !isRedirect
+}
