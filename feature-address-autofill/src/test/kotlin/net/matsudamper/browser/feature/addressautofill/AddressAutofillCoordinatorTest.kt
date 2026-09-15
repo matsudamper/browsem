@@ -69,7 +69,7 @@ class AddressAutofillCoordinatorTest {
         showNameSuggestions(env)
 
         env.coordinator.onFieldBlur(env.session)
-        env.coordinator.onAddressFetch(1)
+        env.coordinator.fetchAddresses(1)
         advanceTimeBy(ADDRESS_AUTOFILL_BLUR_HIDE_WAIT_MS)
         advanceTimeBy(ADDRESS_AUTOFILL_IME_READY_WAIT_MS)
         runCurrent()
@@ -104,7 +104,7 @@ class AddressAutofillCoordinatorTest {
     fun フォーカス未確定の住所取得はフォールバックとして候補バーを出す() = runTest {
         val env = createEnv()
 
-        env.coordinator.onAddressFetch(1)
+        env.coordinator.fetchAddresses(1)
         advanceTimeBy(ADDRESS_AUTOFILL_IME_READY_WAIT_MS)
         advanceUntilIdle()
         assertTrue(env.host.isBarVisible)
@@ -115,7 +115,7 @@ class AddressAutofillCoordinatorTest {
         val env = createEnv()
         env.coordinator.onFieldFocus(env.session, FIELD_KIND_OTHER)
 
-        env.coordinator.onAddressFetch(1)
+        env.coordinator.fetchAddresses(1)
         advanceTimeBy(ADDRESS_AUTOFILL_IME_READY_WAIT_MS)
         advanceUntilIdle()
         assertFalse(env.host.isBarVisible)
@@ -150,7 +150,7 @@ class AddressAutofillCoordinatorTest {
         env.coordinator.onFieldFocus(env.session, FIELD_KIND_OTHER)
         val opened = attachSurface(env)
 
-        env.coordinator.onAddressFetch(1)
+        env.coordinator.fetchAddresses(1)
         advanceTimeBy(ADDRESS_AUTOFILL_IME_READY_WAIT_MS)
         advanceUntilIdle()
         assertTrue(opened.host.isBarVisible)
@@ -169,7 +169,7 @@ class AddressAutofillCoordinatorTest {
         advanceUntilIdle()
         env.coordinator.detach(closing.session)
 
-        env.coordinator.onAddressFetch(1)
+        env.coordinator.fetchAddresses(1)
         advanceTimeBy(ADDRESS_AUTOFILL_IME_READY_WAIT_MS)
         advanceUntilIdle()
         assertTrue(env.host.isBarVisible)
@@ -182,7 +182,7 @@ class AddressAutofillCoordinatorTest {
         env.coordinator.onWindowFocusChanged(env.session, true)
         val opened = attachSurface(env)
 
-        env.coordinator.onAddressFetch(1)
+        env.coordinator.fetchAddresses(1)
         env.coordinator.onFieldFocus(env.session, FIELD_KIND_NAME)
         advanceTimeBy(ADDRESS_AUTOFILL_IME_READY_WAIT_MS)
         advanceUntilIdle()
@@ -196,7 +196,7 @@ class AddressAutofillCoordinatorTest {
         val background = attachSurface(env)
 
         env.coordinator.onWindowFocusChanged(env.session, true)
-        env.coordinator.onAddressFetch(1)
+        env.coordinator.fetchAddresses(1)
         advanceTimeBy(ADDRESS_AUTOFILL_IME_READY_WAIT_MS)
         advanceUntilIdle()
         assertTrue(env.host.isBarVisible)
@@ -210,7 +210,7 @@ class AddressAutofillCoordinatorTest {
         env.coordinator.onWindowFocusChanged(env.session, true)
 
         env.coordinator.onFieldFocus(background.session, FIELD_KIND_NAME)
-        env.coordinator.onAddressFetch(1)
+        env.coordinator.fetchAddresses(1)
         advanceTimeBy(ADDRESS_AUTOFILL_IME_READY_WAIT_MS)
         advanceUntilIdle()
         assertFalse(env.host.isBarVisible)
@@ -225,7 +225,7 @@ class AddressAutofillCoordinatorTest {
         val opened = attachSurface(env)
         env.coordinator.onWindowFocusChanged(opened.session, true)
 
-        env.coordinator.onAddressFetch(1)
+        env.coordinator.fetchAddresses(1)
         advanceTimeBy(ADDRESS_AUTOFILL_IME_READY_WAIT_MS)
         advanceUntilIdle()
         assertTrue(opened.host.isBarVisible)
@@ -238,10 +238,30 @@ class AddressAutofillCoordinatorTest {
         env.coordinator.onWindowFocusChanged(env.session, true)
 
         env.coordinator.onFieldFocus(background.session, FIELD_KIND_OTHER)
-        env.coordinator.onAddressFetch(1)
+        env.coordinator.fetchAddresses(1)
         advanceTimeBy(ADDRESS_AUTOFILL_IME_READY_WAIT_MS)
         advanceUntilIdle()
         assertFalse(env.host.isBarVisible)
+    }
+
+    @Test
+    fun 読み出し中に前面が変わったら住所取得を新しい前面へ出さない() = runTest {
+        val env = createEnv()
+        env.coordinator.onWindowFocusChanged(env.session, true)
+        env.coordinator.onAddressFetchStarted()
+
+        val opened = attachSurface(env)
+        env.coordinator.onWindowFocusChanged(opened.session, true)
+        env.coordinator.onAddressFetch(1)
+        advanceTimeBy(ADDRESS_AUTOFILL_IME_READY_WAIT_MS)
+        advanceUntilIdle()
+        assertFalse(opened.host.isBarVisible)
+    }
+
+    /** 住所取得は要求と完了の2段階で届く。 */
+    private fun AddressAutofillCoordinator.fetchAddresses(count: Int) {
+        onAddressFetchStarted()
+        onAddressFetch(count)
     }
 
     private fun TestScope.attachSurface(env: TestEnv): Surface {

@@ -81,6 +81,14 @@ class AddressAutofillCoordinator(
     private var lastFieldFocusSession: GeckoSession? = null
     private var lastFieldFocusElapsed: Long = 0L
 
+    /** 住所の読み出し中に前面が変わっても発生元を見失わないよう、要求時点の判断を控える。 */
+    private var pendingFetch: PendingFetch? = null
+
+    private class PendingFetch(
+        val session: GeckoSession,
+        val triggeredByOtherSession: Boolean,
+    )
+
     private class Attached(
         val session: GeckoSession,
         val host: AddressAutofillHost,
@@ -196,10 +204,27 @@ class AddressAutofillCoordinator(
         }
     }
 
+    /** 住所の取得要求を受けた時点で呼ぶ。完了は読み出し後になるため、宛先をここで決める。 */
+    fun onAddressFetchStarted() {
+        synchronized(lock) {
+            val session = attachedSessions.values.lastOrNull()?.session ?: return
+            pendingFetch = PendingFetch(
+                session = session,
+                triggeredByOtherSession = isFetchTriggeredByOtherSession(session),
+            )
+        }
+    }
+
     fun onAddressFetch(count: Int) {
         if (count <= 0) return
         val target = synchronized(lock) {
-            val attached = attachedSessions.values.lastOrNull() ?: return
+            val pending = pendingFetch ?: return
+            pendingFetch = null
+            val attached = attachedSessions[pending.session] ?: return
+            if (pending.triggeredByOtherSession) {
+                Log.i(TAG, "onAddressFetch skipped: focused by another session")
+                return
+            }
             // メール欄では住所候補を出さない。それ以外はフォーカス判定まで保留する。
             if (attached.lastFieldKind == FIELD_KIND_EMAIL) {
                 Log.i(TAG, "onAddressFetch skipped: last field is email")
@@ -207,10 +232,6 @@ class AddressAutofillCoordinator(
             }
             if (attached.isFocusSuppressed(FIELD_KIND_ADDRESS)) {
                 Log.i(TAG, "onAddressFetch ignored after address fill")
-                return
-            }
-            if (isFetchTriggeredByOtherSession(attached.session)) {
-                Log.i(TAG, "onAddressFetch skipped: focused by another session")
                 return
             }
             attached
@@ -229,7 +250,6 @@ class AddressAutofillCoordinator(
                             // 推測で選んだ宛先が末尾でなくなったら、その画面には出さない。
                             attachedSessions.values.lastOrNull() !== target ||
                                 shouldAbortAddressFetchAfterFocusSettled(target) ||
-                                isFetchTriggeredByOtherSession(target.session) ||
                                 target.isFocusSuppressed(FIELD_KIND_ADDRESS)
                         }
                     },
