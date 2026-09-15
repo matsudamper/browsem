@@ -115,6 +115,7 @@ class AddressAutofillCoordinator(
         addressRepository: AddressRepository,
     ) {
         val attached = synchronized(lock) {
+            invalidateFocusCorrelationOfOtherSession(session)
             val previous = attachedSessions.remove(session)
             previous?.cancelJobs()
             Attached(session, host, addressRepository).also {
@@ -189,6 +190,7 @@ class AddressAutofillCoordinator(
             val attached = attachedSessions[session] ?: return
             attached.hasWindowFocus = hasWindowFocus
             if (hasWindowFocus) {
+                invalidateFocusCorrelationOfOtherSession(session)
                 moveToMostRecent(session, attached)
             }
         }
@@ -376,6 +378,16 @@ class AddressAutofillCoordinator(
     private fun moveToMostRecentIfForeground(session: GeckoSession, attached: Attached) {
         if (!attached.hasWindowFocus) return
         moveToMostRecent(session, attached)
+    }
+
+    /**
+     * 前面が別の画面へ移ったら、古いフォーカスは以後の住所取得の発生源ではない。
+     * 相関を残すと、直前に別画面を操作していた場合だけフォールバックが働かなくなる。
+     */
+    private fun invalidateFocusCorrelationOfOtherSession(session: GeckoSession) {
+        if (lastFieldFocusSession !== session) {
+            lastFieldFocusSession = null
+        }
     }
 
     private fun recordFieldFocusSession(session: GeckoSession) {
