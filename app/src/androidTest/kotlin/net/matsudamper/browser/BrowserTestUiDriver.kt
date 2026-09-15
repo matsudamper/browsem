@@ -371,7 +371,8 @@ internal fun AndroidComposeTestRule<*, MainActivity>.openLocalPageAndStabilize(
     timeoutMillis: Long = 60_000,
 ) {
     waitForBrowserReady()
-    waitForSessionNavigationSettled()
+    // 収束しないページでも URL 投入自体は行う。
+    runCatching { waitForSessionNavigationSettled() }
     val openedByIntent = runCatching {
         openUrlViaViewIntent(pageUrl)
         waitForUrlBarContains(pageUrl, timeoutMillis = 20_000)
