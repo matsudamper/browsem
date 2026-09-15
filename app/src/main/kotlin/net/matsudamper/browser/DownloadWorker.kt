@@ -212,10 +212,16 @@ internal class DownloadWorker(
             openDownloadsIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
-        // ダウンロード管理画面のプレビューと同じサムネイル/アプリアイコンを通知にも表示する
-        val thumbnail = runCatching {
+        // ダウンロード管理画面のプレビューと同じサムネイル/アプリアイコンを通知にも表示する。
+        // CancellationException まで読み込み失敗扱いにすると、停止要求後もこの関数の続きが
+        // 実行されて完了通知を出してしまうため、キャンセルはそのまま再送出する
+        val thumbnail = try {
             DownloadThumbnailLoader.load(context, fileUri, THUMBNAIL_SIZE_PX)
-        }.getOrNull()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            null
+        }
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_sys_download_done)
             .setContentTitle(fileName)
