@@ -307,9 +307,9 @@ internal fun GeckoBrowserTab(
         }
     }
 
-    // ファイルピッカー（単一ファイル選択）Google Photos を含むピッカーを表示するため ACTION_GET_CONTENT を使用
+    // ファイルピッカー（単一ファイル選択）クラウドストレージを含む統合ピッカーを表示するため ACTION_OPEN_DOCUMENT を使用
     val singleFileLauncher = rememberLauncherForActivityResult(
-        GetContentWithMimeTypes(),
+        OpenDocumentWithMimeTypes(),
     ) { uri ->
         if (uri != null) {
             dialogState.confirmFilePrompt(context, arrayOf(uri))
@@ -318,9 +318,9 @@ internal fun GeckoBrowserTab(
         }
     }
 
-    // ファイルピッカー（複数ファイル選択）Google Photos を含むピッカーを表示するため ACTION_GET_CONTENT を使用
+    // ファイルピッカー（複数ファイル選択）クラウドストレージを含む統合ピッカーを表示するため ACTION_OPEN_DOCUMENT を使用
     val multipleFilesLauncher = rememberLauncherForActivityResult(
-        GetMultipleContentsWithMimeTypes(),
+        OpenMultipleDocumentsWithMimeTypes(),
     ) { uris ->
         if (uris.isNotEmpty()) {
             dialogState.confirmFilePrompt(context, uris.toTypedArray())
@@ -1616,12 +1616,12 @@ private const val MENU_ID_OPEN = 0x10002
 private const val MENU_ID_SAVE_FORM_INPUT = 0x10003
 
 /**
- * ACTION_GET_CONTENT を使った単一ファイル選択コントラクト。
- * OpenDocument と異なり Google Photos などのフォトアプリもピッカーに表示される。
+ * ACTION_OPEN_DOCUMENT を使った単一ファイル選択コントラクト。
+ * DocumentsProvider を通じてローカルとクラウドストレージを統合表示する。
  */
-private class GetContentWithMimeTypes : ActivityResultContract<Array<String>, Uri?>() {
+private class OpenDocumentWithMimeTypes : ActivityResultContract<Array<String>, Uri?>() {
     override fun createIntent(context: Context, input: Array<String>): Intent {
-        return Intent(Intent.ACTION_GET_CONTENT).apply {
+        return Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
             addCategory(Intent.CATEGORY_OPENABLE)
             applyMimeTypes(this, input)
         }
@@ -1633,12 +1633,12 @@ private class GetContentWithMimeTypes : ActivityResultContract<Array<String>, Ur
 }
 
 /**
- * ACTION_GET_CONTENT を使った複数ファイル選択コントラクト。
- * OpenMultipleDocuments と異なり Google Photos などのフォトアプリもピッカーに表示される。
+ * ACTION_OPEN_DOCUMENT を使った複数ファイル選択コントラクト。
+ * DocumentsProvider を通じてローカルとクラウドストレージを統合表示する。
  */
-private class GetMultipleContentsWithMimeTypes : ActivityResultContract<Array<String>, List<Uri>>() {
+private class OpenMultipleDocumentsWithMimeTypes : ActivityResultContract<Array<String>, List<Uri>>() {
     override fun createIntent(context: Context, input: Array<String>): Intent {
-        return Intent(Intent.ACTION_GET_CONTENT).apply {
+        return Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
             addCategory(Intent.CATEGORY_OPENABLE)
             putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
             applyMimeTypes(this, input)
