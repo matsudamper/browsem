@@ -162,7 +162,9 @@ class AddressAutofillCoordinatorTest {
         val env = createEnv()
         val later = attachSurface(env)
         val closing = attachSurface(env)
+        env.coordinator.onWindowFocusChanged(env.session, true)
         env.coordinator.onFieldFocus(env.session, FIELD_KIND_NAME)
+        env.coordinator.onWindowFocusChanged(closing.session, true)
         env.coordinator.onFieldFocus(closing.session, FIELD_KIND_NAME)
         advanceUntilIdle()
         env.coordinator.detach(closing.session)
@@ -177,6 +179,7 @@ class AddressAutofillCoordinatorTest {
     @Test
     fun 住所取得の待機中にフォーカスが来たら古い宛先には出さない() = runTest {
         val env = createEnv()
+        env.coordinator.onWindowFocusChanged(env.session, true)
         val opened = attachSurface(env)
 
         env.coordinator.onAddressFetch(1)
@@ -192,12 +195,26 @@ class AddressAutofillCoordinatorTest {
         val env = createEnv()
         val background = attachSurface(env)
 
-        env.coordinator.onSessionResumed(env.session)
+        env.coordinator.onWindowFocusChanged(env.session, true)
         env.coordinator.onAddressFetch(1)
         advanceTimeBy(ADDRESS_AUTOFILL_IME_READY_WAIT_MS)
         advanceUntilIdle()
         assertTrue(env.host.isBarVisible)
         assertFalse(background.host.isBarVisible)
+    }
+
+    @Test
+    fun 背面の画面のフォーカス通知では宛先が変わらない() = runTest {
+        val env = createEnv()
+        val background = attachSurface(env)
+        env.coordinator.onWindowFocusChanged(env.session, true)
+
+        env.coordinator.onFieldFocus(background.session, FIELD_KIND_NAME)
+        advanceUntilIdle()
+        env.coordinator.onAddressFetch(1)
+        advanceTimeBy(ADDRESS_AUTOFILL_IME_READY_WAIT_MS)
+        advanceUntilIdle()
+        assertTrue(env.host.isBarVisible)
     }
 
     private fun TestScope.attachSurface(env: TestEnv): Surface {

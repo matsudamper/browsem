@@ -737,13 +737,12 @@ internal fun GeckoBrowserTab(
     val windowFocusOwnerView = LocalView.current
     DisposableEffect(windowFocusOwnerView, session, addressAutofillCoordinator) {
         val listener = ViewTreeObserver.OnWindowFocusChangeListener { hasFocus ->
-            if (hasFocus) {
-                addressAutofillCoordinator.onSessionResumed(session)
-            }
+            addressAutofillCoordinator.onWindowFocusChanged(session, hasFocus)
         }
-        if (windowFocusOwnerView.hasWindowFocus()) {
-            addressAutofillCoordinator.onSessionResumed(session)
-        }
+        addressAutofillCoordinator.onWindowFocusChanged(
+            session,
+            windowFocusOwnerView.hasWindowFocus(),
+        )
         windowFocusOwnerView.viewTreeObserver.addOnWindowFocusChangeListener(listener)
         onDispose {
             windowFocusOwnerView.viewTreeObserver.removeOnWindowFocusChangeListener(listener)

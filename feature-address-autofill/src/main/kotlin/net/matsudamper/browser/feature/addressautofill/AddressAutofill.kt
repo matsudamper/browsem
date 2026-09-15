@@ -84,6 +84,7 @@ class AddressAutofillCoordinator(
     ) {
         var showJob: Job? = null
         var hideJob: Job? = null
+        var hasWindowFocus: Boolean = false
         var lastFieldKind: String? = null
         var suppressFocusUntilElapsed: Long = 0L
         var suppressFocusKind: String? = null
@@ -114,6 +115,7 @@ class AddressAutofillCoordinator(
             previous?.cancelJobs()
             Attached(session, host, addressRepository).also {
                 it.lastFieldKind = previous?.lastFieldKind
+                it.hasWindowFocus = previous?.hasWindowFocus ?: false
                 attachedSessions[session] = it
             }
         }
@@ -171,14 +173,17 @@ class AddressAutofillCoordinator(
     }
 
     /**
-     * 画面が前面へ戻ったときに呼ぶ。
-     * 停止中の画面はセッションが登録されたまま残るため、復帰を利用順へ反映しないと
-     * セッションを伴わない住所取得が背面の画面へ届いてしまう。
+     * 画面のウィンドウフォーカスが変わったときに呼ぶ。
+     * 背面の画面もセッションが登録されたまま残るため、前面がどれかを利用順へ反映
+     * しないと、セッションを伴わない住所取得が背面の画面へ届いてしまう。
      */
-    fun onSessionResumed(session: GeckoSession) {
+    fun onWindowFocusChanged(session: GeckoSession, hasWindowFocus: Boolean) {
         synchronized(lock) {
             val attached = attachedSessions[session] ?: return
-            moveToMostRecent(session, attached)
+            attached.hasWindowFocus = hasWindowFocus
+            if (hasWindowFocus) {
+                moveToMostRecent(session, attached)
+            }
         }
     }
 
@@ -230,7 +235,7 @@ class AddressAutofillCoordinator(
                 attached.host.autofillBarHideGeneration += 1
                 attached.lastFieldKind = kind
                 attached.cancelJobs()
-                moveToMostRecent(session, attached)
+                moveToMostRecentIfForeground(session, attached)
                 attached
             }
             attached.host.focusedAutofillKind = kind
@@ -249,7 +254,7 @@ class AddressAutofillCoordinator(
             attached.lastFieldKind = kind
             attached.hideJob?.cancel()
             attached.hideJob = null
-            moveToMostRecent(session, attached)
+            moveToMostRecentIfForeground(session, attached)
             attached
         }
         attached.host.focusedAutofillKind = kind
@@ -349,6 +354,15 @@ class AddressAutofillCoordinator(
         }
         Log.i(TAG, "suggestion bar kind=$kind count=${items.size}")
         attached.host.showAddressAutofillBar(items)
+    }
+
+    /**
+     * 背面の画面のページが input.focus() を実行しても focus 通知は届く。
+     * 前面の画面が決めた利用順を背面が上書きしないよう、ウィンドウフォーカスを条件にする。
+     */
+    private fun moveToMostRecentIfForeground(session: GeckoSession, attached: Attached) {
+        if (!attached.hasWindowFocus) return
+        moveToMostRecent(session, attached)
     }
 
     /** [attachedSessions] の末尾へ動かし、セッションを伴わない通知の宛先にする。 */
