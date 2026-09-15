@@ -1249,7 +1249,7 @@ internal class BrowserTabScreenState(
         }
         if (!loadsCurrentTab) return
 
-        val url = if (request.sourceUri.startsWith("http://") || request.sourceUri.startsWith("https://")) {
+        val url = if (isHttpUri(request.sourceUri)) {
             request.sourceUri
         } else {
             request.fallbackUrl
