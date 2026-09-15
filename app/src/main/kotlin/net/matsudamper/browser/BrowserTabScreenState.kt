@@ -1746,9 +1746,12 @@ internal class BrowserTabScreenState(
             return GeckoResult.fromValue(AllowOrDeny.DENY)
         }
         val action = resolveExternalAppNavigationAction(context, request.uri)
-        if (action is ExternalAppNavigationAction.OpenFallback) {
-            // fallback URL をトップレベルで読み込むと、iframe の第三者コンテンツが確認も
-            // ユーザー操作もなくタブごと任意の URL へ遷移させられる。読み込まずに止める。
+        // blob: や data: など Gecko が扱うスキームはそのまま読み込ませる。
+        if (action == ExternalAppNavigationAction.AllowInBrowser) return null
+        if (action !is ExternalAppNavigationAction.Launch) {
+            // アプリを開くところまで進めない要求は、サブフレームでは黙って止める。
+            // fallback URL をトップレベルで読み込むと iframe の第三者コンテンツがタブごと
+            // 任意の URL へ遷移させられ、Toast は要求を繰り返すページが出し続けられるため。
             saveExternalAppNavigationInfo(uri = request.uri, action = action)
             return GeckoResult.fromValue(AllowOrDeny.DENY)
         }
