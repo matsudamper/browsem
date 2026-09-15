@@ -66,6 +66,9 @@ private const val TAG = "BrowserTabScreenState"
 /** タブ 1 つあたりに残す外部アプリ遷移ログの上限 */
 private const val MAX_EXTERNAL_APP_NAVIGATION_LOGS = 20
 
+/** タブ 1 つあたりに、サブフレーム由来の要求で起動確認を出す上限 */
+private const val MAX_SUBFRAME_EXTERNAL_APP_PROMPTS = 3
+
 private val PAGE_ZOOM_STEPS = listOf(20, 25, 33, 50, 67, 75, 80, 90, 100, 110, 125, 150, 175, 200)
 
 private enum class FindInPageState {
@@ -467,6 +470,10 @@ internal class BrowserTabScreenState(
     // --- ファイルダウンロード確認ダイアログ用state ---
     var pendingDownloadResponse by mutableStateOf<WebResponse?>(null)
     var pendingExternalAppLaunch by mutableStateOf<PendingExternalAppLaunch?>(null)
+
+    // サブフレーム由来の要求で起動確認を出した URI。ユーザー操作なしに何度でも要求できるため、
+    // 同じ URI では出し直さず、タブあたりの回数も制限する。
+    private val promptedSubframeExternalAppUris = mutableSetOf<String>()
 
     // 同じ外部アプリ遷移ログを繰り返し保存しないための記録。
     // ページ遷移ではクリアしない。読み込みごとに違う要求を出すページが自動リロードを
@@ -1752,6 +1759,13 @@ internal class BrowserTabScreenState(
             // アプリを開くところまで進めない要求は、サブフレームでは黙って止める。
             // fallback URL をトップレベルで読み込むと iframe の第三者コンテンツがタブごと
             // 任意の URL へ遷移させられ、Toast は要求を繰り返すページが出し続けられるため。
+            saveExternalAppNavigationInfo(uri = request.uri, action = action)
+            return GeckoResult.fromValue(AllowOrDeny.DENY)
+        }
+        if (promptedSubframeExternalAppUris.size >= MAX_SUBFRAME_EXTERNAL_APP_PROMPTS ||
+            !promptedSubframeExternalAppUris.add(request.uri)
+        ) {
+            // 一度出した確認を閉じた直後に出し直されるとブラウザの操作を妨げられる。
             saveExternalAppNavigationInfo(uri = request.uri, action = action)
             return GeckoResult.fromValue(AllowOrDeny.DENY)
         }
