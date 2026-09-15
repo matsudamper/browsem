@@ -231,6 +231,19 @@ class AddressAutofillCoordinatorTest {
         assertTrue(opened.host.isBarVisible)
     }
 
+    @Test
+    fun 背面の画面の非住所欄フォーカスによる住所取得も前面へ出さない() = runTest {
+        val env = createEnv()
+        val background = attachSurface(env)
+        env.coordinator.onWindowFocusChanged(env.session, true)
+
+        env.coordinator.onFieldFocus(background.session, FIELD_KIND_OTHER)
+        env.coordinator.onAddressFetch(1)
+        advanceTimeBy(ADDRESS_AUTOFILL_IME_READY_WAIT_MS)
+        advanceUntilIdle()
+        assertFalse(env.host.isBarVisible)
+    }
+
     private fun TestScope.attachSurface(env: TestEnv): Surface {
         val host = FakeHost(this)
         val session = mockk<GeckoSession>(relaxed = true)

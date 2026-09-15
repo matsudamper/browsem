@@ -246,6 +246,8 @@ class AddressAutofillCoordinator(
         if (kind == FIELD_KIND_OTHER) {
             val attached = synchronized(lock) {
                 val attached = attachedSessions[session] ?: return
+                // 住所欄の判定は content script と Gecko で一致しないため、other でも記録する。
+                recordFieldFocusSession(session)
                 attached.host.autofillBarHideGeneration += 1
                 attached.lastFieldKind = kind
                 attached.cancelJobs()
