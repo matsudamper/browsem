@@ -1801,7 +1801,11 @@ internal class BrowserTabScreenState(
             }
 
             is ExternalAppNavigationAction.OpenFallback -> {
-                openFallbackUrl(action.url)
+                // 現在ページを置き換えない遷移では fallback URL も読み込まない。
+                // 新規ウィンドウの要求で読み込むと、そのまま残るはずの現在ページが失われる。
+                if (loadsCurrentTab) {
+                    openFallbackUrl(action.url)
+                }
                 GeckoResult.fromValue(AllowOrDeny.DENY)
             }
         }
