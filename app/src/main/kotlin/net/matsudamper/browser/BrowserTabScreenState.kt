@@ -1687,6 +1687,11 @@ internal class BrowserTabScreenState(
         // ダイアログを上書きせずキューに入れる。ダイアログをキャンセルした場合に
         // キューの内容（Play Store 等）を表示し、アプリ起動した場合は破棄する。
         if (pendingExternalAppLaunch != null) {
+            // ダイアログ表示中でもリダイレクト先は止めない。サブフレームのアプリ受け渡しと
+            // 認証のリダイレクトが重なると、ここで DENY してフローごと失うため。
+            if (!shouldCheckExternalAppForNavigation(uri = request.uri, isRedirect = request.isRedirect)) {
+                return null
+            }
             val externalAction = resolveExternalAppNavigationAction(context, request.uri)
             if (externalAction is ExternalAppNavigationAction.Launch) {
                 queuedExternalAppLaunch = externalAction.request
