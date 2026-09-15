@@ -147,9 +147,6 @@ class AboutBlankNewTabLocationTest {
         }
 
         group("ローカル HTTP の index.html を読み込む") {
-            // 新規タブの初回ロードは GeckoView のサイズ確定後に走る。確定前に URL を投入すると
-            // 遅れて来たホームページのロードで上書きされるため、収束を待ってから開く。
-            composeRule.waitForSessionNavigationSettled()
             composeRule.openUrlFromUrlBar(localServer.indexUrl)
             composeRule.waitForStableLocalPage(localServer.indexUrl)
             composeRule.waitUntil(timeoutMillis = 30_000) {

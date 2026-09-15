@@ -73,9 +73,6 @@ class AddressAutofillPromptTest {
         saveAndSetPref("geckoview.autocomplete.selection_dismiss_delay_ms", 60_000)
         clearLogcat()
 
-        // 復元タブのロードが遅れてコミットされると、開いたページがホームページへ
-        // 上書きされる。収束を待ってから開く。
-        composeRule.waitForSessionNavigationSettled()
         composeRule.openUrlFromUrlBar(MDN_AUTOCOMPLETE_PAGE_URL)
         composeRule.waitForUrlBarContains("autocomplete", timeoutMillis = 90_000)
         composeRule.waitForUrlBarNotFocused(timeoutMillis = 30_000)
