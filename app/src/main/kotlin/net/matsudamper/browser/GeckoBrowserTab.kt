@@ -17,6 +17,7 @@ import android.view.View
 import android.view.ViewTreeObserver
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContract
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -329,13 +330,44 @@ internal fun GeckoBrowserTab(
         }
     }
 
+    // 画像のみの要求で使うフォトピッカー（単一選択）Google フォトなどのクラウド写真も選択できる
+    val singleVisualMediaLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickVisualMedia(),
+    ) { uri ->
+        if (uri != null) {
+            dialogState.confirmFilePrompt(context, arrayOf(uri))
+        } else {
+            dialogState.dismissFilePrompt()
+        }
+    }
+
+    // 画像のみの要求で使うフォトピッカー（複数選択）
+    val multipleVisualMediaLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickMultipleVisualMedia(),
+    ) { uris ->
+        if (uris.isNotEmpty()) {
+            dialogState.confirmFilePrompt(context, uris.toTypedArray())
+        } else {
+            dialogState.dismissFilePrompt()
+        }
+    }
+
     // ファイルプロンプトが来たらピッカーを起動
     val pendingFilePrompt = dialogState.pendingFilePrompt
     LaunchedEffect(pendingFilePrompt) {
         val prompt = pendingFilePrompt ?: return@LaunchedEffect
         val mimeTypes = prompt.mimeTypes?.takeIf { it.isNotEmpty() } ?: arrayOf("*/*")
-        when (prompt.type) {
-            GeckoSession.PromptDelegate.FilePrompt.Type.MULTIPLE ->
+        val isMultiple = prompt.type == GeckoSession.PromptDelegate.FilePrompt.Type.MULTIPLE
+        val imageOnlyMediaType = resolveImageOnlyVisualMediaType(mimeTypes)
+            ?.takeIf { ActivityResultContracts.PickVisualMedia.isPhotoPickerAvailable(context) }
+        when {
+            imageOnlyMediaType != null && isMultiple ->
+                multipleVisualMediaLauncher.launch(PickVisualMediaRequest(imageOnlyMediaType))
+
+            imageOnlyMediaType != null ->
+                singleVisualMediaLauncher.launch(PickVisualMediaRequest(imageOnlyMediaType))
+
+            isMultiple ->
                 multipleFilesLauncher.launch(mimeTypes)
 
             else ->
@@ -1614,6 +1646,23 @@ private fun GeckoSession.logKey(): String = Integer.toHexString(System.identityH
 private const val MENU_ID_SEARCH = 0x10001
 private const val MENU_ID_OPEN = 0x10002
 private const val MENU_ID_SAVE_FORM_INPUT = 0x10003
+
+/**
+ * 画像のみの要求であればフォトピッカーへ渡す VisualMediaType を返す。
+ * 画像以外を含む要求では null を返し、従来のファイルピッカーにフォールバックする。
+ */
+private fun resolveImageOnlyVisualMediaType(
+    mimeTypes: Array<String>,
+): ActivityResultContracts.PickVisualMedia.VisualMediaType? {
+    if (mimeTypes.isEmpty()) return null
+    if (!mimeTypes.all { it.startsWith("image/") }) return null
+    val singleSubType = mimeTypes.singleOrNull()?.takeIf { it != "image/*" }
+    return if (singleSubType != null) {
+        ActivityResultContracts.PickVisualMedia.SingleMimeType(singleSubType)
+    } else {
+        ActivityResultContracts.PickVisualMedia.ImageOnly
+    }
+}
 
 /**
  * ACTION_GET_CONTENT を使った単一ファイル選択コントラクト。
