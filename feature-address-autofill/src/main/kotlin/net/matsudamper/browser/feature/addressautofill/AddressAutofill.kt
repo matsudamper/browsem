@@ -81,14 +81,6 @@ class AddressAutofillCoordinator(
     private var lastFieldFocusSession: GeckoSession? = null
     private var lastFieldFocusElapsed: Long = 0L
 
-    /** 住所の読み出し中に前面が変わっても発生元を見失わないよう、要求時点の判断を控える。 */
-    private var pendingFetch: PendingFetch? = null
-
-    private class PendingFetch(
-        val session: GeckoSession,
-        val triggeredByOtherSession: Boolean,
-    )
-
     private class Attached(
         val session: GeckoSession,
         val host: AddressAutofillHost,
@@ -158,9 +150,7 @@ class AddressAutofillCoordinator(
     fun detach(session: GeckoSession) {
         fillExtension.unregisterSession(session)
         val attached = synchronized(lock) {
-            if (lastFieldFocusSession === session) {
-                lastFieldFocusSession = null
-            }
+            releaseFocusCorrelationOf(session)
             attachedSessions.remove(session)?.also { it.cancelJobs() }
         } ?: return
         attached.host.focusedAutofillKind = null
@@ -204,24 +194,24 @@ class AddressAutofillCoordinator(
         }
     }
 
-    /** 住所の取得要求を受けた時点で呼ぶ。完了は読み出し後になるため、宛先をここで決める。 */
-    fun onAddressFetchStarted() {
-        synchronized(lock) {
-            val session = attachedSessions.values.lastOrNull()?.session ?: return
-            pendingFetch = PendingFetch(
-                session = session,
-                triggeredByOtherSession = isFetchTriggeredByOtherSession(session),
-            )
+    /**
+     * 住所の取得要求を受けた時点で呼ぶ。完了は読み出し後になるため、宛先をここで決める。
+     * 要求ごとに返すため、複数の取得が同時に走っても宛先を取り違えない。
+     */
+    fun onAddressFetchStarted(): AddressFetchRequest? {
+        return synchronized(lock) {
+            val session = attachedSessions.values.lastOrNull()?.session ?: return null
+            AddressFetchRequest(session)
         }
     }
 
-    fun onAddressFetch(count: Int) {
+    fun onAddressFetch(request: AddressFetchRequest?, count: Int) {
         if (count <= 0) return
         val target = synchronized(lock) {
-            val pending = pendingFetch ?: return
-            pendingFetch = null
-            val attached = attachedSessions[pending.session] ?: return
-            if (pending.triggeredByOtherSession) {
+            val session = request?.session ?: return
+            val attached = attachedSessions[session] ?: return
+            // フォーカス通知は main handler 経由で遅れて届くため、完了の時点で判定する。
+            if (isFetchTriggeredByOtherSession(session)) {
                 Log.i(TAG, "onAddressFetch skipped: focused by another session")
                 return
             }
@@ -327,6 +317,7 @@ class AddressAutofillCoordinator(
     fun onFieldBlur(session: GeckoSession) {
         synchronized(lock) {
             val attached = attachedSessions[session] ?: return
+            releaseFocusCorrelationOf(session)
             attached.showJob?.cancel()
             attached.showJob = null
             attached.lastFieldKind = FIELD_KIND_OTHER
@@ -353,6 +344,7 @@ class AddressAutofillCoordinator(
     fun onFocusPortDisconnected(session: GeckoSession) {
         val attached = synchronized(lock) {
             val attached = attachedSessions[session] ?: return
+            releaseFocusCorrelationOf(session)
             attached.cancelJobs()
             attached.lastFieldKind = FIELD_KIND_OTHER
             attached
@@ -412,6 +404,13 @@ class AddressAutofillCoordinator(
         }
     }
 
+    /** フォーカスが外れた画面は以後の住所取得の発生源ではない。 */
+    private fun releaseFocusCorrelationOf(session: GeckoSession) {
+        if (lastFieldFocusSession === session) {
+            lastFieldFocusSession = null
+        }
+    }
+
     private fun recordFieldFocusSession(session: GeckoSession) {
         lastFieldFocusSession = session
         lastFieldFocusElapsed = SystemClock.elapsedRealtime()
@@ -447,6 +446,11 @@ class AddressAutofillCoordinator(
         }
     }
 }
+
+/** 住所取得の要求。完了時に宛先を取り違えないよう、要求元のセッションを持つ。 */
+class AddressFetchRequest internal constructor(
+    internal val session: GeckoSession,
+)
 
 class AddressAutofillDelegate(
     private val coordinator: AddressAutofillCoordinator,

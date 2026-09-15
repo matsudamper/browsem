@@ -13,21 +13,21 @@ import org.mozilla.geckoview.GeckoResult
 class AutocompleteStorageDelegate(
     private val addressRepository: AddressRepository,
     private val coroutineScope: CoroutineScope,
-    private val onAddressFetchStarted: () -> Unit = {},
-    private val onAddressFetched: (Int) -> Unit = {},
+    private val onAddressFetchStarted: () -> AddressFetchRequest? = { null },
+    private val onAddressFetched: (AddressFetchRequest?, Int) -> Unit = { _, _ -> },
 ) : Autocomplete.StorageDelegate {
 
     override fun onAddressFetch(): GeckoResult<Array<Autocomplete.Address>> {
         val result = GeckoResult<Array<Autocomplete.Address>>()
         // 取得完了は住所の読み出し後になる。読み出し中に前面が変わっても発生元を見失わないよう、
         // 要求の時点で発生元を控えさせる。
-        onAddressFetchStarted()
+        val request = onAddressFetchStarted()
         coroutineScope.launch(Dispatchers.IO) {
             try {
                 val addresses = addressRepository.getAll().map { it.toGeckoAddress() }.toTypedArray()
                 Log.i(TAG, "onAddressFetch: ${addresses.size}件")
                 result.complete(addresses)
-                onAddressFetched(addresses.size)
+                onAddressFetched(request, addresses.size)
             } catch (e: Exception) {
                 Log.w(TAG, "住所の取得に失敗", e)
                 result.complete(emptyArray())
