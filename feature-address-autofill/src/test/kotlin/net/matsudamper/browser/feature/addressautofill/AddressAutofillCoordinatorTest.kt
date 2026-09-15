@@ -204,17 +204,17 @@ class AddressAutofillCoordinatorTest {
     }
 
     @Test
-    fun 背面の画面のフォーカス通知では宛先が変わらない() = runTest {
+    fun 背面の画面のフォーカスによる住所取得は前面へ出さない() = runTest {
         val env = createEnv()
         val background = attachSurface(env)
         env.coordinator.onWindowFocusChanged(env.session, true)
 
         env.coordinator.onFieldFocus(background.session, FIELD_KIND_NAME)
-        advanceUntilIdle()
         env.coordinator.onAddressFetch(1)
         advanceTimeBy(ADDRESS_AUTOFILL_IME_READY_WAIT_MS)
         advanceUntilIdle()
-        assertTrue(env.host.isBarVisible)
+        assertFalse(env.host.isBarVisible)
+        assertTrue(background.host.isBarVisible)
     }
 
     private fun TestScope.attachSurface(env: TestEnv): Surface {

@@ -77,6 +77,10 @@ class AddressAutofillCoordinator(
      */
     private val attachedSessions = LinkedHashMap<GeckoSession, Attached>()
 
+    /** 直近にフィールドのフォーカスを通知したセッションと、その時刻。 */
+    private var lastFieldFocusSession: GeckoSession? = null
+    private var lastFieldFocusElapsed: Long = 0L
+
     private class Attached(
         val session: GeckoSession,
         val host: AddressAutofillHost,
@@ -145,6 +149,9 @@ class AddressAutofillCoordinator(
     fun detach(session: GeckoSession) {
         fillExtension.unregisterSession(session)
         val attached = synchronized(lock) {
+            if (lastFieldFocusSession === session) {
+                lastFieldFocusSession = null
+            }
             attachedSessions.remove(session)?.also { it.cancelJobs() }
         } ?: return
         attached.host.focusedAutofillKind = null
@@ -200,6 +207,10 @@ class AddressAutofillCoordinator(
                 Log.i(TAG, "onAddressFetch ignored after address fill")
                 return
             }
+            if (isFetchTriggeredByOtherSession(attached.session)) {
+                Log.i(TAG, "onAddressFetch skipped: focused by another session")
+                return
+            }
             attached
         }
         Log.i(TAG, "onAddressFetch schedule suggestion bar count=$count")
@@ -216,6 +227,7 @@ class AddressAutofillCoordinator(
                             // 推測で選んだ宛先が末尾でなくなったら、その画面には出さない。
                             attachedSessions.values.lastOrNull() !== target ||
                                 shouldAbortAddressFetchAfterFocusSettled(target) ||
+                                isFetchTriggeredByOtherSession(target.session) ||
                                 target.isFocusSuppressed(FIELD_KIND_ADDRESS)
                         }
                     },
@@ -246,6 +258,7 @@ class AddressAutofillCoordinator(
         if (kind != FIELD_KIND_ADDRESS && kind != FIELD_KIND_NAME && kind != FIELD_KIND_EMAIL) return
         val attached = synchronized(lock) {
             val attached = attachedSessions[session] ?: return
+            recordFieldFocusSession(session)
             attached.host.autofillBarHideGeneration += 1
             if (attached.isFocusSuppressed(kind)) {
                 Log.i(TAG, "field-focus ignored after fill kind=$kind")
@@ -363,6 +376,23 @@ class AddressAutofillCoordinator(
     private fun moveToMostRecentIfForeground(session: GeckoSession, attached: Attached) {
         if (!attached.hasWindowFocus) return
         moveToMostRecent(session, attached)
+    }
+
+    private fun recordFieldFocusSession(session: GeckoSession) {
+        lastFieldFocusSession = session
+        lastFieldFocusElapsed = SystemClock.elapsedRealtime()
+    }
+
+    /**
+     * 住所取得はセッションを伴わないため、背面の画面のページが `input.focus()` した取得も
+     * 前面の画面へ届いてしまう。直前のフォーカス通知が別セッションのものなら、その取得は
+     * そのセッションのものとみなして前面には出さない。
+     * フォーカス通知が来ない shadow DOM 経由のフォールバックは通す。
+     */
+    private fun isFetchTriggeredByOtherSession(target: GeckoSession): Boolean {
+        val focusSession = lastFieldFocusSession ?: return false
+        if (focusSession === target) return false
+        return SystemClock.elapsedRealtime() - lastFieldFocusElapsed < FETCH_FOCUS_CORRELATION_MS
     }
 
     /** [attachedSessions] の末尾へ動かし、セッションを伴わない通知の宛先にする。 */
@@ -538,6 +568,9 @@ private const val TAG = "AddressAutofill"
 internal const val ADDRESS_AUTOFILL_IME_READY_WAIT_MS = 150L
 internal const val ADDRESS_AUTOFILL_BLUR_HIDE_WAIT_MS = 300L
 private const val FILL_FOCUS_SUPPRESS_MS = 1_500L
+
+/** 住所取得を、直前のフォーカス通知と同じ操作によるものとみなす時間。 */
+private const val FETCH_FOCUS_CORRELATION_MS = 1_000L
 const val FIELD_KIND_NAME = "name"
 const val FIELD_KIND_ADDRESS = "address"
 const val FIELD_KIND_EMAIL = "email"
