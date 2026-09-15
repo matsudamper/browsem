@@ -4,22 +4,16 @@ import android.app.Application
 import android.app.DownloadManager
 import android.app.NotificationManager
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.net.Uri
-import android.os.Build
 import android.provider.MediaStore
 import android.provider.Settings
-import android.util.Size
 import android.widget.Toast
-import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.core.graphics.drawable.toBitmap
 import androidx.core.net.toUri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
-import java.io.File
 import java.util.Locale
 import java.util.UUID
 import kotlinx.coroutines.Dispatchers
@@ -36,6 +30,8 @@ import net.matsudamper.browser.GeckoDownloadManager
 import net.matsudamper.browser.data.download.DownloadRecord
 import net.matsudamper.browser.data.download.DownloadRecordStatus
 import net.matsudamper.browser.data.download.DownloadRepository
+import net.matsudamper.browser.download.DownloadThumbnail
+import net.matsudamper.browser.download.DownloadThumbnailLoader
 import net.matsudamper.browser.download.DownloadUrl
 import net.matsudamper.browser.ui.downloads.DownloadManagementScreenUiState
 
@@ -122,53 +118,20 @@ internal class DownloadManagementScreenViewModel(
      */
     private suspend fun loadPreview(fileUri: String): DownloadManagementScreenUiState.Preview {
         return withContext(Dispatchers.IO) {
-            val uri = fileUri.toUri()
-            val thumbnail = runCatching {
-                getApplication<Application>().contentResolver.loadThumbnail(
-                    uri,
-                    Size(PREVIEW_SIZE_PX, PREVIEW_SIZE_PX),
-                    null,
-                )
-            }.getOrNull()
-            if (thumbnail != null) {
-                return@withContext DownloadManagementScreenUiState.Preview.Thumbnail(thumbnail.asImageBitmap())
-            }
-            val mimeType = getMimeType(uri)
-            val fileName = getDisplayName(uri)
-            if (isApk(mimeType, fileName)) {
-                loadApkIcon(uri)?.let {
-                    return@withContext DownloadManagementScreenUiState.Preview.AppIcon(it)
+            when (val thumbnail = DownloadThumbnailLoader.load(getApplication(), fileUri, PREVIEW_SIZE_PX)) {
+                is DownloadThumbnail.Thumbnail -> {
+                    DownloadManagementScreenUiState.Preview.Thumbnail(thumbnail.bitmap.asImageBitmap())
                 }
-            }
-            DownloadManagementScreenUiState.Preview.FileType(toDownloadFileType(mimeType, fileName))
-        }
-    }
 
-    /**
-     * APK ファイルからアプリアイコンを取り出す。解析に失敗した場合は null を返す。
-     * PackageManager.getPackageArchiveInfo はファイルパスしか受け付けないため、
-     * MediaStore の content:// URI を実ファイルパスに解決してから渡す
-     */
-    private fun loadApkIcon(uri: Uri): ImageBitmap? {
-        val packageManager = getApplication<Application>().packageManager
-        return useFilePath(uri) { path ->
-            val packageInfo = runCatching {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    packageManager.getPackageArchiveInfo(path, PackageManager.PackageInfoFlags.of(0L))
-                } else {
-                    @Suppress("DEPRECATION")
-                    packageManager.getPackageArchiveInfo(path, 0)
+                is DownloadThumbnail.AppIcon -> {
+                    DownloadManagementScreenUiState.Preview.AppIcon(thumbnail.bitmap.asImageBitmap())
                 }
-            }.getOrNull() ?: return@useFilePath null
-            val applicationInfo = packageInfo.applicationInfo ?: return@useFilePath null
-            // アイコンのリソースを APK 自身から解決させるため、参照先パスを設定する
-            applicationInfo.sourceDir = path
-            applicationInfo.publicSourceDir = path
-            runCatching {
-                applicationInfo.loadIcon(packageManager)
-                    .toBitmap(width = PREVIEW_SIZE_PX, height = PREVIEW_SIZE_PX)
-                    .asImageBitmap()
-            }.getOrNull()
+
+                null -> {
+                    val uri = fileUri.toUri()
+                    DownloadManagementScreenUiState.Preview.FileType(toDownloadFileType(getMimeType(uri), getDisplayName(uri)))
+                }
+            }
         }
     }
 
@@ -229,29 +192,6 @@ internal class DownloadManagementScreenViewModel(
                 ?.use { cursor ->
                     if (cursor.moveToFirst()) cursor.getString(0) else null
                 }
-        }.getOrNull()
-    }
-
-    /**
-     * content:// URI を、ファイルパスを要求する API へ渡せる形に解決して [block] を呼ぶ。
-     * MediaStore の DATA 列が使える場合はその実パスを、使えない場合は
-     * ファイルディスクリプタ経由の /proc/self/fd パスを渡す。
-     * 後者は [block] の実行中のみ有効なため、[block] 内で読み切る必要がある
-     */
-    private fun <T> useFilePath(uri: Uri, block: (path: String) -> T?): T? {
-        val resolver = getApplication<Application>().contentResolver
-        val dataPath = runCatching {
-            resolver.query(uri, arrayOf(MediaStore.MediaColumns.DATA), null, null, null)?.use { cursor ->
-                if (cursor.moveToFirst()) cursor.getString(0) else null
-            }
-        }.getOrNull()
-        if (dataPath != null && File(dataPath).canRead()) {
-            return runCatching { block(dataPath) }.getOrNull()
-        }
-        return runCatching {
-            resolver.openFileDescriptor(uri, "r")?.use { descriptor ->
-                block("/proc/self/fd/${descriptor.fd}")
-            }
         }.getOrNull()
     }
 
