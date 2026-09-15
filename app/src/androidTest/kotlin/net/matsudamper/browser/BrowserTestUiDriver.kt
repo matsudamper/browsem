@@ -39,6 +39,10 @@ internal fun AndroidComposeTestRule<*, MainActivity>.openUrlFromUrlBar(url: Stri
     waitUntil(timeoutMillis = 60_000) {
         onAllNodesWithTag(UrlTextInputTestTags.UrlBar.testTag).fetchSemanticsNodes().isNotEmpty()
     }
+    // 復元タブや新規タブの初回ロードは遅れてコミットされることがあり、先に URL を投入すると
+    // 開いたページがホームページへ上書きされる。収束を待ってから投入する。
+    // URL が変わり続けるページもあるため、収束しなくても投入自体は行う。
+    runCatching { waitForSessionNavigationSettled() }
     onNodeWithTag(UrlTextInputTestTags.UrlBar.testTag).performClick()
     onNodeWithTag(UrlTextInputTestTags.UrlBar.testTag).performTextReplacement(url)
     onNodeWithTag(UrlTextInputTestTags.UrlBar.testTag).performImeAction()
@@ -367,7 +371,8 @@ internal fun AndroidComposeTestRule<*, MainActivity>.openLocalPageAndStabilize(
     timeoutMillis: Long = 60_000,
 ) {
     waitForBrowserReady()
-    waitForSessionNavigationSettled()
+    // 収束しないページでも URL 投入自体は行う。
+    runCatching { waitForSessionNavigationSettled() }
     val openedByIntent = runCatching {
         openUrlViaViewIntent(pageUrl)
         waitForUrlBarContains(pageUrl, timeoutMillis = 20_000)

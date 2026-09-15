@@ -28,19 +28,18 @@ class AddressAutofillWebExtension {
     private val lastFocusPorts = ConcurrentHashMap<GeckoSession, WebExtension.Port>()
     private val pendingFills = ConcurrentHashMap<GeckoSession, PendingFill>()
     private val fillRetryRunnables = ConcurrentHashMap<GeckoSession, MutableList<Runnable>>()
+    private val sessionListeners = ConcurrentHashMap<GeckoSession, SessionListener>()
     private val attachedSessions: MutableSet<GeckoSession> =
         Collections.newSetFromMap(ConcurrentHashMap())
     private val delegatedSessions: MutableSet<GeckoSession> =
         Collections.newSetFromMap(ConcurrentHashMap())
 
-    @Volatile
-    var onFieldFocus: ((String) -> Unit)? = null
-
-    @Volatile
-    var onFieldBlur: (() -> Unit)? = null
-
-    @Volatile
-    var onFocusPortDisconnected: (() -> Unit)? = null
+    /** 通知はセッション単位で配る。同一プロセスの Custom Tab・ウェブアプリと宛先を取り違えない。 */
+    interface SessionListener {
+        fun onFieldFocus(kind: String)
+        fun onFieldBlur()
+        fun onFocusPortDisconnected()
+    }
 
     fun install(runtime: GeckoRuntime) {
         Log.d(TAG, "install() 開始: uri=$EXTENSION_URI")
@@ -59,12 +58,14 @@ class AddressAutofillWebExtension {
             )
     }
 
-    fun registerSession(session: GeckoSession) {
+    fun registerSession(session: GeckoSession, listener: SessionListener) {
+        sessionListeners[session] = listener
         attachedSessions.add(session)
         extension?.also { ext -> attachSessionDelegate(session, ext) }
     }
 
     fun unregisterSession(session: GeckoSession) {
+        sessionListeners.remove(session)
         attachedSessions.remove(session)
         delegatedSessions.remove(session)
         sessionPorts.remove(session)
@@ -151,15 +152,17 @@ class AddressAutofillWebExtension {
                     port.setDelegate(object : WebExtension.PortDelegate {
                         override fun onPortMessage(message: Any, port: WebExtension.Port) {
                             val json = message as? JSONObject ?: return
+                            if (!sessionListeners.containsKey(session)) return
                             when (json.optString("action")) {
                                 "field-focus" -> {
                                     val kind = json.optString("kind")
                                     lastFocusPorts[session] = port
-                                    mainHandler.post { onFieldFocus?.invoke(kind) }
+                                    // 解除済みのリスナーへ届けないよう、実行時に引き直す
+                                    mainHandler.post { sessionListeners[session]?.onFieldFocus(kind) }
                                 }
 
                                 "field-blur" -> {
-                                    mainHandler.post { onFieldBlur?.invoke() }
+                                    mainHandler.post { sessionListeners[session]?.onFieldBlur() }
                                 }
                             }
                         }
@@ -168,7 +171,9 @@ class AddressAutofillWebExtension {
                             sessionPorts[session]?.remove(connectedPort)
                             if (lastFocusPorts[session] === connectedPort) {
                                 lastFocusPorts.remove(session)
-                                mainHandler.post { onFocusPortDisconnected?.invoke() }
+                                mainHandler.post {
+                                    sessionListeners[session]?.onFocusPortDisconnected()
+                                }
                             }
                         }
                     })

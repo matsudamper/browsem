@@ -139,8 +139,7 @@ class PageZoomTest {
     @Test
     fun pageZoomInNarrowsViewportInnerWidth() {
         val zoomPageUrl = startZoomPageServer()
-        composeRule.openUrlFromUrlBar(zoomPageUrl)
-        composeRule.waitForUrlBarContains(ZOOM_INDEX_FILE_NAME, timeoutMillis = 60_000)
+        composeRule.openLocalPageAndStabilize(zoomPageUrl)
 
         openPageZoomMenuAndSet200Percent()
         assertTrue(
@@ -191,9 +190,7 @@ class PageZoomTest {
     @Test
     fun pageZoomPersistedAfterNavigation() {
         val zoomPageUrl = startZoomPageServer()
-        composeRule.openUrlFromUrlBar(zoomPageUrl)
-        composeRule.waitForUrlBarContains(ZOOM_INDEX_FILE_NAME, timeoutMillis = 60_000)
-        composeRule.waitForUrlBarNotFocused()
+        composeRule.openLocalPageAndStabilize(zoomPageUrl)
 
         openPageZoomMenuAndSet200Percent()
         composeRule.waitUntil(timeoutMillis = 10_000) {

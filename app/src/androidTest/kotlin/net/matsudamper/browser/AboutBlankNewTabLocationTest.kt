@@ -148,10 +148,10 @@ class AboutBlankNewTabLocationTest {
 
         group("ローカル HTTP の index.html を読み込む") {
             composeRule.openUrlFromUrlBar(localServer.indexUrl)
+            composeRule.waitForStableLocalPage(localServer.indexUrl)
             composeRule.waitUntil(timeoutMillis = 30_000) {
                 localServer.hasRequest("/$INDEX_FILE_NAME")
             }
-            composeRule.waitForUrlBarContains(INDEX_FILE_NAME, timeoutMillis = 30_000)
             composeRule.waitForUrlBarNotFocused(timeoutMillis = 30_000)
             val loadedUrl = composeRule.currentUrlBarText()
             assertTrue("index ページが期待URLで開かれていない: $loadedUrl", loadedUrl.contains("127.0.0.1"))

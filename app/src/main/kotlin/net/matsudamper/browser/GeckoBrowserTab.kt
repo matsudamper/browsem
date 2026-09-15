@@ -14,6 +14,7 @@ import android.view.ActionMode
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
+import android.view.ViewTreeObserver
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContract
@@ -969,6 +970,25 @@ internal fun GeckoBrowserTab(
             // View が外れたあとに Gecko が opener を inactive にするため、
             // 次メッセージで live popup の opener を再 active する。
             currentOnReevaluateOpenerRetention()
+        }
+    }
+
+    // 初回の通知が attach 前に捨てられないよう、attach する DisposableEffect より後に置く。
+    // 分割画面では通常ブラウザと Custom Tab が同時に RESUMED のまま残り、操作する
+    // ペインを切り替えても ON_RESUME は再通知されない。ウィンドウフォーカスで前面の
+    // 画面を判断し、セッションを伴わない住所取得の宛先にする。
+    val windowFocusOwnerView = LocalView.current
+    DisposableEffect(windowFocusOwnerView, session, addressAutofillCoordinator) {
+        val listener = ViewTreeObserver.OnWindowFocusChangeListener { hasFocus ->
+            addressAutofillCoordinator.onWindowFocusChanged(session, hasFocus)
+        }
+        addressAutofillCoordinator.onWindowFocusChanged(
+            session,
+            windowFocusOwnerView.hasWindowFocus(),
+        )
+        windowFocusOwnerView.viewTreeObserver.addOnWindowFocusChangeListener(listener)
+        onDispose {
+            windowFocusOwnerView.viewTreeObserver.removeOnWindowFocusChangeListener(listener)
         }
     }
 

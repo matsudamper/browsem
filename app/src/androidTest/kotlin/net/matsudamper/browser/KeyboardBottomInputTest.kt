@@ -446,7 +446,14 @@ class KeyboardBottomInputTest {
         private const val IME_HIDE_WAIT_MILLIS = 10_000L
         private const val IME_WAIT_MILLIS = 30_000L
         private const val IME_STABLE_WAIT_MILLIS = 10_000L
-        private const val INPUT_VISIBLE_WAIT_MILLIS = 15_000L
+
+        /**
+         * IME の inset が安定してから、表示領域の縮小と Gecko のスクロールを経て
+         * 入力欄のアクセシビリティノードが更新されるまでの待ち時間。
+         * CI のエミュレータでは 15 秒では足りず、入力欄が縮小前の位置のまま
+         * 判定されて落ちることがあった。
+         */
+        private const val INPUT_VISIBLE_WAIT_MILLIS = 30_000L
 
         /** タップが空振りしたときに再タップするまでの待ち時間 */
         private const val TAP_RETRY_INTERVAL_MILLIS = 3_000L

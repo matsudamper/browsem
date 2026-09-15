@@ -108,6 +108,7 @@ val appModule = module {
             it.autocompleteStorageDelegate = AutocompleteStorageDelegate(
                 addressRepository = get(),
                 coroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main),
+                onAddressFetchStarted = addressAutofillCoordinator::onAddressFetchStarted,
                 onAddressFetched = addressAutofillCoordinator::onAddressFetch,
             )
             // 署名要求は GeckoRuntimeSettings では設定できず pref でしか制御できない。
