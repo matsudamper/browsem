@@ -1749,12 +1749,14 @@ internal class BrowserTabScreenState(
         request: GeckoSession.NavigationDelegate.LoadRequest,
     ): GeckoResult<AllowOrDeny>? {
         if (isHttpUri(request.uri)) return null
+        val action = resolveExternalAppNavigationAction(context, request.uri)
+        // blob: や data: など Gecko が扱うスキームはそのまま読み込ませる。
+        // 確認ダイアログの表示中かどうかより先に判定する。外部アプリと関係のない iframe の
+        // 読み込みまで巻き添えで失敗させないため。
+        if (action == ExternalAppNavigationAction.AllowInBrowser) return null
         if (pendingExternalAppLaunch != null) {
             return GeckoResult.fromValue(AllowOrDeny.DENY)
         }
-        val action = resolveExternalAppNavigationAction(context, request.uri)
-        // blob: や data: など Gecko が扱うスキームはそのまま読み込ませる。
-        if (action == ExternalAppNavigationAction.AllowInBrowser) return null
         if (action !is ExternalAppNavigationAction.Launch) {
             // アプリを開くところまで進めない要求は、サブフレームでは黙って止める。
             // fallback URL をトップレベルで読み込むと iframe の第三者コンテンツがタブごと
