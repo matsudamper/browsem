@@ -63,6 +63,12 @@ import org.mozilla.geckoview.WebResponse
 
 private const val TAG = "BrowserTabScreenState"
 
+/** タブ 1 つあたりに残す外部アプリ遷移ログの上限 */
+private const val MAX_EXTERNAL_APP_NAVIGATION_LOGS = 20
+
+/** タブ 1 つあたりに、サブフレーム由来の要求で起動確認を出す上限 */
+private const val MAX_SUBFRAME_EXTERNAL_APP_PROMPTS = 3
+
 private val PAGE_ZOOM_STEPS = listOf(20, 25, 33, 50, 67, 75, 80, 90, 100, 110, 125, 150, 175, 200)
 
 private enum class FindInPageState {
@@ -464,6 +470,21 @@ internal class BrowserTabScreenState(
     // --- ファイルダウンロード確認ダイアログ用state ---
     var pendingDownloadResponse by mutableStateOf<WebResponse?>(null)
     var pendingExternalAppLaunch by mutableStateOf<PendingExternalAppLaunch?>(null)
+
+    // サブフレーム由来の要求で起動確認を出した URI。ユーザー操作なしに何度でも要求できるため、
+    // 同じ URI では出し直さず、タブあたりの回数も制限する。
+    private val promptedSubframeExternalAppUris = mutableSetOf<String>()
+
+    // 同じ外部アプリ遷移ログを繰り返し保存しないための記録。
+    // ページ遷移ではクリアしない。読み込みごとに違う要求を出すページが自動リロードを
+    // 繰り返すと、そのたびに上限まで保存できてしまうため。
+    private val savedExternalAppNavigationKeys = mutableSetOf<String>()
+
+    // 確認ダイアログを閉じたときに、その要求の URL を現在のタブで読み込んでよいか。
+    // 現在ページを置き換えるはずだった遷移だけが対象。新規ウィンドウやサブフレームからの
+    // 要求で読み込むと、そのまま残るはずの現在ページが失われる。
+    private var canLoadPendingLaunchInCurrentTab = false
+    private var canLoadQueuedLaunchInCurrentTab = false
 
     // 外部アプリ確認ダイアログ表示中に到着した後続の外部アプリナビゲーション。
     // ダイアログをキャンセルした場合にこちらを表示する（アプリ起動した場合は破棄する）。
@@ -1197,7 +1218,7 @@ internal class BrowserTabScreenState(
         }
 
         val fallbackUrl = request.fallbackUrl
-        if (fallbackUrl != null) {
+        if (fallbackUrl != null && canLoadPendingLaunchInCurrentTab) {
             queuedExternalAppLaunch = null
             openFallbackUrl(fallbackUrl)
             return
@@ -1207,29 +1228,28 @@ internal class BrowserTabScreenState(
         Toast.makeText(context, "対応するアプリを開けませんでした", Toast.LENGTH_SHORT).show()
     }
 
-    fun dismissPendingExternalAppLaunch() {
-        pendingExternalAppLaunch = null
-        promoteQueuedExternalAppLaunch()
-    }
-
     /**
-     * 外部アプリ確認ダイアログでキャンセルされた際に、
+     * 外部アプリ確認ダイアログを閉じた際に、
      * ブラウザ内で（deep linkではなく）URLを読み込む。
+     * 読み込み直さないと、起動を取りやめた遷移がそのまま消えて白画面で止まる。
      * http/https の場合は sourceUri をそのまま使い、
      * intent:// 等のカスタムスキームの場合は fallbackUrl を使用する。
      */
     fun dismissPendingExternalAppLaunchAndLoadInBrowser() {
         val request = pendingExternalAppLaunch ?: return
+        val loadsCurrentTab = canLoadPendingLaunchInCurrentTab
         pendingExternalAppLaunch = null
 
         val queued = queuedExternalAppLaunch
         queuedExternalAppLaunch = null
         if (queued != null) {
             pendingExternalAppLaunch = queued
+            canLoadPendingLaunchInCurrentTab = canLoadQueuedLaunchInCurrentTab
             return
         }
+        if (!loadsCurrentTab) return
 
-        val url = if (request.sourceUri.startsWith("http://") || request.sourceUri.startsWith("https://")) {
+        val url = if (isHttpUri(request.sourceUri)) {
             request.sourceUri
         } else {
             request.fallbackUrl
@@ -1244,6 +1264,7 @@ internal class BrowserTabScreenState(
         val queued = queuedExternalAppLaunch ?: return
         queuedExternalAppLaunch = null
         pendingExternalAppLaunch = queued
+        canLoadPendingLaunchInCurrentTab = canLoadQueuedLaunchInCurrentTab
     }
 
     fun restoreCurrentPageUrlToInput() {
@@ -1673,44 +1694,102 @@ internal class BrowserTabScreenState(
         // ダイアログを上書きせずキューに入れる。ダイアログをキャンセルした場合に
         // キューの内容（Play Store 等）を表示し、アプリ起動した場合は破棄する。
         if (pendingExternalAppLaunch != null) {
+            // ダイアログ表示中でもリダイレクト先は止めない。サブフレームのアプリ受け渡しと
+            // 認証のリダイレクトが重なると、ここで DENY してフローごと失うため。
+            if (!shouldCheckExternalAppForNavigation(uri = request.uri, isRedirect = request.isRedirect)) {
+                return null
+            }
             val externalAction = resolveExternalAppNavigationAction(context, request.uri)
             if (externalAction is ExternalAppNavigationAction.Launch) {
                 queuedExternalAppLaunch = externalAction.request
+                canLoadQueuedLaunchInCurrentTab = !request.isNewWindowTarget()
             }
             return GeckoResult.fromValue(AllowOrDeny.DENY)
         }
-        val externalAction = resolveExternalAppNavigationAction(context, request.uri)
+        val externalAction = if (
+            shouldCheckExternalAppForNavigation(
+                uri = request.uri,
+                isRedirect = request.isRedirect,
+            )
+        ) {
+            resolveExternalAppNavigationAction(context, request.uri)
+        } else {
+            ExternalAppNavigationAction.AllowInBrowser
+        }
         // single-page でも TARGET_WINDOW_NEW は現在タブへ畳み込まない。
         // DENY + loadUri すると onNewSession が呼ばれず overlay が出せない。
         // 外部アプリ判定だけ行い、ブラウザ内なら ALLOW して onNewSession に渡す。
-        if (isSinglePageMode && request.target == GeckoSession.NavigationDelegate.TARGET_WINDOW_NEW) {
-            return when (externalAction) {
-                ExternalAppNavigationAction.AllowInBrowser -> null
-
-                ExternalAppNavigationAction.AppNotFound -> {
-                    Toast.makeText(context, "対応するアプリが見つかりません", Toast.LENGTH_SHORT).show()
-                    GeckoResult.fromValue(AllowOrDeny.DENY)
-                }
-
-                is ExternalAppNavigationAction.Launch -> {
-                    pendingExternalAppLaunch = externalAction.request
-                    GeckoResult.fromValue(AllowOrDeny.DENY)
-                }
-
-                is ExternalAppNavigationAction.OpenFallback -> {
-                    openFallbackUrl(externalAction.url)
-                    GeckoResult.fromValue(AllowOrDeny.DENY)
-                }
-            }
+        if (isSinglePageMode && request.isNewWindowTarget()) {
+            return applyExternalAppNavigationAction(
+                uri = request.uri,
+                action = externalAction,
+                loadsCurrentTab = false,
+            )
         }
-        return when (externalAction) {
-            ExternalAppNavigationAction.AllowInBrowser -> {
-                if (handleWebAppCrossDomainNavigation(request.uri)) {
-                    GeckoResult.fromValue(AllowOrDeny.DENY)
-                } else {
-                    null
-                }
-            }
+        if (externalAction == ExternalAppNavigationAction.AllowInBrowser &&
+            handleWebAppCrossDomainNavigation(request.uri)
+        ) {
+            return GeckoResult.fromValue(AllowOrDeny.DENY)
+        }
+        return applyExternalAppNavigationAction(
+            uri = request.uri,
+            action = externalAction,
+            loadsCurrentTab = !request.isNewWindowTarget(),
+        )
+    }
+
+    /**
+     * iframe からの遷移。独自スキームでアプリへ受け渡す認証フローがあり、Gecko はそれを
+     * 読み込めずに黙って失敗するため、ここで外部アプリ起動へ回す。
+     *
+     * http/https は埋め込みコンテンツそのものなので App Links 判定をしない。広告や埋め込み
+     * 動画の読み込みでアプリが起動してしまう。
+     */
+    override fun onSubframeLoadRequest(
+        request: GeckoSession.NavigationDelegate.LoadRequest,
+    ): GeckoResult<AllowOrDeny>? {
+        if (isHttpUri(request.uri)) return null
+        val action = resolveExternalAppNavigationAction(context, request.uri)
+        // blob: や data: など Gecko が扱うスキームはそのまま読み込ませる。
+        // 確認ダイアログの表示中かどうかより先に判定する。外部アプリと関係のない iframe の
+        // 読み込みまで巻き添えで失敗させないため。
+        if (action == ExternalAppNavigationAction.AllowInBrowser) return null
+        if (pendingExternalAppLaunch != null) {
+            return GeckoResult.fromValue(AllowOrDeny.DENY)
+        }
+        if (action !is ExternalAppNavigationAction.Launch) {
+            // アプリを開くところまで進めない要求は、サブフレームでは黙って止める。
+            // fallback URL をトップレベルで読み込むと iframe の第三者コンテンツがタブごと
+            // 任意の URL へ遷移させられ、Toast は要求を繰り返すページが出し続けられるため。
+            saveExternalAppNavigationInfo(uri = request.uri, action = action)
+            return GeckoResult.fromValue(AllowOrDeny.DENY)
+        }
+        if (promptedSubframeExternalAppUris.size >= MAX_SUBFRAME_EXTERNAL_APP_PROMPTS ||
+            !promptedSubframeExternalAppUris.add(request.uri)
+        ) {
+            // 一度出した確認を閉じた直後に出し直されるとブラウザの操作を妨げられる。
+            saveExternalAppNavigationInfo(uri = request.uri, action = action)
+            return GeckoResult.fromValue(AllowOrDeny.DENY)
+        }
+        return applyExternalAppNavigationAction(
+            uri = request.uri,
+            action = action,
+            loadsCurrentTab = false,
+        )
+    }
+
+    /**
+     * @param loadsCurrentTab 現在ページを置き換えるはずだった遷移かどうか。ダイアログを閉じた
+     * ときに読み込み直してよいかの判断に使う。
+     */
+    private fun applyExternalAppNavigationAction(
+        uri: String,
+        action: ExternalAppNavigationAction,
+        loadsCurrentTab: Boolean,
+    ): GeckoResult<AllowOrDeny>? {
+        saveExternalAppNavigationInfo(uri = uri, action = action)
+        return when (action) {
+            ExternalAppNavigationAction.AllowInBrowser -> null
 
             ExternalAppNavigationAction.AppNotFound -> {
                 Toast.makeText(context, "対応するアプリが見つかりません", Toast.LENGTH_SHORT).show()
@@ -1718,14 +1797,59 @@ internal class BrowserTabScreenState(
             }
 
             is ExternalAppNavigationAction.Launch -> {
-                pendingExternalAppLaunch = externalAction.request
+                pendingExternalAppLaunch = action.request
+                canLoadPendingLaunchInCurrentTab = loadsCurrentTab
                 GeckoResult.fromValue(AllowOrDeny.DENY)
             }
 
             is ExternalAppNavigationAction.OpenFallback -> {
-                openFallbackUrl(externalAction.url)
+                // 現在ページを置き換えない遷移では fallback URL も読み込まない。
+                // 新規ウィンドウの要求で読み込むと、そのまま残るはずの現在ページが失われる。
+                if (loadsCurrentTab) {
+                    openFallbackUrl(action.url)
+                }
                 GeckoResult.fromValue(AllowOrDeny.DENY)
             }
+        }
+    }
+
+    /**
+     * ブラウザ内で処理しなかった遷移をクラッシュログ画面へ INFO として残す。
+     * 認証アプリへの受け渡しのように端末でしか再現しない遷移を後から追えるようにする。
+     *
+     * URL は scheme とホストだけに切り詰め、Intent の中身も残さない。認証の受け渡しでは
+     * パス・クエリ・フラグメントや extras に認可コードやトークンが載るため。
+     *
+     * iframe から要求を繰り返すページがあるため、同じ内容とタブあたりの件数で絞る。
+     * クラッシュログには件数上限も自動削除も無く、メインスレッドで書き込むため。
+     */
+    private fun saveExternalAppNavigationInfo(
+        uri: String,
+        action: ExternalAppNavigationAction,
+    ) {
+        if (savedExternalAppNavigationKeys.size >= MAX_EXTERNAL_APP_NAVIGATION_LOGS) return
+        val detail = when (action) {
+            ExternalAppNavigationAction.AllowInBrowser -> return
+
+            ExternalAppNavigationAction.AppNotFound -> "appNotFound"
+
+            is ExternalAppNavigationAction.Launch -> {
+                "launch app=${action.request.appName} package=${action.request.intent.`package`}"
+            }
+
+            is ExternalAppNavigationAction.OpenFallback -> {
+                "openFallback url=${redactUrlForLog(action.url)}"
+            }
+        }
+        val body = "uri=${redactUrlForLog(uri)}\naction=$detail\npageUrl=${redactUrlForLog(currentPageUrl)}"
+        if (!savedExternalAppNavigationKeys.add(body)) return
+        try {
+            crashLogRepository.saveInfoSync(
+                title = "外部アプリ遷移",
+                body = body,
+            )
+        } catch (error: RuntimeException) {
+            Log.w(TAG, "外部アプリ遷移ログの保存に失敗", error)
         }
     }
 
@@ -1960,4 +2084,9 @@ internal fun isWebAppCrossDomainNavigation(url: String, pinnedHost: String?): Bo
     if (pinnedHost.isNullOrBlank()) return false
     val targetHost = extractSiteHost(url) ?: return false
     return !targetHost.equals(pinnedHost, ignoreCase = true)
+}
+
+/** `window.open` や target=_blank のように、現在ページを置き換えない遷移かどうか */
+private fun GeckoSession.NavigationDelegate.LoadRequest.isNewWindowTarget(): Boolean {
+    return target == GeckoSession.NavigationDelegate.TARGET_WINDOW_NEW
 }

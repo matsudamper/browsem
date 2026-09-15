@@ -1,5 +1,6 @@
 package net.matsudamper.browser
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -33,5 +34,58 @@ class ExternalAppNavigationTest {
         // 前方一致や部分一致で誤判定しないこと
         assertFalse(isBrowserPinnedHost("fakepay.google.com.example.com"))
         assertFalse(isBrowserPinnedHost("notpay.google.com.evil.test"))
+    }
+
+    @Test
+    fun `http と https のみ http スキームと判定される`() {
+        assertTrue(isHttpUri("https://example.com/"))
+        assertTrue(isHttpUri("HTTP://example.com/"))
+        assertFalse(isHttpUri("okta-verify://enroll"))
+        assertFalse(isHttpUri("intent://example.com/#Intent;scheme=https;end"))
+        assertFalse(isHttpUri("example.com"))
+    }
+
+    @Test
+    fun `リダイレクトでない遷移は App Links 判定を行う`() {
+        assertTrue(
+            shouldCheckExternalAppForNavigation(
+                uri = "https://example.com/",
+                isRedirect = false,
+            ),
+        )
+    }
+
+    @Test
+    fun `リダイレクト先は App Links 判定を行わない`() {
+        assertFalse(
+            shouldCheckExternalAppForNavigation(
+                uri = "https://example.com/",
+                isRedirect = true,
+            ),
+        )
+    }
+
+    @Test
+    fun `ログ用 URL は scheme とホストだけになる`() {
+        assertEquals(
+            "https://example.okta.com",
+            redactUrlForLog("https://example.okta.com/app/github/abc/sso/saml?SAMLRequest=secret#token=1"),
+        )
+        assertEquals("https://example.com", redactUrlForLog("https://user:pass@example.com/path"))
+        assertEquals("okta-verify:", redactUrlForLog("okta-verify:token"))
+        // クエリに絶対 URL を持つ独自スキームでも、内側の :// を区切りと誤認しない
+        assertEquals("myapp:", redactUrlForLog("myapp:callback?code=secret&redirect=https://example.com/"))
+        assertEquals("(スキームなし)", redactUrlForLog(""))
+        assertEquals("(スキームなし)", redactUrlForLog("example.com"))
+    }
+
+    @Test
+    fun `独自スキームはリダイレクト先でも外部アプリ判定を行う`() {
+        assertTrue(
+            shouldCheckExternalAppForNavigation(
+                uri = "okta-verify://enroll",
+                isRedirect = true,
+            ),
+        )
     }
 }
