@@ -240,6 +240,8 @@ class AddressAutofillCoordinator(
                             // 推測で選んだ宛先が末尾でなくなったら、その画面には出さない。
                             attachedSessions.values.lastOrNull() !== target ||
                                 shouldAbortAddressFetchAfterFocusSettled(target) ||
+                                // 遅れて届いた他セッションのフォーカス通知は、待機後にしか分からない。
+                                isFetchTriggeredByOtherSession(target.session) ||
                                 target.isFocusSuppressed(FIELD_KIND_ADDRESS)
                         }
                     },

@@ -258,6 +258,19 @@ class AddressAutofillCoordinatorTest {
         assertFalse(opened.host.isBarVisible)
     }
 
+    @Test
+    fun 待機中に届いた背面のフォーカス通知で住所取得を前面へ出さない() = runTest {
+        val env = createEnv()
+        val background = attachSurface(env)
+        env.coordinator.onWindowFocusChanged(env.session, true)
+
+        env.coordinator.fetchAddresses(1)
+        env.coordinator.onFieldFocus(background.session, FIELD_KIND_NAME)
+        advanceTimeBy(ADDRESS_AUTOFILL_IME_READY_WAIT_MS)
+        advanceUntilIdle()
+        assertFalse(env.host.isBarVisible)
+    }
+
     /** 住所取得は要求と完了の2段階で届く。 */
     private fun AddressAutofillCoordinator.fetchAddresses(count: Int) {
         onAddressFetch(onAddressFetchStarted(), count)
