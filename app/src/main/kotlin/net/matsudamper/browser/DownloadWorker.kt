@@ -26,6 +26,7 @@ import net.matsudamper.browser.download.DownloadHttpClient
 import net.matsudamper.browser.download.DownloadHttpResponse
 import net.matsudamper.browser.download.DownloadMediaStoreMimeType
 import net.matsudamper.browser.download.DownloadMetadata
+import net.matsudamper.browser.download.DownloadThumbnailLoader
 import net.matsudamper.browser.download.DownloadUrl
 import net.matsudamper.browser.download.GeckoDownloadHttpClient
 import net.matsudamper.browser.download.PendingDownloadBodyStore
@@ -96,7 +97,7 @@ internal class DownloadWorker(
                 downloadFile(url, referrerUrl, notificationId, repository)
             }
             repository.updateCompleted(id.toString(), fileName, fileUri.toString())
-            postCompletionNotification(fileName, stableWorkerId)
+            postCompletionNotification(fileName, fileUri.toString(), stableWorkerId)
             Result.success()
         } catch (e: CancellationException) {
             // Job キャンセル済みのコルーチン上では Room の suspend クエリが即座に
@@ -196,7 +197,7 @@ internal class DownloadWorker(
         return fileName.ifBlank { "download-${System.currentTimeMillis()}" }
     }
 
-    private fun postCompletionNotification(fileName: String, stableWorkerId: String) {
+    private suspend fun postCompletionNotification(fileName: String, fileUri: String, stableWorkerId: String) {
         // 負のhashCodeによる通知ID衝突を防ぐため、非負の値に変換する
         val positiveHash = id.hashCode() and 0x7fffffff
         val openDownloadsIntent = Intent(context, MainActivity::class.java).apply {
@@ -211,12 +212,19 @@ internal class DownloadWorker(
             openDownloadsIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
+        // ダウンロード管理画面のプレビューと同じサムネイル/アプリアイコンを通知にも表示する
+        val thumbnail = runCatching {
+            DownloadThumbnailLoader.load(context, fileUri, THUMBNAIL_SIZE_PX)
+        }.getOrNull()
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_sys_download_done)
             .setContentTitle(fileName)
             .setContentText(context.getString(R.string.download_notification_complete))
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
+            .apply {
+                thumbnail?.bitmap?.let { setLargeIcon(it) }
+            }
             .build()
         val notificationManager = context.getSystemService(NotificationManager::class.java)
         notificationManager.notify(NOTIFICATION_ID_COMPLETE_BASE + positiveHash, notification)
@@ -516,6 +524,9 @@ internal class DownloadWorker(
 
         /** 進捗（通知・Room）の更新間隔。頻繁な更新を避けるためのレート制限 */
         private const val PROGRESS_UPDATE_INTERVAL_MILLIS = 1000L
+
+        /** 完了通知の largeIcon に使うサムネイル/アプリアイコンの最大サイズ (px) */
+        private const val THUMBNAIL_SIZE_PX = 256
 
         const val KEY_URL = "url"
         const val KEY_REFERRER_URL = "referrer_url"
