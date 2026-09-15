@@ -14,6 +14,7 @@ import android.view.ActionMode
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
+import android.view.ViewTreeObserver
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContract
@@ -720,8 +721,6 @@ internal fun GeckoBrowserTab(
                 }
 
                 Lifecycle.Event.ON_RESUME -> {
-                    // 前面へ戻った画面を、セッションを伴わない住所取得の宛先にする
-                    addressAutofillCoordinator.onSessionResumed(session)
                     geckoView?.also(::resumeFromPauseIfNeeded)
                 }
 
@@ -730,6 +729,25 @@ internal fun GeckoBrowserTab(
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    // 分割画面では通常ブラウザと Custom Tab が同時に RESUMED のまま残り、操作する
+    // ペインを切り替えても ON_RESUME は再通知されない。ウィンドウフォーカスで前面の
+    // 画面を判断し、セッションを伴わない住所取得の宛先にする。
+    val windowFocusOwnerView = LocalView.current
+    DisposableEffect(windowFocusOwnerView, session, addressAutofillCoordinator) {
+        val listener = ViewTreeObserver.OnWindowFocusChangeListener { hasFocus ->
+            if (hasFocus) {
+                addressAutofillCoordinator.onSessionResumed(session)
+            }
+        }
+        if (windowFocusOwnerView.hasWindowFocus()) {
+            addressAutofillCoordinator.onSessionResumed(session)
+        }
+        windowFocusOwnerView.viewTreeObserver.addOnWindowFocusChangeListener(listener)
+        onDispose {
+            windowFocusOwnerView.viewTreeObserver.removeOnWindowFocusChangeListener(listener)
+        }
     }
 
     // theme-color WebExtensionのコールバック登録
