@@ -8,6 +8,10 @@ import androidx.annotation.VisibleForTesting
 import androidx.browser.customtabs.CustomTabsSessionToken
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import net.matsudamper.browser.feature.webauthncompat.WebAuthnCompatWebExtension
 import org.koin.core.context.GlobalContext
 import org.mozilla.geckoview.GeckoRuntime
@@ -16,6 +20,9 @@ import org.mozilla.geckoview.GeckoSession
 object CustomTabsWarmupStore {
     private const val MAX_SESSION_ENTRIES = 8
     private const val STALE_ENTRY_MS = 10 * 60 * 1000L
+
+    // カスタムタブのウォームアップはプロセス生存中いつでも来るため、プロセスと同じ寿命で持つ。
+    private val warmupScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     private val lock = Any()
     private val entries = linkedMapOf<CustomTabsSessionToken, Entry>()
@@ -27,7 +34,10 @@ object CustomTabsWarmupStore {
     )
 
     fun onWarmup() {
-        GlobalContext.get().get<GeckoRuntime>()
+        // Binder スレッドから呼ばれる。GeckoRuntime の初期化はメインスレッドで行う必要がある。
+        warmupScope.launch {
+            GlobalContext.get().get<GeckoRuntimeInitializer>().initialize()
+        }
     }
 
     fun onNewSession(token: CustomTabsSessionToken) {
@@ -42,9 +52,10 @@ object CustomTabsWarmupStore {
         url: Uri?,
     ) {
         val targetUrl = url?.toString()?.takeIf { it.isNotBlank() } ?: return
-        val (runtime, webAuthnCompatWebExtension) = runOnMainThreadBlocking {
+        // Binder スレッドから呼ばれる。GeckoRuntime の初期化と GeckoSession の操作はメインスレッドで行う。
+        warmupScope.launch {
             val koin = GlobalContext.get()
-            val resolvedRuntime = koin.get<GeckoRuntime>()
+            val runtime = koin.get<GeckoRuntimeInitializer>().initialize()
             synchronized(lock) {
                 cleanupLocked()
                 ensureEntryLocked(token).apply {
@@ -56,8 +67,21 @@ object CustomTabsWarmupStore {
                     updatedAt = System.currentTimeMillis()
                 }
             }
-            resolvedRuntime to koin.get<WebAuthnCompatWebExtension>()
+            installWebAuthnCompatAndPrepare(
+                token = token,
+                targetUrl = targetUrl,
+                runtime = runtime,
+                webAuthnCompatWebExtension = koin.get<WebAuthnCompatWebExtension>(),
+            )
         }
+    }
+
+    private fun installWebAuthnCompatAndPrepare(
+        token: CustomTabsSessionToken,
+        targetUrl: String,
+        runtime: GeckoRuntime,
+        webAuthnCompatWebExtension: WebAuthnCompatWebExtension,
+    ) {
         webAuthnCompatWebExtension.install(runtime).accept(
             {
                 prepareSessionIfCurrent(token, targetUrl, runtime)
