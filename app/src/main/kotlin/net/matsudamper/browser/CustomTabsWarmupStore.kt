@@ -52,21 +52,25 @@ object CustomTabsWarmupStore {
         url: Uri?,
     ) {
         val targetUrl = url?.toString()?.takeIf { it.isNotBlank() } ?: return
+        // 起動・切断が後から来ても要求の記録が後追いにならないよう、エントリの更新は同期的に行う。
+        // GeckoSession を閉じるのはメインスレッドに限られるため、取り外して後段へ渡す。
+        val staleSession = synchronized(lock) {
+            cleanupLocked()
+            ensureEntryLocked(token).run {
+                val removed = preparedSession.takeIf { preparedUrl != targetUrl }
+                if (removed != null) {
+                    preparedSession = null
+                }
+                preparedUrl = targetUrl
+                updatedAt = System.currentTimeMillis()
+                removed
+            }
+        }
         // Binder スレッドから呼ばれる。GeckoRuntime の初期化と GeckoSession の操作はメインスレッドで行う。
         warmupScope.launch {
+            staleSession?.close()
             val koin = GlobalContext.get()
             val runtime = koin.get<GeckoRuntimeInitializer>().initialize()
-            synchronized(lock) {
-                cleanupLocked()
-                ensureEntryLocked(token).apply {
-                    if (preparedUrl != targetUrl) {
-                        preparedSession?.close()
-                        preparedSession = null
-                    }
-                    preparedUrl = targetUrl
-                    updatedAt = System.currentTimeMillis()
-                }
-            }
             installWebAuthnCompatAndPrepare(
                 token = token,
                 targetUrl = targetUrl,
