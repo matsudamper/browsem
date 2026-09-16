@@ -1,0 +1,8 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>LongMethod:ExtensionsScreen.kt:@OptIn(ExperimentalFoundationApi::class) @Composable private fun ExtensionRow</ID>
+    <ID>LongMethod:ExtensionsScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun ExtensionsScreen</ID>
+  </CurrentIssues>
+</SmellBaseline>

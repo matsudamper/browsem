@@ -1,0 +1,15 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>LongMethod:GroupTabBar.kt:@Composable internal fun GroupTabBar</ID>
+    <ID>LongMethod:GroupTabBar.kt:@Composable private fun GroupBookmarkTab</ID>
+    <ID>LongMethod:GroupTabGrid.kt:@Composable internal fun GroupTabGrid</ID>
+    <ID>LongMethod:TabCard.kt:@Composable internal fun TabCard</ID>
+    <ID>LongMethod:TabsScreen.kt:@Composable private fun TabGroupMenu</ID>
+    <ID>LongMethod:TabsScreen.kt:@Composable private fun TabsScreenLoadedContent</ID>
+    <ID>LongParameterList:GroupTabBar.kt:@Composable internal fun GroupTabBar</ID>
+    <ID>LongParameterList:GroupTabGrid.kt:@Composable internal fun GroupTabGrid</ID>
+    <ID>LongParameterList:TabsScreen.kt:@Composable private fun TabsScreenLoadedContent</ID>
+  </CurrentIssues>
+</SmellBaseline>

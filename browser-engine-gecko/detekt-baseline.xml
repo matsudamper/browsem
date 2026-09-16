@@ -1,0 +1,11 @@
+<?xml version="1.0" ?>
+<SmellBaseline>
+  <ManuallySuppressedIssues/>
+  <CurrentIssues>
+    <ID>LongMethod:BrowserTabController.kt:BrowserTabController$suspend fun restoreTabs: String</ID>
+    <ID>LongParameterList:BrowserTab.kt:BrowserTab</ID>
+    <ID>LongParameterList:BrowserTabController.kt:BrowserTabController$private fun createRegisteredTab: BrowserTab</ID>
+    <ID>LongParameterList:BrowserTabController.kt:BrowserTabController$suspend fun createAndAppendTab: BrowserTab</ID>
+    <ID>LongParameterList:BrowserTabFactory.kt:BrowserTabFactory$fun createTab: BrowserTab</ID>
+  </CurrentIssues>
+</SmellBaseline>
