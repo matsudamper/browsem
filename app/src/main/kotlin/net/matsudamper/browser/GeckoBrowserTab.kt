@@ -358,14 +358,17 @@ internal fun GeckoBrowserTab(
         val prompt = pendingFilePrompt ?: return@LaunchedEffect
         val mimeTypes = prompt.mimeTypes?.takeIf { it.isNotEmpty() } ?: arrayOf("*/*")
         val isMultiple = prompt.type == GeckoSession.PromptDelegate.FilePrompt.Type.MULTIPLE
-        val imageOnlyMediaType = resolveImageOnlyVisualMediaType(mimeTypes)
-            ?.takeIf { ActivityResultContracts.PickVisualMedia.isPhotoPickerAvailable(context) }
+        // フォトピッカーには撮影機能がないため、capture 指定時は従来のピッカーでカメラを選べるようにする
+        val usesPhotoPicker = prompt.capture == GeckoSession.PromptDelegate.FilePrompt.Capture.NONE &&
+            isAnyImageRequest(mimeTypes) &&
+            ActivityResultContracts.PickVisualMedia.isPhotoPickerAvailable(context)
+        val imageOnly = ActivityResultContracts.PickVisualMedia.ImageOnly
         when {
-            imageOnlyMediaType != null && isMultiple ->
-                multipleVisualMediaLauncher.launch(PickVisualMediaRequest(imageOnlyMediaType))
+            usesPhotoPicker && isMultiple ->
+                multipleVisualMediaLauncher.launch(PickVisualMediaRequest(imageOnly))
 
-            imageOnlyMediaType != null ->
-                singleVisualMediaLauncher.launch(PickVisualMediaRequest(imageOnlyMediaType))
+            usesPhotoPicker ->
+                singleVisualMediaLauncher.launch(PickVisualMediaRequest(imageOnly))
 
             isMultiple ->
                 multipleFilesLauncher.launch(mimeTypes)
@@ -1648,18 +1651,12 @@ private const val MENU_ID_OPEN = 0x10002
 private const val MENU_ID_SAVE_FORM_INPUT = 0x10003
 
 /**
- * 画像のみの要求であればフォトピッカーへ渡す VisualMediaType を返す。
- * 画像以外を含む要求や、フォトピッカーでは表現できない複数サブタイプ指定では null を返し、
- * MIME タイプを保持できる従来のファイルピッカーにフォールバックする。
+ * 任意の画像を求める要求かどうか。
+ * image/png のような具体的なサブタイプ指定はフォトピッカーでは制約を表現できず、
+ * SVG など MediaStore に載らない形式も選べなくなるため、従来のファイルピッカーに任せる。
  */
-private fun resolveImageOnlyVisualMediaType(
-    mimeTypes: Array<String>,
-): ActivityResultContracts.PickVisualMedia.VisualMediaType? {
-    if (mimeTypes.isEmpty()) return null
-    if (!mimeTypes.all { it.startsWith("image/") }) return null
-    if (mimeTypes.any { it == "image/*" }) return ActivityResultContracts.PickVisualMedia.ImageOnly
-    val singleSubType = mimeTypes.distinct().singleOrNull() ?: return null
-    return ActivityResultContracts.PickVisualMedia.SingleMimeType(singleSubType)
+private fun isAnyImageRequest(mimeTypes: Array<String>): Boolean {
+    return mimeTypes.any { it == "image/*" } && mimeTypes.all { it.startsWith("image/") }
 }
 
 /**
