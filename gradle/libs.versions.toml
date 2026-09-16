@@ -34,7 +34,7 @@ composeRules = "0.6.6"
 mockk = "1.14.11"
 androidsvg = "1.4"
 robolectric = "4.17"
-ktor = "3.5.2"
+ktor = "3.6.0"
 
 [libraries]
 androidx-compose-bom = { module = "androidx.compose:compose-bom", version.ref = "composeBom" }
