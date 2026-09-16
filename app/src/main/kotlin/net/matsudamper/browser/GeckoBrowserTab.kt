@@ -1649,19 +1649,17 @@ private const val MENU_ID_SAVE_FORM_INPUT = 0x10003
 
 /**
  * 画像のみの要求であればフォトピッカーへ渡す VisualMediaType を返す。
- * 画像以外を含む要求では null を返し、従来のファイルピッカーにフォールバックする。
+ * 画像以外を含む要求や、フォトピッカーでは表現できない複数サブタイプ指定では null を返し、
+ * MIME タイプを保持できる従来のファイルピッカーにフォールバックする。
  */
 private fun resolveImageOnlyVisualMediaType(
     mimeTypes: Array<String>,
 ): ActivityResultContracts.PickVisualMedia.VisualMediaType? {
     if (mimeTypes.isEmpty()) return null
     if (!mimeTypes.all { it.startsWith("image/") }) return null
-    val singleSubType = mimeTypes.singleOrNull()?.takeIf { it != "image/*" }
-    return if (singleSubType != null) {
-        ActivityResultContracts.PickVisualMedia.SingleMimeType(singleSubType)
-    } else {
-        ActivityResultContracts.PickVisualMedia.ImageOnly
-    }
+    if (mimeTypes.any { it == "image/*" }) return ActivityResultContracts.PickVisualMedia.ImageOnly
+    val singleSubType = mimeTypes.distinct().singleOrNull() ?: return null
+    return ActivityResultContracts.PickVisualMedia.SingleMimeType(singleSubType)
 }
 
 /**
