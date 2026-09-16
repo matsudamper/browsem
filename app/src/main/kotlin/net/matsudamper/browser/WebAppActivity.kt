@@ -17,11 +17,15 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import java.util.concurrent.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.launch
 import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.TabRepository
 import net.matsudamper.browser.data.history.HistoryRepository
@@ -42,7 +46,8 @@ import org.mozilla.geckoview.GeckoRuntime
  * 独立したタスクとして管理され、アプリの履歴（最近使ったアプリ）に残る。
  */
 class WebAppActivity : ComponentActivity() {
-    private val runtime: GeckoRuntime by inject()
+    private val geckoRuntimeInitializer: GeckoRuntimeInitializer by inject()
+    private var geckoRuntime: GeckoRuntime? by mutableStateOf(null)
     private val themeColorExtension: ThemeColorWebExtension by inject()
     private val mediaWebExtension: MediaWebExtension by inject()
     private val settingsRepository: SettingsRepository by inject()
@@ -62,12 +67,19 @@ class WebAppActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        runtime.settings.setExtensionsWebAPIEnabled(true)
+        // GeckoRuntime の生成は設定値の読み出しを伴うため、メインスレッドをブロックせずに待つ。
+        lifecycleScope.launch {
+            val initialized = geckoRuntimeInitializer.initialize()
+            if (isFinishing || isDestroyed) return@launch
+            initialized.settings.setExtensionsWebAPIEnabled(true)
+            geckoRuntime = initialized
+        }
 
         val initialUrl = resolveInitialUrl()
         setContent {
             val settings by settingsRepository.settings.collectAsState(initial = null)
             val browserSettings = settings ?: return@setContent
+            val runtime = geckoRuntime ?: return@setContent
 
             LaunchedEffect(browserSettings.enableThirdPartyCa) {
                 runtime.settings.setEnterpriseRootsEnabled(browserSettings.enableThirdPartyCa)

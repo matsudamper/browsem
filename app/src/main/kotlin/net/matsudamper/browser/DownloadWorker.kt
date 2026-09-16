@@ -31,7 +31,6 @@ import net.matsudamper.browser.download.DownloadUrl
 import net.matsudamper.browser.download.GeckoDownloadHttpClient
 import net.matsudamper.browser.download.PendingDownloadBodyStore
 import net.matsudamper.browser.download.WebResponseDownloadResponse
-import org.mozilla.geckoview.GeckoRuntime
 
 /**
  * WorkManagerを使った進捗通知付きダウンロードWorker。
@@ -42,12 +41,15 @@ import org.mozilla.geckoview.GeckoRuntime
 internal class DownloadWorker(
     private val context: Context,
     params: WorkerParameters,
-    geckoRuntime: GeckoRuntime,
+    private val geckoRuntimeInitializer: GeckoRuntimeInitializer,
 ) : CoroutineWorker(context, params) {
     private val repository get() = DownloadRepository(context)
 
-    /** HTTP取得のクライアント。GeckoViewのCookie/セッションを共有する */
-    private val httpClient: DownloadHttpClient = GeckoDownloadHttpClient(geckoRuntime)
+    /**
+     * HTTP取得のクライアント。GeckoViewのCookie/セッションを共有する。
+     * プロセス終了後に再実行される場合は GeckoRuntime が未生成のため、doWork で初期化を待って組み立てる。
+     */
+    private lateinit var httpClient: DownloadHttpClient
 
     /** ストリームコピー・切断検出を担うコアロジック */
     private val engine = DownloadEngine()
@@ -82,6 +84,7 @@ internal class DownloadWorker(
         repository.insertDownload(workerId = id.toString(), url = url, referrerUrl = referrerUrl, enqueuedAt = enqueuedAt)
 
         return try {
+            httpClient = GeckoDownloadHttpClient(geckoRuntimeInitializer.initialize())
             // エンキュー直後にキャンセルされた場合（WorkManager 登録前のキャンセル等で
             // 割り込みが届かず Worker が起動してしまったケース）はダウンロードを開始しない
             throwIfCancelledOnRecord()

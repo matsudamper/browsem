@@ -25,9 +25,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -61,7 +63,8 @@ import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoSession
 
 class CustomTabActivity : ComponentActivity() {
-    private val runtime: GeckoRuntime by inject()
+    private val geckoRuntimeInitializer: GeckoRuntimeInitializer by inject()
+    private var geckoRuntime: GeckoRuntime? by mutableStateOf(null)
     private val themeColorExtension: ThemeColorWebExtension by inject()
     private val mediaWebExtensionInstance: MediaWebExtension by inject()
     private val settingsRepository: SettingsRepository by inject()
@@ -74,7 +77,7 @@ class CustomTabActivity : ComponentActivity() {
             initializer {
                 CustomTabBrowserViewModel(
                     tabRepository = tabRepository,
-                    runtime = runtime,
+                    runtime = geckoRuntimeInitializer.requireInitialized(),
                     handoffToken = intent.getStringExtra(WindowOpenHandoffStore.EXTRA_HANDOFF_TOKEN),
                 )
             }
@@ -96,27 +99,37 @@ class CustomTabActivity : ComponentActivity() {
         // キーボード直上に未描画領域が生じても下層 Activity（WebApp 等）が透けないよう、
         // ウィンドウ背景を不透明にしておく。
         window.setBackgroundDrawable(ColorDrawable(Color.BLACK))
-        runtime.settings.setExtensionsWebAPIEnabled(true)
 
-        // 拡張機能は Koin の single で管理されるため、ここではセッション管理のみ担当する
-        val browserTabController = browserViewModel.browserTabController
-        val browserSessionLifecycleController = browserViewModel.browserSessionLifecycleController
-
-        // window.open から引き渡されたセッションは URL では作り直せないため、Activity ではなく
-        // ViewModel が持ち主になる。構成変更をまたいでもタブに載せた内容が失われない。
-        val handedOffPopupSession = browserViewModel.handoffSession
-        val handedOffPopupTabId = browserViewModel.handoffTabId
-        // プロセスごと終了したあと OS がタスクを作り直すと、ストアは空でセッションを取り出せない。
-        // opener も道連れに失われているため復元しようがなく、ホームページに化けるくらいなら閉じる。
-        if (intent.hasExtra(WindowOpenHandoffStore.EXTRA_HANDOFF_TOKEN) && !browserViewModel.hasHandoff) {
-            finish()
-            return
-        }
         val initialUrl = ExternalInitialUrlPolicy.sanitize(intent.dataString).orEmpty()
         val customTabsSessionToken = CustomTabsSessionToken.getSessionTokenFromIntent(intent)
+        // GeckoRuntime の生成は設定値の読み出しを伴うため、メインスレッドをブロックせずに待つ。
+        // ViewModel は GeckoRuntime を必要とするため、初期化を待ってから触る。
+        lifecycleScope.launch {
+            val initialized = geckoRuntimeInitializer.initialize()
+            if (isFinishing || isDestroyed) return@launch
+            initialized.settings.setExtensionsWebAPIEnabled(true)
+            // プロセスごと終了したあと OS がタスクを作り直すと、ストアは空でセッションを取り出せない。
+            // opener も道連れに失われているため復元しようがなく、ホームページに化けるくらいなら閉じる。
+            if (intent.hasExtra(WindowOpenHandoffStore.EXTRA_HANDOFF_TOKEN) && !browserViewModel.hasHandoff) {
+                finish()
+                return@launch
+            }
+            geckoRuntime = initialized
+        }
         setContent {
             val settings by settingsRepository.settings.collectAsState(initial = null)
             val browserSettings = settings ?: return@setContent
+            val runtime = geckoRuntime ?: return@setContent
+
+            // 拡張機能は Koin の single で管理されるため、ここではセッション管理のみ担当する
+            val browserTabController = browserViewModel.browserTabController
+            val browserSessionLifecycleController = browserViewModel.browserSessionLifecycleController
+
+            // window.open から引き渡されたセッションは URL では作り直せないため、Activity ではなく
+            // ViewModel が持ち主になる。構成変更をまたいでもタブに載せた内容が失われない。
+            // 載せ終えると null に変わるため、composition ごとに読み直さない。
+            val handedOffPopupSession = remember { browserViewModel.handoffSession }
+            val handedOffPopupTabId = remember { browserViewModel.handoffTabId }
 
             LaunchedEffect(browserSettings.enableThirdPartyCa) {
                 runtime.settings.setEnterpriseRootsEnabled(browserSettings.enableThirdPartyCa)

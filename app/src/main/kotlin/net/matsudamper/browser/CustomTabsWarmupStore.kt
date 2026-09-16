@@ -8,6 +8,10 @@ import androidx.annotation.VisibleForTesting
 import androidx.browser.customtabs.CustomTabsSessionToken
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import net.matsudamper.browser.feature.webauthncompat.WebAuthnCompatWebExtension
 import org.koin.core.context.GlobalContext
 import org.mozilla.geckoview.GeckoRuntime
@@ -16,6 +20,9 @@ import org.mozilla.geckoview.GeckoSession
 object CustomTabsWarmupStore {
     private const val MAX_SESSION_ENTRIES = 8
     private const val STALE_ENTRY_MS = 10 * 60 * 1000L
+
+    // カスタムタブのウォームアップはプロセス生存中いつでも来るため、プロセスと同じ寿命で持つ。
+    private val warmupScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     private val lock = Any()
     private val entries = linkedMapOf<CustomTabsSessionToken, Entry>()
@@ -27,14 +34,19 @@ object CustomTabsWarmupStore {
     )
 
     fun onWarmup() {
-        GlobalContext.get().get<GeckoRuntime>()
+        // Binder スレッドから呼ばれる。GeckoRuntime の初期化はメインスレッドで行う必要がある。
+        warmupScope.launch {
+            GlobalContext.get().get<GeckoRuntimeInitializer>().initialize()
+        }
     }
 
     fun onNewSession(token: CustomTabsSessionToken) {
+        val evictedSessions = mutableListOf<GeckoSession>()
         synchronized(lock) {
             cleanupLocked()
-            ensureEntryLocked(token).updatedAt = System.currentTimeMillis()
+            ensureEntryLocked(token, evictedSessions).updatedAt = System.currentTimeMillis()
         }
+        closeOnMainThread(evictedSessions)
     }
 
     fun onMayLaunchUrl(
@@ -42,22 +54,40 @@ object CustomTabsWarmupStore {
         url: Uri?,
     ) {
         val targetUrl = url?.toString()?.takeIf { it.isNotBlank() } ?: return
-        val (runtime, webAuthnCompatWebExtension) = runOnMainThreadBlocking {
-            val koin = GlobalContext.get()
-            val resolvedRuntime = koin.get<GeckoRuntime>()
-            synchronized(lock) {
-                cleanupLocked()
-                ensureEntryLocked(token).apply {
-                    if (preparedUrl != targetUrl) {
-                        preparedSession?.close()
-                        preparedSession = null
-                    }
-                    preparedUrl = targetUrl
-                    updatedAt = System.currentTimeMillis()
+        // 起動・切断が後から来ても要求の記録が後追いにならないよう、エントリの更新は同期的に行う。
+        // GeckoSession を閉じるのはメインスレッドに限られるため、取り外して後段へ渡す。
+        val closableSessions = mutableListOf<GeckoSession>()
+        synchronized(lock) {
+            cleanupLocked()
+            ensureEntryLocked(token, closableSessions).apply {
+                preparedSession?.takeIf { preparedUrl != targetUrl }?.let { staleSession ->
+                    closableSessions.add(staleSession)
+                    preparedSession = null
                 }
+                preparedUrl = targetUrl
+                updatedAt = System.currentTimeMillis()
             }
-            resolvedRuntime to koin.get<WebAuthnCompatWebExtension>()
         }
+        // Binder スレッドから呼ばれる。GeckoRuntime の初期化と GeckoSession の操作はメインスレッドで行う。
+        warmupScope.launch {
+            closableSessions.forEach { it.close() }
+            val koin = GlobalContext.get()
+            val runtime = koin.get<GeckoRuntimeInitializer>().initialize()
+            installWebAuthnCompatAndPrepare(
+                token = token,
+                targetUrl = targetUrl,
+                runtime = runtime,
+                webAuthnCompatWebExtension = koin.get<WebAuthnCompatWebExtension>(),
+            )
+        }
+    }
+
+    private fun installWebAuthnCompatAndPrepare(
+        token: CustomTabsSessionToken,
+        targetUrl: String,
+        runtime: GeckoRuntime,
+        webAuthnCompatWebExtension: WebAuthnCompatWebExtension,
+    ) {
         webAuthnCompatWebExtension.install(runtime).accept(
             {
                 prepareSessionIfCurrent(token, targetUrl, runtime)
@@ -164,16 +194,27 @@ object CustomTabsWarmupStore {
         }
     }
 
-    private fun ensureEntryLocked(token: CustomTabsSessionToken): Entry {
+    /** 容量超過で退避したセッションは [evictedSessions] へ移し、呼び出し側がメインスレッドで閉じる。 */
+    private fun ensureEntryLocked(
+        token: CustomTabsSessionToken,
+        evictedSessions: MutableList<GeckoSession>,
+    ): Entry {
         return entries.getOrPut(token) {
             if (entries.size >= MAX_SESSION_ENTRIES) {
                 val oldest = entries.entries.firstOrNull()
                 if (oldest != null) {
-                    oldest.value.preparedSession?.close()
+                    oldest.value.preparedSession?.let { evictedSessions.add(it) }
                     entries.remove(oldest.key)
                 }
             }
             Entry()
+        }
+    }
+
+    private fun closeOnMainThread(sessions: List<GeckoSession>) {
+        if (sessions.isEmpty()) return
+        warmupScope.launch {
+            sessions.forEach { it.close() }
         }
     }
 

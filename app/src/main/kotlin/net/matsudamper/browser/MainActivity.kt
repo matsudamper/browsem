@@ -52,7 +52,8 @@ import org.mozilla.geckoview.WebExtension
 
 class MainActivity : ComponentActivity() {
 
-    private val runtime: GeckoRuntime by inject()
+    private val geckoRuntimeInitializer: GeckoRuntimeInitializer by inject()
+    private lateinit var runtime: GeckoRuntime
     private val settingsRepository: SettingsRepository by inject()
     private val extensionRuntimeCoordinator: ExtensionRuntimeCoordinator by inject()
     private val webExtensionActionController: WebExtensionActionController by inject()
@@ -141,7 +142,8 @@ class MainActivity : ComponentActivity() {
         // geckoInitialized=false のまま初回フレームを描くと BrowserApp が
         // composition に乗らず、rememberNavBackStack の saveable 復元キーが
         // ずれて別タブが表示されることがある。
-        if (savedInstanceState != null && browserViewModel.setupComplete.isCompleted) {
+        // ViewModel は GeckoRuntime を必要とするため、初期化済みかどうかで判定する。
+        if (savedInstanceState != null && geckoRuntimeInitializer.isInitialized && browserViewModel.setupComplete.isCompleted) {
             initializeGeckoRuntime()
         }
 
@@ -250,6 +252,18 @@ class MainActivity : ComponentActivity() {
             return
         }
         geckoInitializationInProgress = true
+        // GeckoRuntime の生成は設定値の読み出しを伴うため、メインスレッドをブロックせずに待つ。
+        lifecycleScope.launch {
+            runtime = geckoRuntimeInitializer.initialize()
+            if (isFinishing || isDestroyed) {
+                geckoInitializationInProgress = false
+                return@launch
+            }
+            setUpGeckoRuntimeDelegates()
+        }
+    }
+
+    private fun setUpGeckoRuntimeDelegates() {
         if (!::extensionInstaller.isInitialized) {
             extensionInstaller = WebExtensionInstaller(
                 runtime = runtime,
@@ -446,7 +460,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
         unregisterSystemNavigationObserverIfNeeded()
-        if (hostsBrowserContent && isFinishing) {
+        if (hostsBrowserContent && isFinishing && geckoRuntimeInitializer.isInitialized) {
             runCatching {
                 runBlocking {
                     browserViewModel.cleanupSelectedExternalTabOnActivityFinishIfNeeded()
@@ -458,7 +472,7 @@ class MainActivity : ComponentActivity() {
         if (::extensionInstaller.isInitialized) {
             extensionInstaller.cleanup()
         }
-        if (isFinishing) {
+        if (isFinishing && ::extensionInstaller.isInitialized) {
             extensionRuntimeCoordinator.clearOnExtensionReady()
         }
         pendingActivityResult?.completeExceptionally(

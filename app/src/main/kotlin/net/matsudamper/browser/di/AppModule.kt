@@ -1,19 +1,15 @@
 package net.matsudamper.browser.di
 
-import android.util.Log
-import androidx.annotation.OptIn
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.runBlocking
 import mozilla.components.lib.publicsuffixlist.PublicSuffixList
 import net.matsudamper.browser.BrowserViewModel
 import net.matsudamper.browser.DownloadWorker
 import net.matsudamper.browser.ExtensionRuntimeCoordinator
 import net.matsudamper.browser.GeckoDownloadManager
+import net.matsudamper.browser.GeckoRuntimeInitializer
 import net.matsudamper.browser.WebExtensionActionController
-import net.matsudamper.browser.allowUnsignedExtensions
 import net.matsudamper.browser.data.BackupRepository
 import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.SiteSettingsRepository
@@ -25,14 +21,10 @@ import net.matsudamper.browser.data.crashlog.CrashLogRepository
 import net.matsudamper.browser.data.download.DownloadRepository
 import net.matsudamper.browser.data.forminput.FormInputRepository
 import net.matsudamper.browser.data.history.HistoryRepository
-import net.matsudamper.browser.data.resolvedExtensionsProcessEnabled
-import net.matsudamper.browser.data.resolvedInputAutoZoomEnabled
-import net.matsudamper.browser.data.resolvedWebAuthnPlatformAuthenticatorAvailableOverrideEnabled
 import net.matsudamper.browser.data.websuggestion.HttpWebSuggestionRepository
 import net.matsudamper.browser.data.websuggestion.WebSuggestionRepository
 import net.matsudamper.browser.feature.addressautofill.AddressAutofillCoordinator
 import net.matsudamper.browser.feature.addressautofill.AddressAutofillWebExtension
-import net.matsudamper.browser.feature.addressautofill.AutocompleteStorageDelegate
 import net.matsudamper.browser.feature.devtools.DevToolsWebExtension
 import net.matsudamper.browser.feature.findinpage.FindInPageWebExtension
 import net.matsudamper.browser.feature.forminputautofill.FormInputAutofillCoordinator
@@ -51,10 +43,7 @@ import org.koin.android.ext.koin.androidContext
 import org.koin.androidx.workmanager.dsl.worker
 import org.koin.core.module.dsl.viewModel
 import org.koin.dsl.module
-import org.mozilla.geckoview.ExperimentalGeckoViewApi
-import org.mozilla.geckoview.GeckoPreferenceController
 import org.mozilla.geckoview.GeckoRuntime
-import org.mozilla.geckoview.GeckoRuntimeSettings
 
 val dataModule = module {
     single { BackupRepository(androidContext()) }
@@ -71,54 +60,30 @@ val dataModule = module {
 }
 
 val appModule = module {
+    // プロセスと同じ寿命で動く CoroutineScope。GeckoRuntime に紐づく delegate など、
+    // 画面より長く生きる処理から共有する。
+    single<CoroutineScope> { CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate) }
     single { AddressAutofillWebExtension() }
     single { FormInputAutofillWebExtension() }
     single { WebAuthnCompatWebExtension() }
     single { PageTranslationWebExtension(get()) }
     single { AddressAutofillCoordinator(get()) }
     factory { FormInputAutofillCoordinator(get()) }
-    single<GeckoRuntime> {
-        // Gecko 起動前の pref 設定はキューされる。メインスレッドをブロックして待機すると
-        // initializeGeckoRuntime() とデッドロックするため非同期で投入する。
-        enableAddressAutofill()
-        val settings = get<SettingsRepository>()
-        val browserSettings = runBlocking {
-            settings.settings.first()
-        }
-        val extensionsProcessEnabled = browserSettings.resolvedExtensionsProcessEnabled()
-        val inputAutoZoomEnabled = browserSettings.resolvedInputAutoZoomEnabled()
-        GeckoRuntime.create(
-            androidContext(),
-            GeckoRuntimeSettings.Builder()
-                .forceUserScalableEnabled(true)
-                .inputAutoZoomEnabled(inputAutoZoomEnabled)
-                .extensionsProcessEnabled(extensionsProcessEnabled)
-                .build(),
-        ).also {
-            get<AddressAutofillWebExtension>().install(it)
-            get<FormInputAutofillWebExtension>().install(it)
-            get<PageTranslationWebExtension>().install(it)
-            // MainActivity の install() はこの設定反映まで含んだ同じ GeckoResult を待つ。
-            // retryInstall() も保存済みの有効状態を再適用する。
-            get<WebAuthnCompatWebExtension>().setEnabled(
-                it,
-                browserSettings.resolvedWebAuthnPlatformAuthenticatorAvailableOverrideEnabled(),
-            )
-            val addressAutofillCoordinator = get<AddressAutofillCoordinator>()
-            it.autocompleteStorageDelegate = AutocompleteStorageDelegate(
-                addressRepository = get(),
-                coroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main),
-                onAddressFetchStarted = addressAutofillCoordinator::onAddressFetchStarted,
-                onAddressFetched = addressAutofillCoordinator::onAddressFetch,
-            )
-            // 署名要求は GeckoRuntimeSettings では設定できず pref でしか制御できない。
-            // 起動時の検証にも使われる値のため runtime 生成のたびに反映する。
-            // Gecko 起動前の呼び出しはキューされる。
-            allowUnsignedExtensions().accept({}, { error ->
-                Log.w("AppModule", "署名要求 pref の反映に失敗", error)
-            })
-        }
+    single {
+        GeckoRuntimeInitializer(
+            context = androidContext(),
+            settingsRepository = get(),
+            addressRepository = get(),
+            addressAutofillWebExtension = get(),
+            formInputAutofillWebExtension = get(),
+            pageTranslationWebExtension = get(),
+            webAuthnCompatWebExtension = get(),
+            addressAutofillCoordinator = get(),
+            autocompleteCoroutineScope = get(),
+        )
     }
+    // 初期化は GeckoRuntimeInitializer が行う。ここでは初期化済みのインスタンスを配るだけにする。
+    single<GeckoRuntime> { get<GeckoRuntimeInitializer>().requireInitialized() }
     // 拡張機能はプロセスに1つの GeckoRuntime に対してインストールするため single で管理
     single { ThemeColorWebExtension().also { it.install(get()) } }
     single { MediaWebExtension(androidContext()).also { it.install(get()) } }
@@ -139,38 +104,4 @@ val appModule = module {
     factory { GeckoDownloadManager(androidContext(), get()) }
     viewModel { BrowserViewModel(get(), get(), get(), get(), get(), get(), get(), get()) }
     worker { DownloadWorker(get(), get(), get()) }
-}
-
-private const val ADDRESS_AUTOFILL_ENABLED_PREF = "extensions.formautofill.addresses.enabled"
-private const val ADDRESS_AUTOFILL_CAPTURE_ENABLED_PREF = "extensions.formautofill.addresses.capture.enabled"
-private const val ADDRESS_AUTOFILL_SUPPORTED_PREF = "extensions.formautofill.addresses.supported"
-
-/** GeckoView に公開設定 API がない住所自動入力を内部プリファレンスで有効にする。 */
-@OptIn(ExperimentalGeckoViewApi::class)
-private fun enableAddressAutofill() {
-    GeckoPreferenceController.setGeckoPrefs(
-        listOf(
-            GeckoPreferenceController.SetGeckoPreference.setBoolPref(
-                ADDRESS_AUTOFILL_ENABLED_PREF,
-                true,
-                GeckoPreferenceController.PREF_BRANCH_USER,
-            ),
-            GeckoPreferenceController.SetGeckoPreference.setBoolPref(
-                ADDRESS_AUTOFILL_CAPTURE_ENABLED_PREF,
-                true,
-                GeckoPreferenceController.PREF_BRANCH_USER,
-            ),
-            GeckoPreferenceController.SetGeckoPreference.setStringPref(
-                ADDRESS_AUTOFILL_SUPPORTED_PREF,
-                "on",
-                GeckoPreferenceController.PREF_BRANCH_USER,
-            ),
-        ),
-    ).accept(
-        { results ->
-            val failed = results.orEmpty().filterValues { !it }.keys
-            if (failed.isNotEmpty()) Log.w("AppModule", "住所自動入力プリファレンスの設定に失敗: $failed")
-        },
-        { error -> Log.w("AppModule", "住所自動入力プリファレンスの設定に失敗", error) },
-    )
 }
