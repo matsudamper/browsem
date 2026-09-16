@@ -65,7 +65,6 @@ internal class DownloadWorker(
 
     override suspend fun doWork(): Result {
         val url = inputData.getString(KEY_URL) ?: return Result.failure()
-        httpClient = GeckoDownloadHttpClient(geckoRuntimeInitializer.initialize())
         val referrerUrl = inputData.getString(KEY_REFERRER_URL).orEmpty()
         // inputDataから通知IDを読み出す（GeckoDownloadManagerと共有）
         val notificationId = inputData.getInt(KEY_NOTIFICATION_ID, NOTIFICATION_ID)
@@ -85,6 +84,7 @@ internal class DownloadWorker(
         repository.insertDownload(workerId = id.toString(), url = url, referrerUrl = referrerUrl, enqueuedAt = enqueuedAt)
 
         return try {
+            httpClient = GeckoDownloadHttpClient(geckoRuntimeInitializer.initialize())
             // エンキュー直後にキャンセルされた場合（WorkManager 登録前のキャンセル等で
             // 割り込みが届かず Worker が起動してしまったケース）はダウンロードを開始しない
             throwIfCancelledOnRecord()
