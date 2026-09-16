@@ -818,10 +818,8 @@ internal fun GeckoBrowserTab(
     DisposableEffect(session, state, findInPageWebExtension) {
         findInPageWebExtension.registerSession(session) { current, total, error ->
             // 正規表現モードでないときに届いた遅延結果は無視する
-            if (!state.findIsRegex) return@registerSession
-            state.findMatchCurrent = current
-            state.findMatchTotal = total
-            state.findQueryError = if (error == "invalid_regex") "無効な正規表現です" else null
+            if (!state.findInPage.isRegex) return@registerSession
+            state.findInPage.onRegexSearchResult(current = current, total = total, error = error)
         }
         onDispose {
             findInPageWebExtension.unregisterSession(session)
@@ -1144,13 +1142,13 @@ internal fun GeckoBrowserTab(
     // webAppMode で上記いずれにも該当しない（これ以上戻れない）場合はバックを消費しない。
     // ハンドラを無効化してシステムに委ねることで、メインアプリと同様に予測型バック
     // （ホーム画面へ縮小していくアニメーション）を発生させ、そのまま Activity を終了させる。
-    PredictiveBackHandler(enabled = state.isFullScreen || state.showFindInPage || state.isUrlInputFocused || state.canGoBack) { progress ->
+    PredictiveBackHandler(enabled = state.isFullScreen || state.findInPage.isVisible || state.isUrlInputFocused || state.canGoBack) { progress ->
         state.isBackGestureInProgress = true
         try {
             progress.collect {}
             when {
                 state.isFullScreen -> state.exitFullScreen()
-                state.showFindInPage -> state.closeFindInPage()
+                state.findInPage.isVisible -> state.findInPage.close()
                 state.isUrlInputFocused -> closeUrlInput(true)
                 state.canGoBack -> state.onGoBack()
             }
@@ -1208,18 +1206,18 @@ internal fun GeckoBrowserTab(
     ) {
         if (state.isFullScreen) {
             // フルスクリーン時はツールバー・翻訳バー・検索バーを非表示
-        } else if (state.showFindInPage) {
+        } else if (state.findInPage.isVisible) {
             FindInPageBar(
-                query = state.findQuery,
-                matchCurrent = state.findMatchCurrent,
-                matchTotal = state.findMatchTotal,
-                isRegex = state.findIsRegex,
-                queryError = state.findQueryError,
-                onQueryChange = state::onFindQueryChange,
-                onNext = state::findNext,
-                onPrevious = state::findPrevious,
-                onClose = state::closeFindInPage,
-                onToggleRegex = state::toggleFindRegex,
+                query = state.findInPage.query,
+                matchCurrent = state.findInPage.matchCurrent,
+                matchTotal = state.findInPage.matchTotal,
+                isRegex = state.findInPage.isRegex,
+                queryError = state.findInPage.queryError,
+                onQueryChange = state.findInPage::onQueryChange,
+                onNext = state.findInPage::findNext,
+                onPrevious = state.findInPage::findPrevious,
+                onClose = state.findInPage::close,
+                onToggleRegex = state.findInPage::toggleRegex,
             )
         } else {
             if (customTabMode || webAppMode) {
@@ -1242,9 +1240,9 @@ internal fun GeckoBrowserTab(
                     onPcModeToggle = state::togglePcMode,
                     showInstallExtensionItem = showInstallExtensionItem && state.showInstallExtensionItem,
                     onInstallExtension = { onInstallExtensionRequest(state.currentPageUrl) },
-                    onTranslatePage = { state.onTranslate(translationProvider) },
+                    onTranslatePage = { state.translation.onTranslate(translationProvider) },
                     onShare = state::sharePage,
-                    onFindInPage = state::openFindInPage,
+                    onFindInPage = state.findInPage::open,
                     onAddToHomeScreen = state::requestAddToHomeScreen,
                     // ウェブアプリモードでは「ホームに追加」を非表示
                     showAddToHomeScreen = !webAppMode,
@@ -1323,7 +1321,7 @@ internal fun GeckoBrowserTab(
                     },
                     isPcMode = state.isPcMode,
                     onPcModeToggle = state::togglePcMode,
-                    onFindInPage = state::openFindInPage,
+                    onFindInPage = state.findInPage::open,
                     toolbarColor = state.toolbarColor,
                     onHome = state::onHome,
                     onForward = state::onGoForward,
@@ -1335,7 +1333,7 @@ internal fun GeckoBrowserTab(
                     onSuperRefresh = state::onSuperRefresh,
                     isPageLoading = state.isPageLoading,
                     onStopLoading = state::onStopLoading,
-                    onTranslatePage = { state.onTranslate(translationProvider) },
+                    onTranslatePage = { state.translation.onTranslate(translationProvider) },
                     pageZoomPercent = state.pageZoomPercent,
                     onPageZoomIn = state::pageZoomIn,
                     onPageZoomOut = state::pageZoomOut,
@@ -1357,7 +1355,7 @@ internal fun GeckoBrowserTab(
                 )
             }
             // 翻訳元・翻訳先の選択肢：検出済み言語＋英語＋日本語（重複除去）
-            val detectedLang = state.detectedPageLanguage
+            val detectedLang = state.translation.detectedPageLanguage
             val languageOptions = remember(detectedLang) {
                 buildList {
                     if (detectedLang != null && detectedLang != TranslationPriorityLanguage.FROM && detectedLang != TranslationPriorityLanguage.TO) {
@@ -1368,20 +1366,20 @@ internal fun GeckoBrowserTab(
                 }
             }
             TranslationStatusBar(
-                state = state.translationState,
-                onRevert = state::onRevertTranslation,
-                onDismissError = state::onDismissTranslationError,
-                errorMessage = state.translationErrorMessage,
-                progress = state.translationProgress,
-                fromLanguage = state.translationFromLanguage,
-                toLanguage = state.translationToLanguage,
+                state = state.translation.state,
+                onRevert = state.translation::onRevert,
+                onDismissError = state.translation::onDismissError,
+                errorMessage = state.translation.errorMessage,
+                progress = state.translation.progress,
+                fromLanguage = state.translation.fromLanguage,
+                toLanguage = state.translation.toLanguage,
                 fromLanguageOptions = languageOptions,
                 toLanguageOptions = languageOptions,
                 onFromLanguageSelected = { lang ->
-                    state.onRetranslate(translationProvider, fromLanguage = lang, toLanguage = state.translationToLanguage ?: TranslationPriorityLanguage.TO)
+                    state.translation.onRetranslate(translationProvider, fromLanguage = lang, toLanguage = state.translation.toLanguage ?: TranslationPriorityLanguage.TO)
                 },
                 onToLanguageSelected = { lang ->
-                    state.onRetranslate(translationProvider, fromLanguage = state.translationFromLanguage, toLanguage = lang)
+                    state.translation.onRetranslate(translationProvider, fromLanguage = state.translation.fromLanguage, toLanguage = lang)
                 },
             )
         }
@@ -1433,7 +1431,7 @@ internal fun GeckoBrowserTab(
                 autofillBar != null &&
                 autofillBar.items.isNotEmpty() &&
                 !state.isUrlInputFocused &&
-                !state.showFindInPage &&
+                !state.findInPage.isVisible &&
                 !state.isFullScreen
             ) {
                 // GeckoView は IME でリサイズしない。バーだけ IME 上へ上げる。

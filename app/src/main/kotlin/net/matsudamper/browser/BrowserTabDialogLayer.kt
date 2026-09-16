@@ -88,16 +88,19 @@ internal fun BrowserTabDialogLayer(
                 state.dismissContextMenu()
             },
             onCopyLink = { url -> state.copyLinkUrl(url) },
-            onDownloadImage = { url -> state.downloadImage(url) },
+            onDownloadImage = { url ->
+                state.dismissContextMenu()
+                state.downloadState.downloadImage(url)
+            },
             onDismiss = state::dismissContextMenu,
         )
     }
 
     // サイトごとのマイク許可確認ダイアログ。
     // OS の権限ダイアログより前に表示され、選択はサイト設定として永続化される。
-    state.microphonePermissionDialog?.let { dialog ->
+    state.sitePermissionDialogState.microphoneDialog?.let { dialog ->
         AlertDialog(
-            onDismissRequest = state::dismissMicrophonePermissionDialog,
+            onDismissRequest = state.sitePermissionDialogState::dismissMicrophone,
             title = { Text("マイクの使用許可") },
             text = {
                 Text(
@@ -106,12 +109,12 @@ internal fun BrowserTabDialogLayer(
                 )
             },
             confirmButton = {
-                TextButton(onClick = { state.confirmMicrophonePermissionDialog(true) }) {
+                TextButton(onClick = { state.sitePermissionDialogState.confirmMicrophone(true) }) {
                     Text("許可")
                 }
             },
             dismissButton = {
-                TextButton(onClick = { state.confirmMicrophonePermissionDialog(false) }) {
+                TextButton(onClick = { state.sitePermissionDialogState.confirmMicrophone(false) }) {
                     Text("ブロック")
                 }
             },
@@ -121,31 +124,31 @@ internal fun BrowserTabDialogLayer(
     // サイトごとの自動再生（音声付きメディア）許可確認ダイアログ。
     // 「許可」「却下」はサイト設定として永続化され、次回以降は確認せずに適用される。
     // 「今回のみ許可」とダイアログを閉じただけの場合は永続化せず、次回も確認する。
-    state.autoplayPermissionDialog?.let { dialog ->
+    state.sitePermissionDialogState.autoplayDialog?.let { dialog ->
         AutoplayPermissionDialog(
             host = dialog.host,
             onAllow = {
-                state.confirmAutoplayPermissionDialog(
-                    BrowserTabScreenState.AutoplayPermissionChoice.Allow,
+                state.sitePermissionDialogState.confirmAutoplay(
+                    SitePermissionDialogState.AutoplayChoice.Allow,
                 )
             },
             onAllowOnce = {
-                state.confirmAutoplayPermissionDialog(
-                    BrowserTabScreenState.AutoplayPermissionChoice.AllowOnce,
+                state.sitePermissionDialogState.confirmAutoplay(
+                    SitePermissionDialogState.AutoplayChoice.AllowOnce,
                 )
             },
             onDeny = {
-                state.confirmAutoplayPermissionDialog(
-                    BrowserTabScreenState.AutoplayPermissionChoice.Deny,
+                state.sitePermissionDialogState.confirmAutoplay(
+                    SitePermissionDialogState.AutoplayChoice.Deny,
                 )
             },
-            onDismiss = state::dismissAutoplayPermissionDialog,
+            onDismiss = state.sitePermissionDialogState::dismissAutoplay,
         )
     }
 
-    state.pendingDownloadResponse?.let { response ->
+    state.downloadState.pendingDownloadResponse?.let { response ->
         AlertDialog(
-            onDismissRequest = state::dismissPendingDownload,
+            onDismissRequest = state.downloadState::dismissPendingDownload,
             title = { Text("ダウンロード") },
             text = {
                 Text(
@@ -155,24 +158,24 @@ internal fun BrowserTabDialogLayer(
                 )
             },
             confirmButton = {
-                TextButton(onClick = state::confirmPendingDownload) {
+                TextButton(onClick = state.downloadState::confirmPendingDownload) {
                     Text("ダウンロード")
                 }
             },
             dismissButton = {
-                TextButton(onClick = state::cancelPendingDownload) {
+                TextButton(onClick = state.downloadState::cancelPendingDownload) {
                     Text("キャンセル")
                 }
             },
         )
     }
 
-    state.duplicateDownloadState?.let { duplicateState ->
+    state.downloadState.duplicateDownloadState?.let { duplicateState ->
         DuplicateDownloadDialog(
             state = duplicateState,
-            onConfirm = state::confirmDuplicateDownload,
-            onCancel = state::cancelDuplicateDownload,
-            onDismiss = state::dismissDuplicateDownload,
+            onConfirm = state.downloadState::confirmDuplicateDownload,
+            onCancel = state.downloadState::cancelDuplicateDownload,
+            onDismiss = state.downloadState::dismissDuplicateDownload,
             onOpenFile = onOpenFile,
         )
     }
@@ -1144,7 +1147,7 @@ private fun ChoicePromptDialog(
 
 @Composable
 private fun DuplicateDownloadDialog(
-    state: BrowserTabScreenState.DuplicateDownloadState,
+    state: TabDownloadState.DuplicateDownloadState,
     onConfirm: () -> Unit,
     onCancel: () -> Unit,
     onDismiss: () -> Unit,
@@ -1218,15 +1221,15 @@ private fun flattenChoices(
 private fun PreviewDuplicateDownloadDialog() {
     BrowserTheme(themeMode = ThemeMode.THEME_SYSTEM) {
         DuplicateDownloadDialog(
-            state = BrowserTabScreenState.DuplicateDownloadState(
+            state = TabDownloadState.DuplicateDownloadState(
                 url = "https://example.com/file.zip",
                 existingDownloads = listOf(
-                    BrowserTabScreenState.DuplicateDownloadEntry(
+                    TabDownloadState.DuplicateDownloadEntry(
                         fileName = "file.zip",
                         status = DownloadRecordStatus.SUCCEEDED,
                         fileUri = "content://media/external/downloads/123",
                     ),
-                    BrowserTabScreenState.DuplicateDownloadEntry(
+                    TabDownloadState.DuplicateDownloadEntry(
                         fileName = "file.zip",
                         status = DownloadRecordStatus.RUNNING,
                         fileUri = null,
