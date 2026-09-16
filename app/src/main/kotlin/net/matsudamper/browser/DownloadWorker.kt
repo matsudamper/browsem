@@ -31,7 +31,6 @@ import net.matsudamper.browser.download.DownloadUrl
 import net.matsudamper.browser.download.GeckoDownloadHttpClient
 import net.matsudamper.browser.download.PendingDownloadBodyStore
 import net.matsudamper.browser.download.WebResponseDownloadResponse
-import org.mozilla.geckoview.GeckoRuntime
 
 /**
  * WorkManagerを使った進捗通知付きダウンロードWorker。
@@ -42,12 +41,15 @@ import org.mozilla.geckoview.GeckoRuntime
 internal class DownloadWorker(
     private val context: Context,
     params: WorkerParameters,
-    geckoRuntime: GeckoRuntime,
+    private val geckoRuntimeInitializer: GeckoRuntimeInitializer,
 ) : CoroutineWorker(context, params) {
     private val repository get() = DownloadRepository(context)
 
-    /** HTTP取得のクライアント。GeckoViewのCookie/セッションを共有する */
-    private val httpClient: DownloadHttpClient = GeckoDownloadHttpClient(geckoRuntime)
+    /**
+     * HTTP取得のクライアント。GeckoViewのCookie/セッションを共有する。
+     * プロセス終了後に再実行される場合は GeckoRuntime が未生成のため、doWork で初期化を待って組み立てる。
+     */
+    private lateinit var httpClient: DownloadHttpClient
 
     /** ストリームコピー・切断検出を担うコアロジック */
     private val engine = DownloadEngine()
@@ -63,6 +65,7 @@ internal class DownloadWorker(
 
     override suspend fun doWork(): Result {
         val url = inputData.getString(KEY_URL) ?: return Result.failure()
+        httpClient = GeckoDownloadHttpClient(geckoRuntimeInitializer.initialize())
         val referrerUrl = inputData.getString(KEY_REFERRER_URL).orEmpty()
         // inputDataから通知IDを読み出す（GeckoDownloadManagerと共有）
         val notificationId = inputData.getInt(KEY_NOTIFICATION_ID, NOTIFICATION_ID)
