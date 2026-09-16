@@ -41,10 +41,12 @@ object CustomTabsWarmupStore {
     }
 
     fun onNewSession(token: CustomTabsSessionToken) {
+        val evictedSessions = mutableListOf<GeckoSession>()
         synchronized(lock) {
             cleanupLocked()
-            ensureEntryLocked(token).updatedAt = System.currentTimeMillis()
+            ensureEntryLocked(token, evictedSessions).updatedAt = System.currentTimeMillis()
         }
+        closeOnMainThread(evictedSessions)
     }
 
     fun onMayLaunchUrl(
@@ -54,21 +56,21 @@ object CustomTabsWarmupStore {
         val targetUrl = url?.toString()?.takeIf { it.isNotBlank() } ?: return
         // 起動・切断が後から来ても要求の記録が後追いにならないよう、エントリの更新は同期的に行う。
         // GeckoSession を閉じるのはメインスレッドに限られるため、取り外して後段へ渡す。
-        val staleSession = synchronized(lock) {
+        val closableSessions = mutableListOf<GeckoSession>()
+        synchronized(lock) {
             cleanupLocked()
-            ensureEntryLocked(token).run {
-                val removed = preparedSession.takeIf { preparedUrl != targetUrl }
-                if (removed != null) {
+            ensureEntryLocked(token, closableSessions).apply {
+                preparedSession?.takeIf { preparedUrl != targetUrl }?.let { staleSession ->
+                    closableSessions.add(staleSession)
                     preparedSession = null
                 }
                 preparedUrl = targetUrl
                 updatedAt = System.currentTimeMillis()
-                removed
             }
         }
         // Binder スレッドから呼ばれる。GeckoRuntime の初期化と GeckoSession の操作はメインスレッドで行う。
         warmupScope.launch {
-            staleSession?.close()
+            closableSessions.forEach { it.close() }
             val koin = GlobalContext.get()
             val runtime = koin.get<GeckoRuntimeInitializer>().initialize()
             installWebAuthnCompatAndPrepare(
@@ -192,16 +194,27 @@ object CustomTabsWarmupStore {
         }
     }
 
-    private fun ensureEntryLocked(token: CustomTabsSessionToken): Entry {
+    /** 容量超過で退避したセッションは [evictedSessions] へ移し、呼び出し側がメインスレッドで閉じる。 */
+    private fun ensureEntryLocked(
+        token: CustomTabsSessionToken,
+        evictedSessions: MutableList<GeckoSession>,
+    ): Entry {
         return entries.getOrPut(token) {
             if (entries.size >= MAX_SESSION_ENTRIES) {
                 val oldest = entries.entries.firstOrNull()
                 if (oldest != null) {
-                    oldest.value.preparedSession?.close()
+                    oldest.value.preparedSession?.let { evictedSessions.add(it) }
                     entries.remove(oldest.key)
                 }
             }
             Entry()
+        }
+    }
+
+    private fun closeOnMainThread(sessions: List<GeckoSession>) {
+        if (sessions.isEmpty()) return
+        warmupScope.launch {
+            sessions.forEach { it.close() }
         }
     }
 
