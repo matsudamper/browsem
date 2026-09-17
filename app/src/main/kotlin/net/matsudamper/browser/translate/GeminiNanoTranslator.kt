@@ -558,7 +558,19 @@ internal class SelectedGeminiNanoModel(
 internal class GeminiNanoModelOption(
     val key: String,
     val modelName: String,
+    val downloaded: Boolean,
 )
+
+/**
+ * 保存済みのキーが今の一覧にない場合に、翻訳時の自動選択と同じ基準で選び直す。
+ *
+ * 一覧に無いキーのままだと設定画面でどの候補も選択されていない状態になる。
+ */
+internal fun resolveGeminiNanoModelKey(models: List<GeminiNanoModelOption>, savedKey: String): String {
+    if (models.any { it.key == savedKey }) return savedKey
+    val fallback = models.firstOrNull { it.downloaded } ?: models.firstOrNull()
+    return fallback?.key.orEmpty()
+}
 
 /** 設定へ保存するキー。候補と表示モデル名の組を一意に表す */
 internal fun geminiNanoModelKey(configName: String, modelName: String): String = "$configName/$modelName"
@@ -575,6 +587,7 @@ internal suspend fun listGeminiNanoModels(): List<GeminiNanoModelOption> {
         GeminiNanoModelOption(
             key = opened.key,
             modelName = opened.modelName,
+            downloaded = opened.priority == DOWNLOADED_MODEL_PRIORITY,
         )
     }
 }

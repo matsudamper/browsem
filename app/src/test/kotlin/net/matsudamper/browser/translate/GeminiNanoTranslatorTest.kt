@@ -88,6 +88,19 @@ class GeminiNanoTranslatorTest {
     }
 
     @Test
+    fun 一覧にない保存キーはダウンロード済みの候補へ寄せる() {
+        val models = listOf(
+            GeminiNanoModelOption(key = "stable-full/A", modelName = "A", downloaded = false),
+            GeminiNanoModelOption(key = "stable-fast/B", modelName = "B", downloaded = true),
+        )
+
+        assertEquals("stable-fast/B", resolveGeminiNanoModelKey(models, savedKey = "preview-fast/C"))
+        assertEquals("stable-fast/B", resolveGeminiNanoModelKey(models, savedKey = ""))
+        assertEquals("stable-full/A", resolveGeminiNanoModelKey(models, savedKey = "stable-full/A"))
+        assertEquals("", resolveGeminiNanoModelKey(models = emptyList(), savedKey = "stable-full/A"))
+    }
+
+    @Test
     fun 保存キーは候補と表示モデル名を連結する() {
         assertEquals(
             "stable-full/gemini-nano-v3",

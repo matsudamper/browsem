@@ -29,7 +29,9 @@ import net.matsudamper.browser.data.resolvedInputAutoZoomEnabled
 import net.matsudamper.browser.data.resolvedWebAuthnPlatformAuthenticatorAvailableOverrideEnabled
 import net.matsudamper.browser.feature.mocklocation.MockLocationWebExtension
 import net.matsudamper.browser.feature.webauthncompat.WebAuthnCompatWebExtension
+import net.matsudamper.browser.translate.GeminiNanoModelOption
 import net.matsudamper.browser.translate.listGeminiNanoModels
+import net.matsudamper.browser.translate.resolveGeminiNanoModelKey
 import net.matsudamper.browser.ui.settings.SettingsScreenUiState
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
@@ -88,12 +90,7 @@ internal class SettingsScreenViewModel(
 
     init {
         viewModelScope.launch {
-            val geminiNanoModels = listGeminiNanoModels().map { model ->
-                SettingsScreenUiState.GeminiNanoModel(
-                    key = model.key,
-                    label = model.modelName,
-                )
-            }
+            val geminiNanoModels = listGeminiNanoModels()
             viewModelStateFlow.update {
                 it.copy(
                     geminiNanoModelsLoaded = true,
@@ -279,13 +276,23 @@ internal class SettingsScreenViewModel(
                     }
                     if (
                         state.geminiNanoModelsLoaded &&
-                        state.geminiNanoModels.isEmpty() &&
                         settings.translationProvider == TranslationProvider.TRANSLATION_PROVIDER_GEMINI_NANO
                     ) {
-                        settingsRepository.setTranslationProvider(
-                            TranslationProvider.TRANSLATION_PROVIDER_GECKO,
+                        if (state.geminiNanoModels.isEmpty()) {
+                            settingsRepository.setTranslationProvider(
+                                TranslationProvider.TRANSLATION_PROVIDER_GECKO,
+                            )
+                            return@collectLatest
+                        }
+                        val resolvedModelKey = resolveGeminiNanoModelKey(
+                            models = state.geminiNanoModels,
+                            savedKey = settings.geminiNanoModelKey,
                         )
-                        return@collectLatest
+                        // 一覧にないキーのままだと、設定画面でどの候補も選択されていない状態になる
+                        if (resolvedModelKey != settings.geminiNanoModelKey) {
+                            settingsRepository.setGeminiNanoModelKey(resolvedModelKey)
+                            return@collectLatest
+                        }
                     }
                     uiStateFlow.update {
                         settings.toUiState(
@@ -294,7 +301,12 @@ internal class SettingsScreenViewModel(
                             backupConfirmDialog = state.backupConfirmDialog,
                             extensionsProcessRestartDialog = state.extensionsProcessRestartDialog,
                             showDefaultBrowserBanner = state.showDefaultBrowserBanner,
-                            geminiNanoModels = state.geminiNanoModels,
+                            geminiNanoModels = state.geminiNanoModels.map { model ->
+                                SettingsScreenUiState.GeminiNanoModel(
+                                    key = model.key,
+                                    label = model.modelName,
+                                )
+                            },
                         )
                     }
                     // 拡張機能への反映は BrowserViewModel が設定の Flow を監視して行う
@@ -325,7 +337,7 @@ internal class SettingsScreenViewModel(
         val pendingExtensionsProcessEnabled: Boolean? = null,
         val showDefaultBrowserBanner: Boolean = false,
         val geminiNanoModelsLoaded: Boolean = false,
-        val geminiNanoModels: List<SettingsScreenUiState.GeminiNanoModel> = emptyList(),
+        val geminiNanoModels: List<GeminiNanoModelOption> = emptyList(),
     )
 }
 
