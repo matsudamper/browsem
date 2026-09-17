@@ -166,7 +166,9 @@ internal fun BrowserApp(
                     if (defaultGroupId != null) {
                         tabGroupRepository.assignTabToGroup(tabId, defaultGroupId)
                     }
-                    val handedOffSession = request.handedOffSession
+                    // 要求から実際に載せるまでの間にコンテンツプロセスが停止していることがある。
+                    // 閉じたセッションを載せると SessionState 経由の復元へ落ちられない。
+                    val handedOffSession = request.handedOffSession?.takeIf { it.isOpen }
                     val newTab = if (handedOffSession != null) {
                         // カスタムタブから引き渡されたセッションは開いたまま載せる。open→restoreState で
                         // 復元すると読み込みが走り、ワンタイムトークンや POST 結果のページが壊れる。
