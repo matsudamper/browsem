@@ -32,6 +32,7 @@ import net.matsudamper.browser.feature.webauthncompat.WebAuthnCompatWebExtension
 import net.matsudamper.browser.translate.GeminiNanoModelOption
 import net.matsudamper.browser.translate.listGeminiNanoModels
 import net.matsudamper.browser.translate.resolveGeminiNanoModelKey
+import net.matsudamper.browser.translate.toGeminiNanoModelLabel
 import net.matsudamper.browser.ui.settings.SettingsScreenUiState
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
@@ -304,7 +305,7 @@ internal class SettingsScreenViewModel(
                             geminiNanoModels = state.geminiNanoModels.map { model ->
                                 SettingsScreenUiState.GeminiNanoModel(
                                     key = model.key,
-                                    label = model.modelName,
+                                    label = toGeminiNanoModelLabel(model.modelName),
                                 )
                             },
                         )

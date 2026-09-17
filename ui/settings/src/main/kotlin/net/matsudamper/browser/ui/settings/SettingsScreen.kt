@@ -759,11 +759,11 @@ private fun SettingsScreenGeminiNanoModelPreview() {
             ),
             SettingsScreenUiState.GeminiNanoModel(
                 key = "preview-full/Gemini Nano 4 Full [Preview, CPU]",
-                label = "Gemini Nano 4 Full [Preview, CPU]",
+                label = "Gemini Nano 4 Full",
             ),
             SettingsScreenUiState.GeminiNanoModel(
                 key = "preview-fast/Gemini Nano 4 Fast [Preview, CPU]",
-                label = "Gemini Nano 4 Fast [Preview, CPU]",
+                label = "Gemini Nano 4 Fast",
             ),
         ),
     )

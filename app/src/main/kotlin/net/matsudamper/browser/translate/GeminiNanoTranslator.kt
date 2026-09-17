@@ -562,6 +562,12 @@ internal class GeminiNanoModelOption(
 )
 
 /**
+ * 設定画面へ出す名前。ML Kit のモデル名に付く "[Preview, CPU]" のような実行環境の注記を落とす。
+ */
+internal fun toGeminiNanoModelLabel(modelName: String): String =
+    modelName.substringBefore('[').trim().ifBlank { modelName }
+
+/**
  * 保存済みのキーが今の一覧にない場合に、翻訳時の自動選択と同じ基準で選び直す。
  *
  * 一覧に無いキーのままだと設定画面でどの候補も選択されていない状態になる。

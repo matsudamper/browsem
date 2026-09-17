@@ -88,6 +88,13 @@ class GeminiNanoTranslatorTest {
     }
 
     @Test
+    fun 表示名から実行環境の注記を落とす() {
+        assertEquals("Gemini Nano 4 Fast", toGeminiNanoModelLabel("Gemini Nano 4 Fast [Preview, CPU]"))
+        assertEquals("Gemini Nano 3 Full", toGeminiNanoModelLabel("Gemini Nano 3 Full"))
+        assertEquals("[Preview]", toGeminiNanoModelLabel("[Preview]"))
+    }
+
+    @Test
     fun 一覧にない保存キーはダウンロード済みの候補へ寄せる() {
         val models = listOf(
             GeminiNanoModelOption(key = "stable-full/A", modelName = "A", downloaded = false),
