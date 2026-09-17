@@ -589,22 +589,32 @@ internal suspend fun listGeminiNanoModels(): List<GeminiNanoModelOption> {
 internal suspend fun selectGeminiNanoModel(preferredKey: String): SelectedGeminiNanoModel? {
     var selected: SelectedGeminiNanoModel? = null
     var selectedPriority = Int.MAX_VALUE
-    for (candidate in GEMINI_NANO_MODEL_CANDIDATES) {
-        val opened = openUsableGeminiNanoModel(candidate) ?: continue
-        if (preferredKey.isNotBlank() && opened.key == preferredKey) {
+    var handedOver = false
+    try {
+        for (candidate in GEMINI_NANO_MODEL_CANDIDATES) {
+            val opened = openUsableGeminiNanoModel(candidate) ?: continue
+            if (preferredKey.isNotBlank() && opened.key == preferredKey) {
+                selected?.generativeModel?.close()
+                selected = SelectedGeminiNanoModel(opened.generativeModel, opened.key)
+                break
+            }
+            if (opened.priority >= selectedPriority) {
+                opened.generativeModel.close()
+                continue
+            }
             selected?.generativeModel?.close()
-            return SelectedGeminiNanoModel(opened.generativeModel, opened.key)
+            selected = SelectedGeminiNanoModel(opened.generativeModel, opened.key)
+            selectedPriority = opened.priority
+            if (preferredKey.isBlank() && opened.priority == DOWNLOADED_MODEL_PRIORITY) break
         }
-        if (opened.priority >= selectedPriority) {
-            opened.generativeModel.close()
-            continue
+        handedOver = true
+        return selected
+    } finally {
+        // 途中でキャンセルされた場合、まだ呼び出し側へ渡していないモデルはここで閉じる
+        if (!handedOver) {
+            selected?.generativeModel?.close()
         }
-        selected?.generativeModel?.close()
-        selected = SelectedGeminiNanoModel(opened.generativeModel, opened.key)
-        selectedPriority = opened.priority
-        if (preferredKey.isBlank() && opened.priority == DOWNLOADED_MODEL_PRIORITY) break
     }
-    return selected
 }
 
 private class OpenedGeminiNanoModel(
@@ -617,18 +627,23 @@ private class OpenedGeminiNanoModel(
 /** 使えない候補は閉じて null を返す */
 private suspend fun openUsableGeminiNanoModel(candidate: GeminiNanoModelCandidate): OpenedGeminiNanoModel? {
     val generativeModel = createGeminiNanoModel(candidate) ?: return null
-    val priority = geminiNanoStatusPriority(checkGeminiNanoStatus(generativeModel))
-    if (priority == null) {
-        generativeModel.close()
-        return null
+    var handedOver = false
+    try {
+        val priority = geminiNanoStatusPriority(checkGeminiNanoStatus(generativeModel)) ?: return null
+        val modelName = fetchGeminiNanoModelName(generativeModel) ?: UNKNOWN_MODEL_NAME
+        handedOver = true
+        return OpenedGeminiNanoModel(
+            generativeModel = generativeModel,
+            modelName = modelName,
+            key = geminiNanoModelKey(candidate.configName, modelName),
+            priority = priority,
+        )
+    } finally {
+        // 状態やモデル名の取得がキャンセルされても、開いたモデルを残さない
+        if (!handedOver) {
+            generativeModel.close()
+        }
     }
-    val modelName = fetchGeminiNanoModelName(generativeModel) ?: UNKNOWN_MODEL_NAME
-    return OpenedGeminiNanoModel(
-        generativeModel = generativeModel,
-        modelName = modelName,
-        key = geminiNanoModelKey(candidate.configName, modelName),
-        priority = priority,
-    )
 }
 
 private fun createGeminiNanoModel(candidate: GeminiNanoModelCandidate): GenerativeModel? {
