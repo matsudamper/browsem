@@ -91,9 +91,7 @@ internal class SettingsScreenViewModel(
             val geminiNanoModels = listGeminiNanoModels().map { model ->
                 SettingsScreenUiState.GeminiNanoModel(
                     key = model.key,
-                    displayName = model.displayName,
-                    modelName = model.modelName,
-                    downloaded = model.downloaded,
+                    label = model.modelName,
                 )
             }
             viewModelStateFlow.update {

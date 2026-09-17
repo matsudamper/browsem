@@ -34,9 +34,7 @@ data class SettingsScreenUiState(
     @Stable
     data class GeminiNanoModel(
         val key: String,
-        val displayName: String,
-        val modelName: String,
-        val downloaded: Boolean,
+        val label: String,
     )
 
     interface Callbacks {

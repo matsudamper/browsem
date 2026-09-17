@@ -314,7 +314,7 @@ fun SettingsScreen(
                     )
                     uiState.geminiNanoModels.forEach { model ->
                         SettingsRadioOption(
-                            label = buildGeminiNanoModelLabel(model),
+                            label = model.label,
                             selected = uiState.translationProvider ==
                                 TranslationProvider.TRANSLATION_PROVIDER_GEMINI_NANO &&
                                 uiState.selectedGeminiNanoModelKey == model.key,
@@ -750,28 +750,20 @@ private fun SettingsScreenGeminiNanoModelPreview() {
         translationProvider = TranslationProvider.TRANSLATION_PROVIDER_GEMINI_NANO,
         geminiNanoModels = listOf(
             SettingsScreenUiState.GeminiNanoModel(
-                key = "stable-full/gemini-nano-v3",
-                displayName = "安定版・高品質",
-                modelName = "gemini-nano-v3",
-                downloaded = true,
+                key = "stable-full/Gemini Nano 3 Full",
+                label = "Gemini Nano 3 Full",
             ),
             SettingsScreenUiState.GeminiNanoModel(
-                key = "stable-fast/gemini-nano-v3",
-                displayName = "安定版・高速",
-                modelName = "gemini-nano-v3",
-                downloaded = true,
+                key = "stable-fast/Gemini Nano 3 Fast",
+                label = "Gemini Nano 3 Fast",
             ),
             SettingsScreenUiState.GeminiNanoModel(
-                key = "preview-full/gemini-nano-v4",
-                displayName = "プレビュー版・高品質",
-                modelName = "gemini-nano-v4",
-                downloaded = false,
+                key = "preview-full/Gemini Nano 4 Full [Preview, CPU]",
+                label = "Gemini Nano 4 Full [Preview, CPU]",
             ),
             SettingsScreenUiState.GeminiNanoModel(
-                key = "preview-fast/gemini-nano-v4",
-                displayName = "プレビュー版・高速",
-                modelName = "gemini-nano-v4",
-                downloaded = false,
+                key = "preview-fast/Gemini Nano 4 Fast [Preview, CPU]",
+                label = "Gemini Nano 4 Fast [Preview, CPU]",
             ),
         ),
     )
@@ -837,12 +829,6 @@ private fun SettingsScreenPreviewContent(
             onBack = {},
         )
     }
-}
-
-/** 保存キーではなく、世代・規模と ML Kit が返すモデル名を読める形にして出す */
-private fun buildGeminiNanoModelLabel(model: SettingsScreenUiState.GeminiNanoModel): String {
-    val suffix = if (model.downloaded) "" else " (未ダウンロード)"
-    return "Gemini Nano ${model.displayName} - ${model.modelName}$suffix"
 }
 
 @Composable

@@ -557,9 +557,7 @@ internal class SelectedGeminiNanoModel(
  */
 internal class GeminiNanoModelOption(
     val key: String,
-    val displayName: String,
     val modelName: String,
-    val downloaded: Boolean,
 )
 
 /** 設定へ保存するキー。候補と表示モデル名の組を一意に表す */
@@ -576,9 +574,7 @@ internal suspend fun listGeminiNanoModels(): List<GeminiNanoModelOption> {
         opened.generativeModel.close()
         GeminiNanoModelOption(
             key = opened.key,
-            displayName = candidate.displayName,
             modelName = opened.modelName,
-            downloaded = opened.priority == DOWNLOADED_MODEL_PRIORITY,
         )
     }
 }
@@ -680,18 +676,17 @@ internal fun geminiNanoStatusPriority(featureStatus: Int?): Int? = when (feature
 /**
  * 安定版・プレビュー版と FULL・FAST の全組み合わせ。既定の安定版 FULL を先に試す。
  *
- * [configName] は設定へ保存するキーの一部で、[displayName] は設定画面に出す名前。
+ * [configName] は設定へ保存するキーの一部。
  */
 internal enum class GeminiNanoModelCandidate(
     val configName: String,
-    val displayName: String,
     private val releaseStageId: Int,
     private val preferenceId: Int,
 ) {
-    StableFull("stable-full", "安定版・高品質", ModelReleaseStage.STABLE, ModelPreference.FULL),
-    StableFast("stable-fast", "安定版・高速", ModelReleaseStage.STABLE, ModelPreference.FAST),
-    PreviewFull("preview-full", "プレビュー版・高品質", ModelReleaseStage.PREVIEW, ModelPreference.FULL),
-    PreviewFast("preview-fast", "プレビュー版・高速", ModelReleaseStage.PREVIEW, ModelPreference.FAST),
+    StableFull("stable-full", ModelReleaseStage.STABLE, ModelPreference.FULL),
+    StableFast("stable-fast", ModelReleaseStage.STABLE, ModelPreference.FAST),
+    PreviewFull("preview-full", ModelReleaseStage.PREVIEW, ModelPreference.FULL),
+    PreviewFast("preview-fast", ModelReleaseStage.PREVIEW, ModelPreference.FAST),
     ;
 
     val modelConfig: ModelConfig = modelConfig {
