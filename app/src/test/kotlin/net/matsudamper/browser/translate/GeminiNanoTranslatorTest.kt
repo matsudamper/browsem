@@ -1,7 +1,9 @@
 package net.matsudamper.browser.translate
 
+import com.google.mlkit.genai.common.FeatureStatus
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -59,5 +61,28 @@ class GeminiNanoTranslatorTest {
     @Test
     fun 引用符を含む翻訳結果は本文を保持する() {
         assertEquals("彼は\"了解\"と言った", sanitizeTranslatedText("彼は\"了解\"と言った"))
+    }
+
+    @Test
+    fun ダウンロード済みのモデルを未取得のモデルより優先する() {
+        val downloaded = requireNotNull(geminiNanoStatusPriority(FeatureStatus.AVAILABLE))
+        val downloadable = requireNotNull(geminiNanoStatusPriority(FeatureStatus.DOWNLOADABLE))
+
+        assertEquals(downloadable, geminiNanoStatusPriority(FeatureStatus.DOWNLOADING))
+        assertTrue(downloaded < downloadable)
+    }
+
+    @Test
+    fun 利用できない状態のモデルは候補にしない() {
+        assertNull(geminiNanoStatusPriority(FeatureStatus.UNAVAILABLE))
+        assertNull(geminiNanoStatusPriority(null))
+    }
+
+    @Test
+    fun モデル候補は安定版を先に試す() {
+        assertEquals(
+            listOf("stable-full", "stable-fast", "preview-fast"),
+            GEMINI_NANO_MODEL_CANDIDATES.map { it.description },
+        )
     }
 }

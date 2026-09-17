@@ -26,9 +26,14 @@ import com.google.mlkit.genai.prompt.Candidate
 import com.google.mlkit.genai.prompt.GenerateContentRequest
 import com.google.mlkit.genai.prompt.Generation
 import com.google.mlkit.genai.prompt.GenerativeModel
+import com.google.mlkit.genai.prompt.ModelConfig
+import com.google.mlkit.genai.prompt.ModelPreference
+import com.google.mlkit.genai.prompt.ModelReleaseStage
 import com.google.mlkit.genai.prompt.SystemInstruction
 import com.google.mlkit.genai.prompt.TextPart
 import com.google.mlkit.genai.prompt.generateContentRequest
+import com.google.mlkit.genai.prompt.generationConfig
+import com.google.mlkit.genai.prompt.modelConfig
 import com.google.mlkit.nl.languageid.LanguageIdentification
 import net.matsudamper.browser.data.crashlog.CrashLogRepository
 import net.matsudamper.browser.resolveTranslationLanguagePair
@@ -45,6 +50,7 @@ class GeminiNanoTranslator(
     private val onTranslateProgressChanged: (TranslationProgress) -> Unit,
 ) : Translator {
     private var currentStage: String = STAGE_SCAN
+    private var currentModelDescription: String = ""
     private val translatedSegmentCount = AtomicInteger(0)
     private val totalSegmentCount = AtomicInteger(0)
 
@@ -89,8 +95,11 @@ class GeminiNanoTranslator(
                 resolveSourceLanguage(snapshot),
                 toLanguage,
             )
+            val selectedModel = selectGeminiNanoModel()
+                ?: throw IllegalStateException("Gemini Nanoを利用できない端末です")
+            currentModelDescription = selectedModel.description
             val inference = GeminiNanoInference(
-                generativeModel = Generation.getClient(),
+                generativeModel = selectedModel.generativeModel,
                 sourceLanguage = sourceLanguage,
                 targetLanguage = targetLanguage,
             )
@@ -300,6 +309,7 @@ class GeminiNanoTranslator(
 
     private fun buildDiagnostics(elapsedMs: Long, error: Throwable): String = buildString {
         appendLine("stage=$currentStage")
+        appendLine("model=$currentModelDescription")
         appendLine("elapsedMs=$elapsedMs")
         appendLine("fromLanguage=${fromLanguage.orEmpty()}")
         appendLine("toLanguage=$toLanguage")
@@ -534,28 +544,106 @@ private class GeminiNanoInference(
     }
 }
 
-internal suspend fun isGeminiNanoAvailable(): Boolean {
-    val generativeModel = try {
-        Generation.getClient()
-    } catch (error: Exception) {
-        return false
-    }
-    return try {
-        when (generativeModel.checkStatus()) {
-            FeatureStatus.AVAILABLE,
-            FeatureStatus.DOWNLOADABLE,
-            FeatureStatus.DOWNLOADING,
-            -> true
+internal class SelectedGeminiNanoModel(
+    val generativeModel: GenerativeModel,
+    val description: String,
+)
 
-            else -> false
+/**
+ * 端末に載っているモデルの世代（安定版・プレビュー版）と規模が違うため、候補を順に調べて使えるものを選ぶ。
+ *
+ * 既にダウンロード済みのモデルがあれば、未取得のモデルより優先して追加ダウンロードを避ける。
+ * 呼び出し側は返した [SelectedGeminiNanoModel.generativeModel] を閉じる責任を持つ。
+ */
+internal suspend fun selectGeminiNanoModel(): SelectedGeminiNanoModel? {
+    var selected: SelectedGeminiNanoModel? = null
+    var selectedPriority = Int.MAX_VALUE
+    for (candidate in GEMINI_NANO_MODEL_CANDIDATES) {
+        val generativeModel = createGeminiNanoModel(candidate) ?: continue
+        val priority = geminiNanoStatusPriority(checkGeminiNanoStatus(generativeModel))
+        if (priority == null || priority >= selectedPriority) {
+            generativeModel.close()
+            continue
         }
+        selected?.generativeModel?.close()
+        selected = SelectedGeminiNanoModel(generativeModel, candidate.description)
+        selectedPriority = priority
+        if (priority == DOWNLOADED_MODEL_PRIORITY) break
+    }
+    return selected
+}
+
+private fun createGeminiNanoModel(candidate: GeminiNanoModelCandidate): GenerativeModel? {
+    return try {
+        Generation.getClient(
+            generationConfig {
+                modelConfig = candidate.modelConfig
+            },
+        )
+    } catch (error: Exception) {
+        Log.w(GEMINI_NANO_MODEL_TAG, "Gemini Nanoのモデル生成に失敗: ${candidate.description}", error)
+        null
+    }
+}
+
+private suspend fun checkGeminiNanoStatus(generativeModel: GenerativeModel): Int? {
+    return try {
+        generativeModel.checkStatus()
     } catch (error: CancellationException) {
         throw error
     } catch (error: Exception) {
-        false
-    } finally {
-        generativeModel.close()
+        Log.w(GEMINI_NANO_MODEL_TAG, "Gemini Nanoの利用状態を取得できなかった", error)
+        null
     }
+}
+
+/** 値が小さいほど優先する。未対応の状態は null */
+internal fun geminiNanoStatusPriority(featureStatus: Int?): Int? = when (featureStatus) {
+    FeatureStatus.AVAILABLE -> DOWNLOADED_MODEL_PRIORITY
+    FeatureStatus.DOWNLOADING, FeatureStatus.DOWNLOADABLE -> UNDOWNLOADED_MODEL_PRIORITY
+    else -> null
+}
+
+internal class GeminiNanoModelCandidate(
+    val modelConfig: ModelConfig,
+    val description: String,
+)
+
+/**
+ * 既定の安定版を先に試し、それが載っていない端末でだけプレビュー版へ落とす。
+ */
+internal val GEMINI_NANO_MODEL_CANDIDATES: List<GeminiNanoModelCandidate> = listOf(
+    GeminiNanoModelCandidate(
+        modelConfig = modelConfig {
+            releaseStage = ModelReleaseStage.STABLE
+            preference = ModelPreference.FULL
+        },
+        description = "stable-full",
+    ),
+    GeminiNanoModelCandidate(
+        modelConfig = modelConfig {
+            releaseStage = ModelReleaseStage.STABLE
+            preference = ModelPreference.FAST
+        },
+        description = "stable-fast",
+    ),
+    GeminiNanoModelCandidate(
+        modelConfig = modelConfig {
+            releaseStage = ModelReleaseStage.PREVIEW
+            preference = ModelPreference.FAST
+        },
+        description = "preview-fast",
+    ),
+)
+
+private const val GEMINI_NANO_MODEL_TAG = "GeminiNanoModel"
+private const val DOWNLOADED_MODEL_PRIORITY = 0
+private const val UNDOWNLOADED_MODEL_PRIORITY = 1
+
+internal suspend fun isGeminiNanoAvailable(): Boolean {
+    val selectedModel = selectGeminiNanoModel() ?: return false
+    selectedModel.generativeModel.close()
+    return true
 }
 
 /** 数字や記号だけのテキストは翻訳しても変化がないため、推論対象から除外する */
