@@ -434,6 +434,8 @@ private class GeminiNanoInference(
             topK = 1
             candidateCount = 1
             maxOutputTokens = maxOutputTokenCount
+            // 思考は1セグメントごとの待ち時間を伸ばすうえ、思考文が訳文に混ざることがある
+            enableThinking = false
         }
         // 指示と原文を同じ入力に混ぜると、指示文そのものを訳して返すことがある
         val request = if (systemPromptAvailable) {
