@@ -51,4 +51,6 @@ message BrowserSettings {
   optional bool input_auto_zoom_enabled = 18;
   // WebAuthn の UVPAA 判定を true に上書きする互換処理
   optional bool webauthn_platform_authenticator_available_override_enabled = 19;
+  // 翻訳に使う Gemini Nano のモデル名 (ML Kit が返す表示モデル名)。空文字は自動選択
+  string gemini_nano_model_key = 20;
 }

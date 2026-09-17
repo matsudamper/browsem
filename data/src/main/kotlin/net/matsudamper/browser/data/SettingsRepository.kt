@@ -26,6 +26,7 @@ class SettingsRepository(context: Context) {
                 .setCustomSearchUrl(settings.customSearchUrl)
                 .setThemeMode(settings.themeMode)
                 .setTranslationProvider(settings.translationProvider)
+                .setGeminiNanoModelKey(settings.geminiNanoModelKey)
                 .setEnableThirdPartyCa(settings.enableThirdPartyCa)
                 .apply {
                     if (settings.hasEnableWebSuggestions()) {
@@ -116,6 +117,15 @@ class SettingsRepository(context: Context) {
         }
     }
 
+    /** 空文字は自動選択に戻す */
+    suspend fun setGeminiNanoModelKey(modelName: String) {
+        dataStore.updateData { current ->
+            current.toBuilder()
+                .setGeminiNanoModelKey(modelName)
+                .build()
+        }
+    }
+
     suspend fun setEnableThirdPartyCa(enabled: Boolean) {
         dataStore.updateData { current ->
             current.toBuilder()
@@ -188,6 +198,7 @@ data class ResolvedBrowserSettings(
     val homepageUrl: String,
     val searchTemplate: String,
     val translationProvider: TranslationProvider,
+    val geminiNanoModelKey: String,
     val enableThirdPartyCa: Boolean,
     val themeMode: ThemeMode,
 )
@@ -196,6 +207,7 @@ fun BrowserSettings.resolvedBrowserSettings(): ResolvedBrowserSettings = Resolve
     homepageUrl = resolvedHomepageUrl(),
     searchTemplate = resolvedSearchTemplate(),
     translationProvider = translationProvider,
+    geminiNanoModelKey = geminiNanoModelKey,
     enableThirdPartyCa = enableThirdPartyCa,
     themeMode = themeMode,
 )

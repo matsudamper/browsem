@@ -29,7 +29,10 @@ import net.matsudamper.browser.data.resolvedInputAutoZoomEnabled
 import net.matsudamper.browser.data.resolvedWebAuthnPlatformAuthenticatorAvailableOverrideEnabled
 import net.matsudamper.browser.feature.mocklocation.MockLocationWebExtension
 import net.matsudamper.browser.feature.webauthncompat.WebAuthnCompatWebExtension
-import net.matsudamper.browser.translate.isGeminiNanoAvailable
+import net.matsudamper.browser.translate.GeminiNanoModelOption
+import net.matsudamper.browser.translate.listGeminiNanoModels
+import net.matsudamper.browser.translate.resolveGeminiNanoModelKey
+import net.matsudamper.browser.translate.toGeminiNanoModelLabel
 import net.matsudamper.browser.ui.settings.SettingsScreenUiState
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
@@ -88,8 +91,13 @@ internal class SettingsScreenViewModel(
 
     init {
         viewModelScope.launch {
-            val geminiNanoAvailable = isGeminiNanoAvailable()
-            viewModelStateFlow.update { it.copy(geminiNanoAvailable = geminiNanoAvailable) }
+            val geminiNanoModels = listGeminiNanoModels()
+            viewModelStateFlow.update {
+                it.copy(
+                    geminiNanoModelsLoaded = true,
+                    geminiNanoModels = geminiNanoModels,
+                )
+            }
         }
     }
 
@@ -115,13 +123,17 @@ internal class SettingsScreenViewModel(
         }
 
         override fun setTranslationProvider(provider: TranslationProvider) {
-            if (
-                provider == TranslationProvider.TRANSLATION_PROVIDER_GEMINI_NANO &&
-                viewModelStateFlow.value.geminiNanoAvailable != true
-            ) {
-                return
-            }
             viewModelScope.launch { settingsRepository.setTranslationProvider(provider) }
+        }
+
+        override fun selectGeminiNanoModel(modelKey: String) {
+            if (viewModelStateFlow.value.geminiNanoModels.none { it.key == modelKey }) return
+            viewModelScope.launch {
+                settingsRepository.setGeminiNanoModelKey(modelKey)
+                settingsRepository.setTranslationProvider(
+                    TranslationProvider.TRANSLATION_PROVIDER_GEMINI_NANO,
+                )
+            }
         }
 
         override fun setEnableThirdPartyCa(enabled: Boolean) {
@@ -264,13 +276,24 @@ internal class SettingsScreenViewModel(
                         return@collectLatest
                     }
                     if (
-                        state.geminiNanoAvailable == false &&
+                        state.geminiNanoModelsLoaded &&
                         settings.translationProvider == TranslationProvider.TRANSLATION_PROVIDER_GEMINI_NANO
                     ) {
-                        settingsRepository.setTranslationProvider(
-                            TranslationProvider.TRANSLATION_PROVIDER_GECKO,
+                        if (state.geminiNanoModels.isEmpty()) {
+                            settingsRepository.setTranslationProvider(
+                                TranslationProvider.TRANSLATION_PROVIDER_GECKO,
+                            )
+                            return@collectLatest
+                        }
+                        val resolvedModelKey = resolveGeminiNanoModelKey(
+                            models = state.geminiNanoModels,
+                            savedKey = settings.geminiNanoModelKey,
                         )
-                        return@collectLatest
+                        // 一覧にないキーのままだと、設定画面でどの候補も選択されていない状態になる
+                        if (resolvedModelKey != settings.geminiNanoModelKey) {
+                            settingsRepository.setGeminiNanoModelKey(resolvedModelKey)
+                            return@collectLatest
+                        }
                     }
                     uiStateFlow.update {
                         settings.toUiState(
@@ -279,7 +302,12 @@ internal class SettingsScreenViewModel(
                             backupConfirmDialog = state.backupConfirmDialog,
                             extensionsProcessRestartDialog = state.extensionsProcessRestartDialog,
                             showDefaultBrowserBanner = state.showDefaultBrowserBanner,
-                            geminiNanoAvailable = state.geminiNanoAvailable == true,
+                            geminiNanoModels = state.geminiNanoModels.map { model ->
+                                SettingsScreenUiState.GeminiNanoModel(
+                                    key = model.key,
+                                    label = toGeminiNanoModelLabel(model.modelName),
+                                )
+                            },
                         )
                     }
                     // 拡張機能への反映は BrowserViewModel が設定の Flow を監視して行う
@@ -309,7 +337,8 @@ internal class SettingsScreenViewModel(
         val extensionsProcessRestartDialog: Boolean = false,
         val pendingExtensionsProcessEnabled: Boolean? = null,
         val showDefaultBrowserBanner: Boolean = false,
-        val geminiNanoAvailable: Boolean? = null,
+        val geminiNanoModelsLoaded: Boolean = false,
+        val geminiNanoModels: List<GeminiNanoModelOption> = emptyList(),
     )
 }
 
@@ -362,7 +391,7 @@ private fun BrowserSettings.toUiState(
     backupConfirmDialog: SettingsScreenUiState.BackupConfirmType?,
     extensionsProcessRestartDialog: Boolean,
     showDefaultBrowserBanner: Boolean,
-    geminiNanoAvailable: Boolean,
+    geminiNanoModels: List<SettingsScreenUiState.GeminiNanoModel>,
 ): SettingsScreenUiState {
     return SettingsScreenUiState(
         callbacks = callbacks,
@@ -372,7 +401,8 @@ private fun BrowserSettings.toUiState(
         customSearchUrl = customSearchUrl,
         themeMode = themeMode,
         translationProvider = translationProvider,
-        geminiNanoAvailable = geminiNanoAvailable,
+        geminiNanoModels = geminiNanoModels,
+        selectedGeminiNanoModelKey = geminiNanoModelKey,
         enableThirdPartyCa = enableThirdPartyCa,
         enableWebSuggestions = resolvedEnableWebSuggestions(),
         inputAutoZoomEnabled = resolvedInputAutoZoomEnabled(),

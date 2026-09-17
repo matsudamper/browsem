@@ -312,16 +312,15 @@ fun SettingsScreen(
                             )
                         },
                     )
-                    SettingsRadioOption(
-                        label = "Gemini Nano (対応端末のみ)",
-                        selected = uiState.translationProvider == TranslationProvider.TRANSLATION_PROVIDER_GEMINI_NANO,
-                        enabled = uiState.geminiNanoAvailable,
-                        onClick = {
-                            uiState.callbacks.setTranslationProvider(
-                                TranslationProvider.TRANSLATION_PROVIDER_GEMINI_NANO,
-                            )
-                        },
-                    )
+                    uiState.geminiNanoModels.forEach { model ->
+                        SettingsRadioOption(
+                            label = model.label,
+                            selected = uiState.translationProvider ==
+                                TranslationProvider.TRANSLATION_PROVIDER_GEMINI_NANO &&
+                                uiState.selectedGeminiNanoModelKey == model.key,
+                            onClick = { uiState.callbacks.selectGeminiNanoModel(model.key) },
+                        )
+                    }
                 }
             }
 
@@ -726,17 +725,56 @@ internal fun CollapsibleSettingSection(
 @Preview(showBackground = true, heightDp = 2600)
 @Composable
 private fun SettingsScreenPreview() {
-    SettingsScreenPreviewContent(showDefaultBrowserBanner = false)
+    SettingsScreenPreviewContent(
+        showDefaultBrowserBanner = false,
+        translationProvider = TranslationProvider.TRANSLATION_PROVIDER_GECKO,
+        geminiNanoModels = emptyList(),
+    )
 }
 
 @Preview(showBackground = true, heightDp = 2600)
 @Composable
 private fun SettingsScreenDefaultBrowserBannerPreview() {
-    SettingsScreenPreviewContent(showDefaultBrowserBanner = true)
+    SettingsScreenPreviewContent(
+        showDefaultBrowserBanner = true,
+        translationProvider = TranslationProvider.TRANSLATION_PROVIDER_GECKO,
+        geminiNanoModels = emptyList(),
+    )
+}
+
+@Preview(showBackground = true, heightDp = 2600)
+@Composable
+private fun SettingsScreenGeminiNanoModelPreview() {
+    SettingsScreenPreviewContent(
+        showDefaultBrowserBanner = false,
+        translationProvider = TranslationProvider.TRANSLATION_PROVIDER_GEMINI_NANO,
+        geminiNanoModels = listOf(
+            SettingsScreenUiState.GeminiNanoModel(
+                key = "stable-full/Gemini Nano 3 Full",
+                label = "Gemini Nano 3 Full",
+            ),
+            SettingsScreenUiState.GeminiNanoModel(
+                key = "stable-fast/Gemini Nano 3 Fast",
+                label = "Gemini Nano 3 Fast",
+            ),
+            SettingsScreenUiState.GeminiNanoModel(
+                key = "preview-full/Gemini Nano 4 Full [Preview, CPU]",
+                label = "Gemini Nano 4 Full",
+            ),
+            SettingsScreenUiState.GeminiNanoModel(
+                key = "preview-fast/Gemini Nano 4 Fast [Preview, CPU]",
+                label = "Gemini Nano 4 Fast",
+            ),
+        ),
+    )
 }
 
 @Composable
-private fun SettingsScreenPreviewContent(showDefaultBrowserBanner: Boolean) {
+private fun SettingsScreenPreviewContent(
+    showDefaultBrowserBanner: Boolean,
+    translationProvider: TranslationProvider,
+    geminiNanoModels: List<SettingsScreenUiState.GeminiNanoModel>,
+) {
     MaterialTheme {
         SettingsScreen(
             uiState = SettingsScreenUiState(
@@ -747,6 +785,7 @@ private fun SettingsScreenPreviewContent(showDefaultBrowserBanner: Boolean) {
                     override fun setCustomSearchUrl(url: String) = Unit
                     override fun setThemeMode(mode: ThemeMode) = Unit
                     override fun setTranslationProvider(provider: TranslationProvider) = Unit
+                    override fun selectGeminiNanoModel(modelKey: String) = Unit
                     override fun setEnableThirdPartyCa(enabled: Boolean) = Unit
                     override fun setEnableWebSuggestions(enabled: Boolean) = Unit
                     override fun setInputAutoZoomEnabled(enabled: Boolean) = Unit
@@ -767,8 +806,9 @@ private fun SettingsScreenPreviewContent(showDefaultBrowserBanner: Boolean) {
                 searchProvider = SearchProvider.GOOGLE,
                 customSearchUrl = "",
                 themeMode = ThemeMode.THEME_SYSTEM,
-                translationProvider = TranslationProvider.TRANSLATION_PROVIDER_GECKO,
-                geminiNanoAvailable = false,
+                translationProvider = translationProvider,
+                geminiNanoModels = geminiNanoModels,
+                selectedGeminiNanoModelKey = geminiNanoModels.firstOrNull()?.key.orEmpty(),
                 enableThirdPartyCa = false,
                 enableWebSuggestions = false,
                 inputAutoZoomEnabled = true,

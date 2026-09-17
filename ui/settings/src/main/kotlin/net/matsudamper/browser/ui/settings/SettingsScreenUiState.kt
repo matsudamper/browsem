@@ -15,7 +15,8 @@ data class SettingsScreenUiState(
     val customSearchUrl: String,
     val themeMode: ThemeMode,
     val translationProvider: TranslationProvider,
-    val geminiNanoAvailable: Boolean,
+    val geminiNanoModels: List<GeminiNanoModel>,
+    val selectedGeminiNanoModelKey: String,
     val enableThirdPartyCa: Boolean,
     val enableWebSuggestions: Boolean,
     val inputAutoZoomEnabled: Boolean,
@@ -29,6 +30,13 @@ data class SettingsScreenUiState(
 ) {
     enum class BackupConfirmType { Export, Import }
 
+    /** 翻訳プロバイダーとして並べる Gemini Nano の候補 */
+    @Stable
+    data class GeminiNanoModel(
+        val key: String,
+        val label: String,
+    )
+
     interface Callbacks {
         fun setHomepageType(type: HomepageType)
         fun setCustomHomepageUrl(url: String)
@@ -36,6 +44,10 @@ data class SettingsScreenUiState(
         fun setCustomSearchUrl(url: String)
         fun setThemeMode(mode: ThemeMode)
         fun setTranslationProvider(provider: TranslationProvider)
+
+        /** 翻訳プロバイダーを Gemini Nano にして、使うモデルを選ぶ */
+        fun selectGeminiNanoModel(modelKey: String)
+
         fun setEnableThirdPartyCa(enabled: Boolean)
         fun setEnableWebSuggestions(enabled: Boolean)
         fun setInputAutoZoomEnabled(enabled: Boolean)
