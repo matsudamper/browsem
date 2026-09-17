@@ -27,7 +27,7 @@ jobs:
           java-version: '25.0.4+101.0.LTS'
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4.0.1
+        uses: android-actions/setup-android@7731365548f3f81c15d4c49c8f1d29101e02cdcf # v4.0.2
         with:
           # 既定値の tools は配信が終了しており、指定したままだと SDK の準備で失敗する
           packages: platform-tools
@@ -128,7 +128,7 @@ jobs:
           java-version: '25.0.4+101.0.LTS'
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4.0.1
+        uses: android-actions/setup-android@7731365548f3f81c15d4c49c8f1d29101e02cdcf # v4.0.2
         with:
           # 既定値の tools は配信が終了しており、指定したままだと SDK の準備で失敗する
           packages: platform-tools
@@ -182,7 +182,7 @@ jobs:
           java-version: '25.0.4+101.0.LTS'
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4.0.1
+        uses: android-actions/setup-android@7731365548f3f81c15d4c49c8f1d29101e02cdcf # v4.0.2
         with:
           # 既定値の tools は配信が終了しており、指定したままだと SDK の準備で失敗する
           packages: platform-tools
@@ -216,7 +216,7 @@ jobs:
           java-version: '25.0.4+101.0.LTS'
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4.0.1
+        uses: android-actions/setup-android@7731365548f3f81c15d4c49c8f1d29101e02cdcf # v4.0.2
         with:
           # 既定値の tools は配信が終了しており、指定したままだと SDK の準備で失敗する
           packages: platform-tools
@@ -241,7 +241,7 @@ jobs:
           java-version: '25.0.4+101.0.LTS'
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4.0.1
+        uses: android-actions/setup-android@7731365548f3f81c15d4c49c8f1d29101e02cdcf # v4.0.2
         with:
           # 既定値の tools は配信が終了しており、指定したままだと SDK の準備で失敗する
           packages: platform-tools

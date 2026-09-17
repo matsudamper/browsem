@@ -170,10 +170,12 @@ class MainActivity : ComponentActivity() {
         if (intent.action != DownloadWorker.ACTION_OPEN_DOWNLOADS) {
             val url = ExternalInitialUrlPolicy.sanitize(intent.dataString)
             if (url != null && url != lastProcessedDeepLinkUrl) {
+                val handoff = consumeCustomTabHandoff(intent)
                 val result = createNewTabChannel.trySend(
                     NewTabRequest(
                         url = url,
-                        sessionState = consumeHandoffSessionState(intent),
+                        handedOffSession = handoff?.session?.takeIf { it.isOpen },
+                        sessionState = handoff?.sessionState,
                         referrerUrl = intent.getStringExtra(CustomTabActivity.EXTRA_NEW_TAB_REFERRER_URL),
                     ),
                 )
@@ -361,10 +363,12 @@ class MainActivity : ComponentActivity() {
         }
         val url = ExternalInitialUrlPolicy.sanitize(intent.dataString)
         if (url != null) {
+            val handoff = consumeCustomTabHandoff(intent)
             val result = createNewTabChannel.trySend(
                 NewTabRequest(
                     url = url,
-                    sessionState = consumeHandoffSessionState(intent),
+                    handedOffSession = handoff?.session?.takeIf { it.isOpen },
+                    sessionState = handoff?.sessionState,
                     referrerUrl = intent.getStringExtra(CustomTabActivity.EXTRA_NEW_TAB_REFERRER_URL),
                 ),
             )
@@ -377,10 +381,10 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * カスタムタブからの「ブラウザで開く」遷移であれば、預けられた SessionState を取り出す。
+     * カスタムタブからの「ブラウザで開く」遷移であれば、預けられた GeckoSession を取り出す。
      * トークンは一度のみ消費され、構成変更後の再 onCreate では null（重複生成は URL 重複判定で防止）。
      */
-    private fun consumeHandoffSessionState(intent: Intent): String? {
+    private fun consumeCustomTabHandoff(intent: Intent): CustomTabHandoffStore.Handoff? {
         val token = intent.getStringExtra(CustomTabHandoffStore.EXTRA_HANDOFF_TOKEN) ?: return null
         return CustomTabHandoffStore.consume(token)
     }

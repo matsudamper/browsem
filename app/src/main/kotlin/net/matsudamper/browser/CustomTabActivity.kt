@@ -233,14 +233,27 @@ class CustomTabActivity : ComponentActivity() {
     /**
      * カスタムタブの内容を通常ブラウザへ引き継いで開く。
      *
-     * SessionState の flush 待ち（最大数百ミリ秒）と遷移を、composition に紐づくスコープでなく
-     * Activity の lifecycleScope で完遂させる。タップ直後の再コンポーズで Composable が
-     * composition から外れても処理がキャンセルされず、「ブラウザで開く」が無効化されないようにする。
+     * GeckoSession をそのまま渡すため、呼び出し元は先に GeckoBrowserTab を composition から
+     * 外しておく必要がある。外す前に渡すと、引き渡し先が張り直した delegate や拡張機能の
+     * セッション登録を、この画面の破棄が後から解除してしまう。
      */
-    private fun openInMainBrowser(url: String, tab: BrowserTab) {
-        lifecycleScope.launch {
-            startMainBrowser(url, captureFreshSessionState(tab))
-        }
+    private fun openInMainBrowser(url: String, tab: BrowserTab, sessionState: String) {
+        val handedOffSession = browserViewModel.browserTabController.handOffSession(tab)
+        startActivity(
+            Intent(this, MainActivity::class.java).apply {
+                action = Intent.ACTION_VIEW
+                data = Uri.parse(url)
+                // GeckoSession は Intent に載せられないため、プロセス内ストアへ預けてトークンのみを渡す
+                putExtra(
+                    CustomTabHandoffStore.EXTRA_HANDOFF_TOKEN,
+                    CustomTabHandoffStore.store(
+                        session = handedOffSession,
+                        sessionState = sessionState,
+                    ),
+                )
+            },
+        )
+        finish()
     }
 
     private fun openNewTabInMainBrowser(url: String, referrerUrl: String?) {
@@ -255,25 +268,6 @@ class CustomTabActivity : ComponentActivity() {
 
     companion object {
         internal const val EXTRA_NEW_TAB_REFERRER_URL = "extra_new_tab_referrer_url"
-    }
-
-    private fun startMainBrowser(url: String, sessionState: String) {
-        val targetUri = Uri.parse(url)
-        startActivity(
-            Intent(this, MainActivity::class.java).apply {
-                action = Intent.ACTION_VIEW
-                data = targetUri
-                // 履歴・スクロール位置などを引き継ぐため、SessionState をプロセス内ストアへ預けて
-                // トークンのみを Intent に載せる（Intent extra へ直接載せると Binder サイズ上限に当たり得る）
-                sessionState.takeIf { it.isNotBlank() }?.let { state ->
-                    putExtra(
-                        CustomTabHandoffStore.EXTRA_HANDOFF_TOKEN,
-                        CustomTabHandoffStore.store(state),
-                    )
-                }
-            },
-        )
-        finish()
     }
 }
 
@@ -298,7 +292,7 @@ private fun CustomTabScreen(
     mediaWebExtension: MediaWebExtension,
     outerNavActions: OuterNavActions,
     onClose: () -> Unit,
-    onOpenInBrowser: (url: String, tab: BrowserTab) -> Unit,
+    onOpenInBrowser: (url: String, tab: BrowserTab, sessionState: String) -> Unit,
     onOpenNewTabInBrowser: (url: String, referrerUrl: String?) -> Unit,
     onOpenPopupInCustomTab: (uri: String, openerTabId: String) -> GeckoSession,
     onRequestDownloadNotificationPermission: suspend () -> Unit,
@@ -361,6 +355,23 @@ private fun CustomTabScreen(
         return
     }
 
+    // 「ブラウザで開く」は GeckoSession をそのまま引き渡す。引き渡す前に GeckoBrowserTab を
+    // composition から外して、この画面が張った delegate と拡張機能のセッション登録を解いておく。
+    // 解く前に渡すと、引き渡し先が張り直した登録を、この画面の破棄が後から解除してしまう。
+    var requestedOpenInBrowserUrl by remember { mutableStateOf<String?>(null) }
+    val currentOnOpenInBrowser by rememberUpdatedState(onOpenInBrowser)
+    val openInBrowserUrl = requestedOpenInBrowserUrl
+    if (openInBrowserUrl != null) {
+        LaunchedEffect(openInBrowserUrl) {
+            currentOnOpenInBrowser(
+                openInBrowserUrl,
+                activeTab,
+                captureFreshSessionState(activeTab),
+            )
+        }
+        return
+    }
+
     val reevaluateOpenerRetention: () -> Unit = {
         WindowOpenSessionPolicy.postAfterFrame {
             browserSessionLifecycleController.retainOpenersOfLivePopups(
@@ -393,7 +404,7 @@ private fun CustomTabScreen(
         showInstallExtensionItem = false,
         customTabMode = true,
         onCloseCustomTab = onClose,
-        onOpenInBrowser = { url -> onOpenInBrowser(url, activeTab) },
+        onOpenInBrowser = { url -> requestedOpenInBrowserUrl = url },
         onOpenNewSessionRequest = { uri ->
             onOpenPopupInCustomTab(uri, activeTab.tabId)
         },
@@ -472,7 +483,8 @@ private fun PreviewCustomTabOpaqueShell() {
 
 /**
  * flushSessionState() で最新の SessionState を onSessionStateChange 経由で反映させ、
- * 更新後の [BrowserTab.sessionState] を返す。スクロール位置などを取りこぼさないために使う。
+ * 更新後の [BrowserTab.sessionState] を返す。引き渡したセッションが閉じていた場合の復元に使うため、
+ * 直前のナビゲーションを取りこぼさないようにする。
  * 反映が一定時間内に来ない場合（既に最新の場合を含む）は現在のキャッシュ値を返す。
  */
 private suspend fun captureFreshSessionState(tab: BrowserTab): String {

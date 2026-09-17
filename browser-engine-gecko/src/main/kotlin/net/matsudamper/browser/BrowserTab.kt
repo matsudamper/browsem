@@ -168,6 +168,10 @@ class BrowserTab(
     // 非表示でも setActive(true) を維持している opener。子タブ閉鎖時に解除する。
     internal var retainForLivePopup: Boolean = false
 
+    // セッションを別画面のタブへ引き渡したか。引き渡した後のセッションは引き渡し先のものなので、
+    // この画面の終了で閉じてはいけない。
+    internal var sessionHandedOff: Boolean = false
+
     // 初回読み込み時に referrer として送信する URL。コンテキストメニューの
     // 「新しいタブで開く」で、ホットリンク保護のあるサーバーが 403 を返さないように
     // 元ページの URL を引き継ぐために使用する。初回読み込みで消費される。

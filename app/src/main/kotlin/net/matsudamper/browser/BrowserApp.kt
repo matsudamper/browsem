@@ -166,13 +166,30 @@ internal fun BrowserApp(
                     if (defaultGroupId != null) {
                         tabGroupRepository.assignTabToGroup(tabId, defaultGroupId)
                     }
-                    val newTab = viewModel.browserTabController.createAndAppendTab(
-                        tabId = tabId,
-                        initialUrl = request.url,
-                        restoredSessionState = request.sessionState,
-                        initialReferrerUrl = request.referrerUrl,
-                        insertAfterSelectedTab = false,
-                    )
+                    // 要求から実際に載せるまでの間にコンテンツプロセスが停止していることがある。
+                    // 閉じたセッションを載せると SessionState 経由の復元へ落ちられない。
+                    val handedOffSession = request.handedOffSession?.takeIf { it.isOpen }
+                    val newTab = if (handedOffSession != null) {
+                        // カスタムタブから引き渡されたセッションは開いたまま載せる。open→restoreState で
+                        // 復元すると読み込みが走り、ワンタイムトークンや POST 結果のページが壊れる。
+                        viewModel.browserTabController.createAndAppendTabWithSession(
+                            session = handedOffSession,
+                            tabId = tabId,
+                            initialUrl = request.url,
+                        ).also { tab ->
+                            // 載せた直後に強制終了されてもページを復元できるよう、
+                            // 引き渡し先の delegate 経由で SessionState を保存し直す。
+                            tab.session.flushSessionState()
+                        }
+                    } else {
+                        viewModel.browserTabController.createAndAppendTab(
+                            tabId = tabId,
+                            initialUrl = request.url,
+                            restoredSessionState = request.sessionState,
+                            initialReferrerUrl = request.referrerUrl,
+                            insertAfterSelectedTab = false,
+                        )
+                    }
                     viewModel.registerExternalTab(newTab.tabId, request.url)
                     selectTabRequester.request(newTab.tabId)
                 },
