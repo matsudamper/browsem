@@ -510,7 +510,25 @@ class BrowserTabController(
         }
     }
 
+    /**
+     * タブの GeckoSession を別画面へ引き渡す。
+     *
+     * SessionState の復元は open→restoreState の読み込みを伴い、ワンタイムトークンや POST 結果の
+     * ページを開き直せない。読み込みなしで同じページを引き継ぐため、開いたままのセッションを渡す。
+     * 引き渡した後のセッションは引き渡し先のものなので、この一覧の終了では閉じない。
+     */
+    fun handOffSession(tab: BrowserTab): GeckoSession {
+        tab.sessionHandedOff = true
+        return tab.session
+    }
+
     private fun disposeTab(tab: BrowserTab, reason: String) {
+        if (tab.sessionHandedOff) {
+            // セッションは引き渡し先のものなので閉じない。delegate は引き渡し先が張り直しているため、
+            // 解除しても影響しない。保留リクエストを残したままにしないよう後始末だけ行う。
+            tab.disposeSessionDelegates(CancellationException(reason))
+            return
+        }
         if (tab.session.isOpen && tab.currentUrl.startsWith("moz-extension://")) {
             // 拡張機能のオプションページを閉じる際は、about:blank へのナビゲーション完了を待ってから
             // セッションを閉じる。これにより pagehide イベントが発火し、

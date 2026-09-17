@@ -1,16 +1,22 @@
 package net.matsudamper.browser
 
+import android.os.Handler
+import android.os.Looper
 import androidx.annotation.VisibleForTesting
 import java.util.UUID
+import org.mozilla.geckoview.GeckoSession
 
 /**
- * カスタムタブから通常ブラウザへ「ブラウザで開く」した際に、GeckoSession の状態
- * （履歴・スクロール位置など）を引き継ぐためのプロセス内受け渡しストア。
+ * カスタムタブから通常ブラウザへ「ブラウザで開く」した際に、GeckoSession をそのまま
+ * 引き継ぐためのプロセス内受け渡しストア。
  *
- * SessionState 文字列を Intent extra に直接載せると Binder のトランザクションサイズ上限に
- * 当たり得るため、状態本体はこのストアに保持し、Intent ではトークンのみを渡す。
+ * SessionState を渡して復元すると open→restoreState で読み込みが走るため、ワンタイム
+ * トークンや POST 結果のページは開き直せず認証エラーになる。読み込みなしで同一の状態を
+ * 引き継ぐには、開いたままのセッション自体を渡すしかない。
  *
- * 複数のカスタムタブが同時に存在しても衝突しないよう、受け渡しごとに一意のトークンを発行する。
+ * GeckoSession は Intent に載せられないので、実体はこのストアが保持し、Intent には
+ * トークンのみを渡す。複数のカスタムタブが同時に存在しても衝突しないよう、受け渡しごとに
+ * 一意のトークンを発行する。
  */
 object CustomTabHandoffStore {
     const val EXTRA_HANDOFF_TOKEN = "net.matsudamper.browser.extra.CUSTOM_TAB_HANDOFF_TOKEN"
@@ -24,39 +30,78 @@ object CustomTabHandoffStore {
     private val lock = Any()
     private val entries = linkedMapOf<String, Entry>()
 
-    private data class Entry(
+    // 期限切れの掃除は store / consume でしか走らないため、消費されないまま次の受け渡しも
+    // 発生しないと、開いたままのセッションがプロセス終了まで残る。登録時に掃除を予約しておく。
+    private val staleEntryCleanupHandler = Handler(Looper.getMainLooper())
+
+    private class Entry(
+        val session: GeckoSession,
         val sessionState: String,
-        val createdAt: Long = System.currentTimeMillis(),
+        val createdAt: Long,
     )
 
-    /** 引き継ぐ SessionState を登録し、Intent に載せるトークンを返す。 */
-    fun store(sessionState: String): String {
+    class Handoff internal constructor(
+        val session: GeckoSession,
+        /** セッションが閉じている（コンテンツプロセスの停止後など）ときに復元へ使う退避状態。 */
+        val sessionState: String,
+    )
+
+    /** 引き継ぐセッションを登録し、Intent に載せるトークンを返す。 */
+    fun store(session: GeckoSession, sessionState: String): String {
         val token = UUID.randomUUID().toString()
-        synchronized(lock) {
-            cleanupLocked()
-            if (entries.size >= MAX_ENTRIES) {
+        val evicted = synchronized(lock) {
+            val staleEntries = removeStaleLocked()
+            val overflowEntry = if (entries.size >= MAX_ENTRIES) {
                 entries.keys.firstOrNull()?.let { entries.remove(it) }
+            } else {
+                null
             }
-            entries[token] = Entry(sessionState = sessionState)
+            entries[token] = Entry(
+                session = session,
+                sessionState = sessionState,
+                createdAt = System.currentTimeMillis(),
+            )
+            staleEntries + listOfNotNull(overflowEntry)
         }
+        evicted.forEach { discard(it) }
+        scheduleStaleEntryCleanup()
         return token
     }
 
-    /** トークンに対応する SessionState を取り出して削除する。存在しなければ null。 */
-    fun consume(token: String): String? {
-        return synchronized(lock) {
-            cleanupLocked()
-            entries.remove(token)?.sessionState
+    /** トークンに対応するセッションを取り出して削除する。存在しなければ null。 */
+    fun consume(token: String): Handoff? {
+        val (handoff, staleEntries) = synchronized(lock) {
+            val staleEntries = removeStaleLocked()
+            val entry = entries.remove(token)
+            val handoff = entry?.let { Handoff(session = it.session, sessionState = it.sessionState) }
+            handoff to staleEntries
         }
+        staleEntries.forEach { discard(it) }
+        return handoff
     }
 
-    private fun cleanupLocked() {
+    private fun scheduleStaleEntryCleanup() {
+        staleEntryCleanupHandler.postDelayed(
+            {
+                val staleEntries = synchronized(lock) { removeStaleLocked() }
+                staleEntries.forEach { discard(it) }
+            },
+            STALE_ENTRY_MS,
+        )
+    }
+
+    private fun removeStaleLocked(): List<Entry> {
         val now = System.currentTimeMillis()
-        val iterator = entries.values.iterator()
-        while (iterator.hasNext()) {
-            if (now - iterator.next().createdAt > STALE_ENTRY_MS) {
-                iterator.remove()
-            }
+        // 掃除は期限ちょうどに走る。ここを厳密な比較にすると取りこぼして残り続ける。
+        val stale = entries.filterValues { now - it.createdAt >= STALE_ENTRY_MS }
+        stale.keys.forEach { entries.remove(it) }
+        return stale.values.toList()
+    }
+
+    /** 引き取り手のないセッションは開いたままにせず閉じる。 */
+    private fun discard(entry: Entry) {
+        if (entry.session.isOpen) {
+            entry.session.close()
         }
     }
 

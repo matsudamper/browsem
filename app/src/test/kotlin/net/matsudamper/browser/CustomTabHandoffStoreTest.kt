@@ -1,11 +1,20 @@
 package net.matsudamper.browser
 
+import io.mockk.every
+import io.mockk.mockk
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.mozilla.geckoview.GeckoSession
+import org.robolectric.RobolectricTestRunner
 
+// 期限切れの掃除を Handler で予約するため Robolectric 上で実行する
+@RunWith(RobolectricTestRunner::class)
 class CustomTabHandoffStoreTest {
 
     @After
@@ -14,26 +23,42 @@ class CustomTabHandoffStoreTest {
     }
 
     @Test
-    fun `store して consume すると同じ状態が返る`() {
-        val token = CustomTabHandoffStore.store("state-A")
-        assertEquals("state-A", CustomTabHandoffStore.consume(token))
+    fun `預けたセッションをトークンで取り出せる`() {
+        val session = mockk<GeckoSession>(relaxed = true)
+        every { session.isOpen } returns true
+
+        val token = CustomTabHandoffStore.store(session = session, sessionState = "state-A")
+        val handoff = CustomTabHandoffStore.consume(token)
+
+        assertNotNull(handoff)
+        assertSame(session, handoff?.session)
+        assertEquals("state-A", handoff?.sessionState)
     }
 
     @Test
-    fun `consume すると削除され二度目は null`() {
-        val token = CustomTabHandoffStore.store("state-A")
+    fun `取り出したトークンは再利用できない`() {
+        val session = mockk<GeckoSession>(relaxed = true)
+        every { session.isOpen } returns true
+        val token = CustomTabHandoffStore.store(session = session, sessionState = "state-A")
+
         CustomTabHandoffStore.consume(token)
+
         assertNull(CustomTabHandoffStore.consume(token))
     }
 
     @Test
     fun `複数カスタムタブは独立したトークンを持ち取り出し順に依存しない`() {
-        val tokenA = CustomTabHandoffStore.store("state-A")
-        val tokenB = CustomTabHandoffStore.store("state-B")
+        val first = mockk<GeckoSession>(relaxed = true)
+        val second = mockk<GeckoSession>(relaxed = true)
+        every { first.isOpen } returns true
+        every { second.isOpen } returns true
 
-        assertNotEquals(tokenA, tokenB)
-        assertEquals("state-B", CustomTabHandoffStore.consume(tokenB))
-        assertEquals("state-A", CustomTabHandoffStore.consume(tokenA))
+        val firstToken = CustomTabHandoffStore.store(session = first, sessionState = "state-A")
+        val secondToken = CustomTabHandoffStore.store(session = second, sessionState = "state-B")
+
+        assertNotEquals(firstToken, secondToken)
+        assertSame(second, CustomTabHandoffStore.consume(secondToken)?.session)
+        assertSame(first, CustomTabHandoffStore.consume(firstToken)?.session)
     }
 
     @Test
