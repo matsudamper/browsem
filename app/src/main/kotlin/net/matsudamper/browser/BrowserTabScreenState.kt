@@ -28,7 +28,6 @@ import java.io.ByteArrayOutputStream
 import java.net.URL
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -36,19 +35,12 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.SiteGeolocationState
-import net.matsudamper.browser.data.SitePermissionState
 import net.matsudamper.browser.data.SiteSettingsRepository
-import net.matsudamper.browser.data.TranslationProvider
 import net.matsudamper.browser.data.crashlog.CrashLogRepository
-import net.matsudamper.browser.data.download.DownloadRecordStatus
 import net.matsudamper.browser.data.extractSiteHost
-import net.matsudamper.browser.download.proceedDownloadFromResponse
 import net.matsudamper.browser.feature.devtools.DevToolsWebExtension
 import net.matsudamper.browser.feature.findinpage.FindInPageWebExtension
 import net.matsudamper.browser.translate.PageTranslationWebExtension
-import net.matsudamper.browser.translate.TranslationPriorityLanguage
-import net.matsudamper.browser.translate.TranslationProgress
-import net.matsudamper.browser.translate.Translator
 import net.matsudamper.browser.ui.browser.BrowserScreenUiState
 import org.json.JSONObject
 import org.koin.compose.koinInject
@@ -70,12 +62,6 @@ private const val MAX_EXTERNAL_APP_NAVIGATION_LOGS = 20
 private const val MAX_SUBFRAME_EXTERNAL_APP_PROMPTS = 3
 
 private val PAGE_ZOOM_STEPS = listOf(20, 25, 33, 50, 67, 75, 80, 90, 100, 110, 125, 150, 175, 200)
-
-private enum class FindInPageState {
-    Closed,
-    Normal,
-    Regex,
-}
 
 @Composable
 internal fun rememberBrowserTabScreenState(
@@ -212,37 +198,24 @@ internal class BrowserTabScreenState(
 
     data class TabHistoryItem(val uri: String, val title: String)
 
-    // --- Translation state ---
-    var translationState by mutableStateOf(TranslationState.Idle)
+    // --- Translation state（分離済み） ---
+    val translation = BrowserTabTranslationState(
+        coroutineScope = coroutineScope,
+        pageTranslationWebExtension = pageTranslationWebExtension,
+        crashLogRepository = crashLogRepository,
+        session = { session },
+        currentPageUrl = { currentPageUrl },
+        loadOriginalPage = { url ->
+            clearPageLoadError()
+            session.loadUri(url)
+        },
+    )
 
-    /** 翻訳失敗時の理由。どの段階で失敗したかを翻訳バーへ表示する */
-    var translationErrorMessage: String? by mutableStateOf(null)
-
-    /** ページ内テキストの翻訳進捗。初期反映後も継続翻訳が進むため、完了まで表示する */
-    var translationProgress: TranslationProgress? by mutableStateOf(null)
-    var originalPageUrlForRevert by mutableStateOf<String?>(null)
-    var detectedPageLanguage by mutableStateOf<String?>(null)
-
-    /** 翻訳元言語タグ（例: "en"） */
-    var translationFromLanguage by mutableStateOf<String?>(null)
-
-    /** 翻訳先言語タグ（例: "ja"） */
-    var translationToLanguage by mutableStateOf<String?>(null)
-    private var translationJob: Job? = null
-    private var activeTranslationProvider: TranslationProvider? = null
-
-    // --- Find-in-page state ---
-    private var findInPageState by mutableStateOf(FindInPageState.Closed)
-    val showFindInPage: Boolean get() = findInPageState != FindInPageState.Closed
-    var findQuery by mutableStateOf("")
-    var findMatchCurrent by mutableIntStateOf(0)
-    var findMatchTotal by mutableIntStateOf(0)
-
-    /** 正規表現モードが有効かどうか */
-    val findIsRegex: Boolean get() = findInPageState == FindInPageState.Regex
-
-    /** 無効な正規表現が入力された場合のエラーメッセージ */
-    var findQueryError by mutableStateOf<String?>(null)
+    // --- Find-in-page state（分離済み） ---
+    val findInPage = FindInPageState(
+        findInPageWebExtension = findInPageWebExtension,
+        session = { session },
+    )
 
     // --- 開発者ツール state ---
     var showDevTools by mutableStateOf(false)
@@ -333,142 +306,18 @@ internal class BrowserTabScreenState(
     // --- Web Share files ワークアラウンドの進行中状態 ---
     val webShareFilesState = WebShareFilesState(coroutineScope)
 
-    // --- サイトごとのマイク許可確認ダイアログ状態 ---
-    var microphonePermissionDialog by mutableStateOf<MicrophonePermissionDialogState?>(null)
-        private set
+    // --- サイトごとの権限確認ダイアログ状態（分離済み） ---
+    val sitePermissionDialogState = SitePermissionDialogState(siteSettingsRepository)
 
-    /**
-     * @param onResult true=許可(永続化), false=ブロック(永続化), null=今回のみ拒否
-     */
-    @Stable
-    class MicrophonePermissionDialogState(
-        val host: String,
-        internal val onResult: (Boolean?) -> Unit,
+    // --- ファイルダウンロード確認ダイアログ状態（分離済み） ---
+    val downloadState = TabDownloadState(
+        coroutineScope = coroutineScope,
+        geckoDownloadManager = geckoDownloadManager,
+        currentPageUrl = { currentPageUrl },
+        onRequestNotificationPermission = onRequestDownloadNotificationPermission,
+        onDownloadResolved = { responseUri -> finishExternalDownloadTabIfNeeded(responseUri) },
     )
 
-    fun confirmMicrophonePermissionDialog(allow: Boolean) {
-        val dialog = microphonePermissionDialog ?: return
-        microphonePermissionDialog = null
-        dialog.onResult(allow)
-    }
-
-    fun dismissMicrophonePermissionDialog() {
-        val dialog = microphonePermissionDialog ?: return
-        microphonePermissionDialog = null
-        dialog.onResult(null)
-    }
-
-    // --- サイトごとの自動再生（音声付きメディア）許可確認ダイアログ状態 ---
-    var autoplayPermissionDialog by mutableStateOf<AutoplayPermissionDialogState?>(null)
-        private set
-
-    /** 自動再生確認ダイアログでの選択 */
-    enum class AutoplayPermissionChoice {
-        /** 許可してサイト設定へ永続化する */
-        Allow,
-
-        /** 今回だけ許可し、永続化しない（次回も確認する） */
-        AllowOnce,
-
-        /** 却下してサイト設定へ永続化する */
-        Deny,
-    }
-
-    /**
-     * @param onResult 選択された [AutoplayPermissionChoice]。
-     * null は未選択（ダイアログを閉じただけ）で、今回のみ拒否し永続化しない
-     */
-    @Stable
-    class AutoplayPermissionDialogState(
-        val host: String,
-        internal val onResult: (AutoplayPermissionChoice?) -> Unit,
-    )
-
-    fun confirmAutoplayPermissionDialog(choice: AutoplayPermissionChoice) {
-        val dialog = autoplayPermissionDialog ?: return
-        autoplayPermissionDialog = null
-        dialog.onResult(choice)
-    }
-
-    fun dismissAutoplayPermissionDialog() {
-        val dialog = autoplayPermissionDialog ?: return
-        autoplayPermissionDialog = null
-        dialog.onResult(null)
-    }
-
-    /**
-     * サイトごとの自動再生（音声付きメディア）の許可を解決する。
-     * 未設定 (ASK) の場合は確認ダイアログを表示してユーザーの応答を待つ。
-     * 「許可」「却下」はサイト設定として永続化し、「今回のみ許可」と未選択は
-     * 永続化しないため次回の要求でも再びダイアログを表示する。
-     */
-    private suspend fun resolveAutoplayPermission(host: String): Boolean {
-        // 要求があったことを記録し、「サイトの設定」画面に自動再生の項目を表示できるようにする
-        siteSettingsRepository.markAutoplayPermissionRequested(host)
-        when (siteSettingsRepository.getAutoplayPermission(host)) {
-            SitePermissionState.SITE_PERMISSION_ALLOW -> return true
-            SitePermissionState.SITE_PERMISSION_DENY -> return false
-            else -> Unit
-        }
-        // 表示中のダイアログが残っている場合は今回のみ拒否として閉じる
-        autoplayPermissionDialog?.also { previous ->
-            autoplayPermissionDialog = null
-            previous.onResult(null)
-        }
-        val result = CompletableDeferred<AutoplayPermissionChoice?>()
-        autoplayPermissionDialog = AutoplayPermissionDialogState(host) { choice ->
-            result.complete(choice)
-        }
-        val persistedState = when (val choice = result.await()) {
-            AutoplayPermissionChoice.Allow -> SitePermissionState.SITE_PERMISSION_ALLOW
-
-            AutoplayPermissionChoice.Deny -> SitePermissionState.SITE_PERMISSION_DENY
-
-            // 今回のみ許可・未選択は永続化せず ASK のままにして、次回も確認する
-            AutoplayPermissionChoice.AllowOnce, null -> return choice == AutoplayPermissionChoice.AllowOnce
-        }
-        siteSettingsRepository.setAutoplayPermission(host = host, state = persistedState)
-        return persistedState == SitePermissionState.SITE_PERMISSION_ALLOW
-    }
-
-    /**
-     * サイトごとのマイク権限を解決する。
-     * 未設定 (ASK) の場合は確認ダイアログを表示してユーザーの応答を待ち、
-     * 許可/ブロックの選択をサイト設定として永続化する。
-     */
-    private suspend fun resolveMicrophonePermission(host: String): Boolean {
-        // 要求があったことを記録し、「サイトの設定」画面にマイクの項目を表示できるようにする
-        siteSettingsRepository.markMicrophonePermissionRequested(host)
-        when (siteSettingsRepository.getMicrophonePermission(host)) {
-            SitePermissionState.SITE_PERMISSION_ALLOW -> return true
-            SitePermissionState.SITE_PERMISSION_DENY -> return false
-            else -> Unit
-        }
-        // 表示中のダイアログが残っている場合は今回のみ拒否として閉じる
-        microphonePermissionDialog?.also { previous ->
-            microphonePermissionDialog = null
-            previous.onResult(null)
-        }
-        val result = CompletableDeferred<Boolean?>()
-        microphonePermissionDialog = MicrophonePermissionDialogState(host) { allow ->
-            result.complete(allow)
-        }
-        val choice = result.await()
-        if (choice != null) {
-            siteSettingsRepository.setMicrophonePermission(
-                host = host,
-                state = if (choice) {
-                    SitePermissionState.SITE_PERMISSION_ALLOW
-                } else {
-                    SitePermissionState.SITE_PERMISSION_DENY
-                },
-            )
-        }
-        return choice == true
-    }
-
-    // --- ファイルダウンロード確認ダイアログ用state ---
-    var pendingDownloadResponse by mutableStateOf<WebResponse?>(null)
     var pendingExternalAppLaunch by mutableStateOf<PendingExternalAppLaunch?>(null)
 
     // サブフレーム由来の要求で起動確認を出した URI。ユーザー操作なしに何度でも要求できるため、
@@ -489,25 +338,6 @@ internal class BrowserTabScreenState(
     // 外部アプリ確認ダイアログ表示中に到着した後続の外部アプリナビゲーション。
     // ダイアログをキャンセルした場合にこちらを表示する（アプリ起動した場合は破棄する）。
     private var queuedExternalAppLaunch: PendingExternalAppLaunch? = null
-
-    // --- ダウンロード重複確認ダイアログ用state ---
-    var duplicateDownloadState by mutableStateOf<DuplicateDownloadState?>(null)
-        private set
-
-    @Stable
-    class DuplicateDownloadState(
-        val url: String,
-        val existingDownloads: List<DuplicateDownloadEntry>,
-        internal val onConfirm: () -> Unit,
-        internal val onDismiss: () -> Unit = {},
-        internal val onCancel: () -> Unit = {},
-    )
-
-    data class DuplicateDownloadEntry(
-        val fileName: String,
-        val status: DownloadRecordStatus,
-        val fileUri: String?,
-    )
 
     // 外部アプリ確認ダイアログでキャンセルされた場合、次回のロードリクエストで外部アプリチェックをスキップする
     private var skipExternalAppCheckForNextLoad = false
@@ -803,102 +633,6 @@ internal class BrowserTabScreenState(
         session.loadUri(script)
     }
 
-    fun openFindInPage() {
-        findInPageState = FindInPageState.Normal
-    }
-
-    fun closeFindInPage() {
-        val previousFindInPageState = findInPageState
-        findInPageState = FindInPageState.Closed
-        if (previousFindInPageState == FindInPageState.Regex) {
-            findInPageWebExtension.clear(session)
-        } else {
-            session.finder.clear()
-        }
-        findQuery = ""
-        findMatchCurrent = 0
-        findMatchTotal = 0
-        findQueryError = null
-    }
-
-    fun onFindQueryChange(newQuery: String) {
-        findQuery = newQuery
-        findQueryError = null
-        if (newQuery.isEmpty()) {
-            if (findIsRegex) {
-                findInPageWebExtension.clear(session)
-            } else {
-                session.finder.clear()
-            }
-            findMatchCurrent = 0
-            findMatchTotal = 0
-        } else {
-            if (findIsRegex) {
-                findInPageWebExtension.search(session, newQuery, isRegex = true)
-            } else {
-                session.finder.find(newQuery, 0).then<Void?> { result ->
-                    findMatchCurrent = result?.current ?: 0
-                    findMatchTotal = result?.total ?: 0
-                    null
-                }
-            }
-        }
-    }
-
-    fun findNext() {
-        if (findQuery.isNotEmpty()) {
-            if (findIsRegex) {
-                findInPageWebExtension.findNext(session)
-            } else {
-                session.finder.find(findQuery, 0).then<Void?> { result ->
-                    findMatchCurrent = result?.current ?: 0
-                    findMatchTotal = result?.total ?: 0
-                    null
-                }
-            }
-        }
-    }
-
-    fun findPrevious() {
-        if (findQuery.isNotEmpty()) {
-            if (findIsRegex) {
-                findInPageWebExtension.findPrevious(session)
-            } else {
-                session.finder.find(findQuery, GeckoSession.FINDER_FIND_BACKWARDS)
-                    .then<Void?> { result ->
-                        findMatchCurrent = result?.current ?: 0
-                        findMatchTotal = result?.total ?: 0
-                        null
-                    }
-            }
-        }
-    }
-
-    fun toggleFindRegex() {
-        val newFindInPageState = if (findInPageState == FindInPageState.Regex) {
-            FindInPageState.Normal
-        } else {
-            FindInPageState.Regex
-        }
-        findInPageState = newFindInPageState
-        findQueryError = null
-        if (findQuery.isNotEmpty()) {
-            if (newFindInPageState == FindInPageState.Regex) {
-                // 通常 → 正規表現: finder をクリアして拡張機能で再検索
-                session.finder.clear()
-                findInPageWebExtension.search(session, findQuery, isRegex = true)
-            } else {
-                // 正規表現 → 通常: 拡張機能をクリアして finder で再検索
-                findInPageWebExtension.clear(session)
-                session.finder.find(findQuery, 0).then<Void?> { result ->
-                    findMatchCurrent = result?.current ?: 0
-                    findMatchTotal = result?.total ?: 0
-                    null
-                }
-            }
-        }
-    }
-
     /** 開発者ツールダイアログを開き、最新のフォーカス情報を問い合わせる */
     fun openDevTools() {
         showDevTools = true
@@ -938,128 +672,6 @@ internal class BrowserTabScreenState(
         showDevToolsConsole = false
     }
 
-    fun onTranslate(translationProvider: TranslationProvider) {
-        when (translationState) {
-            TranslationState.Idle -> {
-                runTranslation(
-                    translationProvider,
-                    fromLanguage = detectedPageLanguage,
-                    toLanguage = TranslationPriorityLanguage.TO,
-                )
-            }
-
-            TranslationState.Loading,
-            TranslationState.ScanningPage,
-            TranslationState.DetectingLanguage,
-            TranslationState.PreparingModel,
-            TranslationState.Translating,
-            TranslationState.Translated,
-            -> {
-                closeTranslationBar(revertPage = true)
-            }
-
-            TranslationState.Error -> {
-                closeTranslationBar(revertPage = false)
-            }
-        }
-    }
-
-    /** ステータスバーの言語ドロップダウンから再翻訳を実行する */
-    fun onRetranslate(translationProvider: TranslationProvider, fromLanguage: String?, toLanguage: String) {
-        if (translationState.isInProgress) return
-        runTranslation(translationProvider, fromLanguage = fromLanguage, toLanguage = toLanguage)
-    }
-
-    private fun runTranslation(translationProvider: TranslationProvider, fromLanguage: String?, toLanguage: String) {
-        translationJob?.cancel()
-        if (usesPageTranslationBridge(activeTranslationProvider)) {
-            pageTranslationWebExtension.stopTranslation(session, restoreOriginal = true)
-        }
-        activeTranslationProvider = translationProvider
-        translationJob = coroutineScope.launch {
-            // 初回翻訳時のみ元URLを保存する
-            if (originalPageUrlForRevert == null) {
-                originalPageUrlForRevert = currentPageUrl
-            }
-            // 非同期処理完了後にページ遷移済みかを検出するために翻訳開始時のURLを保持する
-            val translationStartUrl = originalPageUrlForRevert
-            translationState = TranslationState.Loading
-            translationErrorMessage = null
-            translationProgress = null
-            val pageUrl = translationStartUrl ?: currentPageUrl
-            val result = runCatching {
-                PageTranslator(
-                    session = session,
-                    currentPageUrl = pageUrl,
-                    pageTranslationWebExtension = pageTranslationWebExtension,
-                    crashLogRepository = crashLogRepository,
-                ).translatePage(
-                    provider = translationProvider,
-                    fromLanguage = fromLanguage,
-                    toLanguage = toLanguage,
-                    onTranslateStateChanged = { translateState ->
-                        if (originalPageUrlForRevert == translationStartUrl) {
-                            translationState = translateState.toTranslationState()
-                        }
-                    },
-                    onTranslateProgressChanged = { progress ->
-                        if (originalPageUrlForRevert == translationStartUrl) {
-                            translationProgress = progress
-                        }
-                    },
-                )
-            }
-            // CancellationException は runCatching で握りつぶさずに伝播させる。
-            // キャンセル済みジョブが新ジョブの状態を上書きするのを防ぐ。
-            result.exceptionOrNull()?.let { if (it is CancellationException) throw it }
-            // 翻訳中にページ遷移が発生した場合（onLocationChange が originalPageUrlForRevert をクリア済み）は
-            // 翻訳結果を破棄して翻訳バーを表示しない
-            if (originalPageUrlForRevert != translationStartUrl) return@launch
-            if (result.isSuccess) {
-                val langs = result.getOrNull()
-                translationFromLanguage = langs?.fromLanguage
-                translationToLanguage = langs?.toLanguage
-                translationErrorMessage = null
-                translationState = TranslationState.Translated
-            } else {
-                val error = result.exceptionOrNull()
-                Log.e(TAG, "翻訳に失敗しました", error)
-                translationFromLanguage = null
-                translationToLanguage = null
-                translationErrorMessage = error?.message?.takeIf { it.isNotBlank() }
-                translationState = TranslationState.Error
-            }
-        }
-    }
-
-    fun onRevertTranslation() {
-        closeTranslationBar(revertPage = true)
-    }
-
-    fun onDismissTranslationError() {
-        closeTranslationBar(revertPage = false)
-    }
-
-    private fun closeTranslationBar(revertPage: Boolean) {
-        translationJob?.cancel()
-        translationJob = null
-        val savedUrl = originalPageUrlForRevert
-        val provider = activeTranslationProvider
-        activeTranslationProvider = null
-        translationState = TranslationState.Idle
-        originalPageUrlForRevert = null
-        translationFromLanguage = null
-        translationToLanguage = null
-        translationErrorMessage = null
-        translationProgress = null
-        if (usesPageTranslationBridge(provider)) {
-            pageTranslationWebExtension.stopTranslation(session, restoreOriginal = revertPage)
-        } else if (revertPage && savedUrl != null) {
-            clearPageLoadError()
-            session.loadUri(savedUrl)
-        }
-    }
-
     fun sharePage() {
         shareText("$currentPageTitle\n$currentPageUrl")
     }
@@ -1078,134 +690,10 @@ internal class BrowserTabScreenState(
         }
     }
 
-    fun downloadImage(imageUrl: String) {
-        dismissContextMenu()
-        val referrerUrl = currentPageUrl
-        coroutineScope.launch {
-            val duplicates = geckoDownloadManager.findDuplicateDownloads(imageUrl)
-            if (duplicates.isNotEmpty()) {
-                duplicateDownloadState = DuplicateDownloadState(
-                    url = imageUrl,
-                    existingDownloads = duplicates.map { record ->
-                        DuplicateDownloadEntry(
-                            fileName = record.fileName,
-                            status = record.status,
-                            fileUri = record.fileUri,
-                        )
-                    },
-                    onConfirm = {
-                        proceedDownloadImage(imageUrl, referrerUrl)
-                    },
-                )
-                return@launch
-            }
-            proceedDownloadImage(imageUrl, referrerUrl)
-        }
-    }
-
-    private fun proceedDownloadImage(imageUrl: String, referrerUrl: String) {
-        coroutineScope.launch {
-            onRequestDownloadNotificationPermission()
-            geckoDownloadManager.enqueueDownload(
-                url = imageUrl,
-                referrerUrl = referrerUrl,
-                coroutineScope = coroutineScope,
-            )
-        }
-    }
-
-    // GeckoViewがレンダリングできないレスポンス（ダウンロードリンク等）を受け取った際に呼ばれる
-    // 重複がある場合は重複ダイアログを直接表示し、なければ通常の確認ダイアログを表示する
-    fun downloadFileFromResponse(response: WebResponse) {
-        val referrerUrl = currentPageUrl
-        coroutineScope.launch {
-            val duplicates = geckoDownloadManager.findDuplicateDownloads(response.uri)
-            if (duplicates.isNotEmpty()) {
-                duplicateDownloadState = DuplicateDownloadState(
-                    url = response.uri,
-                    existingDownloads = duplicates.map { record ->
-                        DuplicateDownloadEntry(
-                            fileName = record.fileName,
-                            status = record.status,
-                            fileUri = record.fileUri,
-                        )
-                    },
-                    onConfirm = {
-                        proceedDownloadFromResponse(response, referrerUrl) {
-                            finishExternalDownloadTabIfNeeded(response.uri)
-                        }
-                    },
-                    onDismiss = {
-                        response.body?.close()
-                    },
-                    onCancel = {
-                        finishExternalDownloadTabIfNeeded(response.uri)
-                    },
-                )
-                return@launch
-            }
-            pendingDownloadResponse = response
-        }
-    }
-
-    fun confirmPendingDownload() {
-        val response = pendingDownloadResponse ?: return
-        pendingDownloadResponse = null
-        proceedDownloadFromResponse(response, currentPageUrl) {
-            finishExternalDownloadTabIfNeeded(response.uri)
-        }
-    }
-
-    fun cancelPendingDownload() {
-        val response = pendingDownloadResponse
-        pendingDownloadResponse?.body?.close()
-        pendingDownloadResponse = null
-        response?.let { finishExternalDownloadTabIfNeeded(it.uri) }
-    }
-
-    fun dismissPendingDownload() {
-        pendingDownloadResponse?.body?.close()
-        pendingDownloadResponse = null
-    }
-
     private fun finishExternalDownloadTabIfNeeded(responseUri: String) {
         val initialUrl = externalTabInitialUrl ?: return
         if (!matchesExternalDownloadInitialUrl(initialUrl, responseUri)) return
         externalDownloadDialogListener?.onResolved()
-    }
-
-    private fun proceedDownloadFromResponse(
-        response: WebResponse,
-        referrerUrl: String,
-        onEnqueued: (() -> Unit)? = null,
-    ) {
-        coroutineScope.launch {
-            proceedDownloadFromResponse(
-                awaitPermission = { onRequestDownloadNotificationPermission() },
-                enqueue = { geckoDownloadManager.enqueueDownloadFromResponse(response, referrerUrl) },
-                onEnqueued = onEnqueued,
-                onEnqueueFailed = { response.body?.close() },
-            )
-        }
-    }
-
-    fun confirmDuplicateDownload() {
-        val state = duplicateDownloadState ?: return
-        duplicateDownloadState = null
-        state.onConfirm()
-    }
-
-    fun cancelDuplicateDownload() {
-        val state = duplicateDownloadState ?: return
-        duplicateDownloadState = null
-        state.onDismiss()
-        state.onCancel()
-    }
-
-    fun dismissDuplicateDownload() {
-        val state = duplicateDownloadState ?: return
-        duplicateDownloadState = null
-        state.onDismiss()
     }
 
     fun confirmPendingExternalAppLaunch() {
@@ -1476,30 +964,7 @@ internal class BrowserTabScreenState(
         if (!isUrlInputFocused) {
             urlInput = url
         }
-        if (
-            shouldResetTranslationOnLocationChange(
-                translationState,
-                url,
-                originalPageUrlForRevert,
-                wasFullPageLoad,
-            )
-        ) {
-            translationJob?.cancel()
-            translationJob = null
-            if (usesPageTranslationBridge(activeTranslationProvider)) {
-                pageTranslationWebExtension.stopTranslation(session, restoreOriginal = false)
-            }
-            activeTranslationProvider = null
-            translationState = TranslationState.Idle
-            originalPageUrlForRevert = null
-            translationFromLanguage = null
-            translationToLanguage = null
-            translationErrorMessage = null
-            translationProgress = null
-        }
-        if (!url.startsWith("data:")) {
-            detectedPageLanguage = null
-        }
+        translation.onLocationChange(url, isFullPageLoad = wasFullPageLoad)
         // 履歴を記録（about:blank や data: URL は除外）
         // goBack / goForward 時はカウンタをデクリメントしてスキップする
         val shouldRecord = url.isNotBlank() && !url.startsWith("about:") && !url.startsWith("data:")
@@ -1596,7 +1061,7 @@ internal class BrowserTabScreenState(
     }
 
     override fun onExternalResponse(response: WebResponse) {
-        downloadFileFromResponse(response)
+        downloadState.downloadFileFromResponse(response)
     }
 
     override fun onSessionStateChange(sessionState: GeckoSession.SessionState) {
@@ -1857,7 +1322,7 @@ internal class BrowserTabScreenState(
         translationState: TranslationsController.SessionTranslation.TranslationState?,
     ) {
         val lang = translationState?.detectedLanguages?.docLangTag ?: return
-        detectedPageLanguage = lang
+        translation.onDetectedLanguageChanged(lang)
     }
 
     override fun onFullScreen(fullScreen: Boolean) {
@@ -1893,7 +1358,7 @@ internal class BrowserTabScreenState(
             // OS の権限要求の前に、サイトごとのマイク許可を確認する
             if (Manifest.permission.RECORD_AUDIO in perms) {
                 val host = extractSiteHost(currentPageUrl)
-                if (host == null || !resolveMicrophonePermission(host)) {
+                if (host == null || !sitePermissionDialogState.resolveMicrophonePermission(host)) {
                     onReject()
                     return@launch
                 }
@@ -1923,7 +1388,7 @@ internal class BrowserTabScreenState(
             // OS 権限が許可済みの場合は onAndroidPermissionsRequest を経由しないため、
             // ここでもサイトごとのマイク許可を確認する（未設定ならダイアログを表示する）
             val host = extractSiteHost(uri) ?: extractSiteHost(currentPageUrl)
-            val grantAudio = host != null && resolveMicrophonePermission(host)
+            val grantAudio = host != null && sitePermissionDialogState.resolveMicrophonePermission(host)
             onResult(hasVideo, grantAudio)
         }
     }
@@ -1965,7 +1430,7 @@ internal class BrowserTabScreenState(
             // 自動再生の許可はトップレベルサイト基準のため、iframe からの要求
             // （uri が iframe のオリジン）も表示中ページのホストで判定する
             val host = extractSiteHost(currentPageUrl) ?: uri?.let { extractSiteHost(it) }
-            val allow = host != null && resolveAutoplayPermission(host)
+            val allow = host != null && sitePermissionDialogState.resolveAutoplayPermission(host)
             if (completed.compareAndSet(false, true)) {
                 onResult(allow)
             }
@@ -2058,25 +1523,6 @@ internal class BrowserTabScreenState(
     private fun copyUrlToClipboard(url: String) {
         copyUrlToClipboard(context, url)
     }
-}
-
-/** ページ内 DOM を書き換えて翻訳するプロバイダーかどうかを判定する */
-internal fun usesPageTranslationBridge(provider: TranslationProvider?): Boolean = when (provider) {
-    TranslationProvider.TRANSLATION_PROVIDER_LOCAL_AI,
-    TranslationProvider.TRANSLATION_PROVIDER_GEMINI_NANO,
-    -> true
-
-    TranslationProvider.TRANSLATION_PROVIDER_GECKO,
-    TranslationProvider.UNRECOGNIZED,
-    null,
-    -> false
-}
-
-private fun Translator.TranslateState.toTranslationState(): TranslationState = when (this) {
-    Translator.TranslateState.PAGE_SCAN -> TranslationState.ScanningPage
-    Translator.TranslateState.LANGUAGE_DETECTION -> TranslationState.DetectingLanguage
-    Translator.TranslateState.MODEL_DOWNLOAD -> TranslationState.PreparingModel
-    Translator.TranslateState.TRANSLATING -> TranslationState.Translating
 }
 
 /** WebApp のピン留めホストと異なるホストへの遷移かどうかを判定する */
