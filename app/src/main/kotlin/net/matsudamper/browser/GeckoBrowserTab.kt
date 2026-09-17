@@ -843,16 +843,12 @@ internal fun GeckoBrowserTab(
     DisposableEffect(session, webShareFilesWebExtension) {
         webShareFilesWebExtension.registerSession(session) { request, geckoResult ->
             try {
-                val activePending = webShareFilesState.pending
-                if (activePending != null && !activePending.completed) {
-                    geckoResult.complete(
-                        JSONObject()
-                            .put("success", false)
-                            .put("error", "共有リクエストが競合しました")
-                            .put("errorName", "AbortError"),
-                    )
-                    return@registerSession
-                }
+                // 応答が返らないまま残った要求で以降の共有を止めないよう、
+                // 進行中の要求は中断して新しい要求を受け付ける
+                webShareFilesState.finish(
+                    success = false,
+                    error = "新しい共有リクエストに置き換えられました",
+                )
                 val payloads = decodeWebShareFiles(request.files)
                 if (payloads == null) {
                     geckoResult.complete(
