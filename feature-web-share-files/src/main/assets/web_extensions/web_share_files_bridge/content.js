@@ -117,6 +117,36 @@
     return null;
   }
 
+  // content script 側の Promise / DOMException はページから then も catch もできないため、
+  // ページコンパートメントのオブジェクトへ載せ替えてから返す。
+  function pageDomException(message, name) {
+    return new pageWin.DOMException(message, name);
+  }
+
+  function rejectedPageShare(message, name) {
+    return pageWin.Promise.reject(pageDomException(message, name));
+  }
+
+  function toPageSharePromise(promise) {
+    return new pageWin.Promise(
+      exportFunction(function (resolve, reject) {
+        promise.then(
+          function () {
+            resolve(undefined);
+          },
+          function (error) {
+            reject(
+              pageDomException(
+                (error && error.message) || "共有に失敗しました",
+                (error && error.name) || "AbortError",
+              ),
+            );
+          },
+        );
+      }, pageWin),
+    );
+  }
+
   function createRequestId() {
     return (
       "share-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2)
@@ -204,35 +234,33 @@
     }
 
     if (!hasTransientUserActivation()) {
-      return Promise.reject(
-        new DOMException("ユーザー操作なしでは共有できません", "NotAllowedError"),
-      );
+      return rejectedPageShare("ユーザー操作なしでは共有できません", "NotAllowedError");
     }
 
     if (pendingNativeRequests.size > 0) {
-      return Promise.reject(
-        new DOMException("共有リクエストが競合しました", "AbortError"),
-      );
+      return rejectedPageShare("共有リクエストが競合しました", "AbortError");
     }
 
     const validationError = validateFiles(files);
     if (validationError) {
-      return Promise.reject(new DOMException(validationError, "NotAllowedError"));
+      return rejectedPageShare(validationError, "NotAllowedError");
     }
 
     const requestId = createRequestId();
 
-    return encodeFilesInPage(files)
-      .then(function (encodedFiles) {
-        const encodedError = validateEncodedFiles(encodedFiles);
-        if (encodedError) {
-          throw new DOMException(encodedError, "NotAllowedError");
-        }
-        return sendFilesToNative(requestId, data, encodedFiles);
-      })
-      .catch(function (error) {
-        pendingNativeRequests.delete(requestId);
-        throw error;
-      });
+    return toPageSharePromise(
+      encodeFilesInPage(files)
+        .then(function (encodedFiles) {
+          const encodedError = validateEncodedFiles(encodedFiles);
+          if (encodedError) {
+            throw new DOMException(encodedError, "NotAllowedError");
+          }
+          return sendFilesToNative(requestId, data, encodedFiles);
+        })
+        .catch(function (error) {
+          pendingNativeRequests.delete(requestId);
+          throw error;
+        }),
+    );
   }, pageWin);
 })();
