@@ -62,12 +62,12 @@ internal class BrowserTabTranslationState(
     private var translationJob: Job? = null
     private var activeProvider: TranslationProvider? = null
 
-    fun onTranslate(translationProvider: TranslationProvider, geminiNanoModelName: String) {
+    fun onTranslate(translationProvider: TranslationProvider, geminiNanoModelKey: String) {
         when (state) {
             TranslationState.Idle -> {
                 runTranslation(
                     translationProvider,
-                    geminiNanoModelName = geminiNanoModelName,
+                    geminiNanoModelKey = geminiNanoModelKey,
                     fromLanguage = detectedPageLanguage,
                     toLanguage = TranslationPriorityLanguage.TO,
                 )
@@ -92,14 +92,14 @@ internal class BrowserTabTranslationState(
     /** ステータスバーの言語ドロップダウンから再翻訳を実行する */
     fun onRetranslate(
         translationProvider: TranslationProvider,
-        geminiNanoModelName: String,
+        geminiNanoModelKey: String,
         fromLanguage: String?,
         toLanguage: String,
     ) {
         if (state.isInProgress) return
         runTranslation(
             translationProvider,
-            geminiNanoModelName = geminiNanoModelName,
+            geminiNanoModelKey = geminiNanoModelKey,
             fromLanguage = fromLanguage,
             toLanguage = toLanguage,
         )
@@ -137,7 +137,7 @@ internal class BrowserTabTranslationState(
 
     private fun runTranslation(
         translationProvider: TranslationProvider,
-        geminiNanoModelName: String,
+        geminiNanoModelKey: String,
         fromLanguage: String?,
         toLanguage: String,
     ) {
@@ -165,7 +165,7 @@ internal class BrowserTabTranslationState(
                     provider = translationProvider,
                     fromLanguage = fromLanguage,
                     toLanguage = toLanguage,
-                    geminiNanoModelName = geminiNanoModelName,
+                    geminiNanoModelKey = geminiNanoModelKey,
                     onTranslateStateChanged = { translateState ->
                         if (originalPageUrlForRevert == translationStartUrl) {
                             state = translateState.toTranslationState()

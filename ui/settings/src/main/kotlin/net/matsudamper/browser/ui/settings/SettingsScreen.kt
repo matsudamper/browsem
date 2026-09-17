@@ -312,43 +312,14 @@ fun SettingsScreen(
                             )
                         },
                     )
-                    SettingsRadioOption(
-                        label = "Gemini Nano (対応端末のみ)",
-                        selected = uiState.translationProvider == TranslationProvider.TRANSLATION_PROVIDER_GEMINI_NANO,
-                        enabled = uiState.geminiNanoAvailable,
-                        onClick = {
-                            uiState.callbacks.setTranslationProvider(
-                                TranslationProvider.TRANSLATION_PROVIDER_GEMINI_NANO,
-                            )
-                        },
-                    )
-                }
-            }
-
-            if (
-                uiState.translationProvider == TranslationProvider.TRANSLATION_PROVIDER_GEMINI_NANO &&
-                uiState.geminiNanoModels.isNotEmpty()
-            ) {
-                Spacer(Modifier.height(betweenPadding))
-
-                SettingSection(title = "Gemini Nano のモデル") {
-                    Column(Modifier.selectableGroup()) {
+                    uiState.geminiNanoModels.forEach { model ->
                         SettingsRadioOption(
-                            label = "自動",
-                            selected = uiState.selectedGeminiNanoModelName.isBlank(),
-                            onClick = { uiState.callbacks.setGeminiNanoModelName("") },
+                            label = buildGeminiNanoModelLabel(model),
+                            selected = uiState.translationProvider ==
+                                TranslationProvider.TRANSLATION_PROVIDER_GEMINI_NANO &&
+                                uiState.selectedGeminiNanoModelKey == model.key,
+                            onClick = { uiState.callbacks.selectGeminiNanoModel(model.key) },
                         )
-                        uiState.geminiNanoModels.forEach { model ->
-                            SettingsRadioOption(
-                                label = if (model.downloaded) {
-                                    model.name
-                                } else {
-                                    "${model.name} (未ダウンロード)"
-                                },
-                                selected = uiState.selectedGeminiNanoModelName == model.name,
-                                onClick = { uiState.callbacks.setGeminiNanoModelName(model.name) },
-                            )
-                        }
                     }
                 }
             }
@@ -778,8 +749,30 @@ private fun SettingsScreenGeminiNanoModelPreview() {
         showDefaultBrowserBanner = false,
         translationProvider = TranslationProvider.TRANSLATION_PROVIDER_GEMINI_NANO,
         geminiNanoModels = listOf(
-            SettingsScreenUiState.GeminiNanoModel(name = "gemini-nano-v3", downloaded = true),
-            SettingsScreenUiState.GeminiNanoModel(name = "gemini-nano-v3-preview", downloaded = false),
+            SettingsScreenUiState.GeminiNanoModel(
+                key = "stable-full/gemini-nano-v3",
+                displayName = "安定版・高品質",
+                modelName = "gemini-nano-v3",
+                downloaded = true,
+            ),
+            SettingsScreenUiState.GeminiNanoModel(
+                key = "stable-fast/gemini-nano-v3",
+                displayName = "安定版・高速",
+                modelName = "gemini-nano-v3",
+                downloaded = true,
+            ),
+            SettingsScreenUiState.GeminiNanoModel(
+                key = "preview-full/gemini-nano-v4",
+                displayName = "プレビュー版・高品質",
+                modelName = "gemini-nano-v4",
+                downloaded = false,
+            ),
+            SettingsScreenUiState.GeminiNanoModel(
+                key = "preview-fast/gemini-nano-v4",
+                displayName = "プレビュー版・高速",
+                modelName = "gemini-nano-v4",
+                downloaded = false,
+            ),
         ),
     )
 }
@@ -800,7 +793,7 @@ private fun SettingsScreenPreviewContent(
                     override fun setCustomSearchUrl(url: String) = Unit
                     override fun setThemeMode(mode: ThemeMode) = Unit
                     override fun setTranslationProvider(provider: TranslationProvider) = Unit
-                    override fun setGeminiNanoModelName(modelName: String) = Unit
+                    override fun selectGeminiNanoModel(modelKey: String) = Unit
                     override fun setEnableThirdPartyCa(enabled: Boolean) = Unit
                     override fun setEnableWebSuggestions(enabled: Boolean) = Unit
                     override fun setInputAutoZoomEnabled(enabled: Boolean) = Unit
@@ -822,9 +815,8 @@ private fun SettingsScreenPreviewContent(
                 customSearchUrl = "",
                 themeMode = ThemeMode.THEME_SYSTEM,
                 translationProvider = translationProvider,
-                geminiNanoAvailable = geminiNanoModels.isNotEmpty(),
                 geminiNanoModels = geminiNanoModels,
-                selectedGeminiNanoModelName = geminiNanoModels.firstOrNull()?.name.orEmpty(),
+                selectedGeminiNanoModelKey = geminiNanoModels.firstOrNull()?.key.orEmpty(),
                 enableThirdPartyCa = false,
                 enableWebSuggestions = false,
                 inputAutoZoomEnabled = true,
@@ -845,6 +837,12 @@ private fun SettingsScreenPreviewContent(
             onBack = {},
         )
     }
+}
+
+/** 保存キーではなく、世代・規模と ML Kit が返すモデル名を読める形にして出す */
+private fun buildGeminiNanoModelLabel(model: SettingsScreenUiState.GeminiNanoModel): String {
+    val suffix = if (model.downloaded) "" else " (未ダウンロード)"
+    return "Gemini Nano ${model.displayName} - ${model.modelName}$suffix"
 }
 
 @Composable

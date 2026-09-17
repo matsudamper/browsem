@@ -26,7 +26,7 @@ internal class PageTranslator(
         provider: TranslationProvider,
         fromLanguage: String?,
         toLanguage: String,
-        geminiNanoModelName: String,
+        geminiNanoModelKey: String,
         onTranslateStateChanged: (Translator.TranslateState) -> Unit,
         onTranslateProgressChanged: (TranslationProgress) -> Unit,
     ): TranslationLanguages? {
@@ -65,7 +65,7 @@ internal class PageTranslator(
                     currentPageUrl = currentPageUrl,
                     fromLanguage = fromLanguage,
                     toLanguage = toLanguage,
-                    modelName = geminiNanoModelName,
+                    modelKey = geminiNanoModelKey,
                     pageTranslationWebExtension = pageTranslationWebExtension,
                     crashLogRepository = crashLogRepository,
                     onTranslateStateChanged = onTranslateStateChanged,

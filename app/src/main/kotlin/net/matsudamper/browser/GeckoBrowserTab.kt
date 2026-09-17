@@ -120,7 +120,7 @@ internal fun GeckoBrowserTab(
     homepageUrl: String,
     searchTemplate: String,
     translationProvider: TranslationProvider,
-    geminiNanoModelName: String,
+    geminiNanoModelKey: String,
     themeColorExtension: ThemeColorWebExtension,
     mediaWebExtension: MediaWebExtension,
     browserSessionLifecycleController: BrowserSessionLifecycleController,
@@ -1241,7 +1241,7 @@ internal fun GeckoBrowserTab(
                     onPcModeToggle = state::togglePcMode,
                     showInstallExtensionItem = showInstallExtensionItem && state.showInstallExtensionItem,
                     onInstallExtension = { onInstallExtensionRequest(state.currentPageUrl) },
-                    onTranslatePage = { state.translation.onTranslate(translationProvider, geminiNanoModelName) },
+                    onTranslatePage = { state.translation.onTranslate(translationProvider, geminiNanoModelKey) },
                     onShare = state::sharePage,
                     onFindInPage = state.findInPage::open,
                     onAddToHomeScreen = state::requestAddToHomeScreen,
@@ -1334,7 +1334,7 @@ internal fun GeckoBrowserTab(
                     onSuperRefresh = state::onSuperRefresh,
                     isPageLoading = state.isPageLoading,
                     onStopLoading = state::onStopLoading,
-                    onTranslatePage = { state.translation.onTranslate(translationProvider, geminiNanoModelName) },
+                    onTranslatePage = { state.translation.onTranslate(translationProvider, geminiNanoModelKey) },
                     pageZoomPercent = state.pageZoomPercent,
                     onPageZoomIn = state::pageZoomIn,
                     onPageZoomOut = state::pageZoomOut,
@@ -1379,7 +1379,7 @@ internal fun GeckoBrowserTab(
                 onFromLanguageSelected = { lang ->
                     state.translation.onRetranslate(
                         translationProvider,
-                        geminiNanoModelName = geminiNanoModelName,
+                        geminiNanoModelKey = geminiNanoModelKey,
                         fromLanguage = lang,
                         toLanguage = state.translation.toLanguage ?: TranslationPriorityLanguage.TO,
                     )
@@ -1387,7 +1387,7 @@ internal fun GeckoBrowserTab(
                 onToLanguageSelected = { lang ->
                     state.translation.onRetranslate(
                         translationProvider,
-                        geminiNanoModelName = geminiNanoModelName,
+                        geminiNanoModelKey = geminiNanoModelKey,
                         fromLanguage = state.translation.fromLanguage,
                         toLanguage = lang,
                     )

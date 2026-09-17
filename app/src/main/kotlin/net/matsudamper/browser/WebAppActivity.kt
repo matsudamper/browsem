@@ -139,7 +139,7 @@ class WebAppActivity : ComponentActivity() {
                                 homepageUrl = resolvedInitialUrl,
                                 searchTemplate = browserSettings.resolvedSearchTemplate(),
                                 translationProvider = browserSettings.translationProvider,
-                                geminiNanoModelName = browserSettings.geminiNanoModelName,
+                                geminiNanoModelKey = browserSettings.geminiNanoModelKey,
                                 themeColorExtension = themeColorExtension,
                                 mediaWebExtension = mediaWebExtension,
                                 browserSessionLifecycleController = browserSessionLifecycleController,

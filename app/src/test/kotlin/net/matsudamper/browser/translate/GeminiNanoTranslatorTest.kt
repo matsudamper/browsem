@@ -3,6 +3,7 @@ package net.matsudamper.browser.translate
 import com.google.mlkit.genai.common.FeatureStatus
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -83,6 +84,18 @@ class GeminiNanoTranslatorTest {
         assertEquals(
             listOf("stable-full", "stable-fast", "preview-full", "preview-fast"),
             GEMINI_NANO_MODEL_CANDIDATES.map { it.configName },
+        )
+    }
+
+    @Test
+    fun 保存キーは候補と表示モデル名を連結する() {
+        assertEquals(
+            "stable-full/gemini-nano-v3",
+            geminiNanoModelKey(configName = "stable-full", modelName = "gemini-nano-v3"),
+        )
+        assertNotEquals(
+            geminiNanoModelKey(configName = "stable-fast", modelName = "gemini-nano-v3"),
+            geminiNanoModelKey(configName = "stable-full", modelName = "gemini-nano-v3"),
         )
     }
 }

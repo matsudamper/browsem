@@ -15,10 +15,8 @@ data class SettingsScreenUiState(
     val customSearchUrl: String,
     val themeMode: ThemeMode,
     val translationProvider: TranslationProvider,
-    val geminiNanoAvailable: Boolean,
     val geminiNanoModels: List<GeminiNanoModel>,
-    /** 空文字は自動選択 */
-    val selectedGeminiNanoModelName: String,
+    val selectedGeminiNanoModelKey: String,
     val enableThirdPartyCa: Boolean,
     val enableWebSuggestions: Boolean,
     val inputAutoZoomEnabled: Boolean,
@@ -32,10 +30,12 @@ data class SettingsScreenUiState(
 ) {
     enum class BackupConfirmType { Export, Import }
 
-    /** [name] は ML Kit が返す表示モデル名で、設定の保存キーにもなる */
+    /** 翻訳プロバイダーとして並べる Gemini Nano の候補 */
     @Stable
     data class GeminiNanoModel(
-        val name: String,
+        val key: String,
+        val displayName: String,
+        val modelName: String,
         val downloaded: Boolean,
     )
 
@@ -47,8 +47,8 @@ data class SettingsScreenUiState(
         fun setThemeMode(mode: ThemeMode)
         fun setTranslationProvider(provider: TranslationProvider)
 
-        /** 空文字で自動選択に戻す */
-        fun setGeminiNanoModelName(modelName: String)
+        /** 翻訳プロバイダーを Gemini Nano にして、使うモデルを選ぶ */
+        fun selectGeminiNanoModel(modelKey: String)
 
         fun setEnableThirdPartyCa(enabled: Boolean)
         fun setEnableWebSuggestions(enabled: Boolean)

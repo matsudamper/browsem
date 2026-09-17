@@ -90,13 +90,15 @@ internal class SettingsScreenViewModel(
         viewModelScope.launch {
             val geminiNanoModels = listGeminiNanoModels().map { model ->
                 SettingsScreenUiState.GeminiNanoModel(
-                    name = model.modelName,
+                    key = model.key,
+                    displayName = model.displayName,
+                    modelName = model.modelName,
                     downloaded = model.downloaded,
                 )
             }
             viewModelStateFlow.update {
                 it.copy(
-                    geminiNanoAvailable = geminiNanoModels.isNotEmpty(),
+                    geminiNanoModelsLoaded = true,
                     geminiNanoModels = geminiNanoModels,
                 )
             }
@@ -125,17 +127,17 @@ internal class SettingsScreenViewModel(
         }
 
         override fun setTranslationProvider(provider: TranslationProvider) {
-            if (
-                provider == TranslationProvider.TRANSLATION_PROVIDER_GEMINI_NANO &&
-                viewModelStateFlow.value.geminiNanoAvailable != true
-            ) {
-                return
-            }
             viewModelScope.launch { settingsRepository.setTranslationProvider(provider) }
         }
 
-        override fun setGeminiNanoModelName(modelName: String) {
-            viewModelScope.launch { settingsRepository.setGeminiNanoModelName(modelName) }
+        override fun selectGeminiNanoModel(modelKey: String) {
+            if (viewModelStateFlow.value.geminiNanoModels.none { it.key == modelKey }) return
+            viewModelScope.launch {
+                settingsRepository.setGeminiNanoModelKey(modelKey)
+                settingsRepository.setTranslationProvider(
+                    TranslationProvider.TRANSLATION_PROVIDER_GEMINI_NANO,
+                )
+            }
         }
 
         override fun setEnableThirdPartyCa(enabled: Boolean) {
@@ -278,7 +280,8 @@ internal class SettingsScreenViewModel(
                         return@collectLatest
                     }
                     if (
-                        state.geminiNanoAvailable == false &&
+                        state.geminiNanoModelsLoaded &&
+                        state.geminiNanoModels.isEmpty() &&
                         settings.translationProvider == TranslationProvider.TRANSLATION_PROVIDER_GEMINI_NANO
                     ) {
                         settingsRepository.setTranslationProvider(
@@ -293,7 +296,6 @@ internal class SettingsScreenViewModel(
                             backupConfirmDialog = state.backupConfirmDialog,
                             extensionsProcessRestartDialog = state.extensionsProcessRestartDialog,
                             showDefaultBrowserBanner = state.showDefaultBrowserBanner,
-                            geminiNanoAvailable = state.geminiNanoAvailable == true,
                             geminiNanoModels = state.geminiNanoModels,
                         )
                     }
@@ -324,7 +326,7 @@ internal class SettingsScreenViewModel(
         val extensionsProcessRestartDialog: Boolean = false,
         val pendingExtensionsProcessEnabled: Boolean? = null,
         val showDefaultBrowserBanner: Boolean = false,
-        val geminiNanoAvailable: Boolean? = null,
+        val geminiNanoModelsLoaded: Boolean = false,
         val geminiNanoModels: List<SettingsScreenUiState.GeminiNanoModel> = emptyList(),
     )
 }
@@ -378,7 +380,6 @@ private fun BrowserSettings.toUiState(
     backupConfirmDialog: SettingsScreenUiState.BackupConfirmType?,
     extensionsProcessRestartDialog: Boolean,
     showDefaultBrowserBanner: Boolean,
-    geminiNanoAvailable: Boolean,
     geminiNanoModels: List<SettingsScreenUiState.GeminiNanoModel>,
 ): SettingsScreenUiState {
     return SettingsScreenUiState(
@@ -389,9 +390,8 @@ private fun BrowserSettings.toUiState(
         customSearchUrl = customSearchUrl,
         themeMode = themeMode,
         translationProvider = translationProvider,
-        geminiNanoAvailable = geminiNanoAvailable,
         geminiNanoModels = geminiNanoModels,
-        selectedGeminiNanoModelName = geminiNanoModelName,
+        selectedGeminiNanoModelKey = geminiNanoModelKey,
         enableThirdPartyCa = enableThirdPartyCa,
         enableWebSuggestions = resolvedEnableWebSuggestions(),
         inputAutoZoomEnabled = resolvedInputAutoZoomEnabled(),
