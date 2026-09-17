@@ -524,7 +524,9 @@ class BrowserTabController(
 
     private fun disposeTab(tab: BrowserTab, reason: String) {
         if (tab.sessionHandedOff) {
-            // 引き渡し先が delegate を張り直しているため、delegate の後始末もしない。
+            // セッションは引き渡し先のものなので閉じない。delegate は引き渡し先が張り直しているため、
+            // 解除しても影響しない。保留リクエストを残したままにしないよう後始末だけ行う。
+            tab.disposeSessionDelegates(CancellationException(reason))
             return
         }
         if (tab.session.isOpen && tab.currentUrl.startsWith("moz-extension://")) {
