@@ -30,6 +30,7 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.semantics
@@ -42,7 +43,9 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import java.util.concurrent.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.TabRepository
 import net.matsudamper.browser.data.ThemeMode
@@ -233,7 +236,7 @@ class CustomTabActivity : ComponentActivity() {
      * 外しておく必要がある。外す前に渡すと、引き渡し先が張り直した delegate や拡張機能の
      * セッション登録を、この画面の破棄が後から解除してしまう。
      */
-    private fun openInMainBrowser(url: String, tab: BrowserTab) {
+    private fun openInMainBrowser(url: String, tab: BrowserTab, sessionState: String) {
         val handedOffSession = browserViewModel.browserTabController.handOffSession(tab)
         startActivity(
             Intent(this, MainActivity::class.java).apply {
@@ -244,7 +247,7 @@ class CustomTabActivity : ComponentActivity() {
                     CustomTabHandoffStore.EXTRA_HANDOFF_TOKEN,
                     CustomTabHandoffStore.store(
                         session = handedOffSession,
-                        sessionState = tab.sessionState,
+                        sessionState = sessionState,
                     ),
                 )
             },
@@ -287,7 +290,7 @@ private fun CustomTabScreen(
     mediaWebExtension: MediaWebExtension,
     outerNavActions: OuterNavActions,
     onClose: () -> Unit,
-    onOpenInBrowser: (url: String, tab: BrowserTab) -> Unit,
+    onOpenInBrowser: (url: String, tab: BrowserTab, sessionState: String) -> Unit,
     onOpenNewTabInBrowser: (url: String, referrerUrl: String?) -> Unit,
     onOpenPopupInCustomTab: (uri: String, openerTabId: String) -> GeckoSession,
     onRequestDownloadNotificationPermission: suspend () -> Unit,
@@ -358,7 +361,11 @@ private fun CustomTabScreen(
     val openInBrowserUrl = requestedOpenInBrowserUrl
     if (openInBrowserUrl != null) {
         LaunchedEffect(openInBrowserUrl) {
-            currentOnOpenInBrowser(openInBrowserUrl, activeTab)
+            currentOnOpenInBrowser(
+                openInBrowserUrl,
+                activeTab,
+                captureFreshSessionState(activeTab),
+            )
         }
         return
     }
@@ -470,3 +477,19 @@ private fun PreviewCustomTabOpaqueShell() {
         }
     }
 }
+
+/**
+ * flushSessionState() で最新の SessionState を onSessionStateChange 経由で反映させ、
+ * 更新後の [BrowserTab.sessionState] を返す。引き渡したセッションが閉じていた場合の復元に使うため、
+ * 直前のナビゲーションを取りこぼさないようにする。
+ * 反映が一定時間内に来ない場合（既に最新の場合を含む）は現在のキャッシュ値を返す。
+ */
+private suspend fun captureFreshSessionState(tab: BrowserTab): String {
+    val before = tab.sessionState
+    tab.session.flushSessionState()
+    return withTimeoutOrNull(FLUSH_SESSION_STATE_TIMEOUT_MS) {
+        snapshotFlow { tab.sessionState }.first { it != before }
+    } ?: tab.sessionState
+}
+
+private const val FLUSH_SESSION_STATE_TIMEOUT_MS = 300L
