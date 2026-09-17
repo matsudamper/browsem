@@ -249,9 +249,8 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
 
-      # LongParameterList など型解決が必要なルールを含めるため detektMain を使う
       - name: Run detekt
-        run: ./gradlew detektMain
+        run: ./gradlew detekt
 
   ktlint:
     runs-on: ubuntu-latest

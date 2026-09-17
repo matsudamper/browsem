@@ -29,7 +29,7 @@ GeckoView ベースの Android ブラウザ。Kotlin / Jetpack Compose / Materia
 ## 変更後（必須）
 コード変更後はコミット前に、以下をこの順で逐次実行する。
 1. `./gradlew :app:assembleDebug` でビルド確認
-2. `./gradlew detektMain` で lint を確認（型解決が必要なルールを含む。`detekt` は型解決なしの簡易版）
+2. `./gradlew detekt` で lint を確認
 3. `./gradlew test` でユニットテスト通過を確認
 4. UI 変更を含む場合は `@Preview` を追加/更新し、Paparazzi スナップショットを撮影（コミットしない。PR とチャットに貼る）
 
@@ -39,7 +39,7 @@ GeckoView ベースの Android ブラウザ。Kotlin / Jetpack Compose / Materia
 ./gradlew test
 ./gradlew :app:verifyPaparazziDebug
 ./gradlew :app:recordPaparazziDebug -Dpaparazzi.filter="PreviewName"
-./gradlew :app:lintDebug detektMain
+./gradlew :app:lintDebug detekt
 ./gradlew :app:pixel6Api34DebugAndroidTest
 ```
 

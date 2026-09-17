@@ -1,45 +1,9 @@
-# デフォルトルールは原則無効化し、Compose ルールと肥大化検知のみ有効にする
+# デフォルトルールをすべて無効化し、Compose ルールのみ有効にする
 comments:
   active: false
 
 complexity:
-  active: true
-  CognitiveComplexMethod:
-    active: false
-  ComplexCondition:
-    active: false
-  ComplexInterface:
-    active: false
-  CyclomaticComplexMethod:
-    active: false
-  LabeledExpression:
-    active: false
-  LargeClass:
-    active: true
-    allowedLines: 600
-  LongMethod:
-    active: true
-    allowedLines: 60
-  LongParameterList:
-    active: true
-    allowedFunctionParameters: 8
-    allowedConstructorParameters: 8
-    ignoreDefaultParameters: false
-    ignoreDataClasses: true
-  MethodOverloading:
-    active: false
-  NamedArguments:
-    active: false
-  NestedBlockDepth:
-    active: false
-  NestedScopeFunctions:
-    active: false
-  ReplaceSafeCallChainWithRun:
-    active: false
-  StringLiteralDuplication:
-    active: false
-  TooManyFunctions:
-    active: false
+  active: false
 
 coroutines:
   active: false

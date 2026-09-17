@@ -1,8 +1,0 @@
-<?xml version="1.0" ?>
-<SmellBaseline>
-  <ManuallySuppressedIssues/>
-  <CurrentIssues>
-    <ID>LongMethod:DownloadManagementScreen.kt:@OptIn(ExperimentalFoundationApi::class) @Composable private fun DownloadItemRow</ID>
-    <ID>LongMethod:DownloadManagementScreen.kt:@OptIn(ExperimentalMaterial3Api::class) @Composable fun DownloadManagementScreen</ID>
-  </CurrentIssues>
-</SmellBaseline>
