@@ -325,6 +325,34 @@ fun SettingsScreen(
                 }
             }
 
+            if (
+                uiState.translationProvider == TranslationProvider.TRANSLATION_PROVIDER_GEMINI_NANO &&
+                uiState.geminiNanoModels.isNotEmpty()
+            ) {
+                Spacer(Modifier.height(betweenPadding))
+
+                SettingSection(title = "Gemini Nano のモデル") {
+                    Column(Modifier.selectableGroup()) {
+                        SettingsRadioOption(
+                            label = "自動",
+                            selected = uiState.selectedGeminiNanoModelName.isBlank(),
+                            onClick = { uiState.callbacks.setGeminiNanoModelName("") },
+                        )
+                        uiState.geminiNanoModels.forEach { model ->
+                            SettingsRadioOption(
+                                label = if (model.downloaded) {
+                                    model.name
+                                } else {
+                                    "${model.name} (未ダウンロード)"
+                                },
+                                selected = uiState.selectedGeminiNanoModelName == model.name,
+                                onClick = { uiState.callbacks.setGeminiNanoModelName(model.name) },
+                            )
+                        }
+                    }
+                }
+            }
+
             Spacer(Modifier.height(betweenPadding))
 
             SettingSection(title = "位置情報") {
@@ -726,17 +754,42 @@ internal fun CollapsibleSettingSection(
 @Preview(showBackground = true, heightDp = 2600)
 @Composable
 private fun SettingsScreenPreview() {
-    SettingsScreenPreviewContent(showDefaultBrowserBanner = false)
+    SettingsScreenPreviewContent(
+        showDefaultBrowserBanner = false,
+        translationProvider = TranslationProvider.TRANSLATION_PROVIDER_GECKO,
+        geminiNanoModels = emptyList(),
+    )
 }
 
 @Preview(showBackground = true, heightDp = 2600)
 @Composable
 private fun SettingsScreenDefaultBrowserBannerPreview() {
-    SettingsScreenPreviewContent(showDefaultBrowserBanner = true)
+    SettingsScreenPreviewContent(
+        showDefaultBrowserBanner = true,
+        translationProvider = TranslationProvider.TRANSLATION_PROVIDER_GECKO,
+        geminiNanoModels = emptyList(),
+    )
+}
+
+@Preview(showBackground = true, heightDp = 2600)
+@Composable
+private fun SettingsScreenGeminiNanoModelPreview() {
+    SettingsScreenPreviewContent(
+        showDefaultBrowserBanner = false,
+        translationProvider = TranslationProvider.TRANSLATION_PROVIDER_GEMINI_NANO,
+        geminiNanoModels = listOf(
+            SettingsScreenUiState.GeminiNanoModel(name = "gemini-nano-v3", downloaded = true),
+            SettingsScreenUiState.GeminiNanoModel(name = "gemini-nano-v3-preview", downloaded = false),
+        ),
+    )
 }
 
 @Composable
-private fun SettingsScreenPreviewContent(showDefaultBrowserBanner: Boolean) {
+private fun SettingsScreenPreviewContent(
+    showDefaultBrowserBanner: Boolean,
+    translationProvider: TranslationProvider,
+    geminiNanoModels: List<SettingsScreenUiState.GeminiNanoModel>,
+) {
     MaterialTheme {
         SettingsScreen(
             uiState = SettingsScreenUiState(
@@ -747,6 +800,7 @@ private fun SettingsScreenPreviewContent(showDefaultBrowserBanner: Boolean) {
                     override fun setCustomSearchUrl(url: String) = Unit
                     override fun setThemeMode(mode: ThemeMode) = Unit
                     override fun setTranslationProvider(provider: TranslationProvider) = Unit
+                    override fun setGeminiNanoModelName(modelName: String) = Unit
                     override fun setEnableThirdPartyCa(enabled: Boolean) = Unit
                     override fun setEnableWebSuggestions(enabled: Boolean) = Unit
                     override fun setInputAutoZoomEnabled(enabled: Boolean) = Unit
@@ -767,8 +821,10 @@ private fun SettingsScreenPreviewContent(showDefaultBrowserBanner: Boolean) {
                 searchProvider = SearchProvider.GOOGLE,
                 customSearchUrl = "",
                 themeMode = ThemeMode.THEME_SYSTEM,
-                translationProvider = TranslationProvider.TRANSLATION_PROVIDER_GECKO,
-                geminiNanoAvailable = false,
+                translationProvider = translationProvider,
+                geminiNanoAvailable = geminiNanoModels.isNotEmpty(),
+                geminiNanoModels = geminiNanoModels,
+                selectedGeminiNanoModelName = geminiNanoModels.firstOrNull()?.name.orEmpty(),
                 enableThirdPartyCa = false,
                 enableWebSuggestions = false,
                 inputAutoZoomEnabled = true,

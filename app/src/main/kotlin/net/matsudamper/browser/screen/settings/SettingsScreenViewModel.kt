@@ -29,7 +29,7 @@ import net.matsudamper.browser.data.resolvedInputAutoZoomEnabled
 import net.matsudamper.browser.data.resolvedWebAuthnPlatformAuthenticatorAvailableOverrideEnabled
 import net.matsudamper.browser.feature.mocklocation.MockLocationWebExtension
 import net.matsudamper.browser.feature.webauthncompat.WebAuthnCompatWebExtension
-import net.matsudamper.browser.translate.isGeminiNanoAvailable
+import net.matsudamper.browser.translate.listGeminiNanoModels
 import net.matsudamper.browser.ui.settings.SettingsScreenUiState
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
@@ -88,8 +88,18 @@ internal class SettingsScreenViewModel(
 
     init {
         viewModelScope.launch {
-            val geminiNanoAvailable = isGeminiNanoAvailable()
-            viewModelStateFlow.update { it.copy(geminiNanoAvailable = geminiNanoAvailable) }
+            val geminiNanoModels = listGeminiNanoModels().map { model ->
+                SettingsScreenUiState.GeminiNanoModel(
+                    name = model.modelName,
+                    downloaded = model.downloaded,
+                )
+            }
+            viewModelStateFlow.update {
+                it.copy(
+                    geminiNanoAvailable = geminiNanoModels.isNotEmpty(),
+                    geminiNanoModels = geminiNanoModels,
+                )
+            }
         }
     }
 
@@ -122,6 +132,10 @@ internal class SettingsScreenViewModel(
                 return
             }
             viewModelScope.launch { settingsRepository.setTranslationProvider(provider) }
+        }
+
+        override fun setGeminiNanoModelName(modelName: String) {
+            viewModelScope.launch { settingsRepository.setGeminiNanoModelName(modelName) }
         }
 
         override fun setEnableThirdPartyCa(enabled: Boolean) {
@@ -280,6 +294,7 @@ internal class SettingsScreenViewModel(
                             extensionsProcessRestartDialog = state.extensionsProcessRestartDialog,
                             showDefaultBrowserBanner = state.showDefaultBrowserBanner,
                             geminiNanoAvailable = state.geminiNanoAvailable == true,
+                            geminiNanoModels = state.geminiNanoModels,
                         )
                     }
                     // 拡張機能への反映は BrowserViewModel が設定の Flow を監視して行う
@@ -310,6 +325,7 @@ internal class SettingsScreenViewModel(
         val pendingExtensionsProcessEnabled: Boolean? = null,
         val showDefaultBrowserBanner: Boolean = false,
         val geminiNanoAvailable: Boolean? = null,
+        val geminiNanoModels: List<SettingsScreenUiState.GeminiNanoModel> = emptyList(),
     )
 }
 
@@ -363,6 +379,7 @@ private fun BrowserSettings.toUiState(
     extensionsProcessRestartDialog: Boolean,
     showDefaultBrowserBanner: Boolean,
     geminiNanoAvailable: Boolean,
+    geminiNanoModels: List<SettingsScreenUiState.GeminiNanoModel>,
 ): SettingsScreenUiState {
     return SettingsScreenUiState(
         callbacks = callbacks,
@@ -373,6 +390,8 @@ private fun BrowserSettings.toUiState(
         themeMode = themeMode,
         translationProvider = translationProvider,
         geminiNanoAvailable = geminiNanoAvailable,
+        geminiNanoModels = geminiNanoModels,
+        selectedGeminiNanoModelName = geminiNanoModelName,
         enableThirdPartyCa = enableThirdPartyCa,
         enableWebSuggestions = resolvedEnableWebSuggestions(),
         inputAutoZoomEnabled = resolvedInputAutoZoomEnabled(),

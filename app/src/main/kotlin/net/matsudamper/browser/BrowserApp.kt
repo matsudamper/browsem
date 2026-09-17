@@ -1187,6 +1187,7 @@ private fun MainBrowserContent(
                                 homepageUrl = uiState.homepageUrl,
                                 searchTemplate = uiState.searchTemplate,
                                 translationProvider = uiState.translationProvider,
+                                geminiNanoModelName = uiState.geminiNanoModelName,
                                 themeColorExtension = themeColorExtension,
                                 mediaWebExtension = mediaWebExtension,
                                 tabCount = tabCount,

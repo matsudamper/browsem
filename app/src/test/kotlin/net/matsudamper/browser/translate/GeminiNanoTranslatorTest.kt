@@ -79,10 +79,10 @@ class GeminiNanoTranslatorTest {
     }
 
     @Test
-    fun モデル候補は安定版を先に試す() {
+    fun モデル候補は安定版とプレビュー版の全組み合わせを安定版優先で並べる() {
         assertEquals(
-            listOf("stable-full", "stable-fast", "preview-fast"),
-            GEMINI_NANO_MODEL_CANDIDATES.map { it.description },
+            listOf("stable-full", "stable-fast", "preview-full", "preview-fast"),
+            GEMINI_NANO_MODEL_CANDIDATES.map { it.configName },
         )
     }
 }

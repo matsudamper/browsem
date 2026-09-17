@@ -44,13 +44,14 @@ class GeminiNanoTranslator(
     private val currentPageUrl: String,
     private val fromLanguage: String?,
     private val toLanguage: String,
+    private val modelName: String,
     private val pageTranslationWebExtension: PageTranslationWebExtension,
     private val crashLogRepository: CrashLogRepository,
     private val onTranslateStateChanged: (Translator.TranslateState) -> Unit,
     private val onTranslateProgressChanged: (TranslationProgress) -> Unit,
 ) : Translator {
     private var currentStage: String = STAGE_SCAN
-    private var currentModelDescription: String = ""
+    private var currentModelName: String = ""
     private val translatedSegmentCount = AtomicInteger(0)
     private val totalSegmentCount = AtomicInteger(0)
 
@@ -95,9 +96,9 @@ class GeminiNanoTranslator(
                 resolveSourceLanguage(snapshot),
                 toLanguage,
             )
-            val selectedModel = selectGeminiNanoModel()
+            val selectedModel = selectGeminiNanoModel(modelName)
                 ?: throw IllegalStateException("Gemini Nanoを利用できない端末です")
-            currentModelDescription = selectedModel.description
+            currentModelName = selectedModel.modelName
             val inference = GeminiNanoInference(
                 generativeModel = selectedModel.generativeModel,
                 sourceLanguage = sourceLanguage,
@@ -309,7 +310,7 @@ class GeminiNanoTranslator(
 
     private fun buildDiagnostics(elapsedMs: Long, error: Throwable): String = buildString {
         appendLine("stage=$currentStage")
-        appendLine("model=$currentModelDescription")
+        appendLine("model=$currentModelName")
         appendLine("elapsedMs=$elapsedMs")
         appendLine("fromLanguage=${fromLanguage.orEmpty()}")
         appendLine("toLanguage=$toLanguage")
@@ -546,31 +547,85 @@ private class GeminiNanoInference(
 
 internal class SelectedGeminiNanoModel(
     val generativeModel: GenerativeModel,
-    val description: String,
+    val modelName: String,
+)
+
+/** 設定画面へ出す選択肢。[modelName] は ML Kit が返す表示モデル名で、設定の保存キーにもなる */
+internal class GeminiNanoModelOption(
+    val modelName: String,
+    val downloaded: Boolean,
 )
 
 /**
- * 端末に載っているモデルの世代（安定版・プレビュー版）と規模が違うため、候補を順に調べて使えるものを選ぶ。
+ * 端末が持つ Gemini Nano を表示モデル名で列挙する。
  *
- * 既にダウンロード済みのモデルがあれば、未取得のモデルより優先して追加ダウンロードを避ける。
+ * 世代（安定版・プレビュー版）と規模（FULL・FAST）の組み合わせでも同じモデルに解決されることがあるため、
+ * 表示モデル名で重複を除く。
+ */
+internal suspend fun listGeminiNanoModels(): List<GeminiNanoModelOption> {
+    val optionsByName = LinkedHashMap<String, GeminiNanoModelOption>()
+    for (candidate in GEMINI_NANO_MODEL_CANDIDATES) {
+        val opened = openUsableGeminiNanoModel(candidate) ?: continue
+        opened.generativeModel.close()
+        val downloaded = opened.priority == DOWNLOADED_MODEL_PRIORITY
+        val known = optionsByName[opened.modelName]
+        if (known == null || (downloaded && !known.downloaded)) {
+            optionsByName[opened.modelName] = GeminiNanoModelOption(
+                modelName = opened.modelName,
+                downloaded = downloaded,
+            )
+        }
+    }
+    return optionsByName.values.toList()
+}
+
+/**
+ * 翻訳に使う Gemini Nano を決める。
+ *
+ * [preferredModelName] が空でなければ表示モデル名が一致するモデルを使い、
+ * 一致しなければ候補順かつダウンロード済み優先で選んで追加ダウンロードを避ける。
  * 呼び出し側は返した [SelectedGeminiNanoModel.generativeModel] を閉じる責任を持つ。
  */
-internal suspend fun selectGeminiNanoModel(): SelectedGeminiNanoModel? {
+internal suspend fun selectGeminiNanoModel(preferredModelName: String): SelectedGeminiNanoModel? {
     var selected: SelectedGeminiNanoModel? = null
     var selectedPriority = Int.MAX_VALUE
     for (candidate in GEMINI_NANO_MODEL_CANDIDATES) {
-        val generativeModel = createGeminiNanoModel(candidate) ?: continue
-        val priority = geminiNanoStatusPriority(checkGeminiNanoStatus(generativeModel))
-        if (priority == null || priority >= selectedPriority) {
-            generativeModel.close()
+        val opened = openUsableGeminiNanoModel(candidate) ?: continue
+        if (preferredModelName.isNotBlank() && opened.modelName == preferredModelName) {
+            selected?.generativeModel?.close()
+            return SelectedGeminiNanoModel(opened.generativeModel, opened.modelName)
+        }
+        if (opened.priority >= selectedPriority) {
+            opened.generativeModel.close()
             continue
         }
         selected?.generativeModel?.close()
-        selected = SelectedGeminiNanoModel(generativeModel, candidate.description)
-        selectedPriority = priority
-        if (priority == DOWNLOADED_MODEL_PRIORITY) break
+        selected = SelectedGeminiNanoModel(opened.generativeModel, opened.modelName)
+        selectedPriority = opened.priority
+        if (preferredModelName.isBlank() && opened.priority == DOWNLOADED_MODEL_PRIORITY) break
     }
     return selected
+}
+
+private class OpenedGeminiNanoModel(
+    val generativeModel: GenerativeModel,
+    val modelName: String,
+    val priority: Int,
+)
+
+/** 使えない候補は閉じて null を返す */
+private suspend fun openUsableGeminiNanoModel(candidate: GeminiNanoModelCandidate): OpenedGeminiNanoModel? {
+    val generativeModel = createGeminiNanoModel(candidate) ?: return null
+    val priority = geminiNanoStatusPriority(checkGeminiNanoStatus(generativeModel))
+    if (priority == null) {
+        generativeModel.close()
+        return null
+    }
+    return OpenedGeminiNanoModel(
+        generativeModel = generativeModel,
+        modelName = fetchGeminiNanoModelName(generativeModel) ?: candidate.configName,
+        priority = priority,
+    )
 }
 
 private fun createGeminiNanoModel(candidate: GeminiNanoModelCandidate): GenerativeModel? {
@@ -581,7 +636,7 @@ private fun createGeminiNanoModel(candidate: GeminiNanoModelCandidate): Generati
             },
         )
     } catch (error: Exception) {
-        Log.w(GEMINI_NANO_MODEL_TAG, "Gemini Nanoのモデル生成に失敗: ${candidate.description}", error)
+        Log.w(GEMINI_NANO_MODEL_TAG, "Gemini Nanoのモデル生成に失敗: ${candidate.configName}", error)
         null
     }
 }
@@ -597,6 +652,17 @@ private suspend fun checkGeminiNanoStatus(generativeModel: GenerativeModel): Int
     }
 }
 
+private suspend fun fetchGeminiNanoModelName(generativeModel: GenerativeModel): String? {
+    return try {
+        generativeModel.getBaseModelName().takeIf { it.isNotBlank() }
+    } catch (error: CancellationException) {
+        throw error
+    } catch (error: Exception) {
+        Log.w(GEMINI_NANO_MODEL_TAG, "Gemini Nanoの表示モデル名を取得できなかった", error)
+        null
+    }
+}
+
 /** 値が小さいほど優先する。未対応の状態は null */
 internal fun geminiNanoStatusPriority(featureStatus: Int?): Int? = when (featureStatus) {
     FeatureStatus.AVAILABLE -> DOWNLOADED_MODEL_PRIORITY
@@ -604,13 +670,14 @@ internal fun geminiNanoStatusPriority(featureStatus: Int?): Int? = when (feature
     else -> null
 }
 
+/** [configName] は表示モデル名を取得できなかったときの代替キー */
 internal class GeminiNanoModelCandidate(
     val modelConfig: ModelConfig,
-    val description: String,
+    val configName: String,
 )
 
 /**
- * 既定の安定版を先に試し、それが載っていない端末でだけプレビュー版へ落とす。
+ * 安定版・プレビュー版と FULL・FAST の全組み合わせ。既定の安定版 FULL を先に試す。
  */
 internal val GEMINI_NANO_MODEL_CANDIDATES: List<GeminiNanoModelCandidate> = listOf(
     GeminiNanoModelCandidate(
@@ -618,21 +685,28 @@ internal val GEMINI_NANO_MODEL_CANDIDATES: List<GeminiNanoModelCandidate> = list
             releaseStage = ModelReleaseStage.STABLE
             preference = ModelPreference.FULL
         },
-        description = "stable-full",
+        configName = "stable-full",
     ),
     GeminiNanoModelCandidate(
         modelConfig = modelConfig {
             releaseStage = ModelReleaseStage.STABLE
             preference = ModelPreference.FAST
         },
-        description = "stable-fast",
+        configName = "stable-fast",
+    ),
+    GeminiNanoModelCandidate(
+        modelConfig = modelConfig {
+            releaseStage = ModelReleaseStage.PREVIEW
+            preference = ModelPreference.FULL
+        },
+        configName = "preview-full",
     ),
     GeminiNanoModelCandidate(
         modelConfig = modelConfig {
             releaseStage = ModelReleaseStage.PREVIEW
             preference = ModelPreference.FAST
         },
-        description = "preview-fast",
+        configName = "preview-fast",
     ),
 )
 
@@ -641,7 +715,7 @@ private const val DOWNLOADED_MODEL_PRIORITY = 0
 private const val UNDOWNLOADED_MODEL_PRIORITY = 1
 
 internal suspend fun isGeminiNanoAvailable(): Boolean {
-    val selectedModel = selectGeminiNanoModel() ?: return false
+    val selectedModel = selectGeminiNanoModel(preferredModelName = "") ?: return false
     selectedModel.generativeModel.close()
     return true
 }

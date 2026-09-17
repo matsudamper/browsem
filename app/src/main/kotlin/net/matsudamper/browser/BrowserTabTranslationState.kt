@@ -62,11 +62,12 @@ internal class BrowserTabTranslationState(
     private var translationJob: Job? = null
     private var activeProvider: TranslationProvider? = null
 
-    fun onTranslate(translationProvider: TranslationProvider) {
+    fun onTranslate(translationProvider: TranslationProvider, geminiNanoModelName: String) {
         when (state) {
             TranslationState.Idle -> {
                 runTranslation(
                     translationProvider,
+                    geminiNanoModelName = geminiNanoModelName,
                     fromLanguage = detectedPageLanguage,
                     toLanguage = TranslationPriorityLanguage.TO,
                 )
@@ -89,9 +90,19 @@ internal class BrowserTabTranslationState(
     }
 
     /** ステータスバーの言語ドロップダウンから再翻訳を実行する */
-    fun onRetranslate(translationProvider: TranslationProvider, fromLanguage: String?, toLanguage: String) {
+    fun onRetranslate(
+        translationProvider: TranslationProvider,
+        geminiNanoModelName: String,
+        fromLanguage: String?,
+        toLanguage: String,
+    ) {
         if (state.isInProgress) return
-        runTranslation(translationProvider, fromLanguage = fromLanguage, toLanguage = toLanguage)
+        runTranslation(
+            translationProvider,
+            geminiNanoModelName = geminiNanoModelName,
+            fromLanguage = fromLanguage,
+            toLanguage = toLanguage,
+        )
     }
 
     fun onRevert() {
@@ -124,7 +135,12 @@ internal class BrowserTabTranslationState(
         }
     }
 
-    private fun runTranslation(translationProvider: TranslationProvider, fromLanguage: String?, toLanguage: String) {
+    private fun runTranslation(
+        translationProvider: TranslationProvider,
+        geminiNanoModelName: String,
+        fromLanguage: String?,
+        toLanguage: String,
+    ) {
         translationJob?.cancel()
         stopBridgeIfActive(restoreOriginal = true)
         activeProvider = translationProvider
@@ -149,6 +165,7 @@ internal class BrowserTabTranslationState(
                     provider = translationProvider,
                     fromLanguage = fromLanguage,
                     toLanguage = toLanguage,
+                    geminiNanoModelName = geminiNanoModelName,
                     onTranslateStateChanged = { translateState ->
                         if (originalPageUrlForRevert == translationStartUrl) {
                             state = translateState.toTranslationState()
