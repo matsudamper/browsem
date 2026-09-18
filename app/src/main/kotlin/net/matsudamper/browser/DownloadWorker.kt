@@ -201,17 +201,16 @@ internal class DownloadWorker(
     }
 
     private suspend fun postCompletionNotification(fileName: String, fileUri: String, stableWorkerId: String) {
-        // 負のhashCodeによる通知ID衝突を防ぐため、非負の値に変換する
-        val positiveHash = id.hashCode() and 0x7fffffff
+        val notificationId = DownloadNotificationId.complete(id)
         val openDownloadsIntent = Intent(context, MainActivity::class.java).apply {
             action = ACTION_OPEN_DOWNLOADS
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_NEW_TASK
             putExtra(EXTRA_WORKER_ID, stableWorkerId)
-            putExtra(EXTRA_OPEN_DOWNLOADS_REQUEST_ID, "complete:$positiveHash")
+            putExtra(EXTRA_OPEN_DOWNLOADS_REQUEST_ID, "complete:$notificationId")
         }
         val pendingIntent = PendingIntent.getActivity(
             context,
-            positiveHash,
+            notificationId,
             openDownloadsIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
@@ -236,23 +235,23 @@ internal class DownloadWorker(
             }
             .build()
         val notificationManager = context.getSystemService(NotificationManager::class.java)
-        notificationManager.notify(NOTIFICATION_ID_COMPLETE_BASE + positiveHash, notification)
+        notificationManager.notify(notificationId, notification)
     }
 
     private suspend fun postFailureNotification(stableWorkerId: String, failureReason: String) {
         // フォアグラウンド通知と異なるIDを使う。
         // フォアグラウンド通知と同じIDを使うと、WorkManager がフォアグラウンドサービス停止時に
         // stopForeground(STOP_FOREGROUND_REMOVE) で同IDの通知を削除してしまうため。
-        val positiveHash = id.hashCode() and 0x7fffffff
+        val notificationId = DownloadNotificationId.failure(id)
         val openDownloadsIntent = Intent(context, MainActivity::class.java).apply {
             action = ACTION_OPEN_DOWNLOADS
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_NEW_TASK
             putExtra(EXTRA_WORKER_ID, stableWorkerId)
-            putExtra(EXTRA_OPEN_DOWNLOADS_REQUEST_ID, "failure:$positiveHash")
+            putExtra(EXTRA_OPEN_DOWNLOADS_REQUEST_ID, "failure:$notificationId")
         }
         val pendingIntent = PendingIntent.getActivity(
             context,
-            positiveHash,
+            notificationId,
             openDownloadsIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
@@ -270,7 +269,7 @@ internal class DownloadWorker(
             .setAutoCancel(true)
             .build()
         val notificationManager = context.getSystemService(NotificationManager::class.java)
-        notificationManager.notify(NOTIFICATION_ID_FAILURE_BASE + positiveHash, notification)
+        notificationManager.notify(notificationId, notification)
     }
 
     private suspend fun downloadFile(
@@ -548,15 +547,6 @@ internal class DownloadWorker(
         const val KEY_RESUME_FROM_BYTES = "resume_from_bytes"
         const val CHANNEL_ID = "download_progress_channel"
         const val NOTIFICATION_ID = 9001
-
-        /** 完了通知IDのベース。ワークIDのhashCodeを加算して使用する */
-        const val NOTIFICATION_ID_COMPLETE_BASE = 10000
-
-        /** 失敗通知IDのベース。ワークIDのhashCodeを加算して使用する */
-        const val NOTIFICATION_ID_FAILURE_BASE = 20000
-
-        /** キャンセル通知IDのベース。ワークIDのhashCodeを加算して使用する */
-        const val NOTIFICATION_ID_CANCELLED_BASE = 30000
         const val TAG_DOWNLOAD = "download"
 
         /** ダウンロード管理画面を開くためのActionキー */
