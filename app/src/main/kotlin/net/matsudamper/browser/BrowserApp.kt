@@ -248,7 +248,6 @@ internal fun BrowserAppShell(
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
 
-    // 通知タップ時にダウンロード管理画面を開く
     var pendingOpenDownloadsRequest by rememberSaveable { mutableStateOf(false) }
     var pendingHighlightWorkerId by rememberSaveable { mutableStateOf<String?>(null) }
     var pendingOpenDownloadsRequestId by rememberSaveable { mutableStateOf<String?>(null) }

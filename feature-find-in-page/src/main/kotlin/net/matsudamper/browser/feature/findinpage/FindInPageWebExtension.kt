@@ -20,13 +20,11 @@ class FindInPageWebExtension {
     private var extension: WebExtension? = null
     private val mainHandler = Handler(Looper.getMainLooper())
 
-    // セッションごとの接続ポート
     private val sessionPorts = ConcurrentHashMap<GeckoSession, WebExtension.Port>()
 
     // セッションごとの最後の search コマンド（ポート再接続時に再送するために保持）
     private val activeSearchCommands = ConcurrentHashMap<GeckoSession, JSONObject>()
 
-    // セッションごとの結果コールバック（current, total, error）
     private val sessionCallbacks =
         ConcurrentHashMap<GeckoSession, (current: Int, total: Int, error: String?) -> Unit>()
 

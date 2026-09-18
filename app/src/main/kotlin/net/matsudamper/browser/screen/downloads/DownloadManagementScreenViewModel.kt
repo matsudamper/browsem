@@ -253,7 +253,6 @@ internal class DownloadManagementScreenViewModel(
         return DownloadManagementScreenUiState.DownloadItem(
             id = workerId,
             fileName = fileName.ifEmpty {
-                // FAILEDかつファイル名未取得の場合は失敗を明示する
                 if (status == DownloadRecordStatus.FAILED) "ダウンロード失敗" else "ダウンロード中..."
             },
             status = uiStatus,

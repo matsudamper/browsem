@@ -152,7 +152,6 @@ internal class BrowserTabTranslationState(
         stopBridgeIfActive(restoreOriginal = true)
         activeProvider = translationProvider
         translationJob = coroutineScope.launch {
-            // 初回翻訳時のみ元URLを保存する
             if (originalPageUrlForRevert == null) {
                 originalPageUrlForRevert = currentPageUrl()
             }

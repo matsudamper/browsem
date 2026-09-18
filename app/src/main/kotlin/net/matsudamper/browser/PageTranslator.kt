@@ -36,7 +36,6 @@ internal class PageTranslator(
             TranslationProvider.TRANSLATION_PROVIDER_GECKO,
             TranslationProvider.UNRECOGNIZED,
             -> {
-                // 言語不明の場合はHTMLのlang属性にフォールバック、それでも不明なら優先翻訳元言語を使用
                 val rawFromLang = fromLanguage ?: fetchHtmlLang()
                 val resolvedFromLang = if (rawFromLang.isNullOrBlank() || rawFromLang == "und") {
                     TranslationPriorityLanguage.FROM
@@ -120,10 +119,8 @@ internal fun resolveTranslationLanguagePair(
 ): Pair<String, String> {
     if (fromLanguage == toLanguage) {
         return if (toLanguage == TranslationPriorityLanguage.FROM) {
-            // 翻訳先が優先翻訳元言語と同じ場合は翻訳先を優先翻訳先言語に切り替える
             fromLanguage to TranslationPriorityLanguage.TO
         } else {
-            // それ以外の場合は翻訳元を優先翻訳元言語に切り替える
             TranslationPriorityLanguage.FROM to toLanguage
         }
     }

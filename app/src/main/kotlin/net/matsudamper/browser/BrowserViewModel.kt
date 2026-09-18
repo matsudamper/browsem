@@ -241,7 +241,6 @@ internal class BrowserViewModel(
         )
     }
 
-    // 外部タブを開く直前に選択されていたタブ ID を記憶するマップ
     private val externalTabPreviousTabs = mutableMapOf<String, String?>()
     private val externalTabInitialUrlByTabId = mutableMapOf<String, String>()
     private val externalTabIdsFlow = MutableStateFlow<Set<String>>(emptySet())

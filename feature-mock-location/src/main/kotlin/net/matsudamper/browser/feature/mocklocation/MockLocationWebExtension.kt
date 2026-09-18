@@ -19,7 +19,6 @@ import org.mozilla.geckoview.WebExtension
 class MockLocationWebExtension {
     private var extension: WebExtension? = null
 
-    // 現在の位置情報設定
     @Volatile private var currentConfig: GeolocationConfig = GeolocationConfig(
         latitude = DEFAULT_LATITUDE,
         longitude = DEFAULT_LONGITUDE,
@@ -173,10 +172,8 @@ class MockLocationWebExtension {
 
     /** サイトごとの位置情報の扱い */
     enum class GeolocationMode(val jsonValue: String) {
-        // モック座標を返す
         MOCK("mock"),
 
-        // 位置情報の取得を拒否する
         DENY("deny"),
 
         // 実際の位置情報を返す（Gecko 本体の geolocation へ委譲）

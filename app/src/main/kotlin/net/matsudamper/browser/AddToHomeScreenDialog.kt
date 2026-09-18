@@ -165,7 +165,6 @@ private fun Bitmap.toOpaqueSquareIcon(): Bitmap {
     val squared = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
     val canvas = Canvas(squared)
     canvas.drawColor(Color.WHITE)
-    // 元画像を中央に配置する
     val left = (size - width) / 2f
     val top = (size - height) / 2f
     canvas.drawBitmap(this, left, top, null)

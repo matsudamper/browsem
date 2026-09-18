@@ -121,7 +121,6 @@ class TabRepository(context: Context) {
     }
 
     suspend fun updateSessionState(tabId: String, sessionState: String) {
-        // sessionState は DB ではなくファイルに保存する
         writeSessionState(tabId, sessionState)
     }
 

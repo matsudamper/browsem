@@ -262,7 +262,6 @@ internal class SettingsScreenViewModel(
                 ) { settings, state ->
                     settings to state
                 }.collectLatest { (settings, state) ->
-                    // 初回だけ入力欄をリポジトリの値で初期化する
                     if (!mockLocationInputInitialized) {
                         viewModelStateFlow.update {
                             it.copy(

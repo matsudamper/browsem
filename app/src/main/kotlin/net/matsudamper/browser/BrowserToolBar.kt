@@ -243,7 +243,6 @@ internal class BrowserToolBarGestureState(
             )
         }
         .pointerInput(isFocused) {
-            // 非フォーカス時のみ下スワイプでタブ一覧を開く
             if (isFocused) return@pointerInput
             detectDownSwipe(
                 density = this,
@@ -307,33 +306,23 @@ internal fun BrowserToolbar(
             .then(gestureState?.modifier ?: Modifier),
     ) {
         BoxWithConstraints {
-            // URLバーの最小幅
             val minUrlBarWidth = 150.dp
-            // IconButtonのデフォルトサイズ
             val iconButtonWidth = 48.dp
-            // タブカウントボタンの幅（表示時）
             val tabCountWidth = if (showTabButton && !isFocused) iconButtonWidth else 0.dp
             // メニューボタンは常に表示
             val menuWidth = iconButtonWidth
-            // URLバーSurfaceの左右パディング分
             val urlBarPaddingWidth = 8.dp
-            // 固定要素とURLバー最小幅を除いた余裕幅
             var extraWidth = maxWidth - tabCountWidth - menuWidth - minUrlBarWidth - urlBarPaddingWidth
 
-            // 幅の余裕に応じて以下の順でアイコンを追加する
-            // 1. 翻訳ボタン（タブ数の右側）
             val showTranslate = !isFocused && extraWidth >= iconButtonWidth
             if (showTranslate) extraWidth -= iconButtonWidth
 
-            // 2. 進むボタン（URLバーの左側）
             val showForward = !isFocused && extraWidth >= iconButtonWidth
             if (showForward) extraWidth -= iconButtonWidth
 
-            // 3. 戻るボタン（進むボタンの左側）
             val showBack = !isFocused && extraWidth >= iconButtonWidth
             if (showBack) extraWidth -= iconButtonWidth
 
-            // 4. 更新ボタン（進むボタンの右側）
             val showRefresh = !isFocused && extraWidth >= iconButtonWidth
 
             Row(
@@ -356,7 +345,6 @@ internal fun BrowserToolbar(
                     .height(IntrinsicSize.Min),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                // 戻るボタン（進むボタンの左側）: 短押しで戻る、長押しでタブ履歴BottomSheetを表示
                 if (showBack) {
                     Box(
                         modifier = Modifier
@@ -383,7 +371,6 @@ internal fun BrowserToolbar(
                     }
                 }
 
-                // 進むボタン（URLバーの左側）: 短押しで進む、長押しでタブ履歴BottomSheetを表示
                 if (showForward) {
                     Box(
                         modifier = Modifier
@@ -410,7 +397,6 @@ internal fun BrowserToolbar(
                     }
                 }
 
-                // 更新ボタン（進むボタンの右側）: ロード中は停止、通常時は短押しで更新・長押しでスーパーリフレッシュ
                 if (showRefresh) {
                     Box(
                         modifier = Modifier
@@ -454,7 +440,6 @@ internal fun BrowserToolbar(
                         bottom = 4.dp,
                     )
                     if (isFocused) {
-                        // 編集モード: テキスト入力フィールド + クリアボタン
                         Row(
                             modifier = Modifier
                                 .testTag(BrowserToolbarTestTags.Url(urlInputState.value).testTag)
@@ -495,7 +480,6 @@ internal fun BrowserToolbar(
                             }
                         }
                     } else {
-                        // 表示モード: URL を表示するだけ。タップで編集モードへ、ロングプレスでURLコピー。
                         // UrlBar の testTag は UrlDisplay 内部で付与するため、ここでは付けない
                         // （同一ノードに testTag を二重付与すると外側が優先され UrlBar が消えてしまう）。
                         UrlDisplay(
@@ -527,7 +511,6 @@ internal fun BrowserToolbar(
                             onOpenTabs = onOpenTabs,
                         )
                     }
-                    // 翻訳ボタン（タブ数の右側）
                     if (showTranslate) {
                         IconButton(
                             modifier = Modifier.testTag(BrowserToolbarTestTags.TranslateButton.testTag),

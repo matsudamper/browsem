@@ -122,7 +122,6 @@ internal fun TranslationStatusBar(
                             color = MaterialTheme.colorScheme.onSecondaryContainer,
                             modifier = Modifier.padding(vertical = 8.dp),
                         )
-                        // 翻訳元言語ドロップダウン
                         LanguageDropdownButton(
                             languageTag = fromLanguage,
                             options = fromLanguageOptions,
@@ -134,7 +133,6 @@ internal fun TranslationStatusBar(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSecondaryContainer,
                         )
-                        // 翻訳先言語ドロップダウン
                         LanguageDropdownButton(
                             languageTag = toLanguage,
                             options = toLanguageOptions,
@@ -171,7 +169,6 @@ internal fun TranslationStatusBar(
                     TranslationState.Idle -> {}
                 }
 
-                // 右端のアクションボタン
                 when (state) {
                     TranslationState.Translated -> {
                         TextButton(onClick = onRevert) {

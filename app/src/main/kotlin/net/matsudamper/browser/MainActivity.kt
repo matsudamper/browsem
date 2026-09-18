@@ -553,7 +553,6 @@ class MainActivity : ComponentActivity() {
         // ビルトイン拡張機能 (ThemeColor/Media/FindInPage/MockLocation) は session-level の
         // MessageDelegate で完結する設計のため runtime-level delegate は不要。
         if (extension.isBuiltIn) return
-        // browserAction/pageAction を受け取り、ツールバーメニューへアイコンとして並べる
         webExtensionActionController.attachExtension(extension)
         extension.setTabDelegate(
             object : WebExtension.TabDelegate {

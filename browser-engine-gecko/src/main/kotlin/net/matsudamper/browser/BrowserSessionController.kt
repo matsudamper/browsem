@@ -109,7 +109,6 @@ class BrowserSessionLifecycleController(
      */
     fun performInitialLoadIfPending(tab: BrowserTab) {
         if (!tab.pendingInitialLoad) return
-        // サイズ確定待ちの間にタブが閉じられた場合は何もしない
         if (!tab.session.isOpen) return
         tab.pendingInitialLoad = false
         val urlToLoad = tab.currentUrl.ifBlank { "about:blank" }

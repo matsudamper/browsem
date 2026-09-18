@@ -28,10 +28,8 @@ class DevToolsWebExtension {
     private val nextEntryId = AtomicLong(0)
     private val nextRequestId = AtomicLong(0)
 
-    // セッションごとの接続ポート
     private val sessionPorts = ConcurrentHashMap<GeckoSession, WebExtension.Port>()
 
-    // セッションごとのフォーカス情報コールバック
     private val sessionCallbacks =
         ConcurrentHashMap<GeckoSession, (FocusedInputInfo?) -> Unit>()
 

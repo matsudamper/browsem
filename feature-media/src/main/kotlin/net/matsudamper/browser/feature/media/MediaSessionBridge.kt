@@ -14,12 +14,10 @@ import org.mozilla.geckoview.MediaSession
  */
 object MediaSessionBridge {
 
-    // 現在アクティブなGeckoView MediaSessionの参照
     var activeGeckoMediaSession: MediaSession? = null
 
     private val _playbackState = MutableStateFlow(MediaPlaybackState())
 
-    // サービスが監視するメディア状態
     val playbackState: StateFlow<MediaPlaybackState> = _playbackState.asStateFlow()
 
     fun activate() {
@@ -73,7 +71,6 @@ object MediaSessionBridge {
         _playbackState.value = _playbackState.value.copy(features = features)
     }
 
-    // サービスからGeckoViewへの制御メソッド
     fun play() {
         Log.d(TAG, "play: hasMediaSession=${activeGeckoMediaSession != null}")
         MediaTraceLog.d("BRIDGE command play hasMediaSession=${activeGeckoMediaSession != null}")
@@ -105,7 +102,6 @@ object MediaSessionBridge {
     private const val TAG = "MediaSessionBridge"
 }
 
-// メディア再生状態を保持するデータクラス
 data class MediaPlaybackState(
     val isActive: Boolean = false,
     val isPlaying: Boolean = false,

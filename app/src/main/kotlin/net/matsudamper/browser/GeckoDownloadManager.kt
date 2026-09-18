@@ -211,7 +211,6 @@ internal class GeckoDownloadManager(
             put(DownloadWorker.KEY_REFERRER_URL, referrerUrl)
             put(DownloadWorker.KEY_NOTIFICATION_ID, notificationId)
             put(DownloadWorker.KEY_STABLE_WORKER_ID, workerId)
-            // 部分ファイルがある場合のみRange再開モードで起動する
             if (partialFileUri != null) {
                 put(DownloadWorker.KEY_PARTIAL_FILE_URI, partialFileUri)
                 put(DownloadWorker.KEY_RESUME_FROM_BYTES, totalRead)

@@ -249,7 +249,6 @@ private fun ToolbarMenuContent(
             horizontalArrangement = Arrangement.SpaceEvenly,
         ) {
             Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                // 短押しで戻る、長押しでタブ履歴BottomSheetを表示
                 androidx.compose.foundation.layout.Box(
                     modifier = Modifier
                         .combinedClickable(
@@ -287,7 +286,6 @@ private fun ToolbarMenuContent(
                 MenuColumnLabel(text = "戻る")
             }
             Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                // 短押しで進む、長押しでタブ履歴BottomSheetを表示
                 androidx.compose.foundation.layout.Box(
                     modifier = Modifier
                         .combinedClickable(
@@ -325,7 +323,6 @@ private fun ToolbarMenuContent(
                 MenuColumnLabel(text = "進む")
             }
             Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                // ロード中は停止、通常時は短押しで更新・長押しでスーパーリフレッシュ
                 androidx.compose.foundation.layout.Box(
                     modifier = Modifier
                         .testTag(BrowserToolbarMenuTestTags.RefreshButton.testTag)
@@ -371,7 +368,6 @@ private fun ToolbarMenuContent(
                 MenuColumnLabel(text = if (isPageLoading) "停止" else "更新")
             }
         }
-        // 二段目: ホーム・共有・サイトの設定を一段目と同じ間隔で表示
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -432,7 +428,6 @@ private fun ToolbarMenuContent(
             }
         }
         HorizontalDivider()
-        // ページズームコントロール行（viewport width 操作でテキスト・画像含め全体をズーム）
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -474,7 +469,6 @@ private fun ToolbarMenuContent(
                 }
             }
         }
-        // このタブに対して有効な拡張機能のアイコン行。短押しでポップアップ、長押しで並び替え
         if (extensionActions.isNotEmpty() && extensionActionScrollState != null) {
             HorizontalDivider()
             ExtensionActionRow(

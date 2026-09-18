@@ -99,11 +99,9 @@ internal class FindInPageState(
         queryError = null
         if (query.isEmpty()) return
         if (newMode == FindInPageMode.Regex) {
-            // 通常 → 正規表現: finder をクリアして拡張機能で再検索
             session().finder.clear()
             findInPageWebExtension.search(session(), query, isRegex = true)
         } else {
-            // 正規表現 → 通常: 拡張機能をクリアして finder で再検索
             findInPageWebExtension.clear(session())
             findWithFinder(query, 0)
         }

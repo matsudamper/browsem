@@ -90,7 +90,6 @@ class DownloadRepository(context: Context) {
                 ),
             )
         }
-        // ENQUEUEDからRUNNINGへの状態遷移（既にRUNNINGの場合は何もしない）
         dao.updateEnqueuedToRunning(workerId)
     }
 

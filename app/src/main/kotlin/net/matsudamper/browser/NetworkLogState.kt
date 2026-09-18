@@ -64,7 +64,6 @@ internal fun rememberNetworkLogUiState(
     val tabIds by extension.sessionTabIds.collectAsState()
     val tabId = tabIds[session]
 
-    // 詳細を開いた時と再取得を押した時にプレビューを読み込む
     LaunchedEffect(holder, holder.selectedId, holder.previewReloadCount) {
         holder.loadPreview()
     }
@@ -121,7 +120,6 @@ internal class NetworkLogStateHolder(
     // 一覧に表示しているログ。サムネイルの取得対象を可視範囲から求めるために保持する
     private var shownEntries: List<NetworkLogEntry> = emptyList()
 
-    // サムネイルを出すかどうか（画像フィルタ選択中のみ true）
     private var showsThumbnail: Boolean = false
 
     // 一覧で見えている範囲。前後の余白を含めてサムネイルを先読みする
@@ -198,7 +196,6 @@ internal class NetworkLogStateHolder(
         val detail = selectedId
             ?.let { id -> tabEntries.firstOrNull { it.requestId == id } }
             ?.toDetail()
-        // サムネイルは画像フィルタを選んでいるときだけ出す
         val shown = filtered.asReversed()
         showsThumbnail = filter == NetworkLogUiState.ResourceFilter.Image
         shownEntries = shown

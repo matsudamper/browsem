@@ -150,7 +150,6 @@ class BrowserTab(
     // ロード状態を維持し、再接続時に停止ボタンを正しく表示するために使う。
     var isPageLoading: Boolean = false
 
-    // 未オープンタブのセッション復元情報を保持
     internal var pendingSessionState: String? by mutableStateOf(null)
 
     // onNewSession 経由で作成されたタブの初回ナビゲーション完了までの目印。

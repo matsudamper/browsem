@@ -44,7 +44,6 @@ internal fun DevToolsDialog(
         title = { Text("開発者ツール") },
         text = {
             Column {
-                // 押すとフォーカス中のinput idをコピーする
                 ListItem(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -60,7 +59,6 @@ internal fun DevToolsDialog(
                         )
                     },
                 )
-                // 押すとページが行った通信の一覧を開く
                 ListItem(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -69,7 +67,6 @@ internal fun DevToolsDialog(
                     colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                     headlineContent = { Text("ネットワークログ") },
                 )
-                // 押すとページの console 出力の確認と JavaScript の実行を行う画面を開く
                 ListItem(
                     modifier = Modifier
                         .fillMaxWidth()

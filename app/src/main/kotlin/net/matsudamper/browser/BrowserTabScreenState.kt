@@ -147,10 +147,8 @@ internal class BrowserTabScreenState(
     var onHistoryRecord: (suspend (url: String, title: String) -> Long)? = null,
     var onHistoryTitleUpdate: (suspend (id: Long, title: String) -> Unit)? = null,
 ) : BrowserSessionStateCallbacks {
-    // 現在のページの履歴エントリID（タイトル更新に使用）
     private var currentHistoryEntryId: Long? = null
 
-    // 履歴レコード作成前に届いたタイトルを一時保持する
     private var pendingHistoryTitle: String? = null
 
     // 遅延して返る履歴レコードIDが古い遷移に紐づくものかを判定する
@@ -218,14 +216,11 @@ internal class BrowserTabScreenState(
     var showDevTools by mutableStateOf(false)
         private set
 
-    // 現在フォーカスされている入力要素の情報。フォーカスがない場合は null。
     var devToolsFocusedInput by mutableStateOf<DevToolsWebExtension.FocusedInputInfo?>(null)
 
-    // ネットワークログ画面を表示中かどうか
     var showNetworkLog by mutableStateOf(false)
         private set
 
-    // コンソール画面を表示中かどうか
     var showDevToolsConsole by mutableStateOf(false)
         private set
 
@@ -389,7 +384,6 @@ internal class BrowserTabScreenState(
     var visualViewportScale by mutableFloatStateOf(1f)
     var isRefreshing by mutableStateOf(false)
 
-    // フルページロード中かどうか。更新ボタンを停止ボタンに切り替えるために使用する。
     var isPageLoading by mutableStateOf(browserTab.isPageLoading)
 
     // BrowserTab.scrollY に委譲することで、タブ切替で State が再生成されても
@@ -494,7 +488,6 @@ internal class BrowserTabScreenState(
     }
 
     fun onSuperRefresh() {
-        // キャッシュをバイパスしてリロード（スーパーリフレッシュ）
         superRefreshCurrentPage()
     }
 
@@ -614,7 +607,6 @@ internal class BrowserTabScreenState(
         injectViewportZoom(pageZoomPercent)
     }
 
-    // viewport meta を書き換えてページ全体のズームを適用する
     private fun injectViewportZoom(percent: Int) {
         val screenWidthDp = (context.resources.displayMetrics.widthPixels / context.resources.displayMetrics.density).toInt()
         val viewportContent = viewportContentForPageZoom(screenWidthDp, percent)
@@ -957,8 +949,6 @@ internal class BrowserTabScreenState(
             urlInput = url
         }
         translation.onLocationChange(url, isFullPageLoad = wasFullPageLoad)
-        // 履歴を記録（about:blank や data: URL は除外）
-        // goBack / goForward 時はカウンタをデクリメントしてスキップする
         val shouldRecord = url.isNotBlank() && !url.startsWith("about:") && !url.startsWith("data:")
         val skip = skipHistoryRecordCount > 0
         if (skip) skipHistoryRecordCount--
@@ -1072,7 +1062,6 @@ internal class BrowserTabScreenState(
         // ロード中のキャプチャは古いページの画像となり問題ない。
         // 一方、ロードが完了せずに外部アプリ遷移・ダウンロード判定・onLoadRequest DENY 等で
         // onPageStop が発火しないケースで flag が false のまま固まる問題を回避する。
-        // 新しいページへの遷移時にfaviconをリセット
         browserTab.faviconBitmap = null
         webAppManifestJson = null
         isFullPageLoadPending = true
@@ -1409,7 +1398,6 @@ internal class BrowserTabScreenState(
     }
 
     private fun superRefreshCurrentPage() {
-        // キャッシュを完全にバイパスして再読み込みする
         val retryUrl = pageLoadError?.failingUrl?.takeIf { it.isNotBlank() }
         clearPageLoadError()
         if (retryUrl != null) {

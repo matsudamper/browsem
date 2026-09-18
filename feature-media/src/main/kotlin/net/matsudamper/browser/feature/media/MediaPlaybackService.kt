@@ -96,7 +96,6 @@ class MediaPlaybackService : MediaSessionService() {
             addSession(session)
         }
 
-        // Bridge状態を監視してPlayerの状態を更新
         serviceScope.launch {
             MediaSessionBridge.playbackState.collectLatest { state ->
                 Log.d(TAG, "bridge state: isActive=${state.isActive}, isPlaying=${state.isPlaying}, title=${state.title}")
@@ -287,7 +286,6 @@ private class GeckoMediaPlayer : SimpleBasePlayer(Looper.getMainLooper()) {
             }
 
             else -> {
-                // 秒単位に変換してGeckoViewに渡す
                 MediaSessionBridge.seekTo(positionMs / 1000.0)
             }
         }

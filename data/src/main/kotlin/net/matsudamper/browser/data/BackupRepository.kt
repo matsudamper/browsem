@@ -320,7 +320,6 @@ class BackupRepository(private val context: Context) {
      */
     private fun swapMozillaProfile(staging: File, target: File) {
         val backup = File(target.parentFile, "$MOZILLA_DIR_NAME.old").apply {
-            // 前回失敗時に残ったゴミがあれば先に消す
             deleteRecursively()
         }
         val targetExisted = target.exists()
@@ -333,7 +332,6 @@ class BackupRepository(private val context: Context) {
         val moved = try {
             staging.renameTo(target)
         } catch (t: Throwable) {
-            // 退避を戻して復元前の状態に近づける
             if (targetExisted) backup.renameTo(target)
             throw t
         }
@@ -443,11 +441,8 @@ class BackupRepository(private val context: Context) {
         val relative = absolute.substring(rootPath.length + 1)
         val segments = relative.split(File.separatorChar)
         val name = segments.last().lowercase()
-        // ディレクトリ名がブラックリスト一致 (どのセグメントでも)
         if (segments.any { it.lowercase() in MOZILLA_EXCLUDED_DIRS }) return true
-        // ファイル名が完全一致
         if (name in MOZILLA_EXCLUDED_FILE_NAMES) return true
-        // 拡張子ベースの除外
         return MOZILLA_EXCLUDED_SUFFIXES.any { name.endsWith(it) }
     }
 

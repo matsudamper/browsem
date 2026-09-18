@@ -104,7 +104,6 @@ internal fun UrlTextInput(
                         }
                     }
 
-                    // カーソルが画面外に出た場合に追従してスクロール
                     LaunchedEffect(textFieldValue.selection, textLayoutResult) {
                         if (!resolvedScrollEnabled) return@LaunchedEffect
                         val layout = textLayoutResult ?: return@LaunchedEffect
@@ -118,7 +117,6 @@ internal fun UrlTextInput(
                             layoutTextLength = layout.layoutInput.text.length,
                         )
                         val cursorRect = layout.getCursorRect(offset)
-                        // viewportWidth = コンテンツ幅 - 最大スクロール量
                         val viewportWidth = layout.size.width - scrollState.maxValue
                         val currentScroll = scrollState.value
                         val targetScroll = when {

@@ -318,7 +318,6 @@ fun createGeckoSessionDelegateBundle(
             }
 
             override fun onPageStart(session: GeckoSession, url: String) {
-                // 新しいページでは前ページの証明書情報を持ち越さない
                 browserTab.securityInfo = null
                 callbacks.onPageStart(url)
             }
@@ -468,7 +467,6 @@ internal class BrowserTabSessionDelegateHost(
             }
 
             override fun onPageStart(url: String) {
-                // 新しいページでは前ページの manifest を持ち越さない
                 synchronized(lock) {
                     cachedWebAppManifest = null
                     cachedIsPageLoading = true
@@ -665,7 +663,6 @@ internal class BrowserTabSessionDelegateHost(
         callbacks.onCanGoBackChanged(canGoBack)
         callbacks.onCanGoForwardChanged(canGoForward)
         callbacks.onPageLoadingChanged(isPageLoading)
-        // タブ内ナビゲーション履歴も同様にリプレイする
         if (historyItems.isNotEmpty()) {
             callbacks.onHistoryStateChange(historyItems, historyCurrentIndex)
         }
