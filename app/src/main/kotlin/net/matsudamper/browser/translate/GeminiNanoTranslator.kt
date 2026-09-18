@@ -19,6 +19,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import com.google.mlkit.genai.common.DownloadStatus
 import com.google.mlkit.genai.common.FeatureStatus
 import com.google.mlkit.genai.prompt.Candidate
@@ -502,11 +503,13 @@ private class GeminiNanoInference(
             generateContentRequest(TextPart(instruction + "\n\n" + input), configure)
         }
         val typedRequest = generateTypedContentRequest(request, GeminiNanoTranslatedSegments::class)
+        // withTimeout の TimeoutCancellationException は CancellationException として伝播し、
+        // 呼び出し元の継続翻訳まで止めてしまうため、期限切れは失敗として 1 件ずつの経路へ戻す
         val response = inferenceMutex.withLock {
-            withTimeout(GENERATION_TIMEOUT_MS) {
+            withTimeoutOrNull(GENERATION_TIMEOUT_MS) {
                 generativeModel.generateContent(typedRequest)
             }
-        }
+        } ?: return null
         val candidate = response.candidates.firstOrNull() ?: return null
         if (candidate.finishReason == TypedCandidate.TypedFinishReason.MAX_TOKENS) return null
         val translatedSegments = candidate.response ?: return null
