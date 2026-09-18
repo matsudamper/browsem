@@ -3,7 +3,6 @@ package net.matsudamper.browser.translate
 import android.os.SystemClock
 import android.util.Log
 import java.util.Locale
-import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -46,6 +45,7 @@ class GeminiNanoTranslator(
     private val toLanguage: String,
     private val modelKey: String,
     private val pageTranslationWebExtension: PageTranslationWebExtension,
+    private val pageTranslationCache: PageTranslationCache,
     private val crashLogRepository: CrashLogRepository,
     private val onTranslateStateChanged: (Translator.TranslateState) -> Unit,
     private val onTranslateProgressChanged: (TranslationProgress) -> Unit,
@@ -111,7 +111,11 @@ class GeminiNanoTranslator(
 
                 currentStage = STAGE_INITIAL
                 onTranslateStateChanged(Translator.TranslateState.TRANSLATING)
-                val translationCache = ConcurrentHashMap<String, String>()
+                val translationCache = pageTranslationCache.forTranslator(
+                    translatorKey = "$CACHE_TRANSLATOR_KEY_PREFIX$currentModelKey",
+                    sourceLanguage = sourceLanguage,
+                    targetLanguage = targetLanguage,
+                )
                 totalSegmentCount.set(translatableSegments.size)
                 notifyProgress()
                 val initialSegments = translatableSegments.take(INITIAL_APPLY_SEGMENT_COUNT)
@@ -170,7 +174,7 @@ class GeminiNanoTranslator(
         inference: GeminiNanoInference,
         documentId: String,
         segments: List<PageTranslationWebExtension.Segment>,
-        translationCache: ConcurrentHashMap<String, String>,
+        translationCache: PageTranslationCache.LanguagePairCache,
         awaitDomApply: Boolean,
     ): PageTranslationWebExtension.ApplyResult {
         var documentMatched = true
@@ -179,9 +183,7 @@ class GeminiNanoTranslator(
         for (batch in segments.chunked(APPLY_BATCH_SIZE)) {
             val translations = batch.map { segment ->
                 val translatedText = translationCache[segment.text]
-                    ?: inference.translateTextOrKeepSource(segment.text).also { translated ->
-                        translationCache[segment.text] = translated
-                    }
+                    ?: translateAndCache(inference, translationCache, segment.text)
                 translatedSegmentCount.incrementAndGet()
                 notifyProgress()
                 PageTranslationWebExtension.TranslationResult(
@@ -218,6 +220,17 @@ class GeminiNanoTranslator(
         )
     }
 
+    /** 失敗時は原文を表示するが、再翻訳で推論をやり直せるようキャッシュには残さない */
+    private suspend fun translateAndCache(
+        inference: GeminiNanoInference,
+        translationCache: PageTranslationCache.LanguagePairCache,
+        text: String,
+    ): String {
+        val translatedText = inference.translateTextOrNull(text) ?: return text
+        translationCache[text] = translatedText
+        return translatedText
+    }
+
     /**
      * 反映件数が0でも、ページ側が書き換えたノードは継続翻訳で訳し直されるため失敗にしない。
      */
@@ -240,7 +253,7 @@ class GeminiNanoTranslator(
         inference: GeminiNanoInference,
         documentId: String,
         remainingSegments: List<PageTranslationWebExtension.Segment>,
-        translationCache: ConcurrentHashMap<String, String>,
+        translationCache: PageTranslationCache.LanguagePairCache,
     ): Boolean {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         val queue = Channel<List<PageTranslationWebExtension.Segment>>(
@@ -329,6 +342,9 @@ class GeminiNanoTranslator(
 
     companion object {
         private const val TAG = "GeminiNanoTranslator"
+
+        /** 実際に選ばれたモデルを含め、モデルを切り替えたら別のキャッシュになるようにする */
+        private const val CACHE_TRANSLATOR_KEY_PREFIX = "gemini-nano/"
         private const val UNDETERMINED_LANGUAGE = "und"
         private const val LANGUAGE_DETECTION_LIMIT = 2_000
 
@@ -404,15 +420,15 @@ private class GeminiNanoInference(
         return joinTranslatedChunks(chunks, translatedChunks)
     }
 
-    /** 原文のままにしたい場合に、翻訳失敗を呼び出し元へ伝えずに済ませる */
-    suspend fun translateTextOrKeepSource(text: String): String {
+    /** 翻訳失敗を呼び出し元へ伝えず、原文のまま表示する判断を任せる */
+    suspend fun translateTextOrNull(text: String): String? {
         return try {
             translateText(text)
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {
             Log.w(TAG, "Gemini Nanoの翻訳に失敗したため原文を維持する", error)
-            text
+            null
         }
     }
 
