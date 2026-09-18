@@ -11,7 +11,9 @@ import androidx.work.await
 import androidx.work.workDataOf
 import java.util.UUID
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import net.matsudamper.browser.data.download.DownloadRepository
 import net.matsudamper.browser.download.PendingDownloadBodyStore
 import net.matsudamper.browser.download.enqueueDownloadWithStartingNotification
@@ -137,8 +139,12 @@ internal class GeckoDownloadManager(
                     )
                     WorkManager.getInstance(context).enqueue(workRequest).await()
                 } catch (e: Throwable) {
-                    PendingDownloadBodyStore.discard(workId.toString())
-                    downloadRepository.updateCancelled(workRequest.id.toString())
+                    // キャンセル済みのコルーチンでは Room の suspend クエリが即座に中断され、
+                    // レコードが ENQUEUED のまま残るため NonCancellable で後始末する
+                    withContext(NonCancellable) {
+                        PendingDownloadBodyStore.discard(workId.toString())
+                        downloadRepository.updateCancelled(workRequest.id.toString())
+                    }
                     throw e
                 }
             },
@@ -240,7 +246,14 @@ internal class GeckoDownloadManager(
                 enqueue = {
                     // 既存レコードを新しいワーカーIDへ付け替えてENQUEUEDに戻す（削除・再作成しない）
                     downloadRepository.updateResumed(workerId = workerId, newWorkerId = newWorkId.toString())
-                    WorkManager.getInstance(context).enqueue(workRequest)
+                    try {
+                        WorkManager.getInstance(context).enqueue(workRequest).await()
+                    } catch (e: Throwable) {
+                        withContext(NonCancellable) {
+                            downloadRepository.updateCancelled(newWorkId.toString())
+                        }
+                        throw e
+                    }
                 },
                 dismissStartingNotification = { notificationManager.cancel(notificationId) },
             )
