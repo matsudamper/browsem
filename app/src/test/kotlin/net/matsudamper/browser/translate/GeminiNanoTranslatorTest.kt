@@ -100,6 +100,7 @@ class GeminiNanoTranslatorTest {
         assertEquals("Gemini Nano 4 Full", toGeminiNanoModelLabel("nano-v4-full"))
         assertEquals("Gemini Nano 3 Fast", toGeminiNanoModelLabel("nano-v3-fast"))
         assertEquals("Gemini Nano 3 Full", toGeminiNanoModelLabel("nano-v3-full"))
+        assertEquals("Gemini Nano 2", toGeminiNanoModelLabel("nano-v2"))
     }
 
     @Test

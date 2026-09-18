@@ -571,11 +571,12 @@ internal fun toGeminiNanoModelLabel(modelName: String): String {
     val withoutRuntimeNote = modelName.substringBefore('[').trim().ifBlank { modelName }
     val rawIdMatch = GEMINI_NANO_RAW_MODEL_ID_REGEX.matchEntire(withoutRuntimeNote) ?: return withoutRuntimeNote
     val (generation, size) = rawIdMatch.destructured
-    return "Gemini Nano $generation ${size.replaceFirstChar { it.uppercase() }}"
+    val label = "Gemini Nano $generation"
+    return if (size.isEmpty()) label else "$label ${size.replaceFirstChar { it.uppercase() }}"
 }
 
 private val GEMINI_NANO_RAW_MODEL_ID_REGEX = Regex(
-    "nano-v(\\d+)-(fast|full)",
+    "nano-v(\\d+)(?:-(fast|full))?",
     RegexOption.IGNORE_CASE,
 )
 
