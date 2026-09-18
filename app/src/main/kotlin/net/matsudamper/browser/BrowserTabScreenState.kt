@@ -147,10 +147,8 @@ internal class BrowserTabScreenState(
     var onHistoryRecord: (suspend (url: String, title: String) -> Long)? = null,
     var onHistoryTitleUpdate: (suspend (id: Long, title: String) -> Unit)? = null,
 ) : BrowserSessionStateCallbacks {
-    // 現在のページの履歴エントリID（タイトル更新に使用）
     private var currentHistoryEntryId: Long? = null
 
-    // 履歴レコード作成前に届いたタイトルを一時保持する
     private var pendingHistoryTitle: String? = null
 
     // 遅延して返る履歴レコードIDが古い遷移に紐づくものかを判定する
@@ -161,7 +159,6 @@ internal class BrowserTabScreenState(
     var onWebAppCrossDomainNavigation by mutableStateOf(onWebAppCrossDomainNavigation)
     val session: GeckoSession get() = browserTab.session
 
-    // --- URL / Navigation state ---
     var urlInput by mutableStateOf(browserTab.currentUrl)
     var currentPageUrl by mutableStateOf(browserTab.currentUrl)
     var currentPageTitle by mutableStateOf(browserTab.title)
@@ -169,7 +166,6 @@ internal class BrowserTabScreenState(
     var canGoForward by mutableStateOf(false)
     var isUrlInputFocused by mutableStateOf(false)
 
-    // --- Display state ---
     var isPcMode by mutableStateOf(false)
 
     // BrowserTab.themeColor に委譲することで、変更が自動的に永続化対象になる
@@ -189,13 +185,11 @@ internal class BrowserTabScreenState(
     private val mainHandler = Handler(Looper.getMainLooper())
     var webAppManifestJson by mutableStateOf<String?>(null)
 
-    // --- タブ内ナビゲーション履歴（GeckoView の HistoryDelegate から同期） ---
     var tabHistoryItems by mutableStateOf<List<TabHistoryItem>>(emptyList())
     var tabHistoryCurrentIndex by mutableStateOf(-1)
 
     data class TabHistoryItem(val uri: String, val title: String)
 
-    // --- Translation state（分離済み） ---
     val translation = BrowserTabTranslationState(
         coroutineScope = coroutineScope,
         pageTranslationWebExtension = pageTranslationWebExtension,
@@ -208,31 +202,24 @@ internal class BrowserTabScreenState(
         },
     )
 
-    // --- Find-in-page state（分離済み） ---
     val findInPage = FindInPageState(
         findInPageWebExtension = findInPageWebExtension,
         session = { session },
     )
 
-    // --- 開発者ツール state ---
     var showDevTools by mutableStateOf(false)
         private set
 
-    // 現在フォーカスされている入力要素の情報。フォーカスがない場合は null。
     var devToolsFocusedInput by mutableStateOf<DevToolsWebExtension.FocusedInputInfo?>(null)
 
-    // ネットワークログ画面を表示中かどうか
     var showNetworkLog by mutableStateOf(false)
         private set
 
-    // コンソール画面を表示中かどうか
     var showDevToolsConsole by mutableStateOf(false)
         private set
 
-    // --- Back gesture state ---
     var isBackGestureInProgress by mutableStateOf(false)
 
-    // --- Context menu state ---
     var contextMenuState by mutableStateOf<ContextMenuState?>(null)
         private set
 
@@ -240,7 +227,6 @@ internal class BrowserTabScreenState(
         contextMenuState = null
     }
 
-    // --- コンテンツ領域のタッチジェスチャー追跡 ---
     // JS フリーズ中に滞留したタッチが解放後にまとめて処理されると、スクロール操作でも
     // 長押し判定になり onContextMenu が届くことがあるため、実際のジェスチャーを記録して抑制する。
     private var hasTouchGestureRecord = false
@@ -249,7 +235,6 @@ internal class BrowserTabScreenState(
     private var touchGestureStartedAtMs = 0L
     private var touchGestureEndedAtMs = 0L
 
-    /** コンテンツ領域で新しいタッチジェスチャーが始まった */
     fun onContentTouchStart() {
         hasTouchGestureRecord = true
         isTouchGestureActive = true
@@ -262,7 +247,6 @@ internal class BrowserTabScreenState(
         touchGestureMoved = true
     }
 
-    /** タッチジェスチャーが終了した (UP / CANCEL) */
     fun onContentTouchEnd() {
         isTouchGestureActive = false
         touchGestureEndedAtMs = SystemClock.elapsedRealtime()
@@ -285,7 +269,6 @@ internal class BrowserTabScreenState(
         data class LinkWithImage(val url: String, val imageSrcUrl: String) : ContextMenuState
     }
 
-    // --- ホームに追加ダイアログ状態 ---
     var addToHomeScreenState by mutableStateOf<AddToHomeScreenState?>(null)
         private set
     private var addToHomeIconJob: Job? = null
@@ -297,16 +280,12 @@ internal class BrowserTabScreenState(
         val isIconLoading: Boolean,
     )
 
-    // --- プロンプトダイアログ状態（分離済み） ---
     val promptDialogState = PromptDialogState(coroutineScope)
 
-    // --- Web Share files ワークアラウンドの進行中状態 ---
     val webShareFilesState = WebShareFilesState(coroutineScope)
 
-    // --- サイトごとの権限確認ダイアログ状態（分離済み） ---
     val sitePermissionDialogState = SitePermissionDialogState(siteSettingsRepository)
 
-    // --- ファイルダウンロード確認ダイアログ状態（分離済み） ---
     val downloadState = TabDownloadState(
         coroutineScope = coroutineScope,
         geckoDownloadManager = geckoDownloadManager,
@@ -334,7 +313,6 @@ internal class BrowserTabScreenState(
     // 外部アプリ確認ダイアログでキャンセルされた場合、次回のロードリクエストで外部アプリチェックをスキップする
     private var skipExternalAppCheckForNextLoad = false
 
-    // --- フルスクリーン状態 ---
     var isFullScreen by mutableStateOf(false)
 
     var renderReady by mutableStateOf(false)
@@ -352,21 +330,11 @@ internal class BrowserTabScreenState(
     var capturePreviewRequestCount by mutableIntStateOf(0)
         private set
 
-    // プレビューキャプチャの可否を表すフラグ。
-    // false の間は captureTabPreview() が早期 return するため、状態遷移が
-    // 想定通りに行われないと「いつまで経ってもプレビューが保存されない」状態に
-    // 陥る。デバッグしやすいよう、すべての遷移を理由付きでログに残す。
-    //
-    // 設計判断:
-    // - 初期値は「過去にプレビューが保存されているか」または「セッション状態が
-    //   復元される予定か」を基準に true にする。プロセス再起動時に、復元タブで
-    //   onPageStart/onPageStop が発火しないままタブ切替が走ると永遠に false の
-    //   ままになる問題を防ぐ。
-    // - onPageStart では false に戻さない。GeckoView は新ページのロード中も
-    //   古いページを表示し続けるため、ロード中にキャプチャしても白ページには
-    //   ならない。一方、ロードが完了せずに外部アプリ遷移・ダウンロード判定・
-    //   ナビゲーションキャンセル等が起きると onPageStop が発火せずフラグが
-    //   false のまま固まる問題があった。
+    // false の間は captureTabPreview() が早期 return する。状態遷移が想定どおりに進まないと
+    // プレビューが永遠に保存されなくなるため、遷移はすべて理由付きでログに残す。
+    // 初期値を「プレビュー保存済み」または「セッション状態を復元予定」で true にするのは、
+    // プロセス再起動後の復元タブで onPageStart/onPageStop が発火しないままタブ切替が走ると
+    // false のまま固まるため。
     private var previewCaptureReady: Boolean =
         browserTab.previewBitmap?.isNotEmpty() == true || browserTab.sessionState.isNotBlank()
         set(value) {
@@ -380,16 +348,13 @@ internal class BrowserTabScreenState(
 
     var pageLoadError by mutableStateOf<PageLoadError?>(null)
 
-    // --- ズーム状態（viewport width 操作によりテキスト・画像含め全体をズーム）---
     // BrowserTab.pageZoomPercent に委譲することで、タブ切替や State 再生成後も倍率を維持する。
     val pageZoomPercent: Int
         get() = browserTab.pageZoomPercent
 
-    // --- Scroll / Refresh state ---
     var visualViewportScale by mutableFloatStateOf(1f)
     var isRefreshing by mutableStateOf(false)
 
-    // フルページロード中かどうか。更新ボタンを停止ボタンに切り替えるために使用する。
     var isPageLoading by mutableStateOf(browserTab.isPageLoading)
 
     // BrowserTab.scrollY に委譲することで、タブ切替で State が再生成されても
@@ -403,12 +368,9 @@ internal class BrowserTabScreenState(
     val showInstallExtensionItem: Boolean
         get() = resolveAmoInstallUriFromPage(currentPageUrl) != null
 
-    // --- 拡張機能アクション（ツールバーメニューのアイコン行）---
-
     // メニューのアイコン行の横スクロール位置。タブ内でのみ保持し、永続化はしない
     val extensionActionScrollState = ScrollState(initial = 0)
 
-    /** 表示中の拡張機能ポップアップ。null なら非表示 */
     var extensionActionPopup by mutableStateOf<WebExtensionActionController.PopupRequest?>(null)
     private var extensionActionOrder by mutableStateOf<List<String>>(emptyList())
 
@@ -444,10 +406,6 @@ internal class BrowserTabScreenState(
             order = draggingExtensionActionOrder ?: extensionActionOrder,
             idOf = { it.extensionId },
         )
-
-    // ================================================================
-    // Actions
-    // ================================================================
 
     fun onUrlSubmit(rawInput: String) {
         val resolved = buildUrlFromInput(rawInput, homepageUrl, searchTemplate)
@@ -494,7 +452,6 @@ internal class BrowserTabScreenState(
     }
 
     fun onSuperRefresh() {
-        // キャッシュをバイパスしてリロード（スーパーリフレッシュ）
         superRefreshCurrentPage()
     }
 
@@ -530,7 +487,6 @@ internal class BrowserTabScreenState(
         session.goBack()
     }
 
-    /** タブ履歴の指定インデックスへ直接ジャンプする */
     fun jumpToHistoryEntry(targetIndex: Int) {
         if (targetIndex == tabHistoryCurrentIndex) return
         skipHistoryRecordCount++
@@ -614,7 +570,6 @@ internal class BrowserTabScreenState(
         injectViewportZoom(pageZoomPercent)
     }
 
-    // viewport meta を書き換えてページ全体のズームを適用する
     private fun injectViewportZoom(percent: Int) {
         val screenWidthDp = (context.resources.displayMetrics.widthPixels / context.resources.displayMetrics.density).toInt()
         val viewportContent = viewportContentForPageZoom(screenWidthDp, percent)
@@ -631,7 +586,6 @@ internal class BrowserTabScreenState(
         devToolsWebExtension.requestFocusedInput(session)
     }
 
-    /** フォーカス中の input の id をクリップボードにコピーする */
     fun copyFocusedInputId() {
         val id = devToolsFocusedInput?.id?.takeIf { it.isNotBlank() } ?: return
         val clipboard =
@@ -668,7 +622,6 @@ internal class BrowserTabScreenState(
         shareText("$currentPageTitle\n$currentPageUrl")
     }
 
-    /** 任意のテキストを OS の共有シート（text/plain）で共有する */
     fun shareText(text: String) {
         launchPlainTextShare(body = text)
     }
@@ -957,8 +910,6 @@ internal class BrowserTabScreenState(
             urlInput = url
         }
         translation.onLocationChange(url, isFullPageLoad = wasFullPageLoad)
-        // 履歴を記録（about:blank や data: URL は除外）
-        // goBack / goForward 時はカウンタをデクリメントしてスキップする
         val shouldRecord = url.isNotBlank() && !url.startsWith("about:") && !url.startsWith("data:")
         val skip = skipHistoryRecordCount > 0
         if (skip) skipHistoryRecordCount--
@@ -1072,7 +1023,6 @@ internal class BrowserTabScreenState(
         // ロード中のキャプチャは古いページの画像となり問題ない。
         // 一方、ロードが完了せずに外部アプリ遷移・ダウンロード判定・onLoadRequest DENY 等で
         // onPageStop が発火しないケースで flag が false のまま固まる問題を回避する。
-        // 新しいページへの遷移時にfaviconをリセット
         browserTab.faviconBitmap = null
         webAppManifestJson = null
         isFullPageLoadPending = true
@@ -1324,7 +1274,7 @@ internal class BrowserTabScreenState(
         hasAudio: Boolean,
         onResult: (grantVideo: Boolean, grantAudio: Boolean) -> Unit,
     ) {
-        // マイクを含まない要求（カメラのみ等）は従来通り許可する
+        // マイクを含まない要求（カメラのみ等）はサイト設定を確認せず許可する
         if (!hasAudio) {
             onResult(hasVideo, false)
             return
@@ -1409,7 +1359,6 @@ internal class BrowserTabScreenState(
     }
 
     private fun superRefreshCurrentPage() {
-        // キャッシュを完全にバイパスして再読み込みする
         val retryUrl = pageLoadError?.failingUrl?.takeIf { it.isNotBlank() }
         clearPageLoadError()
         if (retryUrl != null) {

@@ -121,7 +121,6 @@ class TabRepository(context: Context) {
     }
 
     suspend fun updateSessionState(tabId: String, sessionState: String) {
-        // sessionState は DB ではなくファイルに保存する
         writeSessionState(tabId, sessionState)
     }
 
@@ -174,7 +173,6 @@ class TabRepository(context: Context) {
         deleteSessionStateFile(tabId)
     }
 
-    /** サムネイル画像をファイルに保存する */
     fun saveTabThumbnail(tabId: String, imageBytes: ByteArray) {
         if (imageBytes.isEmpty()) return
         if (!thumbnailDir.exists()) {
@@ -183,7 +181,6 @@ class TabRepository(context: Context) {
         File(thumbnailDir, "$tabId.webp").writeBytes(imageBytes)
     }
 
-    /** サムネイル画像をファイルから読み込む */
     fun loadTabThumbnail(tabId: String): ByteArray? {
         val file = File(thumbnailDir, "$tabId.webp")
         return if (file.exists()) file.readBytes() else null

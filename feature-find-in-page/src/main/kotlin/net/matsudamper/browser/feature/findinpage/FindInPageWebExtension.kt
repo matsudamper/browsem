@@ -20,13 +20,11 @@ class FindInPageWebExtension {
     private var extension: WebExtension? = null
     private val mainHandler = Handler(Looper.getMainLooper())
 
-    // セッションごとの接続ポート
     private val sessionPorts = ConcurrentHashMap<GeckoSession, WebExtension.Port>()
 
     // セッションごとの最後の search コマンド（ポート再接続時に再送するために保持）
     private val activeSearchCommands = ConcurrentHashMap<GeckoSession, JSONObject>()
 
-    // セッションごとの結果コールバック（current, total, error）
     private val sessionCallbacks =
         ConcurrentHashMap<GeckoSession, (current: Int, total: Int, error: String?) -> Unit>()
 
@@ -77,7 +75,6 @@ class FindInPageWebExtension {
         }
     }
 
-    /** 新しい検索クエリを送信する */
     fun search(session: GeckoSession, query: String, isRegex: Boolean) {
         val message = JSONObject().apply {
             put("action", "search")
@@ -89,7 +86,6 @@ class FindInPageWebExtension {
         sendMessage(session, message)
     }
 
-    /** 次のマッチへ移動する */
     fun findNext(session: GeckoSession) {
         sendMessage(
             session,
@@ -99,7 +95,6 @@ class FindInPageWebExtension {
         )
     }
 
-    /** 前のマッチへ移動する */
     fun findPrevious(session: GeckoSession) {
         sendMessage(
             session,
@@ -109,7 +104,6 @@ class FindInPageWebExtension {
         )
     }
 
-    /** ハイライトを全てクリアする */
     fun clear(session: GeckoSession) {
         activeSearchCommands.remove(session)
         sendMessage(

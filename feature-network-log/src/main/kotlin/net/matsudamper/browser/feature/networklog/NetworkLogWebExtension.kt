@@ -31,7 +31,6 @@ class NetworkLogWebExtension(
     private var extension: WebExtension? = null
     private val mainHandler = Handler(Looper.getMainLooper())
 
-    // バックグラウンドスクリプトとのポート
     private var backgroundPort: WebExtension.Port? = null
 
     // セッションごとの webRequest 上の tabId。

@@ -37,7 +37,6 @@ fun BackupProgressScreen(
     modifier: Modifier = Modifier,
 ) {
     StatusBarAppearanceEffect(MaterialTheme.colorScheme.surface)
-    // 処理中はバック操作を無効化する
     BackHandler(enabled = uiState.phase is BackupProgressUiState.Phase.InProgress) {}
 
     val title = if (uiState.isImport) "インポート" else "エクスポート"
@@ -48,7 +47,6 @@ fun BackupProgressScreen(
             TopAppBar(
                 title = { Text(title) },
                 navigationIcon = {
-                    // 処理中は戻るボタンを非表示にする
                     if (uiState.phase !is BackupProgressUiState.Phase.InProgress) {
                         IconButton(onClick = uiState.callbacks::onDismiss) {
                             Icon(
@@ -69,7 +67,6 @@ fun BackupProgressScreen(
         ) {
             when (val phase = uiState.phase) {
                 is BackupProgressUiState.Phase.WaitingForFile -> {
-                    // ファイルピッカーが開いている間は待機表示のみ
                     CircularProgressIndicator()
                 }
 
@@ -96,7 +93,6 @@ fun BackupProgressScreen(
                 }
 
                 is BackupProgressUiState.Phase.Completed -> {
-                    // 完了メッセージとボタンを表示する
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(phase.successMessage)
                         Spacer(Modifier.height(16.dp))
@@ -107,7 +103,6 @@ fun BackupProgressScreen(
                 }
 
                 is BackupProgressUiState.Phase.PendingRestart -> {
-                    // インポート完了後の再起動促進ダイアログを表示する
                     AlertDialog(
                         onDismissRequest = {},
                         title = { Text("インポートが完了しました") },
@@ -127,7 +122,6 @@ fun BackupProgressScreen(
                 }
 
                 is BackupProgressUiState.Phase.Error -> {
-                    // エラーダイアログを表示する
                     AlertDialog(
                         onDismissRequest = uiState.callbacks::onDismiss,
                         title = { Text("エラーが発生しました") },

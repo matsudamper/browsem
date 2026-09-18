@@ -152,7 +152,6 @@ class CustomTabActivity : ComponentActivity() {
                                 // window.open() の URL 省略で空になり得るので、ホームページで補わない。
                                 handedOffPopupInitialUrl = browserViewModel::currentHandoffInitialUrl,
                                 onHandedOffPopupSessionAttached = {
-                                    // 載せる前に window.close が呼ばれていた場合はここで閉じる
                                     if (browserViewModel.onHandoffSessionAttached()) {
                                         finish()
                                     }

@@ -584,7 +584,6 @@ fun SettingsScreen(
         )
     }
 
-    // バックアップ操作の確認ダイアログ（設定画面の上に重ねて表示する）
     val confirmDialog = uiState.backupConfirmDialog
     if (confirmDialog != null) {
         val isImport = confirmDialog == SettingsScreenUiState.BackupConfirmType.Import

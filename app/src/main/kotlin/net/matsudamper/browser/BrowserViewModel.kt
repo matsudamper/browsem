@@ -241,7 +241,6 @@ internal class BrowserViewModel(
         )
     }
 
-    // 外部タブを開く直前に選択されていたタブ ID を記憶するマップ
     private val externalTabPreviousTabs = mutableMapOf<String, String?>()
     private val externalTabInitialUrlByTabId = mutableMapOf<String, String>()
     private val externalTabIdsFlow = MutableStateFlow<Set<String>>(emptySet())
@@ -399,7 +398,6 @@ private fun ResolvedBrowserSettings.toLogicSettings(): BrowserLogicSettings = Br
     enableThirdPartyCa = enableThirdPartyCa,
 )
 
-/** サイトごとの位置情報設定を拡張機能のモードへ変換する */
 private fun SiteGeolocationState.toGeolocationMode(): MockLocationWebExtension.GeolocationMode {
     return when (this) {
         SiteGeolocationState.SITE_GEOLOCATION_DENY -> MockLocationWebExtension.GeolocationMode.DENY

@@ -112,7 +112,6 @@ internal fun GroupTabGrid(
             }
         }
 
-        // ドラッグ状態を上位コンポーザブルに通知する
         LaunchedEffect(dragDropState.isDragging, dragDropState.dragCenterInRoot, onTabDragStateChanged) {
             onTabDragStateChanged(dragDropState.isDragging, dragDropState.dragCenterInRoot)
         }
@@ -181,7 +180,6 @@ internal fun GroupTabGrid(
                 key = { _, tab -> tab.id },
             ) { index, tab ->
                 val selected = tab.id == selectedTabId
-                // ドラッグ中のアイテムはグリッド上で非表示（透明）にする
                 val isDraggingThis = dragDropState.draggedItemKey == tab.id
                 TabCard(
                     tab = tab,
@@ -198,7 +196,6 @@ internal fun GroupTabGrid(
             }
         }
 
-        // ドラッグ中のオーバーレイ表示
         if (dragDropState.isDragging) {
             val overlayTab = tabs.firstOrNull { it.id == dragDropState.draggedItemKey }
             if (overlayTab != null) {
@@ -245,13 +242,11 @@ private fun rememberDragDropState(
     }
 }
 
-/** ドラッグ&ドロップの状態を管理するクラス */
 @Stable
 private class DragDropState(
     val gridState: LazyGridState,
     private val onMove: (fromIndex: Int, toIndex: Int) -> Unit,
 ) {
-    /** ドラッグ中のアイテムのキー */
     var draggedItemKey: Any? by mutableStateOf(null)
         private set
 
@@ -259,20 +254,17 @@ private class DragDropState(
     var draggedItemOffset: IntOffset by mutableStateOf(IntOffset.Zero)
         private set
 
-    /** ドラッグ中アイテムのサイズ（ピクセル） */
     var draggedItemSize: IntSize by mutableStateOf(IntSize.Zero)
         private set
 
     /** ドラッグ中の現在のインデックス（並び替え時に更新） */
     private var currentDragIndex: Int by mutableIntStateOf(-1)
 
-    /** ドラッグ中かどうか */
     val isDragging: Boolean get() = draggedItemKey != null
 
     /** このドラッグ中に並び替えが発生したか（onMove が一度でも呼ばれたか） */
     private var didReorder: Boolean = false
 
-    /** ドラッグ開始時刻（uptimeMillis） */
     private var dragStartUptimeMs: Long = 0L
 
     /** ルート座標でのドラッグ中の中心位置（グループ間移動の衝突判定用） */
@@ -282,7 +274,6 @@ private class DragDropState(
     /** グリッドのルート座標上の bounds（onGloballyPositioned で設定） */
     var gridBoundsInRoot: Rect by mutableStateOf(Rect.Zero)
 
-    /** ドラッグ開始時の処理 */
     fun onDragStart(offset: Offset) {
         val viewportOffset = gridState.layoutInfo.viewportStartOffset
         val item = gridState.layoutInfo.visibleItemsInfo.firstOrNull { info ->
@@ -304,26 +295,21 @@ private class DragDropState(
         didReorder = false
         dragStartUptimeMs = android.os.SystemClock.uptimeMillis()
 
-        // ルート座標での中心位置を初期化
         updateDragCenterInRoot()
     }
 
-    /** ドラッグ中の移動処理 */
     fun onDrag(dragAmount: Offset) {
         if (!isDragging) return
 
         draggedItemOffset = (draggedItemOffset.toOffset() + dragAmount).round()
 
-        // ルート座標を更新
         updateDragCenterInRoot()
 
-        // ドラッグ中アイテムの中心座標（ビューポート相対）
         val centerX = draggedItemOffset.x + draggedItemSize.width / 2f
         val centerY = draggedItemOffset.y + draggedItemSize.height / 2f
 
         val viewportOffset = gridState.layoutInfo.viewportStartOffset
 
-        // 中心に最も近い別のアイテムを探す
         val targetItem = gridState.layoutInfo.visibleItemsInfo
             .filter { it.key != draggedItemKey }
             .minByOrNull { info ->
@@ -335,7 +321,6 @@ private class DragDropState(
                 dx * dx + dy * dy
             } ?: return
 
-        // ドラッグ中アイテムの中心が別のアイテムの領域内に入ったら並び替え
         val targetTop = (targetItem.offset.y - viewportOffset).toFloat()
         val targetBottom = targetTop + targetItem.size.height
         val targetLeft = targetItem.offset.x.toFloat()

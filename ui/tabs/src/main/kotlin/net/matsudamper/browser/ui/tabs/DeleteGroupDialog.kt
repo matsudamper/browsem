@@ -6,7 +6,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 
-/** グループを削除する前の確認ダイアログ */
 @Composable
 internal fun DeleteGroupDialog(
     groupName: String,

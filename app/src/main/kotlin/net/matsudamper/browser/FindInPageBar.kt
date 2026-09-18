@@ -158,7 +158,6 @@ internal fun FindInPageBar(
                     )
                 }
             }
-            // 無効な正規表現のエラーメッセージ
             if (queryError != null) {
                 Text(
                     text = queryError,

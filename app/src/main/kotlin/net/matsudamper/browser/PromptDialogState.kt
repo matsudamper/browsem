@@ -125,10 +125,6 @@ internal class PromptDialogState(
         pendingFormInputSaveDialog = null
     }
 
-    // ================================================================
-    // Actions
-    // ================================================================
-
     fun dismissAlertPrompt() {
         val prompt = pendingAlertPrompt ?: return
         pendingAlertResult?.complete(prompt.dismiss())
@@ -306,7 +302,6 @@ internal class PromptDialogState(
         val mimeFromResolver = context.contentResolver.getType(uri)
         if (mimeFromResolver != null) return mimeFromResolver
 
-        // null の場合のみ DISPLAY_NAME の拡張子から補完
         val displayName = runCatching {
             context.contentResolver.query(
                 uri,
@@ -332,7 +327,6 @@ internal class PromptDialogState(
             }
         }
 
-        // それでも不明なら未知のバイナリとして扱う
         return "application/octet-stream"
     }
 
@@ -418,10 +412,6 @@ internal class PromptDialogState(
         pendingAddressSaveResult = null
         pendingAddressSaveAddress = null
     }
-
-    // ================================================================
-    // Delegate 生成
-    // ================================================================
 
     fun createPromptDelegate(): GeckoSession.PromptDelegate =
         object : GeckoSession.PromptDelegate {
@@ -545,7 +535,6 @@ internal class PromptDialogState(
                 session: GeckoSession,
                 prompt: GeckoSession.PromptDelegate.PopupPrompt,
             ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse> {
-                // ポップアップを許可する
                 return GeckoResult.fromValue(prompt.confirm(AllowOrDeny.ALLOW))
             }
 

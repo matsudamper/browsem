@@ -64,7 +64,6 @@ internal fun rememberNetworkLogUiState(
     val tabIds by extension.sessionTabIds.collectAsState()
     val tabId = tabIds[session]
 
-    // 詳細を開いた時と再取得を押した時にプレビューを読み込む
     LaunchedEffect(holder, holder.selectedId, holder.previewReloadCount) {
         holder.loadPreview()
     }
@@ -79,9 +78,6 @@ internal fun rememberNetworkLogUiState(
     return uiState
 }
 
-/**
- * ネットワークログ画面の状態保持。
- */
 @Stable
 internal class NetworkLogStateHolder(
     private val extension: NetworkLogWebExtension,
@@ -97,7 +93,6 @@ internal class NetworkLogStateHolder(
     var selectedId by mutableStateOf<String?>(null)
         private set
 
-    /** プレビュー再取得のトリガー */
     var previewReloadCount by mutableIntStateOf(0)
         private set
 
@@ -121,13 +116,11 @@ internal class NetworkLogStateHolder(
     // 一覧に表示しているログ。サムネイルの取得対象を可視範囲から求めるために保持する
     private var shownEntries: List<NetworkLogEntry> = emptyList()
 
-    // サムネイルを出すかどうか（画像フィルタ選択中のみ true）
     private var showsThumbnail: Boolean = false
 
     // 一覧で見えている範囲。前後の余白を含めてサムネイルを先読みする
     private var visibleRange: IntRange = IntRange.EMPTY
 
-    /** サムネイルの取得状態 */
     private class ThumbnailState(val bitmap: ImageBitmap?)
 
     // 表示対象のタブ ID。null の場合は全タブ分を表示する
@@ -184,7 +177,6 @@ internal class NetworkLogStateHolder(
         }
     }
 
-    /** 表示用の UiState を組み立てる */
     fun createUiState(allEntries: List<NetworkLogEntry>, tabId: Int?): NetworkLogUiState {
         currentTabId = tabId
         val tabEntries = if (tabId == null) {
@@ -198,7 +190,6 @@ internal class NetworkLogStateHolder(
         val detail = selectedId
             ?.let { id -> tabEntries.firstOrNull { it.requestId == id } }
             ?.toDetail()
-        // サムネイルは画像フィルタを選んでいるときだけ出す
         val shown = filtered.asReversed()
         showsThumbnail = filter == NetworkLogUiState.ResourceFilter.Image
         shownEntries = shown
@@ -221,7 +212,6 @@ internal class NetworkLogStateHolder(
         )
     }
 
-    /** プレビュー用の本文を取得する */
     fun loadPreview() {
         val id = selectedId ?: return
         val entry = selectedEntry()

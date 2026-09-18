@@ -7,7 +7,6 @@ import java.io.InputStream
  * GeckoViewのWebResponseや、テスト用のHTTPクライアント実装を同一インターフェースで扱う。
  */
 interface DownloadHttpResponse : AutoCloseable {
-    /** HTTPステータスコード */
     val statusCode: Int
 
     /** リダイレクト後の最終URL（ファイル名推測に使用） */

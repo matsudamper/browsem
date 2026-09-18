@@ -22,9 +22,6 @@ data class DownloadManagementScreenUiState(
             val isIndeterminate: Boolean,
         ) : DownloadStatus
 
-        /**
-         * ダウンロード完了。
-         */
         data class Completed(
             val fileUri: String,
         ) : DownloadStatus
@@ -95,11 +92,9 @@ data class DownloadManagementScreenUiState(
         interface Listener {
             fun onCancel()
 
-            /** ダウンロード中のアイテムを一時停止する */
             fun onPause()
             fun onOpenFile()
 
-            /** 失敗したダウンロードを再開する */
             fun onResume()
 
             /** ダウンロード開始時のページを新しいタブで開く。originPageUrl が null の場合は no-op */

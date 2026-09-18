@@ -190,7 +190,6 @@ class TabsScreenViewModel(
             }
         }
         viewModelScope.launch {
-            // 初回: デフォルトグループを作成する（DBが空のときのみ）
             val initialTabs = tabStore.tabStoreState.first()
             tabGroupRepository.createDefaultGroupIfEmpty(initialTabs.tabs.map { it.id })
             // createDefaultGroupIfEmpty 完了後に監視を開始することで、グループが存在しない状態で
@@ -266,7 +265,6 @@ class TabsScreenViewModel(
         }
     }
 
-    /** 新しいグループを追加する */
     private fun addGroup() {
         viewModelScope.launch {
             val currentGroups = viewModelStateFlow.value.groups
@@ -278,7 +276,6 @@ class TabsScreenViewModel(
             programmaticScrollTarget = newSortOrder
             viewModelStateFlow.update {
                 it.copy(
-                    // ローカル順序に追加してすぐに反映する
                     localGroupOrder = currentGroups + TabGroupData(newId, name),
                     activeGroupIndex = newSortOrder,
                 )
@@ -296,7 +293,6 @@ class TabsScreenViewModel(
         if (fromIndex !in currentGroups.indices || toIndex !in currentGroups.indices) return
         currentGroups.add(toIndex, currentGroups.removeAt(fromIndex))
 
-        // アクティブグループのインデックスを並び替えに合わせて補正する
         val active = state.activeGroupIndex ?: 0
         val newActiveIndex = when {
             active == fromIndex -> toIndex
@@ -317,7 +313,6 @@ class TabsScreenViewModel(
         }
     }
 
-    /** タブを別のグループへ移動する */
     private fun moveTabToGroup(tabId: String, targetGroupIndex: Int) {
         val targetGroup = viewModelStateFlow.value.groups.getOrNull(targetGroupIndex) ?: return
         viewModelScope.launch {
@@ -411,14 +406,10 @@ class TabsScreenViewModel(
         val currentGroups = viewModelStateFlow.value.groups
         val group = currentGroups.getOrNull(groupIndex) ?: return
         val newIsDefault = !group.isDefault
-        // ローカル順序を即座に更新して UI に反映する
         val newLocalOrder = currentGroups.map { g ->
             when {
                 g.id == group.id -> g.copy(isDefault = newIsDefault)
-
-                // 他のグループのデフォルトを解除
                 newIsDefault -> g.copy(isDefault = false)
-
                 else -> g
             }
         }
@@ -428,11 +419,9 @@ class TabsScreenViewModel(
         }
     }
 
-    /** グループ名を変更する */
     private fun renameGroup(groupIndex: Int, newName: String) {
         val currentGroups = viewModelStateFlow.value.groups
         val group = currentGroups.getOrNull(groupIndex) ?: return
-        // ローカル順序を即座に更新して UI に反映する
         val newLocalOrder = currentGroups.toMutableList().also {
             it[groupIndex] = it[groupIndex].copy(name = newName)
         }
@@ -449,7 +438,6 @@ class TabsScreenViewModel(
         val group = currentGroups.getOrNull(groupIndex) ?: return
         val fallback = currentGroups.firstOrNull { it.id != group.id }
         val newGroups = currentGroups.toMutableList().also { it.removeAt(groupIndex) }
-        // アクティブインデックスを新しいリストに合わせて補正する
         val active = state.activeGroupIndex ?: 0
         val newActiveIndex = when {
             active == groupIndex -> (groupIndex - 1).coerceAtLeast(0)

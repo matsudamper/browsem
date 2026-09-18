@@ -332,7 +332,6 @@ fun SiteSettingsScreen(
         }
     }
 
-    // 削除操作の確認ダイアログ（画面の上に重ねて表示する）
     val confirmDialog = uiState.clearDataConfirmDialog
     if (confirmDialog != null) {
         val targetName = when (confirmDialog) {

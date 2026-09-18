@@ -124,10 +124,6 @@ import net.matsudamper.browser.ui.tabs.TabsScreen
 import org.koin.compose.koinInject
 import org.mozilla.geckoview.GeckoRuntime
 
-// ──────────────────────────────────────────────────────────────
-// 本体ブラウザ用エントリポイント (MainActivity から呼ばれる)
-// ──────────────────────────────────────────────────────────────
-
 @Composable
 internal fun BrowserApp(
     viewModel: BrowserViewModel,
@@ -215,13 +211,11 @@ internal fun BrowserApp(
     }
 }
 
-// ──────────────────────────────────────────────────────────────
-// 外側シェル — 全モード共有
-// 全画面系の navEntry (Settings, SiteSettings, …) はここに集約。
-// rootContent が本体/App/CustomTab のモード別内容を描画する。
-// ──────────────────────────────────────────────────────────────
-
 /**
+ * 本体ブラウザ / WebApp / CustomTab の全モードで共有する外側シェル。
+ * 全画面系の navEntry (Settings, SiteSettings, …) をここに集約し、
+ * [rootContent] がモード別の内容を描画する。
+ *
  * @param onNavigateToUrl 履歴やダウンロードからURLを開く際のコールバック。
  *   呼び出し側がタブ作成と内側ナビの更新を行う。
  *   タブ UI を持たない WebApp / CustomTab では null を渡す。この場合 URL タップは
@@ -248,7 +242,6 @@ internal fun BrowserAppShell(
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
 
-    // 通知タップ時にダウンロード管理画面を開く
     var pendingOpenDownloadsRequest by rememberSaveable { mutableStateOf(false) }
     var pendingHighlightWorkerId by rememberSaveable { mutableStateOf<String?>(null) }
     var pendingOpenDownloadsRequestId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -917,11 +910,6 @@ internal fun BrowserAppShell(
     )
 }
 
-// ──────────────────────────────────────────────────────────────
-// 本体ブラウザ — 内側ナビ (Setup / Browser / Tabs)
-// タブ切替・beforeTab 履歴・NavController はここに閉じ込める。
-// ──────────────────────────────────────────────────────────────
-
 @Stable
 internal class OuterNavActions(private val backStack: MutableList<NavKey>) {
     fun add(destination: AppDestination) {
@@ -1345,10 +1333,6 @@ private fun MainBrowserContent(
         },
     )
 }
-
-// ──────────────────────────────────────────────────────────────
-// ユーティリティ
-// ──────────────────────────────────────────────────────────────
 
 private const val GITHUB_RELEASES_URL = "https://github.com/matsudamper/browsem/releases"
 

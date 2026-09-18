@@ -79,10 +79,8 @@ class WebExtensionActionController(private val runtime: GeckoRuntime) {
     // 対象の拡張機能。UI から参照するため観測可能にする
     private val extensions = mutableStateMapOf<String, WebExtension>()
 
-    // 全タブ共通のアクション
     private val defaultActions = mutableStateMapOf<String, ActionEntry>()
 
-    // タブごとのアクション上書き
     private val sessionActions = mutableStateMapOf<GeckoSession, SnapshotStateMap<String, ActionEntry>>()
 
     // 最後にデコードできたアイコン。Image は通知のたびに作り直されるため、
@@ -99,7 +97,6 @@ class WebExtensionActionController(private val runtime: GeckoRuntime) {
     // セッションごとのポップアップ表示コールバック。null 通知は非表示を表す
     private val popupCallbacks = mutableMapOf<GeckoSession, (PopupRequest?) -> Unit>()
 
-    // 現在ポップアップを表示中のセッションと、その表示に使っているセッション
     private val openPopupSessions = mutableMapOf<GeckoSession, GeckoSession>()
 
     // click() を呼んだタブ。ポップアップの表示要求はこのタブへ振り分ける
@@ -169,7 +166,6 @@ class WebExtensionActionController(private val runtime: GeckoRuntime) {
     fun unregisterSession(session: GeckoSession) {
         popupCallbacks.remove(session)
         sessionActions.remove(session)
-        // タブ固有アイコンのキャッシュも一緒に破棄する
         iconBitmaps.keys.filter { it.session === session }.forEach { iconBitmaps.remove(it) }
         pendingIcons.keys.filter { it.session === session }.forEach { pendingIcons.remove(it) }
         closePopup(session)
@@ -234,7 +230,6 @@ class WebExtensionActionController(private val runtime: GeckoRuntime) {
     /** アイコンのクリック。ポップアップを持つ拡張機能は [PopupRequest] が通知される */
     fun click(session: GeckoSession, extensionId: String) {
         val action = resolveAction(extensionId, sessionActions[session])?.action ?: return
-        // グレー表示のアクションは操作させない
         if (action.enabled == false) return
         pendingPopupOwner = session
         runCatching { action.click() }
@@ -255,7 +250,6 @@ class WebExtensionActionController(private val runtime: GeckoRuntime) {
         val owner = pendingPopupOwner ?: return null
         pendingPopupOwner = null
         val callback = popupCallbacks[owner] ?: return null
-        // トグル要求で既に開いている場合は閉じるだけにする
         if (openPopupSessions.containsKey(owner)) {
             closePopup(owner)
             return null

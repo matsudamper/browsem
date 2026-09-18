@@ -43,9 +43,6 @@ class NavController(
         backStack[browserIndex] = destination
     }
 
-    /**
-     * @return tabId
-     */
     fun getSelectedTab(): String? {
         return backStack.filterIsInstance<BrowserNavDestination.Browser>()
             .lastOrNull()

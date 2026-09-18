@@ -78,7 +78,6 @@ internal object DownloadThumbnailLoader {
         }
     }
 
-    /** MIME タイプまたは拡張子から APK かどうかを判定する */
     private fun isApk(mimeType: String?, fileName: String?): Boolean {
         if (mimeType.equals(MIME_TYPE_APK, ignoreCase = true)) return true
         return fileName?.endsWith(".apk", ignoreCase = true) == true

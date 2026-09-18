@@ -38,7 +38,6 @@ class BrowserTabController(
     private val tabGroupRepository: TabGroupRepository?,
     private val isSinglePage: Boolean,
 ) : TabStore {
-    // タブ復元の状態を追跡する列挙型
     private enum class RestoreState { NOT_STARTED, IN_PROGRESS, COMPLETED }
 
     private val controllerScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -102,7 +101,6 @@ class BrowserTabController(
             }
 
             RestoreState.IN_PROGRESS -> {
-                // 別のコルーチンで復元中。完了を待機してから返す
                 Log.d(TAG, "restoreTabs(): 進行中の復元を待機")
                 _restoreComplete.await()
                 return selectedTabId ?: withContext(Dispatchers.Main.immediate) {

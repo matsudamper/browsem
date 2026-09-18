@@ -41,7 +41,6 @@ data class NetworkLogEntry(
         get() = mimeType.substringBefore(';').trim()
 }
 
-/** ヘッダ 1 行 */
 data class NetworkLogHeader(
     val name: String,
     val value: String,
@@ -62,7 +61,6 @@ enum class NetworkResourceType {
     ;
 
     companion object {
-        /** webRequest の type 文字列から種別を判定する */
         fun fromWebRequestType(type: String): NetworkResourceType {
             return when (type) {
                 "main_frame", "sub_frame" -> Document

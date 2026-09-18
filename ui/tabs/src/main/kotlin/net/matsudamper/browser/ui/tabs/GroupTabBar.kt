@@ -59,7 +59,6 @@ import androidx.compose.ui.zIndex
 import kotlin.math.abs
 import net.matsudamper.browser.data.TabGroupData
 
-/** タブシェイプ：上辺のみ角丸の矩形 */
 private val TabShape = RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp)
 
 /** グループタブバー全体の高さ。LazyRow・外側 Box 両方で共有する */
@@ -71,7 +70,6 @@ private val GroupTabUnselectedHeight = 40.dp
 /** ドラッグ中に自動スクロールを開始する、ビューポート端からの距離 */
 private val AutoScrollThreshold = 48.dp
 
-/** 自動スクロールの1フレームあたりの最大移動量 */
 private val AutoScrollMaxSpeedPerFrame = 12.dp
 
 /** 並び替え後にスクロール位置を上書きし直すフレーム数 */
@@ -104,7 +102,6 @@ internal fun GroupTabBar(
         onMove = onReorderGroups,
     )
 
-    // ページスクロール進捗を読み取る（タブの高さ・色アニメーションに使用）
     val currentPage = pagerState.currentPage
     val offsetFraction = pagerState.currentPageOffsetFraction
 
@@ -196,13 +193,11 @@ internal fun GroupTabBar(
                         },
                 )
             }
-            // グループ追加ボタン（ドラッグ対象外）
             item(key = "add_group") {
                 AddGroupBookmarkTab(onClick = onAddGroup)
             }
         }
 
-        // ドラッグ中のオーバーレイ表示
         if (dragDropState.isDragging) {
             val draggedGroup = groups.firstOrNull { it.id.value == dragDropState.draggedItemKey }
             val draggedIndex = groups.indexOfFirst { it.id.value == dragDropState.draggedItemKey }
@@ -232,7 +227,6 @@ private fun rememberGroupDragDropState(
     }
 }
 
-/** グループタブバーのドラッグ&ドロップ状態を管理するクラス */
 @Stable
 private class GroupDragDropState(
     val listState: LazyListState,
@@ -246,7 +240,6 @@ private class GroupDragDropState(
     var draggedItemOffset: IntOffset by mutableStateOf(IntOffset.Zero)
         private set
 
-    /** ドラッグ中アイテムのサイズ（ピクセル） */
     var draggedItemSize: IntSize by mutableStateOf(IntSize.Zero)
         private set
 
@@ -304,7 +297,6 @@ private class GroupDragDropState(
         autoScrolledPx = 0f
     }
 
-    /** ドラッグ中の移動処理 */
     fun onDrag(dragAmount: Offset, groupCount: Int) {
         if (!isDragging) return
         this.groupCount = groupCount
@@ -382,7 +374,6 @@ private class GroupDragDropState(
         autoScrolledPx += consumed
     }
 
-    /** ドラッグ終了時の処理 */
     fun onDragEnd() {
         draggedItemKey = null
         draggedItemOffset = IntOffset.Zero
@@ -572,7 +563,6 @@ private fun GroupBookmarkTab(
         else -> lerp(unselectedColor, selectedColor, fraction)
     }
 
-    // ページスクロール進捗に応じて高さをアニメーションする
     val visualHeight = GroupTabUnselectedHeight + (GroupTabBarHeight - GroupTabUnselectedHeight) * fraction
     // 外側のBoxは常に GroupTabBarHeight を確保し、LazyRowアイテムの位置が変わらないようにする
     Box(

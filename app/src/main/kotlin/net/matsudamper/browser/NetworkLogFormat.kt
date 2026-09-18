@@ -34,7 +34,6 @@ internal object NetworkLogFormat {
         return "$bytes B"
     }
 
-    /** 所要時間を表示用にする */
     fun formatDuration(millis: Long): String {
         if (millis < 0) return "-"
         if (millis < MILLIS_PER_SECOND) return "$millis ms"
@@ -61,7 +60,6 @@ internal object NetworkLogFormat {
         return runCatching { URI(url).host }.getOrNull().orEmpty()
     }
 
-    /** ステータスの区分を判定する */
     fun statusKind(statusCode: Int, error: String?): NetworkLogUiState.StatusKind {
         if (error != null) return NetworkLogUiState.StatusKind.Failed
         return when (statusCode) {
@@ -73,7 +71,6 @@ internal object NetworkLogFormat {
         }
     }
 
-    /** 一覧に出すステータス表示 */
     fun statusLabel(statusCode: Int, error: String?): String {
         return when {
             error != null -> "失敗"
@@ -82,7 +79,6 @@ internal object NetworkLogFormat {
         }
     }
 
-    /** リソース種別の日本語ラベル */
     fun typeLabel(type: NetworkResourceType): String {
         return when (type) {
             NetworkResourceType.Document -> "文書"
@@ -96,7 +92,6 @@ internal object NetworkLogFormat {
         }
     }
 
-    /** 絞り込みチップのラベル */
     fun filterLabel(filter: NetworkLogUiState.ResourceFilter): String {
         return when (filter) {
             NetworkLogUiState.ResourceFilter.All -> "すべて"
@@ -111,7 +106,6 @@ internal object NetworkLogFormat {
         }
     }
 
-    /** リソース種別に対応する絞り込み条件 */
     fun filterOf(type: NetworkResourceType): NetworkLogUiState.ResourceFilter {
         return when (type) {
             NetworkResourceType.Document -> NetworkLogUiState.ResourceFilter.Document
@@ -125,7 +119,6 @@ internal object NetworkLogFormat {
         }
     }
 
-    /** 絞り込み条件と検索文字列に一致するかどうか */
     fun matches(
         entry: NetworkLogEntry,
         filter: NetworkLogUiState.ResourceFilter,

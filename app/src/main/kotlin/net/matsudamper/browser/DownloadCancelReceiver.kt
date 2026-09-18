@@ -49,7 +49,6 @@ internal class DownloadCancelReceiver : BroadcastReceiver() {
                         }
                     },
                     stopWorker = {
-                        // Worker 起動前に保持しているレスポンスがあればここで破棄する。
                         PendingDownloadBodyStore.discard(workerId)
                         WorkManager.getInstance(applicationContext).cancelWorkById(currentWorkerId)
                     },

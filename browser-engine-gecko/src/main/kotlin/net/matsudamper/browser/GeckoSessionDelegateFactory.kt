@@ -65,7 +65,6 @@ interface BrowserSessionStateCallbacks {
     fun onFullScreen(fullScreen: Boolean)
 }
 
-/** タブ内ナビゲーション履歴の項目 */
 data class HistoryStateItem(val uri: String, val title: String)
 
 data class GeckoSessionDelegateBundle(
@@ -94,7 +93,7 @@ fun createGeckoSessionDelegateBundle(
                     "onContentPermissionRequest: permission=${perm.permission}, uri=${perm.uri}",
                 )
                 if (perm.permission == GeckoSession.PermissionDelegate.PERMISSION_AUTOPLAY_INAUDIBLE) {
-                    // 消音メディアは音が出ず邪魔にならないため、従来通り自動再生を許可する
+                    // 消音メディアは音が出ず邪魔にならないため、自動再生を許可する
                     Log.d("BrowserTabPermission", "inaudible autoplay permission allowed")
                     return GeckoResult.fromValue(
                         GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW,
@@ -318,7 +317,6 @@ fun createGeckoSessionDelegateBundle(
             }
 
             override fun onPageStart(session: GeckoSession, url: String) {
-                // 新しいページでは前ページの証明書情報を持ち越さない
                 browserTab.securityInfo = null
                 callbacks.onPageStart(url)
             }
@@ -468,7 +466,6 @@ internal class BrowserTabSessionDelegateHost(
             }
 
             override fun onPageStart(url: String) {
-                // 新しいページでは前ページの manifest を持ち越さない
                 synchronized(lock) {
                     cachedWebAppManifest = null
                     cachedIsPageLoading = true
@@ -665,7 +662,6 @@ internal class BrowserTabSessionDelegateHost(
         callbacks.onCanGoBackChanged(canGoBack)
         callbacks.onCanGoForwardChanged(canGoForward)
         callbacks.onPageLoadingChanged(isPageLoading)
-        // タブ内ナビゲーション履歴も同様にリプレイする
         if (historyItems.isNotEmpty()) {
             callbacks.onHistoryStateChange(historyItems, historyCurrentIndex)
         }

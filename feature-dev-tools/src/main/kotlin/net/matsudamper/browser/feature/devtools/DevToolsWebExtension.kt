@@ -28,10 +28,8 @@ class DevToolsWebExtension {
     private val nextEntryId = AtomicLong(0)
     private val nextRequestId = AtomicLong(0)
 
-    // セッションごとの接続ポート
     private val sessionPorts = ConcurrentHashMap<GeckoSession, WebExtension.Port>()
 
-    // セッションごとのフォーカス情報コールバック
     private val sessionCallbacks =
         ConcurrentHashMap<GeckoSession, (FocusedInputInfo?) -> Unit>()
 
@@ -59,11 +57,9 @@ class DevToolsWebExtension {
     private val _consoleEntries =
         MutableStateFlow<Map<GeckoSession, List<ConsoleEntry>>>(mapOf())
 
-    /** セッションごとのコンソール表示内容 */
     val consoleEntries: StateFlow<Map<GeckoSession, List<ConsoleEntry>>> =
         _consoleEntries.asStateFlow()
 
-    /** フォーカスされている入力要素の情報 */
     data class FocusedInputInfo(
         val id: String,
         val tagName: String,
@@ -87,13 +83,10 @@ class DevToolsWebExtension {
             Error,
             Debug,
 
-            /** 実行した JavaScript の入力 */
             Input,
 
-            /** 実行結果 */
             Result,
 
-            /** 実行時のエラー */
             ResultError,
         }
     }
@@ -154,7 +147,6 @@ class DevToolsWebExtension {
         }
     }
 
-    /** 現在フォーカスされている入力要素の情報を問い合わせる */
     fun requestFocusedInput(session: GeckoSession) {
         postToContentScript(session, JSONObject().apply { put("action", "query") })
     }
@@ -179,7 +171,6 @@ class DevToolsWebExtension {
         )
     }
 
-    /** コンソールの表示内容を消去する */
     fun clearConsoleEntries(session: GeckoSession) {
         bufferedEntries.remove(session)
         _consoleEntries.update { current -> current + (session to listOf()) }

@@ -63,13 +63,11 @@ import net.matsudamper.browser.ui.common.BrowserTheme
 /** アイコン 1 つ分の幅。並び替えの位置計算にも使うため全アイテムで共通にする */
 private val ITEM_SIZE = 48.dp
 
-/** アイコン画像自体のサイズ */
 private val ICON_SIZE = 24.dp
 
 /** ドラッグ中に端へ近づいたら自動スクロールを始める距離 */
 private val AUTO_SCROLL_EDGE = 24.dp
 
-/** 自動スクロールの 1 フレームあたりの移動量 */
 private val AUTO_SCROLL_STEP = 4.dp
 
 /**
@@ -284,10 +282,8 @@ private fun ExtensionActionItem(
     }
 }
 
-/** 無効なアクションの不透明度 */
 private const val DISABLED_ALPHA = 0.38f
 
-/** 無効なアクションのアイコンから色味を落とすフィルタ */
 private val GrayscaleColorFilter = ColorFilter.colorMatrix(
     ColorMatrix().apply { setToSaturation(0f) },
 )

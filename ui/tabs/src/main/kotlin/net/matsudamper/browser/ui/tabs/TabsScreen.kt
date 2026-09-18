@@ -147,7 +147,6 @@ fun TabsScreen(
         }
     }
 
-    // 画面から離れるときに保留中のタブ削除を確定する
     DisposableEffect(Unit) {
         onDispose {
             currentCallbacks.onConfirmCloseTab()
@@ -279,7 +278,6 @@ private fun TabsScreenLoadedContent(
         }
     }
 
-    // グループタブバー上の各グループタブのルート座標 bounds を保持する
     val groupTabBounds = remember { mutableMapOf<Int, Rect>() }
     // グループが削除・並び替えされた際に無効なインデックスのエントリを除去する
     LaunchedEffect(groups) {
@@ -303,10 +301,8 @@ private fun TabsScreenLoadedContent(
     // グループ移動ダイアログの状態：長押しして移動せずに離したタブのID
     var moveDialogOnGroupSelected by remember { mutableStateOf<((Int) -> Unit)?>(null) }
 
-    // 名前変更ダイアログの対象グループインデックス
     var renameDialogGroupIndex by remember { mutableStateOf<Int?>(null) }
 
-    // 削除確認ダイアログの対象グループインデックス
     var deleteDialogGroupIndex by remember { mutableStateOf<Int?>(null) }
 
     var floatingActionButtonBoundsInRoot by remember { mutableStateOf<Rect?>(null) }
@@ -363,7 +359,6 @@ private fun TabsScreenLoadedContent(
                 .fillMaxSize()
                 .padding(paddingValues),
         ) {
-            // グループタブバー（上辺角丸タブ）
             GroupTabBar(
                 groups = groups,
                 activeGroupIndex = activeGroupIndex,
@@ -381,14 +376,12 @@ private fun TabsScreenLoadedContent(
                 modifier = Modifier.fillMaxWidth(),
             )
 
-            // スワイプ進捗インジケータ
             PagerIndicator(
                 pagerState = pagerState,
                 listState = groupTabListState,
                 modifier = Modifier.fillMaxWidth(),
             )
 
-            // グループごとのタブグリッド（HorizontalPager）
             HorizontalPager(
                 state = pagerState,
                 modifier = Modifier
@@ -452,7 +445,6 @@ private fun TabsScreenLoadedContent(
         }
     }
 
-    // グループ移動ダイアログ
     val moveDialogHandler = moveDialogOnGroupSelected
     if (moveDialogHandler != null) {
         MoveTabToGroupDialog(
@@ -466,7 +458,6 @@ private fun TabsScreenLoadedContent(
         )
     }
 
-    // 名前変更ダイアログ
     val renameIndex = renameDialogGroupIndex
     if (renameIndex != null) {
         val group = groups.getOrNull(renameIndex)
@@ -482,7 +473,6 @@ private fun TabsScreenLoadedContent(
         }
     }
 
-    // 削除確認ダイアログ
     val deleteIndex = deleteDialogGroupIndex
     if (deleteIndex != null) {
         val group = groups.getOrNull(deleteIndex)
@@ -541,7 +531,6 @@ private fun TabGroupMenu(
                         onCheckedChange = { onToggleDefaultGroup(page) },
                     )
                 }
-                // グループの名前変更・削除を格納する3点メニュー
                 var groupMenuExpanded by remember { mutableStateOf(false) }
                 Box {
                     IconButton(onClick = { groupMenuExpanded = true }) {

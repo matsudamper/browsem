@@ -15,7 +15,6 @@ internal data class DevToolsConsoleUiState(
     val scriptText: String,
     /** 実行できるかどうか。入力が空の間や実行中は実行できない */
     val canExecute: Boolean,
-    /** 実行結果を待っているかどうか */
     val isExecuting: Boolean,
     /** 詳細を開いている場合の内容。一覧表示中は null */
     val detail: Detail?,
@@ -50,7 +49,6 @@ internal data class DevToolsConsoleUiState(
         ResultError,
     }
 
-    /** 全文表示の内容 */
     @Immutable
     data class Detail(
         val title: String,
@@ -65,7 +63,6 @@ internal data class DevToolsConsoleUiState(
         fun onClickClear()
         fun onClickCloseDetail()
 
-        /** 詳細の全文をクリップボードにコピーする */
         fun onClickCopyDetail()
         fun onDismiss()
     }

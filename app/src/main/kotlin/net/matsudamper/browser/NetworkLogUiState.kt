@@ -4,9 +4,6 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.Stable
 import androidx.compose.ui.graphics.ImageBitmap
 
-/**
- * 開発者ツールのネットワークログ画面の状態。
- */
 @Immutable
 internal data class NetworkLogUiState(
     val callbacks: Callbacks,
@@ -87,7 +84,6 @@ internal data class NetworkLogUiState(
         val sizeLabel: String,
     )
 
-    /** 詳細表示の内容 */
     @Immutable
     data class Detail(
         val id: String,
@@ -114,13 +110,10 @@ internal data class NetworkLogUiState(
         val value: String,
     )
 
-    /** レスポンス本文のプレビュー */
     @Immutable
     sealed interface Preview {
-        /** 取得中 */
         data object Loading : Preview
 
-        /** 画像として表示できる場合 */
         data class Image(
             val bitmap: ImageBitmap,
             val sizeLabel: String,
@@ -128,19 +121,16 @@ internal data class NetworkLogUiState(
             val canCopyBody: Boolean,
         ) : Preview
 
-        /** テキストとして表示できる場合 */
         data class Text(
             val text: String,
             val isTruncated: Boolean,
         ) : Preview
 
-        /** 表示できない場合の理由 */
         data class Unavailable(
             val message: String,
         ) : Preview
     }
 
-    /** 種別の絞り込み条件 */
     enum class ResourceFilter {
         All,
         Document,

@@ -160,12 +160,9 @@ internal fun GeckoBrowserTab(
     val formInputRepository: FormInputRepository = koinInject()
     val addressAutofillCoordinator: AddressAutofillCoordinator = koinInject()
     val formInputAutofillCoordinator: FormInputAutofillCoordinator = koinInject()
-    // URLバーフォーカス時にクリップボードから読み取ったURL
     var clipboardUrl by remember { mutableStateOf<String?>(null) }
-    // タブ履歴BottomSheetの表示状態
     var showTabHistorySheet by remember { mutableStateOf(false) }
 
-    // Androidランタイムパーミッション要求用（マイク・カメラ等）
     val pendingPermissionsRef = remember {
         object {
             var pending: CompletableDeferred<Array<String>>? = null
@@ -210,7 +207,6 @@ internal fun GeckoBrowserTab(
         },
     )
 
-    // ツールバー色の輝度に応じてステータスバーアイコン色（黒/白）を動的に切り替える
     val toolbarColors = resolveBrowserToolbarColors(
         toolbarColor = state.toolbarColor,
         defaultToolbarColor = MaterialTheme.colorScheme.primaryContainer,
@@ -231,7 +227,6 @@ internal fun GeckoBrowserTab(
         }
     }
 
-    // フルスクリーン時にシステムバーを非表示にする
     if (!view.isInEditMode) {
         DisposableEffect(state.isFullScreen) {
             if (!state.isFullScreen) return@DisposableEffect onDispose {}
@@ -342,7 +337,6 @@ internal fun GeckoBrowserTab(
         }
     }
 
-    // 画像のみの要求で使うフォトピッカー（複数選択）
     val multipleVisualMediaLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.PickMultipleVisualMedia(),
     ) { uris ->
@@ -353,7 +347,6 @@ internal fun GeckoBrowserTab(
         }
     }
 
-    // ファイルプロンプトが来たらピッカーを起動
     val pendingFilePrompt = dialogState.pendingFilePrompt
     LaunchedEffect(pendingFilePrompt) {
         val prompt = pendingFilePrompt ?: return@LaunchedEffect
@@ -379,7 +372,6 @@ internal fun GeckoBrowserTab(
         }
     }
 
-    // Web Share プロンプトが来たら Channel 経由で共有シートを起動し、結果を待ってから GeckoResult を完了する
     LaunchedEffect(dialogState) {
         dialogState.webShareLaunchChannel.receiveAsFlow().collect {
             val prompt = dialogState.pendingWebSharePrompt ?: return@collect
@@ -414,7 +406,6 @@ internal fun GeckoBrowserTab(
         geckoView?.requestFocus()
     }
 
-    // ページの初回描画・ロード完了の度にプレビューキャプチャを実行する
     LaunchedEffect(state) {
         snapshotFlow { state.capturePreviewRequestCount }
             .collectLatest { count ->
@@ -447,7 +438,6 @@ internal fun GeckoBrowserTab(
             }
     }
 
-    // URLバー入力変更時にサジェスト検索を発火
     LaunchedEffect(state, onUrlInputChanged) {
         snapshotFlow { state.urlInput to state.isUrlInputFocused }
             .collectLatest { (input, focused) ->
@@ -500,11 +490,9 @@ internal fun GeckoBrowserTab(
         stableCount: Int,
         startTimeMs: Long,
     ) {
-        // 旧実装は OneShotPreDrawListener を使っていたが、preDraw は描画が必要なフレーム
-        // でしか発火しないため、サイズ安定後に画面の再描画トリガがないと stable check が
-        // 進まず復帰が遅延する事象が観測された (再現で 31 秒待たされた)。
-        // postOnAnimation は Choreographer のアニメーションフレームで毎 vsync 発火する
-        // ため、UI 操作がなくても安定検出を進められる。
+        // OneShotPreDrawListener は描画が必要なフレームでしか発火せず、サイズ安定後に再描画の
+        // トリガがないと stable check が進まず復帰が数十秒遅れる。postOnAnimation は Choreographer の
+        // アニメーションフレームで毎 vsync 発火するため、UI 操作がなくても安定検出を進められる。
         gecko.postOnAnimation {
             if (surfaceResumeState == SurfaceResumeState.ACTIVE) {
                 Log.d(TAG_SURFACE_RESUME, "stable-check skipped: already ACTIVE")
@@ -637,7 +625,7 @@ internal fun GeckoBrowserTab(
                     // よる focus-only 離脱を含む) では踏まない。この場合に release + INVISIBLE
                     // すると、Activity が可視のまま (ON_STOP が来ないまま) GeckoView だけが
                     // 真っ白になるため、surface と active を維持する (PAUSED_KEEP_SURFACE)。
-                    // 完全に不可視になる ON_STOP 側で従来どおり release する。
+                    // 完全に不可視になる ON_STOP 側で release する。
                     //
                     // capture preview は release 前に start する。capturePixels() は非同期
                     // GeckoResult を返すため release 直後に走るキャプチャ完了率は低下するが、
@@ -683,7 +671,7 @@ internal fun GeckoBrowserTab(
 
                         else -> {
                             // IME 表示中の ACTIVE、または WAITING_STABLE 中（前回 resume の
-                            // 安定待ちが完了する前に再度 pause した場合）は従来どおり release。
+                            // 安定待ちが完了する前に再度 pause した場合）は release する。
                             Log.d(
                                 TAG_SURFACE_RESUME,
                                 "ON_PAUSE: releaseSession + INVISIBLE 実行 gv.size=${target.width}x${target.height}",
@@ -711,7 +699,7 @@ internal fun GeckoBrowserTab(
                 Lifecycle.Event.ON_STOP -> {
                     session.flushSessionState()
                     // IME 表示中の pause は ON_PAUSE で release 済み (RELEASED)。
-                    // media の場合は session 維持のため capture のみ実行（従来どおり）。
+                    // media の場合は session 維持のため capture のみ実行する。
                     // TODO: media 再生継続中の session は release しないため、surface 再作成時の
                     //       SyncResumeResizeCompositor ハング経路を踏むリスクが残る。実機で
                     //       再現を確認したら、audio を殺さない形で compositor 再構築する手段
@@ -727,10 +715,8 @@ internal fun GeckoBrowserTab(
                                 // IME 非表示の pause で surface を維持していたが、ON_STOP に
                                 // 到達した = 完全に不可視化した (ホームボタン等)。ここで release
                                 // せず session を attach したまま停止すると、復帰時に surface が
-                                // session 付きで再作成され自動 resume-resize のハング経路を踏む
-                                // (revert された #398 の STOPPED_KEEP_SURFACE はこれが原因と推測)。
-                                // 従来どおり release して、復帰は実績のある RELEASED →
-                                // fresh attach 経路に合流させる。
+                                // session 付きで再作成され自動 resume-resize のハング経路を踏む。
+                                // release して、復帰は RELEASED → fresh attach 経路に合流させる。
                                 Log.d(
                                     TAG_SURFACE_RESUME,
                                     "ON_STOP: PAUSED_KEEP_SURFACE → releaseSession + INVISIBLE 実行" +
@@ -767,7 +753,6 @@ internal fun GeckoBrowserTab(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    // theme-color WebExtensionのコールバック登録
     DisposableEffect(session, state, themeColorExtension) {
         themeColorExtension.registerSession(session) { color, reportedUrl ->
             if (!isThemeColorForCurrentPage(state.currentPageUrl, reportedUrl)) {
@@ -815,7 +800,6 @@ internal fun GeckoBrowserTab(
         }
     }
 
-    // FindInPageWebExtension のセッション登録
     DisposableEffect(session, state, findInPageWebExtension) {
         findInPageWebExtension.registerSession(session) { current, total, error ->
             // 正規表現モードでないときに届いた遅延結果は無視する
@@ -924,7 +908,6 @@ internal fun GeckoBrowserTab(
         }
     }
 
-    // DevToolsWebExtension のセッション登録（フォーカス中の入力要素情報の通知）
     DisposableEffect(session, state) {
         val devToolsWebExtension = state.devToolsWebExtension
         devToolsWebExtension.registerSession(session) { focusedInput ->
@@ -1050,7 +1033,6 @@ internal fun GeckoBrowserTab(
         scheduleInitialLoad()
     }
 
-    // テキスト選択メニューにカスタムアクション（検索/開く/入力欄保存）を追加
     DisposableEffect(session, enableTabUi, searchTemplate, formInputAutofillCoordinator) {
         val activity = context.findActivity()
         if (activity == null) {
@@ -1069,7 +1051,6 @@ internal fun GeckoBrowserTab(
                     menu.add(Menu.NONE, MENU_ID_SAVE_FORM_INPUT, Menu.NONE, "入力欄を保存")
                 }
 
-                // コピー等の標準項目・他アプリの後にカスタム項目を末尾追加
                 val text = mSelection?.text?.trim() ?: ""
                 if (text.isNotBlank()) {
                     val isUrl = text.startsWith("http://") ||
@@ -1135,8 +1116,7 @@ internal fun GeckoBrowserTab(
         }
     }
 
-    // Back handler (when 分岐で優先度を制御: showFindInPage > isUrlInputFocused > canGoBack)
-    // webAppMode で上記いずれにも該当しない（これ以上戻れない）場合はバックを消費しない。
+    // webAppMode で戻る先が無い場合はバックを消費しない。
     // ハンドラを無効化してシステムに委ねることで、メインアプリと同様に予測型バック
     // （ホーム画面へ縮小していくアニメーション）を発生させ、そのまま Activity を終了させる。
     PredictiveBackHandler(enabled = state.isFullScreen || state.findInPage.isVisible || state.isUrlInputFocused || state.canGoBack) { progress ->
@@ -1202,7 +1182,7 @@ internal fun GeckoBrowserTab(
             ),
     ) {
         if (state.isFullScreen) {
-            // フルスクリーン時はツールバー・翻訳バー・検索バーを非表示
+            // フルスクリーン中はツールバー・翻訳バー・検索バーを出さない
         } else if (state.findInPage.isVisible) {
             FindInPageBar(
                 query = state.findInPage.query,
@@ -1241,7 +1221,6 @@ internal fun GeckoBrowserTab(
                     onShare = state::sharePage,
                     onFindInPage = state.findInPage::open,
                     onAddToHomeScreen = state::requestAddToHomeScreen,
-                    // ウェブアプリモードでは「ホームに追加」を非表示
                     showAddToHomeScreen = !webAppMode,
                     onOpenInBrowser = onOpenInBrowser?.let { callback ->
                         { callback(state.currentPageUrl) }
@@ -1253,7 +1232,6 @@ internal fun GeckoBrowserTab(
                     onPageZoomIn = state::pageZoomIn,
                     onPageZoomOut = state::pageZoomOut,
                     onResetPageZoom = state::resetPageZoom,
-                    // ウェブアプリモードでは閉じるボタンを非表示にする
                     showCloseButton = customTabMode,
                     showHome = webAppMode,
                 )
@@ -1273,7 +1251,6 @@ internal fun GeckoBrowserTab(
                             if (!state.isUrlInputFocused) {
                                 state.urlInput = ""
                             }
-                            // クリップボードからURLを読み取り、現在のページと異なる場合に表示
                             val clipManager = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE)
                                 as android.content.ClipboardManager
                             val clipped = clipManager.primaryClip?.getItemAt(0)
@@ -1351,7 +1328,6 @@ internal fun GeckoBrowserTab(
                     onAddToHomeScreen = state::requestAddToHomeScreen,
                 )
             }
-            // 翻訳元・翻訳先の選択肢：検出済み言語＋英語＋日本語（重複除去）
             val detectedLang = state.translation.detectedPageLanguage
             val languageOptions = remember(detectedLang) {
                 buildList {
@@ -1469,7 +1445,6 @@ internal fun GeckoBrowserTab(
         )
     }
 
-    // ホームに追加ダイアログ
     state.addToHomeScreenState?.let { addToHomeScreenState ->
         AddToHomeScreenDialog(
             url = addToHomeScreenState.url,
@@ -1480,7 +1455,6 @@ internal fun GeckoBrowserTab(
         )
     }
 
-    // 拡張機能のポップアップ（タブに対する拡張機能の操作画面）
     state.extensionActionPopup?.let { popup ->
         ExtensionActionPopupDialog(
             popup = popup,
@@ -1488,7 +1462,6 @@ internal fun GeckoBrowserTab(
         )
     }
 
-    // 開発者ツールダイアログ
     if (state.showDevTools) {
         DevToolsDialog(
             focusedInput = state.devToolsFocusedInput,
@@ -1499,7 +1472,6 @@ internal fun GeckoBrowserTab(
         )
     }
 
-    // ネットワークログ画面
     if (state.showNetworkLog) {
         NetworkLogDialog(
             uiState = rememberNetworkLogUiState(
@@ -1509,7 +1481,6 @@ internal fun GeckoBrowserTab(
         )
     }
 
-    // コンソール画面
     if (state.showDevToolsConsole) {
         DevToolsConsoleDialog(
             uiState = rememberDevToolsConsoleUiState(
@@ -1519,7 +1490,6 @@ internal fun GeckoBrowserTab(
         )
     }
 
-    // タブ履歴BottomSheet
     if (showTabHistorySheet) {
         TabHistoryBottomSheet(
             items = state.tabHistoryItems.asReversed(),
@@ -1650,7 +1620,6 @@ private const val STABLE_TIMEOUT_MS = 1000L
 
 private fun GeckoSession.logKey(): String = Integer.toHexString(System.identityHashCode(this))
 
-// テキスト選択メニューのカスタム項目 ID
 private const val MENU_ID_SEARCH = 0x10001
 private const val MENU_ID_OPEN = 0x10002
 private const val MENU_ID_SAVE_FORM_INPUT = 0x10003
@@ -1723,7 +1692,6 @@ private fun Modifier.imeAboveNavigationBarsPadding(): Modifier {
     return padding(bottom = with(density) { imeBottomPx.toDp() })
 }
 
-/** MIME タイプを Intent に適用する共通関数 */
 private fun applyMimeTypes(intent: Intent, mimeTypes: Array<String>) {
     when {
         mimeTypes.isEmpty() -> intent.type = "*/*"

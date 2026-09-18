@@ -51,7 +51,6 @@ internal class DownloadWorker(
      */
     private lateinit var httpClient: DownloadHttpClient
 
-    /** ストリームコピー・切断検出を担うコアロジック */
     private val engine = DownloadEngine()
 
     /** 通知タップ時に対象アイテムをハイライトするための安定したworkerID */
@@ -66,16 +65,12 @@ internal class DownloadWorker(
     override suspend fun doWork(): Result {
         val url = inputData.getString(KEY_URL) ?: return Result.failure()
         val referrerUrl = inputData.getString(KEY_REFERRER_URL).orEmpty()
-        // inputDataから通知IDを読み出す（GeckoDownloadManagerと共有）
         val notificationId = inputData.getInt(KEY_NOTIFICATION_ID, NOTIFICATION_ID)
-        // 再開モード: 部分ファイルURI
         val partialFileUriString = inputData.getString(KEY_PARTIAL_FILE_URI)
-        // 再開時でも安定したworkerIdを取得する（初回ダウンロードではid.toString()と同じ）
         stableWorkerId = inputData.getString(KEY_STABLE_WORKER_ID) ?: id.toString()
 
         val enqueuedAt = System.currentTimeMillis()
 
-        // URLからファイル名を推測して最初から保存しておく
         val guessedFileName = URLUtil.guessFileName(url, null, null)
 
         ensureNotificationChannel(context)
@@ -131,7 +126,6 @@ internal class DownloadWorker(
                     }
                 } else {
                     repository.updateCancelled(workerId)
-                    // キャンセル時は部分ファイルを削除する
                     savedUri?.let { context.contentResolver.delete(it, null, null) }
                 }
             }
@@ -142,7 +136,6 @@ internal class DownloadWorker(
             val failureReason = DownloadFailureReason.from(e)
             val savedUri = partialResultUri
             if (savedUri != null && partialResultTotalRead > 0) {
-                // 部分ファイルが存在する場合は再開可能として保存する
                 repository.updatePartialFailed(
                     currentWorkerId = id.toString(),
                     partialFileUri = savedUri.toString(),
@@ -152,7 +145,6 @@ internal class DownloadWorker(
                     failureReason = failureReason,
                 )
             } else {
-                // partialResultUri が非null かつ 0バイトの場合は孤立したMediaStoreエントリを削除する
                 savedUri?.let { context.contentResolver.delete(it, null, null) }
                 repository.updateFailed(id.toString(), failureReason)
             }
@@ -318,7 +310,6 @@ internal class DownloadWorker(
             val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
                 ?: throw IOException("ダウンロードエントリの作成に失敗しました。")
 
-            // 失敗時に部分ファイルURIを参照できるよう保存する
             partialResultUri = uri
             partialResultFileName = fileName
             partialResultContentLength = contentLength
@@ -349,7 +340,6 @@ internal class DownloadWorker(
 
             val completeValues = ContentValues().apply { put(MediaStore.Downloads.IS_PENDING, 0) }
             resolver.update(uri, completeValues, null, null)
-            // 完了したので部分ファイル情報をクリアする
             partialResultUri = null
             // IS_PENDING=0 更新後にMediaStoreが重複を避けてリネームした場合に備え、実際のファイル名を取得する
             val actualFileName = resolver.query(
@@ -363,7 +353,6 @@ internal class DownloadWorker(
             }
             return Pair(uri, actualFileName ?: fileName)
         } finally {
-            // ボディを確実にクローズする（pendingResponse 経由・fetch 経由いずれの場合も）
             response.close()
         }
     }
@@ -398,7 +387,6 @@ internal class DownloadWorker(
             // サーバーがRangeリクエストをサポートしていない場合（200 OK）は最初からやり直す。
             // 非HTTP（statusCode が無い）レスポンスも Range 継続はできないため同様に扱う
             if (statusCode == 200 || statusCode == DownloadMetadata.NO_HTTP_STATUS) {
-                // 部分ファイルを削除して新規ダウンロードを開始する
                 resolver.delete(partialUri, null, null)
                 partialResultUri = null
                 return downloadFile(urlString, referrerUrl, notificationId, repository)
@@ -408,10 +396,8 @@ internal class DownloadWorker(
                 throw IOException("HTTP エラー: $statusCode")
             }
 
-            // 206 Partial Content: 既存ファイルへ追記する
             val body = response.body ?: throw IOException("レスポンスボディが空です。")
             val contentRangeHeader = response.header("Content-Range")
-            // Content-Range: bytes START-END/TOTAL 形式からトータルサイズを取得する
             val totalFileSize = DownloadMetadata.parseTotalFromContentRange(contentRangeHeader)
                 ?: (rangeStart + DownloadMetadata.parseContentLength(response.header("Content-Length")))
             val contentLength = totalFileSize
@@ -446,7 +432,6 @@ internal class DownloadWorker(
             partialResultTotalRead = rangeStart
 
             var lastUpdateTime = 0L
-            // "wa" モードで追記オープンする
             resolver.openOutputStream(partialUri, "wa")?.use { outputStream ->
                 engine.copyTo(
                     body = body,
@@ -487,7 +472,6 @@ internal class DownloadWorker(
         stableWorkerId: String,
     ): ForegroundInfo {
         val sizeText = buildSizeText(totalRead, contentLength)
-        // タップ時にダウンロード管理画面を開くPendingIntent
         val openDownloadsIntent = Intent(context, MainActivity::class.java).apply {
             action = ACTION_OPEN_DOWNLOADS
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_NEW_TASK
@@ -540,16 +524,13 @@ internal class DownloadWorker(
         const val KEY_REFERRER_URL = "referrer_url"
         const val KEY_NOTIFICATION_ID = "notification_id"
 
-        /** 再開モード: 部分ファイルのMediaStore URI */
         const val KEY_PARTIAL_FILE_URI = "partial_file_uri"
 
-        /** 再開モード: 再開を開始するバイト位置 */
         const val KEY_RESUME_FROM_BYTES = "resume_from_bytes"
         const val CHANNEL_ID = "download_progress_channel"
         const val NOTIFICATION_ID = 9001
         const val TAG_DOWNLOAD = "download"
 
-        /** ダウンロード管理画面を開くためのActionキー */
         const val ACTION_OPEN_DOWNLOADS = "net.matsudamper.browser.ACTION_OPEN_DOWNLOADS"
 
         /** 通知タップ時にハイライト対象のダウンロードを特定するためのExtra */
