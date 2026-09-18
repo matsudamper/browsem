@@ -125,10 +125,6 @@ internal class PromptDialogState(
         pendingFormInputSaveDialog = null
     }
 
-    // ================================================================
-    // Actions
-    // ================================================================
-
     fun dismissAlertPrompt() {
         val prompt = pendingAlertPrompt ?: return
         pendingAlertResult?.complete(prompt.dismiss())
@@ -416,10 +412,6 @@ internal class PromptDialogState(
         pendingAddressSaveResult = null
         pendingAddressSaveAddress = null
     }
-
-    // ================================================================
-    // Delegate 生成
-    // ================================================================
 
     fun createPromptDelegate(): GeckoSession.PromptDelegate =
         object : GeckoSession.PromptDelegate {

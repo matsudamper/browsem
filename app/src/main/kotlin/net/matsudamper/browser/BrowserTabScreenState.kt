@@ -159,7 +159,6 @@ internal class BrowserTabScreenState(
     var onWebAppCrossDomainNavigation by mutableStateOf(onWebAppCrossDomainNavigation)
     val session: GeckoSession get() = browserTab.session
 
-    // --- URL / Navigation state ---
     var urlInput by mutableStateOf(browserTab.currentUrl)
     var currentPageUrl by mutableStateOf(browserTab.currentUrl)
     var currentPageTitle by mutableStateOf(browserTab.title)
@@ -167,7 +166,6 @@ internal class BrowserTabScreenState(
     var canGoForward by mutableStateOf(false)
     var isUrlInputFocused by mutableStateOf(false)
 
-    // --- Display state ---
     var isPcMode by mutableStateOf(false)
 
     // BrowserTab.themeColor に委譲することで、変更が自動的に永続化対象になる
@@ -187,13 +185,11 @@ internal class BrowserTabScreenState(
     private val mainHandler = Handler(Looper.getMainLooper())
     var webAppManifestJson by mutableStateOf<String?>(null)
 
-    // --- タブ内ナビゲーション履歴（GeckoView の HistoryDelegate から同期） ---
     var tabHistoryItems by mutableStateOf<List<TabHistoryItem>>(emptyList())
     var tabHistoryCurrentIndex by mutableStateOf(-1)
 
     data class TabHistoryItem(val uri: String, val title: String)
 
-    // --- Translation state（分離済み） ---
     val translation = BrowserTabTranslationState(
         coroutineScope = coroutineScope,
         pageTranslationWebExtension = pageTranslationWebExtension,
@@ -206,13 +202,11 @@ internal class BrowserTabScreenState(
         },
     )
 
-    // --- Find-in-page state（分離済み） ---
     val findInPage = FindInPageState(
         findInPageWebExtension = findInPageWebExtension,
         session = { session },
     )
 
-    // --- 開発者ツール state ---
     var showDevTools by mutableStateOf(false)
         private set
 
@@ -224,10 +218,8 @@ internal class BrowserTabScreenState(
     var showDevToolsConsole by mutableStateOf(false)
         private set
 
-    // --- Back gesture state ---
     var isBackGestureInProgress by mutableStateOf(false)
 
-    // --- Context menu state ---
     var contextMenuState by mutableStateOf<ContextMenuState?>(null)
         private set
 
@@ -235,7 +227,6 @@ internal class BrowserTabScreenState(
         contextMenuState = null
     }
 
-    // --- コンテンツ領域のタッチジェスチャー追跡 ---
     // JS フリーズ中に滞留したタッチが解放後にまとめて処理されると、スクロール操作でも
     // 長押し判定になり onContextMenu が届くことがあるため、実際のジェスチャーを記録して抑制する。
     private var hasTouchGestureRecord = false
@@ -280,7 +271,6 @@ internal class BrowserTabScreenState(
         data class LinkWithImage(val url: String, val imageSrcUrl: String) : ContextMenuState
     }
 
-    // --- ホームに追加ダイアログ状態 ---
     var addToHomeScreenState by mutableStateOf<AddToHomeScreenState?>(null)
         private set
     private var addToHomeIconJob: Job? = null
@@ -292,16 +282,12 @@ internal class BrowserTabScreenState(
         val isIconLoading: Boolean,
     )
 
-    // --- プロンプトダイアログ状態（分離済み） ---
     val promptDialogState = PromptDialogState(coroutineScope)
 
-    // --- Web Share files ワークアラウンドの進行中状態 ---
     val webShareFilesState = WebShareFilesState(coroutineScope)
 
-    // --- サイトごとの権限確認ダイアログ状態（分離済み） ---
     val sitePermissionDialogState = SitePermissionDialogState(siteSettingsRepository)
 
-    // --- ファイルダウンロード確認ダイアログ状態（分離済み） ---
     val downloadState = TabDownloadState(
         coroutineScope = coroutineScope,
         geckoDownloadManager = geckoDownloadManager,
@@ -329,7 +315,6 @@ internal class BrowserTabScreenState(
     // 外部アプリ確認ダイアログでキャンセルされた場合、次回のロードリクエストで外部アプリチェックをスキップする
     private var skipExternalAppCheckForNextLoad = false
 
-    // --- フルスクリーン状態 ---
     var isFullScreen by mutableStateOf(false)
 
     var renderReady by mutableStateOf(false)
@@ -375,12 +360,10 @@ internal class BrowserTabScreenState(
 
     var pageLoadError by mutableStateOf<PageLoadError?>(null)
 
-    // --- ズーム状態（viewport width 操作によりテキスト・画像含め全体をズーム）---
     // BrowserTab.pageZoomPercent に委譲することで、タブ切替や State 再生成後も倍率を維持する。
     val pageZoomPercent: Int
         get() = browserTab.pageZoomPercent
 
-    // --- Scroll / Refresh state ---
     var visualViewportScale by mutableFloatStateOf(1f)
     var isRefreshing by mutableStateOf(false)
 
@@ -396,8 +379,6 @@ internal class BrowserTabScreenState(
 
     val showInstallExtensionItem: Boolean
         get() = resolveAmoInstallUriFromPage(currentPageUrl) != null
-
-    // --- 拡張機能アクション（ツールバーメニューのアイコン行）---
 
     // メニューのアイコン行の横スクロール位置。タブ内でのみ保持し、永続化はしない
     val extensionActionScrollState = ScrollState(initial = 0)
@@ -438,10 +419,6 @@ internal class BrowserTabScreenState(
             order = draggingExtensionActionOrder ?: extensionActionOrder,
             idOf = { it.extensionId },
         )
-
-    // ================================================================
-    // Actions
-    // ================================================================
 
     fun onUrlSubmit(rawInput: String) {
         val resolved = buildUrlFromInput(rawInput, homepageUrl, searchTemplate)
