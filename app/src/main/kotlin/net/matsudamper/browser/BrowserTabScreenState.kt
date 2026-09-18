@@ -55,9 +55,6 @@ import org.mozilla.geckoview.WebResponse
 
 private const val TAG = "BrowserTabScreenState"
 
-/** タブ 1 つあたりに残す外部アプリ遷移ログの上限 */
-private const val MAX_EXTERNAL_APP_NAVIGATION_LOGS = 20
-
 /** タブ 1 つあたりに、サブフレーム由来の要求で起動確認を出す上限 */
 private const val MAX_SUBFRAME_EXTERNAL_APP_PROMPTS = 3
 
@@ -323,11 +320,6 @@ internal class BrowserTabScreenState(
     // サブフレーム由来の要求で起動確認を出した URI。ユーザー操作なしに何度でも要求できるため、
     // 同じ URI では出し直さず、タブあたりの回数も制限する。
     private val promptedSubframeExternalAppUris = mutableSetOf<String>()
-
-    // 同じ外部アプリ遷移ログを繰り返し保存しないための記録。
-    // ページ遷移ではクリアしない。読み込みごとに違う要求を出すページが自動リロードを
-    // 繰り返すと、そのたびに上限まで保存できてしまうため。
-    private val savedExternalAppNavigationKeys = mutableSetOf<String>()
 
     // 確認ダイアログを閉じたときに、その要求の URL を現在のタブで読み込んでよいか。
     // 現在ページを置き換えるはずだった遷移だけが対象。新規ウィンドウやサブフレームからの
@@ -1186,7 +1178,6 @@ internal class BrowserTabScreenState(
         // 外部アプリ判定だけ行い、ブラウザ内なら ALLOW して onNewSession に渡す。
         if (isSinglePageMode && request.isNewWindowTarget()) {
             return applyExternalAppNavigationAction(
-                uri = request.uri,
                 action = externalAction,
                 loadsCurrentTab = false,
             )
@@ -1197,7 +1188,6 @@ internal class BrowserTabScreenState(
             return GeckoResult.fromValue(AllowOrDeny.DENY)
         }
         return applyExternalAppNavigationAction(
-            uri = request.uri,
             action = externalAction,
             loadsCurrentTab = !request.isNewWindowTarget(),
         )
@@ -1226,18 +1216,15 @@ internal class BrowserTabScreenState(
             // アプリを開くところまで進めない要求は、サブフレームでは黙って止める。
             // fallback URL をトップレベルで読み込むと iframe の第三者コンテンツがタブごと
             // 任意の URL へ遷移させられ、Toast は要求を繰り返すページが出し続けられるため。
-            saveExternalAppNavigationInfo(uri = request.uri, action = action)
             return GeckoResult.fromValue(AllowOrDeny.DENY)
         }
         if (promptedSubframeExternalAppUris.size >= MAX_SUBFRAME_EXTERNAL_APP_PROMPTS ||
             !promptedSubframeExternalAppUris.add(request.uri)
         ) {
             // 一度出した確認を閉じた直後に出し直されるとブラウザの操作を妨げられる。
-            saveExternalAppNavigationInfo(uri = request.uri, action = action)
             return GeckoResult.fromValue(AllowOrDeny.DENY)
         }
         return applyExternalAppNavigationAction(
-            uri = request.uri,
             action = action,
             loadsCurrentTab = false,
         )
@@ -1248,11 +1235,9 @@ internal class BrowserTabScreenState(
      * ときに読み込み直してよいかの判断に使う。
      */
     private fun applyExternalAppNavigationAction(
-        uri: String,
         action: ExternalAppNavigationAction,
         loadsCurrentTab: Boolean,
     ): GeckoResult<AllowOrDeny>? {
-        saveExternalAppNavigationInfo(uri = uri, action = action)
         return when (action) {
             ExternalAppNavigationAction.AllowInBrowser -> null
 
@@ -1275,46 +1260,6 @@ internal class BrowserTabScreenState(
                 }
                 GeckoResult.fromValue(AllowOrDeny.DENY)
             }
-        }
-    }
-
-    /**
-     * ブラウザ内で処理しなかった遷移をクラッシュログ画面へ INFO として残す。
-     * 認証アプリへの受け渡しのように端末でしか再現しない遷移を後から追えるようにする。
-     *
-     * URL は scheme とホストだけに切り詰め、Intent の中身も残さない。認証の受け渡しでは
-     * パス・クエリ・フラグメントや extras に認可コードやトークンが載るため。
-     *
-     * iframe から要求を繰り返すページがあるため、同じ内容とタブあたりの件数で絞る。
-     * クラッシュログには件数上限も自動削除も無く、メインスレッドで書き込むため。
-     */
-    private fun saveExternalAppNavigationInfo(
-        uri: String,
-        action: ExternalAppNavigationAction,
-    ) {
-        if (savedExternalAppNavigationKeys.size >= MAX_EXTERNAL_APP_NAVIGATION_LOGS) return
-        val detail = when (action) {
-            ExternalAppNavigationAction.AllowInBrowser -> return
-
-            ExternalAppNavigationAction.AppNotFound -> "appNotFound"
-
-            is ExternalAppNavigationAction.Launch -> {
-                "launch app=${action.request.appName} package=${action.request.intent.`package`}"
-            }
-
-            is ExternalAppNavigationAction.OpenFallback -> {
-                "openFallback url=${redactUrlForLog(action.url)}"
-            }
-        }
-        val body = "uri=${redactUrlForLog(uri)}\naction=$detail\npageUrl=${redactUrlForLog(currentPageUrl)}"
-        if (!savedExternalAppNavigationKeys.add(body)) return
-        try {
-            crashLogRepository.saveInfoSync(
-                title = "外部アプリ遷移",
-                body = body,
-            )
-        } catch (error: RuntimeException) {
-            Log.w(TAG, "外部アプリ遷移ログの保存に失敗", error)
         }
     }
 
