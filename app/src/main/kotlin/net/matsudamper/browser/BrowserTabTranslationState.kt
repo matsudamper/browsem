@@ -123,7 +123,7 @@ internal class BrowserTabTranslationState(
     }
 
     /**
-     * ページ遷移に追従して翻訳状態を破棄する。
+     * ページ遷移に追従して翻訳状態と訳文キャッシュを破棄する。
      *
      * data: URL（翻訳結果ページ）では検出言語も保持する。
      */
@@ -133,6 +133,8 @@ internal class BrowserTabTranslationState(
             stopBridgeIfActive(restoreOriginal = false)
             activeProvider = null
             clearBarState()
+        }
+        if (shouldClearTranslationCacheOnLocationChange(url, isFullPageLoad)) {
             pageTranslationCache.clear()
         }
         if (!url.startsWith("data:")) {
