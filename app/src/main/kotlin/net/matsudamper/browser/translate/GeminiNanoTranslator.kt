@@ -111,7 +111,11 @@ class GeminiNanoTranslator(
 
                 currentStage = STAGE_INITIAL
                 onTranslateStateChanged(Translator.TranslateState.TRANSLATING)
-                val translationCache = pageTranslationCache.forLanguagePair(sourceLanguage, targetLanguage)
+                val translationCache = pageTranslationCache.forTranslator(
+                    translatorKey = "$CACHE_TRANSLATOR_KEY_PREFIX$currentModelKey",
+                    sourceLanguage = sourceLanguage,
+                    targetLanguage = targetLanguage,
+                )
                 totalSegmentCount.set(translatableSegments.size)
                 notifyProgress()
                 val initialSegments = translatableSegments.take(INITIAL_APPLY_SEGMENT_COUNT)
@@ -338,6 +342,9 @@ class GeminiNanoTranslator(
 
     companion object {
         private const val TAG = "GeminiNanoTranslator"
+
+        /** 実際に選ばれたモデルを含め、モデルを切り替えたら別のキャッシュになるようにする */
+        private const val CACHE_TRANSLATOR_KEY_PREFIX = "gemini-nano/"
         private const val UNDETERMINED_LANGUAGE = "und"
         private const val LANGUAGE_DETECTION_LIMIT = 2_000
 

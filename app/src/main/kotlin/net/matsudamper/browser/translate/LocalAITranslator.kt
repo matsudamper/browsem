@@ -81,9 +81,10 @@ class LocalAITranslator(
                 targetLanguage = effectiveTargetLanguage,
                 segmentCount = snapshot.segments.size,
             )
-            val translationCache = pageTranslationCache.forLanguagePair(
-                effectiveSourceLanguage,
-                effectiveTargetLanguage,
+            val translationCache = pageTranslationCache.forTranslator(
+                translatorKey = CACHE_TRANSLATOR_KEY,
+                sourceLanguage = effectiveSourceLanguage,
+                targetLanguage = effectiveTargetLanguage,
             )
             totalSegmentCount.set(snapshot.segments.size)
             notifyProgress()
@@ -402,6 +403,7 @@ class LocalAITranslator(
 
     companion object {
         private const val TAG = "LocalAITranslator"
+        private const val CACHE_TRANSLATOR_KEY = "mlkit"
         private const val LANGUAGE_DETECTION_LIMIT = 2_000
         private const val APPLY_BATCH_SIZE = 16
         private const val INITIAL_APPLY_SEGMENT_COUNT = 8
