@@ -14,6 +14,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import net.matsudamper.browser.data.download.DownloadRepository
 import net.matsudamper.browser.download.PendingDownloadBodyStore
+import net.matsudamper.browser.download.cancelDownloadFromNotification
 
 /** 通知のキャンセル操作からダウンロードを停止する。 */
 internal class DownloadCancelReceiver : BroadcastReceiver() {
@@ -33,35 +34,38 @@ internal class DownloadCancelReceiver : BroadcastReceiver() {
             try {
                 val repository = DownloadRepository(applicationContext)
                 val workerId = currentWorkerId.toString()
-
-                // SUCCEEDED/FAILED との状態遷移を DB 上で競合させる。
-                // 既に完了・失敗が確定している場合はキャンセル通知を出さない。
-                if (!repository.updateCancelled(workerId)) {
-                    return@launch
-                }
                 val record = repository.getByCurrentWorkerId(currentWorkerId)
 
-                // 再開中は Worker が partialResultUri を設定する前でも DB に部分ファイル URI が残るため、
-                // キャンセルを確定した側で削除して MediaStore エントリを残さない。
-                record?.partialFileUri?.let { partialFileUri ->
-                    runCatching {
-                        applicationContext.contentResolver.delete(Uri.parse(partialFileUri), null, null)
-                    }
-                }
-
-                // Worker 起動前に保持しているレスポンスがあればここで破棄する。
-                PendingDownloadBodyStore.discard(workerId)
-                WorkManager.getInstance(applicationContext).cancelWorkById(currentWorkerId)
-
-                // GeckoDownloadManager が Worker 起動前に表示した通知も含め、進捗通知を消す。
-                applicationContext.getSystemService(NotificationManager::class.java)
-                    ?.cancel(notificationId)
-
-                postCancelledNotification(
-                    context = applicationContext,
-                    currentWorkerId = currentWorkerId,
-                    stableWorkerId = stableWorkerId,
-                    fileName = record?.fileName.orEmpty(),
+                cancelDownloadFromNotification(
+                    // SUCCEEDED/FAILED との状態遷移を DB 上で競合させる。
+                    markCancelled = { repository.updateCancelled(workerId) },
+                    // 再開中は Worker が partialResultUri を設定する前でも DB に部分ファイル URI が残るため、
+                    // キャンセルを確定した側で削除して MediaStore エントリを残さない。
+                    deletePartialFile = {
+                        record?.partialFileUri?.let { partialFileUri ->
+                            runCatching {
+                                applicationContext.contentResolver.delete(Uri.parse(partialFileUri), null, null)
+                            }
+                        }
+                    },
+                    stopWorker = {
+                        // Worker 起動前に保持しているレスポンスがあればここで破棄する。
+                        PendingDownloadBodyStore.discard(workerId)
+                        WorkManager.getInstance(applicationContext).cancelWorkById(currentWorkerId)
+                    },
+                    // GeckoDownloadManager が Worker 起動前に表示した通知も含め、進捗通知を消す。
+                    dismissProgressNotification = {
+                        applicationContext.getSystemService(NotificationManager::class.java)
+                            ?.cancel(notificationId)
+                    },
+                    postCancelledNotification = {
+                        notifyCancelled(
+                            context = applicationContext,
+                            currentWorkerId = currentWorkerId,
+                            stableWorkerId = stableWorkerId,
+                            fileName = record?.fileName.orEmpty(),
+                        )
+                    },
                 )
             } finally {
                 pendingResult.finish()
@@ -96,23 +100,23 @@ internal class DownloadCancelReceiver : BroadcastReceiver() {
             )
         }
 
-        private fun postCancelledNotification(
+        private fun notifyCancelled(
             context: Context,
             currentWorkerId: UUID,
             stableWorkerId: String,
             fileName: String,
         ) {
             DownloadWorker.ensureNotificationChannel(context)
-            val positiveHash = currentWorkerId.hashCode() and 0x7fffffff
+            val notificationId = DownloadNotificationId.cancelled(currentWorkerId)
             val openDownloadsIntent = Intent(context, MainActivity::class.java).apply {
                 action = DownloadWorker.ACTION_OPEN_DOWNLOADS
                 flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_NEW_TASK
                 putExtra(DownloadWorker.EXTRA_WORKER_ID, stableWorkerId)
-                putExtra(DownloadWorker.EXTRA_OPEN_DOWNLOADS_REQUEST_ID, "cancelled:$positiveHash")
+                putExtra(DownloadWorker.EXTRA_OPEN_DOWNLOADS_REQUEST_ID, "cancelled:$notificationId")
             }
             val openDownloadsPendingIntent = PendingIntent.getActivity(
                 context,
-                positiveHash,
+                notificationId,
                 openDownloadsIntent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             )
@@ -125,7 +129,7 @@ internal class DownloadCancelReceiver : BroadcastReceiver() {
                 .setAutoCancel(true)
                 .build()
             context.getSystemService(NotificationManager::class.java)
-                ?.notify(DownloadWorker.NOTIFICATION_ID_CANCELLED_BASE + positiveHash, notification)
+                ?.notify(notificationId, notification)
         }
     }
 }

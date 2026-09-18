@@ -1,5 +1,6 @@
 package net.matsudamper.browser
 
+import android.app.Notification
 import android.app.NotificationManager
 import android.content.Context
 import androidx.core.app.NotificationCompat
@@ -12,7 +13,9 @@ import java.util.UUID
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import net.matsudamper.browser.data.download.DownloadRepository
+import net.matsudamper.browser.data.download.ResumeRevertPoint
 import net.matsudamper.browser.download.PendingDownloadBodyStore
+import net.matsudamper.browser.download.enqueueDownloadWithStartingNotification
 import org.mozilla.geckoview.WebResponse
 
 internal class GeckoDownloadManager(
@@ -41,7 +44,7 @@ internal class GeckoDownloadManager(
         if (response != null) {
             PendingDownloadBodyStore.put(workId.toString(), response)
         }
-        val notificationId = workId.hashCode() and 0x7fffffff
+        val notificationId = DownloadNotificationId.progress(workId)
         val workRequest = OneTimeWorkRequestBuilder<DownloadWorker>()
             .setId(workId)
             .setInputData(
@@ -83,7 +86,7 @@ internal class GeckoDownloadManager(
         if (response != null) {
             PendingDownloadBodyStore.put(workId.toString(), response)
         }
-        val notificationId = workId.hashCode() and 0x7fffffff
+        val notificationId = DownloadNotificationId.progress(workId)
         val workRequest = OneTimeWorkRequestBuilder<DownloadWorker>()
             .setId(workId)
             .setInputData(
@@ -112,28 +115,52 @@ internal class GeckoDownloadManager(
         referrerUrl: String,
         notificationId: Int,
     ) {
-        try {
-            downloadRepository.insertEnqueued(
-                workerId = workRequest.id.toString(),
-                url = url,
-                referrerUrl = referrerUrl,
-                enqueuedAt = System.currentTimeMillis(),
-            )
-            WorkManager.getInstance(context).enqueue(workRequest).await()
-        } catch (e: Throwable) {
-            PendingDownloadBodyStore.discard(workId.toString())
-            downloadRepository.updateCancelled(workRequest.id.toString())
-            throw e
-        }
+        val notificationManager = context.getSystemService(NotificationManager::class.java)
+        enqueueDownloadWithStartingNotification(
+            prepareRecord = {
+                downloadRepository.insertEnqueued(
+                    workerId = workRequest.id.toString(),
+                    url = url,
+                    referrerUrl = referrerUrl,
+                    enqueuedAt = System.currentTimeMillis(),
+                )
+            },
+            showStartingNotification = {
+                notificationManager.notify(
+                    notificationId,
+                    buildStartingNotification(
+                        title = context.getString(R.string.download_notification_starting),
+                        currentWorkerId = workId,
+                        stableWorkerId = workId.toString(),
+                        notificationId = notificationId,
+                    ),
+                )
+            },
+            enqueue = { WorkManager.getInstance(context).enqueue(workRequest).await() },
+            cleanUpFailedEnqueue = {
+                notificationManager.cancel(notificationId)
+                PendingDownloadBodyStore.discard(workId.toString())
+                downloadRepository.updateCancelled(workRequest.id.toString())
+            },
+        )
+    }
+
+    /** Worker がフォアグラウンド通知を出すまでの間だけ表示する、進捗不定の通知を作る */
+    private fun buildStartingNotification(
+        title: String,
+        currentWorkerId: UUID,
+        stableWorkerId: String,
+        notificationId: Int,
+    ): Notification {
         val cancelPendingIntent = DownloadCancelReceiver.createPendingIntent(
             context = context,
-            currentWorkerId = workId,
-            stableWorkerId = workId.toString(),
+            currentWorkerId = currentWorkerId,
+            stableWorkerId = stableWorkerId,
             notificationId = notificationId,
         )
-        val notification = NotificationCompat.Builder(context, DownloadWorker.CHANNEL_ID)
+        return NotificationCompat.Builder(context, DownloadWorker.CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_sys_download)
-            .setContentTitle(context.getString(R.string.download_notification_starting))
+            .setContentTitle(title)
             .setProgress(100, 0, true)
             .setOnlyAlertOnce(true)
             .addAction(
@@ -142,8 +169,6 @@ internal class GeckoDownloadManager(
                 cancelPendingIntent,
             )
             .build()
-        context.getSystemService(NotificationManager::class.java)
-            .notify(notificationId, notification)
     }
 
     /**
@@ -180,7 +205,7 @@ internal class GeckoDownloadManager(
     ) {
         DownloadWorker.ensureNotificationChannel(context)
         val newWorkId = UUID.randomUUID()
-        val notificationId = newWorkId.hashCode() and 0x7fffffff
+        val notificationId = DownloadNotificationId.progress(newWorkId)
         val inputData = buildMap<String, Any> {
             put(DownloadWorker.KEY_URL, url)
             put(DownloadWorker.KEY_REFERRER_URL, referrerUrl)
@@ -198,28 +223,40 @@ internal class GeckoDownloadManager(
             .addTag(DownloadWorker.TAG_DOWNLOAD)
             .build()
         coroutineScope.launch {
-            // 既存レコードを新しいワーカーIDへ付け替えてENQUEUEDに戻す（削除・再作成しない）
-            downloadRepository.updateResumed(workerId = workerId, newWorkerId = newWorkId.toString())
-            WorkManager.getInstance(context).enqueue(workRequest)
-            val cancelPendingIntent = DownloadCancelReceiver.createPendingIntent(
-                context = context,
-                currentWorkerId = newWorkId,
-                stableWorkerId = workerId,
-                notificationId = notificationId,
+            val notificationManager = context.getSystemService(NotificationManager::class.java)
+            // エンキューに失敗したときに部分ファイルを保持したまま戻せるよう、付け替え前の状態を覚えておく
+            var revertPoint: ResumeRevertPoint? = null
+            enqueueDownloadWithStartingNotification(
+                prepareRecord = {
+                    // 既存レコードを新しいワーカーIDへ付け替えてENQUEUEDに戻す（削除・再作成しない）
+                    revertPoint = downloadRepository.updateResumed(
+                        workerId = workerId,
+                        newWorkerId = newWorkId.toString(),
+                    )
+                },
+                showStartingNotification = {
+                    notificationManager.notify(
+                        notificationId,
+                        buildStartingNotification(
+                            title = context.getString(R.string.download_notification_resuming),
+                            currentWorkerId = newWorkId,
+                            stableWorkerId = workerId,
+                            notificationId = notificationId,
+                        ),
+                    )
+                },
+                enqueue = { WorkManager.getInstance(context).enqueue(workRequest).await() },
+                cleanUpFailedEnqueue = {
+                    notificationManager.cancel(notificationId)
+                    revertPoint?.let { previous ->
+                        downloadRepository.revertResumed(
+                            workerId = workerId,
+                            newWorkerId = newWorkId.toString(),
+                            revertPoint = previous,
+                        )
+                    }
+                },
             )
-            val notification = NotificationCompat.Builder(context, DownloadWorker.CHANNEL_ID)
-                .setSmallIcon(android.R.drawable.stat_sys_download)
-                .setContentTitle(context.getString(R.string.download_notification_resuming))
-                .setProgress(100, 0, true)
-                .setOnlyAlertOnce(true)
-                .addAction(
-                    android.R.drawable.ic_menu_close_clear_cancel,
-                    context.getString(R.string.download_notification_cancel),
-                    cancelPendingIntent,
-                )
-                .build()
-            context.getSystemService(NotificationManager::class.java)
-                .notify(notificationId, notification)
         }
     }
 }
