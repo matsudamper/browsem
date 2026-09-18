@@ -75,7 +75,6 @@ internal fun buildGeminiNanoBatchTranslationInstruction(
         "If a segment cannot be translated, return it unchanged and never explain why."
 }
 
-/** 「1: 原文」の形で 1 行ずつ並べる。index は 1 始まりで出力の照合に使う */
 internal fun buildGeminiNanoBatchTranslationInput(texts: List<String>): String =
     texts.withIndex().joinToString("\n") { (index, text) -> "${index + 1}: $text" }
 
