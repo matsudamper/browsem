@@ -234,9 +234,18 @@
       return HIDDEN_SEGMENT_DISTANCE;
     }
     if (rect.width === 0 && rect.height === 0) return HIDDEN_SEGMENT_DISTANCE;
+    const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
     const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
-    if (rect.bottom < 0) return -rect.bottom;
-    if (rect.top > viewportHeight) return rect.top - viewportHeight;
+    return Math.hypot(
+      axisDistance(rect.left, rect.right, viewportWidth),
+      axisDistance(rect.top, rect.bottom, viewportHeight),
+    );
+  }
+
+  /** 1 軸上で区間 [start, end] がビューポート [0, viewportSize] からどれだけ離れているか */
+  function axisDistance(start, end, viewportSize) {
+    if (end < 0) return -end;
+    if (start > viewportSize) return start - viewportSize;
     return 0;
   }
 
