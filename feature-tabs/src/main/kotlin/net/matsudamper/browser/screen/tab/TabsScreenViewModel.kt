@@ -409,9 +409,7 @@ class TabsScreenViewModel(
         val newLocalOrder = currentGroups.map { g ->
             when {
                 g.id == group.id -> g.copy(isDefault = newIsDefault)
-
                 newIsDefault -> g.copy(isDefault = false)
-
                 else -> g
             }
         }
