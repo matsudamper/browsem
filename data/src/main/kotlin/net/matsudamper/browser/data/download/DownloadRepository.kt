@@ -196,12 +196,18 @@ class DownloadRepository(context: Context) {
     }
 
     /**
-     * 指定したワーカーのレコードがキャンセルまたは一時停止済みかどうかを返す。
+     * 指定したワーカーが停止すべきかどうかを返す。
      * WorkManager の割り込みが取りこぼされた場合でも Worker が自力で停止できるよう、
-     * Worker の進捗更新時にポーリングして確認するために使用する
+     * Worker の進捗更新時にポーリングして確認するために使用する。
+     *
+     * レコードが見つからない場合も停止要求として扱う。再開すると updateResumed が
+     * currentWorkerId を新しいワーカーへ付け替えるため、割り込みを取りこぼした古いワーカーからは
+     * レコードが引けなくなる。この状態を走行継続と判定すると、レコードが完了した後も
+     * 古いワーカーが通知を更新し続け、キャンセルもできなくなる
      */
     suspend fun isStopRequested(currentWorkerId: String): Boolean {
-        return dao.getStatus(currentWorkerId) in listOf(
+        val status = dao.getStatus(currentWorkerId) ?: return true
+        return status in listOf(
             DownloadRecordStatus.CANCELLED.name,
             DownloadRecordStatus.PAUSED.name,
         )
