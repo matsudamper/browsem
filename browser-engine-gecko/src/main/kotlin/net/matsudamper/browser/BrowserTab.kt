@@ -152,11 +152,8 @@ class BrowserTab(
     internal var pendingSessionState: String? by mutableStateOf(null)
 
     // onNewSession 経由で作成されたタブの初回ナビゲーション完了までの目印。
-    // 初回読み込みは GeckoView が session.open() 後に opener (window.open 元) の
-    // コンテキスト付きで自動実行するため、アプリ側から loadUri してはいけない
-    // (referrer / opener 連携が失われ Google Pay などのポップアップ決済が壊れる)。
-    // restoreSession が自動読み込みを currentUrl の loadUri で上書きしないための
-    // ガードとして使い、実 URL への onLocationChange 発火でクリアされる。
+    // GeckoView が opener のコンテキスト付きで行う自動読み込みを restoreSession が
+    // currentUrl の loadUri で上書きしないためのガード。実 URL への onLocationChange でクリアされる。
     internal var pendingInitialUrl: String? by mutableStateOf(null)
 
     // NavigationDelegate.onNewSession で作ったタブ。コンテキストメニューの
@@ -176,8 +173,6 @@ class BrowserTab(
     internal var pendingReferrerUrl: String? = null
 
     // 初回ロードを GeckoView の Surface サイズ確定後まで遅延するための目印。
-    // 未確定 viewport でロードすると ImageDocument の shrink-to-fit スケールが
-    // 誤計算され、画像が小さく低解像度で表示されるのを回避する。
     // restoreSession で立ち、performInitialLoadIfPending で消費される。
     internal var pendingInitialLoad: Boolean = false
 

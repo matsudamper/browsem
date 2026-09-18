@@ -490,11 +490,9 @@ internal fun GeckoBrowserTab(
         stableCount: Int,
         startTimeMs: Long,
     ) {
-        // 旧実装は OneShotPreDrawListener を使っていたが、preDraw は描画が必要なフレーム
-        // でしか発火しないため、サイズ安定後に画面の再描画トリガがないと stable check が
-        // 進まず復帰が遅延する事象が観測された (再現で 31 秒待たされた)。
-        // postOnAnimation は Choreographer のアニメーションフレームで毎 vsync 発火する
-        // ため、UI 操作がなくても安定検出を進められる。
+        // OneShotPreDrawListener は描画が必要なフレームでしか発火せず、サイズ安定後に再描画の
+        // トリガがないと stable check が進まず復帰が数十秒遅れる。postOnAnimation は Choreographer の
+        // アニメーションフレームで毎 vsync 発火するため、UI 操作がなくても安定検出を進められる。
         gecko.postOnAnimation {
             if (surfaceResumeState == SurfaceResumeState.ACTIVE) {
                 Log.d(TAG_SURFACE_RESUME, "stable-check skipped: already ACTIVE")
@@ -627,7 +625,7 @@ internal fun GeckoBrowserTab(
                     // よる focus-only 離脱を含む) では踏まない。この場合に release + INVISIBLE
                     // すると、Activity が可視のまま (ON_STOP が来ないまま) GeckoView だけが
                     // 真っ白になるため、surface と active を維持する (PAUSED_KEEP_SURFACE)。
-                    // 完全に不可視になる ON_STOP 側で従来どおり release する。
+                    // 完全に不可視になる ON_STOP 側で release する。
                     //
                     // capture preview は release 前に start する。capturePixels() は非同期
                     // GeckoResult を返すため release 直後に走るキャプチャ完了率は低下するが、
@@ -673,7 +671,7 @@ internal fun GeckoBrowserTab(
 
                         else -> {
                             // IME 表示中の ACTIVE、または WAITING_STABLE 中（前回 resume の
-                            // 安定待ちが完了する前に再度 pause した場合）は従来どおり release。
+                            // 安定待ちが完了する前に再度 pause した場合）は release する。
                             Log.d(
                                 TAG_SURFACE_RESUME,
                                 "ON_PAUSE: releaseSession + INVISIBLE 実行 gv.size=${target.width}x${target.height}",
@@ -701,7 +699,7 @@ internal fun GeckoBrowserTab(
                 Lifecycle.Event.ON_STOP -> {
                     session.flushSessionState()
                     // IME 表示中の pause は ON_PAUSE で release 済み (RELEASED)。
-                    // media の場合は session 維持のため capture のみ実行（従来どおり）。
+                    // media の場合は session 維持のため capture のみ実行する。
                     // TODO: media 再生継続中の session は release しないため、surface 再作成時の
                     //       SyncResumeResizeCompositor ハング経路を踏むリスクが残る。実機で
                     //       再現を確認したら、audio を殺さない形で compositor 再構築する手段
@@ -717,10 +715,8 @@ internal fun GeckoBrowserTab(
                                 // IME 非表示の pause で surface を維持していたが、ON_STOP に
                                 // 到達した = 完全に不可視化した (ホームボタン等)。ここで release
                                 // せず session を attach したまま停止すると、復帰時に surface が
-                                // session 付きで再作成され自動 resume-resize のハング経路を踏む
-                                // (revert された #398 の STOPPED_KEEP_SURFACE はこれが原因と推測)。
-                                // 従来どおり release して、復帰は実績のある RELEASED →
-                                // fresh attach 経路に合流させる。
+                                // session 付きで再作成され自動 resume-resize のハング経路を踏む。
+                                // release して、復帰は RELEASED → fresh attach 経路に合流させる。
                                 Log.d(
                                     TAG_SURFACE_RESUME,
                                     "ON_STOP: PAUSED_KEEP_SURFACE → releaseSession + INVISIBLE 実行" +

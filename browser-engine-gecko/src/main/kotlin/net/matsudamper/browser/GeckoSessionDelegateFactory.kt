@@ -93,7 +93,7 @@ fun createGeckoSessionDelegateBundle(
                     "onContentPermissionRequest: permission=${perm.permission}, uri=${perm.uri}",
                 )
                 if (perm.permission == GeckoSession.PermissionDelegate.PERMISSION_AUTOPLAY_INAUDIBLE) {
-                    // 消音メディアは音が出ず邪魔にならないため、従来通り自動再生を許可する
+                    // 消音メディアは音が出ず邪魔にならないため、自動再生を許可する
                     Log.d("BrowserTabPermission", "inaudible autoplay permission allowed")
                     return GeckoResult.fromValue(
                         GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW,

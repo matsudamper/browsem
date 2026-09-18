@@ -330,21 +330,11 @@ internal class BrowserTabScreenState(
     var capturePreviewRequestCount by mutableIntStateOf(0)
         private set
 
-    // プレビューキャプチャの可否を表すフラグ。
-    // false の間は captureTabPreview() が早期 return するため、状態遷移が
-    // 想定通りに行われないと「いつまで経ってもプレビューが保存されない」状態に
-    // 陥る。デバッグしやすいよう、すべての遷移を理由付きでログに残す。
-    //
-    // 設計判断:
-    // - 初期値は「過去にプレビューが保存されているか」または「セッション状態が
-    //   復元される予定か」を基準に true にする。プロセス再起動時に、復元タブで
-    //   onPageStart/onPageStop が発火しないままタブ切替が走ると永遠に false の
-    //   ままになる問題を防ぐ。
-    // - onPageStart では false に戻さない。GeckoView は新ページのロード中も
-    //   古いページを表示し続けるため、ロード中にキャプチャしても白ページには
-    //   ならない。一方、ロードが完了せずに外部アプリ遷移・ダウンロード判定・
-    //   ナビゲーションキャンセル等が起きると onPageStop が発火せずフラグが
-    //   false のまま固まる問題があった。
+    // false の間は captureTabPreview() が早期 return する。状態遷移が想定どおりに進まないと
+    // プレビューが永遠に保存されなくなるため、遷移はすべて理由付きでログに残す。
+    // 初期値を「プレビュー保存済み」または「セッション状態を復元予定」で true にするのは、
+    // プロセス再起動後の復元タブで onPageStart/onPageStop が発火しないままタブ切替が走ると
+    // false のまま固まるため。
     private var previewCaptureReady: Boolean =
         browserTab.previewBitmap?.isNotEmpty() == true || browserTab.sessionState.isNotBlank()
         set(value) {
@@ -1284,7 +1274,7 @@ internal class BrowserTabScreenState(
         hasAudio: Boolean,
         onResult: (grantVideo: Boolean, grantAudio: Boolean) -> Unit,
     ) {
-        // マイクを含まない要求（カメラのみ等）は従来通り許可する
+        // マイクを含まない要求（カメラのみ等）はサイト設定を確認せず許可する
         if (!hasAudio) {
             onResult(hasVideo, false)
             return
