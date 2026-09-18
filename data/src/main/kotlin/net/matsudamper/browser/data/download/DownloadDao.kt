@@ -71,6 +71,9 @@ interface DownloadDao {
     @Query("SELECT * FROM download WHERE currentWorkerId = :currentWorkerId")
     suspend fun getByCurrentWorkerId(currentWorkerId: String): DownloadEntity?
 
+    @Query("SELECT * FROM download WHERE workerId = :workerId")
+    suspend fun getByWorkerId(workerId: String): DownloadEntity?
+
     /**
      * ダウンロード失敗時に部分ファイルURIを保存する。
      * 再開可能なダウンロードとしてFAILEDステータスで記録する
@@ -117,6 +120,21 @@ interface DownloadDao {
             "WHERE workerId = :workerId",
     )
     suspend fun updateResumed(workerId: String, newWorkerId: String)
+
+    /**
+     * 再開のエンキューに失敗したときに、付け替え前のワーカーIDと状態へ戻す。
+     * 付け替えたままの場合だけ戻し、その後の操作で状態が変わっていれば何もしない
+     */
+    @Query(
+        "UPDATE download SET currentWorkerId = :previousWorkerId, status = :previousStatus " +
+            "WHERE workerId = :workerId AND currentWorkerId = :newWorkerId",
+    )
+    suspend fun revertResumed(
+        workerId: String,
+        newWorkerId: String,
+        previousWorkerId: String,
+        previousStatus: String,
+    )
 
     /** 指定URLに一致するアクティブ（ENQUEUED/RUNNING/SUCCEEDED/PAUSED）なダウンロードを取得する */
     @Query("SELECT * FROM download WHERE url = :url AND status IN ('ENQUEUED', 'RUNNING', 'SUCCEEDED', 'PAUSED') ORDER BY enqueuedAt DESC")

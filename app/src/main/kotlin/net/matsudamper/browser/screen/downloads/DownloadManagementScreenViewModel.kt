@@ -26,6 +26,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import net.matsudamper.browser.DownloadNotificationId
 import net.matsudamper.browser.GeckoDownloadManager
 import net.matsudamper.browser.data.download.DownloadRecord
 import net.matsudamper.browser.data.download.DownloadRecordStatus
@@ -295,9 +296,8 @@ internal class DownloadManagementScreenViewModel(
         val pausedPartialFileUri = record.partialFileUri.takeIf { record.status == DownloadRecordStatus.PAUSED }
         // suspend を挟むと viewModelScope の破棄でキャンセル要求自体が消えるため、即時に発行する
         workManager.cancelWorkById(currentWorkerId)
-        // Worker 起動前に GeckoDownloadManager が直接表示した通知は誰も消さないため、
-        // 同じ導出式（workId の hashCode）で通知 ID を求めて明示的に消す
-        val notificationId = currentWorkerId.hashCode() and 0x7fffffff
+        // Worker 起動前に GeckoDownloadManager が直接表示した通知は誰も消さないため、明示的に消す
+        val notificationId = DownloadNotificationId.progress(currentWorkerId)
         getApplication<Application>()
             .getSystemService(NotificationManager::class.java)
             ?.cancel(notificationId)
@@ -326,9 +326,8 @@ internal class DownloadManagementScreenViewModel(
         viewModelScope.launch {
             downloadRepository.updatePaused(currentWorkerId.toString())
             workManager.cancelWorkById(currentWorkerId)
-            // Worker 起動前に GeckoDownloadManager が直接表示した通知は誰も消さないため、
-            // 同じ導出式（workId の hashCode）で通知 ID を求めて明示的に消す
-            val notificationId = currentWorkerId.hashCode() and 0x7fffffff
+            // Worker 起動前に GeckoDownloadManager が直接表示した通知は誰も消さないため、明示的に消す
+            val notificationId = DownloadNotificationId.progress(currentWorkerId)
             getApplication<Application>()
                 .getSystemService(NotificationManager::class.java)
                 ?.cancel(notificationId)

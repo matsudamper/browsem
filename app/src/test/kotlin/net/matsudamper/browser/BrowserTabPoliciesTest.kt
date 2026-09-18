@@ -171,6 +171,39 @@ class BrowserTabPoliciesTest {
         )
     }
 
+    // --- shouldClearTranslationCacheOnLocationChange ---
+
+    /** 原文表示中（Idle）でも別ページへのフルページロードでキャッシュを捨てることを確認する */
+    @Test
+    fun translationCacheIsClearedOnFullPageLoad() {
+        assertTrue(
+            shouldClearTranslationCacheOnLocationChange(
+                url = "https://example.com/page-b",
+                isFullPageLoad = true,
+            ),
+        )
+    }
+
+    @Test
+    fun translationCacheIsKeptOnSpaNavigation() {
+        assertFalse(
+            shouldClearTranslationCacheOnLocationChange(
+                url = "https://example.com/page-b",
+                isFullPageLoad = false,
+            ),
+        )
+    }
+
+    @Test
+    fun translationCacheIsKeptOnDataUrl() {
+        assertFalse(
+            shouldClearTranslationCacheOnLocationChange(
+                url = "data:text/html,translated",
+                isFullPageLoad = true,
+            ),
+        )
+    }
+
     @Test
     fun externalDownloadInitialUrlMatchesResponseIgnoringFragmentAndTrailingSlash() {
         assertTrue(
