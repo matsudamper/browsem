@@ -6,7 +6,7 @@ import androidx.lifecycle.viewModelScope
 import java.util.UUID
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -247,7 +247,7 @@ internal class BrowserViewModel(
     private val externalTabIdsFlow = MutableStateFlow<Set<String>>(emptySet())
     private val externalTabInitialUrlsFlow = MutableStateFlow<Map<String, String>>(emptyMap())
     private val externalTabCleanupMutex = Mutex()
-    private var externalTabFinishCleanupJob: Job? = null
+    private var externalTabFinishCleanupJob: Deferred<Unit>? = null
 
     val externalTabIds: StateFlow<Set<String>> = externalTabIdsFlow.asStateFlow()
     val externalTabInitialUrls: StateFlow<Map<String, String>> = externalTabInitialUrlsFlow.asStateFlow()
@@ -347,11 +347,14 @@ internal class BrowserViewModel(
      * メインスレッドを塞いで同じ Mutex を待つと、observer 側は再開できずデッドロックする。
      * そのため実処理はメインスレッドに依存しない IO のジョブに一本化し、後から来た呼び出しは
      * そのジョブの完了だけを待つ。
+     *
+     * launch だと DB 削除の失敗が viewModelScope の未捕捉例外としてプロセスを落とすため、
+     * async にして呼び出し元の await へ例外を返す。
      */
     suspend fun cleanupSelectedExternalTabOnActivityFinishIfNeeded() {
         val runningJob = externalTabFinishCleanupJob?.takeIf { it.isActive }
         if (runningJob != null) {
-            runningJob.join()
+            runningJob.await()
             return
         }
         val cleanup = snapshotSelectedExternalTabFinishCleanup() ?: return
@@ -359,14 +362,14 @@ internal class BrowserViewModel(
         externalTabInitialUrlByTabId.remove(cleanup.tabId)
         externalTabIdsFlow.update { it - cleanup.tabId }
         externalTabInitialUrlsFlow.update { it - cleanup.tabId }
-        val job = viewModelScope.launch(Dispatchers.IO) {
+        val job = viewModelScope.async(Dispatchers.IO) {
             externalTabCleanupMutex.withLock {
                 browserTabController.awaitPersistenceIdle()
                 tabRepository.closeTab(cleanup.tabId, cleanup.nextSelectedTabId)
             }
         }
         externalTabFinishCleanupJob = job
-        job.join()
+        job.await()
     }
 
     private fun currentHomepageUrl(): String {
