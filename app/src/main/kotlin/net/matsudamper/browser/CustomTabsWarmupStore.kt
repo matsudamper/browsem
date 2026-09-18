@@ -8,6 +8,7 @@ import androidx.annotation.VisibleForTesting
 import androidx.browser.customtabs.CustomTabsSessionToken
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -41,12 +42,12 @@ object CustomTabsWarmupStore {
     }
 
     fun onNewSession(token: CustomTabsSessionToken) {
-        val evictedSessions = mutableListOf<GeckoSession>()
+        val closableSessions = mutableListOf<GeckoSession>()
         synchronized(lock) {
-            cleanupLocked()
-            ensureEntryLocked(token, evictedSessions).updatedAt = System.currentTimeMillis()
+            closableSessions += takeStaleSessionsLocked()
+            ensureEntryLocked(token, closableSessions).updatedAt = System.currentTimeMillis()
         }
-        closeOnMainThread(evictedSessions)
+        closeOnMainThread(closableSessions)
     }
 
     fun onMayLaunchUrl(
@@ -58,7 +59,7 @@ object CustomTabsWarmupStore {
         // GeckoSession を閉じるのはメインスレッドに限られるため、取り外して後段へ渡す。
         val closableSessions = mutableListOf<GeckoSession>()
         synchronized(lock) {
-            cleanupLocked()
+            closableSessions += takeStaleSessionsLocked()
             ensureEntryLocked(token, closableSessions).apply {
                 preparedSession?.takeIf { preparedUrl != targetUrl }?.let { staleSession ->
                     closableSessions.add(staleSession)
@@ -114,23 +115,13 @@ object CustomTabsWarmupStore {
         token: CustomTabsSessionToken,
         launchUrl: String,
     ): GeckoSession? {
+        val closableSessions = mutableListOf<GeckoSession>()
         val prepared = synchronized(lock) {
-            cleanupLocked()
-            val entry = entries[token] ?: return null
-            entry.updatedAt = System.currentTimeMillis()
-            val session = entry.preparedSession
-            if (session == null) {
-                entries.remove(token)
-                return null
-            }
-            val url = entry.preparedUrl
-            entry.preparedSession = null
-            entry.preparedUrl = null
-            removeEntryIfEmptyLocked(token)
-            session to url
+            closableSessions += takeStaleSessionsLocked()
+            takePreparedSessionLocked(token)
         }
-        val session = prepared.first
-        val preparedUrl = prepared.second
+        closeOnMainThread(closableSessions)
+        val (session, preparedUrl) = prepared ?: return null
         if (launchUrl.isNotBlank() && launchUrl != preparedUrl) {
             runOnMainThreadBlocking {
                 session.loadUri(launchUrl)
@@ -139,16 +130,26 @@ object CustomTabsWarmupStore {
         return session
     }
 
+    private fun takePreparedSessionLocked(token: CustomTabsSessionToken): Pair<GeckoSession, String?>? {
+        val entry = entries[token] ?: return null
+        entry.updatedAt = System.currentTimeMillis()
+        val session = entry.preparedSession
+        if (session == null) {
+            entries.remove(token)
+            return null
+        }
+        val url = entry.preparedUrl
+        entry.preparedSession = null
+        entry.preparedUrl = null
+        removeEntryIfEmptyLocked(token)
+        return session to url
+    }
+
     fun onSessionCleanup(token: CustomTabsSessionToken) {
         val removed = synchronized(lock) {
-            val entry = entries.remove(token) ?: return
-            entry.preparedSession
+            entries.remove(token)?.preparedSession
         }
-        if (removed != null) {
-            runOnMainThreadBlocking {
-                removed.close()
-            }
-        }
+        closeOnMainThread(listOfNotNull(removed))
     }
 
     @VisibleForTesting
@@ -179,18 +180,28 @@ object CustomTabsWarmupStore {
         runtime: GeckoRuntime,
     ) {
         runOnMainThreadBlocking {
+            val closableSessions = mutableListOf<GeckoSession>()
             val session = synchronized(lock) {
-                cleanupLocked()
-                val entry = entries[token] ?: return@synchronized null
-                if (entry.preparedUrl != targetUrl) return@synchronized null
-                entry.updatedAt = System.currentTimeMillis()
-                entry.preparedSession ?: GeckoSession().also { newSession ->
-                    newSession.open(runtime)
-                    registerBrowserSessionForRuntimeUpdates(newSession)
-                    entry.preparedSession = newSession
-                }
-            } ?: return@runOnMainThreadBlocking
-            session.loadUri(targetUrl)
+                closableSessions += takeStaleSessionsLocked()
+                prepareSessionLocked(token, targetUrl, runtime)
+            }
+            closableSessions.forEach { it.close() }
+            session?.loadUri(targetUrl)
+        }
+    }
+
+    private fun prepareSessionLocked(
+        token: CustomTabsSessionToken,
+        targetUrl: String,
+        runtime: GeckoRuntime,
+    ): GeckoSession? {
+        val entry = entries[token] ?: return null
+        if (entry.preparedUrl != targetUrl) return null
+        entry.updatedAt = System.currentTimeMillis()
+        return entry.preparedSession ?: GeckoSession().also { newSession ->
+            newSession.open(runtime)
+            registerBrowserSessionForRuntimeUpdates(newSession)
+            entry.preparedSession = newSession
         }
     }
 
@@ -225,18 +236,22 @@ object CustomTabsWarmupStore {
         }
     }
 
-    private fun cleanupLocked() {
+    /**
+     * 期限切れエントリを外し、閉じるべきセッションを返す。
+     * lock 保持中にメインスレッドを待つと Binder スレッドとの間でロック順序が反転するため、閉じるのは呼び出し側に任せる。
+     */
+    private fun takeStaleSessionsLocked(): List<GeckoSession> {
         val now = System.currentTimeMillis()
+        val staleSessions = mutableListOf<GeckoSession>()
         val iterator = entries.entries.iterator()
         while (iterator.hasNext()) {
             val (_, entry) = iterator.next()
             if (now - entry.updatedAt > STALE_ENTRY_MS) {
-                runOnMainThreadBlocking {
-                    entry.preparedSession?.close()
-                }
+                entry.preparedSession?.let { staleSessions.add(it) }
                 iterator.remove()
             }
         }
+        return staleSessions
     }
 
     private fun <T> runOnMainThreadBlocking(block: () -> T): T {
@@ -244,14 +259,14 @@ object CustomTabsWarmupStore {
             return block()
         }
         val latch = CountDownLatch(1)
-        var result: Result<T>? = null
+        val result = AtomicReference<Result<T>>()
         Handler(Looper.getMainLooper()).post {
-            result = runCatching { block() }
+            result.set(runCatching { block() })
             latch.countDown()
         }
         check(latch.await(10, TimeUnit.SECONDS)) {
             "CustomTabsWarmupStore main thread operation timed out."
         }
-        return result!!.getOrThrow()
+        return result.get().getOrThrow()
     }
 }
