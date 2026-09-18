@@ -173,6 +173,7 @@ class BrowserTab(
     internal var pendingReferrerUrl: String? = null
 
     // 初回ロードを GeckoView の Surface サイズ確定後まで遅延するための目印。
+    // 未確定 viewport でロードすると ImageDocument の shrink-to-fit が誤計算されるため。
     // restoreSession で立ち、performInitialLoadIfPending で消費される。
     internal var pendingInitialLoad: Boolean = false
 
