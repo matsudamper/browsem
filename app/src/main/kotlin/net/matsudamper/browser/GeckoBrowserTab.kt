@@ -1696,7 +1696,6 @@ private fun Modifier.imeAboveNavigationBarsPadding(): Modifier {
     return padding(bottom = with(density) { imeBottomPx.toDp() })
 }
 
-/** MIME タイプを Intent に適用する共通関数 */
 private fun applyMimeTypes(intent: Intent, mimeTypes: Array<String>) {
     when {
         mimeTypes.isEmpty() -> intent.type = "*/*"

@@ -349,7 +349,6 @@ internal class ExtensionsScreenViewModel(
     interface Event {
         fun navigateToExtensionSettings(url: String)
 
-        /** ZIP / XPI を選択するファイルピッカーを開く */
         fun requestExtensionFilePicker()
     }
 
@@ -367,7 +366,6 @@ internal class ExtensionsScreenViewModel(
     companion object {
         private const val EXTENSION_INSTALL_CACHE_DIR = "extension_install"
 
-        /** ファイルピッカーで選択可能にする MIME タイプ */
         val EXTENSION_ARCHIVE_MIME_TYPES = arrayOf(
             "application/zip",
             "application/x-xpinstall",

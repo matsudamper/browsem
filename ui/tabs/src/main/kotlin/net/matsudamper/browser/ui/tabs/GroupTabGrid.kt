@@ -242,13 +242,11 @@ private fun rememberDragDropState(
     }
 }
 
-/** ドラッグ&ドロップの状態を管理するクラス */
 @Stable
 private class DragDropState(
     val gridState: LazyGridState,
     private val onMove: (fromIndex: Int, toIndex: Int) -> Unit,
 ) {
-    /** ドラッグ中のアイテムのキー */
     var draggedItemKey: Any? by mutableStateOf(null)
         private set
 
@@ -256,20 +254,17 @@ private class DragDropState(
     var draggedItemOffset: IntOffset by mutableStateOf(IntOffset.Zero)
         private set
 
-    /** ドラッグ中アイテムのサイズ（ピクセル） */
     var draggedItemSize: IntSize by mutableStateOf(IntSize.Zero)
         private set
 
     /** ドラッグ中の現在のインデックス（並び替え時に更新） */
     private var currentDragIndex: Int by mutableIntStateOf(-1)
 
-    /** ドラッグ中かどうか */
     val isDragging: Boolean get() = draggedItemKey != null
 
     /** このドラッグ中に並び替えが発生したか（onMove が一度でも呼ばれたか） */
     private var didReorder: Boolean = false
 
-    /** ドラッグ開始時刻（uptimeMillis） */
     private var dragStartUptimeMs: Long = 0L
 
     /** ルート座標でのドラッグ中の中心位置（グループ間移動の衝突判定用） */
@@ -279,7 +274,6 @@ private class DragDropState(
     /** グリッドのルート座標上の bounds（onGloballyPositioned で設定） */
     var gridBoundsInRoot: Rect by mutableStateOf(Rect.Zero)
 
-    /** ドラッグ開始時の処理 */
     fun onDragStart(offset: Offset) {
         val viewportOffset = gridState.layoutInfo.viewportStartOffset
         val item = gridState.layoutInfo.visibleItemsInfo.firstOrNull { info ->
@@ -304,7 +298,6 @@ private class DragDropState(
         updateDragCenterInRoot()
     }
 
-    /** ドラッグ中の移動処理 */
     fun onDrag(dragAmount: Offset) {
         if (!isDragging) return
 

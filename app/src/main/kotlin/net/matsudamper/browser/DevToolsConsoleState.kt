@@ -50,9 +50,6 @@ internal fun rememberDevToolsConsoleUiState(
     return holder.createUiState(entries = entriesBySession[session].orEmpty())
 }
 
-/**
- * コンソール画面の状態保持。
- */
 @Stable
 internal class DevToolsConsoleStateHolder(
     private val session: GeckoSession,

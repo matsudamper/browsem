@@ -75,7 +75,6 @@ class FindInPageWebExtension {
         }
     }
 
-    /** 新しい検索クエリを送信する */
     fun search(session: GeckoSession, query: String, isRegex: Boolean) {
         val message = JSONObject().apply {
             put("action", "search")
@@ -87,7 +86,6 @@ class FindInPageWebExtension {
         sendMessage(session, message)
     }
 
-    /** 次のマッチへ移動する */
     fun findNext(session: GeckoSession) {
         sendMessage(
             session,
@@ -97,7 +95,6 @@ class FindInPageWebExtension {
         )
     }
 
-    /** 前のマッチへ移動する */
     fun findPrevious(session: GeckoSession) {
         sendMessage(
             session,
@@ -107,7 +104,6 @@ class FindInPageWebExtension {
         )
     }
 
-    /** ハイライトを全てクリアする */
     fun clear(session: GeckoSession) {
         activeSearchCommands.remove(session)
         sendMessage(

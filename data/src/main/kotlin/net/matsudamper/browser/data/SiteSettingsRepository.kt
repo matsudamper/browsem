@@ -70,7 +70,6 @@ class SiteSettingsRepository(context: Context) {
         }.distinctUntilChanged()
     }
 
-    /** 指定ホストがマイク権限を要求したことを記録する */
     suspend fun markMicrophonePermissionRequested(host: String) {
         ensureLegacyMigration()
         database.withTransaction {
@@ -79,7 +78,6 @@ class SiteSettingsRepository(context: Context) {
         }
     }
 
-    /** 指定ホストの現在のマイク権限の状態を取得する */
     suspend fun getMicrophonePermission(host: String): SitePermissionState {
         return microphonePermission(host).first()
     }
@@ -118,7 +116,6 @@ class SiteSettingsRepository(context: Context) {
         }.distinctUntilChanged()
     }
 
-    /** 指定ホストが音声付きメディアの自動再生を要求したことを記録する */
     suspend fun markAutoplayPermissionRequested(host: String) {
         ensureLegacyMigration()
         database.withTransaction {
@@ -127,7 +124,6 @@ class SiteSettingsRepository(context: Context) {
         }
     }
 
-    /** 指定ホストの現在の音声付きメディアの自動再生の状態を取得する */
     suspend fun getAutoplayPermission(host: String): SitePermissionState {
         return autoplayPermission(host).first()
     }
@@ -147,7 +143,6 @@ class SiteSettingsRepository(context: Context) {
         }.distinctUntilChanged()
     }
 
-    /** 指定ホストの現在の位置情報の扱いを取得する */
     suspend fun getGeolocationState(host: String): SiteGeolocationState {
         return geolocationState(host).first()
     }
@@ -182,7 +177,6 @@ class SiteSettingsRepository(context: Context) {
         }.distinctUntilChanged()
     }
 
-    /** 指定ホストが位置情報を要求したことを記録する */
     suspend fun markGeolocationRequested(host: String) {
         ensureLegacyMigration()
         database.withTransaction {

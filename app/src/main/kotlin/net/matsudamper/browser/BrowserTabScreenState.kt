@@ -235,7 +235,6 @@ internal class BrowserTabScreenState(
     private var touchGestureStartedAtMs = 0L
     private var touchGestureEndedAtMs = 0L
 
-    /** コンテンツ領域で新しいタッチジェスチャーが始まった */
     fun onContentTouchStart() {
         hasTouchGestureRecord = true
         isTouchGestureActive = true
@@ -248,7 +247,6 @@ internal class BrowserTabScreenState(
         touchGestureMoved = true
     }
 
-    /** タッチジェスチャーが終了した (UP / CANCEL) */
     fun onContentTouchEnd() {
         isTouchGestureActive = false
         touchGestureEndedAtMs = SystemClock.elapsedRealtime()
@@ -383,7 +381,6 @@ internal class BrowserTabScreenState(
     // メニューのアイコン行の横スクロール位置。タブ内でのみ保持し、永続化はしない
     val extensionActionScrollState = ScrollState(initial = 0)
 
-    /** 表示中の拡張機能ポップアップ。null なら非表示 */
     var extensionActionPopup by mutableStateOf<WebExtensionActionController.PopupRequest?>(null)
     private var extensionActionOrder by mutableStateOf<List<String>>(emptyList())
 
@@ -500,7 +497,6 @@ internal class BrowserTabScreenState(
         session.goBack()
     }
 
-    /** タブ履歴の指定インデックスへ直接ジャンプする */
     fun jumpToHistoryEntry(targetIndex: Int) {
         if (targetIndex == tabHistoryCurrentIndex) return
         skipHistoryRecordCount++
@@ -600,7 +596,6 @@ internal class BrowserTabScreenState(
         devToolsWebExtension.requestFocusedInput(session)
     }
 
-    /** フォーカス中の input の id をクリップボードにコピーする */
     fun copyFocusedInputId() {
         val id = devToolsFocusedInput?.id?.takeIf { it.isNotBlank() } ?: return
         val clipboard =
@@ -637,7 +632,6 @@ internal class BrowserTabScreenState(
         shareText("$currentPageTitle\n$currentPageUrl")
     }
 
-    /** 任意のテキストを OS の共有シート（text/plain）で共有する */
     fun shareText(text: String) {
         launchPlainTextShare(body = text)
     }

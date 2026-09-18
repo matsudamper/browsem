@@ -52,11 +52,9 @@ internal class BrowserTabTranslationState(
     var detectedPageLanguage by mutableStateOf<String?>(null)
         private set
 
-    /** 翻訳元言語タグ（例: "en"） */
     var fromLanguage by mutableStateOf<String?>(null)
         private set
 
-    /** 翻訳先言語タグ（例: "ja"） */
     var toLanguage by mutableStateOf<String?>(null)
         private set
 

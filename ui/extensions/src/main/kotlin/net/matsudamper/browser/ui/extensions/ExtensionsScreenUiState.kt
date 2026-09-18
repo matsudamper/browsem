@@ -18,7 +18,6 @@ data class ExtensionsScreenUiState(
         /** ZIP / XPI ファイルを選択して拡張機能をインストールする */
         fun installExtensionFromFile()
 
-        /** 拡張機能全体の有効/無効を切り替える */
         fun setExtensionsGloballyEnabled(enabled: Boolean)
         fun dismissError()
     }

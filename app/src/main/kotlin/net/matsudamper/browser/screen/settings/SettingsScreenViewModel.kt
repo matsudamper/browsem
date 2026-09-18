@@ -317,16 +317,13 @@ internal class SettingsScreenViewModel(
     interface Event {
         fun onOpenMockLocationOnMap()
 
-        /** バックアップ進行画面に遷移する */
         fun onNavigateToBackupProgress(isImport: Boolean)
 
         /** 拡張プロセス設定変更のためプロセスを再起動する */
         fun onRestartProcess()
 
-        /** デフォルトブラウザの設定画面を開く */
         fun onOpenDefaultBrowserSettings()
 
-        /** デフォルトブラウザかどうかを UI 側で確認する */
         fun onCheckDefaultBrowserStatus()
     }
 

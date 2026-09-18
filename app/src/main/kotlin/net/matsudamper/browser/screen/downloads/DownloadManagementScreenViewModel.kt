@@ -136,7 +136,6 @@ internal class DownloadManagementScreenViewModel(
         }
     }
 
-    /** MIME タイプまたは拡張子から APK かどうかを判定する */
     private fun isApk(mimeType: String?, fileName: String?): Boolean {
         if (mimeType.equals(MIME_TYPE_APK, ignoreCase = true)) return true
         return fileName?.endsWith(".apk", ignoreCase = true) == true
@@ -464,12 +463,10 @@ internal class DownloadManagementScreenViewModel(
         /** サムネイル・アプリアイコンを読み込む際の最大サイズ (px) */
         private const val PREVIEW_SIZE_PX = 256
 
-        /** APK の MIME タイプ */
         private const val MIME_TYPE_APK = "application/vnd.android.package-archive"
 
         private const val MIME_TYPE_PDF = "application/pdf"
 
-        /** 圧縮アーカイブとして扱う MIME タイプ */
         private val ARCHIVE_MIME_TYPES = setOf(
             "application/zip",
             "application/x-zip-compressed",

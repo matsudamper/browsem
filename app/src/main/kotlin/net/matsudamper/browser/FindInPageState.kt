@@ -29,7 +29,6 @@ internal class FindInPageState(
 
     val isVisible: Boolean get() = mode != FindInPageMode.Closed
 
-    /** 正規表現モードが有効かどうか */
     val isRegex: Boolean get() = mode == FindInPageMode.Regex
 
     var query by mutableStateOf("")
@@ -41,7 +40,6 @@ internal class FindInPageState(
     var matchTotal by mutableIntStateOf(0)
         private set
 
-    /** 無効な正規表現が入力された場合のエラーメッセージ */
     var queryError by mutableStateOf<String?>(null)
         private set
 
@@ -107,7 +105,6 @@ internal class FindInPageState(
         }
     }
 
-    /** 正規表現検索の結果を拡張機能から受け取る */
     fun onRegexSearchResult(current: Int, total: Int, error: String?) {
         matchCurrent = current
         matchTotal = total

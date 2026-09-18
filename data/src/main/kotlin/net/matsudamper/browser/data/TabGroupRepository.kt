@@ -8,10 +8,8 @@ import net.matsudamper.browser.data.tab.TabGroupAssignment
 import net.matsudamper.browser.data.tab.TabGroupEntity
 
 interface TabGroupRepository {
-    /** グループ一覧を Flow で購読する */
     fun observeGroups(): Flow<List<TabGroupData>>
 
-    /** タブID→グループIDのマッピングを Flow で購読する */
     fun observeTabGroupAssignments(): Flow<List<TabGroupAssignment>>
 
     /**
@@ -21,10 +19,8 @@ interface TabGroupRepository {
      */
     suspend fun createDefaultGroupIfEmpty(tabIds: List<String>): TabGroupId
 
-    /** 新グループを追加する */
     suspend fun addGroup(name: String, sortOrder: Int): TabGroupId
 
-    /** タブをグループに割り当てる */
     suspend fun assignTabToGroup(tabId: String, groupId: TabGroupId)
 
     /**
@@ -37,10 +33,8 @@ interface TabGroupRepository {
     /** タブのグループ割り当てを空文字に設定する（タブ削除時） */
     suspend fun removeTabFromGroup(tabId: String)
 
-    /** グループの並び順を更新する */
     suspend fun reorderGroups(orderedGroupIds: List<String>)
 
-    /** グループ名を変更する */
     suspend fun renameGroup(groupId: TabGroupId, name: String)
 
     /**

@@ -200,9 +200,6 @@ class WebAppActivity : ComponentActivity() {
         super.onDestroy()
     }
 
-    /**
-     * 別ドメインの URL を Custom Tabs で開く。
-     */
     private fun openInCustomTab(url: String) {
         CustomTabsIntent.Builder()
             .build()

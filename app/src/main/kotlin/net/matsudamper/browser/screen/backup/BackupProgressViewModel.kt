@@ -78,9 +78,6 @@ internal class BackupProgressViewModel(
         }
     }
 
-    /**
-     * エクスポートを実行する。
-     */
     private suspend fun runExport(uri: Uri) {
         val result = try {
             backupRepository.exportToZip(uri, onProgress = ::updateProgress)
@@ -180,13 +177,10 @@ internal class BackupProgressViewModel(
     }
 
     interface Event {
-        /** ファイルピッカーを開くよう要求する */
         fun onRequestFilePicker()
 
-        /** アプリを再起動（プロセス終了）する */
         fun onRestartApp()
 
-        /** 前の画面に戻る */
         fun onNavigateBack()
     }
 }

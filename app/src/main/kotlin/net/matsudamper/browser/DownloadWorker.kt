@@ -51,7 +51,6 @@ internal class DownloadWorker(
      */
     private lateinit var httpClient: DownloadHttpClient
 
-    /** ストリームコピー・切断検出を担うコアロジック */
     private val engine = DownloadEngine()
 
     /** 通知タップ時に対象アイテムをハイライトするための安定したworkerID */
@@ -525,16 +524,13 @@ internal class DownloadWorker(
         const val KEY_REFERRER_URL = "referrer_url"
         const val KEY_NOTIFICATION_ID = "notification_id"
 
-        /** 再開モード: 部分ファイルのMediaStore URI */
         const val KEY_PARTIAL_FILE_URI = "partial_file_uri"
 
-        /** 再開モード: 再開を開始するバイト位置 */
         const val KEY_RESUME_FROM_BYTES = "resume_from_bytes"
         const val CHANNEL_ID = "download_progress_channel"
         const val NOTIFICATION_ID = 9001
         const val TAG_DOWNLOAD = "download"
 
-        /** ダウンロード管理画面を開くためのActionキー */
         const val ACTION_OPEN_DOWNLOADS = "net.matsudamper.browser.ACTION_OPEN_DOWNLOADS"
 
         /** 通知タップ時にハイライト対象のダウンロードを特定するためのExtra */

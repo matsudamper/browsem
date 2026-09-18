@@ -12,7 +12,6 @@ import java.util.WeakHashMap
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
 
-/** タブの現在の接続のセキュリティ情報 (TLS) */
 data class TabSecurityInfo(
     val isSecure: Boolean,
     val certificate: X509Certificate?,
@@ -242,7 +241,6 @@ class BrowserTab(
         sessionDelegateHost.clearPageLoadingState()
     }
 
-    /** SessionState から履歴キャッシュを初期化する */
     internal fun initHistoryFromSessionState(sessionState: GeckoSession.SessionState) {
         sessionDelegateHost.initHistoryCache(sessionState)
     }

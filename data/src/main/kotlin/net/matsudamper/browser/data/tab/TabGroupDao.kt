@@ -116,7 +116,6 @@ abstract class TabGroupDao {
         }
     }
 
-    /** タブID→グループIDのマッピングを Flow で購読する */
     @Query("SELECT tabId, groupId FROM tab_state")
     abstract fun observeTabGroupAssignments(): Flow<List<TabGroupAssignment>>
 

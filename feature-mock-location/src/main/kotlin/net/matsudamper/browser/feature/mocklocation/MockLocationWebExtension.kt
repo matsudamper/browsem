@@ -90,7 +90,6 @@ class MockLocationWebExtension {
         }
     }
 
-    /** 接続元ページの URL からホスト名を取り出す */
     private fun portHost(port: WebExtension.Port): String? {
         return runCatching { URI(port.sender.url) }.getOrNull()?.host
     }
@@ -108,7 +107,6 @@ class MockLocationWebExtension {
         return topHost ?: senderHost
     }
 
-    /** ホストに応じた設定メッセージを構築する */
     private fun buildConfigMessage(host: String?, action: String): JSONObject {
         val config = currentConfig
         return JSONObject().apply {
@@ -170,7 +168,6 @@ class MockLocationWebExtension {
         )
     }
 
-    /** サイトごとの位置情報の扱い */
     enum class GeolocationMode(val jsonValue: String) {
         MOCK("mock"),
 

@@ -26,7 +26,6 @@ internal class SitePermissionDialogState(
         internal val onResult: (Boolean?) -> Unit,
     )
 
-    /** 自動再生確認ダイアログでの選択 */
     enum class AutoplayChoice {
         /** 許可してサイト設定へ永続化する */
         Allow,

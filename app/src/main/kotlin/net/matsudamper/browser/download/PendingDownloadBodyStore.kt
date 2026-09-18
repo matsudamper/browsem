@@ -17,7 +17,6 @@ import org.mozilla.geckoview.WebResponse
 object PendingDownloadBodyStore {
     private val responses = ConcurrentHashMap<String, WebResponse>()
 
-    /** 指定 workId に対応するボディ付きレスポンスを保持する */
     fun put(workId: String, response: WebResponse) {
         responses[workId] = response
     }

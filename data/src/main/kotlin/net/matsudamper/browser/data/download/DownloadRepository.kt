@@ -171,7 +171,6 @@ class DownloadRepository(context: Context) {
         dao.pauseIfActive(currentWorkerId)
     }
 
-    /** 指定したワーカーのレコードが一時停止済みかどうかを返す */
     suspend fun isPaused(currentWorkerId: String): Boolean {
         return dao.getStatus(currentWorkerId) == DownloadRecordStatus.PAUSED.name
     }

@@ -65,7 +65,6 @@ interface BrowserSessionStateCallbacks {
     fun onFullScreen(fullScreen: Boolean)
 }
 
-/** タブ内ナビゲーション履歴の項目 */
 data class HistoryStateItem(val uri: String, val title: String)
 
 data class GeckoSessionDelegateBundle(

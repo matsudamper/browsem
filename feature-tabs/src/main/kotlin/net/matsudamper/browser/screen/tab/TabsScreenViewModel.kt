@@ -265,7 +265,6 @@ class TabsScreenViewModel(
         }
     }
 
-    /** 新しいグループを追加する */
     private fun addGroup() {
         viewModelScope.launch {
             val currentGroups = viewModelStateFlow.value.groups
@@ -314,7 +313,6 @@ class TabsScreenViewModel(
         }
     }
 
-    /** タブを別のグループへ移動する */
     private fun moveTabToGroup(tabId: String, targetGroupIndex: Int) {
         val targetGroup = viewModelStateFlow.value.groups.getOrNull(targetGroupIndex) ?: return
         viewModelScope.launch {
@@ -423,7 +421,6 @@ class TabsScreenViewModel(
         }
     }
 
-    /** グループ名を変更する */
     private fun renameGroup(groupIndex: Int, newName: String) {
         val currentGroups = viewModelStateFlow.value.groups
         val group = currentGroups.getOrNull(groupIndex) ?: return

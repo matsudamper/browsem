@@ -398,7 +398,6 @@ private fun ResolvedBrowserSettings.toLogicSettings(): BrowserLogicSettings = Br
     enableThirdPartyCa = enableThirdPartyCa,
 )
 
-/** サイトごとの位置情報設定を拡張機能のモードへ変換する */
 private fun SiteGeolocationState.toGeolocationMode(): MockLocationWebExtension.GeolocationMode {
     return when (this) {
         SiteGeolocationState.SITE_GEOLOCATION_DENY -> MockLocationWebExtension.GeolocationMode.DENY
