@@ -8,6 +8,7 @@ import androidx.annotation.VisibleForTesting
 import androidx.browser.customtabs.CustomTabsSessionToken
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -258,14 +259,14 @@ object CustomTabsWarmupStore {
             return block()
         }
         val latch = CountDownLatch(1)
-        var result: Result<T>? = null
+        val result = AtomicReference<Result<T>>()
         Handler(Looper.getMainLooper()).post {
-            result = runCatching { block() }
+            result.set(runCatching { block() })
             latch.countDown()
         }
         check(latch.await(10, TimeUnit.SECONDS)) {
             "CustomTabsWarmupStore main thread operation timed out."
         }
-        return result!!.getOrThrow()
+        return result.get().getOrThrow()
     }
 }
