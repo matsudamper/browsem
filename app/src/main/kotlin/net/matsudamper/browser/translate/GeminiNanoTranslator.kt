@@ -516,10 +516,10 @@ private class GeminiNanoInference(
     /** 各訳文の見積もりに、index やキーなど JSON の枝葉ぶんを件数に応じて足す */
     private fun estimateBatchMaxOutputTokens(texts: List<String>): Int {
         val totalChars = texts.sumOf { it.length }
-        return (totalChars * OUTPUT_TOKENS_PER_SOURCE_CHAR +
+        val estimate = totalChars * OUTPUT_TOKENS_PER_SOURCE_CHAR +
             texts.size * BATCH_OUTPUT_TOKENS_PER_SEGMENT_OVERHEAD +
-            OUTPUT_TOKENS_MARGIN)
-            .coerceIn(MIN_OUTPUT_TOKENS, MAX_OUTPUT_TOKENS)
+            OUTPUT_TOKENS_MARGIN
+        return estimate.coerceIn(MIN_OUTPUT_TOKENS, MAX_OUTPUT_TOKENS)
     }
 
     private suspend fun translateChunk(chunk: String): String {
