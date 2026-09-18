@@ -343,10 +343,12 @@ internal class BrowserViewModel(
      * 先に保留中の保存を流し切ってから DB から削除し、次回起動時に復元されないようにする。
      *
      * 戻る操作の observer（メインスレッドのコルーチン）と onDestroy の runBlocking の両方から
-     * 呼ばれる。observer 側が Mutex を握ったまま IO 待ちで中断している間に onDestroy が
-     * メインスレッドを塞いで同じ Mutex を待つと、observer 側は再開できずデッドロックする。
-     * そのため実処理はメインスレッドに依存しない IO のジョブに一本化し、後から来た呼び出しは
-     * そのジョブの完了だけを待つ。
+     * 呼ばれる。onDestroy はメインスレッドを塞いで完了を待つため、ここで待つ処理は
+     * メインスレッドのコルーチンが握り得るもの（[externalTabCleanupMutex] など）に依存させない。
+     * 依存させると、その保持側が再開先のメインスレッドを得られずデッドロックする。
+     * 実処理は IO のジョブに一本化し、後から来た呼び出しはそのジョブの完了だけを待つ。
+     * [finishExternalDownloadTab] との競合は、メモリ上の外部タブ情報をメインスレッドで先に
+     * 消すことで防ぐ（あちらは登録の有無を見て何もしない）。
      *
      * launch だと DB 削除の失敗が viewModelScope の未捕捉例外としてプロセスを落とすため、
      * async にして呼び出し元の await へ例外を返す。
@@ -363,10 +365,8 @@ internal class BrowserViewModel(
         externalTabIdsFlow.update { it - cleanup.tabId }
         externalTabInitialUrlsFlow.update { it - cleanup.tabId }
         val job = viewModelScope.async(Dispatchers.IO) {
-            externalTabCleanupMutex.withLock {
-                browserTabController.awaitPersistenceIdle()
-                tabRepository.closeTab(cleanup.tabId, cleanup.nextSelectedTabId)
-            }
+            browserTabController.awaitPersistenceIdle()
+            tabRepository.closeTab(cleanup.tabId, cleanup.nextSelectedTabId)
         }
         externalTabFinishCleanupJob = job
         job.await()
