@@ -5,6 +5,8 @@
   const SEGMENT_BATCH_SIZE = 48;
   const SEGMENT_BATCH_CHAR_LIMIT = 32768;
   const DYNAMIC_FLUSH_DELAY_MS = 120;
+  // 描画されていないノードは画面内判定ができないため、最後に翻訳する
+  const HIDDEN_SEGMENT_DISTANCE = Number.MAX_SAFE_INTEGER;
   const NATIVE_RECONNECT_DELAY_MS = 1000;
   const TRANSLATED_ATTRIBUTES = ['title', 'aria-label', 'aria-description', 'placeholder', 'alt'];
   const OBSERVED_ATTRIBUTES = TRANSLATED_ATTRIBUTES.concat(['value']);
@@ -218,6 +220,38 @@
     }
   }
 
+  function viewportDistance(entry) {
+    let rect;
+    try {
+      if (entry.kind === 'text') {
+        const range = document.createRange();
+        range.selectNodeContents(entry.node);
+        rect = range.getBoundingClientRect();
+      } else {
+        rect = entry.element.getBoundingClientRect();
+      }
+    } catch (error) {
+      return HIDDEN_SEGMENT_DISTANCE;
+    }
+    if (rect.width === 0 && rect.height === 0) return HIDDEN_SEGMENT_DISTANCE;
+    const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+    if (rect.bottom < 0) return -rect.bottom;
+    if (rect.top > viewportHeight) return rect.top - viewportHeight;
+    return 0;
+  }
+
+  /** 画面内のテキストから訳し始めるため、表示位置が画面に近い順へ並べ替える（同じ距離は DOM 順のまま） */
+  function sortByViewportDistance(segments) {
+    const distances = new Map();
+    segments.forEach(function (segment) {
+      const entry = entries.get(segment.id);
+      distances.set(segment.id, entry ? viewportDistance(entry) : HIDDEN_SEGMENT_DISTANCE);
+    });
+    return segments.slice().sort(function (a, b) {
+      return distances.get(a.id) - distances.get(b.id);
+    });
+  }
+
   function sendSegmentBatches(action, requestId, segments) {
     let batch = [];
     let batchChars = 0;
@@ -412,9 +446,10 @@
       htmlLanguage: document.documentElement ? (document.documentElement.lang || '') : '',
     });
 
-    const segments = [];
+    let segments = [];
     try {
       collectRoot(document.body, segments);
+      segments = sortByViewportDistance(segments);
     } catch (error) {
       // 収集が途中で落ちると scanComplete が送られず、アプリ側は待ち続けてしまう
       postMessage({
