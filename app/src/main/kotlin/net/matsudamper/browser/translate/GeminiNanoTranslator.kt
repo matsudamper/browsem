@@ -562,10 +562,23 @@ internal class GeminiNanoModelOption(
 )
 
 /**
- * 設定画面へ出す名前。ML Kit のモデル名に付く "[Preview, CPU]" のような実行環境の注記を落とす。
+ * 設定画面へ出す名前。
+ *
+ * ML Kit のモデル名は "Gemini Nano 4 Fast [Preview, CPU]" のような読める形の場合と、
+ * "nano-v4-fast" のような内部識別子のままの場合があるため、両方を人が読める表記へ揃える。
  */
-internal fun toGeminiNanoModelLabel(modelName: String): String =
-    modelName.substringBefore('[').trim().ifBlank { modelName }
+internal fun toGeminiNanoModelLabel(modelName: String): String {
+    val withoutRuntimeNote = modelName.substringBefore('[').trim().ifBlank { modelName }
+    val rawIdMatch = GEMINI_NANO_RAW_MODEL_ID_REGEX.matchEntire(withoutRuntimeNote) ?: return withoutRuntimeNote
+    val (generation, fastSuffix) = rawIdMatch.destructured
+    val size = if (fastSuffix.isEmpty()) "Full" else "Fast"
+    return "Gemini Nano $generation $size"
+}
+
+private val GEMINI_NANO_RAW_MODEL_ID_REGEX = Regex(
+    "(?:gemini[- ]?)?nano-v(\\d+)(-fast)?",
+    RegexOption.IGNORE_CASE,
+)
 
 /**
  * 保存済みのキーが今の一覧にない場合に、翻訳時の自動選択と同じ基準で選び直す。
