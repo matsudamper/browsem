@@ -9,6 +9,7 @@ import net.matsudamper.browser.data.crashlog.CrashLogRepository
 import net.matsudamper.browser.translate.GeckoTranslator
 import net.matsudamper.browser.translate.GeminiNanoTranslator
 import net.matsudamper.browser.translate.LocalAITranslator
+import net.matsudamper.browser.translate.PageTranslationCache
 import net.matsudamper.browser.translate.PageTranslationWebExtension
 import net.matsudamper.browser.translate.TranslationLanguages
 import net.matsudamper.browser.translate.TranslationPriorityLanguage
@@ -20,6 +21,7 @@ internal class PageTranslator(
     private val session: GeckoSession,
     private val currentPageUrl: String,
     private val pageTranslationWebExtension: PageTranslationWebExtension,
+    private val pageTranslationCache: PageTranslationCache,
     private val crashLogRepository: CrashLogRepository,
 ) {
     suspend fun translatePage(
@@ -53,6 +55,7 @@ internal class PageTranslator(
                     fromLanguage = fromLanguage,
                     toLanguage = toLanguage,
                     pageTranslationWebExtension = pageTranslationWebExtension,
+                    pageTranslationCache = pageTranslationCache,
                     crashLogRepository = crashLogRepository,
                     onTranslateStateChanged = onTranslateStateChanged,
                     onTranslateProgressChanged = onTranslateProgressChanged,
@@ -67,6 +70,7 @@ internal class PageTranslator(
                     toLanguage = toLanguage,
                     modelKey = geminiNanoModelKey,
                     pageTranslationWebExtension = pageTranslationWebExtension,
+                    pageTranslationCache = pageTranslationCache,
                     crashLogRepository = crashLogRepository,
                     onTranslateStateChanged = onTranslateStateChanged,
                     onTranslateProgressChanged = onTranslateProgressChanged,

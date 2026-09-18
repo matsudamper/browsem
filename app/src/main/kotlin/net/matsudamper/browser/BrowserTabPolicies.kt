@@ -21,6 +21,17 @@ internal fun shouldResetTranslationOnLocationChange(
         url != originalPageUrlForRevert
 }
 
+/**
+ * ページ遷移時に翻訳キャッシュを捨てるべきかを判定する。
+ *
+ * 翻訳バーが Idle（原文表示中）でも別ページの訳文を持ち越さないよう、
+ * 翻訳状態とは独立にフルページロードで捨てる。data: URL（翻訳コンテンツ）は
+ * 同じページの表示替えなので残す。
+ */
+internal fun shouldClearTranslationCacheOnLocationChange(url: String, isFullPageLoad: Boolean): Boolean {
+    return isFullPageLoad && !url.startsWith("data:")
+}
+
 internal fun isThemeColorForCurrentPage(currentPageUrl: String, reportedUrl: String): Boolean {
     if (reportedUrl.isBlank()) return false
     return normalizedBrowserPageKey(currentPageUrl) == normalizedBrowserPageKey(reportedUrl)
