@@ -30,7 +30,9 @@ import com.google.mlkit.genai.prompt.ModelPreference
 import com.google.mlkit.genai.prompt.ModelReleaseStage
 import com.google.mlkit.genai.prompt.SystemInstruction
 import com.google.mlkit.genai.prompt.TextPart
+import com.google.mlkit.genai.prompt.TypedCandidate
 import com.google.mlkit.genai.prompt.generateContentRequest
+import com.google.mlkit.genai.prompt.generateTypedContentRequest
 import com.google.mlkit.genai.prompt.generationConfig
 import com.google.mlkit.genai.prompt.modelConfig
 import com.google.mlkit.nl.languageid.LanguageIdentification
@@ -180,7 +182,9 @@ class GeminiNanoTranslator(
         var documentMatched = true
         var appliedCount = 0
         var requeuedCount = 0
-        for (batch in segments.chunked(APPLY_BATCH_SIZE)) {
+        val groups = groupSegmentsForBatchTranslation(segments, inference.supportsBatchTranslation)
+        for (batch in groups) {
+            translateBatchIntoCache(inference, translationCache, batch)
             val translations = batch.map { segment ->
                 val translatedText = translationCache[segment.text]
                     ?: translateAndCache(inference, translationCache, segment.text)
@@ -218,6 +222,24 @@ class GeminiNanoTranslator(
             appliedCount = appliedCount,
             requeuedCount = requeuedCount,
         )
+    }
+
+    /**
+     * 1 グループを 1 回の生成でまとめて訳し、成功分だけキャッシュへ入れる。
+     *
+     * 失敗したグループは何も入れず、続く 1 件ずつの経路で訳し直す。
+     */
+    private suspend fun translateBatchIntoCache(
+        inference: GeminiNanoInference,
+        translationCache: PageTranslationCache.LanguagePairCache,
+        batch: List<PageTranslationWebExtension.Segment>,
+    ) {
+        val texts = batch.map { it.text }.distinct().filter { translationCache[it] == null }
+        if (texts.size < BATCH_TRANSLATION_MIN_SEGMENT_COUNT) return
+        val translatedTexts = inference.translateBatchOrNull(texts) ?: return
+        texts.forEachIndexed { index, text ->
+            translationCache[text] = translatedTexts[index]
+        }
     }
 
     /** 失敗時は原文を表示するが、再翻訳で推論をやり直せるようキャッシュには残さない */
@@ -348,8 +370,8 @@ class GeminiNanoTranslator(
         private const val UNDETERMINED_LANGUAGE = "und"
         private const val LANGUAGE_DETECTION_LIMIT = 2_000
 
-        /** 生成1件ごとに反映し、推論中のDOM書き換えで結果が捨てられる時間を短くする */
-        private const val APPLY_BATCH_SIZE = 1
+        /** 1 件だけならまとめても生成回数は減らないため、1 件ずつの経路に任せる */
+        private const val BATCH_TRANSLATION_MIN_SEGMENT_COUNT = 2
 
         /** DOM更新が推論速度を上回っても未処理セグメントを溜め込まないようにする */
         private const val DYNAMIC_TRANSLATION_QUEUE_CAPACITY = 16
@@ -383,6 +405,13 @@ private class GeminiNanoInference(
     @Volatile
     private var systemPromptAvailable = false
 
+    @Volatile
+    private var structuredOutputAvailable = false
+
+    /** 構造化出力に対応したモデルだけ、複数セグメントをまとめて 1 回で訳せる */
+    val supportsBatchTranslation: Boolean
+        get() = structuredOutputAvailable
+
     suspend fun prepare() {
         withTimeout(MODEL_PREPARATION_TIMEOUT_MS) {
             while (true) {
@@ -391,6 +420,9 @@ private class GeminiNanoInference(
                         generativeModel.warmup()
                         systemPromptAvailable = runCatching { generativeModel.isSystemPromptAvailable() }
                             .getOrDefault(false)
+                        structuredOutputAvailable =
+                            runCatching { generativeModel.isStructuredOutputFeatureAvailable() }
+                                .getOrDefault(false)
                         return@withTimeout
                     }
 
@@ -432,8 +464,62 @@ private class GeminiNanoInference(
         }
     }
 
+    /**
+     * 複数の原文を 1 回の生成でまとめて訳す。入力と同じ順で返す。
+     *
+     * 失敗や照合不一致は null を返し、呼び出し元が 1 件ずつの経路へ戻す。
+     * 再試行はしない。失敗したまとめ翻訳の待ち時間を二重に払うより、
+     * 1 件ずつの経路で確実に進めたほうが早い。
+     */
+    suspend fun translateBatchOrNull(texts: List<String>): List<String>? {
+        return try {
+            generateBatchTranslation(texts)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            Log.w(TAG, "Gemini Nanoのまとめ翻訳に失敗したため1件ずつ訳す: count=${texts.size}", error)
+            null
+        }
+    }
+
     fun close() {
         generativeModel.close()
+    }
+
+    private suspend fun generateBatchTranslation(texts: List<String>): List<String>? {
+        val instruction = buildGeminiNanoBatchTranslationInstruction(sourceLanguage, targetLanguage)
+        val input = buildGeminiNanoBatchTranslationInput(texts)
+        val configure: GenerateContentRequest.Builder.() -> Unit = {
+            temperature = 0f
+            topK = 1
+            candidateCount = 1
+            maxOutputTokens = estimateBatchMaxOutputTokens(texts)
+            enableThinking = false
+        }
+        val request = if (systemPromptAvailable) {
+            generateContentRequest(SystemInstruction(instruction), TextPart(input), configure)
+        } else {
+            generateContentRequest(TextPart(instruction + "\n\n" + input), configure)
+        }
+        val typedRequest = generateTypedContentRequest(request, GeminiNanoTranslatedSegments::class)
+        val response = inferenceMutex.withLock {
+            withTimeout(GENERATION_TIMEOUT_MS) {
+                generativeModel.generateContent(typedRequest)
+            }
+        }
+        val candidate = response.candidates.firstOrNull() ?: return null
+        if (candidate.finishReason == TypedCandidate.TypedFinishReason.MAX_TOKENS) return null
+        val translatedSegments = candidate.response ?: return null
+        return orderBatchTranslations(texts.size, translatedSegments.translations)
+    }
+
+    /** 各訳文の見積もりに、index やキーなど JSON の枝葉ぶんを件数に応じて足す */
+    private fun estimateBatchMaxOutputTokens(texts: List<String>): Int {
+        val totalChars = texts.sumOf { it.length }
+        return (totalChars * OUTPUT_TOKENS_PER_SOURCE_CHAR +
+            texts.size * BATCH_OUTPUT_TOKENS_PER_SEGMENT_OVERHEAD +
+            OUTPUT_TOKENS_MARGIN)
+            .coerceIn(MIN_OUTPUT_TOKENS, MAX_OUTPUT_TOKENS)
     }
 
     private suspend fun translateChunk(chunk: String): String {
@@ -551,6 +637,7 @@ private class GeminiNanoInference(
         private val SENTENCE_END_CHARS = charArrayOf('.', '!', '?', '。', '！', '？', '\n')
         private const val OUTPUT_TOKENS_PER_SOURCE_CHAR = 2
         private const val OUTPUT_TOKENS_MARGIN = 64
+        private const val BATCH_OUTPUT_TOKENS_PER_SEGMENT_OVERHEAD = 24
         private const val MIN_OUTPUT_TOKENS = 128
         private const val MAX_OUTPUT_TOKENS = 1_024
         private const val GENERATION_ATTEMPT_COUNT = 2
@@ -824,7 +911,7 @@ private val UNUSABLE_TRANSLATION_MARKERS = listOf(
     "Asanaimodel",
 )
 
-private fun toLanguageDisplayName(languageTag: String): String =
+internal fun toLanguageDisplayName(languageTag: String): String =
     Locale.forLanguageTag(languageTag)
         .getDisplayLanguage(Locale.ENGLISH)
         .ifBlank { languageTag }
