@@ -179,9 +179,7 @@ class GeminiNanoTranslator(
         for (batch in segments.chunked(APPLY_BATCH_SIZE)) {
             val translations = batch.map { segment ->
                 val translatedText = translationCache[segment.text]
-                    ?: inference.translateTextOrKeepSource(segment.text).also { translated ->
-                        translationCache[segment.text] = translated
-                    }
+                    ?: translateAndCache(inference, translationCache, segment.text)
                 translatedSegmentCount.incrementAndGet()
                 notifyProgress()
                 PageTranslationWebExtension.TranslationResult(
@@ -216,6 +214,17 @@ class GeminiNanoTranslator(
             appliedCount = appliedCount,
             requeuedCount = requeuedCount,
         )
+    }
+
+    /** 失敗時は原文を表示するが、再翻訳で推論をやり直せるようキャッシュには残さない */
+    private suspend fun translateAndCache(
+        inference: GeminiNanoInference,
+        translationCache: PageTranslationCache.LanguagePairCache,
+        text: String,
+    ): String {
+        val translatedText = inference.translateTextOrNull(text) ?: return text
+        translationCache[text] = translatedText
+        return translatedText
     }
 
     /**
@@ -404,15 +413,15 @@ private class GeminiNanoInference(
         return joinTranslatedChunks(chunks, translatedChunks)
     }
 
-    /** 原文のままにしたい場合に、翻訳失敗を呼び出し元へ伝えずに済ませる */
-    suspend fun translateTextOrKeepSource(text: String): String {
+    /** 翻訳失敗を呼び出し元へ伝えず、原文のまま表示する判断を任せる */
+    suspend fun translateTextOrNull(text: String): String? {
         return try {
             translateText(text)
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {
             Log.w(TAG, "Gemini Nanoの翻訳に失敗したため原文を維持する", error)
-            text
+            null
         }
     }
 
