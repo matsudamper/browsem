@@ -3,7 +3,6 @@ package net.matsudamper.browser.translate
 import android.os.SystemClock
 import android.util.Log
 import java.util.Locale
-import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -46,6 +45,7 @@ class GeminiNanoTranslator(
     private val toLanguage: String,
     private val modelKey: String,
     private val pageTranslationWebExtension: PageTranslationWebExtension,
+    private val pageTranslationCache: PageTranslationCache,
     private val crashLogRepository: CrashLogRepository,
     private val onTranslateStateChanged: (Translator.TranslateState) -> Unit,
     private val onTranslateProgressChanged: (TranslationProgress) -> Unit,
@@ -111,7 +111,7 @@ class GeminiNanoTranslator(
 
                 currentStage = STAGE_INITIAL
                 onTranslateStateChanged(Translator.TranslateState.TRANSLATING)
-                val translationCache = ConcurrentHashMap<String, String>()
+                val translationCache = pageTranslationCache.forLanguagePair(sourceLanguage, targetLanguage)
                 totalSegmentCount.set(translatableSegments.size)
                 notifyProgress()
                 val initialSegments = translatableSegments.take(INITIAL_APPLY_SEGMENT_COUNT)
@@ -170,7 +170,7 @@ class GeminiNanoTranslator(
         inference: GeminiNanoInference,
         documentId: String,
         segments: List<PageTranslationWebExtension.Segment>,
-        translationCache: ConcurrentHashMap<String, String>,
+        translationCache: PageTranslationCache.LanguagePairCache,
         awaitDomApply: Boolean,
     ): PageTranslationWebExtension.ApplyResult {
         var documentMatched = true
@@ -240,7 +240,7 @@ class GeminiNanoTranslator(
         inference: GeminiNanoInference,
         documentId: String,
         remainingSegments: List<PageTranslationWebExtension.Segment>,
-        translationCache: ConcurrentHashMap<String, String>,
+        translationCache: PageTranslationCache.LanguagePairCache,
     ): Boolean {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         val queue = Channel<List<PageTranslationWebExtension.Segment>>(

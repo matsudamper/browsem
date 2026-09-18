@@ -3,7 +3,6 @@ package net.matsudamper.browser.translate
 import android.os.SystemClock
 import android.util.Log
 import java.util.Locale
-import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -34,6 +33,7 @@ class LocalAITranslator(
     private val fromLanguage: String?,
     private val toLanguage: String,
     private val pageTranslationWebExtension: PageTranslationWebExtension,
+    private val pageTranslationCache: PageTranslationCache,
     private val crashLogRepository: CrashLogRepository,
     private val onTranslateStateChanged: (Translator.TranslateState) -> Unit,
     private val onTranslateProgressChanged: (TranslationProgress) -> Unit,
@@ -81,7 +81,10 @@ class LocalAITranslator(
                 targetLanguage = effectiveTargetLanguage,
                 segmentCount = snapshot.segments.size,
             )
-            val translationCache = ConcurrentHashMap<String, String>()
+            val translationCache = pageTranslationCache.forLanguagePair(
+                effectiveSourceLanguage,
+                effectiveTargetLanguage,
+            )
             totalSegmentCount.set(snapshot.segments.size)
             notifyProgress()
             val initialSegments = snapshot.segments.take(INITIAL_APPLY_SEGMENT_COUNT)
@@ -180,7 +183,7 @@ class LocalAITranslator(
         pageTranslationWebExtension: PageTranslationWebExtension,
         documentId: String,
         segments: List<PageTranslationWebExtension.Segment>,
-        translationCache: ConcurrentHashMap<String, String>,
+        translationCache: PageTranslationCache.LanguagePairCache,
         sourceLanguage: String,
         targetLanguage: String,
     ) {
@@ -247,7 +250,7 @@ class LocalAITranslator(
         pageTranslationWebExtension: PageTranslationWebExtension,
         documentId: String,
         segments: List<PageTranslationWebExtension.Segment>,
-        translationCache: ConcurrentHashMap<String, String>,
+        translationCache: PageTranslationCache.LanguagePairCache,
         awaitDomApply: Boolean = false,
     ): PageTranslationWebExtension.ApplyResult {
         var documentMatched = true
@@ -307,7 +310,7 @@ class LocalAITranslator(
         pageTranslationWebExtension: PageTranslationWebExtension,
         documentId: String,
         initialSegments: List<PageTranslationWebExtension.Segment>,
-        translationCache: ConcurrentHashMap<String, String>,
+        translationCache: PageTranslationCache.LanguagePairCache,
     ): Boolean {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         val queue = Channel<List<PageTranslationWebExtension.Segment>>(Channel.UNLIMITED)

@@ -11,6 +11,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import net.matsudamper.browser.data.TranslationProvider
 import net.matsudamper.browser.data.crashlog.CrashLogRepository
+import net.matsudamper.browser.translate.PageTranslationCache
 import net.matsudamper.browser.translate.PageTranslationWebExtension
 import net.matsudamper.browser.translate.TranslationLanguages
 import net.matsudamper.browser.translate.TranslationPriorityLanguage
@@ -61,6 +62,9 @@ internal class BrowserTabTranslationState(
 
     private var translationJob: Job? = null
     private var activeProvider: TranslationProvider? = null
+
+    /** 原文表示と再翻訳を往復しても訳し直さないよう、ページ遷移まで訳文を持ち続ける */
+    private val pageTranslationCache = PageTranslationCache()
 
     fun onTranslate(translationProvider: TranslationProvider, geminiNanoModelKey: String) {
         when (state) {
@@ -129,6 +133,7 @@ internal class BrowserTabTranslationState(
             stopBridgeIfActive(restoreOriginal = false)
             activeProvider = null
             clearBarState()
+            pageTranslationCache.clear()
         }
         if (!url.startsWith("data:")) {
             detectedPageLanguage = null
@@ -160,6 +165,7 @@ internal class BrowserTabTranslationState(
                     session = session(),
                     currentPageUrl = pageUrl,
                     pageTranslationWebExtension = pageTranslationWebExtension,
+                    pageTranslationCache = pageTranslationCache,
                     crashLogRepository = crashLogRepository,
                 ).translatePage(
                     provider = translationProvider,
