@@ -9,6 +9,12 @@ import kotlinx.coroutines.flow.map
 
 enum class DownloadRecordStatus { ENQUEUED, RUNNING, SUCCEEDED, FAILED, CANCELLED, PAUSED }
 
+/** 再開でワーカーIDを付け替える前の状態。エンキューに失敗したときに戻すために使う */
+data class ResumeRevertPoint(
+    val currentWorkerId: String,
+    val status: DownloadRecordStatus,
+)
+
 data class DownloadRecord(
     /** レコードの安定ID。再開してもこの値は変わらない */
     val workerId: UUID,
@@ -196,12 +202,18 @@ class DownloadRepository(context: Context) {
     }
 
     /**
-     * 指定したワーカーのレコードがキャンセルまたは一時停止済みかどうかを返す。
+     * 指定したワーカーが停止すべきかどうかを返す。
      * WorkManager の割り込みが取りこぼされた場合でも Worker が自力で停止できるよう、
-     * Worker の進捗更新時にポーリングして確認するために使用する
+     * Worker の進捗更新時にポーリングして確認するために使用する。
+     *
+     * レコードが見つからない場合も停止要求として扱う。再開すると updateResumed が
+     * currentWorkerId を新しいワーカーへ付け替えるため、割り込みを取りこぼした古いワーカーからは
+     * レコードが引けなくなる。この状態を走行継続と判定すると、レコードが完了した後も
+     * 古いワーカーが通知を更新し続け、キャンセルもできなくなる
      */
     suspend fun isStopRequested(currentWorkerId: String): Boolean {
-        return dao.getStatus(currentWorkerId) in listOf(
+        val status = dao.getStatus(currentWorkerId) ?: return true
+        return status in listOf(
             DownloadRecordStatus.CANCELLED.name,
             DownloadRecordStatus.PAUSED.name,
         )
@@ -218,10 +230,29 @@ class DownloadRepository(context: Context) {
 
     /**
      * 再開時に既存レコードを新しいワーカーIDへ付け替えてENQUEUEDに戻す。
-     * レコードを削除・再作成しないため、リスト上の位置とUIのアイテム同一性が維持される
+     * レコードを削除・再作成しないため、リスト上の位置とUIのアイテム同一性が維持される。
+     * 戻り値は付け替え前の状態で、エンキューに失敗したときに [revertResumed] へ渡す
      */
-    suspend fun updateResumed(workerId: String, newWorkerId: String) {
+    suspend fun updateResumed(workerId: String, newWorkerId: String): ResumeRevertPoint? {
+        val previous = dao.getByWorkerId(workerId)
         dao.updateResumed(workerId = workerId, newWorkerId = newWorkerId)
+        return previous?.let {
+            ResumeRevertPoint(currentWorkerId = it.currentWorkerId, status = it.toStatus())
+        }
+    }
+
+    /**
+     * 再開のエンキューに失敗したときに、付け替え前の状態へ戻す。
+     * CANCELLED にすると部分ファイルを削除する経路が無くなり MediaStore のエントリが残るため、
+     * 部分ファイルを保持したまま再開可能な状態へ戻す
+     */
+    suspend fun revertResumed(workerId: String, newWorkerId: String, revertPoint: ResumeRevertPoint) {
+        dao.revertResumed(
+            workerId = workerId,
+            newWorkerId = newWorkerId,
+            previousWorkerId = revertPoint.currentWorkerId,
+            previousStatus = revertPoint.status.name,
+        )
     }
 
     /** 実行中以外のダウンロード履歴を削除する。ファイル自体は削除しない */
@@ -239,12 +270,16 @@ class DownloadRepository(context: Context) {
         throw CancellationException("ダウンロードがキャンセルまたは一時停止されました")
     }
 
-    private fun DownloadEntity.toRecord(): DownloadRecord {
-        val recordStatus = try {
+    private fun DownloadEntity.toStatus(): DownloadRecordStatus {
+        return try {
             DownloadRecordStatus.valueOf(this.status)
         } catch (_: IllegalArgumentException) {
             DownloadRecordStatus.FAILED
         }
+    }
+
+    private fun DownloadEntity.toRecord(): DownloadRecord {
+        val recordStatus = toStatus()
         return DownloadRecord(
             workerId = UUID.fromString(workerId),
             currentWorkerId = UUID.fromString(currentWorkerId),
