@@ -41,7 +41,7 @@ internal class GeckoDownloadManager(
         if (response != null) {
             PendingDownloadBodyStore.put(workId.toString(), response)
         }
-        val notificationId = workId.hashCode() and 0x7fffffff
+        val notificationId = DownloadNotificationId.progress(workId)
         val workRequest = OneTimeWorkRequestBuilder<DownloadWorker>()
             .setId(workId)
             .setInputData(
@@ -83,7 +83,7 @@ internal class GeckoDownloadManager(
         if (response != null) {
             PendingDownloadBodyStore.put(workId.toString(), response)
         }
-        val notificationId = workId.hashCode() and 0x7fffffff
+        val notificationId = DownloadNotificationId.progress(workId)
         val workRequest = OneTimeWorkRequestBuilder<DownloadWorker>()
             .setId(workId)
             .setInputData(
@@ -180,7 +180,7 @@ internal class GeckoDownloadManager(
     ) {
         DownloadWorker.ensureNotificationChannel(context)
         val newWorkId = UUID.randomUUID()
-        val notificationId = newWorkId.hashCode() and 0x7fffffff
+        val notificationId = DownloadNotificationId.progress(newWorkId)
         val inputData = buildMap<String, Any> {
             put(DownloadWorker.KEY_URL, url)
             put(DownloadWorker.KEY_REFERRER_URL, referrerUrl)

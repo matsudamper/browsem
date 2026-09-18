@@ -107,16 +107,16 @@ internal class DownloadCancelReceiver : BroadcastReceiver() {
             fileName: String,
         ) {
             DownloadWorker.ensureNotificationChannel(context)
-            val positiveHash = currentWorkerId.hashCode() and 0x7fffffff
+            val notificationId = DownloadNotificationId.cancelled(currentWorkerId)
             val openDownloadsIntent = Intent(context, MainActivity::class.java).apply {
                 action = DownloadWorker.ACTION_OPEN_DOWNLOADS
                 flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_NEW_TASK
                 putExtra(DownloadWorker.EXTRA_WORKER_ID, stableWorkerId)
-                putExtra(DownloadWorker.EXTRA_OPEN_DOWNLOADS_REQUEST_ID, "cancelled:$positiveHash")
+                putExtra(DownloadWorker.EXTRA_OPEN_DOWNLOADS_REQUEST_ID, "cancelled:$notificationId")
             }
             val openDownloadsPendingIntent = PendingIntent.getActivity(
                 context,
-                positiveHash,
+                notificationId,
                 openDownloadsIntent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             )
@@ -129,7 +129,7 @@ internal class DownloadCancelReceiver : BroadcastReceiver() {
                 .setAutoCancel(true)
                 .build()
             context.getSystemService(NotificationManager::class.java)
-                ?.notify(DownloadWorker.NOTIFICATION_ID_CANCELLED_BASE + positiveHash, notification)
+                ?.notify(notificationId, notification)
         }
     }
 }
