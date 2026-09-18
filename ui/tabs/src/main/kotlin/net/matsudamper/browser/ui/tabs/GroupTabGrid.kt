@@ -112,7 +112,6 @@ internal fun GroupTabGrid(
             }
         }
 
-        // ドラッグ状態を上位コンポーザブルに通知する
         LaunchedEffect(dragDropState.isDragging, dragDropState.dragCenterInRoot, onTabDragStateChanged) {
             onTabDragStateChanged(dragDropState.isDragging, dragDropState.dragCenterInRoot)
         }
@@ -181,7 +180,6 @@ internal fun GroupTabGrid(
                 key = { _, tab -> tab.id },
             ) { index, tab ->
                 val selected = tab.id == selectedTabId
-                // ドラッグ中のアイテムはグリッド上で非表示（透明）にする
                 val isDraggingThis = dragDropState.draggedItemKey == tab.id
                 TabCard(
                     tab = tab,
@@ -198,7 +196,6 @@ internal fun GroupTabGrid(
             }
         }
 
-        // ドラッグ中のオーバーレイ表示
         if (dragDropState.isDragging) {
             val overlayTab = tabs.firstOrNull { it.id == dragDropState.draggedItemKey }
             if (overlayTab != null) {
@@ -304,7 +301,6 @@ private class DragDropState(
         didReorder = false
         dragStartUptimeMs = android.os.SystemClock.uptimeMillis()
 
-        // ルート座標での中心位置を初期化
         updateDragCenterInRoot()
     }
 
@@ -314,16 +310,13 @@ private class DragDropState(
 
         draggedItemOffset = (draggedItemOffset.toOffset() + dragAmount).round()
 
-        // ルート座標を更新
         updateDragCenterInRoot()
 
-        // ドラッグ中アイテムの中心座標（ビューポート相対）
         val centerX = draggedItemOffset.x + draggedItemSize.width / 2f
         val centerY = draggedItemOffset.y + draggedItemSize.height / 2f
 
         val viewportOffset = gridState.layoutInfo.viewportStartOffset
 
-        // 中心に最も近い別のアイテムを探す
         val targetItem = gridState.layoutInfo.visibleItemsInfo
             .filter { it.key != draggedItemKey }
             .minByOrNull { info ->
@@ -335,7 +328,6 @@ private class DragDropState(
                 dx * dx + dy * dy
             } ?: return
 
-        // ドラッグ中アイテムの中心が別のアイテムの領域内に入ったら並び替え
         val targetTop = (targetItem.offset.y - viewportOffset).toFloat()
         val targetBottom = targetTop + targetItem.size.height
         val targetLeft = targetItem.offset.x.toFloat()

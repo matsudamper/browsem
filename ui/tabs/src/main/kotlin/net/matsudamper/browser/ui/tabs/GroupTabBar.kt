@@ -104,7 +104,6 @@ internal fun GroupTabBar(
         onMove = onReorderGroups,
     )
 
-    // ページスクロール進捗を読み取る（タブの高さ・色アニメーションに使用）
     val currentPage = pagerState.currentPage
     val offsetFraction = pagerState.currentPageOffsetFraction
 
@@ -196,13 +195,11 @@ internal fun GroupTabBar(
                         },
                 )
             }
-            // グループ追加ボタン（ドラッグ対象外）
             item(key = "add_group") {
                 AddGroupBookmarkTab(onClick = onAddGroup)
             }
         }
 
-        // ドラッグ中のオーバーレイ表示
         if (dragDropState.isDragging) {
             val draggedGroup = groups.firstOrNull { it.id.value == dragDropState.draggedItemKey }
             val draggedIndex = groups.indexOfFirst { it.id.value == dragDropState.draggedItemKey }
@@ -572,7 +569,6 @@ private fun GroupBookmarkTab(
         else -> lerp(unselectedColor, selectedColor, fraction)
     }
 
-    // ページスクロール進捗に応じて高さをアニメーションする
     val visualHeight = GroupTabUnselectedHeight + (GroupTabBarHeight - GroupTabUnselectedHeight) * fraction
     // 外側のBoxは常に GroupTabBarHeight を確保し、LazyRowアイテムの位置が変わらないようにする
     Box(

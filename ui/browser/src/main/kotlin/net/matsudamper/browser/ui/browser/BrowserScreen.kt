@@ -129,7 +129,6 @@ fun BrowserScreen(
             }
         }
 
-        // 前のタブのプレビュー画像（右スワイプ時に左から表示）
         prevTab?.let { preview ->
             TabPreviewPage(
                 tab = preview.tab,
@@ -141,7 +140,6 @@ fun BrowserScreen(
             )
         }
 
-        // 次のタブのプレビュー画像（左スワイプ時に右から表示）
         nextTab?.let { preview ->
             TabPreviewPage(
                 tab = preview.tab,
@@ -153,7 +151,6 @@ fun BrowserScreen(
             )
         }
 
-        // 現在のタブのブラウザ（最前面）
         browserTabContent(
             Modifier
                 .fillMaxSize()
