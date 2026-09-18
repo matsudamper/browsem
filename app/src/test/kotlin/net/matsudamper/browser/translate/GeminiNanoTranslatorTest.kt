@@ -97,9 +97,9 @@ class GeminiNanoTranslatorTest {
     @Test
     fun 内部識別子のままのモデル名を読める表記に変える() {
         assertEquals("Gemini Nano 4 Fast", toGeminiNanoModelLabel("nano-v4-fast"))
-        assertEquals("Gemini Nano 4 Full", toGeminiNanoModelLabel("nano-v4"))
+        assertEquals("Gemini Nano 4 Full", toGeminiNanoModelLabel("nano-v4-full"))
         assertEquals("Gemini Nano 3 Fast", toGeminiNanoModelLabel("nano-v3-fast"))
-        assertEquals("Gemini Nano 3 Full", toGeminiNanoModelLabel("nano-v3"))
+        assertEquals("Gemini Nano 3 Full", toGeminiNanoModelLabel("nano-v3-full"))
     }
 
     @Test
