@@ -11,10 +11,9 @@ import androidx.work.await
 import androidx.work.workDataOf
 import java.util.UUID
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import net.matsudamper.browser.data.download.DownloadRepository
+import net.matsudamper.browser.data.download.ResumeRevertPoint
 import net.matsudamper.browser.download.PendingDownloadBodyStore
 import net.matsudamper.browser.download.enqueueDownloadWithStartingNotification
 import org.mozilla.geckoview.WebResponse
@@ -118,6 +117,14 @@ internal class GeckoDownloadManager(
     ) {
         val notificationManager = context.getSystemService(NotificationManager::class.java)
         enqueueDownloadWithStartingNotification(
+            prepareRecord = {
+                downloadRepository.insertEnqueued(
+                    workerId = workRequest.id.toString(),
+                    url = url,
+                    referrerUrl = referrerUrl,
+                    enqueuedAt = System.currentTimeMillis(),
+                )
+            },
             showStartingNotification = {
                 notificationManager.notify(
                     notificationId,
@@ -129,26 +136,12 @@ internal class GeckoDownloadManager(
                     ),
                 )
             },
-            enqueue = {
-                try {
-                    downloadRepository.insertEnqueued(
-                        workerId = workRequest.id.toString(),
-                        url = url,
-                        referrerUrl = referrerUrl,
-                        enqueuedAt = System.currentTimeMillis(),
-                    )
-                    WorkManager.getInstance(context).enqueue(workRequest).await()
-                } catch (e: Throwable) {
-                    // キャンセル済みのコルーチンでは Room の suspend クエリが即座に中断され、
-                    // レコードが ENQUEUED のまま残るため NonCancellable で後始末する
-                    withContext(NonCancellable) {
-                        PendingDownloadBodyStore.discard(workId.toString())
-                        downloadRepository.updateCancelled(workRequest.id.toString())
-                    }
-                    throw e
-                }
+            enqueue = { WorkManager.getInstance(context).enqueue(workRequest).await() },
+            cleanUpFailedEnqueue = {
+                notificationManager.cancel(notificationId)
+                PendingDownloadBodyStore.discard(workId.toString())
+                downloadRepository.updateCancelled(workRequest.id.toString())
             },
-            dismissStartingNotification = { notificationManager.cancel(notificationId) },
         )
     }
 
@@ -231,7 +224,16 @@ internal class GeckoDownloadManager(
             .build()
         coroutineScope.launch {
             val notificationManager = context.getSystemService(NotificationManager::class.java)
+            // エンキューに失敗したときに部分ファイルを保持したまま戻せるよう、付け替え前の状態を覚えておく
+            var revertPoint: ResumeRevertPoint? = null
             enqueueDownloadWithStartingNotification(
+                prepareRecord = {
+                    // 既存レコードを新しいワーカーIDへ付け替えてENQUEUEDに戻す（削除・再作成しない）
+                    revertPoint = downloadRepository.updateResumed(
+                        workerId = workerId,
+                        newWorkerId = newWorkId.toString(),
+                    )
+                },
                 showStartingNotification = {
                     notificationManager.notify(
                         notificationId,
@@ -243,19 +245,17 @@ internal class GeckoDownloadManager(
                         ),
                     )
                 },
-                enqueue = {
-                    // 既存レコードを新しいワーカーIDへ付け替えてENQUEUEDに戻す（削除・再作成しない）
-                    downloadRepository.updateResumed(workerId = workerId, newWorkerId = newWorkId.toString())
-                    try {
-                        WorkManager.getInstance(context).enqueue(workRequest).await()
-                    } catch (e: Throwable) {
-                        withContext(NonCancellable) {
-                            downloadRepository.updateCancelled(newWorkId.toString())
-                        }
-                        throw e
+                enqueue = { WorkManager.getInstance(context).enqueue(workRequest).await() },
+                cleanUpFailedEnqueue = {
+                    notificationManager.cancel(notificationId)
+                    revertPoint?.let { previous ->
+                        downloadRepository.revertResumed(
+                            workerId = workerId,
+                            newWorkerId = newWorkId.toString(),
+                            revertPoint = previous,
+                        )
                     }
                 },
-                dismissStartingNotification = { notificationManager.cancel(notificationId) },
             )
         }
     }
