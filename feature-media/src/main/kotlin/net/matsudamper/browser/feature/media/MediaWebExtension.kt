@@ -81,10 +81,8 @@ class MediaWebExtension(
             return
         }
         Log.d(TAG, "registerSession: session=${session.logKey()} tabId=$tabId")
-        val extension = extension
-        if (extension != null) {
-            attachSessionMessageDelegate(session, extension)
-        }
+        val extension = extension ?: return
+        attachSessionMessageDelegate(session, extension)
     }
 
     fun unregisterSession(session: GeckoSession) {

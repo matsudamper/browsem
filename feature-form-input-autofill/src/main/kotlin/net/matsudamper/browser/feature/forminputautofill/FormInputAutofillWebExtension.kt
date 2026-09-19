@@ -61,10 +61,8 @@ class FormInputAutofillWebExtension {
     fun registerSession(session: GeckoSession, listener: SessionListener) {
         sessionListeners[session] = listener
         attachedSessions.add(session)
-        val extension = extension
-        if (extension != null) {
-            attachSessionDelegate(session, extension)
-        }
+        val extension = extension ?: return
+        attachSessionDelegate(session, extension)
     }
 
     fun unregisterSession(session: GeckoSession) {

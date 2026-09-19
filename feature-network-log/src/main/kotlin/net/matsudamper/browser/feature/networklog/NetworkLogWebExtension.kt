@@ -74,10 +74,8 @@ class NetworkLogWebExtension(
     /** セッションを登録し、tabId の通知を受け取れるようにする */
     fun registerSession(session: GeckoSession) {
         registeredSessions.add(session)
-        val extension = extension
-        if (extension != null) {
-            attachSessionDelegate(session, extension)
-        }
+        val extension = extension ?: return
+        attachSessionDelegate(session, extension)
     }
 
     fun unregisterSession(session: GeckoSession) {

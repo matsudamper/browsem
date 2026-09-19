@@ -60,10 +60,8 @@ class FindInPageWebExtension {
         onResult: (current: Int, total: Int, error: String?) -> Unit,
     ) {
         sessionCallbacks[session] = onResult
-        val extension = extension
-        if (extension != null) {
-            attachSessionDelegate(session, extension)
-        }
+        val extension = extension ?: return
+        attachSessionDelegate(session, extension)
     }
 
     fun unregisterSession(session: GeckoSession) {

@@ -61,10 +61,8 @@ class MockLocationWebExtension {
     fun registerSession(session: GeckoSession, topUrlProvider: () -> String?) {
         sessionTopUrlProviders[session] = topUrlProvider
         attachedSessions.add(session)
-        val extension = extension
-        if (extension != null) {
-            attachSessionDelegate(session, extension)
-        }
+        val extension = extension ?: return
+        attachSessionDelegate(session, extension)
     }
 
     fun unregisterSession(session: GeckoSession) {

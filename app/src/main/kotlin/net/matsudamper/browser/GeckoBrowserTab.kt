@@ -414,10 +414,8 @@ internal fun GeckoBrowserTab(
                 if (count == 0) return@collectLatest
                 // GeckoView.capturePixels は Main スレッド必須。
                 withContext(Dispatchers.Main.immediate) {
-                    val gv = geckoView
-                    if (gv != null) {
-                        state.captureTabPreview(gv)
-                    }
+                    val gv = geckoView ?: return@withContext
+                    state.captureTabPreview(gv)
                 }
             }
     }
@@ -710,52 +708,46 @@ internal fun GeckoBrowserTab(
                     //       再現を確認したら、audio を殺さない形で compositor 再構築する手段
                     //       （releaseSession しても MediaSession 経由で音は継続する可能性が高い）
                     //       を検討する。
-                    val target = geckoView
-                    if (target != null) {
-                        when {
-                            mediaWebExtension.shouldKeepSessionAttached(session) -> {
-                                state.captureTabPreview(target)
-                            }
-
-                            surfaceResumeState == SurfaceResumeState.PAUSED_KEEP_SURFACE -> {
-                                // IME 非表示の pause で surface を維持していたが、ON_STOP に
-                                // 到達した = 完全に不可視化した (ホームボタン等)。ここで release
-                                // せず session を attach したまま停止すると、復帰時に surface が
-                                // session 付きで再作成され自動 resume-resize のハング経路を踏む。
-                                // release して、復帰は RELEASED → fresh attach 経路に合流させる。
-                                Log.d(
-                                    TAG_SURFACE_RESUME,
-                                    "ON_STOP: PAUSED_KEEP_SURFACE → releaseSession + INVISIBLE 実行" +
-                                        " gv.size=${target.width}x${target.height}",
-                                )
-                                // 不可視になったので Mozilla の契約どおり deactivate してよい。
-                                // ただし live popup の opener は JS を止めない。
-                                browserSessionLifecycleController.pauseSession(browserTab)
-                                addressAutofillDelegate.unbindBeforeViewRelease(session)
-                                target.releaseSession()
-                                // View から外れると Gecko が opener を inactive にするため保持し直す。
-                                currentOnReevaluateOpenerRetention()
-                                target.visibility = View.INVISIBLE
-                                surfaceResumeState = SurfaceResumeState.RELEASED
-                            }
-
-                            else -> Unit
+                    val target = geckoView ?: return@LifecycleEventObserver
+                    when {
+                        mediaWebExtension.shouldKeepSessionAttached(session) -> {
+                            state.captureTabPreview(target)
                         }
+
+                        surfaceResumeState == SurfaceResumeState.PAUSED_KEEP_SURFACE -> {
+                            // IME 非表示の pause で surface を維持していたが、ON_STOP に
+                            // 到達した = 完全に不可視化した (ホームボタン等)。ここで release
+                            // せず session を attach したまま停止すると、復帰時に surface が
+                            // session 付きで再作成され自動 resume-resize のハング経路を踏む。
+                            // release して、復帰は RELEASED → fresh attach 経路に合流させる。
+                            Log.d(
+                                TAG_SURFACE_RESUME,
+                                "ON_STOP: PAUSED_KEEP_SURFACE → releaseSession + INVISIBLE 実行" +
+                                    " gv.size=${target.width}x${target.height}",
+                            )
+                            // 不可視になったので Mozilla の契約どおり deactivate してよい。
+                            // ただし live popup の opener は JS を止めない。
+                            browserSessionLifecycleController.pauseSession(browserTab)
+                            addressAutofillDelegate.unbindBeforeViewRelease(session)
+                            target.releaseSession()
+                            // View から外れると Gecko が opener を inactive にするため保持し直す。
+                            currentOnReevaluateOpenerRetention()
+                            target.visibility = View.INVISIBLE
+                            surfaceResumeState = SurfaceResumeState.RELEASED
+                        }
+
+                        else -> Unit
                     }
                 }
 
                 Lifecycle.Event.ON_START -> {
-                    val gv = geckoView
-                    if (gv != null) {
-                        resumeFromPauseIfNeeded(gv)
-                    }
+                    val gv = geckoView ?: return@LifecycleEventObserver
+                    resumeFromPauseIfNeeded(gv)
                 }
 
                 Lifecycle.Event.ON_RESUME -> {
-                    val gv = geckoView
-                    if (gv != null) {
-                        resumeFromPauseIfNeeded(gv)
-                    }
+                    val gv = geckoView ?: return@LifecycleEventObserver
+                    resumeFromPauseIfNeeded(gv)
                 }
 
                 else -> Unit
