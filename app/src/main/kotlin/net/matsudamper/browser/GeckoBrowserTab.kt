@@ -1134,7 +1134,6 @@ internal fun GeckoBrowserTab(
         }
     }
 
-    // IME visibility tracking:
     // URLバーにフォーカスした直後はIMEがまだ非表示のことがあるため、
     // 一度でもIME表示を確認した後の「非表示化」のみをフォーカス解除トリガーにする。
     LaunchedEffect(state.isUrlInputFocused, isImeVisible) {
