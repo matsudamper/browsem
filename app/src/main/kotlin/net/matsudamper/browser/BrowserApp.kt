@@ -1176,6 +1176,9 @@ private fun MainBrowserContent(
                                 onBack = {},
                                 onRefresh = {},
                                 onSuperRefresh = {},
+                                isPageLoading = false,
+                                onStopLoading = {},
+                                showTabButton = true,
                                 onTranslatePage = {},
                                 onLongPressHistory = {},
                                 urlInputState = UrlInputState(
