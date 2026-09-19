@@ -896,6 +896,8 @@ class AddressAutofillPromptTest {
      */
     private fun openAddressesScreenFromToolbar() {
         composeRule.waitForBrowserReady()
+        // URL バーにフォーカスが残っていると IME が前面にありツールバーへのタッチ注入が失敗する
+        composeRule.waitForUrlBarNotFocused()
         composeRule.onNode(
             hasTestTag(BrowserToolbarTestTags.MenuButton.testTag)
                 .and(hasParent(hasTestTag(BrowserToolbarTestTags.Toolbar.testTag))),
