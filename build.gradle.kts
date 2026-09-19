@@ -1,5 +1,4 @@
-import com.android.build.api.dsl.ApplicationExtension
-import com.android.build.api.dsl.LibraryExtension
+import com.android.build.api.dsl.CommonExtension
 
 plugins {
     alias(libs.plugins.android.application) apply false
@@ -30,26 +29,7 @@ tasks.register<Sync>("syncRobolectricProperties") {
 fun Project.wireRobolectricPropertiesFromRoot() {
     if (!robolectricPropertiesFile.asFile.exists()) return
 
-    extensions.configure<LibraryExtension>("android") {
-        sourceSets.named("test") {
-            resources.srcDir(robolectricResourcesDir)
-        }
-    }
-
-    tasks.matching {
-        it.name == "processDebugUnitTestJavaRes" || it.name == "processReleaseUnitTestJavaRes"
-    }.configureEach {
-        dependsOn(rootProject.tasks.named("syncRobolectricProperties"))
-    }
-    tasks.withType<Test>().configureEach {
-        dependsOn(rootProject.tasks.named("syncRobolectricProperties"))
-    }
-}
-
-fun Project.wireRobolectricPropertiesFromRootForApp() {
-    if (!robolectricPropertiesFile.asFile.exists()) return
-
-    extensions.configure<ApplicationExtension>("android") {
+    extensions.configure<CommonExtension>("android") {
         sourceSets.named("test") {
             resources.srcDir(robolectricResourcesDir)
         }
@@ -72,7 +52,7 @@ subprojects {
         wireRobolectricPropertiesFromRoot()
     }
     pluginManager.withPlugin("com.android.application") {
-        wireRobolectricPropertiesFromRootForApp()
+        wireRobolectricPropertiesFromRoot()
     }
 
     tasks.withType<Test>().configureEach {
