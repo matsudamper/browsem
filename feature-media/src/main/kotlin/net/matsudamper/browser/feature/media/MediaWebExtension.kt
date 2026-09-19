@@ -39,7 +39,7 @@ class MediaWebExtension(
         Collections.synchronizedSet(Collections.newSetFromMap(WeakHashMap<GeckoSession, Boolean>()))
     private val sessionTabIds =
         Collections.synchronizedMap(WeakHashMap<GeckoSession, String>())
-    private val _playingTabIds = MutableStateFlow<Set<String>>(emptySet())
+    private val _playingTabIds = MutableStateFlow<Set<String>>(setOf())
     val playingTabIds: StateFlow<Set<String>> = _playingTabIds.asStateFlow()
     private val artworkRequestSerial = AtomicLong(0L)
     private val artworkTargetSizePx by lazy(LazyThreadSafetyMode.NONE) {
@@ -81,8 +81,9 @@ class MediaWebExtension(
             return
         }
         Log.d(TAG, "registerSession: session=${session.logKey()} tabId=$tabId")
-        extension?.also { ext ->
-            attachSessionMessageDelegate(session, ext)
+        val extension = extension
+        if (extension != null) {
+            attachSessionMessageDelegate(session, extension)
         }
     }
 
@@ -240,7 +241,7 @@ class MediaWebExtension(
         sessionArtworkRequestIds.clear()
         registeredSessions.clear()
         sessionTabIds.clear()
-        _playingTabIds.value = emptySet()
+        _playingTabIds.value = setOf()
     }
 
     private fun publishPlayingTabIds() {

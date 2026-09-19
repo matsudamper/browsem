@@ -512,7 +512,7 @@ class MainActivity : ComponentActivity() {
             { extensions ->
                 webExtensionWarmUpInProgress = false
                 webExtensionWarmUpCompleted = true
-                val extensionList = extensions ?: emptyList()
+                val extensionList = extensions ?: listOf()
                 val globallyEnabled = runBlocking {
                     settingsRepository.settings.first().resolvedExtensionsEnabled()
                 }

@@ -22,7 +22,7 @@ class MockLocationWebExtension {
     @Volatile private var currentConfig: GeolocationConfig = GeolocationConfig(
         latitude = DEFAULT_LATITUDE,
         longitude = DEFAULT_LONGITUDE,
-        siteModes = emptyMap(),
+        siteModes = mapOf(),
     )
 
     /** ページが位置情報を要求した際にホスト名を通知するコールバック */
@@ -61,8 +61,9 @@ class MockLocationWebExtension {
     fun registerSession(session: GeckoSession, topUrlProvider: () -> String?) {
         sessionTopUrlProviders[session] = topUrlProvider
         attachedSessions.add(session)
-        extension?.also { ext ->
-            attachSessionDelegate(session, ext)
+        val extension = extension
+        if (extension != null) {
+            attachSessionDelegate(session, extension)
         }
     }
 

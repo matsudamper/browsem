@@ -67,7 +67,7 @@ internal object HomeScreenIconFetcher {
         val linkedManifestIcons = pageHtmlIcons.manifestUrls
             .take(2)
             .flatMap { manifestUrl ->
-                val fetched = fetchText(manifestUrl, MAX_HTML_BYTES) ?: return@flatMap emptyList()
+                val fetched = fetchText(manifestUrl, MAX_HTML_BYTES) ?: return@flatMap listOf()
                 parseManifestIconCandidates(
                     manifestJson = fetched.body,
                     // redirect 後の最終 URL を基準にしないと、/manifest.webmanifest →
@@ -114,7 +114,10 @@ internal object HomeScreenIconFetcher {
                 ?: return@forEach
             val href = attributes["href"]?.takeIf { it.isNotBlank() } ?: return@forEach
             if ("manifest" in relValues) {
-                resolveUrl(pageUri, href)?.also(manifestUrls::add)
+                val manifestUrl = resolveUrl(pageUri, href)
+                if (manifestUrl != null) {
+                    manifestUrls.add(manifestUrl)
+                }
             }
             if (relValues.any { it == "icon" || it == "apple-touch-icon" || it == "apple-touch-icon-precomposed" }) {
                 val url = resolveUrl(pageUri, href) ?: return@forEach
@@ -156,14 +159,14 @@ internal object HomeScreenIconFetcher {
         fallbackBaseUri: URI,
         source: IconSource,
     ): List<IconCandidate> {
-        if (manifestJson.isNullOrBlank()) return emptyList()
-        val manifest = runCatching { JSONObject(manifestJson) }.getOrNull() ?: return emptyList()
+        if (manifestJson.isNullOrBlank()) return listOf()
+        val manifest = runCatching { JSONObject(manifestJson) }.getOrNull() ?: return listOf()
         val manifestBaseUri = manifest.optString("href")
             .takeIf { it.isNotBlank() }
             ?.let { resolveUrl(fallbackBaseUri, it) }
             ?.let { runCatching { URI(it) }.getOrNull() }
             ?: fallbackBaseUri
-        val icons = manifest.optJSONArray("icons") ?: return emptyList()
+        val icons = manifest.optJSONArray("icons") ?: return listOf()
         return buildList {
             for (index in 0 until icons.length()) {
                 val icon = icons.optJSONObject(index) ?: continue
@@ -197,7 +200,7 @@ internal object HomeScreenIconFetcher {
 
     private fun fallbackIconCandidates(pageUri: URI): List<IconCandidate> {
         val originUri = runCatching { URI("${pageUri.scheme}://${pageUri.rawAuthority}/") }.getOrNull()
-            ?: return emptyList()
+            ?: return listOf()
         return listOf(
             "/apple-touch-icon.png",
             "/apple-touch-icon-precomposed.png",
@@ -362,8 +365,8 @@ internal object HomeScreenIconFetcher {
     )
 
     private data class HtmlIconCandidates(
-        val icons: List<IconCandidate> = emptyList(),
-        val manifestUrls: List<String> = emptyList(),
+        val icons: List<IconCandidate> = listOf(),
+        val manifestUrls: List<String> = listOf(),
     )
 
     private data class IconCandidate(

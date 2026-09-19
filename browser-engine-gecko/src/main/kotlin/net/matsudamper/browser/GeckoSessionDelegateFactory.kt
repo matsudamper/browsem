@@ -378,7 +378,7 @@ internal class BrowserTabSessionDelegateHost(
     // attachUi 時にリプレイする
     private var cachedCanGoBack: Boolean = false
     private var cachedCanGoForward: Boolean = false
-    private var cachedHistoryItems: List<HistoryStateItem> = emptyList()
+    private var cachedHistoryItems: List<HistoryStateItem> = listOf()
     private var cachedHistoryCurrentIndex: Int = -1
 
     // UI未接続中に届いた window.close を失わないように覚えておき、attachUi 時にリプレイする。

@@ -25,7 +25,7 @@ import net.matsudamper.browser.ui.tabs.TabsScreenUiState
 class TabsScreenViewModel(
     private val tabStore: TabStore,
     private val tabGroupRepository: TabGroupRepository,
-    private val playingTabIds: StateFlow<Set<String>> = MutableStateFlow(emptySet()),
+    private val playingTabIds: StateFlow<Set<String>> = MutableStateFlow(setOf<String>()),
 ) : ViewModel() {
 
     private val viewModelStateFlow = MutableStateFlow(ViewModelState())
@@ -457,13 +457,13 @@ class TabsScreenViewModel(
     }
 
     data class ViewModelState(
-        val dbGroups: List<TabGroupData> = emptyList(),
+        val dbGroups: List<TabGroupData> = listOf(),
         val localGroupOrder: List<TabGroupData>? = null,
         val activeGroupIndex: Int? = null,
         val tabStoreState: TabStoreState = TabStoreState(),
-        val assignments: List<TabGroupAssignment> = emptyList(),
+        val assignments: List<TabGroupAssignment> = listOf(),
         val pendingClosedTab: PendingClosedTab? = null,
-        val playingTabIds: Set<String> = emptySet(),
+        val playingTabIds: Set<String> = setOf(),
     ) {
         /** ドラッグ中はローカル順序を優先し、DB の更新が遅れても表示が乱れないようにする。 */
         val groups: List<TabGroupData> get() = localGroupOrder ?: dbGroups

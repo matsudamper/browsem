@@ -114,7 +114,7 @@ internal class NetworkLogStateHolder(
     private val thumbnailOrder = ArrayDeque<String>()
 
     // 一覧に表示しているログ。サムネイルの取得対象を可視範囲から求めるために保持する
-    private var shownEntries: List<NetworkLogEntry> = emptyList()
+    private var shownEntries: List<NetworkLogEntry> = listOf()
 
     private var showsThumbnail: Boolean = false
 

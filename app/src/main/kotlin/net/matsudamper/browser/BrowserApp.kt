@@ -755,7 +755,7 @@ internal fun BrowserAppShell(
                         onDispose {
                             val entries = pendingConsumeByWorkerIdEntries
                             if (entries.isNotEmpty()) {
-                                pendingConsumeByWorkerIdEntries = emptyList()
+                                pendingConsumeByWorkerIdEntries = listOf()
                                 entries.forEach { (_, requestId) ->
                                     currentOnOpenDownloadsRequestConsumed?.invoke(requestId)
                                 }

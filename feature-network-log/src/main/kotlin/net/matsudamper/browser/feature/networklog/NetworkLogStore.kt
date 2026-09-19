@@ -12,7 +12,7 @@ import kotlinx.coroutines.flow.update
 class NetworkLogStore(
     private val maxEntries: Int = DEFAULT_MAX_ENTRIES,
 ) {
-    private val _entries = MutableStateFlow<List<NetworkLogEntry>>(emptyList())
+    private val _entries = MutableStateFlow<List<NetworkLogEntry>>(listOf())
 
     /** 記録順（古い順）のログ */
     val entries: StateFlow<List<NetworkLogEntry>> = _entries.asStateFlow()
@@ -44,7 +44,7 @@ class NetworkLogStore(
     fun clear(tabId: Int?) {
         _entries.update { current ->
             if (tabId == null) {
-                emptyList()
+                listOf()
             } else {
                 current.filterNot { it.tabId == tabId }
             }

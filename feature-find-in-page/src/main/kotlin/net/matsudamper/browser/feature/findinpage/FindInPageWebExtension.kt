@@ -60,8 +60,9 @@ class FindInPageWebExtension {
         onResult: (current: Int, total: Int, error: String?) -> Unit,
     ) {
         sessionCallbacks[session] = onResult
-        extension?.also { ext ->
-            attachSessionDelegate(session, ext)
+        val extension = extension
+        if (extension != null) {
+            attachSessionDelegate(session, extension)
         }
     }
 

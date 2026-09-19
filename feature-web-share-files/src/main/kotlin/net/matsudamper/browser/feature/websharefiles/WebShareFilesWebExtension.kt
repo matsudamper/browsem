@@ -45,8 +45,9 @@ class WebShareFilesWebExtension {
         callback: (WebShareFilesRequest, GeckoResult<Any>) -> Unit,
     ) {
         callbacks[session] = callback
-        extension?.also { ext ->
-            attachSessionMessageDelegate(session, ext)
+        val extension = extension
+        if (extension != null) {
+            attachSessionMessageDelegate(session, extension)
         }
     }
 

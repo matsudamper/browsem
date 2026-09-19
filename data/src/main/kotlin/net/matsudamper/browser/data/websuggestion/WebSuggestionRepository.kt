@@ -29,7 +29,7 @@ class HttpWebSuggestionRepository(
         val request = buildSuggestionRequest(
             searchProvider = searchProvider,
             query = query,
-        ) ?: return@withContext emptyList()
+        ) ?: return@withContext listOf()
 
         runCatching {
             val connection = connectionFactory.open(request.url)
@@ -41,7 +41,7 @@ class HttpWebSuggestionRepository(
                 connection.setRequestProperty("User-Agent", USER_AGENT)
 
                 if (connection.responseCode !in 200..299) {
-                    return@runCatching emptyList()
+                    return@runCatching listOf()
                 }
 
                 runInterruptible {
@@ -58,7 +58,7 @@ class HttpWebSuggestionRepository(
         }.onFailure { e ->
             // キャンセル時は再スローしてコルーチンのキャンセルを正しく伝播させる
             if (e is CancellationException) throw e
-        }.getOrDefault(emptyList())
+        }.getOrDefault(listOf())
     }
 }
 
@@ -114,7 +114,7 @@ internal fun parseSuggestionResponse(
 
         SearchProvider.CUSTOM,
         SearchProvider.UNRECOGNIZED,
-        -> emptyList()
+        -> listOf()
     }
 }
 
@@ -127,7 +127,7 @@ private fun parseGoogleSuggestions(body: String): List<String> {
             .filter { it.isNotEmpty() }
             .distinctPreservingOrder()
     } catch (_: Exception) {
-        emptyList()
+        listOf()
     }
 }
 
@@ -140,7 +140,7 @@ private fun parseDuckDuckGoSuggestions(body: String): List<String> {
             .filter { it.isNotEmpty() }
             .distinctPreservingOrder()
     } catch (_: Exception) {
-        emptyList()
+        listOf()
     }
 }
 

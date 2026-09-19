@@ -36,7 +36,7 @@ class BrowserApplication : Application() {
     }
 
     private fun File.getChildrenRecursively(): List<File> {
-        val children = listFiles()?.toList() ?: emptyList()
+        val children = listFiles()?.toList() ?: listOf()
         return children + children.flatMap { it.getChildrenRecursively() }
     }
 }

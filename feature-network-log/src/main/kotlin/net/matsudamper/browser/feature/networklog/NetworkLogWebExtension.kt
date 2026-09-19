@@ -35,7 +35,7 @@ class NetworkLogWebExtension(
 
     // セッションごとの webRequest 上の tabId。
     // 対応付けは非同期に確定するため、UI が購読できるよう Flow で公開する
-    private val _sessionTabIds = MutableStateFlow<Map<GeckoSession, Int>>(emptyMap())
+    private val _sessionTabIds = MutableStateFlow<Map<GeckoSession, Int>>(mapOf())
     val sessionTabIds: StateFlow<Map<GeckoSession, Int>> = _sessionTabIds.asStateFlow()
 
     // 登録済みセッション（拡張のインストール完了後にデリゲートを張るために保持）
@@ -74,8 +74,9 @@ class NetworkLogWebExtension(
     /** セッションを登録し、tabId の通知を受け取れるようにする */
     fun registerSession(session: GeckoSession) {
         registeredSessions.add(session)
-        extension?.also { ext ->
-            attachSessionDelegate(session, ext)
+        val extension = extension
+        if (extension != null) {
+            attachSessionDelegate(session, extension)
         }
     }
 
@@ -260,7 +261,7 @@ class NetworkLogWebExtension(
     }
 
     private fun JSONArray?.toHeaders(): List<NetworkLogHeader> {
-        if (this == null) return emptyList()
+        if (this == null) return listOf()
         return buildList {
             for (index in 0 until length()) {
                 val json = optJSONObject(index) ?: continue

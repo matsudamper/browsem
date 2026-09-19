@@ -414,7 +414,10 @@ internal fun GeckoBrowserTab(
                 if (count == 0) return@collectLatest
                 // GeckoView.capturePixels は Main スレッド必須。
                 withContext(Dispatchers.Main.immediate) {
-                    geckoView?.also { gv -> state.captureTabPreview(gv) }
+                    val gv = geckoView
+                    if (gv != null) {
+                        state.captureTabPreview(gv)
+                    }
                 }
             }
     }
@@ -707,7 +710,8 @@ internal fun GeckoBrowserTab(
                     //       再現を確認したら、audio を殺さない形で compositor 再構築する手段
                     //       （releaseSession しても MediaSession 経由で音は継続する可能性が高い）
                     //       を検討する。
-                    geckoView?.also { target ->
+                    val target = geckoView
+                    if (target != null) {
                         when {
                             mediaWebExtension.shouldKeepSessionAttached(session) -> {
                                 state.captureTabPreview(target)
@@ -741,11 +745,17 @@ internal fun GeckoBrowserTab(
                 }
 
                 Lifecycle.Event.ON_START -> {
-                    geckoView?.also(::resumeFromPauseIfNeeded)
+                    val gv = geckoView
+                    if (gv != null) {
+                        resumeFromPauseIfNeeded(gv)
+                    }
                 }
 
                 Lifecycle.Event.ON_RESUME -> {
-                    geckoView?.also(::resumeFromPauseIfNeeded)
+                    val gv = geckoView
+                    if (gv != null) {
+                        resumeFromPauseIfNeeded(gv)
+                    }
                 }
 
                 else -> Unit
@@ -1053,7 +1063,7 @@ internal fun GeckoBrowserTab(
                     menu.add(Menu.NONE, MENU_ID_SAVE_FORM_INPUT, Menu.NONE, "入力欄を保存")
                 }
 
-                val text = mSelection?.text?.trim() ?: ""
+                val text = mSelection?.text?.trim().orEmpty()
                 if (text.isNotBlank()) {
                     val isUrl = text.startsWith("http://") ||
                         text.startsWith("https://") ||
@@ -1289,8 +1299,9 @@ internal fun GeckoBrowserTab(
                     showTabActions = enableTabUi,
                     onOpenTabs = {
                         if (enableTabUi) {
-                            geckoView?.also {
-                                runCatching { state.flushAndCaptureForTabSwitch(it) }
+                            val gv = geckoView
+                            if (gv != null) {
+                                runCatching { state.flushAndCaptureForTabSwitch(gv) }
                             }
                             onOpenTabs()
                         }
@@ -1322,7 +1333,8 @@ internal fun GeckoBrowserTab(
                     onHorizontalDrag = onToolbarHorizontalDrag,
                     onHorizontalDragEnd = {
                         // タブ切替スワイプになる可能性があるため、現在のタブのプレビューを事前にキャプチャする
-                        geckoView?.also { gv ->
+                        val gv = geckoView
+                        if (gv != null) {
                             runCatching { state.flushAndCaptureForTabSwitch(gv) }
                         }
                         onToolbarDragEnd()
@@ -1666,7 +1678,7 @@ private class GetMultipleContentsWithMimeTypes : ActivityResultContract<Array<St
     }
 
     override fun parseResult(resultCode: Int, intent: Intent?): List<Uri> {
-        if (resultCode != Activity.RESULT_OK || intent == null) return emptyList()
+        if (resultCode != Activity.RESULT_OK || intent == null) return listOf()
         val clipData = intent.clipData
         return if (clipData != null) {
             // 一部のピッカーは clipData に加え intent.data にも先頭URIを入れるため、両方をマージして重複を除去する
