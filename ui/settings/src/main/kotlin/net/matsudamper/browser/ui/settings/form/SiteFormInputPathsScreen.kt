@@ -86,7 +86,7 @@ fun SiteFormInputPathsScreen(
 
 @Preview(showBackground = true)
 @Composable
-private fun Preview() {
+private fun PathsPreview() {
     MaterialTheme {
         SiteFormInputPathsScreen(
             uiState = SiteFormInputPathsScreenUiState(
