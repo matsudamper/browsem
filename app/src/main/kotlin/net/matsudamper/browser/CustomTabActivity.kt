@@ -402,6 +402,9 @@ private fun CustomTabScreen(
         enableTabUi = false,
         showInstallExtensionItem = false,
         customTabMode = true,
+        webAppMode = false,
+        webAppPinnedHost = null,
+        onWebAppCrossDomainNavigation = null,
         onCloseCustomTab = onClose,
         onOpenInBrowser = { url -> requestedOpenInBrowserUrl = url },
         onOpenNewSessionRequest = { uri ->
@@ -411,6 +414,10 @@ private fun CustomTabScreen(
             onOpenNewTabInBrowser(uri, referrerUrl)
         },
         onCloseTab = onClose,
+        externalDownloadDialogListener = null,
+        externalTabInitialUrl = null,
+        onToolbarHorizontalDrag = {},
+        onToolbarDragEnd = {},
         onHistoryRecord = uiState.callbacks::onHistoryRecord,
         onHistoryTitleUpdate = uiState.callbacks::onHistoryTitleUpdate,
         urlBarSuggestions = uiState.urlBarSuggestions,
