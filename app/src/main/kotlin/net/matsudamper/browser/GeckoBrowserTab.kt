@@ -1053,7 +1053,7 @@ internal fun GeckoBrowserTab(
                     menu.add(Menu.NONE, MENU_ID_SAVE_FORM_INPUT, Menu.NONE, "入力欄を保存")
                 }
 
-                val text = mSelection?.text?.trim() ?: ""
+                val text = mSelection?.text?.trim().orEmpty()
                 if (text.isNotBlank()) {
                     val isUrl = text.startsWith("http://") ||
                         text.startsWith("https://") ||
