@@ -211,11 +211,18 @@ internal fun CustomTabToolbar(
                     onPageZoomIn = onPageZoomIn,
                     onPageZoomOut = onPageZoomOut,
                     onResetPageZoom = onResetPageZoom,
+                    extensionActions = listOf(),
+                    extensionActionScrollState = null,
+                    onExtensionActionMove = { _, _ -> },
+                    onExtensionActionMoveEnd = {},
+                    onExtensionActionMoveCancel = {},
                     showOpenSettings = false,
                     showAddToHomeScreen = showAddToHomeScreen,
                     showHome = showHome,
                     onOpenInBrowser = onOpenInBrowser,
                     onOpenSiteSettings = onOpenSiteSettings,
+                    onOpenDownloads = null,
+                    onOpenDevTools = null,
                 )
             }
         }
