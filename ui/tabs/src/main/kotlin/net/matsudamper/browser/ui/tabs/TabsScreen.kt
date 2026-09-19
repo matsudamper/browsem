@@ -20,9 +20,6 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -65,12 +62,14 @@ import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import net.matsudamper.browser.data.TabGroupData
 import net.matsudamper.browser.data.TabGroupId
+import net.matsudamper.browser.resources.R as ResourcesR
 import net.matsudamper.browser.ui.common.StatusBarAppearanceEffect
 
 internal object TabsLayoutDefaults {
@@ -350,7 +349,7 @@ private fun TabsScreenLoadedContent(
                         floatingActionButtonBoundsInRoot = coordinates.boundsInRoot()
                     },
             ) {
-                Icon(imageVector = Icons.Default.Add, contentDescription = "新規タブ")
+                Icon(painter = painterResource(ResourcesR.drawable.ic_add_24dp), contentDescription = "新規タブ")
             }
         },
     ) { paddingValues ->
@@ -535,7 +534,7 @@ private fun TabGroupMenu(
                 Box {
                     IconButton(onClick = { groupMenuExpanded = true }) {
                         Icon(
-                            imageVector = Icons.Default.MoreVert,
+                            painter = painterResource(ResourcesR.drawable.ic_more_vert_24dp),
                             contentDescription = "メニュー",
                         )
                     }
