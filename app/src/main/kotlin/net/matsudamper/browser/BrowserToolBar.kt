@@ -718,7 +718,7 @@ private fun BrowserToolBarPreviewContent(
 @Preview(name = "Light")
 @Preview(name = "Dark", uiMode = android.content.res.Configuration.UI_MODE_NIGHT_YES)
 @Composable
-private fun Preview() {
+private fun PreviewFocusStates() {
     BrowserTheme(themeMode = net.matsudamper.browser.data.ThemeMode.THEME_SYSTEM) {
         Column {
             for (isFocused in listOf(true, false)) {
