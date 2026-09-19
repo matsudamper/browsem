@@ -2,21 +2,22 @@ package net.matsudamper.browser.navigation
 
 import androidx.navigation3.runtime.NavKey
 import kotlinx.serialization.Serializable
+import java.io.Serializable as JavaSerializable
 
 /**
  * 外側シェルのナビゲーション先。
  * Root がモード別のブラウジング画面、それ以外は全モード共有の全画面系。
  */
 @Serializable
-sealed interface AppDestination : NavKey, java.io.Serializable {
+sealed interface AppDestination : NavKey, JavaSerializable {
     @Serializable
-    data object Root : AppDestination, java.io.Serializable
+    data object Root : AppDestination, JavaSerializable
 
     @Serializable
-    data object Settings : AppDestination, java.io.Serializable
+    data object Settings : AppDestination, JavaSerializable
 
     @Serializable
-    data object SiteSettingsList : AppDestination, java.io.Serializable
+    data object SiteSettingsList : AppDestination, JavaSerializable
 
     @Serializable
     data class SiteSettings(
@@ -24,7 +25,7 @@ sealed interface AppDestination : NavKey, java.io.Serializable {
         val scheme: String = "https",
         val port: Int = 443,
         val tabId: String? = null,
-    ) : AppDestination, java.io.Serializable
+    ) : AppDestination, JavaSerializable
 
     @Serializable
     data class SiteFormInputPaths(
@@ -51,28 +52,28 @@ sealed interface AppDestination : NavKey, java.io.Serializable {
     ) : AppDestination
 
     @Serializable
-    data object Extensions : AppDestination, java.io.Serializable
+    data object Extensions : AppDestination, JavaSerializable
 
     @Serializable
-    data object History : AppDestination, java.io.Serializable
+    data object History : AppDestination, JavaSerializable
 
     @Serializable
-    data object Downloads : AppDestination, java.io.Serializable
+    data object Downloads : AppDestination, JavaSerializable
 
     @Serializable
-    data object Addresses : AppDestination, java.io.Serializable
+    data object Addresses : AppDestination, JavaSerializable
 
     @Serializable
-    data object CrashLogs : AppDestination, java.io.Serializable
+    data object CrashLogs : AppDestination, JavaSerializable
 
     @Serializable
-    data class CrashLogDetail(val crashLogId: Long) : AppDestination, java.io.Serializable
+    data class CrashLogDetail(val crashLogId: Long) : AppDestination, JavaSerializable
 
     @Serializable
-    data class AddressEdit(val addressId: Long) : AppDestination, java.io.Serializable
+    data class AddressEdit(val addressId: Long) : AppDestination, JavaSerializable
 
     @Serializable
-    data class BackupProgress(val isImport: Boolean) : AppDestination, java.io.Serializable
+    data class BackupProgress(val isImport: Boolean) : AppDestination, JavaSerializable
 }
 
 /**
@@ -80,13 +81,13 @@ sealed interface AppDestination : NavKey, java.io.Serializable {
  * タブ切替・タブ一覧・復元の状態機械を閉じ込める。
  */
 @Serializable
-sealed interface BrowserNavDestination : NavKey, java.io.Serializable {
+sealed interface BrowserNavDestination : NavKey, JavaSerializable {
     @Serializable
-    data object Setup : BrowserNavDestination, java.io.Serializable
+    data object Setup : BrowserNavDestination, JavaSerializable
 
     @Serializable
-    data class Browser(val tabId: String, val beforeTab: Browser?) : BrowserNavDestination, java.io.Serializable
+    data class Browser(val tabId: String, val beforeTab: Browser?) : BrowserNavDestination, JavaSerializable
 
     @Serializable
-    data object Tabs : BrowserNavDestination, java.io.Serializable
+    data object Tabs : BrowserNavDestination, JavaSerializable
 }
