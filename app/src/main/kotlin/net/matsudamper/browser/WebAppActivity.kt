@@ -23,6 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
+import java.net.URI
 import java.util.concurrent.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.launch
@@ -104,7 +105,7 @@ class WebAppActivity : ComponentActivity() {
                         }
                     }
                     val resolvedInitialUrl = initialUrl ?: browserSettings.resolvedHomepageUrl()
-                    val webAppPinnedHost = runCatching { java.net.URI(resolvedInitialUrl).host }.getOrNull()
+                    val webAppPinnedHost = runCatching { URI(resolvedInitialUrl).host }.getOrNull()
                     val webAppScreenViewModel = viewModel(initializer = {
                         WebAppScreenViewModel(
                             historyRepository = historyRepository,
@@ -186,7 +187,7 @@ class WebAppActivity : ComponentActivity() {
         startActivity(
             Intent(this, MainActivity::class.java).apply {
                 action = Intent.ACTION_VIEW
-                data = android.net.Uri.parse(url)
+                data = Uri.parse(url)
                 referrerUrl?.let { putExtra(CustomTabActivity.EXTRA_NEW_TAB_REFERRER_URL, it) }
             },
         )

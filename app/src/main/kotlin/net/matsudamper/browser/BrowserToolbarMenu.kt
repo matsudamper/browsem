@@ -6,6 +6,7 @@ import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Row
@@ -249,7 +250,7 @@ private fun ToolbarMenuContent(
             horizontalArrangement = Arrangement.SpaceEvenly,
         ) {
             Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                androidx.compose.foundation.layout.Box(
+                Box(
                     modifier = Modifier
                         .combinedClickable(
                             enabled = canGoBack,
@@ -267,7 +268,7 @@ private fun ToolbarMenuContent(
                         ),
                     contentAlignment = Alignment.Center,
                 ) {
-                    androidx.compose.foundation.layout.Box(
+                    Box(
                         modifier = Modifier
                             .padding(12.dp),
                         contentAlignment = Alignment.Center,
@@ -286,7 +287,7 @@ private fun ToolbarMenuContent(
                 MenuColumnLabel(text = "戻る")
             }
             Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                androidx.compose.foundation.layout.Box(
+                Box(
                     modifier = Modifier
                         .combinedClickable(
                             enabled = canGoForward,
@@ -304,7 +305,7 @@ private fun ToolbarMenuContent(
                         ),
                     contentAlignment = Alignment.Center,
                 ) {
-                    androidx.compose.foundation.layout.Box(
+                    Box(
                         modifier = Modifier
                             .padding(12.dp),
                         contentAlignment = Alignment.Center,
@@ -323,7 +324,7 @@ private fun ToolbarMenuContent(
                 MenuColumnLabel(text = "進む")
             }
             Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                androidx.compose.foundation.layout.Box(
+                Box(
                     modifier = Modifier
                         .testTag(BrowserToolbarMenuTestTags.RefreshButton.testTag)
                         .combinedClickable(
@@ -349,7 +350,7 @@ private fun ToolbarMenuContent(
                         ),
                     contentAlignment = Alignment.Center,
                 ) {
-                    androidx.compose.foundation.layout.Box(
+                    Box(
                         modifier = Modifier.padding(12.dp),
                         contentAlignment = Alignment.Center,
                     ) {
@@ -663,35 +664,69 @@ private fun MenuColumnLabel(
     )
 }
 
+@Composable
+private fun ToolbarMenuContentPreview(
+    isPageLoading: Boolean,
+    onStopLoading: () -> Unit,
+    showInstallExtensionItem: Boolean,
+    extensionActions: List<WebExtensionActionController.ActionUiState>,
+    extensionActionScrollState: ScrollState?,
+    showOpenSettings: Boolean,
+    showAddToHomeScreen: Boolean,
+    onOpenInBrowser: (() -> Unit)?,
+    onOpenDownloads: (() -> Unit)?,
+    onOpenDevTools: (() -> Unit)?,
+) {
+    ToolbarMenuContent(
+        onDismissRequest = {},
+        onRefresh = {},
+        onSuperRefresh = {},
+        isPageLoading = isPageLoading,
+        onStopLoading = onStopLoading,
+        onHome = {},
+        onForward = {},
+        canGoForward = true,
+        onBack = {},
+        canGoBack = true,
+        onLongPressHistory = {},
+        isPcMode = false,
+        onPcModeToggle = {},
+        showInstallExtensionItem = showInstallExtensionItem,
+        onInstallExtension = {},
+        onTranslatePage = {},
+        onShare = {},
+        onFindInPage = {},
+        onOpenSettings = {},
+        onAddToHomeScreen = {},
+        pageZoomPercent = 100,
+        onPageZoomIn = {},
+        onPageZoomOut = {},
+        onResetPageZoom = {},
+        extensionActions = extensionActions,
+        extensionActionScrollState = extensionActionScrollState,
+        onExtensionActionMove = { _, _ -> },
+        onExtensionActionMoveEnd = {},
+        onExtensionActionMoveCancel = {},
+        showOpenSettings = showOpenSettings,
+        showAddToHomeScreen = showAddToHomeScreen,
+        showHome = true,
+        onOpenInBrowser = onOpenInBrowser,
+        onOpenSiteSettings = {},
+        onOpenDownloads = onOpenDownloads,
+        onOpenDevTools = onOpenDevTools,
+    )
+}
+
 @Preview(name = "ToolbarMenuLight")
 @Preview(name = "ToolbarMenuDark", uiMode = Configuration.UI_MODE_NIGHT_YES)
 @Composable
 private fun PreviewToolbarMenuContent() {
     BrowserTheme(themeMode = ThemeMode.THEME_SYSTEM) {
         Surface(modifier = Modifier.width(280.dp)) {
-            ToolbarMenuContent(
-                onDismissRequest = {},
-                onRefresh = {},
-                onSuperRefresh = {},
-                onHome = {},
-                onForward = {},
-                canGoForward = true,
-                onBack = {},
-                canGoBack = true,
-                onLongPressHistory = {},
-                isPcMode = false,
-                onPcModeToggle = {},
+            ToolbarMenuContentPreview(
+                isPageLoading = false,
+                onStopLoading = {},
                 showInstallExtensionItem = true,
-                onInstallExtension = {},
-                onTranslatePage = {},
-                onShare = {},
-                onFindInPage = {},
-                onOpenSettings = {},
-                onAddToHomeScreen = {},
-                pageZoomPercent = 100,
-                onPageZoomIn = {},
-                onPageZoomOut = {},
-                onResetPageZoom = {},
                 extensionActions = List(5) { index ->
                     WebExtensionActionController.ActionUiState(
                         extensionId = "extension_$index",
@@ -703,14 +738,9 @@ private fun PreviewToolbarMenuContent() {
                     )
                 },
                 extensionActionScrollState = ScrollState(initial = 0),
-                onExtensionActionMove = { _, _ -> },
-                onExtensionActionMoveEnd = {},
-                onExtensionActionMoveCancel = {},
                 showOpenSettings = true,
                 showAddToHomeScreen = true,
-                showHome = true,
                 onOpenInBrowser = null,
-                onOpenSiteSettings = {},
                 onOpenDownloads = {},
                 onOpenDevTools = {},
             )
@@ -724,39 +754,15 @@ private fun PreviewToolbarMenuContent() {
 private fun PreviewToolbarMenuContentWebApp() {
     BrowserTheme(themeMode = ThemeMode.THEME_SYSTEM) {
         Surface(modifier = Modifier.width(280.dp)) {
-            ToolbarMenuContent(
-                onDismissRequest = {},
-                onRefresh = {},
-                onSuperRefresh = {},
-                onHome = {},
-                onForward = {},
-                canGoForward = true,
-                onBack = {},
-                canGoBack = true,
-                onLongPressHistory = {},
-                isPcMode = false,
-                onPcModeToggle = {},
+            ToolbarMenuContentPreview(
+                isPageLoading = false,
+                onStopLoading = {},
                 showInstallExtensionItem = false,
-                onInstallExtension = {},
-                onTranslatePage = {},
-                onShare = {},
-                onFindInPage = {},
-                onOpenSettings = {},
-                onAddToHomeScreen = {},
-                pageZoomPercent = 100,
-                onPageZoomIn = {},
-                onPageZoomOut = {},
-                onResetPageZoom = {},
                 extensionActions = emptyList(),
                 extensionActionScrollState = null,
-                onExtensionActionMove = { _, _ -> },
-                onExtensionActionMoveEnd = {},
-                onExtensionActionMoveCancel = {},
                 showOpenSettings = false,
                 showAddToHomeScreen = false,
-                showHome = true,
                 onOpenInBrowser = {},
-                onOpenSiteSettings = {},
                 onOpenDownloads = null,
                 onOpenDevTools = null,
             )
@@ -778,39 +784,15 @@ private fun PreviewToolbarMenuContentConstrainedHeight() {
                 .toolbarMenuScrollbar(scrollState)
                 .verticalScroll(scrollState),
         ) {
-            ToolbarMenuContent(
-                onDismissRequest = {},
-                onRefresh = {},
-                onSuperRefresh = {},
-                onHome = {},
-                onForward = {},
-                canGoForward = true,
-                onBack = {},
-                canGoBack = true,
-                onLongPressHistory = {},
-                isPcMode = false,
-                onPcModeToggle = {},
+            ToolbarMenuContentPreview(
+                isPageLoading = false,
+                onStopLoading = {},
                 showInstallExtensionItem = true,
-                onInstallExtension = {},
-                onTranslatePage = {},
-                onShare = {},
-                onFindInPage = {},
-                onOpenSettings = {},
-                onAddToHomeScreen = {},
-                pageZoomPercent = 100,
-                onPageZoomIn = {},
-                onPageZoomOut = {},
-                onResetPageZoom = {},
                 extensionActions = emptyList(),
                 extensionActionScrollState = null,
-                onExtensionActionMove = { _, _ -> },
-                onExtensionActionMoveEnd = {},
-                onExtensionActionMoveCancel = {},
                 showOpenSettings = true,
                 showAddToHomeScreen = true,
-                showHome = true,
                 onOpenInBrowser = null,
-                onOpenSiteSettings = {},
                 onOpenDownloads = {},
                 onOpenDevTools = {},
             )
@@ -834,39 +816,15 @@ private fun PreviewToolbarMenuContentConstrainedHeightScrolled() {
                 .toolbarMenuScrollbar(scrollState)
                 .verticalScroll(scrollState),
         ) {
-            ToolbarMenuContent(
-                onDismissRequest = {},
-                onRefresh = {},
-                onSuperRefresh = {},
-                onHome = {},
-                onForward = {},
-                canGoForward = true,
-                onBack = {},
-                canGoBack = true,
-                onLongPressHistory = {},
-                isPcMode = false,
-                onPcModeToggle = {},
+            ToolbarMenuContentPreview(
+                isPageLoading = false,
+                onStopLoading = {},
                 showInstallExtensionItem = true,
-                onInstallExtension = {},
-                onTranslatePage = {},
-                onShare = {},
-                onFindInPage = {},
-                onOpenSettings = {},
-                onAddToHomeScreen = {},
-                pageZoomPercent = 100,
-                onPageZoomIn = {},
-                onPageZoomOut = {},
-                onResetPageZoom = {},
                 extensionActions = emptyList(),
                 extensionActionScrollState = null,
-                onExtensionActionMove = { _, _ -> },
-                onExtensionActionMoveEnd = {},
-                onExtensionActionMoveCancel = {},
                 showOpenSettings = true,
                 showAddToHomeScreen = true,
-                showHome = true,
                 onOpenInBrowser = null,
-                onOpenSiteSettings = {},
                 onOpenDownloads = {},
                 onOpenDevTools = {},
             )
@@ -880,41 +838,15 @@ private fun PreviewToolbarMenuContentConstrainedHeightScrolled() {
 private fun PreviewToolbarMenuContentLoading() {
     BrowserTheme(themeMode = ThemeMode.THEME_SYSTEM) {
         Surface(modifier = Modifier.width(280.dp)) {
-            ToolbarMenuContent(
-                onDismissRequest = {},
-                onRefresh = {},
-                onSuperRefresh = {},
+            ToolbarMenuContentPreview(
                 isPageLoading = true,
                 onStopLoading = {},
-                onHome = {},
-                onForward = {},
-                canGoForward = true,
-                onBack = {},
-                canGoBack = true,
-                onLongPressHistory = {},
-                isPcMode = false,
-                onPcModeToggle = {},
                 showInstallExtensionItem = true,
-                onInstallExtension = {},
-                onTranslatePage = {},
-                onShare = {},
-                onFindInPage = {},
-                onOpenSettings = {},
-                onAddToHomeScreen = {},
-                pageZoomPercent = 100,
-                onPageZoomIn = {},
-                onPageZoomOut = {},
-                onResetPageZoom = {},
                 extensionActions = emptyList(),
                 extensionActionScrollState = ScrollState(initial = 0),
-                onExtensionActionMove = { _, _ -> },
-                onExtensionActionMoveEnd = {},
-                onExtensionActionMoveCancel = {},
                 showOpenSettings = true,
                 showAddToHomeScreen = true,
-                showHome = true,
                 onOpenInBrowser = null,
-                onOpenSiteSettings = {},
                 onOpenDownloads = {},
                 onOpenDevTools = {},
             )

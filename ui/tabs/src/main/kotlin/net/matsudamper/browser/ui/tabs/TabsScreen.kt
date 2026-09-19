@@ -630,7 +630,7 @@ private fun PagerIndicator(
 
 @Composable
 @Preview(name = "フローティンググループメニュー")
-private fun Preview() {
+private fun PreviewFloatingGroupMenu() {
     val groups = remember {
         listOf(
             TabGroupData(TabGroupId("g1"), "デフォルト"),

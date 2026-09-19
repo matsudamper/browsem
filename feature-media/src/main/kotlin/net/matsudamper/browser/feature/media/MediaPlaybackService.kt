@@ -1,8 +1,11 @@
 package net.matsudamper.browser.feature.media
 
+import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.content.Intent
 import android.graphics.Bitmap
+import android.os.Bundle
 import android.os.Looper
 import android.util.Log
 import androidx.annotation.OptIn
@@ -12,6 +15,7 @@ import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import androidx.media3.common.SimpleBasePlayer
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.session.CommandButton
 import androidx.media3.session.DefaultMediaNotificationProvider
 import androidx.media3.session.MediaNotification
 import androidx.media3.session.MediaSession
@@ -55,7 +59,7 @@ class MediaPlaybackService : MediaSessionService() {
             object : MediaNotification.Provider {
                 override fun createNotification(
                     mediaSession: MediaSession,
-                    customLayout: ImmutableList<androidx.media3.session.CommandButton>,
+                    customLayout: ImmutableList<CommandButton>,
                     actionFactory: MediaNotification.ActionFactory,
                     onNotificationChangedCallback: MediaNotification.Provider.Callback,
                 ): MediaNotification {
@@ -78,7 +82,7 @@ class MediaPlaybackService : MediaSessionService() {
                 override fun handleCustomCommand(
                     session: MediaSession,
                     action: String,
-                    extras: android.os.Bundle,
+                    extras: Bundle,
                 ): Boolean {
                     return defaultNotificationProvider.handleCustomCommand(session, action, extras)
                 }
@@ -109,7 +113,7 @@ class MediaPlaybackService : MediaSessionService() {
         return mediaSession
     }
 
-    override fun onStartCommand(intent: android.content.Intent?, flags: Int, startId: Int): Int {
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         Log.d(TAG, "onStartCommand: flags=$flags, startId=$startId bridgeState=${MediaSessionBridge.playbackState.value}")
         MediaTraceLog.d("SVC onStartCommand startId=$startId flags=$flags startedFg=${hasStartedForeground.get()}")
 
@@ -125,7 +129,7 @@ class MediaPlaybackService : MediaSessionService() {
         try {
             startForeground(
                 NOTIFICATION_ID,
-                android.app.Notification.Builder(this, CHANNEL_ID)
+                Notification.Builder(this, CHANNEL_ID)
                     .setSmallIcon(android.R.drawable.ic_media_play)
                     .setContentTitle("Media playback")
                     .setContentText("Starting…")
