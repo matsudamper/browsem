@@ -9,6 +9,7 @@ import java.io.File
 import java.io.IOException
 import java.util.Base64
 import java.util.UUID
+import net.matsudamper.browser.feature.websharefiles.WebShareFilesLimits
 import net.matsudamper.browser.feature.websharefiles.WebShareFilesWebExtension
 
 internal const val WEB_SHARE_FILES_CHOSEN_ACTION =
@@ -118,7 +119,7 @@ internal fun prepareWebShareFilesIntent(
     url: String?,
     files: List<WebShareFilePayload>,
 ): PreparedWebShareFiles? {
-    if (files.isEmpty() || requestId.isBlank()) return null
+    if (files.isEmpty() || !WebShareFilesLimits.isValidRequestId(requestId)) return null
     val cacheDir = File(context.cacheDir, "web_share_files/$requestId").apply {
         mkdirs()
     }
