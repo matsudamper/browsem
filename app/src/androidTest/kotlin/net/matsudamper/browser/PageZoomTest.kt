@@ -9,7 +9,6 @@ import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.percentOffset
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
@@ -120,7 +119,7 @@ class PageZoomTest {
         }
 
         // パーセントボタン（"110%"）をタップしてリセット
-        composeRule.onNodeWithText("110%").performClick()
+        composeRule.onNodeWithTag(BrowserToolbarMenuTestTags.ZoomPercentButton.testTag).performClick()
         composeRule.waitUntil(timeoutMillis = 10_000) {
             composeRule.onAllNodesWithText("100%").fetchSemanticsNodes().isNotEmpty()
         }
