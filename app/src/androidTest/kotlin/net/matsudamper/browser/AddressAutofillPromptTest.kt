@@ -924,10 +924,16 @@ class AddressAutofillPromptTest {
      * 「全削除」ボタンは住所が1件以上あるときだけ表示される。
      */
     private fun clearAddressesInAddressesScreen() {
-        val hasEntries = composeRule
-            .onAllNodesWithTag(AddressesScreenTestTags.DeleteAllButton.testTag)
-            .fetchSemanticsNodes()
-            .isNotEmpty()
+        // 一覧は Room の Flow で遅れて届き、読み込み中と住所なしの表示が同じなので、
+        // 全削除ボタンの出現を上限付きで待ってから「住所なし」と判断する
+        val hasEntries = runCatching {
+            composeRule.waitUntil(timeoutMillis = ADDRESS_LIST_LOAD_TIMEOUT_MS) {
+                composeRule
+                    .onAllNodesWithTag(AddressesScreenTestTags.DeleteAllButton.testTag)
+                    .fetchSemanticsNodes()
+                    .isNotEmpty()
+            }
+        }.isSuccess
         if (!hasEntries) return
 
         composeRule.onNodeWithTag(AddressesScreenTestTags.DeleteAllButton.testTag).performClick()
@@ -1742,6 +1748,7 @@ class AddressAutofillPromptTest {
     }
 
     private companion object {
+        private const val ADDRESS_LIST_LOAD_TIMEOUT_MS = 3_000L
         private const val ADDRESS_FORM_FILE_NAME = "address-form.html"
         private const val ADDRESS_SELECT_FORM_FILE_NAME = "address_form.html"
         private const val ADDRESS_FORM_DONE_FILE_NAME = "done.html"
