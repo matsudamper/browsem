@@ -72,12 +72,12 @@ internal class DownloadManagementScreenViewModel(
     val eventHandler = Channel<(Event) -> Unit>(Channel.UNLIMITED)
 
     /** resumeDownload から最新のレコードを参照するためのキャッシュ */
-    private var currentRecords: List<DownloadRecord> = emptyList()
+    private var currentRecords: List<DownloadRecord> = listOf()
 
     val uiState: StateFlow<DownloadManagementScreenUiState> = MutableStateFlow(
         DownloadManagementScreenUiState(
             isLoading = true,
-            downloads = emptyList(),
+            downloads = listOf(),
             hasClearableHistory = false,
             showClearHistoryDialog = false,
             callbacks = screenCallbacks,

@@ -243,8 +243,8 @@ internal class BrowserViewModel(
 
     private val externalTabPreviousTabs = mutableMapOf<String, String?>()
     private val externalTabInitialUrlByTabId = mutableMapOf<String, String>()
-    private val externalTabIdsFlow = MutableStateFlow<Set<String>>(emptySet())
-    private val externalTabInitialUrlsFlow = MutableStateFlow<Map<String, String>>(emptyMap())
+    private val externalTabIdsFlow = MutableStateFlow<Set<String>>(setOf())
+    private val externalTabInitialUrlsFlow = MutableStateFlow<Map<String, String>>(mapOf())
     private val externalTabCleanupMutex = Mutex()
     private var externalTabFinishCleanupJob: Deferred<Unit>? = null
 

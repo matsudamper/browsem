@@ -146,9 +146,9 @@ class FormInputRepository(context: Context) {
         fieldKey: String,
         limit: Int = SUGGESTION_LIMIT,
     ): List<String> {
-        if (fieldKey.isBlank()) return emptyList()
+        if (fieldKey.isBlank()) return listOf()
         val origin = pageKey.origin()
-        if (!isFieldRegistered(origin, pageKey.path, fieldKey)) return emptyList()
+        if (!isFieldRegistered(origin, pageKey.path, fieldKey)) return listOf()
         return dao.getDistinctValuesForField(
             scheme = pageKey.scheme,
             host = pageKey.host,

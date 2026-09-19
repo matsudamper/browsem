@@ -1,9 +1,9 @@
 package net.matsudamper.browser.core
 
 data class TabStoreState(
-    val tabs: List<TabSummary> = emptyList(),
+    val tabs: List<TabSummary> = listOf(),
     val selectedTabId: String? = null,
-    val tabGroupAssignments: Map<String, String> = emptyMap(),
+    val tabGroupAssignments: Map<String, String> = mapOf(),
 )
 
 data class TabSummary(

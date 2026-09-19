@@ -198,7 +198,7 @@ class FormInputAutofillWebExtension {
     }
 
     private fun parseFields(array: JSONArray?): List<FormInputFieldMessage> {
-        if (array == null) return emptyList()
+        if (array == null) return listOf()
         val result = mutableListOf<FormInputFieldMessage>()
         for (index in 0 until array.length()) {
             val item = array.optJSONObject(index) ?: continue

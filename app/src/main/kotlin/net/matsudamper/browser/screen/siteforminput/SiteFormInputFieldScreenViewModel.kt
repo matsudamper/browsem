@@ -70,7 +70,7 @@ internal class SiteFormInputFieldScreenViewModel(
             callbacks = callbacks,
             displayPath = displayFormInputPath(path),
             fieldKey = fieldKey,
-            values = emptyList(),
+            values = listOf(),
             deleteValueConfirm = null,
             deleteFieldConfirm = false,
         ),

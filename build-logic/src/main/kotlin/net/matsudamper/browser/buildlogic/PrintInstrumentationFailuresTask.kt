@@ -75,7 +75,7 @@ abstract class PrintInstrumentationFailuresTask : DefaultTask() {
             DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(xml)
         }.getOrElse {
             println("[XML パースエラー] ${xml.path}: ${it.message}")
-            return emptyList()
+            return listOf()
         }
         val failures = mutableListOf<Failure>()
         val testcases = document.getElementsByTagName("testcase")

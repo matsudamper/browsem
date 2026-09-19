@@ -334,7 +334,7 @@ internal class SettingsScreenViewModel(
         val pendingExtensionsProcessEnabled: Boolean? = null,
         val showDefaultBrowserBanner: Boolean = false,
         val geminiNanoModelsLoaded: Boolean = false,
-        val geminiNanoModels: List<GeminiNanoModelOption> = emptyList(),
+        val geminiNanoModels: List<GeminiNanoModelOption> = listOf(),
     )
 }
 

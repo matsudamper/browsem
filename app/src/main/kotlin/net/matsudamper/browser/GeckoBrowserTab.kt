@@ -1666,7 +1666,7 @@ private class GetMultipleContentsWithMimeTypes : ActivityResultContract<Array<St
     }
 
     override fun parseResult(resultCode: Int, intent: Intent?): List<Uri> {
-        if (resultCode != Activity.RESULT_OK || intent == null) return emptyList()
+        if (resultCode != Activity.RESULT_OK || intent == null) return listOf()
         val clipData = intent.clipData
         return if (clipData != null) {
             // 一部のピッカーは clipData に加え intent.data にも先頭URIを入れるため、両方をマージして重複を除去する

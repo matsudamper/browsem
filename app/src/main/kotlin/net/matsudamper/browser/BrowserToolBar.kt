@@ -121,7 +121,7 @@ internal fun BrowserToolBar(
     modifier: Modifier = Modifier,
     isPageLoading: Boolean = false,
     onStopLoading: () -> Unit = {},
-    extensionActions: List<WebExtensionActionController.ActionUiState> = emptyList(),
+    extensionActions: List<WebExtensionActionController.ActionUiState> = listOf(),
     extensionActionScrollState: ScrollState? = null,
     onExtensionActionMove: (fromIndex: Int, toIndex: Int) -> Unit = { _, _ -> },
     onExtensionActionMoveEnd: () -> Unit = {},
