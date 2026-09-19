@@ -114,7 +114,10 @@ internal object HomeScreenIconFetcher {
                 ?: return@forEach
             val href = attributes["href"]?.takeIf { it.isNotBlank() } ?: return@forEach
             if ("manifest" in relValues) {
-                resolveUrl(pageUri, href)?.also(manifestUrls::add)
+                val manifestUrl = resolveUrl(pageUri, href)
+                if (manifestUrl != null) {
+                    manifestUrls.add(manifestUrl)
+                }
             }
             if (relValues.any { it == "icon" || it == "apple-touch-icon" || it == "apple-touch-icon-precomposed" }) {
                 val url = resolveUrl(pageUri, href) ?: return@forEach

@@ -58,8 +58,9 @@ class ReadabilityWebExtension {
      */
     fun registerSession(session: GeckoSession, onArticle: (ReadabilityArticle) -> Unit) {
         sessionCallbacks[session] = onArticle
-        extension?.also { ext ->
-            attachSessionDelegate(session, ext)
+        val extension = extension
+        if (extension != null) {
+            attachSessionDelegate(session, extension)
         }
     }
 

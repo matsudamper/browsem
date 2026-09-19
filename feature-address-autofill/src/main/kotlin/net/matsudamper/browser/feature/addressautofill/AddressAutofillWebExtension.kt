@@ -61,7 +61,10 @@ class AddressAutofillWebExtension {
     fun registerSession(session: GeckoSession, listener: SessionListener) {
         sessionListeners[session] = listener
         attachedSessions.add(session)
-        extension?.also { ext -> attachSessionDelegate(session, ext) }
+        val extension = extension
+        if (extension != null) {
+            attachSessionDelegate(session, extension)
+        }
     }
 
     fun unregisterSession(session: GeckoSession) {

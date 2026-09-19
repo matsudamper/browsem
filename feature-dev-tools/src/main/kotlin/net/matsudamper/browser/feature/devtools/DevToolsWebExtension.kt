@@ -126,8 +126,9 @@ class DevToolsWebExtension {
         onFocusedInputChanged: (FocusedInputInfo?) -> Unit,
     ) {
         sessionCallbacks[session] = onFocusedInputChanged
-        extension?.also { ext ->
-            attachSessionDelegate(session, ext)
+        val extension = extension
+        if (extension != null) {
+            attachSessionDelegate(session, extension)
         }
     }
 

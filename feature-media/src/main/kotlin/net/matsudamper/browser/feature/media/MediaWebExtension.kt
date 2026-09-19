@@ -81,8 +81,9 @@ class MediaWebExtension(
             return
         }
         Log.d(TAG, "registerSession: session=${session.logKey()} tabId=$tabId")
-        extension?.also { ext ->
-            attachSessionMessageDelegate(session, ext)
+        val extension = extension
+        if (extension != null) {
+            attachSessionMessageDelegate(session, extension)
         }
     }
 
