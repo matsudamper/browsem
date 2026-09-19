@@ -111,7 +111,11 @@ internal fun AndroidComposeTestRule<*, MainActivity>.waitForUrlBarNotFocused(
 internal fun AndroidComposeTestRule<*, MainActivity>.dismissUrlBarFocusWithoutPageInteraction() {
     if (!isUrlBarFocused()) return
     hideSoftInputFromDecorView()
-    Thread.sleep(URL_BAR_IME_HIDE_GRACE_MS + 100)
+    runCatching {
+        waitUntil(timeoutMillis = URL_BAR_IME_HIDE_GRACE_MS + 100) {
+            !isUrlBarFocused()
+        }
+    }
     if (!isUrlBarFocused()) return
     runCatching {
         onNodeWithTag(UrlTextInputTestTags.UrlBar.testTag).performImeAction()
