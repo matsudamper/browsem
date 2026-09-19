@@ -25,9 +25,6 @@ tasks.register<Sync>("syncRobolectricProperties") {
 /**
  * リポジトリルートの [robolectric.properties] を各 Android モジュールの test リソースとして参照する。
  * Robolectric はモジュール内の src/test/resources しか読まないため、Gradle で参照を橋渡しする。
- *
- * `LibraryExtension` / `ApplicationExtension` はいずれも `CommonExtension` を継承しており、
- * ここで使う `sourceSets` は `CommonExtension` 側の定義のため型を共通化できる。
  */
 fun Project.wireRobolectricPropertiesFromRoot() {
     if (!robolectricPropertiesFile.asFile.exists()) return
