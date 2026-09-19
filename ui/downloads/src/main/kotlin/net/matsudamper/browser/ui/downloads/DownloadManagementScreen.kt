@@ -21,9 +21,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -66,6 +63,7 @@ import java.util.UUID
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import net.matsudamper.browser.resources.R as ResourcesR
 import net.matsudamper.browser.ui.common.StatusBarAppearanceEffect
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -88,7 +86,7 @@ fun DownloadManagementScreen(
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            painter = painterResource(ResourcesR.drawable.ic_arrow_back_24dp),
                             contentDescription = "戻る",
                         )
                     }
@@ -105,7 +103,7 @@ fun DownloadManagementScreen(
                     }
                     IconButton(onClick = uiState.callbacks::onOpenDownloadsFolder) {
                         Icon(
-                            imageVector = Icons.Default.FolderOpen,
+                            painter = painterResource(ResourcesR.drawable.ic_folder_open_24dp),
                             contentDescription = "ダウンロードフォルダを開く",
                         )
                     }
