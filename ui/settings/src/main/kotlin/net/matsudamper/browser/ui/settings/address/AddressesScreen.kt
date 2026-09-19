@@ -37,6 +37,12 @@ sealed interface AddressesScreenTestTags {
     data object AddButton : AddressesScreenTestTags {
         override val id = "add_button"
     }
+    data object DeleteAllButton : AddressesScreenTestTags {
+        override val id = "delete_all_button"
+    }
+    data object ConfirmDeleteAllButton : AddressesScreenTestTags {
+        override val id = "confirm_delete_all_button"
+    }
 
     data class Entry(val addressId: Long) : AddressesScreenTestTags {
         override val id = "entry_$addressId"
@@ -72,7 +78,10 @@ fun AddressesScreen(
                         Text("追加")
                     }
                     if (uiState.entries.isNotEmpty()) {
-                        TextButton(onClick = uiState.callbacks::onClickDeleteAll) {
+                        TextButton(
+                            onClick = uiState.callbacks::onClickDeleteAll,
+                            modifier = Modifier.testTag(AddressesScreenTestTags.DeleteAllButton.testTag),
+                        ) {
                             Text("全削除")
                         }
                     }
@@ -108,7 +117,10 @@ fun AddressesScreen(
             title = { Text("確認") },
             text = { Text("すべての住所を削除しますか？") },
             confirmButton = {
-                TextButton(onClick = uiState.callbacks::onConfirmDeleteAll) {
+                TextButton(
+                    onClick = uiState.callbacks::onConfirmDeleteAll,
+                    modifier = Modifier.testTag(AddressesScreenTestTags.ConfirmDeleteAllButton.testTag),
+                ) {
                     Text("削除")
                 }
             },

@@ -7,11 +7,14 @@ import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.ComposeTimeoutException
+import androidx.compose.ui.test.hasParent
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextReplacement
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import java.net.InetSocketAddress
@@ -20,9 +23,9 @@ import java.net.Socket
 import java.net.URL
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.TimeoutException
-import kotlinx.coroutines.runBlocking
-import net.matsudamper.browser.data.address.AddressEntity
-import net.matsudamper.browser.data.address.AddressRepository
+import net.matsudamper.browser.ui.settings.SettingsScreenTestTags
+import net.matsudamper.browser.ui.settings.address.AddressEditScreenTestTags
+import net.matsudamper.browser.ui.settings.address.AddressesScreenTestTags
 import org.junit.After
 import org.junit.Assert.fail
 import org.junit.Rule
@@ -828,56 +831,129 @@ class AddressAutofillPromptTest {
     }
 
     private fun seedUserReportedAddressWithoutCountry() {
-        val repository = AddressRepository(
-            InstrumentationRegistry.getInstrumentation().targetContext,
+        seedAddressViaUi(
+            mapOf(
+                AddressEditScreenTestTags.GivenNameField to FILL_GIVEN_NAME,
+                AddressEditScreenTestTags.FamilyNameField to FILL_FAMILY_NAME,
+                AddressEditScreenTestTags.AddressLevel1Field to "c",
+                AddressEditScreenTestTags.AddressLevel2Field to "i",
+                AddressEditScreenTestTags.AddressLevel3Field to "2",
+                AddressEditScreenTestTags.StreetAddressField to "p",
+                AddressEditScreenTestTags.PostalCodeField to "2222222",
+                AddressEditScreenTestTags.TelField to "09011111111",
+                AddressEditScreenTestTags.EmailField to FILL_EMAIL,
+            ),
         )
-        runBlocking {
-            repository.deleteAll()
-            repository.save(
-                AddressEntity(
-                    givenName = FILL_GIVEN_NAME,
-                    familyName = FILL_FAMILY_NAME,
-                    addressLevel1 = "c",
-                    addressLevel2 = "i",
-                    addressLevel3 = "2",
-                    streetAddress = "p",
-                    postalCode = "2222222",
-                    tel = "09011111111",
-                    email = FILL_EMAIL,
-                ),
-            )
-        }
-        seededAddresses = true
     }
 
     private fun seedMozillaSampleAddress() {
-        val repository = AddressRepository(
-            InstrumentationRegistry.getInstrumentation().targetContext,
+        seedAddressViaUi(
+            mapOf(
+                AddressEditScreenTestTags.GivenNameField to FILL_GIVEN_NAME,
+                AddressEditScreenTestTags.FamilyNameField to FILL_FAMILY_NAME,
+                AddressEditScreenTestTags.StreetAddressField to "20 Ingram Street, Forest Hills Gardens, Queens",
+                AddressEditScreenTestTags.PostalCodeField to "11375",
+                AddressEditScreenTestTags.CountryField to "US",
+                AddressEditScreenTestTags.EmailField to FILL_EMAIL,
+                AddressEditScreenTestTags.TelField to "+1 180090021",
+            ),
         )
-        runBlocking {
-            repository.deleteAll()
-            repository.save(
-                AddressEntity(
-                    givenName = FILL_GIVEN_NAME,
-                    familyName = FILL_FAMILY_NAME,
-                    streetAddress = "20 Ingram Street, Forest Hills Gardens, Queens",
-                    postalCode = "11375",
-                    country = "US",
-                    email = FILL_EMAIL,
-                    tel = "+1 180090021",
-                ),
-            )
+    }
+
+    /**
+     * 設定画面の住所追加フォームから住所を1件登録する。
+     * 送信済みフォームの再テストで前回分と混ざらないよう、追加前に既存の住所を全削除する。
+     */
+    private fun seedAddressViaUi(fields: Map<AddressEditScreenTestTags, String>) {
+        openAddressesScreenFromToolbar()
+        clearAddressesInAddressesScreen()
+
+        composeRule.onNodeWithTag(AddressesScreenTestTags.AddButton.testTag).performClick()
+        composeRule.waitUntil(timeoutMillis = 10_000) {
+            composeRule.onAllNodesWithTag(AddressEditScreenTestTags.Root.testTag).fetchSemanticsNodes().isNotEmpty()
         }
+        fields.forEach { (tag, value) ->
+            composeRule.onNodeWithTag(tag.testTag).performTextReplacement(value)
+        }
+        composeRule.onNodeWithTag(AddressEditScreenTestTags.SaveButton.testTag).performClick()
+        composeRule.waitUntil(timeoutMillis = 10_000) {
+            composeRule.onAllNodesWithTag(AddressesScreenTestTags.Root.testTag).fetchSemanticsNodes().isNotEmpty()
+        }
+
+        returnToBrowserFromAddressesScreen()
         seededAddresses = true
     }
 
     private fun clearSeededAddresses() {
-        val repository = AddressRepository(
-            InstrumentationRegistry.getInstrumentation().targetContext,
-        )
-        runBlocking {
-            repository.deleteAll()
+        openAddressesScreenFromToolbar()
+        clearAddressesInAddressesScreen()
+        returnToBrowserFromAddressesScreen()
+    }
+
+    /**
+     * ツールバーメニュー → 設定 → 住所、と辿って住所一覧画面を開く。
+     */
+    private fun openAddressesScreenFromToolbar() {
+        composeRule.waitForBrowserReady()
+        composeRule.onNode(
+            hasTestTag(BrowserToolbarTestTags.MenuButton.testTag)
+                .and(hasParent(hasTestTag(BrowserToolbarTestTags.Toolbar.testTag))),
+        ).performClick()
+        composeRule.waitUntil(timeoutMillis = 10_000) {
+            composeRule.onAllNodesWithTag(BrowserToolbarMenuTestTags.SettingsButton.testTag)
+                .fetchSemanticsNodes().isNotEmpty()
         }
+        composeRule.onNodeWithTag(BrowserToolbarMenuTestTags.SettingsButton.testTag).performClick()
+        composeRule.waitUntil(timeoutMillis = 10_000) {
+            composeRule.onAllNodesWithTag(SettingsScreenTestTags.Root.testTag).fetchSemanticsNodes().isNotEmpty()
+        }
+
+        composeRule.onNodeWithTag(SettingsScreenTestTags.OpenAddressesButton.testTag).performClick()
+        composeRule.waitUntil(timeoutMillis = 10_000) {
+            composeRule.onAllNodesWithTag(AddressesScreenTestTags.Root.testTag).fetchSemanticsNodes().isNotEmpty()
+        }
+    }
+
+    /**
+     * 住所一覧画面で「全削除」を確定する。既存の住所が無ければ何もしない。
+     * 「全削除」ボタンは住所が1件以上あるときだけ表示される。
+     */
+    private fun clearAddressesInAddressesScreen() {
+        val hasEntries = composeRule
+            .onAllNodesWithTag(AddressesScreenTestTags.DeleteAllButton.testTag)
+            .fetchSemanticsNodes()
+            .isNotEmpty()
+        if (!hasEntries) return
+
+        composeRule.onNodeWithTag(AddressesScreenTestTags.DeleteAllButton.testTag).performClick()
+        composeRule.waitUntil(timeoutMillis = 10_000) {
+            composeRule.onAllNodesWithTag(AddressesScreenTestTags.ConfirmDeleteAllButton.testTag)
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithTag(AddressesScreenTestTags.ConfirmDeleteAllButton.testTag).performClick()
+        composeRule.waitUntil(timeoutMillis = 10_000) {
+            composeRule.onAllNodesWithTag(AddressesScreenTestTags.DeleteAllButton.testTag)
+                .fetchSemanticsNodes().isEmpty()
+        }
+    }
+
+    /**
+     * 住所一覧画面からシステムの戻る操作でブラウザ画面まで戻る。
+     */
+    private fun returnToBrowserFromAddressesScreen() {
+        pressSystemBack()
+        composeRule.waitUntil(timeoutMillis = 10_000) {
+            composeRule.onAllNodesWithTag(SettingsScreenTestTags.Root.testTag).fetchSemanticsNodes().isNotEmpty()
+        }
+        pressSystemBack()
+        composeRule.waitForBrowserReady()
+    }
+
+    private fun pressSystemBack() {
+        composeRule.runOnIdle {
+            composeRule.activity.onBackPressedDispatcher.onBackPressed()
+        }
+        composeRule.waitForIdle()
     }
 
     /**
