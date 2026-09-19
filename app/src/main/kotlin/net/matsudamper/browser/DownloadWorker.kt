@@ -6,6 +6,7 @@ import android.app.PendingIntent
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.net.Uri
 import android.os.Environment
 import android.provider.MediaStore
@@ -506,7 +507,7 @@ internal class DownloadWorker(
         return ForegroundInfo(
             notificationId,
             notification,
-            android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC,
+            ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC,
         )
     }
 

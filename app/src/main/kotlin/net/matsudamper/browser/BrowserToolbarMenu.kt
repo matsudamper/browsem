@@ -6,6 +6,7 @@ import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Row
@@ -249,7 +250,7 @@ private fun ToolbarMenuContent(
             horizontalArrangement = Arrangement.SpaceEvenly,
         ) {
             Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                androidx.compose.foundation.layout.Box(
+                Box(
                     modifier = Modifier
                         .combinedClickable(
                             enabled = canGoBack,
@@ -267,7 +268,7 @@ private fun ToolbarMenuContent(
                         ),
                     contentAlignment = Alignment.Center,
                 ) {
-                    androidx.compose.foundation.layout.Box(
+                    Box(
                         modifier = Modifier
                             .padding(12.dp),
                         contentAlignment = Alignment.Center,
@@ -286,7 +287,7 @@ private fun ToolbarMenuContent(
                 MenuColumnLabel(text = "戻る")
             }
             Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                androidx.compose.foundation.layout.Box(
+                Box(
                     modifier = Modifier
                         .combinedClickable(
                             enabled = canGoForward,
@@ -304,7 +305,7 @@ private fun ToolbarMenuContent(
                         ),
                     contentAlignment = Alignment.Center,
                 ) {
-                    androidx.compose.foundation.layout.Box(
+                    Box(
                         modifier = Modifier
                             .padding(12.dp),
                         contentAlignment = Alignment.Center,
@@ -323,7 +324,7 @@ private fun ToolbarMenuContent(
                 MenuColumnLabel(text = "進む")
             }
             Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                androidx.compose.foundation.layout.Box(
+                Box(
                     modifier = Modifier
                         .testTag(BrowserToolbarMenuTestTags.RefreshButton.testTag)
                         .combinedClickable(
@@ -349,7 +350,7 @@ private fun ToolbarMenuContent(
                         ),
                     contentAlignment = Alignment.Center,
                 ) {
-                    androidx.compose.foundation.layout.Box(
+                    Box(
                         modifier = Modifier.padding(12.dp),
                         contentAlignment = Alignment.Center,
                     ) {

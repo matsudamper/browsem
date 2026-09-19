@@ -4,6 +4,7 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import java.util.concurrent.CancellationException
 import org.mozilla.geckoview.AllowOrDeny
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoRuntime
@@ -161,11 +162,11 @@ internal class WebExtensionInstaller(
 
     fun cleanup() {
         installPromptState?.result?.completeExceptionally(
-            java.util.concurrent.CancellationException("Installer was cleaned up."),
+            CancellationException("Installer was cleaned up."),
         )
         installPromptState = null
         permissionPromptState?.result?.completeExceptionally(
-            java.util.concurrent.CancellationException("Installer was cleaned up."),
+            CancellationException("Installer was cleaned up."),
         )
         permissionPromptState = null
         installFailureMessage = null

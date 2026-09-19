@@ -3,6 +3,7 @@ package net.matsudamper.browser
 import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.content.BroadcastReceiver
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
@@ -67,6 +68,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
@@ -1251,8 +1253,8 @@ internal fun GeckoBrowserTab(
                             if (!state.isUrlInputFocused) {
                                 state.urlInput = ""
                             }
-                            val clipManager = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE)
-                                as android.content.ClipboardManager
+                            val clipManager = context.getSystemService(Context.CLIPBOARD_SERVICE)
+                                as ClipboardManager
                             val clipped = clipManager.primaryClip?.getItemAt(0)
                                 ?.coerceToText(context)?.toString()?.trim()
                             clipboardUrl = if (
@@ -1544,14 +1546,14 @@ private fun TabHistoryBottomSheet(
                         text = entry.title.ifBlank { entry.uri },
                         style = MaterialTheme.typography.bodyMedium,
                         maxLines = 1,
-                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        overflow = TextOverflow.Ellipsis,
                     )
                     Text(
                         text = entry.uri,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
-                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
                 if (index < items.lastIndex) {

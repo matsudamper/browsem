@@ -59,6 +59,9 @@ import androidx.navigation3.ui.NavDisplay
 import androidx.navigation3.ui.defaultPopTransitionSpec
 import androidx.navigation3.ui.defaultTransitionSpec
 import androidx.work.WorkManager
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import java.util.UUID
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
@@ -1337,8 +1340,8 @@ private fun MainBrowserContent(
 private const val GITHUB_RELEASES_URL = "https://github.com/matsudamper/browsem/releases"
 
 private fun buildBackupFileName(): String {
-    val formatter = java.text.SimpleDateFormat("yyyyMMdd-HHmmss", java.util.Locale.US)
-    return "browsem-backup-${formatter.format(java.util.Date())}.${BackupRepository.FILE_EXTENSION}"
+    val formatter = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US)
+    return "browsem-backup-${formatter.format(Date())}.${BackupRepository.FILE_EXTENSION}"
 }
 
 private fun copyTextToClipboard(

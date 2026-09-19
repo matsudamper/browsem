@@ -32,6 +32,7 @@ import androidx.core.content.pm.ShortcutInfoCompat
 import androidx.core.content.pm.ShortcutManagerCompat
 import androidx.core.graphics.drawable.IconCompat
 import kotlin.math.max
+import net.matsudamper.browser.data.ThemeMode
 import net.matsudamper.browser.ui.common.BrowserTheme
 
 /**
@@ -174,7 +175,7 @@ private fun Bitmap.toOpaqueSquareIcon(): Bitmap {
 @Preview(name = "favicon あり")
 @Composable
 private fun PreviewWithFavicon() {
-    BrowserTheme(themeMode = net.matsudamper.browser.data.ThemeMode.THEME_SYSTEM) {
+    BrowserTheme(themeMode = ThemeMode.THEME_SYSTEM) {
         AddToHomeScreenDialog(
             url = "https://example.com",
             title = "Example Site",
@@ -188,7 +189,7 @@ private fun PreviewWithFavicon() {
 @Preview(name = "タイトルなし")
 @Composable
 private fun PreviewNoTitle() {
-    BrowserTheme(themeMode = net.matsudamper.browser.data.ThemeMode.THEME_SYSTEM) {
+    BrowserTheme(themeMode = ThemeMode.THEME_SYSTEM) {
         AddToHomeScreenDialog(
             url = "https://example.com/very/long/path?query=value",
             title = "",
