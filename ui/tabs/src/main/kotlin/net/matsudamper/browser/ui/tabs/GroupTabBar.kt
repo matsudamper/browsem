@@ -19,8 +19,6 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -58,6 +56,7 @@ import androidx.compose.ui.unit.toOffset
 import androidx.compose.ui.zIndex
 import kotlin.math.abs
 import net.matsudamper.browser.data.TabGroupData
+import net.matsudamper.browser.resources.R as ResourcesR
 
 private val TabShape = RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp)
 
@@ -651,7 +650,7 @@ private fun AddGroupBookmarkTab(
             contentAlignment = Alignment.Center,
         ) {
             Icon(
-                imageVector = Icons.Default.Add,
+                painter = painterResource(ResourcesR.drawable.ic_add_24dp),
                 contentDescription = "グループを追加",
                 tint = MaterialTheme.colorScheme.onSecondaryContainer,
                 modifier = Modifier.size(20.dp),
