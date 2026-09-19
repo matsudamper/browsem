@@ -118,7 +118,6 @@ internal fun BrowserToolBar(
     onPageZoomOut: () -> Unit,
     onResetPageZoom: () -> Unit,
     toolbarColor: Color?,
-    modifier: Modifier = Modifier,
     isPageLoading: Boolean,
     onStopLoading: () -> Unit,
     extensionActions: List<WebExtensionActionController.ActionUiState>,
@@ -132,6 +131,7 @@ internal fun BrowserToolBar(
     onOpenSiteSettings: (() -> Unit)?,
     onOpenDownloads: (() -> Unit)?,
     onOpenDevTools: (() -> Unit)?,
+    modifier: Modifier = Modifier,
 ) {
     var visibleMenu by remember { mutableStateOf(false) }
     BrowserToolbar(
@@ -288,11 +288,11 @@ internal fun BrowserToolbar(
     onSuperRefresh: () -> Unit,
     onTranslatePage: () -> Unit,
     onLongPressHistory: () -> Unit,
-    modifier: Modifier = Modifier,
     isPageLoading: Boolean,
     onStopLoading: () -> Unit,
     showTabButton: Boolean,
     toolbarMenu: @Composable (menuAnchorBottomPx: Int) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     var heightCache by remember { mutableIntStateOf(0) }
     var menuAnchorBottomPx by remember { mutableIntStateOf(0) }
