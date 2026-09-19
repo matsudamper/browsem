@@ -14,6 +14,7 @@ import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextReplacement
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -908,7 +909,9 @@ class AddressAutofillPromptTest {
             composeRule.onAllNodesWithTag(SettingsScreenTestTags.Root.testTag).fetchSemanticsNodes().isNotEmpty()
         }
 
-        composeRule.onNodeWithTag(SettingsScreenTestTags.OpenAddressesButton.testTag).performClick()
+        composeRule.onNodeWithTag(SettingsScreenTestTags.OpenAddressesButton.testTag)
+            .performScrollTo()
+            .performClick()
         composeRule.waitUntil(timeoutMillis = 10_000) {
             composeRule.onAllNodesWithTag(AddressesScreenTestTags.Root.testTag).fetchSemanticsNodes().isNotEmpty()
         }
