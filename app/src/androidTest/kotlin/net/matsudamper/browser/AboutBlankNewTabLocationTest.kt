@@ -42,7 +42,6 @@ class AboutBlankNewTabLocationTest {
     @get:Rule
     val composeRule = createAndroidComposeRule<MainActivity>()
 
-    private val userDebug = false
     private var server: LocalHtmlServer? = null
 
     @Before
@@ -416,9 +415,6 @@ class AboutBlankNewTabLocationTest {
     ) {
         contract {
             callsInPlace(block, InvocationKind.EXACTLY_ONCE)
-        }
-        if (userDebug) {
-            Thread.sleep(5.seconds.inWholeMilliseconds)
         }
         println("start: $title")
         block()
