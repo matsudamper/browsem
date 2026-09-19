@@ -41,6 +41,42 @@ sealed interface AddressEditScreenTestTags {
     data object SaveButton : AddressEditScreenTestTags {
         override val id = "save_button"
     }
+    data object FamilyNameField : AddressEditScreenTestTags {
+        override val id = "family_name_field"
+    }
+    data object GivenNameField : AddressEditScreenTestTags {
+        override val id = "given_name_field"
+    }
+    data object AdditionalNameField : AddressEditScreenTestTags {
+        override val id = "additional_name_field"
+    }
+    data object PostalCodeField : AddressEditScreenTestTags {
+        override val id = "postal_code_field"
+    }
+    data object AddressLevel1Field : AddressEditScreenTestTags {
+        override val id = "address_level1_field"
+    }
+    data object AddressLevel2Field : AddressEditScreenTestTags {
+        override val id = "address_level2_field"
+    }
+    data object AddressLevel3Field : AddressEditScreenTestTags {
+        override val id = "address_level3_field"
+    }
+    data object StreetAddressField : AddressEditScreenTestTags {
+        override val id = "street_address_field"
+    }
+    data object CountryField : AddressEditScreenTestTags {
+        override val id = "country_field"
+    }
+    data object OrganizationField : AddressEditScreenTestTags {
+        override val id = "organization_field"
+    }
+    data object TelField : AddressEditScreenTestTags {
+        override val id = "tel_field"
+    }
+    data object EmailField : AddressEditScreenTestTags {
+        override val id = "email_field"
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
@@ -93,6 +129,7 @@ fun AddressEditScreen(
                     value = uiState.familyName,
                     onValueChange = uiState.callbacks::onFamilyNameChange,
                     enabled = fieldsEnabled,
+                    modifier = Modifier.testTag(AddressEditScreenTestTags.FamilyNameField.testTag),
                 )
                 Spacer(Modifier.height(8.dp))
                 AddressField(
@@ -100,6 +137,7 @@ fun AddressEditScreen(
                     value = uiState.givenName,
                     onValueChange = uiState.callbacks::onGivenNameChange,
                     enabled = fieldsEnabled,
+                    modifier = Modifier.testTag(AddressEditScreenTestTags.GivenNameField.testTag),
                 )
                 Spacer(Modifier.height(8.dp))
                 AddressField(
@@ -107,6 +145,7 @@ fun AddressEditScreen(
                     value = uiState.additionalName,
                     onValueChange = uiState.callbacks::onAdditionalNameChange,
                     enabled = fieldsEnabled,
+                    modifier = Modifier.testTag(AddressEditScreenTestTags.AdditionalNameField.testTag),
                 )
             }
 
@@ -118,6 +157,7 @@ fun AddressEditScreen(
                     value = uiState.postalCode,
                     onValueChange = uiState.callbacks::onPostalCodeChange,
                     enabled = fieldsEnabled,
+                    modifier = Modifier.testTag(AddressEditScreenTestTags.PostalCodeField.testTag),
                 )
                 Spacer(Modifier.height(8.dp))
                 AddressField(
@@ -125,6 +165,7 @@ fun AddressEditScreen(
                     value = uiState.addressLevel1,
                     onValueChange = uiState.callbacks::onAddressLevel1Change,
                     enabled = fieldsEnabled,
+                    modifier = Modifier.testTag(AddressEditScreenTestTags.AddressLevel1Field.testTag),
                 )
                 Spacer(Modifier.height(8.dp))
                 AddressField(
@@ -132,6 +173,7 @@ fun AddressEditScreen(
                     value = uiState.addressLevel2,
                     onValueChange = uiState.callbacks::onAddressLevel2Change,
                     enabled = fieldsEnabled,
+                    modifier = Modifier.testTag(AddressEditScreenTestTags.AddressLevel2Field.testTag),
                 )
                 Spacer(Modifier.height(8.dp))
                 AddressField(
@@ -139,6 +181,7 @@ fun AddressEditScreen(
                     value = uiState.addressLevel3,
                     onValueChange = uiState.callbacks::onAddressLevel3Change,
                     enabled = fieldsEnabled,
+                    modifier = Modifier.testTag(AddressEditScreenTestTags.AddressLevel3Field.testTag),
                 )
                 Spacer(Modifier.height(8.dp))
                 AddressField(
@@ -146,6 +189,7 @@ fun AddressEditScreen(
                     value = uiState.streetAddress,
                     onValueChange = uiState.callbacks::onStreetAddressChange,
                     enabled = fieldsEnabled,
+                    modifier = Modifier.testTag(AddressEditScreenTestTags.StreetAddressField.testTag),
                 )
                 Spacer(Modifier.height(8.dp))
                 AddressField(
@@ -153,6 +197,7 @@ fun AddressEditScreen(
                     value = uiState.country,
                     onValueChange = uiState.callbacks::onCountryChange,
                     enabled = fieldsEnabled,
+                    modifier = Modifier.testTag(AddressEditScreenTestTags.CountryField.testTag),
                 )
             }
 
@@ -164,6 +209,7 @@ fun AddressEditScreen(
                     value = uiState.organization,
                     onValueChange = uiState.callbacks::onOrganizationChange,
                     enabled = fieldsEnabled,
+                    modifier = Modifier.testTag(AddressEditScreenTestTags.OrganizationField.testTag),
                 )
                 Spacer(Modifier.height(8.dp))
                 AddressField(
@@ -171,6 +217,7 @@ fun AddressEditScreen(
                     value = uiState.tel,
                     onValueChange = uiState.callbacks::onTelChange,
                     enabled = fieldsEnabled,
+                    modifier = Modifier.testTag(AddressEditScreenTestTags.TelField.testTag),
                 )
                 Spacer(Modifier.height(8.dp))
                 AddressField(
@@ -178,6 +225,7 @@ fun AddressEditScreen(
                     value = uiState.email,
                     onValueChange = uiState.callbacks::onEmailChange,
                     enabled = fieldsEnabled,
+                    modifier = Modifier.testTag(AddressEditScreenTestTags.EmailField.testTag),
                 )
             }
 
@@ -192,6 +240,7 @@ private fun AddressField(
     value: String,
     onValueChange: (String) -> Unit,
     enabled: Boolean,
+    modifier: Modifier = Modifier,
 ) {
     OutlinedTextField(
         value = value,
@@ -199,7 +248,7 @@ private fun AddressField(
         label = { Text(label) },
         enabled = enabled,
         singleLine = true,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
     )
 }
 
