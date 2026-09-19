@@ -669,6 +669,52 @@ sealed class BrowserToolbarTestTags(val id: String) {
     )
 }
 
+@Composable
+private fun BrowserToolBarPreviewContent(
+    isFocused: Boolean,
+    tabCount: Int?,
+    toolbarColor: Color?,
+    isPageLoading: Boolean,
+    onStopLoading: () -> Unit,
+    canGoForward: Boolean,
+    canGoBack: Boolean,
+) {
+    BrowserToolBar(
+        value = "https://google.com",
+        onValueChange = {},
+        onSubmit = {},
+        isFocused = isFocused,
+        onFocusChanged = {},
+        onLongClickUrl = {},
+        showInstallExtensionItem = true,
+        onInstallExtension = {},
+        onOpenSettings = {},
+        onShare = {},
+        tabCount = tabCount,
+        onOpenTabs = {},
+        isPcMode = false,
+        onPcModeToggle = {},
+        onFindInPage = {},
+        onAddToHomeScreen = {},
+        pageZoomPercent = 100,
+        onPageZoomIn = {},
+        onPageZoomOut = {},
+        onResetPageZoom = {},
+        toolbarColor = toolbarColor,
+        onRefresh = {},
+        onSuperRefresh = {},
+        isPageLoading = isPageLoading,
+        onStopLoading = onStopLoading,
+        onHome = {},
+        onForward = {},
+        canGoForward = canGoForward,
+        onBack = {},
+        canGoBack = canGoBack,
+        onLongPressHistory = {},
+        onTranslatePage = {},
+    )
+}
+
 @Preview(name = "Light")
 @Preview(name = "Dark", uiMode = android.content.res.Configuration.UI_MODE_NIGHT_YES)
 @Composable
@@ -676,37 +722,14 @@ private fun Preview() {
     BrowserTheme(themeMode = net.matsudamper.browser.data.ThemeMode.THEME_SYSTEM) {
         Column {
             for (isFocused in listOf(true, false)) {
-                BrowserToolBar(
-                    value = "https://google.com",
-                    onValueChange = {},
-                    onSubmit = {},
+                BrowserToolBarPreviewContent(
                     isFocused = isFocused,
-                    onFocusChanged = {},
-                    onLongClickUrl = {},
-                    showInstallExtensionItem = true,
-                    onInstallExtension = {},
-                    onOpenSettings = {},
-                    onShare = {},
                     tabCount = 2,
-                    onOpenTabs = {},
-                    isPcMode = false,
-                    onPcModeToggle = {},
-                    onFindInPage = {},
-                    onAddToHomeScreen = {},
-                    pageZoomPercent = 100,
-                    onPageZoomIn = {},
-                    onPageZoomOut = {},
-                    onResetPageZoom = {},
                     toolbarColor = null,
-                    onRefresh = {},
-                    onSuperRefresh = {},
-                    onHome = {},
-                    onForward = {},
+                    isPageLoading = false,
+                    onStopLoading = {},
                     canGoForward = false,
-                    onBack = {},
                     canGoBack = false,
-                    onLongPressHistory = {},
-                    onTranslatePage = {},
                 )
                 Spacer(modifier = Modifier.height(8.dp))
             }
@@ -720,37 +743,14 @@ private fun PreviewTabCountVariants() {
     BrowserTheme(themeMode = net.matsudamper.browser.data.ThemeMode.THEME_SYSTEM) {
         Column {
             for (tabCount in listOf(null, 2, 99, 999, 9999, 10000)) {
-                BrowserToolBar(
-                    value = "https://google.com",
-                    onValueChange = {},
-                    onSubmit = {},
+                BrowserToolBarPreviewContent(
                     isFocused = false,
-                    onFocusChanged = {},
-                    onLongClickUrl = {},
-                    showInstallExtensionItem = true,
-                    onInstallExtension = {},
-                    onOpenSettings = {},
-                    onShare = {},
                     tabCount = tabCount,
-                    onOpenTabs = {},
-                    isPcMode = false,
-                    onPcModeToggle = {},
-                    onFindInPage = {},
-                    onAddToHomeScreen = {},
-                    pageZoomPercent = 100,
-                    onPageZoomIn = {},
-                    onPageZoomOut = {},
-                    onResetPageZoom = {},
                     toolbarColor = null,
-                    onRefresh = {},
-                    onSuperRefresh = {},
-                    onHome = {},
-                    onForward = {},
+                    isPageLoading = false,
+                    onStopLoading = {},
                     canGoForward = false,
-                    onBack = {},
                     canGoBack = false,
-                    onLongPressHistory = {},
-                    onTranslatePage = {},
                 )
                 Spacer(modifier = Modifier.height(8.dp))
             }
@@ -763,37 +763,14 @@ private fun PreviewTabCountVariants() {
 private fun PreviewWideToolbar() {
     BrowserTheme(themeMode = net.matsudamper.browser.data.ThemeMode.THEME_SYSTEM) {
         Column {
-            BrowserToolBar(
-                value = "https://google.com",
-                onValueChange = {},
-                onSubmit = {},
+            BrowserToolBarPreviewContent(
                 isFocused = false,
-                onFocusChanged = {},
-                onLongClickUrl = {},
-                showInstallExtensionItem = true,
-                onInstallExtension = {},
-                onOpenSettings = {},
-                onShare = {},
                 tabCount = 2,
-                onOpenTabs = {},
-                isPcMode = false,
-                onPcModeToggle = {},
-                onFindInPage = {},
-                onAddToHomeScreen = {},
-                pageZoomPercent = 100,
-                onPageZoomIn = {},
-                onPageZoomOut = {},
-                onResetPageZoom = {},
                 toolbarColor = null,
-                onRefresh = {},
-                onSuperRefresh = {},
-                onHome = {},
-                onForward = {},
+                isPageLoading = false,
+                onStopLoading = {},
                 canGoForward = true,
-                onBack = {},
                 canGoBack = false,
-                onLongPressHistory = {},
-                onTranslatePage = {},
             )
         }
     }
@@ -804,39 +781,14 @@ private fun PreviewWideToolbar() {
 private fun PreviewWideToolbarLoading() {
     BrowserTheme(themeMode = net.matsudamper.browser.data.ThemeMode.THEME_SYSTEM) {
         Column {
-            BrowserToolBar(
-                value = "https://google.com",
-                onValueChange = {},
-                onSubmit = {},
+            BrowserToolBarPreviewContent(
                 isFocused = false,
-                onFocusChanged = {},
-                onLongClickUrl = {},
-                showInstallExtensionItem = true,
-                onInstallExtension = {},
-                onOpenSettings = {},
-                onShare = {},
                 tabCount = 2,
-                onOpenTabs = {},
-                isPcMode = false,
-                onPcModeToggle = {},
-                onFindInPage = {},
-                onAddToHomeScreen = {},
-                pageZoomPercent = 100,
-                onPageZoomIn = {},
-                onPageZoomOut = {},
-                onResetPageZoom = {},
                 toolbarColor = null,
-                onRefresh = {},
-                onSuperRefresh = {},
                 isPageLoading = true,
                 onStopLoading = {},
-                onHome = {},
-                onForward = {},
                 canGoForward = true,
-                onBack = {},
                 canGoBack = false,
-                onLongPressHistory = {},
-                onTranslatePage = {},
             )
         }
     }
@@ -852,37 +804,14 @@ private fun PreviewDisabledOnThemeColor() {
     BrowserTheme(themeMode = net.matsudamper.browser.data.ThemeMode.THEME_SYSTEM) {
         Column {
             for (toolbarColor in listOf(Color.Black, Color.White)) {
-                BrowserToolBar(
-                    value = "https://google.com",
-                    onValueChange = {},
-                    onSubmit = {},
+                BrowserToolBarPreviewContent(
                     isFocused = false,
-                    onFocusChanged = {},
-                    onLongClickUrl = {},
-                    showInstallExtensionItem = true,
-                    onInstallExtension = {},
-                    onOpenSettings = {},
-                    onShare = {},
                     tabCount = 2,
-                    onOpenTabs = {},
-                    isPcMode = false,
-                    onPcModeToggle = {},
-                    onFindInPage = {},
-                    onAddToHomeScreen = {},
-                    pageZoomPercent = 100,
-                    onPageZoomIn = {},
-                    onPageZoomOut = {},
-                    onResetPageZoom = {},
                     toolbarColor = toolbarColor,
-                    onRefresh = {},
-                    onSuperRefresh = {},
-                    onHome = {},
-                    onForward = {},
+                    isPageLoading = false,
+                    onStopLoading = {},
                     canGoForward = false,
-                    onBack = {},
                     canGoBack = true,
-                    onLongPressHistory = {},
-                    onTranslatePage = {},
                 )
                 Spacer(modifier = Modifier.height(8.dp))
             }
