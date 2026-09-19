@@ -84,13 +84,14 @@ internal fun AndroidComposeTestRule<*, MainActivity>.waitForTabsScreenLoaded(
 internal fun AndroidComposeTestRule<*, MainActivity>.waitForUrlBarNotFocused(
     timeoutMillis: Long = 30_000,
 ) {
-    val deadline = SystemClock.elapsedRealtime() + timeoutMillis
-    while (SystemClock.elapsedRealtime() < deadline) {
-        if (!isUrlBarFocused()) return
-        dismissUrlBarFocusWithoutPageInteraction()
-        if (!isUrlBarFocused()) return
-        dismissUrlBarFocusViaGeckoContainerIfSafe()
-        Thread.sleep(200)
+    if (!isUrlBarFocused()) return
+    runCatching {
+        waitUntil(timeoutMillis = timeoutMillis) {
+            dismissUrlBarFocusWithoutPageInteraction()
+            if (!isUrlBarFocused()) return@waitUntil true
+            dismissUrlBarFocusViaGeckoContainerIfSafe()
+            !isUrlBarFocused()
+        }
     }
     if (!isUrlBarFocused()) return
     dismissUrlBarFocusViaBackIfStillFocused()
@@ -287,22 +288,30 @@ internal fun AndroidComposeTestRule<*, MainActivity>.waitForSessionNavigationSet
 ) {
     var lastUrl: String? = null
     var stableCount = 0
-    val deadline = SystemClock.elapsedRealtime() + timeoutMillis
-    while (SystemClock.elapsedRealtime() < deadline) {
-        val current = currentPageUrlFromUi()
-        if (current.isNotEmpty() && current == lastUrl) {
-            stableCount++
-            if (stableCount >= stablePolls) return
-        } else {
-            stableCount = 0
-            lastUrl = current
+    // waitUntil自体は約10ms間隔で条件を評価するため、安定判定に必要な実時間の
+    // 間隔(pollIntervalMillis)は条件内で自前に計測して間引く。
+    var lastCheckedAt = 0L
+    try {
+        waitUntil(timeoutMillis = timeoutMillis) {
+            val now = SystemClock.elapsedRealtime()
+            if (now - lastCheckedAt < pollIntervalMillis) return@waitUntil false
+            lastCheckedAt = now
+            val current = currentPageUrlFromUi()
+            if (current.isNotEmpty() && current == lastUrl) {
+                stableCount++
+            } else {
+                stableCount = 0
+                lastUrl = current
+            }
+            stableCount >= stablePolls
         }
-        Thread.sleep(pollIntervalMillis)
+    } catch (e: ComposeTimeoutException) {
+        throw AssertionError(
+            "waitForSessionNavigationSettled timeout: lastUrl=\"$lastUrl\" " +
+                "stableCount=$stableCount current=\"${currentPageUrlFromUi()}\"",
+            e,
+        )
     }
-    throw AssertionError(
-        "waitForSessionNavigationSettled timeout: lastUrl=\"$lastUrl\" " +
-            "stableCount=$stableCount current=\"${currentPageUrlFromUi()}\"",
-    )
 }
 
 /**
@@ -317,19 +326,25 @@ internal fun AndroidComposeTestRule<*, MainActivity>.waitForStablePageMarker(
     pollIntervalMillis: Long = 500,
 ) {
     var stableCount = 0
-    val deadline = SystemClock.elapsedRealtime() + timeoutMillis
-    while (SystemClock.elapsedRealtime() < deadline) {
-        if (isExpectedLocalPage(currentPageUrlFromUi(), expectedPageUrl)) {
-            stableCount++
-            if (stableCount >= stablePolls) return
-        } else {
-            stableCount = 0
+    var lastCheckedAt = 0L
+    try {
+        waitUntil(timeoutMillis = timeoutMillis) {
+            val now = SystemClock.elapsedRealtime()
+            if (now - lastCheckedAt < pollIntervalMillis) return@waitUntil false
+            lastCheckedAt = now
+            if (isExpectedLocalPage(currentPageUrlFromUi(), expectedPageUrl)) {
+                stableCount++
+            } else {
+                stableCount = 0
+            }
+            stableCount >= stablePolls
         }
-        Thread.sleep(pollIntervalMillis)
+    } catch (e: ComposeTimeoutException) {
+        throw AssertionError(
+            "waitForStablePageMarker timeout: expected=\"$expectedPageUrl\" current=\"${currentPageUrlFromUi()}\"",
+            e,
+        )
     }
-    throw AssertionError(
-        "waitForStablePageMarker timeout: expected=\"$expectedPageUrl\" current=\"${currentPageUrlFromUi()}\"",
-    )
 }
 
 /**
@@ -345,22 +360,28 @@ internal fun AndroidComposeTestRule<*, MainActivity>.waitForStableLocalPage(
     pollIntervalMillis: Long = 500,
 ) {
     var stableCount = 0
-    val deadline = SystemClock.elapsedRealtime() + timeoutMillis
-    while (SystemClock.elapsedRealtime() < deadline) {
-        val current = currentPageUrlFromUi()
-        if (isExpectedLocalPage(current, pageUrl)) {
-            stableCount++
-            if (stableCount >= stablePolls) return
-        } else {
-            stableCount = 0
-            openUrlFromUrlBar(pageUrl)
-            waitForIdle()
+    var lastCheckedAt = 0L
+    try {
+        waitUntil(timeoutMillis = timeoutMillis) {
+            val now = SystemClock.elapsedRealtime()
+            if (now - lastCheckedAt < pollIntervalMillis) return@waitUntil false
+            lastCheckedAt = now
+            val current = currentPageUrlFromUi()
+            if (isExpectedLocalPage(current, pageUrl)) {
+                stableCount++
+            } else {
+                stableCount = 0
+                openUrlFromUrlBar(pageUrl)
+                waitForIdle()
+            }
+            stableCount >= stablePolls
         }
-        Thread.sleep(pollIntervalMillis)
+    } catch (e: ComposeTimeoutException) {
+        throw AssertionError(
+            "waitForStableLocalPage timeout: expected=\"$pageUrl\" current=\"${currentPageUrlFromUi()}\"",
+            e,
+        )
     }
-    throw AssertionError(
-        "waitForStableLocalPage timeout: expected=\"$pageUrl\" current=\"${currentPageUrlFromUi()}\"",
-    )
 }
 
 /**

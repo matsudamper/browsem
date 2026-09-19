@@ -5,6 +5,7 @@ import android.graphics.Color
 import android.util.Log
 import android.view.View
 import android.view.ViewGroup
+import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.lifecycle.Lifecycle
@@ -112,39 +113,47 @@ class GeckoSurfaceResumeTest {
      * フィクスチャ固有の背景色の比率を検証する。
      */
     private fun waitForFixtureBackgroundGeckoPixels(timeoutMillis: Long = 30_000): Bitmap {
-        val deadline = System.currentTimeMillis() + timeoutMillis
         val startTime = System.currentTimeMillis()
         var latestBitmap: Bitmap? = null
         var lastError: Throwable? = null
         var attempt = 0
-        while (System.currentTimeMillis() < deadline) {
-            attempt++
-            try {
-                latestBitmap = captureGeckoPixels()
-                val ratio = latestBitmap.fixtureBackgroundRatio()
-                Log.d(
-                    TAG,
-                    "試行$attempt: 背景色比率=${String.format("%.1f", ratio * 100)}%" +
-                        " (${latestBitmap.width}x${latestBitmap.height})",
-                )
-                if (ratio >= FIXTURE_BACKGROUND_RATIO_THRESHOLD) {
-                    Log.d(TAG, "背景色ピクセル確認完了 (試行$attempt, 経過${System.currentTimeMillis() - startTime}ms)")
-                    return latestBitmap
+        try {
+            composeRule.waitUntil(timeoutMillis = timeoutMillis) {
+                attempt++
+                try {
+                    val bitmap = captureGeckoPixels()
+                    latestBitmap = bitmap
+                    val ratio = bitmap.fixtureBackgroundRatio()
+                    Log.d(
+                        TAG,
+                        "試行$attempt: 背景色比率=${String.format("%.1f", ratio * 100)}%" +
+                            " (${bitmap.width}x${bitmap.height})",
+                    )
+                    if (ratio >= FIXTURE_BACKGROUND_RATIO_THRESHOLD) {
+                        Log.d(TAG, "背景色ピクセル確認完了 (試行$attempt, 経過${System.currentTimeMillis() - startTime}ms)")
+                        true
+                    } else {
+                        false
+                    }
+                } catch (e: AssertionError) {
+                    // Activity リジューム直後は GeckoView の Compositor がまだ準備できておらず
+                    // capturePixels() が失敗することがある。一時的なエラーとしてリトライする。
+                    Log.w(TAG, "試行$attempt: capturePixels失敗 - ${e.message}")
+                    lastError = e
+                    false
                 }
-            } catch (e: AssertionError) {
-                // Activity リジューム直後は GeckoView の Compositor がまだ準備できておらず
-                // capturePixels() が失敗することがある。一時的なエラーとしてリトライする。
-                Log.w(TAG, "試行$attempt: capturePixels失敗 - ${e.message}")
-                lastError = e
             }
-            Thread.sleep(250L)
+        } catch (e: ComposeTimeoutException) {
+            val elapsed = System.currentTimeMillis() - startTime
+            error(
+                "GeckoView pixels never showed the fixture background color after $attempt attempts (${elapsed}ms). " +
+                    "lastBitmap=${latestBitmap?.width}x${latestBitmap?.height}, " +
+                    "lastError=$lastError",
+            )
         }
-        val elapsed = System.currentTimeMillis() - startTime
-        error(
-            "GeckoView pixels never showed the fixture background color after $attempt attempts (${elapsed}ms). " +
-                "lastBitmap=${latestBitmap?.width}x${latestBitmap?.height}, " +
-                "lastError=$lastError",
-        )
+        return requireNotNull(latestBitmap) {
+            "waitUntil succeeded but latestBitmap was not captured"
+        }
     }
 
     private fun captureGeckoPixels(): Bitmap {
