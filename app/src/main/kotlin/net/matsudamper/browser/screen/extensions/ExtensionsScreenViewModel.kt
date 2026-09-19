@@ -327,7 +327,7 @@ internal class ExtensionsScreenViewModel(
                 viewModelStateFlow.update {
                     it.copy(
                         isLoading = false,
-                        extensions = (list ?: emptyList())
+                        extensions = (list ?: listOf())
                             .filter(ExtensionGlobalController::isUserManaged)
                             .sortedBy { ext ->
                                 (ext.metaData.name?.takeIf { n -> n.isNotBlank() } ?: ext.id).lowercase()
@@ -353,7 +353,7 @@ internal class ExtensionsScreenViewModel(
     }
 
     data class ViewModelState(
-        val extensions: List<WebExtension> = emptyList(),
+        val extensions: List<WebExtension> = listOf(),
         val extensionsGloballyEnabled: Boolean? = null,
         val isLoading: Boolean = true,
         val uninstallingId: String? = null,

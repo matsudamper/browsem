@@ -45,7 +45,7 @@ internal class AddressesScreenViewModel(
     val uiState: StateFlow<AddressesScreenUiState> = MutableStateFlow(
         AddressesScreenUiState(
             callbacks = callbacks,
-            entries = emptyList(),
+            entries = listOf(),
             showDeleteAllDialog = false,
         ),
     ).also { uiStateFlow ->
@@ -92,7 +92,7 @@ internal class AddressesScreenViewModel(
     }
 
     data class ViewModelState(
-        val entries: List<AddressEntity> = emptyList(),
+        val entries: List<AddressEntity> = listOf(),
         val showDeleteAllDialog: Boolean = false,
     )
 

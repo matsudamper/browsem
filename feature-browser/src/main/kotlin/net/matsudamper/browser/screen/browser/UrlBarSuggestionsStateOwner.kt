@@ -164,11 +164,11 @@ private data class WebSuggestionInput(
 )
 
 private data class WebSuggestionState(
-    val suggestions: List<String> = emptyList(),
+    val suggestions: List<String> = listOf(),
     val isLoading: Boolean = false,
 )
 
 private data class UrlBarSuggestionsViewModelState(
-    val historySuggestions: List<HistoryEntry> = emptyList(),
+    val historySuggestions: List<HistoryEntry> = listOf(),
     val webSuggestionState: WebSuggestionState = WebSuggestionState(),
 )

@@ -903,7 +903,7 @@ private fun PreviewNetworkLogScreenEmpty() {
         NetworkLogScreen(
             uiState = NetworkLogUiState(
                 callbacks = PreviewNetworkLogCallbacks,
-                entries = emptyList(),
+                entries = listOf(),
                 filters = listOf(previewFilters().first()),
                 searchQuery = "",
                 summary = NetworkLogUiState.Summary(countLabel = "0 件", sizeLabel = "0 B"),

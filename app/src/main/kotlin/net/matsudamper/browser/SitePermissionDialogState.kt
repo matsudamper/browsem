@@ -90,9 +90,10 @@ internal class SitePermissionDialogState(
             else -> Unit
         }
         // 表示中のダイアログが残っている場合は今回のみ拒否として閉じる
-        microphoneDialog?.also { previous ->
+        val dialog = microphoneDialog
+        if (dialog != null) {
             microphoneDialog = null
-            previous.onResult(null)
+            dialog.onResult(null)
         }
         val result = CompletableDeferred<Boolean?>()
         microphoneDialog = MicrophoneDialog(host) { allow ->
@@ -127,9 +128,10 @@ internal class SitePermissionDialogState(
             else -> Unit
         }
         // 表示中のダイアログが残っている場合は今回のみ拒否として閉じる
-        autoplayDialog?.also { previous ->
+        val dialog = autoplayDialog
+        if (dialog != null) {
             autoplayDialog = null
-            previous.onResult(null)
+            dialog.onResult(null)
         }
         val result = CompletableDeferred<AutoplayChoice?>()
         autoplayDialog = AutoplayDialog(host) { choice ->

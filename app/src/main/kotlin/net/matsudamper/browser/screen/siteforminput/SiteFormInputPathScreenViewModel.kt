@@ -84,7 +84,7 @@ internal class SiteFormInputPathScreenViewModel(
             callbacks = callbacks,
             path = path,
             displayPath = displayFormInputPath(path),
-            fields = emptyList(),
+            fields = listOf(),
             deletePathConfirm = false,
             deleteFieldConfirm = null,
         ),

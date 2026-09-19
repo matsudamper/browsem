@@ -15,4 +15,4 @@ internal fun openDownloadsRequestIdFrom(intent: Intent): String {
         ?: legacyOpenDownloadsRequestId(intent.getStringExtra(DownloadWorker.EXTRA_WORKER_ID))
 }
 
-internal fun legacyOpenDownloadsRequestId(workerId: String?): String = "legacy:${workerId ?: ""}"
+internal fun legacyOpenDownloadsRequestId(workerId: String?): String = "legacy:${workerId.orEmpty()}"

@@ -727,7 +727,7 @@ private fun SettingsScreenPreview() {
     SettingsScreenPreviewContent(
         showDefaultBrowserBanner = false,
         translationProvider = TranslationProvider.TRANSLATION_PROVIDER_GECKO,
-        geminiNanoModels = emptyList(),
+        geminiNanoModels = listOf(),
     )
 }
 
@@ -737,7 +737,7 @@ private fun SettingsScreenDefaultBrowserBannerPreview() {
     SettingsScreenPreviewContent(
         showDefaultBrowserBanner = true,
         translationProvider = TranslationProvider.TRANSLATION_PROVIDER_GECKO,
-        geminiNanoModels = emptyList(),
+        geminiNanoModels = listOf(),
     )
 }
 

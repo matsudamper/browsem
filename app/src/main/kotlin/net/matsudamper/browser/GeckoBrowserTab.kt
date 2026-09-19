@@ -414,7 +414,8 @@ internal fun GeckoBrowserTab(
                 if (count == 0) return@collectLatest
                 // GeckoView.capturePixels は Main スレッド必須。
                 withContext(Dispatchers.Main.immediate) {
-                    geckoView?.also { gv -> state.captureTabPreview(gv) }
+                    val gv = geckoView ?: return@withContext
+                    state.captureTabPreview(gv)
                 }
             }
     }
@@ -707,45 +708,46 @@ internal fun GeckoBrowserTab(
                     //       再現を確認したら、audio を殺さない形で compositor 再構築する手段
                     //       （releaseSession しても MediaSession 経由で音は継続する可能性が高い）
                     //       を検討する。
-                    geckoView?.also { target ->
-                        when {
-                            mediaWebExtension.shouldKeepSessionAttached(session) -> {
-                                state.captureTabPreview(target)
-                            }
-
-                            surfaceResumeState == SurfaceResumeState.PAUSED_KEEP_SURFACE -> {
-                                // IME 非表示の pause で surface を維持していたが、ON_STOP に
-                                // 到達した = 完全に不可視化した (ホームボタン等)。ここで release
-                                // せず session を attach したまま停止すると、復帰時に surface が
-                                // session 付きで再作成され自動 resume-resize のハング経路を踏む。
-                                // release して、復帰は RELEASED → fresh attach 経路に合流させる。
-                                Log.d(
-                                    TAG_SURFACE_RESUME,
-                                    "ON_STOP: PAUSED_KEEP_SURFACE → releaseSession + INVISIBLE 実行" +
-                                        " gv.size=${target.width}x${target.height}",
-                                )
-                                // 不可視になったので Mozilla の契約どおり deactivate してよい。
-                                // ただし live popup の opener は JS を止めない。
-                                browserSessionLifecycleController.pauseSession(browserTab)
-                                addressAutofillDelegate.unbindBeforeViewRelease(session)
-                                target.releaseSession()
-                                // View から外れると Gecko が opener を inactive にするため保持し直す。
-                                currentOnReevaluateOpenerRetention()
-                                target.visibility = View.INVISIBLE
-                                surfaceResumeState = SurfaceResumeState.RELEASED
-                            }
-
-                            else -> Unit
+                    val target = geckoView ?: return@LifecycleEventObserver
+                    when {
+                        mediaWebExtension.shouldKeepSessionAttached(session) -> {
+                            state.captureTabPreview(target)
                         }
+
+                        surfaceResumeState == SurfaceResumeState.PAUSED_KEEP_SURFACE -> {
+                            // IME 非表示の pause で surface を維持していたが、ON_STOP に
+                            // 到達した = 完全に不可視化した (ホームボタン等)。ここで release
+                            // せず session を attach したまま停止すると、復帰時に surface が
+                            // session 付きで再作成され自動 resume-resize のハング経路を踏む。
+                            // release して、復帰は RELEASED → fresh attach 経路に合流させる。
+                            Log.d(
+                                TAG_SURFACE_RESUME,
+                                "ON_STOP: PAUSED_KEEP_SURFACE → releaseSession + INVISIBLE 実行" +
+                                    " gv.size=${target.width}x${target.height}",
+                            )
+                            // 不可視になったので Mozilla の契約どおり deactivate してよい。
+                            // ただし live popup の opener は JS を止めない。
+                            browserSessionLifecycleController.pauseSession(browserTab)
+                            addressAutofillDelegate.unbindBeforeViewRelease(session)
+                            target.releaseSession()
+                            // View から外れると Gecko が opener を inactive にするため保持し直す。
+                            currentOnReevaluateOpenerRetention()
+                            target.visibility = View.INVISIBLE
+                            surfaceResumeState = SurfaceResumeState.RELEASED
+                        }
+
+                        else -> Unit
                     }
                 }
 
                 Lifecycle.Event.ON_START -> {
-                    geckoView?.also(::resumeFromPauseIfNeeded)
+                    val gv = geckoView ?: return@LifecycleEventObserver
+                    resumeFromPauseIfNeeded(gv)
                 }
 
                 Lifecycle.Event.ON_RESUME -> {
-                    geckoView?.also(::resumeFromPauseIfNeeded)
+                    val gv = geckoView ?: return@LifecycleEventObserver
+                    resumeFromPauseIfNeeded(gv)
                 }
 
                 else -> Unit
@@ -1053,7 +1055,7 @@ internal fun GeckoBrowserTab(
                     menu.add(Menu.NONE, MENU_ID_SAVE_FORM_INPUT, Menu.NONE, "入力欄を保存")
                 }
 
-                val text = mSelection?.text?.trim() ?: ""
+                val text = mSelection?.text?.trim().orEmpty()
                 if (text.isNotBlank()) {
                     val isUrl = text.startsWith("http://") ||
                         text.startsWith("https://") ||
@@ -1288,8 +1290,9 @@ internal fun GeckoBrowserTab(
                     showTabActions = enableTabUi,
                     onOpenTabs = {
                         if (enableTabUi) {
-                            geckoView?.also {
-                                runCatching { state.flushAndCaptureForTabSwitch(it) }
+                            val gv = geckoView
+                            if (gv != null) {
+                                runCatching { state.flushAndCaptureForTabSwitch(gv) }
                             }
                             onOpenTabs()
                         }
@@ -1321,7 +1324,8 @@ internal fun GeckoBrowserTab(
                     onHorizontalDrag = onToolbarHorizontalDrag,
                     onHorizontalDragEnd = {
                         // タブ切替スワイプになる可能性があるため、現在のタブのプレビューを事前にキャプチャする
-                        geckoView?.also { gv ->
+                        val gv = geckoView
+                        if (gv != null) {
                             runCatching { state.flushAndCaptureForTabSwitch(gv) }
                         }
                         onToolbarDragEnd()
@@ -1665,7 +1669,7 @@ private class GetMultipleContentsWithMimeTypes : ActivityResultContract<Array<St
     }
 
     override fun parseResult(resultCode: Int, intent: Intent?): List<Uri> {
-        if (resultCode != Activity.RESULT_OK || intent == null) return emptyList()
+        if (resultCode != Activity.RESULT_OK || intent == null) return listOf()
         val clipData = intent.clipData
         return if (clipData != null) {
             // 一部のピッカーは clipData に加え intent.data にも先頭URIを入れるため、両方をマージして重複を除去する

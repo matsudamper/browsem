@@ -189,7 +189,7 @@ internal class BrowserTabScreenState(
     private val mainHandler = Handler(Looper.getMainLooper())
     var webAppManifestJson by mutableStateOf<String?>(null)
 
-    var tabHistoryItems by mutableStateOf<List<TabHistoryItem>>(emptyList())
+    var tabHistoryItems by mutableStateOf<List<TabHistoryItem>>(listOf())
     var tabHistoryCurrentIndex by mutableStateOf(-1)
 
     data class TabHistoryItem(val uri: String, val title: String)
@@ -376,7 +376,7 @@ internal class BrowserTabScreenState(
     val extensionActionScrollState = ScrollState(initial = 0)
 
     var extensionActionPopup by mutableStateOf<WebExtensionActionController.PopupRequest?>(null)
-    private var extensionActionOrder by mutableStateOf<List<String>>(emptyList())
+    private var extensionActionOrder by mutableStateOf<List<String>>(listOf())
 
     // ドラッグ中は保存済みの並び順ではなく、この一時的な並び順を使う
     private var draggingExtensionActionOrder by mutableStateOf<List<String>?>(null)

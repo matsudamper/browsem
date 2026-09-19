@@ -438,7 +438,7 @@ internal fun calculateGroupSlots(
     startPadding: Float,
     scrolledPx: Float,
 ): List<GroupSlotInfo> {
-    if (groupCount <= 0 || itemWidth <= 0) return emptyList()
+    if (groupCount <= 0 || itemWidth <= 0) return listOf()
     return List(groupCount) { index ->
         val left = startPadding - scrolledPx + index * itemWidth
         GroupSlotInfo(index = index, left = left, right = left + itemWidth)

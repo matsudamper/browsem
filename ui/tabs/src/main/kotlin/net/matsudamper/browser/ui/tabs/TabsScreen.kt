@@ -388,7 +388,7 @@ private fun TabsScreenLoadedContent(
                     .weight(1f),
                 userScrollEnabled = !isTabDragging,
             ) { page ->
-                val tabsForPage = groupedTabs.getOrElse(page) { emptyList() }
+                val tabsForPage = groupedTabs.getOrElse(page) { listOf() }
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -653,7 +653,7 @@ private fun PreviewFloatingGroupMenu() {
         groups = groups,
         activeGroupIndex = 0,
         selectedTabId = "1",
-        groupHasPlayingTab = emptyList(),
+        groupHasPlayingTab = listOf(),
         snackbarHostState = remember { SnackbarHostState() },
         newTabListener = PreviewNewTabListener,
         onReorderTabs = { _, _, _ -> },
@@ -689,7 +689,7 @@ private fun PreviewSingleGroup() {
         groups = groups,
         activeGroupIndex = 0,
         selectedTabId = "1",
-        groupHasPlayingTab = emptyList(),
+        groupHasPlayingTab = listOf(),
         snackbarHostState = remember { SnackbarHostState() },
         newTabListener = PreviewNewTabListener,
         onReorderTabs = { _, _, _ -> },
@@ -740,7 +740,7 @@ private fun PreviewWithSnackbar() {
             onRenameGroup = { _, _ -> },
             onDeleteGroup = {},
             onToggleDefaultGroup = {},
-            groupHasPlayingTab = emptyList(),
+            groupHasPlayingTab = listOf(),
         )
         Snackbar(
             modifier = Modifier
