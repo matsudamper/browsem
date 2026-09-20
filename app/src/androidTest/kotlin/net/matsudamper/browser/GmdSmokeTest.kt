@@ -8,8 +8,8 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performTextReplacement
@@ -201,7 +201,7 @@ class GmdSmokeTest {
         composeRule.onNodeWithTag(UrlTextInputTestTags.UrlBar.testTag).performTextReplacement(token)
         waitForHistorySuggestionsVisible(historyTitle)
 
-        composeRule.onNodeWithText(historyTitle).performClick()
+        composeRule.onAllNodesWithTag(BrowserTabSurfaceTestTags.HistorySuggestionItem.testTag).onFirst().performClick()
 
         composeRule.waitUntil(timeoutMillis = 30_000) {
             val currentUrl = composeRule.currentUrlBarText()
@@ -464,24 +464,30 @@ class GmdSmokeTest {
         observeMillis: Long = 1_500L,
         requireImeWasVisibleBeforeTap: Boolean = false,
     ) {
-        val start = System.currentTimeMillis()
-        val deadline = start + observeMillis
-        val stableWindowStart = start + 700L
+        val stableWindowStart = System.currentTimeMillis() + 700L
         var imeVisibleInStableWindow = false
-        while (System.currentTimeMillis() < deadline) {
-            val focused = isUrlBarFocused()
-            var imeVisible = false
-            composeRule.runOnIdle {
-                val insets = composeRule.activity.window.decorView.rootWindowInsets
-                imeVisible = insets?.isVisible(WindowInsets.Type.ime()) == true
+        var focusWasDropped = false
+        // 条件が true を返すのはフォーカス消失を検知したときだけで、observeMillis の間
+        // 消失が起きなければタイムアウト例外(=観測期間を無事終えた)を成功として扱う。
+        try {
+            composeRule.waitUntil(timeoutMillis = observeMillis) {
+                if (!isUrlBarFocused()) {
+                    focusWasDropped = true
+                    return@waitUntil true
+                }
+                var imeVisible = false
+                composeRule.runOnIdle {
+                    val insets = composeRule.activity.window.decorView.rootWindowInsets
+                    imeVisible = insets?.isVisible(WindowInsets.Type.ime()) == true
+                }
+                if (imeVisible && System.currentTimeMillis() >= stableWindowStart) {
+                    imeVisibleInStableWindow = true
+                }
+                false
             }
-
-            if (imeVisible && System.currentTimeMillis() >= stableWindowStart) {
-                imeVisibleInStableWindow = true
-            }
-            assertTrue("URL bar focus was dropped while observing keyboard state", focused)
-            Thread.sleep(100)
+        } catch (_: androidx.compose.ui.test.ComposeTimeoutException) {
         }
+        assertTrue("URL bar focus was dropped while observing keyboard state", !focusWasDropped)
         if (requireImeWasVisibleBeforeTap) {
             assertTrue(
                 "IME was visible before tapping URL bar but did not stay visible/reopen for URL bar",

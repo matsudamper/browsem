@@ -126,9 +126,8 @@ class DevToolsWebExtension {
         onFocusedInputChanged: (FocusedInputInfo?) -> Unit,
     ) {
         sessionCallbacks[session] = onFocusedInputChanged
-        extension?.also { ext ->
-            attachSessionDelegate(session, ext)
-        }
+        val extension = extension ?: return
+        attachSessionDelegate(session, extension)
     }
 
     fun unregisterSession(session: GeckoSession) {

@@ -755,7 +755,7 @@ internal fun BrowserAppShell(
                         onDispose {
                             val entries = pendingConsumeByWorkerIdEntries
                             if (entries.isNotEmpty()) {
-                                pendingConsumeByWorkerIdEntries = emptyList()
+                                pendingConsumeByWorkerIdEntries = listOf()
                                 entries.forEach { (_, requestId) ->
                                     currentOnOpenDownloadsRequestConsumed?.invoke(requestId)
                                 }
@@ -1176,6 +1176,9 @@ private fun MainBrowserContent(
                                 onBack = {},
                                 onRefresh = {},
                                 onSuperRefresh = {},
+                                isPageLoading = false,
+                                onStopLoading = {},
+                                showTabButton = true,
                                 onTranslatePage = {},
                                 onLongPressHistory = {},
                                 urlInputState = UrlInputState(
@@ -1201,6 +1204,14 @@ private fun MainBrowserContent(
                                 tabCount = tabCount,
                                 onInstallExtensionRequest = onInstallExtensionRequest,
                                 onRequestDownloadNotificationPermission = onRequestDownloadNotificationPermission,
+                                enableTabUi = true,
+                                showInstallExtensionItem = true,
+                                customTabMode = false,
+                                webAppMode = false,
+                                webAppPinnedHost = null,
+                                onWebAppCrossDomainNavigation = null,
+                                onCloseCustomTab = null,
+                                onOpenInBrowser = null,
                                 onOpenSettings = { outerNavActions.add(AppDestination.Settings) },
                                 onOpenDownloads = {
                                     outerNavActions.addIfAbsent(AppDestination.Downloads)

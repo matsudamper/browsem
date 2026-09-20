@@ -199,11 +199,11 @@ private data class ViewModelState(
     val urlBarSuggestions: UrlBarSuggestionsUiState = UrlBarSuggestionsUiState(),
     val tabGroups: Loadable<List<TabGroupData>> = Loadable.Loading,
     val tabGroupAssignments: Loadable<List<TabGroupAssignment>> = Loadable.Loading,
-    val browserTabs: List<BrowserTab> = emptyList(),
-    val orderedBrowserTabs: List<BrowserTab> = emptyList(),
+    val browserTabs: List<BrowserTab> = listOf(),
+    val orderedBrowserTabs: List<BrowserTab> = listOf(),
     val screenTabId: String? = null,
-    val externalTabIds: Set<String> = emptySet(),
-    val externalTabInitialUrls: Map<String, String> = emptyMap(),
+    val externalTabIds: Set<String> = setOf(),
+    val externalTabInitialUrls: Map<String, String> = mapOf(),
 ) {
     fun withResolvedOrderedBrowserTabs(): ViewModelState {
         val orderedBrowserTabs = resolveOrderedBrowserTabs()

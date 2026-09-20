@@ -34,7 +34,7 @@ data class TabsScreenUiState(
             val groups: List<TabGroupData>,
             val activeGroupIndex: Int,
             val selectedTabId: String?,
-            val groupHasPlayingTab: List<Boolean> = emptyList(),
+            val groupHasPlayingTab: List<Boolean> = listOf(),
             val newTabListener: NewTabListener,
         ) : LoadingState {
             @Stable

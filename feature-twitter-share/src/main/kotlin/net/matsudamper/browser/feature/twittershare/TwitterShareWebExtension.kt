@@ -43,9 +43,8 @@ class TwitterShareWebExtension {
 
     fun registerSession(session: GeckoSession, callback: (TwitterShareData) -> Unit) {
         callbacks[session] = callback
-        extension?.also { ext ->
-            attachSessionMessageDelegate(session, ext)
-        }
+        val extension = extension ?: return
+        attachSessionMessageDelegate(session, extension)
     }
 
     fun unregisterSession(session: GeckoSession) {

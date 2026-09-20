@@ -61,7 +61,8 @@ class FormInputAutofillWebExtension {
     fun registerSession(session: GeckoSession, listener: SessionListener) {
         sessionListeners[session] = listener
         attachedSessions.add(session)
-        extension?.also { ext -> attachSessionDelegate(session, ext) }
+        val extension = extension ?: return
+        attachSessionDelegate(session, extension)
     }
 
     fun unregisterSession(session: GeckoSession) {
@@ -198,7 +199,7 @@ class FormInputAutofillWebExtension {
     }
 
     private fun parseFields(array: JSONArray?): List<FormInputFieldMessage> {
-        if (array == null) return emptyList()
+        if (array == null) return listOf()
         val result = mutableListOf<FormInputFieldMessage>()
         for (index in 0 until array.length()) {
             val item = array.optJSONObject(index) ?: continue

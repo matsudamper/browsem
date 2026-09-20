@@ -155,9 +155,11 @@ class WebAppActivity : ComponentActivity() {
                                 onOpenTabs = {},
                                 enableTabUi = false,
                                 showInstallExtensionItem = false,
+                                customTabMode = false,
                                 webAppMode = true,
                                 webAppPinnedHost = webAppPinnedHost,
                                 onWebAppCrossDomainNavigation = ::openInCustomTab,
+                                onCloseCustomTab = null,
                                 onOpenInBrowser = ::openInMainBrowser,
                                 onOpenNewSessionRequest = { uri ->
                                     openWindowOpenRequestInCustomTab(
@@ -170,6 +172,11 @@ class WebAppActivity : ComponentActivity() {
                                 onOpenNewTabRequest = { uri, referrerUrl ->
                                     openNewTabInMainBrowser(uri, referrerUrl)
                                 },
+                                onCloseTab = null,
+                                externalDownloadDialogListener = null,
+                                externalTabInitialUrl = null,
+                                onToolbarHorizontalDrag = {},
+                                onToolbarDragEnd = {},
                                 onHistoryRecord = webAppUiState.callbacks::onHistoryRecord,
                                 onHistoryTitleUpdate = webAppUiState.callbacks::onHistoryTitleUpdate,
                                 urlBarSuggestions = webAppUiState.urlBarSuggestions,

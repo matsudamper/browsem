@@ -219,7 +219,7 @@ internal fun BrowserTabDialogLayer(
     dialogState.pendingAlertPrompt?.let { prompt ->
         AlertDialog(
             onDismissRequest = dialogState::dismissAlertPrompt,
-            text = { Text(prompt.message ?: "") },
+            text = { Text(prompt.message.orEmpty()) },
             confirmButton = {
                 TextButton(onClick = dialogState::dismissAlertPrompt) {
                     Text("OK")
@@ -231,7 +231,7 @@ internal fun BrowserTabDialogLayer(
     dialogState.pendingButtonPrompt?.let { prompt ->
         AlertDialog(
             onDismissRequest = dialogState::dismissButtonPrompt,
-            text = { Text(prompt.message ?: "") },
+            text = { Text(prompt.message.orEmpty()) },
             confirmButton = {
                 TextButton(onClick = { dialogState.confirmButtonPrompt(true) }) {
                     Text("OK")
@@ -246,7 +246,7 @@ internal fun BrowserTabDialogLayer(
     }
 
     dialogState.pendingTextPrompt?.let { prompt ->
-        var textValue by remember(prompt) { mutableStateOf(prompt.defaultValue ?: "") }
+        var textValue by remember(prompt) { mutableStateOf(prompt.defaultValue.orEmpty()) }
         AlertDialog(
             onDismissRequest = dialogState::dismissTextPrompt,
             title = prompt.message?.takeIf { it.isNotEmpty() }?.let { { Text(it) } },
@@ -349,7 +349,7 @@ internal fun BrowserTabDialogLayer(
 
             else -> {
                 // MONTH, WEEK: テキスト入力で対応
-                var dateTimeText by remember(prompt) { mutableStateOf(prompt.defaultValue ?: "") }
+                var dateTimeText by remember(prompt) { mutableStateOf(prompt.defaultValue.orEmpty()) }
                 val (title, hint) = when (prompt.type) {
                     GeckoSession.PromptDelegate.DateTimePrompt.Type.MONTH -> "年月を選択" to "YYYY-MM"
                     GeckoSession.PromptDelegate.DateTimePrompt.Type.WEEK -> "週を選択" to "YYYY-Www"

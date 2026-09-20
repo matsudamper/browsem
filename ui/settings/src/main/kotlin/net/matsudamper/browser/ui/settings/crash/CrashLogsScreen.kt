@@ -197,7 +197,7 @@ private fun PreviewCrashLogsScreenEmpty() {
         uiState = CrashLogsScreenUiState(
             callbacks = previewCallbacks,
             isLoading = false,
-            entries = emptyList(),
+            entries = listOf(),
             showDeleteAllDialog = false,
         ),
         onBack = {},

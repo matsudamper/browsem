@@ -44,9 +44,8 @@ class ThemeColorWebExtension {
 
     fun registerSession(session: GeckoSession, callback: (Color?, String) -> Unit) {
         callbacks[session] = callback
-        extension?.also { ext ->
-            attachSessionMessageDelegate(session, ext)
-        }
+        val extension = extension ?: return
+        attachSessionMessageDelegate(session, extension)
     }
 
     fun isInstalled(): Boolean = extension != null

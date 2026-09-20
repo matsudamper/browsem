@@ -40,7 +40,7 @@ internal class CrashLogsScreenViewModel(
         CrashLogsScreenUiState(
             callbacks = callbacks,
             isLoading = true,
-            entries = emptyList(),
+            entries = listOf(),
             showDeleteAllDialog = false,
         ),
     ).also { uiStateFlow ->
@@ -85,7 +85,7 @@ internal class CrashLogsScreenViewModel(
 
     data class ViewModelState(
         val isLoading: Boolean = true,
-        val entries: List<CrashLogListItem> = emptyList(),
+        val entries: List<CrashLogListItem> = listOf(),
         val showDeleteAllDialog: Boolean = false,
     )
 }

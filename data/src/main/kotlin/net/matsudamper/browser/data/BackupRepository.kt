@@ -346,7 +346,7 @@ class BackupRepository(private val context: Context) {
      * GeckoView プロファイル (`files/mozilla/`) 配下のバックアップ対象ファイルを列挙する。
      */
     private fun listMozillaProfileFiles(): List<File> {
-        val root = mozillaDir().takeIf { it.exists() && it.isDirectory } ?: return emptyList()
+        val root = mozillaDir().takeIf { it.exists() && it.isDirectory } ?: return listOf()
         val rootPath = root.absolutePath
         return root.walkTopDown()
             .onEnter { dir -> !isMozillaPathExcluded(rootPath, dir) }

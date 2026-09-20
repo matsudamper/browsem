@@ -42,7 +42,7 @@ internal class SiteFormInputPathsScreenViewModel(
         SiteFormInputPathsScreenUiState(
             callbacks = callbacks,
             displayOrigin = displayFormInputOrigin(origin),
-            paths = emptyList(),
+            paths = listOf(),
         ),
     )
 
