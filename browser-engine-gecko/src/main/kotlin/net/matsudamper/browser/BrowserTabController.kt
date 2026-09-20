@@ -416,6 +416,9 @@ class BrowserTabController(
     }
 
     fun close() {
+        // セッション破棄中の delegate callback が、作り直された Controller の復元結果を
+        // 上書きしないよう、新しい保存は受け付けない
+        persistenceCoordinator.stopAcceptingNewPersistence()
         confirmClosedTab()
         tabRegistry.values().forEach { tab ->
             disposeTab(tab, "BrowserTabController が終了しました")

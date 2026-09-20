@@ -17,6 +17,18 @@ internal class BrowserTabPersistenceCoordinator(
     // CustomTabs等のTabに依存しない場合はTabの保存を利用しない
     private val tabRepository = tabRepository.takeUnless { isSinglePage }
 
+    @Volatile
+    private var acceptsNewPersistence = true
+
+    /**
+     * Controller の終了後に新しい保存を受け付けなくする。
+     * 終了処理中の delegate callback による保存が、作り直された Controller の復元結果を
+     * 後から上書きしないようにする。キュー済みの保存はそのまま流し切る。
+     */
+    fun stopAcceptingNewPersistence() {
+        acceptsNewPersistence = false
+    }
+
     /**
      * 保留中の保存と交差させたくない処理を直列化する。復元の読み出しに使う。
      */
@@ -61,6 +73,7 @@ internal class BrowserTabPersistenceCoordinator(
         selected: Boolean,
     ) {
         tabRepository ?: return
+        if (!acceptsNewPersistence) return
         val persistedTab = tab.toPersistedTabState()
         withContext(Dispatchers.IO) {
             persistenceMutex.withLock {
@@ -111,6 +124,7 @@ internal class BrowserTabPersistenceCoordinator(
 
     fun persistPreviewBitmap(tabId: String, previewBitmap: ByteArray?) {
         tabRepository ?: return
+        if (!acceptsNewPersistence) return
         persistenceScope.launch(Dispatchers.IO) {
             if (previewBitmap != null && previewBitmap.isNotEmpty()) {
                 runCatching {
@@ -124,6 +138,7 @@ internal class BrowserTabPersistenceCoordinator(
 
     private fun enqueue(action: suspend (TabRepository) -> Unit) {
         tabRepository ?: return
+        if (!acceptsNewPersistence) return
         persistenceScope.launch(Dispatchers.IO) {
             persistenceMutex.withLock {
                 runCatching {
