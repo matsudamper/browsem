@@ -299,10 +299,8 @@ class GeminiNanoTranslator(
             },
             onStopped = { releaseDynamicTranslation() },
         )
-        if (!activated) {
-            releaseDynamicTranslation()
-            return false
-        }
+        // 起動に失敗した場合は activateTranslation が onStopped を呼んでおり、解放は済んでいる
+        if (!activated) return false
         if (remainingSegments.isNotEmpty()) {
             queue.trySend(remainingSegments)
         }

@@ -350,10 +350,8 @@ class LocalAITranslator(
             },
             onStopped = { releaseDynamicTranslation() },
         )
-        if (!activated) {
-            releaseDynamicTranslation()
-            return false
-        }
+        // 起動に失敗した場合は activateTranslation が onStopped を呼んでおり、解放は済んでいる
+        if (!activated) return false
         if (initialSegments.isNotEmpty()) {
             queue.trySend(initialSegments)
         }
