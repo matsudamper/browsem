@@ -40,6 +40,7 @@ data class BrowserScreenUiState(
         }
     }
 
+    @Stable
     interface Callbacks {
         suspend fun onHistoryRecord(url: String, title: String): Long
         suspend fun onHistoryTitleUpdate(id: Long, title: String)
