@@ -68,7 +68,7 @@ class MediaNotificationSmokeTest {
             latch.countDown()
         }
         latch.await(5, TimeUnit.SECONDS)
-        UiDevice.getInstance(InstrumentationRegistry.getInstrumentation()).pressBack()
+        closeNotificationShade()
     }
 
     /**
@@ -105,7 +105,7 @@ class MediaNotificationSmokeTest {
                 found,
             )
         } finally {
-            uiDevice.pressBack()
+            closeNotificationShade()
         }
     }
 
@@ -165,6 +165,16 @@ class MediaNotificationSmokeTest {
             composeRule.onNodeWithTag(AutoplayPermissionDialogTestTags.Deny.testTag).performClick()
             composeRule.waitForIdle()
         }.onFailure { Log.d(TAG, "ダイアログ却下に失敗: ${it.message}") }
+    }
+
+    /**
+     * openNotification() で開いた通知シェードを閉じる。
+     * 物理戻るキーは使わない方針だが onBackPressedDispatcher はアプリ内にしか届かず
+     * システム UI のシェードは閉じられないため、statusbar サービスへ直接 collapse を指示する。
+     */
+    private fun closeNotificationShade() {
+        UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
+            .executeShellCommand("cmd statusbar collapse")
     }
 
     private fun openMediaPage(mediaPageUri: String) {

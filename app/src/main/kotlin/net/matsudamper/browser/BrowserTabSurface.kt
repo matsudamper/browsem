@@ -387,7 +387,9 @@ internal fun UrlSuggestionList(
                             )
                         }
                     },
-                    modifier = Modifier.clickable { onHistorySuggestionClick(entry) },
+                    modifier = Modifier
+                        .testTag(BrowserTabSurfaceTestTags.HistorySuggestionItem.testTag)
+                        .clickable { onHistorySuggestionClick(entry) },
                 )
             }
         }
@@ -720,5 +722,8 @@ sealed interface BrowserTabSurfaceTestTags {
     }
     object RetryButton : BrowserTabSurfaceTestTags {
         override val id = "retry_button"
+    }
+    object HistorySuggestionItem : BrowserTabSurfaceTestTags {
+        override val id = "history_suggestion_item"
     }
 }

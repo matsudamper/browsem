@@ -69,6 +69,9 @@ sealed interface SettingsScreenTestTags {
     data object Root : SettingsScreenTestTags {
         override val id = "root"
     }
+    data object OpenAddressesButton : SettingsScreenTestTags {
+        override val id = "open_addresses_button"
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -508,7 +511,9 @@ fun SettingsScreen(
             SettingSection(title = "住所") {
                 TextButton(
                     onClick = onOpenAddresses,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag(SettingsScreenTestTags.OpenAddressesButton.testTag),
                 ) {
                     Text("保存された住所を管理")
                 }
