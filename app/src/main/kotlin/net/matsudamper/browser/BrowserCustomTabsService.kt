@@ -4,15 +4,18 @@ import android.net.Uri
 import android.os.Bundle
 import androidx.browser.customtabs.CustomTabsService
 import androidx.browser.customtabs.CustomTabsSessionToken
+import org.koin.android.ext.android.inject
 
 class BrowserCustomTabsService : CustomTabsService() {
+    private val warmupStore: CustomTabsWarmupStore by inject()
+
     override fun warmup(flags: Long): Boolean {
-        CustomTabsWarmupStore.onWarmup()
+        warmupStore.onWarmup()
         return true
     }
 
     override fun newSession(sessionToken: CustomTabsSessionToken): Boolean {
-        CustomTabsWarmupStore.onNewSession(sessionToken)
+        warmupStore.onNewSession(sessionToken)
         return true
     }
 
@@ -22,7 +25,7 @@ class BrowserCustomTabsService : CustomTabsService() {
         extras: Bundle?,
         otherLikelyBundles: List<Bundle>?,
     ): Boolean {
-        CustomTabsWarmupStore.onMayLaunchUrl(
+        warmupStore.onMayLaunchUrl(
             token = sessionToken,
             url = url,
         )
@@ -59,7 +62,7 @@ class BrowserCustomTabsService : CustomTabsService() {
     ): Boolean = false
 
     override fun cleanUpSession(sessionToken: CustomTabsSessionToken): Boolean {
-        CustomTabsWarmupStore.onSessionCleanup(sessionToken)
+        warmupStore.onSessionCleanup(sessionToken)
         return super.cleanUpSession(sessionToken)
     }
 }

@@ -17,6 +17,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.koin.core.context.GlobalContext
 
 @RunWith(AndroidJUnit4::class)
 class MainActivityCustomTabLaunchTest {
@@ -74,14 +75,15 @@ class MainActivityCustomTabLaunchTest {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
         val monitor = instrumentation.addMonitor(CustomTabActivity::class.java.name, null, false)
-        CustomTabsWarmupStore.resetForTesting()
+        val warmupStore = GlobalContext.get().get<CustomTabsWarmupStore>()
+        warmupStore.resetForTesting()
 
         try {
             val sessionToken = CustomTabsSessionToken.createMockSessionTokenForTesting()
             val preloadUri = Uri.parse("about:blank#customtabs-preload")
 
-            CustomTabsWarmupStore.onNewSession(sessionToken)
-            CustomTabsWarmupStore.onMayLaunchUrl(
+            warmupStore.onNewSession(sessionToken)
+            warmupStore.onMayLaunchUrl(
                 token = sessionToken,
                 url = preloadUri,
             )
@@ -91,7 +93,7 @@ class MainActivityCustomTabLaunchTest {
             assertTrue(
                 "onMayLaunchUrl 後に準備済みセッションが存在しません",
                 waitUntil(timeoutMillis = 10_000) {
-                    CustomTabsWarmupStore.hasPreparedSessionForTesting(
+                    warmupStore.hasPreparedSessionForTesting(
                         sessionToken,
                         preloadUri.toString(),
                     )
@@ -117,7 +119,7 @@ class MainActivityCustomTabLaunchTest {
                     assertTrue(
                         "準備済みセッションが所定時間内に消費されていません",
                         waitUntil(timeoutMillis = 10_000) {
-                            !CustomTabsWarmupStore.hasPreparedSessionForTesting(
+                            !warmupStore.hasPreparedSessionForTesting(
                                 sessionToken,
                                 preloadUri.toString(),
                             )
@@ -128,7 +130,7 @@ class MainActivityCustomTabLaunchTest {
                     // ここで null になるのは CustomTabActivity が消費したことを意味する。
                     assertNull(
                         "事前ロード済みセッションが CustomTabActivity に引き継がれていません",
-                        CustomTabsWarmupStore.consumePreparedSession(sessionToken, preloadUri.toString()),
+                        warmupStore.consumePreparedSession(sessionToken, preloadUri.toString()),
                     )
                 } finally {
                     launched?.finish()
@@ -136,7 +138,7 @@ class MainActivityCustomTabLaunchTest {
             }
         } finally {
             instrumentation.removeMonitor(monitor)
-            CustomTabsWarmupStore.resetForTesting()
+            warmupStore.resetForTesting()
         }
     }
 
