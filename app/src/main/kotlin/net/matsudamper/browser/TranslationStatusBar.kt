@@ -1,7 +1,6 @@
 package net.matsudamper.browser
 
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -21,7 +20,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -230,7 +228,7 @@ internal fun translationProgressLabel(
 private fun LanguageDropdownButton(
     languageTag: String?,
     options: List<String>?,
-    color: Color,
+    color: androidx.compose.ui.graphics.Color,
     onSelected: (String) -> Unit,
 ) {
     val displayName = languageDisplayName(languageTag)
@@ -246,7 +244,7 @@ private fun LanguageDropdownButton(
     var expanded by remember { mutableStateOf(false) }
     TextButton(
         onClick = { expanded = true },
-        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 4.dp, vertical = 0.dp),
     ) {
         Text(
             text = displayName,

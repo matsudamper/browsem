@@ -39,7 +39,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -59,7 +58,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import kotlin.math.abs
 import net.matsudamper.browser.data.ThemeMode
-import net.matsudamper.browser.data.history.HistoryEntry
 import net.matsudamper.browser.ui.browser.UrlBarSuggestionsUiState
 import net.matsudamper.browser.ui.common.BrowserTheme
 import org.mozilla.geckoview.GeckoResult
@@ -268,7 +266,7 @@ internal fun BrowserContentHost(
 internal fun BrowserTabOverlayLayer(
     state: BrowserTabScreenState,
     urlBarSuggestions: UrlBarSuggestionsUiState,
-    onHistorySuggestionClick: (HistoryEntry) -> Unit,
+    onHistorySuggestionClick: (net.matsudamper.browser.data.history.HistoryEntry) -> Unit,
     onWebSuggestionClick: (String) -> Unit,
     clipboardUrl: String?,
     onClipboardUrlClick: (String) -> Unit,
@@ -324,10 +322,10 @@ internal fun BrowserTabOverlayLayer(
 @Composable
 internal fun UrlSuggestionList(
     currentPageUrl: String,
-    historySuggestions: List<HistoryEntry>,
+    historySuggestions: List<net.matsudamper.browser.data.history.HistoryEntry>,
     webSuggestions: List<String>,
     isLoadingWebSuggestions: Boolean,
-    onHistorySuggestionClick: (HistoryEntry) -> Unit,
+    onHistorySuggestionClick: (net.matsudamper.browser.data.history.HistoryEntry) -> Unit,
     onWebSuggestionClick: (String) -> Unit,
     onCopyCurrentUrl: () -> Unit,
     onRestoreCurrentUrl: () -> Unit,
@@ -435,7 +433,7 @@ private fun SuggestionSectionHeader(
     title: String,
     modifier: Modifier = Modifier,
 ) {
-    CompositionLocalProvider(
+    androidx.compose.runtime.CompositionLocalProvider(
         LocalContentColor provides MaterialTheme.colorScheme.onSurfaceVariant,
     ) {
         Text(
@@ -456,7 +454,7 @@ private fun ClipboardUrlListItem(
             Text(text = "コピーしたリンク")
         },
         supportingContent = {
-            CompositionLocalProvider(
+            androidx.compose.runtime.CompositionLocalProvider(
                 LocalContentColor provides MaterialTheme.colorScheme.onSurfaceVariant,
             ) {
                 Text(
@@ -490,7 +488,7 @@ private fun CurrentPageUrlListItem(
                 text = "今のURL",
                 style = MaterialTheme.typography.bodyLarge,
             )
-            CompositionLocalProvider(
+            androidx.compose.runtime.CompositionLocalProvider(
                 LocalContentColor provides MaterialTheme.colorScheme.onSurfaceVariant,
             ) {
                 Text(
@@ -619,7 +617,7 @@ private fun PreviewUrlSuggestionListDark() {
 private const val PREVIEW_SUGGESTION_CURRENT_PAGE_URL = "https://example.com/very/long/path?query=value"
 private const val PREVIEW_SUGGESTION_CLIPBOARD_URL = "https://clipboard.example.com/copied"
 private val previewSuggestionHistoryEntries = List(4) { index ->
-    HistoryEntry(
+    net.matsudamper.browser.data.history.HistoryEntry(
         id = index.toLong() + 1,
         url = "https://history.example.com/page$index",
         title = "履歴タイトル $index",
@@ -647,7 +645,7 @@ internal fun PageLoadErrorOverlay(
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
             Spacer(modifier = Modifier.height(32.dp))
-            CompositionLocalProvider(
+            androidx.compose.runtime.CompositionLocalProvider(
                 LocalContentColor provides MaterialTheme.colorScheme.onSurfaceVariant,
             ) {
                 Text(
@@ -671,7 +669,7 @@ internal fun PageLoadErrorOverlay(
                     style = MaterialTheme.typography.bodyLarge,
                 )
                 if (pageLoadError.failingUrl.isNotBlank()) {
-                    CompositionLocalProvider(
+                    androidx.compose.runtime.CompositionLocalProvider(
                         LocalContentColor provides MaterialTheme.colorScheme.onSurfaceVariant,
                     ) {
                         Text(

@@ -1,6 +1,5 @@
 package net.matsudamper.browser
 
-import android.content.res.Configuration
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.border
@@ -53,7 +52,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.pointer.PointerInputScope
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.IntrinsicMeasurable
 import androidx.compose.ui.layout.IntrinsicMeasureScope
@@ -80,7 +78,6 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.math.roundToInt
-import net.matsudamper.browser.data.ThemeMode
 import net.matsudamper.browser.resources.R as ResourcesR
 import net.matsudamper.browser.ui.common.BrowserTheme
 import net.matsudamper.browser.ui.common.resolveBrowserToolbarColors
@@ -719,10 +716,10 @@ private fun BrowserToolBarPreviewContent(
 }
 
 @Preview(name = "Light")
-@Preview(name = "Dark", uiMode = Configuration.UI_MODE_NIGHT_YES)
+@Preview(name = "Dark", uiMode = android.content.res.Configuration.UI_MODE_NIGHT_YES)
 @Composable
 private fun PreviewFocusStates() {
-    BrowserTheme(themeMode = ThemeMode.THEME_SYSTEM) {
+    BrowserTheme(themeMode = net.matsudamper.browser.data.ThemeMode.THEME_SYSTEM) {
         Column {
             for (isFocused in listOf(true, false)) {
                 BrowserToolBarPreviewContent(
@@ -743,7 +740,7 @@ private fun PreviewFocusStates() {
 @Preview(name = "TabCountVariants")
 @Composable
 private fun PreviewTabCountVariants() {
-    BrowserTheme(themeMode = ThemeMode.THEME_SYSTEM) {
+    BrowserTheme(themeMode = net.matsudamper.browser.data.ThemeMode.THEME_SYSTEM) {
         Column {
             for (tabCount in listOf(null, 2, 99, 999, 9999, 10000)) {
                 BrowserToolBarPreviewContent(
@@ -764,7 +761,7 @@ private fun PreviewTabCountVariants() {
 @Preview(name = "WideToolbar", widthDp = 600)
 @Composable
 private fun PreviewWideToolbar() {
-    BrowserTheme(themeMode = ThemeMode.THEME_SYSTEM) {
+    BrowserTheme(themeMode = net.matsudamper.browser.data.ThemeMode.THEME_SYSTEM) {
         Column {
             BrowserToolBarPreviewContent(
                 isFocused = false,
@@ -782,7 +779,7 @@ private fun PreviewWideToolbar() {
 @Preview(name = "WideToolbarLoading", widthDp = 600)
 @Composable
 private fun PreviewWideToolbarLoading() {
-    BrowserTheme(themeMode = ThemeMode.THEME_SYSTEM) {
+    BrowserTheme(themeMode = net.matsudamper.browser.data.ThemeMode.THEME_SYSTEM) {
         Column {
             BrowserToolBarPreviewContent(
                 isFocused = false,
@@ -801,10 +798,10 @@ private fun PreviewWideToolbarLoading() {
 // disable アイコンの色がシステムテーマではなくツールバーのコンテンツカラー(メニュー等と同じ色)に
 // 基づいて決まることを確認するプレビュー。戻る=有効・進む=無効で有効/無効のコントラストを見る。
 @Preview(name = "DisabledOnThemeColorLight", widthDp = 600)
-@Preview(name = "DisabledOnThemeColorDark", widthDp = 600, uiMode = Configuration.UI_MODE_NIGHT_YES)
+@Preview(name = "DisabledOnThemeColorDark", widthDp = 600, uiMode = android.content.res.Configuration.UI_MODE_NIGHT_YES)
 @Composable
 private fun PreviewDisabledOnThemeColor() {
-    BrowserTheme(themeMode = ThemeMode.THEME_SYSTEM) {
+    BrowserTheme(themeMode = net.matsudamper.browser.data.ThemeMode.THEME_SYSTEM) {
         Column {
             for (toolbarColor in listOf(Color.Black, Color.White)) {
                 BrowserToolBarPreviewContent(
@@ -822,7 +819,7 @@ private fun PreviewDisabledOnThemeColor() {
     }
 }
 
-private suspend fun PointerInputScope.detectDownSwipe(
+private suspend fun androidx.compose.ui.input.pointer.PointerInputScope.detectDownSwipe(
     density: Density,
     onDownSwipe: () -> Unit,
 ) {

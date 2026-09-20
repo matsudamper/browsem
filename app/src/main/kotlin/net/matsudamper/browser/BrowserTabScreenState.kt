@@ -2,8 +2,6 @@ package net.matsudamper.browser
 
 import android.Manifest
 import android.content.ActivityNotFoundException
-import android.content.ClipData
-import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
@@ -27,8 +25,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import java.io.ByteArrayOutputStream
-import java.net.HttpURLConnection
-import java.net.URI
 import java.net.URL
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CancellationException
@@ -593,8 +589,8 @@ internal class BrowserTabScreenState(
     fun copyFocusedInputId() {
         val id = devToolsFocusedInput?.id?.takeIf { it.isNotBlank() } ?: return
         val clipboard =
-            context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        clipboard.setPrimaryClip(ClipData.newPlainText("input id", id))
+            context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+        clipboard.setPrimaryClip(android.content.ClipData.newPlainText("input id", id))
         Toast.makeText(context, "id をコピーしました", Toast.LENGTH_SHORT).show()
     }
 
@@ -1058,14 +1054,14 @@ internal class BrowserTabScreenState(
      * <origin>/favicon.ico を試みる。失敗した場合はnullのままにする。
      */
     private fun fetchFavicon(pageUrl: String) {
-        val uri = runCatching { URI(pageUrl) }.getOrNull() ?: return
+        val uri = runCatching { java.net.URI(pageUrl) }.getOrNull() ?: return
         val scheme = uri.scheme ?: return
         if (scheme != "http" && scheme != "https") return
         val host = uri.host ?: return
         val faviconUrl = "$scheme://$host/favicon.ico"
         coroutineScope.launch(Dispatchers.IO) {
             val bitmap = runCatching {
-                val connection = URL(faviconUrl).openConnection() as HttpURLConnection
+                val connection = URL(faviconUrl).openConnection() as java.net.HttpURLConnection
                 try {
                     connection.connectTimeout = 5000
                     connection.readTimeout = 5000

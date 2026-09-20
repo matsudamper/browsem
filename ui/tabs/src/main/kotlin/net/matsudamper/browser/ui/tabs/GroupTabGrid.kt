@@ -1,7 +1,6 @@
 package net.matsudamper.browser.ui.tabs
 
 import android.graphics.Bitmap
-import android.os.SystemClock
 import android.util.LruCache
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.Arrangement
@@ -294,7 +293,7 @@ private class DragDropState(
         draggedItemSize = item.size
         currentDragIndex = item.index
         didReorder = false
-        dragStartUptimeMs = SystemClock.uptimeMillis()
+        dragStartUptimeMs = android.os.SystemClock.uptimeMillis()
 
         updateDragCenterInRoot()
     }
@@ -340,7 +339,7 @@ private class DragDropState(
     /** ドラッグ状態をリセットし、終了時点の情報を返す。 */
     fun endDrag(): EndResult? {
         val key = draggedItemKey ?: return null
-        val elapsed = SystemClock.uptimeMillis() - dragStartUptimeMs
+        val elapsed = android.os.SystemClock.uptimeMillis() - dragStartUptimeMs
         val insideGrid = if (gridBoundsInRoot.isEmpty) true else gridBoundsInRoot.contains(dragCenterInRoot)
         val moved = didReorder
         draggedItemKey = null

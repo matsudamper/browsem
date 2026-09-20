@@ -5,7 +5,6 @@ import android.os.Looper
 import android.util.Log
 import androidx.compose.ui.graphics.Color
 import java.util.concurrent.ConcurrentHashMap
-import android.graphics.Color as AndroidColor
 import org.json.JSONObject
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoRuntime
@@ -93,7 +92,7 @@ class ThemeColorWebExtension {
 
         private fun parseColor(colorValue: String): Color? {
             return try {
-                Color(AndroidColor.parseColor(colorValue))
+                Color(android.graphics.Color.parseColor(colorValue))
             } catch (_: IllegalArgumentException) {
                 Log.w(TAG, "色のパース失敗: $colorValue")
                 null
