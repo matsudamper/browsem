@@ -39,6 +39,10 @@ class MediaWebExtension(
         Collections.synchronizedSet(Collections.newSetFromMap(WeakHashMap<GeckoSession, Boolean>()))
     private val sessionTabIds =
         Collections.synchronizedMap(WeakHashMap<GeckoSession, String>())
+    // 破棄済みセッション。デリゲート解除後もキュー済みのコールバックが残るため、
+    // 解放した状態を作り直さないようここで弾く。
+    private val releasedSessions =
+        Collections.synchronizedSet(Collections.newSetFromMap(WeakHashMap<GeckoSession, Boolean>()))
     private val _playingTabIds = MutableStateFlow<Set<String>>(setOf())
     val playingTabIds: StateFlow<Set<String>> = _playingTabIds.asStateFlow()
     private val artworkRequestSerial = AtomicLong(0L)
@@ -74,6 +78,7 @@ class MediaWebExtension(
     }
 
     fun registerSession(session: GeckoSession, tabId: String? = null) {
+        releasedSessions.remove(session)
         if (tabId != null) {
             sessionTabIds[session] = tabId
         }
@@ -100,6 +105,7 @@ class MediaWebExtension(
     fun releaseSession(session: GeckoSession) {
         Log.d(TAG, "releaseSession: session=${session.logKey()}")
         MediaTraceLog.d("WX release session=${session.logKey()}")
+        releasedSessions.add(session)
         sessionStates.remove(session)
         sessionArtworkBitmaps.remove(session)
         sessionArtworkRequestIds.remove(session)
@@ -116,6 +122,7 @@ class MediaWebExtension(
     }
 
     fun onActivated(session: GeckoSession, mediaSession: MediaSession) {
+        if (isReleased(session)) return
         Log.d(TAG, "onActivated: session=${session.logKey()} mediaSession=${mediaSession.logKey()}")
         MediaTraceLog.d("WX activated session=${session.logKey()} mediaSession=${mediaSession.logKey()}")
         cancelPendingDeactivation(session)
@@ -125,12 +132,14 @@ class MediaWebExtension(
     }
 
     fun onDeactivated(session: GeckoSession) {
+        if (isReleased(session)) return
         Log.d(TAG, "onDeactivated: session=${session.logKey()}")
         MediaTraceLog.d("WX deactivated session=${session.logKey()}")
         deactivateSession(session)
     }
 
     fun onFeatures(session: GeckoSession, features: Long) {
+        if (isReleased(session)) return
         Log.d(TAG, "onFeatures: session=${session.logKey()} features=$features")
         cancelPendingDeactivation(session)
         val current = sessionStates[session] ?: SessionPlaybackSnapshot()
@@ -144,6 +153,7 @@ class MediaWebExtension(
     }
 
     fun onMetadata(session: GeckoSession, meta: MediaSession.Metadata) {
+        if (isReleased(session)) return
         Log.d(
             TAG,
             "onMetadata: session=${session.logKey()} title=${meta.title}, artist=${meta.artist}, album=${meta.album}, hasArtwork=${meta.artwork != null}",
@@ -169,7 +179,7 @@ class MediaWebExtension(
         artwork.getBitmap(artworkTargetSizePx).accept(
             { bitmap ->
                 mainHandler.post {
-                    if (!isArtworkRequestCurrent(session, requestId)) {
+                    if (isReleased(session) || !isArtworkRequestCurrent(session, requestId)) {
                         return@post
                     }
                     if (bitmap == null) {
@@ -185,7 +195,7 @@ class MediaWebExtension(
             { error ->
                 Log.w(TAG, "artwork getBitmap failed", error)
                 mainHandler.post {
-                    if (!isArtworkRequestCurrent(session, requestId)) {
+                    if (isReleased(session) || !isArtworkRequestCurrent(session, requestId)) {
                         return@post
                     }
                     sessionArtworkBitmaps.remove(session)
@@ -198,6 +208,7 @@ class MediaWebExtension(
     }
 
     fun onPlay(session: GeckoSession, mediaSession: MediaSession) {
+        if (isReleased(session)) return
         Log.d(TAG, "onPlay fallback: session=${session.logKey()}")
         cancelPendingDeactivation(session)
         bindMediaSessionIfNeeded(session, mediaSession)
@@ -207,6 +218,7 @@ class MediaWebExtension(
     }
 
     fun onPause(session: GeckoSession, mediaSession: MediaSession) {
+        if (isReleased(session)) return
         Log.d(TAG, "onPause fallback: session=${session.logKey()}")
         MediaTraceLog.d("WX pauseFallback session=${session.logKey()}")
         cancelPendingDeactivation(session)
@@ -221,6 +233,7 @@ class MediaWebExtension(
         mediaSession: MediaSession,
         state: MediaSession.PositionState,
     ) {
+        if (isReleased(session)) return
         Log.d(
             TAG,
             "onPositionState fallback: session=${session.logKey()} position=${state.position}, duration=${state.duration}",
@@ -261,8 +274,11 @@ class MediaWebExtension(
         sessionArtworkRequestIds.clear()
         registeredSessions.clear()
         sessionTabIds.clear()
+        releasedSessions.clear()
         _playingTabIds.value = setOf()
     }
+
+    private fun isReleased(session: GeckoSession): Boolean = session in releasedSessions
 
     private fun publishPlayingTabIds() {
         val playing = mutableSetOf<String>()
@@ -300,6 +316,7 @@ class MediaWebExtension(
                         )
                     val snapshot = buildSessionPlaybackSnapshot(previousSnapshot, payload)
                     mainHandler.post {
+                        if (isReleased(session)) return@post
                         Log.d(TAG, "raw snapshot: session=${session.logKey()} payload=$json")
                         val debugReason = json.optString("debugReason", "")
                         if (debugReason != "interval" && debugReason != "event:timeupdate") {
