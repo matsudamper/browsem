@@ -119,7 +119,7 @@ private fun errorResponse(message: String): GeckoResult<Any> {
 
 internal fun JSONObject.toWebShareFilesRequest(): WebShareFilesWebExtension.WebShareFilesRequest? {
     val requestId = optString("requestId", "").trim()
-    if (requestId.isEmpty()) return null
+    if (!WebShareFilesLimits.isValidRequestId(requestId)) return null
     val filesJson = optJSONArray("files") ?: JSONArray()
     if (filesJson.length() == 0 || filesJson.length() > WebShareFilesLimits.MAX_FILES) {
         return null
