@@ -41,6 +41,7 @@ class MediaWebExtension(
         Collections.synchronizedMap(WeakHashMap<GeckoSession, String>())
     private val sessionMediaSessions =
         Collections.synchronizedMap(WeakHashMap<GeckoSession, MediaSession>())
+
     // 破棄済みセッション。デリゲート解除後もキュー済みのコールバックが残るため、
     // 解放した状態を作り直さないようここで弾く。
     private val releasedSessions =
