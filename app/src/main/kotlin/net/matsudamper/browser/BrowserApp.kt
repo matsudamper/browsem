@@ -64,11 +64,11 @@ import net.matsudamper.browser.data.extractSiteHost
 import net.matsudamper.browser.data.forminput.parseFormInputPageKey
 import net.matsudamper.browser.data.history.HistoryRepository
 import net.matsudamper.browser.data.websuggestion.WebSuggestionRepository
-import net.matsudamper.browser.navigation.AppDestination
-import net.matsudamper.browser.navigation.BrowserNavDestination
 import net.matsudamper.browser.navigation.AddressEditNavContent
 import net.matsudamper.browser.navigation.AddressesNavContent
+import net.matsudamper.browser.navigation.AppDestination
 import net.matsudamper.browser.navigation.BackupProgressNavContent
+import net.matsudamper.browser.navigation.BrowserNavDestination
 import net.matsudamper.browser.navigation.CrashLogDetailNavContent
 import net.matsudamper.browser.navigation.CrashLogsNavContent
 import net.matsudamper.browser.navigation.DownloadsNavContent
@@ -322,7 +322,6 @@ internal fun BrowserAppShell(
                         browserSessionLifecycleController = browserSessionLifecycleController,
                     )
                 }
-
 
                 else -> error("Unknown destination: $key")
             }

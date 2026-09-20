@@ -11,6 +11,7 @@ import net.matsudamper.browser.GeckoDownloadManager
 import net.matsudamper.browser.GeckoRuntimeInitializer
 import net.matsudamper.browser.WebAppBrowserViewModel
 import net.matsudamper.browser.WebExtensionActionController
+import net.matsudamper.browser.core.TabStore
 import net.matsudamper.browser.data.BackupRepository
 import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.SiteSettingsRepository
@@ -20,6 +21,7 @@ import net.matsudamper.browser.data.TabRepository
 import net.matsudamper.browser.data.address.AddressRepository
 import net.matsudamper.browser.data.crashlog.CrashLogRepository
 import net.matsudamper.browser.data.download.DownloadRepository
+import net.matsudamper.browser.data.forminput.FormInputOrigin
 import net.matsudamper.browser.data.forminput.FormInputRepository
 import net.matsudamper.browser.data.history.HistoryRepository
 import net.matsudamper.browser.data.websuggestion.HttpWebSuggestionRepository
@@ -39,8 +41,6 @@ import net.matsudamper.browser.feature.twittershare.TwitterShareWebExtension
 import net.matsudamper.browser.feature.viewportscale.ViewportScaleWebExtension
 import net.matsudamper.browser.feature.webauthncompat.WebAuthnCompatWebExtension
 import net.matsudamper.browser.feature.websharefiles.WebShareFilesWebExtension
-import net.matsudamper.browser.core.TabStore
-import net.matsudamper.browser.data.forminput.FormInputOrigin
 import net.matsudamper.browser.screen.addresses.AddressEditScreenViewModel
 import net.matsudamper.browser.screen.addresses.AddressesScreenViewModel
 import net.matsudamper.browser.screen.backup.BackupProgressViewModel
