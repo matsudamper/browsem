@@ -56,6 +56,9 @@ class MainActivity : ComponentActivity() {
     private lateinit var runtime: GeckoRuntime
     private val settingsRepository: SettingsRepository by inject()
     private val applicationScope: CoroutineScope by inject()
+
+    @Volatile
+    private var extensionsGloballyEnabled: Boolean = true
     private val extensionRuntimeCoordinator: ExtensionRuntimeCoordinator by inject()
     private val webExtensionActionController: WebExtensionActionController by inject()
     private val webAuthnCompatWebExtension: WebAuthnCompatWebExtension by inject()
@@ -262,7 +265,18 @@ class MainActivity : ComponentActivity() {
                 geckoInitializationInProgress = false
                 return@launch
             }
+            observeExtensionsGloballyEnabled()
             setUpGeckoRuntimeDelegates()
+        }
+    }
+
+    /** 拡張機能の delegate 登録はコールバック内で同期的に行うため、設定値を先に読んで保持する。 */
+    private suspend fun observeExtensionsGloballyEnabled() {
+        extensionsGloballyEnabled = settingsRepository.settings.first().resolvedExtensionsEnabled()
+        lifecycleScope.launch {
+            settingsRepository.settings.collect { settings ->
+                extensionsGloballyEnabled = settings.resolvedExtensionsEnabled()
+            }
         }
     }
 
@@ -337,18 +351,23 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun onExtensionReady(extension: WebExtension) {
-        lifecycleScope.launch {
-            val globallyEnabled = settingsRepository.settings.first().resolvedExtensionsEnabled()
-            if (globallyEnabled) {
-                setupDelegatesForExtension(extension)
-            } else {
-                ExtensionGlobalController.applyGlobalEnabled(
-                    runtime = runtime,
-                    extensions = listOf(extension),
-                    globallyEnabled = false,
-                )
-            }
+        applyExtensionAvailability(listOf(extension))
+    }
+
+    /**
+     * 拡張機能が利用可能になった時点で delegate を張らないと chrome.tabs.create などのリスナーが
+     * 不在になるため、事前に読んだ設定値を使って同期的に登録する。
+     */
+    private fun applyExtensionAvailability(extensions: List<WebExtension>) {
+        if (extensionsGloballyEnabled) {
+            extensions.forEach { extension -> setupDelegatesForExtension(extension) }
+            return
         }
+        ExtensionGlobalController.applyGlobalEnabled(
+            runtime = runtime,
+            extensions = extensions,
+            globallyEnabled = false,
+        )
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -514,20 +533,8 @@ class MainActivity : ComponentActivity() {
             { extensions ->
                 webExtensionWarmUpInProgress = false
                 webExtensionWarmUpCompleted = true
-                val extensionList = extensions ?: listOf()
-                lifecycleScope.launch {
-                    val globallyEnabled = settingsRepository.settings.first().resolvedExtensionsEnabled()
-                    if (globallyEnabled) {
-                        // 起動時点ですでにインストール済みの拡張機能にも delegate を設定する。
-                        extensionList.forEach { ext -> setupDelegatesForExtension(ext) }
-                    } else {
-                        ExtensionGlobalController.applyGlobalEnabled(
-                            runtime = runtime,
-                            extensions = extensionList,
-                            globallyEnabled = false,
-                        )
-                    }
-                }
+                // 起動時点ですでにインストール済みの拡張機能にも delegate を設定する。
+                applyExtensionAvailability(extensions ?: listOf())
             },
             {
                 webExtensionWarmUpInProgress = false
