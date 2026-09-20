@@ -6,7 +6,7 @@ import net.matsudamper.browser.BrowserTab
 @Stable
 data class BrowserScreenUiState(
     val urlBarSuggestions: UrlBarSuggestionsUiState,
-    val swipePreview: SwipePreviewUiState = SwipePreviewUiState(),
+    val swipePreview: SwipePreviewUiState,
     val groupTabCount: Int?,
     val externalDownloadDialogListener: ExternalDownloadDialogListener?,
     val externalTabInitialUrl: String?,
