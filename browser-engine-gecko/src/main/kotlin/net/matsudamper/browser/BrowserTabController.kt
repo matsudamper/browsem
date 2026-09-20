@@ -179,8 +179,9 @@ class BrowserTabController(
         }
     }
 
-    suspend fun awaitPersistenceIdle() {
-        persistenceCoordinator.awaitIdle()
+    /** 保留中の保存と交差させたくない処理を、保存と同じロックの中で実行する。 */
+    suspend fun <T> withPersistenceLock(block: suspend () -> T): T {
+        return persistenceCoordinator.withPersistenceLock(block)
     }
 
     suspend fun getOrCreateTab(tabId: String, homepageUrl: String): BrowserTab {

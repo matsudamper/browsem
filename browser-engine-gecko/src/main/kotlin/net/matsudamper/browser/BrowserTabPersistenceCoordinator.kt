@@ -17,10 +17,6 @@ internal class BrowserTabPersistenceCoordinator(
     // CustomTabs等のTabに依存しない場合はTabの保存を利用しない
     private val tabRepository = tabRepository.takeUnless { isSinglePage }
 
-    suspend fun awaitIdle() {
-        withPersistenceLock {}
-    }
-
     /**
      * 保留中の保存と交差させたくない処理を直列化する。復元の読み出しに使う。
      */

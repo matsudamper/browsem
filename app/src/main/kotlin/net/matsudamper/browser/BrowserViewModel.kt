@@ -365,8 +365,10 @@ internal class BrowserViewModel(
         externalTabIdsFlow.update { it - cleanup.tabId }
         externalTabInitialUrlsFlow.update { it - cleanup.tabId }
         val job = applicationScope.async(Dispatchers.IO) {
-            browserTabController.awaitPersistenceIdle()
-            tabRepository.closeTab(cleanup.tabId, cleanup.nextSelectedTabId)
+            // 削除と、保留中の保存の待機を同じロックの中で行い、作り直された画面の復元と交差させない
+            browserTabController.withPersistenceLock {
+                tabRepository.closeTab(cleanup.tabId, cleanup.nextSelectedTabId)
+            }
         }
         externalTabFinishCleanupJob = job
         job.await()
