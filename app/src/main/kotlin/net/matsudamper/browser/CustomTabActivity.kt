@@ -79,6 +79,7 @@ class CustomTabActivity : ComponentActivity() {
                     tabRepository = tabRepository,
                     runtime = geckoRuntimeInitializer.requireInitialized(),
                     handoffToken = intent.getStringExtra(WindowOpenHandoffStore.EXTRA_HANDOFF_TOKEN),
+                    mediaWebExtension = mediaWebExtensionInstance,
                 )
             }
         }

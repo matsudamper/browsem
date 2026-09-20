@@ -93,6 +93,28 @@ class MediaWebExtension(
         }
     }
 
+    /**
+     * タブのセッションを破棄するときに呼ぶ。画面離脱と違って再生を継続する相手がいないため、
+     * 再生状態と GeckoView 側 MediaSession への参照を猶予なしで手放す。
+     */
+    fun releaseSession(session: GeckoSession) {
+        Log.d(TAG, "releaseSession: session=${session.logKey()}")
+        MediaTraceLog.d("WX release session=${session.logKey()}")
+        sessionStates.remove(session)
+        sessionArtworkBitmaps.remove(session)
+        sessionArtworkRequestIds.remove(session)
+        registeredSessions.remove(session)
+        sessionTabIds.remove(session)
+        publishPlayingTabIds()
+        if (activeSession !== session) {
+            return
+        }
+        cancelPendingDeactivation(session)
+        activeSession = null
+        MediaSessionBridge.deactivate()
+        MediaPlaybackServiceController.stop(context)
+    }
+
     fun onActivated(session: GeckoSession, mediaSession: MediaSession) {
         Log.d(TAG, "onActivated: session=${session.logKey()} mediaSession=${mediaSession.logKey()}")
         MediaTraceLog.d("WX activated session=${session.logKey()} mediaSession=${mediaSession.logKey()}")

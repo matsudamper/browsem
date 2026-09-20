@@ -85,6 +85,12 @@ class BrowserTabController(
      */
     var onTabListChanged: (() -> Unit)? = null
 
+    /**
+     * タブのセッションを破棄する直前に呼ぶ。セッションに紐づく再生状態など、
+     * 画面離脱では手放せない参照を解放するために使う。
+     */
+    var onTabSessionDisposed: ((GeckoSession) -> Unit)? = null
+
     fun findTab(tabId: String): BrowserTab? = tabRegistry.find(tabId)
 
     /** タブがこのセッション中に [closeTab] で閉じられたかどうかを返す */
@@ -522,11 +528,12 @@ class BrowserTabController(
 
     private fun disposeTab(tab: BrowserTab, reason: String) {
         if (tab.sessionHandedOff) {
-            // セッションは引き渡し先のものなので閉じない。delegate は引き渡し先が張り直しているため、
+            // セッションは引き渡し先のものなので閉じず、破棄として通知もしない。delegate は引き渡し先が張り直しているため、
             // 解除しても影響しない。保留リクエストを残したままにしないよう後始末だけ行う。
             tab.disposeSessionDelegates(CancellationException(reason))
             return
         }
+        onTabSessionDisposed?.invoke(tab.session)
         if (tab.session.isOpen && tab.currentUrl.startsWith("moz-extension://")) {
             // 拡張機能のオプションページを閉じる際は、about:blank へのナビゲーション完了を待ってから
             // セッションを閉じる。これにより pagehide イベントが発火し、
