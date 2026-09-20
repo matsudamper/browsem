@@ -31,12 +31,10 @@ import org.mozilla.geckoview.GeckoSession
 
 /**
  * @param isSinglePage Tabに依存しない。Tabの保存機能が無効化される
+ * @param persistenceScope 保存を流すスコープ。画面が終了した後も保留中の保存を流し切る必要があるため、
+ * [close] で止まる controllerScope ではなくプロセス寿命のスコープを渡す
  */
 @Stable
-/**
- * @param persistenceScope 保存を流すスコープ。画面が終了した後も保留中の保存を流し切る必要があるため、
- * [close] で止まる [controllerScope] ではなくプロセス寿命のスコープを渡す。
- */
 class BrowserTabController(
     private val tabRepository: TabRepository,
     private val tabGroupRepository: TabGroupRepository?,
