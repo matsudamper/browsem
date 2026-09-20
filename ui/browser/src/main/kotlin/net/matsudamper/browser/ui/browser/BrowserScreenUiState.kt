@@ -1,7 +1,6 @@
 package net.matsudamper.browser.ui.browser
 
 import androidx.compose.runtime.Stable
-import net.matsudamper.browser.BrowserTab
 
 @Stable
 data class BrowserScreenUiState(
@@ -31,7 +30,8 @@ data class BrowserScreenUiState(
 
     @Stable
     data class AdjacentTabPreview(
-        val tab: BrowserTab,
+        val tabId: String,
+        val content: TabPreviewContent,
         val listener: Listener,
     ) {
         @Stable
