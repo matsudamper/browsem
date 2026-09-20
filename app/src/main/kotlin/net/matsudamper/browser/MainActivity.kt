@@ -34,6 +34,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import java.util.concurrent.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.receiveAsFlow
@@ -55,6 +56,7 @@ class MainActivity : ComponentActivity() {
     private val geckoRuntimeInitializer: GeckoRuntimeInitializer by inject()
     private lateinit var runtime: GeckoRuntime
     private val settingsRepository: SettingsRepository by inject()
+    private val applicationScope: CoroutineScope by inject()
     private val extensionRuntimeCoordinator: ExtensionRuntimeCoordinator by inject()
     private val webExtensionActionController: WebExtensionActionController by inject()
     private val webAuthnCompatWebExtension: WebAuthnCompatWebExtension by inject()
@@ -465,12 +467,13 @@ class MainActivity : ComponentActivity() {
     override fun onDestroy() {
         unregisterSystemNavigationObserverIfNeeded()
         if (hostsBrowserContent && isFinishing && geckoRuntimeInitializer.isInitialized) {
-            runCatching {
-                runBlocking {
+            // メインスレッドを塞がないよう、Activity より長く生きるスコープで待つ
+            applicationScope.launch {
+                runCatching {
                     browserViewModel.cleanupSelectedExternalTabOnActivityFinishIfNeeded()
+                }.onFailure { error ->
+                    Log.e("MainActivity", "外部タブの終了クリーンアップに失敗", error)
                 }
-            }.onFailure { error ->
-                Log.e("MainActivity", "外部タブの終了クリーンアップに失敗", error)
             }
         }
         if (::extensionInstaller.isInitialized) {
