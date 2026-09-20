@@ -5,8 +5,8 @@ GeckoView ベースの Android ブラウザ。Kotlin / Jetpack Compose / Materia
 
 ## アーキテクチャ
 - OneShotイベントはChannelを使ったevent
-- データフロー: Proto → DataStore/Room → Repository → ViewModel(ViewModelStateFlow) → UiState → Compose
-- GeckoRuntimeはプロセスに1つ。`GeckoRuntime.getDefault(context)` で取得し ViewModel・Controller 経由で配布
+- データフロー: Proto → DataStore/Room → Repository → ViewModel(`MutableStateFlow`) → UiState → Compose
+- GeckoRuntimeはプロセスに1つ。`GeckoRuntimeInitializer.initialize()` が生成し、Koin の `single<GeckoRuntime>` として ViewModel・Controller 経由で配布
 
 ## GeckoView 調査
 - Bugzilla: https://bugzilla.mozilla.org/
