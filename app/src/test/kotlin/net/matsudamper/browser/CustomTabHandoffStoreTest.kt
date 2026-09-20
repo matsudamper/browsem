@@ -27,7 +27,7 @@ class CustomTabHandoffStoreTest {
         val session = mockk<GeckoSession>(relaxed = true)
         every { session.isOpen } returns true
 
-        val token = CustomTabHandoffStore.store(session = session, sessionState = "state-A")
+        val token = CustomTabHandoffStore.store(session = session, sessionState = "state-A", onDiscard = {})
         val handoff = CustomTabHandoffStore.consume(token)
 
         assertNotNull(handoff)
@@ -39,7 +39,7 @@ class CustomTabHandoffStoreTest {
     fun `取り出したトークンは再利用できない`() {
         val session = mockk<GeckoSession>(relaxed = true)
         every { session.isOpen } returns true
-        val token = CustomTabHandoffStore.store(session = session, sessionState = "state-A")
+        val token = CustomTabHandoffStore.store(session = session, sessionState = "state-A", onDiscard = {})
 
         CustomTabHandoffStore.consume(token)
 
@@ -53,8 +53,8 @@ class CustomTabHandoffStoreTest {
         every { first.isOpen } returns true
         every { second.isOpen } returns true
 
-        val firstToken = CustomTabHandoffStore.store(session = first, sessionState = "state-A")
-        val secondToken = CustomTabHandoffStore.store(session = second, sessionState = "state-B")
+        val firstToken = CustomTabHandoffStore.store(session = first, sessionState = "state-A", onDiscard = {})
+        val secondToken = CustomTabHandoffStore.store(session = second, sessionState = "state-B", onDiscard = {})
 
         assertNotEquals(firstToken, secondToken)
         assertSame(second, CustomTabHandoffStore.consume(secondToken)?.session)
@@ -62,7 +62,29 @@ class CustomTabHandoffStoreTest {
     }
 
     @Test
+    fun `上限超過で破棄されたセッションは onDiscard を受け取る`() {
+        val discarded = mutableListOf<GeckoSession>()
+        val sessions = List(MAX_ENTRIES + 1) { index ->
+            mockk<GeckoSession>(relaxed = true).also { session ->
+                every { session.isOpen } returns true
+                CustomTabHandoffStore.store(
+                    session = session,
+                    sessionState = "state-$index",
+                    onDiscard = { discarded += it },
+                )
+            }
+        }
+
+        assertEquals(listOf(sessions.first()), discarded)
+    }
+
+    @Test
     fun `未知のトークンは null`() {
         assertNull(CustomTabHandoffStore.consume("does-not-exist"))
+    }
+
+    private companion object {
+        // CustomTabHandoffStore.MAX_ENTRIES と同じ値
+        private const val MAX_ENTRIES = 8
     }
 }

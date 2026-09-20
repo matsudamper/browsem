@@ -38,6 +38,7 @@ object CustomTabHandoffStore {
         val session: GeckoSession,
         val sessionState: String,
         val createdAt: Long,
+        val onDiscard: (GeckoSession) -> Unit,
     )
 
     class Handoff internal constructor(
@@ -46,8 +47,17 @@ object CustomTabHandoffStore {
         val sessionState: String,
     )
 
-    /** 引き継ぐセッションを登録し、Intent に載せるトークンを返す。 */
-    fun store(session: GeckoSession, sessionState: String): String {
+    /**
+     * 引き継ぐセッションを登録し、Intent に載せるトークンを返す。
+     *
+     * [onDiscard] は引き取り手がないまま破棄するときに呼ぶ。引き渡し元で維持していた
+     * 再生状態など、セッションに紐づく参照を手放すために使う。
+     */
+    fun store(
+        session: GeckoSession,
+        sessionState: String,
+        onDiscard: (GeckoSession) -> Unit,
+    ): String {
         val token = UUID.randomUUID().toString()
         val evicted = synchronized(lock) {
             val staleEntries = removeStaleLocked()
@@ -60,6 +70,7 @@ object CustomTabHandoffStore {
                 session = session,
                 sessionState = sessionState,
                 createdAt = System.currentTimeMillis(),
+                onDiscard = onDiscard,
             )
             staleEntries + listOfNotNull(overflowEntry)
         }
@@ -100,6 +111,7 @@ object CustomTabHandoffStore {
 
     /** 引き取り手のないセッションは開いたままにせず閉じる。 */
     private fun discard(entry: Entry) {
+        entry.onDiscard(entry.session)
         if (entry.session.isOpen) {
             entry.session.close()
         }
