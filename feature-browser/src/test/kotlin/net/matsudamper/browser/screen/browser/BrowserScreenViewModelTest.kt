@@ -152,8 +152,8 @@ class BrowserScreenViewModelTest {
 
         val uiState = viewModel.uiState.value
         // "b" の前は "a"、次は "c"（g2 の "d" は含まれない）
-        assertEquals("a", uiState.swipePreview.previousTab?.tabId)
-        assertEquals("c", uiState.swipePreview.nextTab?.tabId)
+        assertEquals("a", uiState.swipePreview.previousTab?.content?.title)
+        assertEquals("c", uiState.swipePreview.nextTab?.content?.title)
     }
 
     @Test
@@ -183,7 +183,7 @@ class BrowserScreenViewModelTest {
         advanceUntilIdle()
 
         val uiState = viewModel.uiState.value
-        assertEquals("a", uiState.swipePreview.previousTab?.tabId)
+        assertEquals("a", uiState.swipePreview.previousTab?.content?.title)
         // "c" は g2 に属するため nextTab に含まれない
         assertNull(uiState.swipePreview.nextTab)
     }
@@ -217,7 +217,7 @@ class BrowserScreenViewModelTest {
         val uiState = viewModel.uiState.value
         // "a" は g1 に属するため previousTab に含まれない
         assertNull(uiState.swipePreview.previousTab)
-        assertEquals("c", uiState.swipePreview.nextTab?.tabId)
+        assertEquals("c", uiState.swipePreview.nextTab?.content?.title)
     }
 
     @Test
@@ -323,7 +323,7 @@ class BrowserScreenViewModelTest {
         advanceUntilIdle()
 
         // 初期状態: a の次は b
-        assertEquals("b", viewModel.uiState.value.swipePreview.nextTab?.tabId)
+        assertEquals("b", viewModel.uiState.value.swipePreview.nextTab?.content?.title)
 
         // タブ c を追加し、グループに割り当て
         val tabC = createTab("c")
@@ -367,7 +367,7 @@ class BrowserScreenViewModelTest {
         val viewModel = buildViewModel(browserTabsFlow, repo, "a")
         advanceUntilIdle()
 
-        assertEquals("b", viewModel.uiState.value.swipePreview.nextTab?.tabId)
+        assertEquals("b", viewModel.uiState.value.swipePreview.nextTab?.content?.title)
         assertEquals(3, viewModel.uiState.value.groupTabCount)
 
         // b, c を g2 に移動

@@ -30,7 +30,6 @@ data class BrowserScreenUiState(
 
     @Stable
     data class AdjacentTabPreview(
-        val tabId: String,
         val content: TabPreviewContent,
         val listener: Listener,
     ) {

@@ -86,7 +86,7 @@ class BrowserScreenViewModel(
                         if (
                             previousTab != null &&
                             selectedTab?.openerTabId != null &&
-                            previousTab.tabId == selectedTab.openerTabId
+                            adjacentTabs.previousTab.tabId == selectedTab.openerTabId
                         ) {
                             object : BrowserScreenUiState.SwipePreviewUiState.BackToOpenerListener {
                                 override fun onBackToOpener() {
@@ -167,7 +167,6 @@ class BrowserScreenViewModel(
     private fun BrowserTab.toAdjacentTabPreview(): BrowserScreenUiState.AdjacentTabPreview {
         val tab = this
         return BrowserScreenUiState.AdjacentTabPreview(
-            tabId = tab.tabId,
             // プレビュー画像やタイトルは撮影完了後に BrowserTab 側で更新される。
             // 値をコピーすると更新を取りこぼすため、読み出しを委譲する。
             content = object : TabPreviewContent {
