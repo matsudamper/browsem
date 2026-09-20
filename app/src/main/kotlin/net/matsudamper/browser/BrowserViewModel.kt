@@ -82,6 +82,7 @@ internal class BrowserViewModel(
         tabRepository = tabRepository,
         tabGroupRepository = tabGroupRepository,
         isSinglePage = false,
+        persistenceScope = applicationScope,
     )
     val browserSessionLifecycleController = BrowserSessionLifecycleController(runtime)
 

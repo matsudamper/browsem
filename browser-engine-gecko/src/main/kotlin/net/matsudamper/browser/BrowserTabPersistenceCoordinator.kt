@@ -11,7 +11,7 @@ import net.matsudamper.browser.data.TabRepository
 
 internal class BrowserTabPersistenceCoordinator(
     tabRepository: TabRepository,
-    private val controllerScope: CoroutineScope,
+    private val persistenceScope: CoroutineScope,
     private val isSinglePage: Boolean,
 ) {
     // CustomTabs等のTabに依存しない場合はTabの保存を利用しない
@@ -107,7 +107,7 @@ internal class BrowserTabPersistenceCoordinator(
 
     fun persistPreviewBitmap(tabId: String, previewBitmap: ByteArray?) {
         tabRepository ?: return
-        controllerScope.launch(Dispatchers.IO) {
+        persistenceScope.launch(Dispatchers.IO) {
             if (previewBitmap != null && previewBitmap.isNotEmpty()) {
                 runCatching {
                     tabRepository.saveTabThumbnail(tabId, previewBitmap)
@@ -120,7 +120,7 @@ internal class BrowserTabPersistenceCoordinator(
 
     private fun enqueue(action: suspend (TabRepository) -> Unit) {
         tabRepository ?: return
-        controllerScope.launch(Dispatchers.IO) {
+        persistenceScope.launch(Dispatchers.IO) {
             persistenceMutex.withLock {
                 runCatching {
                     action(tabRepository)
