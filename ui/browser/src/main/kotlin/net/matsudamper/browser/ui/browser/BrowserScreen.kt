@@ -215,7 +215,8 @@ private fun TabPreviewPage(
 
         BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
             val previewBitmap = tab.previewBitmap
-            var decodedPreview: Bitmap? by remember { mutableStateOf(null) }
+            // 同じ呼び出し位置のタブが入れ替わったときに、別タブの画像を出さないよう作り直す
+            var decodedPreview: Bitmap? by remember(tab.tabId) { mutableStateOf(null) }
             LaunchedEffect(previewBitmap) {
                 decodedPreview = if (previewBitmap != null && previewBitmap.isNotEmpty()) {
                     withContext(Dispatchers.Default) {
