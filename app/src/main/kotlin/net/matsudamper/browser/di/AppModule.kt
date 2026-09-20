@@ -38,6 +38,7 @@ import net.matsudamper.browser.feature.twittershare.TwitterShareWebExtension
 import net.matsudamper.browser.feature.viewportscale.ViewportScaleWebExtension
 import net.matsudamper.browser.feature.webauthncompat.WebAuthnCompatWebExtension
 import net.matsudamper.browser.feature.websharefiles.WebShareFilesWebExtension
+import net.matsudamper.browser.screen.settings.WebAuthnSettingsUpdateQueue
 import net.matsudamper.browser.translate.PageTranslationWebExtension
 import org.koin.android.ext.koin.androidContext
 import org.koin.androidx.workmanager.dsl.worker
@@ -66,6 +67,7 @@ val appModule = module {
     single { AddressAutofillWebExtension() }
     single { FormInputAutofillWebExtension() }
     single { WebAuthnCompatWebExtension() }
+    single { WebAuthnSettingsUpdateQueue(applicationScope = get()) }
     single { PageTranslationWebExtension(get()) }
     single { AddressAutofillCoordinator(get()) }
     factory { FormInputAutofillCoordinator(get()) }
