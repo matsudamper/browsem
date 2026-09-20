@@ -39,7 +39,6 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.resolvedExtensionsEnabled
 import net.matsudamper.browser.feature.webauthncompat.WebAuthnCompatInstallState
@@ -338,18 +337,18 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun onExtensionReady(extension: WebExtension) {
-        val globallyEnabled = runBlocking {
-            settingsRepository.settings.first().resolvedExtensionsEnabled()
+        lifecycleScope.launch {
+            val globallyEnabled = settingsRepository.settings.first().resolvedExtensionsEnabled()
+            if (globallyEnabled) {
+                setupDelegatesForExtension(extension)
+            } else {
+                ExtensionGlobalController.applyGlobalEnabled(
+                    runtime = runtime,
+                    extensions = listOf(extension),
+                    globallyEnabled = false,
+                )
+            }
         }
-        if (!globallyEnabled) {
-            ExtensionGlobalController.applyGlobalEnabled(
-                runtime = runtime,
-                extensions = listOf(extension),
-                globallyEnabled = false,
-            )
-            return
-        }
-        setupDelegatesForExtension(extension)
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -516,19 +515,19 @@ class MainActivity : ComponentActivity() {
                 webExtensionWarmUpInProgress = false
                 webExtensionWarmUpCompleted = true
                 val extensionList = extensions ?: listOf()
-                val globallyEnabled = runBlocking {
-                    settingsRepository.settings.first().resolvedExtensionsEnabled()
+                lifecycleScope.launch {
+                    val globallyEnabled = settingsRepository.settings.first().resolvedExtensionsEnabled()
+                    if (globallyEnabled) {
+                        // 起動時点ですでにインストール済みの拡張機能にも delegate を設定する。
+                        extensionList.forEach { ext -> setupDelegatesForExtension(ext) }
+                    } else {
+                        ExtensionGlobalController.applyGlobalEnabled(
+                            runtime = runtime,
+                            extensions = extensionList,
+                            globallyEnabled = false,
+                        )
+                    }
                 }
-                if (!globallyEnabled) {
-                    ExtensionGlobalController.applyGlobalEnabled(
-                        runtime = runtime,
-                        extensions = extensionList,
-                        globallyEnabled = false,
-                    )
-                    return@accept
-                }
-                // 起動時点ですでにインストール済みの拡張機能にも delegate を設定する。
-                extensionList.forEach { ext -> setupDelegatesForExtension(ext) }
             },
             {
                 webExtensionWarmUpInProgress = false
