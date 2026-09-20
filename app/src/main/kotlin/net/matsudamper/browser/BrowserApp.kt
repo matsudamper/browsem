@@ -1,20 +1,11 @@
 package net.matsudamper.browser
 
-import android.Manifest
-import android.app.Application
-import android.content.ActivityNotFoundException
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
-import android.net.Uri
-import android.os.Handler
-import android.os.Looper
-import android.os.Process
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.ContentTransform
 import androidx.compose.animation.EnterTransition
@@ -38,17 +29,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntOffset
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
 import androidx.navigation3.runtime.NavEntry
 import androidx.navigation3.runtime.NavKey
@@ -58,7 +43,6 @@ import androidx.navigation3.scene.Scene
 import androidx.navigation3.ui.NavDisplay
 import androidx.navigation3.ui.defaultPopTransitionSpec
 import androidx.navigation3.ui.defaultTransitionSpec
-import androidx.work.WorkManager
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -72,59 +56,40 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
-import androidx.lifecycle.viewmodel.compose.viewModel as composeViewModel
-import mozilla.components.lib.publicsuffixlist.PublicSuffixList
 import net.matsudamper.browser.data.BackupRepository
 import net.matsudamper.browser.data.SettingsRepository
-import net.matsudamper.browser.data.SiteSettingsRepository
 import net.matsudamper.browser.data.TabGroupId
 import net.matsudamper.browser.data.TabGroupRepository
-import net.matsudamper.browser.data.address.AddressRepository
-import net.matsudamper.browser.data.crashlog.CrashLogRepository
 import net.matsudamper.browser.data.extractSiteHost
-import net.matsudamper.browser.data.forminput.FormInputOrigin
-import net.matsudamper.browser.data.forminput.FormInputRepository
 import net.matsudamper.browser.data.forminput.parseFormInputPageKey
 import net.matsudamper.browser.data.history.HistoryRepository
 import net.matsudamper.browser.data.websuggestion.WebSuggestionRepository
 import net.matsudamper.browser.navigation.AppDestination
 import net.matsudamper.browser.navigation.BrowserNavDestination
+import net.matsudamper.browser.navigation.AddressEditNavContent
+import net.matsudamper.browser.navigation.AddressesNavContent
+import net.matsudamper.browser.navigation.BackupProgressNavContent
+import net.matsudamper.browser.navigation.CrashLogDetailNavContent
+import net.matsudamper.browser.navigation.CrashLogsNavContent
+import net.matsudamper.browser.navigation.DownloadsNavContent
+import net.matsudamper.browser.navigation.ExtensionsNavContent
+import net.matsudamper.browser.navigation.HistoryNavContent
 import net.matsudamper.browser.navigation.NavController
-import net.matsudamper.browser.screen.addresses.AddressEditScreenViewModel
-import net.matsudamper.browser.screen.addresses.AddressesScreenViewModel
-import net.matsudamper.browser.screen.backup.BackupProgressViewModel
+import net.matsudamper.browser.navigation.PendingDownloadsOpenRequest
+import net.matsudamper.browser.navigation.SettingsNavContent
+import net.matsudamper.browser.navigation.SiteFormInputFieldNavContent
+import net.matsudamper.browser.navigation.SiteFormInputPathNavContent
+import net.matsudamper.browser.navigation.SiteFormInputPathsNavContent
+import net.matsudamper.browser.navigation.SiteSettingsListNavContent
+import net.matsudamper.browser.navigation.SiteSettingsNavContent
 import net.matsudamper.browser.screen.browser.BrowserScreenViewModel
-import net.matsudamper.browser.screen.crashlog.CrashLogDetailScreenViewModel
-import net.matsudamper.browser.screen.crashlog.CrashLogsScreenViewModel
-import net.matsudamper.browser.screen.downloads.DownloadManagementScreenViewModel
-import net.matsudamper.browser.screen.extensions.ExtensionsScreenViewModel
-import net.matsudamper.browser.screen.history.HistoryScreenViewModel
-import net.matsudamper.browser.screen.settings.SettingsScreenViewModel
-import net.matsudamper.browser.screen.siteforminput.SiteFormInputFieldScreenViewModel
-import net.matsudamper.browser.screen.siteforminput.SiteFormInputPathScreenViewModel
-import net.matsudamper.browser.screen.siteforminput.SiteFormInputPathsScreenViewModel
-import net.matsudamper.browser.screen.sitesettings.SiteSettingsListScreenViewModel
-import net.matsudamper.browser.screen.sitesettings.SiteSettingsScreenViewModel
 import net.matsudamper.browser.screen.tab.TabsScreenViewModel
 import net.matsudamper.browser.ui.browser.BrowserScreen
 import net.matsudamper.browser.ui.common.BrowserTheme
-import net.matsudamper.browser.ui.downloads.DownloadManagementScreen
-import net.matsudamper.browser.ui.extensions.ExtensionsScreen
-import net.matsudamper.browser.ui.history.HistoryScreen
-import net.matsudamper.browser.ui.settings.SettingsScreen
-import net.matsudamper.browser.ui.settings.address.AddressEditScreen
-import net.matsudamper.browser.ui.settings.address.AddressesScreen
-import net.matsudamper.browser.ui.settings.backup.BackupProgressScreen
-import net.matsudamper.browser.ui.settings.backup.BackupProgressUiState
-import net.matsudamper.browser.ui.settings.crash.CrashLogDetailRoute
-import net.matsudamper.browser.ui.settings.crash.CrashLogsRoute
-import net.matsudamper.browser.ui.settings.form.SiteFormInputFieldScreen
-import net.matsudamper.browser.ui.settings.form.SiteFormInputPathScreen
-import net.matsudamper.browser.ui.settings.form.SiteFormInputPathsScreen
-import net.matsudamper.browser.ui.settings.site.SiteSettingsListScreen
-import net.matsudamper.browser.ui.settings.site.SiteSettingsScreen
 import net.matsudamper.browser.ui.tabs.TabsScreen
+import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
+import org.koin.core.parameter.parametersOf
 import org.mozilla.geckoview.GeckoRuntime
 
 @Composable
@@ -240,21 +205,18 @@ internal fun BrowserAppShell(
 ) {
     val outerBackStack = rememberNavBackStack(AppDestination.Root)
     val outerNavActions = remember(outerBackStack) { OuterNavActions(outerBackStack) }
-    val settingsRepository: SettingsRepository = koinInject()
-    val historyRepository: HistoryRepository = koinInject()
-    val scope = rememberCoroutineScope()
-    val context = LocalContext.current
-
-    var pendingOpenDownloadsRequest by rememberSaveable { mutableStateOf(false) }
-    var pendingHighlightWorkerId by rememberSaveable { mutableStateOf<String?>(null) }
-    var pendingOpenDownloadsRequestId by rememberSaveable { mutableStateOf<String?>(null) }
-    var pendingConsumeByWorkerIdEntries by rememberSaveable { mutableStateOf(listOf<Pair<String, String>>()) }
+    val pendingDownloadsOpenRequest = PendingDownloadsOpenRequest(
+        isRequested = rememberSaveable { mutableStateOf(false) },
+        highlightWorkerId = rememberSaveable { mutableStateOf<String?>(null) },
+        requestId = rememberSaveable { mutableStateOf<String?>(null) },
+        consumeByWorkerIdEntries = rememberSaveable { mutableStateOf(listOf<Pair<String, String>>()) },
+    )
     if (openDownloadsFlow != null) {
         LaunchedEffect(openDownloadsFlow) {
             openDownloadsFlow.onEach { request ->
-                pendingHighlightWorkerId = request.workerId
-                pendingOpenDownloadsRequestId = request.requestId
-                pendingOpenDownloadsRequest = true
+                pendingDownloadsOpenRequest.highlightWorkerId.value = request.workerId
+                pendingDownloadsOpenRequest.requestId.value = request.requestId
+                pendingDownloadsOpenRequest.isRequested.value = true
                 val existingIndex = outerBackStack.indexOfLast { it is AppDestination.Downloads }
                 if (existingIndex < 0) {
                     outerBackStack.add(AppDestination.Downloads)
@@ -289,623 +251,78 @@ internal fun BrowserAppShell(
                 }
 
                 AppDestination.Settings -> navEntry(key) {
-                    val lifecycleOwner = LocalLifecycleOwner.current
-                    val settingsViewModel = composeViewModel(initializer = {
-                        SettingsScreenViewModel(settingsRepository)
-                    })
-                    val settingsUiState by settingsViewModel.uiState.collectAsState()
-                    val requestDefaultBrowserLauncher = rememberLauncherForActivityResult(
-                        ActivityResultContracts.StartActivityForResult(),
-                    ) {
-                        settingsViewModel.onDefaultBrowserStatusChecked(
-                            DefaultBrowserChecker.isDefaultBrowser(context),
-                        )
-                    }
-                    DisposableEffect(lifecycleOwner, settingsViewModel) {
-                        val observer = LifecycleEventObserver { _, event ->
-                            if (event == Lifecycle.Event.ON_RESUME) {
-                                settingsViewModel.refreshDefaultBrowserStatus()
-                            }
-                        }
-                        lifecycleOwner.lifecycle.addObserver(observer)
-                        onDispose {
-                            lifecycleOwner.lifecycle.removeObserver(observer)
-                        }
-                    }
-                    LaunchedEffect(settingsViewModel) {
-                        settingsViewModel.eventHandler.receiveAsFlow().collect { handler ->
-                            handler(object : SettingsScreenViewModel.Event {
-                                override fun onOpenMockLocationOnMap() {
-                                    val settingsUiState = settingsViewModel.uiState.value ?: return
-                                    val parts = settingsUiState.mockLocationInput.split(",")
-                                    if (parts.size != 2) return
-                                    val lat = parts[0].trim().toDoubleOrNull() ?: return
-                                    val lng = parts[1].trim().toDoubleOrNull() ?: return
-                                    val intent = Intent(
-                                        Intent.ACTION_VIEW,
-                                        Uri.parse("geo:$lat,$lng?q=$lat,$lng"),
-                                    )
-                                    try {
-                                        context.startActivity(intent)
-                                    } catch (_: ActivityNotFoundException) {
-                                    }
-                                }
-
-                                override fun onNavigateToBackupProgress(isImport: Boolean) {
-                                    outerBackStack.add(AppDestination.BackupProgress(isImport))
-                                }
-
-                                override fun onRestartProcess() {
-                                    Handler(Looper.getMainLooper())
-                                        .postDelayed({
-                                            Process.killProcess(Process.myPid())
-                                        }, 300)
-                                }
-
-                                override fun onOpenDefaultBrowserSettings() {
-                                    val intent = DefaultBrowserChecker.createRequestDefaultBrowserIntent(context)
-                                        ?: return
-                                    requestDefaultBrowserLauncher.launch(intent)
-                                }
-
-                                override fun onCheckDefaultBrowserStatus() {
-                                    settingsViewModel.onDefaultBrowserStatusChecked(
-                                        DefaultBrowserChecker.isDefaultBrowser(context),
-                                    )
-                                }
-                            })
-                        }
-                    }
-                    settingsUiState?.let { uiState ->
-                        SettingsScreen(
-                            uiState = uiState,
-                            onOpenExtensions = { outerBackStack.add(AppDestination.Extensions) },
-                            onOpenHistory = { outerBackStack.add(AppDestination.History) },
-                            onOpenAddresses = { outerBackStack.add(AppDestination.Addresses) },
-                            onOpenSiteSettings = { outerBackStack.add(AppDestination.SiteSettingsList) },
-                            onOpenCrashLogs = { outerBackStack.add(AppDestination.CrashLogs) },
-                            onOpenReleases = {
-                                context.startActivity(
-                                    Intent(
-                                        Intent.ACTION_VIEW,
-                                        Uri.parse(GITHUB_RELEASES_URL),
-                                        context,
-                                        CustomTabActivity::class.java,
-                                    ),
-                                )
-                            },
-                            onBack = { outerBackStack.removeLastOrNull() },
-                        )
-                    }
+                    SettingsNavContent(navActions = outerNavActions)
                 }
 
                 AppDestination.SiteSettingsList -> navEntry(key) {
-                    val siteSettingsRepository: SiteSettingsRepository = koinInject()
-                    val siteSettingsListViewModel = composeViewModel(initializer = {
-                        SiteSettingsListScreenViewModel(siteSettingsRepository)
-                    })
-                    val siteSettingsListUiState by siteSettingsListViewModel.uiState.collectAsState()
-                    LaunchedEffect(siteSettingsListViewModel) {
-                        siteSettingsListViewModel.eventHandler.receiveAsFlow().collect { handler ->
-                            handler(object : SiteSettingsListScreenViewModel.Event {
-                                override fun navigateToSiteSettings(host: String) {
-                                    outerBackStack.add(AppDestination.SiteSettings(host = host))
-                                }
-                            })
-                        }
-                    }
-                    SiteSettingsListScreen(
-                        uiState = siteSettingsListUiState,
-                        onBack = { outerBackStack.removeLastOrNull() },
-                    )
+                    SiteSettingsListNavContent(navActions = outerNavActions)
                 }
 
                 is AppDestination.SiteSettings -> navEntry(key) {
-                    val siteSettingsRepository: SiteSettingsRepository = koinInject()
-                    val formInputRepository: FormInputRepository = koinInject()
-                    val geckoRuntime: GeckoRuntime = koinInject()
-                    val publicSuffixList: PublicSuffixList = koinInject()
-                    val formInputOrigin = FormInputOrigin(
-                        scheme = key.scheme,
-                        host = key.host,
-                        port = key.port,
-                    )
-                    val siteSettingsViewModel = composeViewModel(initializer = {
-                        SiteSettingsScreenViewModel(
-                            host = key.host,
-                            formInputOrigin = formInputOrigin,
-                            siteSettingsRepository = siteSettingsRepository,
-                            formInputRepository = formInputRepository,
-                            geckoRuntime = geckoRuntime,
-                            publicSuffixList = publicSuffixList,
-                            securityInfo = key.tabId
-                                ?.let { browserTabController.findTab(it) }
-                                ?.securityInfo,
-                        )
-                    })
-                    val locationPermissionLauncher = rememberLauncherForActivityResult(
-                        ActivityResultContracts.RequestMultiplePermissions(),
-                    ) { results ->
-                        siteSettingsViewModel.onLocationPermissionResult(results.values.any { it })
-                    }
-                    LaunchedEffect(siteSettingsViewModel) {
-                        siteSettingsViewModel.eventHandler.receiveAsFlow().collect { handler ->
-                            handler(object : SiteSettingsScreenViewModel.Event {
-                                override fun onRequestLocationPermission() {
-                                    locationPermissionLauncher.launch(
-                                        arrayOf(
-                                            Manifest.permission.ACCESS_FINE_LOCATION,
-                                            Manifest.permission.ACCESS_COARSE_LOCATION,
-                                        ),
-                                    )
-                                }
-
-                                override fun navigateToSavedFormInputs() {
-                                    outerBackStack.add(
-                                        AppDestination.SiteFormInputPaths(
-                                            scheme = formInputOrigin.scheme,
-                                            host = formInputOrigin.host,
-                                            port = formInputOrigin.port,
-                                        ),
-                                    )
-                                }
-                            })
-                        }
-                    }
-                    val siteSettingsUiState by siteSettingsViewModel.uiState.collectAsState()
-                    SiteSettingsScreen(
-                        uiState = siteSettingsUiState,
-                        onBack = { outerBackStack.removeLastOrNull() },
+                    SiteSettingsNavContent(
+                        key = key,
+                        navActions = outerNavActions,
+                        browserTabController = browserTabController,
                     )
                 }
 
                 is AppDestination.SiteFormInputPaths -> navEntry(key) {
-                    val formInputRepository: FormInputRepository = koinInject()
-                    val origin = FormInputOrigin(
-                        scheme = key.scheme,
-                        host = key.host,
-                        port = key.port,
-                    )
-                    val pathsViewModel = composeViewModel(initializer = {
-                        SiteFormInputPathsScreenViewModel(
-                            origin = origin,
-                            formInputRepository = formInputRepository,
-                        )
-                    })
-                    val pathsUiState by pathsViewModel.uiState.collectAsState()
-                    LaunchedEffect(pathsViewModel) {
-                        pathsViewModel.eventHandler.receiveAsFlow().collect { handler ->
-                            handler(object : SiteFormInputPathsScreenViewModel.Event {
-                                override fun navigateBack() {
-                                    outerBackStack.removeLastOrNull()
-                                }
-
-                                override fun navigateToPath(path: String) {
-                                    outerBackStack.add(
-                                        AppDestination.SiteFormInputPath(
-                                            scheme = key.scheme,
-                                            host = key.host,
-                                            port = key.port,
-                                            path = path,
-                                        ),
-                                    )
-                                }
-                            })
-                        }
-                    }
-                    SiteFormInputPathsScreen(
-                        uiState = pathsUiState,
-                    )
+                    SiteFormInputPathsNavContent(key = key, navActions = outerNavActions)
                 }
 
                 is AppDestination.SiteFormInputPath -> navEntry(key) {
-                    val formInputRepository: FormInputRepository = koinInject()
-                    val origin = FormInputOrigin(
-                        scheme = key.scheme,
-                        host = key.host,
-                        port = key.port,
-                    )
-                    val pathViewModel = composeViewModel(initializer = {
-                        SiteFormInputPathScreenViewModel(
-                            origin = origin,
-                            path = key.path,
-                            formInputRepository = formInputRepository,
-                        )
-                    })
-                    val pathUiState by pathViewModel.uiState.collectAsState()
-                    LaunchedEffect(pathViewModel) {
-                        pathViewModel.eventHandler.receiveAsFlow().collect { handler ->
-                            handler(object : SiteFormInputPathScreenViewModel.Event {
-                                override fun navigateBack() {
-                                    outerBackStack.removeLastOrNull()
-                                }
-
-                                override fun navigateBackAfterDeleted() {
-                                    outerBackStack.removeLastOrNull()
-                                }
-
-                                override fun navigateToField(fieldKey: String) {
-                                    outerBackStack.add(
-                                        AppDestination.SiteFormInputField(
-                                            scheme = key.scheme,
-                                            host = key.host,
-                                            port = key.port,
-                                            path = key.path,
-                                            fieldKey = fieldKey,
-                                        ),
-                                    )
-                                }
-                            })
-                        }
-                    }
-                    SiteFormInputPathScreen(
-                        uiState = pathUiState,
-                    )
+                    SiteFormInputPathNavContent(key = key, navActions = outerNavActions)
                 }
 
                 is AppDestination.SiteFormInputField -> navEntry(key) {
-                    val formInputRepository: FormInputRepository = koinInject()
-                    val origin = FormInputOrigin(
-                        scheme = key.scheme,
-                        host = key.host,
-                        port = key.port,
-                    )
-                    val fieldViewModel = composeViewModel(initializer = {
-                        SiteFormInputFieldScreenViewModel(
-                            origin = origin,
-                            path = key.path,
-                            fieldKey = key.fieldKey,
-                            formInputRepository = formInputRepository,
-                        )
-                    })
-                    val fieldUiState by fieldViewModel.uiState.collectAsState()
-                    LaunchedEffect(fieldViewModel) {
-                        fieldViewModel.eventHandler.receiveAsFlow().collect { handler ->
-                            handler(object : SiteFormInputFieldScreenViewModel.Event {
-                                override fun navigateBack() {
-                                    outerBackStack.removeLastOrNull()
-                                }
-
-                                override fun navigateBackAfterDeleted() {
-                                    outerBackStack.removeLastOrNull()
-                                }
-                            })
-                        }
-                    }
-                    SiteFormInputFieldScreen(
-                        uiState = fieldUiState,
-                    )
+                    SiteFormInputFieldNavContent(key = key, navActions = outerNavActions)
                 }
 
                 AppDestination.History -> navEntry(key) {
-                    val historyViewModel = composeViewModel(initializer = {
-                        HistoryScreenViewModel(historyRepository)
-                    })
-                    val historyUiState by historyViewModel.uiState.collectAsState()
-                    LaunchedEffect(historyViewModel) {
-                        historyViewModel.eventHandler.receiveAsFlow().collect {
-                            it(object : HistoryScreenViewModel.Event {
-                                override fun navigateToUrl(url: String) {
-                                    // null のモードでは URL を開けないため、画面だけ閉じないよう何もしない
-                                    val navigateToUrl = onNavigateToUrl ?: return
-                                    scope.launch {
-                                        navigateToUrl(url)
-                                        outerNavActions.popToRoot()
-                                    }
-                                }
-                            })
-                        }
-                    }
-                    HistoryScreen(
-                        uiState = historyUiState,
-                        onBack = { outerBackStack.removeLastOrNull() },
+                    HistoryNavContent(
+                        navActions = outerNavActions,
+                        onNavigateToUrl = onNavigateToUrl,
                     )
                 }
 
                 AppDestination.Addresses -> navEntry(key) {
-                    val addressRepository: AddressRepository = koinInject()
-                    val addressesViewModel = composeViewModel(initializer = {
-                        AddressesScreenViewModel(addressRepository)
-                    })
-                    val addressesUiState by addressesViewModel.uiState.collectAsState()
-                    LaunchedEffect(addressesViewModel) {
-                        addressesViewModel.eventHandler.receiveAsFlow().collect {
-                            it(object : AddressesScreenViewModel.Event {
-                                override fun navigateToEdit(addressId: Long) {
-                                    outerBackStack.add(AppDestination.AddressEdit(addressId = addressId))
-                                }
-                            })
-                        }
-                    }
-                    AddressesScreen(
-                        uiState = addressesUiState,
-                        onBack = { outerBackStack.removeLastOrNull() },
-                    )
+                    AddressesNavContent(navActions = outerNavActions)
                 }
 
                 AppDestination.CrashLogs -> navEntry(key) {
-                    val crashLogRepository: CrashLogRepository = koinInject()
-                    val crashLogsViewModel = composeViewModel(initializer = {
-                        CrashLogsScreenViewModel(crashLogRepository)
-                    })
-                    val crashLogsUiState by crashLogsViewModel.uiState.collectAsState()
-                    LaunchedEffect(crashLogsViewModel) {
-                        crashLogsViewModel.eventHandler.receiveAsFlow().collect {
-                            it(object : CrashLogsScreenViewModel.Event {
-                                override fun navigateToDetail(crashLogId: Long) {
-                                    outerBackStack.add(AppDestination.CrashLogDetail(crashLogId = crashLogId))
-                                }
-                            })
-                        }
-                    }
-                    CrashLogsRoute(
-                        uiState = crashLogsUiState,
-                        onBack = { outerBackStack.removeLastOrNull() },
-                    )
+                    CrashLogsNavContent(navActions = outerNavActions)
                 }
 
                 is AppDestination.CrashLogDetail -> navEntry(key) {
-                    val crashLogRepository: CrashLogRepository = koinInject()
-                    val crashLogDetailViewModel = composeViewModel(initializer = {
-                        CrashLogDetailScreenViewModel(
-                            crashLogRepository = crashLogRepository,
-                            crashLogId = key.crashLogId,
-                        )
-                    })
-                    val crashLogDetailUiState by crashLogDetailViewModel.uiState.collectAsState()
-                    LaunchedEffect(crashLogDetailViewModel) {
-                        crashLogDetailViewModel.eventHandler.receiveAsFlow().collect {
-                            it(object : CrashLogDetailScreenViewModel.Event {
-                                override fun copyToClipboard(text: String) {
-                                    copyTextToClipboard(
-                                        context = context,
-                                        label = "crash log",
-                                        text = text,
-                                        message = "クラッシュログをコピーしました",
-                                    )
-                                }
-                            })
-                        }
-                    }
-                    CrashLogDetailRoute(
-                        uiState = crashLogDetailUiState,
-                        onBack = { outerBackStack.removeLastOrNull() },
-                    )
+                    CrashLogDetailNavContent(key = key, navActions = outerNavActions)
                 }
 
                 is AppDestination.AddressEdit -> navEntry(key) {
-                    val addressRepository: AddressRepository = koinInject()
-                    val addressEditViewModel = composeViewModel(initializer = {
-                        AddressEditScreenViewModel(
-                            addressRepository = addressRepository,
-                            addressId = key.addressId,
-                        )
-                    })
-                    val addressEditUiState by addressEditViewModel.uiState.collectAsState()
-                    LaunchedEffect(addressEditViewModel) {
-                        addressEditViewModel.eventHandler.receiveAsFlow().collect {
-                            it(object : AddressEditScreenViewModel.Event {
-                                override fun navigateBack() {
-                                    outerBackStack.removeLastOrNull()
-                                }
-                            })
-                        }
-                    }
-                    AddressEditScreen(
-                        uiState = addressEditUiState,
-                        onBack = { outerBackStack.removeLastOrNull() },
-                    )
+                    AddressEditNavContent(key = key, navActions = outerNavActions)
                 }
 
                 AppDestination.Extensions -> navEntry(key) {
-                    val extensionRuntimeCoordinator: ExtensionRuntimeCoordinator = koinInject()
-                    val extensionsViewModel = composeViewModel(initializer = {
-                        ExtensionsScreenViewModel(
-                            application = context.applicationContext as Application,
-                            runtime = runtime,
-                            settingsRepository = settingsRepository,
-                            extensionRuntimeCoordinator = extensionRuntimeCoordinator,
-                        )
-                    })
-                    val extensionsUiState by extensionsViewModel.uiState.collectAsState()
-                    val extensionFileLauncher = rememberLauncherForActivityResult(
-                        ActivityResultContracts.OpenDocument(),
-                    ) { uri ->
-                        extensionsViewModel.onExtensionFileSelected(uri)
-                    }
-                    LaunchedEffect(extensionsViewModel) {
-                        extensionsViewModel.eventHandler.receiveAsFlow().collect {
-                            it(object : ExtensionsScreenViewModel.Event {
-                                override fun navigateToExtensionSettings(url: String) {
-                                    context.startActivity(
-                                        Intent(
-                                            Intent.ACTION_VIEW,
-                                            Uri.parse(url),
-                                            context,
-                                            CustomTabActivity::class.java,
-                                        ),
-                                    )
-                                }
-
-                                override fun requestExtensionFilePicker() {
-                                    extensionFileLauncher.launch(
-                                        ExtensionsScreenViewModel.EXTENSION_ARCHIVE_MIME_TYPES,
-                                    )
-                                }
-                            })
-                        }
-                    }
-                    ExtensionsScreen(
-                        uiState = extensionsUiState,
-                        onBack = { outerBackStack.removeLastOrNull() },
-                    )
+                    ExtensionsNavContent(navActions = outerNavActions)
                 }
 
                 AppDestination.Downloads -> navEntry(key) {
-                    val downloadsViewModel = composeViewModel(initializer = {
-                        DownloadManagementScreenViewModel(context.applicationContext as Application)
-                    })
-                    val downloadsUiState by downloadsViewModel.uiState.collectAsState()
-                    val currentOnOpenDownloadsRequestConsumed by rememberUpdatedState(onOpenDownloadsRequestConsumed)
-                    var highlightItemIdString by rememberSaveable { mutableStateOf<String?>(null) }
-                    val highlightItemId = highlightItemIdString?.let { id ->
-                        runCatching { UUID.fromString(id) }.getOrNull()
-                    }
-                    DisposableEffect(Unit) {
-                        onDispose {
-                            val entries = pendingConsumeByWorkerIdEntries
-                            if (entries.isNotEmpty()) {
-                                pendingConsumeByWorkerIdEntries = listOf()
-                                entries.forEach { (_, requestId) ->
-                                    currentOnOpenDownloadsRequestConsumed?.invoke(requestId)
-                                }
-                            }
-                        }
-                    }
-                    LaunchedEffect(pendingOpenDownloadsRequest, pendingHighlightWorkerId, pendingOpenDownloadsRequestId) {
-                        if (!pendingOpenDownloadsRequest) return@LaunchedEffect
-                        val workerId = pendingHighlightWorkerId
-                        val requestId = pendingOpenDownloadsRequestId
-                        pendingHighlightWorkerId = null
-                        pendingOpenDownloadsRequestId = null
-                        pendingOpenDownloadsRequest = false
-                        if (workerId != null) {
-                            val id = runCatching { UUID.fromString(workerId) }.getOrNull()
-                            if (id != null) {
-                                downloadsViewModel.requestHighlight(id)
-                                if (requestId != null) {
-                                    pendingConsumeByWorkerIdEntries =
-                                        pendingConsumeByWorkerIdEntries + (workerId to requestId)
-                                }
-                                return@LaunchedEffect
-                            }
-                        }
-                        if (requestId != null) {
-                            currentOnOpenDownloadsRequestConsumed?.invoke(requestId)
-                        }
-                    }
-                    LaunchedEffect(downloadsViewModel) {
-                        downloadsViewModel.eventHandler.receiveAsFlow().collect {
-                            it(object : DownloadManagementScreenViewModel.Event {
-                                override fun navigateToUrl(url: String) {
-                                    // null のモードでは URL を開けないため、画面だけ閉じないよう何もしない
-                                    val navigateToUrl = onNavigateToUrl ?: return
-                                    scope.launch {
-                                        navigateToUrl(url)
-                                        outerNavActions.popToRoot()
-                                    }
-                                }
-
-                                override fun highlightItem(id: UUID) {
-                                    highlightItemIdString = id.toString()
-                                }
-                            })
-                        }
-                    }
-                    DownloadManagementScreen(
-                        uiState = downloadsUiState,
-                        onBack = { outerBackStack.removeLastOrNull() },
-                        highlightItemId = highlightItemId,
-                        onHighlightComplete = { itemId ->
-                            highlightItemIdString = null
-                            val workerId = itemId.toString()
-                            val requestId = pendingConsumeByWorkerIdEntries
-                                .firstOrNull { it.first == workerId }
-                                ?.second
-                            if (requestId != null) {
-                                pendingConsumeByWorkerIdEntries =
-                                    pendingConsumeByWorkerIdEntries.filterNot { it.first == workerId }
-                                currentOnOpenDownloadsRequestConsumed?.invoke(requestId)
-                            }
-                        },
+                    DownloadsNavContent(
+                        navActions = outerNavActions,
+                        openRequest = pendingDownloadsOpenRequest,
+                        onOpenDownloadsRequestConsumed = onOpenDownloadsRequestConsumed,
+                        onNavigateToUrl = onNavigateToUrl,
                     )
                 }
 
                 is AppDestination.BackupProgress -> navEntry(key) {
-                    val backupRepository: BackupRepository = koinInject()
-                    val backupViewModel = composeViewModel(initializer = {
-                        BackupProgressViewModel(key.isImport, backupRepository)
-                    })
-                    val backupUiState by backupViewModel.uiState.collectAsState()
-
-                    val pausedTabIds = remember { mutableSetOf<String>() }
-
-                    LaunchedEffect(browserTabController, browserSessionLifecycleController) {
-                        browserTabController.tabStoreState.collect {
-                            browserTabController.tabs.forEach { tab ->
-                                if (pausedTabIds.add(tab.tabId)) {
-                                    browserSessionLifecycleController.pauseSession(tab)
-                                }
-                            }
-                        }
-                    }
-
-                    DisposableEffect(browserTabController, browserSessionLifecycleController) {
-                        onDispose {
-                            val tabs = browserTabController.tabs
-                            tabs
-                                .filter { it.tabId in pausedTabIds }
-                                .forEach { tab ->
-                                    browserSessionLifecycleController.resumeSession(tab, tabs)
-                                }
-                        }
-                    }
-
-                    val isInProgress = backupUiState.phase is BackupProgressUiState.Phase.InProgress
-                    LaunchedEffect(isInProgress) {
-                        if (isInProgress) {
-                            WorkManager.getInstance(context)
-                                .cancelAllWorkByTag(DownloadWorker.TAG_DOWNLOAD)
-                        }
-                    }
-
-                    val exportLauncher = rememberLauncherForActivityResult(
-                        ActivityResultContracts.CreateDocument(BackupRepository.MIME_TYPE),
-                    ) { uri ->
-                        if (uri != null) {
-                            backupViewModel.startWithUri(uri)
-                        } else {
-                            outerBackStack.removeLastOrNull()
-                        }
-                    }
-                    val importLauncher = rememberLauncherForActivityResult(
-                        ActivityResultContracts.OpenDocument(),
-                    ) { uri ->
-                        if (uri != null) {
-                            backupViewModel.startWithUri(uri)
-                        } else {
-                            outerBackStack.removeLastOrNull()
-                        }
-                    }
-
-                    LaunchedEffect(backupViewModel) {
-                        backupViewModel.eventHandler.receiveAsFlow().collect { handler ->
-                            handler(object : BackupProgressViewModel.Event {
-                                override fun onRequestFilePicker() {
-                                    if (key.isImport) {
-                                        importLauncher.launch(
-                                            arrayOf(BackupRepository.MIME_TYPE, "application/octet-stream", "*/*"),
-                                        )
-                                    } else {
-                                        exportLauncher.launch(buildBackupFileName())
-                                    }
-                                }
-
-                                override fun onRestartApp() {
-                                    Process.killProcess(Process.myPid())
-                                }
-
-                                override fun onNavigateBack() {
-                                    outerBackStack.removeLastOrNull()
-                                }
-                            })
-                        }
-                    }
-
-                    BackupProgressScreen(
-                        uiState = backupUiState,
+                    BackupProgressNavContent(
+                        key = key,
+                        navActions = outerNavActions,
+                        browserTabController = browserTabController,
+                        browserSessionLifecycleController = browserSessionLifecycleController,
                     )
                 }
+
 
                 else -> error("Unknown destination: $key")
             }
@@ -921,6 +338,10 @@ internal class OuterNavActions(private val backStack: MutableList<NavKey>) {
 
     fun addIfAbsent(destination: AppDestination) {
         if (backStack.none { it == destination }) backStack.add(destination)
+    }
+
+    fun pop() {
+        backStack.removeLastOrNull()
     }
 
     fun popToRoot() {
@@ -1281,13 +702,9 @@ private fun MainBrowserContent(
                 }
 
                 BrowserNavDestination.Tabs -> navEntry(key) {
-                    val tabsViewModel = composeViewModel(initializer = {
-                        TabsScreenViewModel(
-                            tabStore = browserTabController,
-                            tabGroupRepository = tabGroupRepository,
-                            playingTabIds = mediaWebExtension.playingTabIds,
-                        )
-                    })
+                    val tabsViewModel: TabsScreenViewModel = koinViewModel {
+                        parametersOf(browserTabController)
+                    }
                     val tabsUiState by tabsViewModel.uiState.collectAsState()
                     DisposableEffect(Unit) {
                         onDispose { navController.disposeTabs() }
@@ -1348,14 +765,14 @@ private fun MainBrowserContent(
     )
 }
 
-private const val GITHUB_RELEASES_URL = "https://github.com/matsudamper/browsem/releases"
+internal const val GITHUB_RELEASES_URL = "https://github.com/matsudamper/browsem/releases"
 
-private fun buildBackupFileName(): String {
+internal fun buildBackupFileName(): String {
     val formatter = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US)
     return "browsem-backup-${formatter.format(Date())}.${BackupRepository.FILE_EXTENSION}"
 }
 
-private fun copyTextToClipboard(
+internal fun copyTextToClipboard(
     context: Context,
     label: String,
     text: String,
