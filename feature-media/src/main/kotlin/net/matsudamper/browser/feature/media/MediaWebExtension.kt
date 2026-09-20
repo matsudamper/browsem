@@ -39,6 +39,8 @@ class MediaWebExtension(
         Collections.synchronizedSet(Collections.newSetFromMap(WeakHashMap<GeckoSession, Boolean>()))
     private val sessionTabIds =
         Collections.synchronizedMap(WeakHashMap<GeckoSession, String>())
+    private val sessionMediaSessions =
+        Collections.synchronizedMap(WeakHashMap<GeckoSession, MediaSession>())
     // 破棄済みセッション。デリゲート解除後もキュー済みのコールバックが残るため、
     // 解放した状態を作り直さないようここで弾く。
     private val releasedSessions =
@@ -111,14 +113,31 @@ class MediaWebExtension(
         sessionArtworkRequestIds.remove(session)
         registeredSessions.remove(session)
         sessionTabIds.remove(session)
+        sessionMediaSessions.remove(session)
         publishPlayingTabIds()
         if (activeSession !== session) {
             return
         }
         cancelPendingDeactivation(session)
         activeSession = null
+        MediaSessionBridge.activeGeckoMediaSession = null
+        val nextActiveSession = findActivePlaybackSession()
+        if (nextActiveSession != null) {
+            // 他タブの再生が続いているため、通知とコントロールはそのタブへ引き継ぐ
+            Log.d(TAG, "releaseSession: 再生中の別セッションへ切り替え session=${nextActiveSession.logKey()}")
+            activeSession = nextActiveSession
+            MediaSessionBridge.activeGeckoMediaSession = sessionMediaSessions[nextActiveSession]
+            applySessionState(nextActiveSession)
+            return
+        }
         MediaSessionBridge.deactivate()
         MediaPlaybackServiceController.stop(context)
+    }
+
+    private fun isReleased(session: GeckoSession): Boolean = session in releasedSessions
+
+    private fun findActivePlaybackSession(): GeckoSession? {
+        return sessionStates.toMap().entries.firstOrNull { it.value.isActive }?.key
     }
 
     fun onActivated(session: GeckoSession, mediaSession: MediaSession) {
@@ -126,6 +145,7 @@ class MediaWebExtension(
         Log.d(TAG, "onActivated: session=${session.logKey()} mediaSession=${mediaSession.logKey()}")
         MediaTraceLog.d("WX activated session=${session.logKey()} mediaSession=${mediaSession.logKey()}")
         cancelPendingDeactivation(session)
+        sessionMediaSessions[session] = mediaSession
         activeSession = session
         MediaSessionBridge.activeGeckoMediaSession = mediaSession
         applySessionState(session)
@@ -274,11 +294,10 @@ class MediaWebExtension(
         sessionArtworkRequestIds.clear()
         registeredSessions.clear()
         sessionTabIds.clear()
+        sessionMediaSessions.clear()
         releasedSessions.clear()
         _playingTabIds.value = setOf()
     }
-
-    private fun isReleased(session: GeckoSession): Boolean = session in releasedSessions
 
     private fun publishPlayingTabIds() {
         val playing = mutableSetOf<String>()
@@ -437,6 +456,7 @@ class MediaWebExtension(
             TAG,
             "bindMediaSessionIfNeeded: session=${session.logKey()} mediaSession=${mediaSession.logKey()} currentActive=${activeSession?.logKey()}",
         )
+        sessionMediaSessions[session] = mediaSession
         if (activeSession == null || activeSession === session) {
             activeSession = session
             MediaSessionBridge.activeGeckoMediaSession = mediaSession
