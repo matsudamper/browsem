@@ -45,7 +45,16 @@ object CustomTabHandoffStore {
         val session: GeckoSession,
         /** セッションが閉じている（コンテンツプロセスの停止後など）ときに復元へ使う退避状態。 */
         val sessionState: String,
-    )
+        private val onDiscard: (GeckoSession) -> Unit,
+    ) {
+        /** 取り出したセッションをタブへ載せずに捨てるときに呼ぶ。 */
+        fun discardSession() {
+            onDiscard(session)
+            if (session.isOpen) {
+                session.close()
+            }
+        }
+    }
 
     /**
      * 引き継ぐセッションを登録し、Intent に載せるトークンを返す。
@@ -84,7 +93,13 @@ object CustomTabHandoffStore {
         val (handoff, staleEntries) = synchronized(lock) {
             val staleEntries = removeStaleLocked()
             val entry = entries.remove(token)
-            val handoff = entry?.let { Handoff(session = it.session, sessionState = it.sessionState) }
+            val handoff = entry?.let {
+                Handoff(
+                    session = it.session,
+                    sessionState = it.sessionState,
+                    onDiscard = it.onDiscard,
+                )
+            }
             handoff to staleEntries
         }
         staleEntries.forEach { discard(it) }

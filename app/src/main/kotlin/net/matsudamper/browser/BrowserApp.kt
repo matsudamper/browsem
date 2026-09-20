@@ -168,6 +168,10 @@ internal fun BrowserApp(
                     // 要求から実際に載せるまでの間にコンテンツプロセスが停止していることがある。
                     // 閉じたセッションを載せると SessionState 経由の復元へ落ちられない。
                     val handedOffSession = request.handedOffSession?.takeIf { it.isOpen }
+                    if (handedOffSession == null) {
+                        // 載せずに捨てるセッションは、引き渡し元が持っていた再生状態も手放す
+                        request.handedOffSession?.let { viewModel.mediaWebExtension.releaseSession(it) }
+                    }
                     val newTab = if (handedOffSession != null) {
                         // カスタムタブから引き渡されたセッションは開いたまま載せる。open→restoreState で
                         // 復元すると読み込みが走り、ワンタイムトークンや POST 結果のページが壊れる。

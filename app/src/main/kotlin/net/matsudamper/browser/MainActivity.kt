@@ -171,10 +171,15 @@ class MainActivity : ComponentActivity() {
             val url = ExternalInitialUrlPolicy.sanitize(intent.dataString)
             if (url != null && url != lastProcessedDeepLinkUrl) {
                 val handoff = consumeCustomTabHandoff(intent)
+                val handedOffSession = handoff?.session?.takeIf { it.isOpen }
+                if (handoff != null && handedOffSession == null) {
+                    // 閉じたセッションは載せずに SessionState から復元するため、ここで手放す
+                    handoff.discardSession()
+                }
                 val result = createNewTabChannel.trySend(
                     NewTabRequest(
                         url = url,
-                        handedOffSession = handoff?.session?.takeIf { it.isOpen },
+                        handedOffSession = handedOffSession,
                         sessionState = handoff?.sessionState,
                         referrerUrl = intent.getStringExtra(CustomTabActivity.EXTRA_NEW_TAB_REFERRER_URL),
                     ),
