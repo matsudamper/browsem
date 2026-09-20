@@ -16,11 +16,19 @@ internal class BrowserTabPersistenceCoordinator(
 ) {
     // CustomTabs等のTabに依存しない場合はTabの保存を利用しない
     private val tabRepository = tabRepository.takeUnless { isSinglePage }
-    private val persistenceMutex = Mutex()
 
     suspend fun awaitIdle() {
-        withContext(Dispatchers.IO) {
-            persistenceMutex.withLock {}
+        withPersistenceLock {}
+    }
+
+    /**
+     * 保留中の保存と交差させたくない処理を直列化する。復元の読み出しに使う。
+     */
+    suspend fun <T> withPersistenceLock(block: suspend () -> T): T {
+        return withContext(Dispatchers.IO) {
+            persistenceMutex.withLock {
+                block()
+            }
         }
     }
 
@@ -133,5 +141,9 @@ internal class BrowserTabPersistenceCoordinator(
 
     private companion object {
         private const val TAG = "BrowserTabPersistence"
+
+        // Activity の作り直しで Controller が入れ替わっても保存と復元の順序を保てるよう、
+        // 直列化はプロセス全体で共有する。
+        private val persistenceMutex = Mutex()
     }
 }

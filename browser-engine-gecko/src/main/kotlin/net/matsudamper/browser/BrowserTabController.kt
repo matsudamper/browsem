@@ -119,7 +119,8 @@ class BrowserTabController(
         }
         restoreState = RestoreState.IN_PROGRESS
         try {
-            val snapshot = withContext(Dispatchers.IO) {
+            // 旧 Controller の保留中の保存が残っていることがあるため、流し切ってから読み出す
+            val snapshot = persistenceCoordinator.withPersistenceLock {
                 val persisted = tabRepository.loadTabs()
                 RestoredTabs(
                     tabs = persisted.tabs.map { tab ->
