@@ -2,13 +2,19 @@ package net.matsudamper.browser
 
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.referentialEqualityPolicy
 import androidx.compose.runtime.setValue
 import net.matsudamper.browser.core.TabSummary
 
 internal class BrowserTabRegistry {
     // find / orderedTabs はコンポジション中からも読まれるため、素の可変コレクションではなく
     // スナップショット state の差し替えで更新を通知する。
-    private var tabsById: Map<String, BrowserTab> by mutableStateOf(linkedMapOf())
+    // move は要素を変えず挿入順だけを変えるが Map.equals は順序を見ないため、
+    // 既定の構造等価ポリシーでは代入が破棄される。参照等価で必ず反映させる。
+    private var tabsById: Map<String, BrowserTab> by mutableStateOf(
+        value = linkedMapOf(),
+        policy = referentialEqualityPolicy(),
+    )
 
     fun isEmpty(): Boolean = tabsById.isEmpty()
 
