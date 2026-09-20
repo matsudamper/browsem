@@ -1,9 +1,14 @@
 package net.matsudamper.browser
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import net.matsudamper.browser.core.TabSummary
 
 internal class BrowserTabRegistry {
-    private val tabsById = LinkedHashMap<String, BrowserTab>()
+    // find / orderedTabs はコンポジション中からも読まれるため、素の可変コレクションではなく
+    // スナップショット state の差し替えで更新を通知する。
+    private var tabsById: Map<String, BrowserTab> by mutableStateOf(linkedMapOf())
 
     fun isEmpty(): Boolean = tabsById.isEmpty()
 
@@ -23,13 +28,14 @@ internal class BrowserTabRegistry {
         }
         val targetIndex = insertIndex.coerceIn(0, orderedTabs.size)
         orderedTabs.add(targetIndex, tab)
-        tabsById.clear()
-        orderedTabs.forEach { orderedTab ->
-            tabsById[orderedTab.tabId] = orderedTab
-        }
+        replaceWith(orderedTabs)
     }
 
-    fun remove(tabId: String): BrowserTab? = tabsById.remove(tabId)
+    fun remove(tabId: String): BrowserTab? {
+        val removed = tabsById[tabId] ?: return null
+        replaceWith(tabsById.values.filterNot { tab -> tab.tabId == tabId })
+        return removed
+    }
 
     fun move(fromIndex: Int, toIndex: Int) {
         val orderedTabs = tabsById.values.toMutableList()
@@ -37,15 +43,16 @@ internal class BrowserTabRegistry {
             return
         }
         orderedTabs.add(toIndex, orderedTabs.removeAt(fromIndex))
-        tabsById.clear()
-        orderedTabs.forEach { orderedTab ->
-            tabsById[orderedTab.tabId] = orderedTab
-        }
+        replaceWith(orderedTabs)
     }
 
     fun summaries(): List<TabSummary> = tabsById.values.map(BrowserTab::toSummary)
 
     fun clear() {
-        tabsById.clear()
+        tabsById = linkedMapOf()
+    }
+
+    private fun replaceWith(orderedTabs: List<BrowserTab>) {
+        tabsById = orderedTabs.associateByTo(LinkedHashMap()) { tab -> tab.tabId }
     }
 }

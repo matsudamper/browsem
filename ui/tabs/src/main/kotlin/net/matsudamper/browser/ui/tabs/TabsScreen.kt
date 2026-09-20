@@ -48,6 +48,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -277,7 +278,7 @@ private fun TabsScreenLoadedContent(
         }
     }
 
-    val groupTabBounds = remember { mutableMapOf<Int, Rect>() }
+    val groupTabBounds = remember { mutableStateMapOf<Int, Rect>() }
     // グループが削除・並び替えされた際に無効なインデックスのエントリを除去する
     LaunchedEffect(groups) {
         val validIndices = groups.indices.toSet()
