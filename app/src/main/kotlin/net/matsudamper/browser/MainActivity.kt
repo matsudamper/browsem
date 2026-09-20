@@ -380,6 +380,21 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
+     * チャネルは Activity と寿命を共にするため、受け取られないまま破棄される要求が残りうる。
+     * 引き渡されたセッションを開いたまま捨てないよう、ここで手放す。
+     */
+    private fun releaseUnconsumedNewTabRequests() {
+        while (true) {
+            val request = createNewTabChannel.tryReceive().getOrNull() ?: break
+            val session = request.handedOffSession ?: continue
+            browserViewModel.mediaWebExtension.releaseSession(session)
+            if (session.isOpen) {
+                session.close()
+            }
+        }
+    }
+
+    /**
      * カスタムタブからの「ブラウザで開く」遷移であれば、預けられた GeckoSession を取り出す。
      * トークンは一度のみ消費され、構成変更後の再 onCreate では null（重複生成は URL 重複判定で防止）。
      */
@@ -463,6 +478,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
         unregisterSystemNavigationObserverIfNeeded()
+        releaseUnconsumedNewTabRequests()
         if (hostsBrowserContent && isFinishing && geckoRuntimeInitializer.isInitialized) {
             runCatching {
                 runBlocking {
