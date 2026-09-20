@@ -4,8 +4,10 @@ import android.content.Intent
 import android.net.Uri
 import net.matsudamper.browser.feature.websharefiles.WebShareFilesLimits
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class WebShareFilesTest {
@@ -101,5 +103,17 @@ class WebShareFilesTest {
         assertEquals(3, WebShareFilesLimits.estimateDecodedBytes("AAAA"))
         assertEquals(2, WebShareFilesLimits.estimateDecodedBytes("AAA="))
         assertEquals(1, WebShareFilesLimits.estimateDecodedBytes("AA=="))
+    }
+
+    @Test
+    fun webShareFilesLimits_isValidRequestId_rejectsPathTraversal() {
+        assertFalse(WebShareFilesLimits.isValidRequestId("../../evil"))
+        assertFalse(WebShareFilesLimits.isValidRequestId("a/b"))
+        assertFalse(WebShareFilesLimits.isValidRequestId(""))
+    }
+
+    @Test
+    fun webShareFilesLimits_isValidRequestId_acceptsGeneratedFormat() {
+        assertTrue(WebShareFilesLimits.isValidRequestId("share-lz3k2j-9f8h2k1a0b"))
     }
 }
