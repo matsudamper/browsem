@@ -136,8 +136,11 @@ class MediaWebExtension(
 
     private fun isReleased(session: GeckoSession): Boolean = session in releasedSessions
 
+    /** 一時停止中も isActive は true になるため、通知の対象は再生中のセッションを優先する */
     private fun findActivePlaybackSession(): GeckoSession? {
-        return sessionStates.toMap().entries.firstOrNull { it.value.isActive }?.key
+        val activeStates = sessionStates.toMap().filterValues { it.isActive }
+        return activeStates.entries.firstOrNull { it.value.isPlaying }?.key
+            ?: activeStates.keys.firstOrNull()
     }
 
     fun onActivated(session: GeckoSession, mediaSession: MediaSession) {
