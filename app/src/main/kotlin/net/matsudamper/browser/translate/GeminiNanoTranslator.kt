@@ -260,6 +260,11 @@ class GeminiNanoTranslator(
             capacity = DYNAMIC_TRANSLATION_QUEUE_CAPACITY,
             onBufferOverflow = BufferOverflow.DROP_OLDEST,
         )
+        val releaseDynamicTranslation = {
+            queue.close()
+            scope.cancel()
+            inference.close()
+        }
         scope.launch {
             for (segments in queue) {
                 val targets = segments.filter { isTranslatableText(it.text) }
@@ -292,13 +297,12 @@ class GeminiNanoTranslator(
                 notifyProgress()
                 queue.trySend(segments)
             },
-            onStopped = {
-                queue.close()
-                scope.cancel()
-                inference.close()
-            },
+            onStopped = { releaseDynamicTranslation() },
         )
-        if (!activated) return false
+        if (!activated) {
+            releaseDynamicTranslation()
+            return false
+        }
         if (remainingSegments.isNotEmpty()) {
             queue.trySend(remainingSegments)
         }

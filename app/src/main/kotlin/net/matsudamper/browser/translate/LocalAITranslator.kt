@@ -315,6 +315,11 @@ class LocalAITranslator(
     ): Boolean {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         val queue = Channel<List<PageTranslationWebExtension.Segment>>(Channel.UNLIMITED)
+        val releaseDynamicTranslation = {
+            queue.close()
+            scope.cancel()
+            translator.close()
+        }
         scope.launch {
             for (segments in queue) {
                 try {
@@ -343,13 +348,12 @@ class LocalAITranslator(
                 notifyProgress()
                 queue.trySend(segments)
             },
-            onStopped = {
-                queue.close()
-                scope.cancel()
-                translator.close()
-            },
+            onStopped = { releaseDynamicTranslation() },
         )
-        if (!activated) return false
+        if (!activated) {
+            releaseDynamicTranslation()
+            return false
+        }
         if (initialSegments.isNotEmpty()) {
             queue.trySend(initialSegments)
         }
