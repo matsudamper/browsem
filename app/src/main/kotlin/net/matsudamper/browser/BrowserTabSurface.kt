@@ -58,8 +58,9 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import kotlin.math.abs
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import net.matsudamper.browser.data.ThemeMode
-import net.matsudamper.browser.data.history.HistoryEntry
 import net.matsudamper.browser.ui.browser.UrlBarSuggestionsUiState
 import net.matsudamper.browser.ui.common.BrowserTheme
 import org.mozilla.geckoview.GeckoResult
@@ -232,12 +233,12 @@ internal fun BrowserContentHost(
         )
 
         val previewBytes = browserTab.previewBitmap
-        var previewBitmap: Bitmap? by remember(null) {
-            mutableStateOf(null)
-        }
+        var previewBitmap: Bitmap? by remember { mutableStateOf(null) }
         LaunchedEffect(previewBytes) {
             previewBitmap = if (previewBytes != null) {
-                BitmapFactory.decodeByteArray(previewBytes, 0, previewBytes.size)
+                withContext(Dispatchers.Default) {
+                    BitmapFactory.decodeByteArray(previewBytes, 0, previewBytes.size)
+                }
             } else {
                 null
             }
@@ -268,7 +269,7 @@ internal fun BrowserContentHost(
 internal fun BrowserTabOverlayLayer(
     state: BrowserTabScreenState,
     urlBarSuggestions: UrlBarSuggestionsUiState,
-    onHistorySuggestionClick: (HistoryEntry) -> Unit,
+    onHistorySuggestionClick: (UrlBarSuggestionsUiState.HistorySuggestion) -> Unit,
     onWebSuggestionClick: (String) -> Unit,
     clipboardUrl: String?,
     onClipboardUrlClick: (String) -> Unit,
@@ -286,14 +287,12 @@ internal fun BrowserTabOverlayLayer(
             shouldShowUrlSuggestions(
                 showFindInPage = state.findInPage.isVisible,
                 isUrlInputFocused = state.isUrlInputFocused,
-                suggestionCount = urlBarSuggestions.historySuggestions.size +
-                    urlBarSuggestions.webSuggestions.size +
-                    if (urlBarSuggestions.isLoadingWebSuggestions) {
-                        1
-                    } else {
-                        0 +
-                            if (clipboardUrl != null) 1 else 0
-                    },
+                suggestionCount = urlBarSuggestionCount(
+                    historySuggestionCount = urlBarSuggestions.historySuggestions.size,
+                    webSuggestionCount = urlBarSuggestions.webSuggestions.size,
+                    isLoadingWebSuggestions = urlBarSuggestions.isLoadingWebSuggestions,
+                    hasClipboardUrl = clipboardUrl != null,
+                ),
                 currentPageUrl = state.currentPageUrl,
             )
         ) {
@@ -324,10 +323,10 @@ internal fun BrowserTabOverlayLayer(
 @Composable
 internal fun UrlSuggestionList(
     currentPageUrl: String,
-    historySuggestions: List<HistoryEntry>,
+    historySuggestions: List<UrlBarSuggestionsUiState.HistorySuggestion>,
     webSuggestions: List<String>,
     isLoadingWebSuggestions: Boolean,
-    onHistorySuggestionClick: (HistoryEntry) -> Unit,
+    onHistorySuggestionClick: (UrlBarSuggestionsUiState.HistorySuggestion) -> Unit,
     onWebSuggestionClick: (String) -> Unit,
     onCopyCurrentUrl: () -> Unit,
     onRestoreCurrentUrl: () -> Unit,
@@ -621,11 +620,10 @@ private fun PreviewUrlSuggestionListDark() {
 private const val PREVIEW_SUGGESTION_CURRENT_PAGE_URL = "https://example.com/very/long/path?query=value"
 private const val PREVIEW_SUGGESTION_CLIPBOARD_URL = "https://clipboard.example.com/copied"
 private val previewSuggestionHistoryEntries = List(4) { index ->
-    HistoryEntry(
+    UrlBarSuggestionsUiState.HistorySuggestion(
         id = index.toLong() + 1,
         url = "https://history.example.com/page$index",
         title = "履歴タイトル $index",
-        visitedAt = 0,
     )
 }
 private val previewSuggestionWebSuggestions = List(4) { index -> "検索候補 $index" }

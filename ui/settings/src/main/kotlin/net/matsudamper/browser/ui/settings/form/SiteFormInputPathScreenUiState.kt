@@ -11,7 +11,6 @@ data class SiteFormInputPathScreenUiState(
     val deletePathConfirm: Boolean,
     val deleteFieldConfirm: String?,
 ) {
-    @Stable
     data class FieldEntry(
         val fieldKey: String,
         val previewText: String,

@@ -28,7 +28,6 @@ import androidx.compose.ui.unit.dp
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import net.matsudamper.browser.data.crashlog.CrashLogEntity
 import net.matsudamper.browser.resources.R as ResourcesR
 import net.matsudamper.browser.ui.common.StatusBarAppearanceEffect
 
@@ -147,8 +146,7 @@ private fun PreviewCrashLogDetailScreen() {
                 override fun onClickCopyBody() = Unit
             },
             isLoading = false,
-            entry = CrashLogEntity(
-                id = 1,
+            entry = CrashLogDetailScreenUiState.Entry(
                 occurredAt = 1_700_000_000_000,
                 title = "java.lang.RuntimeException: test crash",
                 body = "Thread: main\njava.lang.RuntimeException: test crash\n\tat example.MainActivity.onCreate(MainActivity.kt:10)",
