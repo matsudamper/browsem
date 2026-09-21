@@ -782,6 +782,21 @@ internal fun GeckoBrowserTab(
 
                 Lifecycle.Event.ON_START -> {
                     val gv = geckoView ?: return@LifecycleEventObserver
+                    // ON_START は ON_STOP を経た復帰。PAUSED_KEEP_SURFACE のまま来たのは
+                    // ON_STOP で release できなかったケースで、不可視の間に破棄された surface を
+                    // session が掴んだままになり、復帰後もフレームが出ず黒いままになる。
+                    // RELEASED に倒して surface 再作成からの復元経路へ合流させる。
+                    if (surfaceResumeState == SurfaceResumeState.PAUSED_KEEP_SURFACE) {
+                        Log.w(
+                            TAG_SURFACE_RESUME,
+                            "ON_START: PAUSED_KEEP_SURFACE のまま復帰したため release して作り直す" +
+                                " session=${session.logKey()}",
+                        )
+                        addressAutofillDelegate.unbindBeforeViewRelease(session)
+                        gv.releaseSession()
+                        gv.visibility = View.INVISIBLE
+                        surfaceResumeState = SurfaceResumeState.RELEASED
+                    }
                     resumeFromPauseIfNeeded(gv)
                 }
 
