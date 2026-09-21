@@ -464,6 +464,19 @@ internal fun GeckoBrowserTab(
     //
     // local function は前方参照不可なので attach → schedule → restore の順で定義する。
     fun attachSessionAfterStableSize(gecko: GeckoView) {
+        // GeckoView.setSession は呼び出し時点の session に display を acquire し、その後
+        // session が open されても貼り直さない。バックグラウンド中に onCrash/onKill で
+        // コンテンツプロセスが失われた session を閉じたまま attach すると、新しい window に
+        // Surface が渡らずコンポジタがフレームを出さない (画面が黒いまま固まる)。
+        // 先に open→restoreState で復元してから attach する。
+        if (!session.isOpen) {
+            Log.w(
+                TAG_SURFACE_RESUME,
+                "attachSessionAfterStableSize: session closed (crash/kill) → setSession 前に restoreSession で復元" +
+                    " session=${session.logKey()}",
+            )
+            browserSessionLifecycleController.restoreSession(browserTab)
+        }
         gecko.setSession(session)
         addressAutofillDelegate.bind(session)
         if (session.isOpen) {
@@ -472,17 +485,6 @@ internal fun GeckoBrowserTab(
             browserSessionLifecycleController.notifyExtensionsActiveTab(session)
             // 別画面へ渡した子が閉じていれば、ここで opener の保持を解く
             currentOnReevaluateOpenerRetention()
-        } else {
-            // バックグラウンド中に onCrash/onKill でコンテンツプロセスが失われ、
-            // isOpen=false のまま復帰したケース。setActive するだけでは何も描画されず
-            // coverUntilFirstPaint の単色のまま固まるため、restoreSession の
-            // open→restoreState 経路で復元する。
-            Log.w(
-                TAG_SURFACE_RESUME,
-                "attachSessionAfterStableSize: session closed (crash/kill) → restoreSession で復元" +
-                    " session=${session.logKey()}",
-            )
-            browserSessionLifecycleController.restoreSession(browserTab)
         }
         surfaceResumeState = SurfaceResumeState.ACTIVE
     }
