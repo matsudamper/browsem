@@ -29,7 +29,6 @@ import java.util.concurrent.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.launch
 import net.matsudamper.browser.data.SettingsRepository
-import net.matsudamper.browser.data.TabRepository
 import net.matsudamper.browser.data.history.HistoryRepository
 import net.matsudamper.browser.data.resolvedHomepageUrl
 import net.matsudamper.browser.data.resolvedSearchTemplate
@@ -40,6 +39,7 @@ import net.matsudamper.browser.screen.browser.WebAppScreenViewModel
 import net.matsudamper.browser.ui.browser.BrowserContentLoadingIndicator
 import net.matsudamper.browser.ui.common.BrowserTheme
 import org.koin.android.ext.android.inject
+import org.koin.androidx.compose.koinViewModel
 import org.mozilla.geckoview.GeckoRuntime
 
 /**
@@ -53,7 +53,6 @@ class WebAppActivity : ComponentActivity() {
     private val themeColorExtension: ThemeColorWebExtension by inject()
     private val mediaWebExtension: MediaWebExtension by inject()
     private val settingsRepository: SettingsRepository by inject()
-    private val tabRepository: TabRepository by inject()
     private val historyRepository: HistoryRepository by inject()
     private val webSuggestionRepository: WebSuggestionRepository by inject()
 
@@ -89,12 +88,7 @@ class WebAppActivity : ComponentActivity() {
 
             BrowserTheme(themeMode = browserSettings.themeMode) {
                 WebAuthnCompatStartupGate(runtime = runtime) {
-                    val browserViewModel = viewModel(initializer = {
-                        WebAppBrowserViewModel(
-                            tabRepository = tabRepository,
-                            runtime = runtime,
-                        )
-                    })
+                    val browserViewModel: WebAppBrowserViewModel = koinViewModel()
                     val browserTabController = browserViewModel.browserTabController
                     val browserSessionLifecycleController = browserViewModel.browserSessionLifecycleController
                     val reevaluateOpenerRetention: () -> Unit = {
@@ -107,13 +101,7 @@ class WebAppActivity : ComponentActivity() {
                     }
                     val resolvedInitialUrl = initialUrl ?: browserSettings.resolvedHomepageUrl()
                     val webAppPinnedHost = runCatching { URI(resolvedInitialUrl).host }.getOrNull()
-                    val webAppScreenViewModel = viewModel(initializer = {
-                        WebAppScreenViewModel(
-                            historyRepository = historyRepository,
-                            settingsRepository = settingsRepository,
-                            webSuggestionRepository = webSuggestionRepository,
-                        )
-                    })
+                    val webAppScreenViewModel: WebAppScreenViewModel = koinViewModel()
                     val uiState by webAppScreenViewModel.uiState.collectAsState()
 
                     BrowserAppShell(

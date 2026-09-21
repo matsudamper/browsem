@@ -43,6 +43,7 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import java.util.concurrent.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
@@ -59,6 +60,7 @@ import net.matsudamper.browser.feature.themecolor.ThemeColorWebExtension
 import net.matsudamper.browser.screen.browser.CustomTabScreenViewModel
 import net.matsudamper.browser.ui.common.BrowserTheme
 import org.koin.android.ext.android.inject
+import org.koin.androidx.compose.koinViewModel
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoSession
 
@@ -69,6 +71,7 @@ class CustomTabActivity : ComponentActivity() {
     private val mediaWebExtensionInstance: MediaWebExtension by inject()
     private val settingsRepository: SettingsRepository by inject()
     private val tabRepository: TabRepository by inject()
+    private val applicationScope: CoroutineScope by inject()
     private val historyRepository: HistoryRepository by inject()
     private val webSuggestionRepository: WebSuggestionRepository by inject()
 
@@ -79,6 +82,8 @@ class CustomTabActivity : ComponentActivity() {
                     tabRepository = tabRepository,
                     runtime = geckoRuntimeInitializer.requireInitialized(),
                     handoffToken = intent.getStringExtra(WindowOpenHandoffStore.EXTRA_HANDOFF_TOKEN),
+                    mediaWebExtension = mediaWebExtensionInstance,
+                    applicationScope = applicationScope,
                 )
             }
         }
@@ -163,9 +168,6 @@ class CustomTabActivity : ComponentActivity() {
                                 geminiNanoModelKey = browserSettings.geminiNanoModelKey,
                                 browserTabController = browserTabController,
                                 browserSessionLifecycleController = browserSessionLifecycleController,
-                                settingsRepository = settingsRepository,
-                                historyRepository = historyRepository,
-                                webSuggestionRepository = webSuggestionRepository,
                                 themeColorExtension = themeColorExtension,
                                 mediaWebExtension = mediaWebExtensionInstance,
                                 outerNavActions = outerNavActions,
@@ -284,9 +286,6 @@ private fun CustomTabScreen(
     geminiNanoModelKey: String,
     browserTabController: BrowserTabController,
     browserSessionLifecycleController: BrowserSessionLifecycleController,
-    settingsRepository: SettingsRepository,
-    historyRepository: HistoryRepository,
-    webSuggestionRepository: WebSuggestionRepository,
     themeColorExtension: ThemeColorWebExtension,
     mediaWebExtension: MediaWebExtension,
     outerNavActions: OuterNavActions,
@@ -296,13 +295,7 @@ private fun CustomTabScreen(
     onOpenPopupInCustomTab: (uri: String, openerTabId: String) -> GeckoSession,
     onRequestDownloadNotificationPermission: suspend () -> Unit,
 ) {
-    val viewModel = viewModel(initializer = {
-        CustomTabScreenViewModel(
-            historyRepository = historyRepository,
-            settingsRepository = settingsRepository,
-            webSuggestionRepository = webSuggestionRepository,
-        )
-    })
+    val viewModel: CustomTabScreenViewModel = koinViewModel()
     val uiState by viewModel.uiState.collectAsState()
     val currentOnHandedOffPopupSessionAttached by rememberUpdatedState(onHandedOffPopupSessionAttached)
     val currentHandedOffPopupInitialUrl by rememberUpdatedState(handedOffPopupInitialUrl)

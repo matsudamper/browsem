@@ -3,12 +3,7 @@ package net.matsudamper.browser.screen.settings
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.channels.ReceiveChannel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -29,59 +24,17 @@ import net.matsudamper.browser.data.resolvedInputAutoZoomEnabled
 import net.matsudamper.browser.data.resolvedWebAuthnPlatformAuthenticatorAvailableOverrideEnabled
 import net.matsudamper.browser.feature.mocklocation.MockLocationWebExtension
 import net.matsudamper.browser.feature.webauthncompat.WebAuthnCompatWebExtension
-import net.matsudamper.browser.translate.GeminiNanoModelOption
-import net.matsudamper.browser.translate.listGeminiNanoModels
-import net.matsudamper.browser.translate.resolveGeminiNanoModelKey
-import net.matsudamper.browser.translate.toGeminiNanoModelLabel
+import net.matsudamper.browser.translate.GeminiNanoModel
 import net.matsudamper.browser.ui.settings.SettingsScreenUiState
-import org.koin.core.component.KoinComponent
-import org.koin.core.component.inject
 import org.mozilla.geckoview.GeckoRuntime
-
-internal data class WebAuthnSettingsUpdate(
-    val persist: suspend () -> Unit,
-    val onPersisted: () -> Unit,
-)
-
-internal suspend fun processWebAuthnSettingsUpdates(
-    channel: ReceiveChannel<WebAuthnSettingsUpdate>,
-    onError: (Throwable) -> Unit,
-) {
-    for (update in channel) {
-        try {
-            update.persist()
-            update.onPersisted()
-        } catch (error: CancellationException) {
-            throw error
-        } catch (error: Throwable) {
-            onError(error)
-        }
-    }
-}
-
-private val webAuthnSettingsUpdateScope by lazy {
-    CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-}
-private val webAuthnSettingsUpdateChannel by lazy {
-    Channel<WebAuthnSettingsUpdate>(Channel.UNLIMITED).also { channel ->
-        webAuthnSettingsUpdateScope.launch {
-            processWebAuthnSettingsUpdates(channel) { error ->
-                Log.w(
-                    "SettingsScreenViewModel",
-                    "WebAuthn 互換設定の保存または再読み込みに失敗",
-                    error,
-                )
-            }
-        }
-    }
-}
 
 internal class SettingsScreenViewModel(
     private val settingsRepository: SettingsRepository,
-) : ViewModel(), KoinComponent {
+    private val runtime: GeckoRuntime,
+    private val webAuthnCompatWebExtension: WebAuthnCompatWebExtension,
+    private val webAuthnSettingsUpdateQueue: WebAuthnSettingsUpdateQueue,
+) : ViewModel() {
 
-    private val runtime: GeckoRuntime by inject()
-    private val webAuthnCompatWebExtension: WebAuthnCompatWebExtension by inject()
     private val viewModelStateFlow = MutableStateFlow(ViewModelState())
     val eventHandler = Channel<(Event) -> Unit>(Channel.UNLIMITED)
 
@@ -91,7 +44,7 @@ internal class SettingsScreenViewModel(
 
     init {
         viewModelScope.launch {
-            val geminiNanoModels = listGeminiNanoModels()
+            val geminiNanoModels = GeminiNanoModel.list()
             viewModelStateFlow.update {
                 it.copy(
                     geminiNanoModelsLoaded = true,
@@ -151,7 +104,7 @@ internal class SettingsScreenViewModel(
         override fun setWebAuthnPlatformAuthenticatorAvailableOverrideEnabled(enabled: Boolean) {
             webAuthnCompatWebExtension.retrySetEnabled(runtime, enabled).accept(
                 {
-                    webAuthnSettingsUpdateChannel.trySend(
+                    webAuthnSettingsUpdateQueue.enqueue(
                         WebAuthnSettingsUpdate(
                             persist = {
                                 settingsRepository
@@ -284,7 +237,7 @@ internal class SettingsScreenViewModel(
                             )
                             return@collectLatest
                         }
-                        val resolvedModelKey = resolveGeminiNanoModelKey(
+                        val resolvedModelKey = GeminiNanoModel.resolveKey(
                             models = state.geminiNanoModels,
                             savedKey = settings.geminiNanoModelKey,
                         )
@@ -304,7 +257,7 @@ internal class SettingsScreenViewModel(
                             geminiNanoModels = state.geminiNanoModels.map { model ->
                                 SettingsScreenUiState.GeminiNanoModel(
                                     key = model.key,
-                                    label = toGeminiNanoModelLabel(model.modelName),
+                                    label = GeminiNanoModel.toLabel(model.modelName),
                                 )
                             },
                         )
@@ -334,7 +287,7 @@ internal class SettingsScreenViewModel(
         val pendingExtensionsProcessEnabled: Boolean? = null,
         val showDefaultBrowserBanner: Boolean = false,
         val geminiNanoModelsLoaded: Boolean = false,
-        val geminiNanoModels: List<GeminiNanoModelOption> = listOf(),
+        val geminiNanoModels: List<GeminiNanoModel.Option> = listOf(),
     )
 }
 

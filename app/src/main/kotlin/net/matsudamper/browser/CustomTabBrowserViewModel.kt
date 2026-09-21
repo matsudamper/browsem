@@ -1,7 +1,9 @@
 package net.matsudamper.browser
 
 import androidx.lifecycle.ViewModel
+import kotlinx.coroutines.CoroutineScope
 import net.matsudamper.browser.data.TabRepository
+import net.matsudamper.browser.feature.media.MediaWebExtension
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoSession
 
@@ -18,11 +20,14 @@ internal class CustomTabBrowserViewModel(
     tabRepository: TabRepository,
     runtime: GeckoRuntime,
     handoffToken: String?,
+    private val mediaWebExtension: MediaWebExtension,
+    applicationScope: CoroutineScope,
 ) : ViewModel() {
     val browserTabController = BrowserTabController(
         tabRepository = tabRepository,
         tabGroupRepository = null,
         isSinglePage = true,
+        persistenceScope = applicationScope,
     )
     val browserSessionLifecycleController = BrowserSessionLifecycleController(runtime)
 
@@ -63,6 +68,9 @@ internal class CustomTabBrowserViewModel(
                 tabs = browserTabController.tabs,
                 selectedTabId = browserTabController.selectedTabId,
             )
+        }
+        browserTabController.onTabSessionDisposed = { session ->
+            mediaWebExtension.releaseSession(session)
         }
     }
 

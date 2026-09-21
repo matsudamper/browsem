@@ -31,19 +31,22 @@ import org.mozilla.geckoview.GeckoSession
 
 /**
  * @param isSinglePage Tabに依存しない。Tabの保存機能が無効化される
+ * @param persistenceScope 保存を流すスコープ。画面が終了した後も保留中の保存を流し切る必要があるため、
+ * [close] で止まる controllerScope ではなくプロセス寿命のスコープを渡す
  */
 @Stable
 class BrowserTabController(
     private val tabRepository: TabRepository,
     private val tabGroupRepository: TabGroupRepository?,
     private val isSinglePage: Boolean,
+    persistenceScope: CoroutineScope,
 ) : TabStore {
     private enum class RestoreState { NOT_STARTED, IN_PROGRESS, COMPLETED }
 
     private val controllerScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val persistenceCoordinator = BrowserTabPersistenceCoordinator(
         tabRepository = tabRepository,
-        controllerScope = controllerScope,
+        persistenceScope = persistenceScope,
         isSinglePage = isSinglePage,
     )
 
@@ -85,6 +88,12 @@ class BrowserTabController(
      */
     var onTabListChanged: (() -> Unit)? = null
 
+    /**
+     * タブのセッションを破棄する直前に呼ぶ。セッションに紐づく再生状態など、
+     * 画面離脱では手放せない参照を解放するために使う。
+     */
+    var onTabSessionDisposed: ((GeckoSession) -> Unit)? = null
+
     fun findTab(tabId: String): BrowserTab? = tabRegistry.find(tabId)
 
     /** タブがこのセッション中に [closeTab] で閉じられたかどうかを返す */
@@ -116,7 +125,8 @@ class BrowserTabController(
         }
         restoreState = RestoreState.IN_PROGRESS
         try {
-            val snapshot = withContext(Dispatchers.IO) {
+            // 旧 Controller の保留中の保存が残っていることがあるため、流し切ってから読み出す
+            val snapshot = persistenceCoordinator.withPersistenceLock {
                 val persisted = tabRepository.loadTabs()
                 RestoredTabs(
                     tabs = persisted.tabs.map { tab ->
@@ -175,8 +185,9 @@ class BrowserTabController(
         }
     }
 
-    suspend fun awaitPersistenceIdle() {
-        persistenceCoordinator.awaitIdle()
+    /** 保留中の保存と交差させたくない処理を、保存と同じロックの中で実行する。 */
+    suspend fun <T> withPersistenceLock(block: suspend () -> T): T {
+        return persistenceCoordinator.withPersistenceLock(block)
     }
 
     suspend fun getOrCreateTab(tabId: String, homepageUrl: String): BrowserTab {
@@ -411,6 +422,9 @@ class BrowserTabController(
     }
 
     fun close() {
+        // セッション破棄中の delegate callback が、作り直された Controller の復元結果を
+        // 上書きしないよう、新しい保存は受け付けない
+        persistenceCoordinator.stopAcceptingNewPersistence()
         confirmClosedTab()
         tabRegistry.values().forEach { tab ->
             disposeTab(tab, "BrowserTabController が終了しました")
@@ -522,11 +536,12 @@ class BrowserTabController(
 
     private fun disposeTab(tab: BrowserTab, reason: String) {
         if (tab.sessionHandedOff) {
-            // セッションは引き渡し先のものなので閉じない。delegate は引き渡し先が張り直しているため、
+            // セッションは引き渡し先のものなので閉じず、破棄として通知もしない。delegate は引き渡し先が張り直しているため、
             // 解除しても影響しない。保留リクエストを残したままにしないよう後始末だけ行う。
             tab.disposeSessionDelegates(CancellationException(reason))
             return
         }
+        onTabSessionDisposed?.invoke(tab.session)
         if (tab.session.isOpen && tab.currentUrl.startsWith("moz-extension://")) {
             // 拡張機能のオプションページを閉じる際は、about:blank へのナビゲーション完了を待ってから
             // セッションを閉じる。これにより pagehide イベントが発火し、
