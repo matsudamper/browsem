@@ -90,7 +90,7 @@ class GeminiNanoTranslator(
                 resolveSourceLanguage(snapshot),
                 toLanguage,
             )
-            val selectedModel = selectGeminiNanoModel(modelKey)
+            val selectedModel = GeminiNanoModel.select(modelKey)
                 ?: throw IllegalStateException("Gemini Nanoを利用できない端末です")
             currentModelKey = selectedModel.key
             val inference = GeminiNanoInference(

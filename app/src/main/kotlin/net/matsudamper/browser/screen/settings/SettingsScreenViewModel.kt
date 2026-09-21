@@ -24,10 +24,7 @@ import net.matsudamper.browser.data.resolvedInputAutoZoomEnabled
 import net.matsudamper.browser.data.resolvedWebAuthnPlatformAuthenticatorAvailableOverrideEnabled
 import net.matsudamper.browser.feature.mocklocation.MockLocationWebExtension
 import net.matsudamper.browser.feature.webauthncompat.WebAuthnCompatWebExtension
-import net.matsudamper.browser.translate.GeminiNanoModelOption
-import net.matsudamper.browser.translate.listGeminiNanoModels
-import net.matsudamper.browser.translate.resolveGeminiNanoModelKey
-import net.matsudamper.browser.translate.toGeminiNanoModelLabel
+import net.matsudamper.browser.translate.GeminiNanoModel
 import net.matsudamper.browser.ui.settings.SettingsScreenUiState
 import org.mozilla.geckoview.GeckoRuntime
 
@@ -47,7 +44,7 @@ internal class SettingsScreenViewModel(
 
     init {
         viewModelScope.launch {
-            val geminiNanoModels = listGeminiNanoModels()
+            val geminiNanoModels = GeminiNanoModel.list()
             viewModelStateFlow.update {
                 it.copy(
                     geminiNanoModelsLoaded = true,
@@ -240,7 +237,7 @@ internal class SettingsScreenViewModel(
                             )
                             return@collectLatest
                         }
-                        val resolvedModelKey = resolveGeminiNanoModelKey(
+                        val resolvedModelKey = GeminiNanoModel.resolveKey(
                             models = state.geminiNanoModels,
                             savedKey = settings.geminiNanoModelKey,
                         )
@@ -260,7 +257,7 @@ internal class SettingsScreenViewModel(
                             geminiNanoModels = state.geminiNanoModels.map { model ->
                                 SettingsScreenUiState.GeminiNanoModel(
                                     key = model.key,
-                                    label = toGeminiNanoModelLabel(model.modelName),
+                                    label = GeminiNanoModel.toLabel(model.modelName),
                                 )
                             },
                         )
@@ -290,7 +287,7 @@ internal class SettingsScreenViewModel(
         val pendingExtensionsProcessEnabled: Boolean? = null,
         val showDefaultBrowserBanner: Boolean = false,
         val geminiNanoModelsLoaded: Boolean = false,
-        val geminiNanoModels: List<GeminiNanoModelOption> = listOf(),
+        val geminiNanoModels: List<GeminiNanoModel.Option> = listOf(),
     )
 }
 
