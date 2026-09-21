@@ -646,8 +646,8 @@ internal fun GeckoBrowserTab(
                             awaitingSurfaceDestroy = true
                             gecko.postDelayed(
                                 {
-                                    awaitingSurfaceDestroy = false
                                     if (generation != surfaceRestoreGeneration) return@postDelayed
+                                    awaitingSurfaceDestroy = false
                                     restoreSurfaceIfNeeded(gecko, blankSurfaceRetryCount + 1)
                                 },
                                 SURFACE_DESTROY_WAIT_MS,
@@ -844,10 +844,10 @@ internal fun GeckoBrowserTab(
                         val generation = surfaceRestoreGeneration
                         gv.postDelayed(
                             {
-                                awaitingSurfaceDestroy = false
-                                // 待っている間に Composable が破棄されていれば、
-                                // 捨てられた View と session には触らない。
+                                // 待っている間に Composable が破棄されていれば、捨てられた
+                                // View と session には触らず、状態も書き換えない。
                                 if (generation != surfaceRestoreGeneration) return@postDelayed
+                                awaitingSurfaceDestroy = false
                                 resumeFromPauseIfNeeded(gv)
                             },
                             SURFACE_DESTROY_WAIT_MS,
