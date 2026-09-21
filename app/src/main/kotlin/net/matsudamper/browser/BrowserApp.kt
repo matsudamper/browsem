@@ -1127,7 +1127,7 @@ private fun MainBrowserContent(
                             externalTabInitialUrlsFlow = viewModel.externalTabInitialUrls,
                         )
                     }
-                    DisposableEffect(key.tabId) {
+                    DisposableEffect(browserScreenViewModel) {
                         onDispose { browserScreenViewModel.close() }
                     }
                     val browserScreenUiState by browserScreenViewModel.uiState.collectAsState()
