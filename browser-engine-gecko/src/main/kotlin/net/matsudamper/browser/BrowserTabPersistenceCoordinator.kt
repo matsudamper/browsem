@@ -37,7 +37,8 @@ internal class BrowserTabPersistenceCoordinator(
      */
     suspend fun <T> withPersistenceLock(block: suspend () -> T): T {
         val result = CompletableDeferred<T>()
-        persistenceTasks.send {
+        // 中断を挟まずに登録し、呼び出し順がそのままキューの順序になるようにする
+        persistenceTasks.trySend {
             runCatching { block() }
                 .fold(result::complete, result::completeExceptionally)
         }

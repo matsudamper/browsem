@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import java.util.UUID
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -364,8 +365,9 @@ internal class BrowserViewModel(
         externalTabInitialUrlByTabId.remove(cleanup.tabId)
         externalTabIdsFlow.update { it - cleanup.tabId }
         externalTabInitialUrlsFlow.update { it - cleanup.tabId }
-        val job = applicationScope.async(Dispatchers.IO) {
-            // 削除と、保留中の保存の待機を同じロックの中で行い、作り直された画面の復元と交差させない
+        // 保存キューへの登録までを呼び出し時点で済ませ、作り直された画面の復元より後ろに回らないようにする。
+        // 実処理はキューを回すコルーチン（IO）で行うため、ここで dispatcher を切り替える必要はない。
+        val job = applicationScope.async(start = CoroutineStart.UNDISPATCHED) {
             browserTabController.withPersistenceLock {
                 tabRepository.closeTab(cleanup.tabId, cleanup.nextSelectedTabId)
             }
