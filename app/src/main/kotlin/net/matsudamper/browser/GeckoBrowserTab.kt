@@ -53,6 +53,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -255,6 +256,8 @@ internal fun GeckoBrowserTab(
     // Surface と Session の復元状態を一元管理する state machine。
     // ON_START / ON_RESUME が重複発火しても state=ACTIVE なら即 no-op にする。
     var surfaceResumeState by remember(session) { mutableStateOf(SurfaceResumeState.ACTIVE) }
+    // 復元サイクルの世代。復元を始めるたびに更新し、前の世代が残した監視を無効化する。
+    var surfaceRestoreGeneration by remember(session) { mutableIntStateOf(0) }
     val addressAutofillDelegate = remember(session, addressAutofillCoordinator) {
         AddressAutofillDelegate(coordinator = addressAutofillCoordinator)
     }
@@ -575,6 +578,8 @@ internal fun GeckoBrowserTab(
         // stale フレームが一瞬表示されるのを防ぐため pre-draw 待ちより前に cover する。
         gecko.coverUntilFirstPaint(resumeCoverColor)
         surfaceResumeState = SurfaceResumeState.WAITING_STABLE
+        surfaceRestoreGeneration++
+        val generation = surfaceRestoreGeneration
         scheduleStableSizeAttach(
             gecko = gecko,
             recordedHeight = -1,
@@ -590,6 +595,9 @@ internal fun GeckoBrowserTab(
         fun waitForFirstComposite(activeSinceMs: Long?) {
             gecko.postDelayed(
                 {
+                    // 前の復元サイクルが残した監視は、新しいサイクルの attach を
+                    // 巻き添えに作り直してしまうため何もしない。
+                    if (generation != surfaceRestoreGeneration) return@postDelayed
                     if (!lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
                         return@postDelayed
                     }
@@ -827,7 +835,11 @@ internal fun GeckoBrowserTab(
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            // 破棄後に監視が生き残って View を触らないよう世代を進めて無効化する。
+            surfaceRestoreGeneration++
+        }
     }
 
     DisposableEffect(session, state, themeColorExtension) {
