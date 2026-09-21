@@ -1,17 +1,16 @@
 package net.matsudamper.browser
 
 import android.util.Log
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.withContext
 import net.matsudamper.browser.data.TabRepository
 
 internal class BrowserTabPersistenceCoordinator(
     tabRepository: TabRepository,
-    private val persistenceScope: CoroutineScope,
+    persistenceScope: CoroutineScope,
     private val isSinglePage: Boolean,
 ) {
     // CustomTabs等のTabに依存しない場合はTabの保存を利用しない
@@ -19,6 +18,10 @@ internal class BrowserTabPersistenceCoordinator(
 
     @Volatile
     private var acceptsNewPersistence = true
+
+    init {
+        startWorkerIfNeeded(persistenceScope)
+    }
 
     /**
      * Controller の終了後に新しい保存を受け付けなくする。
@@ -30,14 +33,15 @@ internal class BrowserTabPersistenceCoordinator(
     }
 
     /**
-     * 保留中の保存と交差させたくない処理を直列化する。復元の読み出しに使う。
+     * 保留中の保存と交差させたくない処理を、保存と同じ順序で実行する。復元の読み出しに使う。
      */
     suspend fun <T> withPersistenceLock(block: suspend () -> T): T {
-        return withContext(Dispatchers.IO) {
-            persistenceMutex.withLock {
-                block()
-            }
+        val result = CompletableDeferred<T>()
+        persistenceTasks.send {
+            runCatching { block() }
+                .fold(result::complete, result::completeExceptionally)
         }
+        return result.await()
     }
 
     fun persistSelection(tabId: String?) {
@@ -72,17 +76,15 @@ internal class BrowserTabPersistenceCoordinator(
         insertIndex: Int,
         selected: Boolean,
     ) {
-        tabRepository ?: return
+        val tabRepository = tabRepository ?: return
         if (!acceptsNewPersistence) return
         val persistedTab = tab.toPersistedTabState()
-        withContext(Dispatchers.IO) {
-            persistenceMutex.withLock {
-                tabRepository.createOrUpdateTab(
-                    tab = persistedTab,
-                    insertIndex = insertIndex,
-                    selected = selected,
-                )
-            }
+        withPersistenceLock {
+            tabRepository.createOrUpdateTab(
+                tab = persistedTab,
+                insertIndex = insertIndex,
+                selected = selected,
+            )
         }
     }
 
@@ -123,29 +125,21 @@ internal class BrowserTabPersistenceCoordinator(
     }
 
     fun persistPreviewBitmap(tabId: String, previewBitmap: ByteArray?) {
-        tabRepository ?: return
-        if (!acceptsNewPersistence) return
-        persistenceScope.launch(Dispatchers.IO) {
-            if (previewBitmap != null && previewBitmap.isNotEmpty()) {
-                runCatching {
-                    tabRepository.saveTabThumbnail(tabId, previewBitmap)
-                }.onFailure { error ->
-                    Log.e(TAG, "タブプレビュー保存に失敗しました", error)
-                }
-            }
+        if (previewBitmap == null || previewBitmap.isEmpty()) return
+        enqueue {
+            it.saveTabThumbnail(tabId, previewBitmap)
         }
     }
 
     private fun enqueue(action: suspend (TabRepository) -> Unit) {
-        tabRepository ?: return
+        val tabRepository = tabRepository ?: return
         if (!acceptsNewPersistence) return
-        persistenceScope.launch(Dispatchers.IO) {
-            persistenceMutex.withLock {
-                runCatching {
-                    action(tabRepository)
-                }.onFailure { error ->
-                    Log.e(TAG, "タブ状態の永続化に失敗しました", error)
-                }
+        // send ではなく trySend で、呼び出し順がそのままキューの順序になるようにする
+        persistenceTasks.trySend {
+            runCatching {
+                action(tabRepository)
+            }.onFailure { error ->
+                Log.e(TAG, "タブ状態の永続化に失敗しました", error)
             }
         }
     }
@@ -154,7 +148,19 @@ internal class BrowserTabPersistenceCoordinator(
         private const val TAG = "BrowserTabPersistence"
 
         // Activity の作り直しで Controller が入れ替わっても保存と復元の順序を保てるよう、
-        // 直列化はプロセス全体で共有する。
-        private val persistenceMutex = Mutex()
+        // キューはプロセス全体で共有し、単一のコルーチンが投入順に実行する。
+        private val persistenceTasks = Channel<suspend () -> Unit>(Channel.UNLIMITED)
+        private var workerStarted = false
+
+        @Synchronized
+        private fun startWorkerIfNeeded(scope: CoroutineScope) {
+            if (workerStarted) return
+            workerStarted = true
+            scope.launch(Dispatchers.IO) {
+                for (task in persistenceTasks) {
+                    task()
+                }
+            }
+        }
     }
 }
