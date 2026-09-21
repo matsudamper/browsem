@@ -670,6 +670,7 @@ private fun ContextMenuDialog(
                             enableTabUi = enableTabUi,
                             onOpenNewTab = onOpenNewTab,
                             onOpenUrl = onOpenUrl,
+                            onCopyLink = onCopyLink,
                             onDownloadImage = onDownloadImage,
                         )
                     }
@@ -700,6 +701,12 @@ private fun ContextMenuDialog(
                         }
                         TextButton(
                             modifier = Modifier.fillMaxWidth(),
+                            onClick = { onCopyLink(menu.imageSrcUrl) },
+                        ) {
+                            Text(text = "画像のリンクをコピー")
+                        }
+                        TextButton(
+                            modifier = Modifier.fillMaxWidth(),
                             onClick = { onDownloadImage(menu.imageSrcUrl) },
                         ) {
                             Text(text = "画像をダウンロード")
@@ -723,6 +730,7 @@ private fun ImageActionButtons(
     enableTabUi: Boolean,
     onOpenNewTab: (String) -> Unit,
     onOpenUrl: (String) -> Unit,
+    onCopyLink: (String) -> Unit,
     onDownloadImage: (String) -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -740,6 +748,12 @@ private fun ImageActionButtons(
             ) {
                 Text(text = "開く")
             }
+        }
+        TextButton(
+            modifier = Modifier.fillMaxWidth(),
+            onClick = { onCopyLink(srcUrl) },
+        ) {
+            Text(text = "画像のリンクをコピー")
         }
         TextButton(
             modifier = Modifier.fillMaxWidth(),

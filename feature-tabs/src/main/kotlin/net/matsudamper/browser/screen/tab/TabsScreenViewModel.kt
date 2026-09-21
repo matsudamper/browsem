@@ -104,6 +104,7 @@ class TabsScreenViewModel(
         TabsScreenUiState(
             callbacks = callbacks,
             loadingState = TabsScreenUiState.LoadingState.Loading,
+            pendingClosedTab = null,
         ),
     ).also { uiStateFlow ->
         viewModelScope.launch {
