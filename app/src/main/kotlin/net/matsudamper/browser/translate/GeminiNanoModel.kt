@@ -115,7 +115,7 @@ internal object GeminiNanoModel {
             handedOver = true
             return Opened(
                 generativeModel = generativeModel,
-                modelName = modelName,
+                modelName = "Local $modelName",
                 key = buildKey(candidate.configName, modelName),
                 priority = priority,
             )
