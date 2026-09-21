@@ -53,6 +53,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -255,6 +256,9 @@ internal fun GeckoBrowserTab(
     // Surface と Session の復元状態を一元管理する state machine。
     // ON_START / ON_RESUME が重複発火しても state=ACTIVE なら即 no-op にする。
     var surfaceResumeState by remember(session) { mutableStateOf(SurfaceResumeState.ACTIVE) }
+    // コンポジタがフレームを出さないまま黒画面になった surface を作り直した回数。
+    // 復帰のたびに 0 から数え直す。
+    var blankSurfaceRetryCount by remember(session) { mutableIntStateOf(0) }
     val addressAutofillDelegate = remember(session, addressAutofillCoordinator) {
         AddressAutofillDelegate(coordinator = addressAutofillCoordinator)
     }
@@ -580,6 +584,40 @@ internal fun GeckoBrowserTab(
             recordedHeight = -1,
             stableCount = 0,
             startTimeMs = SystemClock.elapsedRealtime(),
+        )
+        // attach しても Gecko 側のコンポジタが新しい surface にフレームを出さず、画面が
+        // 黒いまま固まることがある。session は open のままなので他に検知手段がなく、
+        // onFirstComposite が来たかどうかで判定して surface ごと作り直す。
+        val compositeCountBeforeAttach = state.firstCompositeCount
+        gecko.postDelayed(
+            {
+                if (!lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
+                    return@postDelayed
+                }
+                if (state.firstCompositeCount != compositeCountBeforeAttach) return@postDelayed
+                if (surfaceResumeState != SurfaceResumeState.ACTIVE) return@postDelayed
+                if (blankSurfaceRetryCount >= BLANK_SURFACE_MAX_RETRY) {
+                    Log.w(
+                        TAG_SURFACE_RESUME,
+                        "blank-surface: 再作成しても first composite が来ない。復旧を諦める" +
+                            " session=${session.logKey()}",
+                    )
+                    return@postDelayed
+                }
+                blankSurfaceRetryCount++
+                Log.w(
+                    TAG_SURFACE_RESUME,
+                    "blank-surface: attach 後 ${BLANK_SURFACE_TIMEOUT_MS}ms で first composite が" +
+                        " 来ないため surface を作り直す retry=$blankSurfaceRetryCount" +
+                        " session=${session.logKey()}",
+                )
+                addressAutofillDelegate.unbindBeforeViewRelease(session)
+                gecko.releaseSession()
+                gecko.visibility = View.INVISIBLE
+                surfaceResumeState = SurfaceResumeState.RELEASED
+                restoreSurfaceIfNeeded(gecko)
+            },
+            BLANK_SURFACE_TIMEOUT_MS,
         )
     }
 
@@ -1624,6 +1662,15 @@ private const val STABLE_FRAMES_THRESHOLD = 3
  * setSession する。Web 入力欄の表示遅延と GPU kill 防止のトレードオフ。
  */
 private const val STABLE_TIMEOUT_MS = 1000L
+
+/**
+ * attach 後にコンポジタの最初のフレーム (onFirstComposite) を待つ時間。これを過ぎても
+ * 来なければ surface にフレームが供給されていないとみなし、作り直して attach し直す。
+ */
+private const val BLANK_SURFACE_TIMEOUT_MS = 1500L
+
+/** 黒いままの surface を作り直す上限回数。 */
+private const val BLANK_SURFACE_MAX_RETRY = 2
 
 private fun GeckoSession.logKey(): String = Integer.toHexString(System.identityHashCode(this))
 
