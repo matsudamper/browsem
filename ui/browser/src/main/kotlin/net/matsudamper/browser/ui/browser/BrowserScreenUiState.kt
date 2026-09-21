@@ -5,7 +5,7 @@ import androidx.compose.runtime.Stable
 @Stable
 data class BrowserScreenUiState(
     val urlBarSuggestions: UrlBarSuggestionsUiState,
-    val swipePreview: SwipePreviewUiState = SwipePreviewUiState(),
+    val swipePreview: SwipePreviewUiState,
     val groupTabCount: Int?,
     val externalDownloadDialogListener: ExternalDownloadDialogListener?,
     val externalTabInitialUrl: String?,
@@ -39,6 +39,7 @@ data class BrowserScreenUiState(
         }
     }
 
+    @Stable
     interface Callbacks {
         suspend fun onHistoryRecord(url: String, title: String): Long
         suspend fun onHistoryTitleUpdate(id: Long, title: String)

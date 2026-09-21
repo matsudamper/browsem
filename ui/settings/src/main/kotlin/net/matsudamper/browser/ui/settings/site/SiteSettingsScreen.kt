@@ -52,7 +52,7 @@ sealed interface SiteSettingsScreenTestTags {
 
     val testTag get() = "${SiteSettingsScreenTestTags::class.java.name}#$id"
 
-    object Root : SiteSettingsScreenTestTags {
+    data object Root : SiteSettingsScreenTestTags {
         override val id = "root"
     }
 }
