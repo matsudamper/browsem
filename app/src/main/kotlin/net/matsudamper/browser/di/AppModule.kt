@@ -189,7 +189,7 @@ val appModule = module {
         )
     }
     viewModel { CustomTabScreenViewModel(get(), get(), get()) }
-    viewModel { WebAppBrowserViewModel(get(), get(), get()) }
+    viewModel { WebAppBrowserViewModel(get(), get(), get(), get()) }
     viewModel { WebAppScreenViewModel(get(), get(), get()) }
     worker { DownloadWorker(get(), get(), get()) }
 }
