@@ -235,7 +235,6 @@ internal class BrowserToolBarGestureState(
     var onHorizontalDragEnd = onHorizontalDragEnd
     var onOpenTabs = onOpenTabs
 
-    // isFocused をキーに持つため、コンポジションごとに呼び出して最新値を渡す必要がある。
     fun modifier(isFocused: Boolean): Modifier {
         return Modifier
             .pointerInput(isFocused) {
