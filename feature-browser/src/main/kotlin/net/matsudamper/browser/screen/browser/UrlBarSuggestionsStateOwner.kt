@@ -53,7 +53,13 @@ internal class UrlBarSuggestionsStateOwner(
             viewModelStateFlow.collectLatest { state ->
                 uiStateFlow.update {
                     UrlBarSuggestionsUiState(
-                        historySuggestions = state.historySuggestions,
+                        historySuggestions = state.historySuggestions.map { entry ->
+                            UrlBarSuggestionsUiState.HistorySuggestion(
+                                id = entry.id,
+                                url = entry.url,
+                                title = entry.title,
+                            )
+                        },
                         webSuggestions = state.webSuggestionState.suggestions,
                         isLoadingWebSuggestions = state.webSuggestionState.isLoading,
                     )

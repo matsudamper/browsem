@@ -18,6 +18,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
@@ -36,7 +37,7 @@ import net.matsudamper.browser.data.websuggestion.WebSuggestionRepository
 import net.matsudamper.browser.feature.media.MediaWebExtension
 import net.matsudamper.browser.feature.themecolor.ThemeColorWebExtension
 import net.matsudamper.browser.screen.browser.WebAppScreenViewModel
-import net.matsudamper.browser.ui.browser.WebAppScreen
+import net.matsudamper.browser.ui.browser.BrowserContentLoadingIndicator
 import net.matsudamper.browser.ui.common.BrowserTheme
 import org.koin.android.ext.android.inject
 import org.mozilla.geckoview.GeckoRuntime
@@ -120,23 +121,32 @@ class WebAppActivity : ComponentActivity() {
                         browserSessionLifecycleController = browserSessionLifecycleController,
                         runtime = runtime,
                     ) { outerNavActions ->
-                        WebAppScreen(
-                            initialUrl = resolvedInitialUrl,
-                            browserTabController = browserTabController,
-                            uiState = uiState,
-                        ) { modifier, browserTab, webAppUiState ->
-                            val taskTitle = browserTab.title
-                            val taskFavicon = browserTab.faviconBitmap
+                        val browserTab by produceState<BrowserTab?>(
+                            initialValue = null,
+                            key1 = browserTabController,
+                            key2 = resolvedInitialUrl,
+                        ) {
+                            // Activity再生成（フォルダブル開閉等）時はViewModelのcontrollerに既存タブが残っているため再利用する。
+                            // タブの破棄はViewModelの onCleared() で行う。
+                            value = browserTabController.tabs.firstOrNull()
+                                ?: browserTabController.createAndAppendTab(initialUrl = resolvedInitialUrl)
+                        }
+                        val activeTab = browserTab
+                        if (activeTab == null) {
+                            BrowserContentLoadingIndicator()
+                        } else {
+                            val taskTitle = activeTab.title
+                            val taskFavicon = activeTab.faviconBitmap
                             LaunchedEffect(taskTitle, taskFavicon) {
                                 updateTaskDescription(taskTitle, taskFavicon)
                             }
-                            val currentUrl = browserTab.currentUrl
+                            val currentUrl = activeTab.currentUrl
                             LaunchedEffect(currentUrl) {
-                                fetchHighQualityFavicon(browserTab, currentUrl)
+                                fetchHighQualityFavicon(activeTab, currentUrl)
                             }
                             GeckoBrowserTab(
-                                modifier = modifier,
-                                browserTab = browserTab,
+                                modifier = Modifier.fillMaxSize(),
+                                browserTab = activeTab,
                                 homepageUrl = resolvedInitialUrl,
                                 searchTemplate = browserSettings.resolvedSearchTemplate(),
                                 translationProvider = browserSettings.translationProvider,
@@ -149,7 +159,7 @@ class WebAppActivity : ComponentActivity() {
                                 onRequestDownloadNotificationPermission = { requestDownloadNotificationPermission() },
                                 onOpenSettings = {},
                                 onOpenSiteSettings = { url ->
-                                    outerNavActions.openSiteSettings(url, browserTab.tabId)
+                                    outerNavActions.openSiteSettings(url, activeTab.tabId)
                                 },
                                 onOpenDownloads = null,
                                 onOpenTabs = {},
@@ -164,7 +174,7 @@ class WebAppActivity : ComponentActivity() {
                                 onOpenNewSessionRequest = { uri ->
                                     openWindowOpenRequestInCustomTab(
                                         uri = uri,
-                                        openerTabId = browserTab.tabId,
+                                        openerTabId = activeTab.tabId,
                                         browserTabController = browserTabController,
                                         browserSessionLifecycleController = browserSessionLifecycleController,
                                     )
@@ -177,10 +187,10 @@ class WebAppActivity : ComponentActivity() {
                                 externalTabInitialUrl = null,
                                 onToolbarHorizontalDrag = {},
                                 onToolbarDragEnd = {},
-                                onHistoryRecord = webAppUiState.callbacks::onHistoryRecord,
-                                onHistoryTitleUpdate = webAppUiState.callbacks::onHistoryTitleUpdate,
-                                urlBarSuggestions = webAppUiState.urlBarSuggestions,
-                                onUrlInputChanged = webAppUiState.callbacks::onUrlInputChanged,
+                                onHistoryRecord = uiState.callbacks::onHistoryRecord,
+                                onHistoryTitleUpdate = uiState.callbacks::onHistoryTitleUpdate,
+                                urlBarSuggestions = uiState.urlBarSuggestions,
+                                onUrlInputChanged = uiState.callbacks::onUrlInputChanged,
                                 onReevaluateOpenerRetention = reevaluateOpenerRetention,
                             )
                         }

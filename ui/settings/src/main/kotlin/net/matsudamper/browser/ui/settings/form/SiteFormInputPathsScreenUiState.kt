@@ -8,7 +8,6 @@ data class SiteFormInputPathsScreenUiState(
     val displayOrigin: String,
     val paths: List<PathEntry>,
 ) {
-    @Stable
     data class PathEntry(
         val path: String,
         val displayPath: String,
