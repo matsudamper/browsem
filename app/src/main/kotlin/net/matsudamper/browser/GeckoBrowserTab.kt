@@ -258,6 +258,9 @@ internal fun GeckoBrowserTab(
     var surfaceResumeState by remember(session) { mutableStateOf(SurfaceResumeState.ACTIVE) }
     // 復元サイクルの世代。復元を始めるたびに更新し、前の世代が残した監視を無効化する。
     var surfaceRestoreGeneration by remember(session) { mutableIntStateOf(0) }
+    // INVISIBLE にした surface の破棄を待っている間 true。破棄前に VISIBLE へ戻すと
+    // 破棄と生成が合流して同じ surface のまま attach し直してしまう。
+    var awaitingSurfaceDestroy by remember(session) { mutableStateOf(false) }
     val addressAutofillDelegate = remember(session, addressAutofillCoordinator) {
         AddressAutofillDelegate(coordinator = addressAutofillCoordinator)
     }
@@ -569,6 +572,10 @@ internal fun GeckoBrowserTab(
                 " session=${session.logKey()}",
         )
         if (surfaceResumeState != SurfaceResumeState.RELEASED) return
+        if (awaitingSurfaceDestroy) {
+            Log.d(TAG_SURFACE_RESUME, "restoreSurfaceIfNeeded: surface の破棄待ちのため何もしない")
+            return
+        }
         // ON_PAUSE で INVISIBLE にして Surface を破棄しているので VISIBLE に戻して
         // SurfaceView 内部の Surface を新規作成させる。
         if (gecko.visibility != View.VISIBLE) {
@@ -634,7 +641,16 @@ internal fun GeckoBrowserTab(
                             gecko.releaseSession()
                             gecko.visibility = View.INVISIBLE
                             surfaceResumeState = SurfaceResumeState.RELEASED
-                            restoreSurfaceIfNeeded(gecko, blankSurfaceRetryCount + 1)
+                            // surface の破棄は次の traversal で行われる。反映を待ってから
+                            // VISIBLE に戻さないと同じ surface に attach し直してしまう。
+                            awaitingSurfaceDestroy = true
+                            gecko.postDelayed(
+                                {
+                                    awaitingSurfaceDestroy = false
+                                    restoreSurfaceIfNeeded(gecko, blankSurfaceRetryCount + 1)
+                                },
+                                SURFACE_DESTROY_WAIT_MS,
+                            )
                         }
 
                         // release 済み。次の復帰で新しい監視が始まる。
@@ -822,6 +838,16 @@ internal fun GeckoBrowserTab(
                         gv.releaseSession()
                         gv.visibility = View.INVISIBLE
                         surfaceResumeState = SurfaceResumeState.RELEASED
+                        // surface の破棄が次の traversal で反映されるのを待ってから復元する。
+                        awaitingSurfaceDestroy = true
+                        gv.postDelayed(
+                            {
+                                awaitingSurfaceDestroy = false
+                                resumeFromPauseIfNeeded(gv)
+                            },
+                            SURFACE_DESTROY_WAIT_MS,
+                        )
+                        return@LifecycleEventObserver
                     }
                     resumeFromPauseIfNeeded(gv)
                 }
@@ -1719,6 +1745,12 @@ private const val BLANK_SURFACE_MAX_RETRY = 2
 
 /** first composite の到着と attach 完了を見に行く間隔。 */
 private const val BLANK_SURFACE_POLL_MS = 250L
+
+/**
+ * INVISIBLE にした SurfaceView の surface が破棄されるまでの待ち時間。破棄は次の
+ * traversal で行われるため、同じコールスタックで VISIBLE に戻すと破棄が起きない。
+ */
+private const val SURFACE_DESTROY_WAIT_MS = 100L
 
 private fun GeckoSession.logKey(): String = Integer.toHexString(System.identityHashCode(this))
 
