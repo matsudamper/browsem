@@ -1,5 +1,6 @@
 package net.matsudamper.browser.ui.browser
 
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.animation.core.Animatable
@@ -18,8 +19,12 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
@@ -31,7 +36,9 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import kotlin.math.roundToInt
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Composable
 fun BrowserScreen(
@@ -162,15 +169,20 @@ private fun TabPreviewPage(
         previewHeaderContent(Modifier.fillMaxWidth(), preview, tabCount)
 
         BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-            val previewBitmap = preview.previewImage
-            val bitmap = if (previewBitmap != null && previewBitmap.isNotEmpty()) {
-                remember(previewBitmap) {
-                    BitmapFactory.decodeByteArray(previewBitmap, 0, previewBitmap.size)
+            val previewImage = preview.previewImage
+            // 別のタブへ切り替わったときに前のタブの画像を出さないよう、画像ごとに作り直す
+            var decodedPreview: Bitmap? by remember(previewImage) { mutableStateOf(null) }
+            LaunchedEffect(previewImage) {
+                decodedPreview = if (previewImage != null && previewImage.isNotEmpty()) {
+                    withContext(Dispatchers.Default) {
+                        BitmapFactory.decodeByteArray(previewImage, 0, previewImage.size)
+                    }
+                } else {
+                    null
                 }
-            } else {
-                null
             }
 
+            val bitmap = decodedPreview
             if (bitmap != null) {
                 // 画像がコンテナより短い場合（フォルダブルで画面サイズが変わった場合）は上寄せ、
                 // 同じサイズの場合はURLバーの高さ分のズレに対応するため下寄せ

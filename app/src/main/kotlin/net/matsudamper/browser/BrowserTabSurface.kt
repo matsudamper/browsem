@@ -58,6 +58,8 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import kotlin.math.abs
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import net.matsudamper.browser.data.ThemeMode
 import net.matsudamper.browser.ui.browser.UrlBarSuggestionsUiState
 import net.matsudamper.browser.ui.common.BrowserTheme
@@ -231,12 +233,12 @@ internal fun BrowserContentHost(
         )
 
         val previewBytes = browserTab.previewBitmap
-        var previewBitmap: Bitmap? by remember(null) {
-            mutableStateOf(null)
-        }
+        var previewBitmap: Bitmap? by remember { mutableStateOf(null) }
         LaunchedEffect(previewBytes) {
             previewBitmap = if (previewBytes != null) {
-                BitmapFactory.decodeByteArray(previewBytes, 0, previewBytes.size)
+                withContext(Dispatchers.Default) {
+                    BitmapFactory.decodeByteArray(previewBytes, 0, previewBytes.size)
+                }
             } else {
                 null
             }
