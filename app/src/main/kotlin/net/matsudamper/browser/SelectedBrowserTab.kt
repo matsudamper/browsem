@@ -3,6 +3,9 @@ package net.matsudamper.browser
 import android.util.Log
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 
 /**
  * 画面が表示している tabId に対応する [BrowserTab] を解決する。
@@ -14,7 +17,10 @@ internal fun rememberSelectedBrowserTab(
     homepageUrl: String,
     browserTabController: BrowserTabController,
 ): BrowserTab? {
-    val selectedTab = browserTabController.findTab(tabId)
+    // タブの登録簿は Compose の状態ではないため、findTab の結果だけでは追加・削除で再コンポーズされない。
+    // タブの増減で更新される tabStoreState を読み、解決をやり直す。
+    val tabStoreState by browserTabController.tabStoreState.collectAsState()
+    val selectedTab = remember(tabId, tabStoreState) { browserTabController.findTab(tabId) }
     LaunchedEffect(tabId, homepageUrl, selectedTab) {
         // closeTab で閉じたタブは再作成しない。
         // NavDisplay の遷移アニメーション中に画面が残っている間に
