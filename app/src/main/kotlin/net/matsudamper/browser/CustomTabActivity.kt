@@ -60,6 +60,7 @@ import net.matsudamper.browser.feature.themecolor.ThemeColorWebExtension
 import net.matsudamper.browser.screen.browser.CustomTabScreenViewModel
 import net.matsudamper.browser.ui.common.BrowserTheme
 import org.koin.android.ext.android.inject
+import org.koin.androidx.compose.koinViewModel
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoSession
 
@@ -167,9 +168,6 @@ class CustomTabActivity : ComponentActivity() {
                                 geminiNanoModelKey = browserSettings.geminiNanoModelKey,
                                 browserTabController = browserTabController,
                                 browserSessionLifecycleController = browserSessionLifecycleController,
-                                settingsRepository = settingsRepository,
-                                historyRepository = historyRepository,
-                                webSuggestionRepository = webSuggestionRepository,
                                 themeColorExtension = themeColorExtension,
                                 mediaWebExtension = mediaWebExtensionInstance,
                                 outerNavActions = outerNavActions,
@@ -288,9 +286,6 @@ private fun CustomTabScreen(
     geminiNanoModelKey: String,
     browserTabController: BrowserTabController,
     browserSessionLifecycleController: BrowserSessionLifecycleController,
-    settingsRepository: SettingsRepository,
-    historyRepository: HistoryRepository,
-    webSuggestionRepository: WebSuggestionRepository,
     themeColorExtension: ThemeColorWebExtension,
     mediaWebExtension: MediaWebExtension,
     outerNavActions: OuterNavActions,
@@ -300,13 +295,7 @@ private fun CustomTabScreen(
     onOpenPopupInCustomTab: (uri: String, openerTabId: String) -> GeckoSession,
     onRequestDownloadNotificationPermission: suspend () -> Unit,
 ) {
-    val viewModel = viewModel(initializer = {
-        CustomTabScreenViewModel(
-            historyRepository = historyRepository,
-            settingsRepository = settingsRepository,
-            webSuggestionRepository = webSuggestionRepository,
-        )
-    })
+    val viewModel: CustomTabScreenViewModel = koinViewModel()
     val uiState by viewModel.uiState.collectAsState()
     val currentOnHandedOffPopupSessionAttached by rememberUpdatedState(onHandedOffPopupSessionAttached)
     val currentHandedOffPopupInitialUrl by rememberUpdatedState(handedOffPopupInitialUrl)
