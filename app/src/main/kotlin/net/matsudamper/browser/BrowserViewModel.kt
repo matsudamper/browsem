@@ -168,8 +168,8 @@ internal class BrowserViewModel(
                 }
         }
         // ページが位置情報を要求したら記録し、「サイトの設定」画面に位置情報の項目を表示できるようにする
-        mockLocationWebExtension.onGeolocationRequested = { host ->
-            viewModelScope.launch {
+        viewModelScope.launch {
+            mockLocationWebExtension.geolocationRequestedHosts.collect { host ->
                 siteSettingsRepository.markGeolocationRequested(host)
             }
         }
