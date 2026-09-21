@@ -38,35 +38,16 @@ object CustomTabHandoffStore {
         val session: GeckoSession,
         val sessionState: String,
         val createdAt: Long,
-        val onDiscard: (GeckoSession) -> Unit,
     )
 
     class Handoff internal constructor(
         val session: GeckoSession,
         /** セッションが閉じている（コンテンツプロセスの停止後など）ときに復元へ使う退避状態。 */
         val sessionState: String,
-        private val onDiscard: (GeckoSession) -> Unit,
-    ) {
-        /** 取り出したセッションをタブへ載せずに捨てるときに呼ぶ。 */
-        fun discardSession() {
-            onDiscard(session)
-            if (session.isOpen) {
-                session.close()
-            }
-        }
-    }
+    )
 
-    /**
-     * 引き継ぐセッションを登録し、Intent に載せるトークンを返す。
-     *
-     * [onDiscard] は引き取り手がないまま破棄するときに呼ぶ。引き渡し元で維持していた
-     * 再生状態など、セッションに紐づく参照を手放すために使う。
-     */
-    fun store(
-        session: GeckoSession,
-        sessionState: String,
-        onDiscard: (GeckoSession) -> Unit,
-    ): String {
+    /** 引き継ぐセッションを登録し、Intent に載せるトークンを返す。 */
+    fun store(session: GeckoSession, sessionState: String): String {
         val token = UUID.randomUUID().toString()
         val evicted = synchronized(lock) {
             val staleEntries = removeStaleLocked()
@@ -79,7 +60,6 @@ object CustomTabHandoffStore {
                 session = session,
                 sessionState = sessionState,
                 createdAt = System.currentTimeMillis(),
-                onDiscard = onDiscard,
             )
             staleEntries + listOfNotNull(overflowEntry)
         }
@@ -93,13 +73,7 @@ object CustomTabHandoffStore {
         val (handoff, staleEntries) = synchronized(lock) {
             val staleEntries = removeStaleLocked()
             val entry = entries.remove(token)
-            val handoff = entry?.let {
-                Handoff(
-                    session = it.session,
-                    sessionState = it.sessionState,
-                    onDiscard = it.onDiscard,
-                )
-            }
+            val handoff = entry?.let { Handoff(session = it.session, sessionState = it.sessionState) }
             handoff to staleEntries
         }
         staleEntries.forEach { discard(it) }
@@ -126,7 +100,6 @@ object CustomTabHandoffStore {
 
     /** 引き取り手のないセッションは開いたままにせず閉じる。 */
     private fun discard(entry: Entry) {
-        entry.onDiscard(entry.session)
         if (entry.session.isOpen) {
             entry.session.close()
         }

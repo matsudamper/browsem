@@ -170,7 +170,20 @@ class MainActivity : ComponentActivity() {
         if (intent.action != DownloadWorker.ACTION_OPEN_DOWNLOADS) {
             val url = ExternalInitialUrlPolicy.sanitize(intent.dataString)
             if (url != null && url != lastProcessedDeepLinkUrl) {
-                requestNewTabFromExternalIntent(intent, url)
+                val handoff = consumeCustomTabHandoff(intent)
+                val result = createNewTabChannel.trySend(
+                    NewTabRequest(
+                        url = url,
+                        handedOffSession = handoff?.session?.takeIf { it.isOpen },
+                        sessionState = handoff?.sessionState,
+                        referrerUrl = intent.getStringExtra(CustomTabActivity.EXTRA_NEW_TAB_REFERRER_URL),
+                    ),
+                )
+                if (result.isFailure) {
+                    Log.e("MainActivity", "URL の送信に失敗: $url, reason=${result.exceptionOrNull()}")
+                } else {
+                    lastProcessedDeepLinkUrl = url
+                }
             }
         }
 
@@ -350,46 +363,19 @@ class MainActivity : ComponentActivity() {
         }
         val url = ExternalInitialUrlPolicy.sanitize(intent.dataString)
         if (url != null) {
-            requestNewTabFromExternalIntent(intent, url)
-        }
-    }
-
-    /**
-     * 外部 Intent の URL を新規タブとして要求する。引き渡されたセッションが閉じていれば、
-     * SessionState からの復元へ落ちるため、載せずに手放す。
-     */
-    private fun requestNewTabFromExternalIntent(intent: Intent, url: String) {
-        val handoff = consumeCustomTabHandoff(intent)
-        val handedOffSession = handoff?.session?.takeIf { it.isOpen }
-        if (handoff != null && handedOffSession == null) {
-            handoff.discardSession()
-        }
-        val result = createNewTabChannel.trySend(
-            NewTabRequest(
-                url = url,
-                handedOffSession = handedOffSession,
-                sessionState = handoff?.sessionState,
-                referrerUrl = intent.getStringExtra(CustomTabActivity.EXTRA_NEW_TAB_REFERRER_URL),
-            ),
-        )
-        if (result.isFailure) {
-            Log.e("MainActivity", "URL の送信に失敗: $url, reason=${result.exceptionOrNull()}")
-        } else {
-            lastProcessedDeepLinkUrl = url
-        }
-    }
-
-    /**
-     * チャネルは Activity と寿命を共にするため、受け取られないまま破棄される要求が残りうる。
-     * 引き渡されたセッションを開いたまま捨てないよう、ここで手放す。
-     */
-    private fun releaseUnconsumedNewTabRequests() {
-        while (true) {
-            val request = createNewTabChannel.tryReceive().getOrNull() ?: break
-            val session = request.handedOffSession ?: continue
-            browserViewModel.mediaWebExtension.releaseSession(session)
-            if (session.isOpen) {
-                session.close()
+            val handoff = consumeCustomTabHandoff(intent)
+            val result = createNewTabChannel.trySend(
+                NewTabRequest(
+                    url = url,
+                    handedOffSession = handoff?.session?.takeIf { it.isOpen },
+                    sessionState = handoff?.sessionState,
+                    referrerUrl = intent.getStringExtra(CustomTabActivity.EXTRA_NEW_TAB_REFERRER_URL),
+                ),
+            )
+            if (result.isFailure) {
+                Log.e("MainActivity", "URL の送信に失敗: $url, reason=${result.exceptionOrNull()}")
+            } else {
+                lastProcessedDeepLinkUrl = url
             }
         }
     }
@@ -478,7 +464,6 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
         unregisterSystemNavigationObserverIfNeeded()
-        releaseUnconsumedNewTabRequests()
         if (hostsBrowserContent && isFinishing && geckoRuntimeInitializer.isInitialized) {
             runCatching {
                 runBlocking {

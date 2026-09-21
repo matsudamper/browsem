@@ -249,7 +249,6 @@ class CustomTabActivity : ComponentActivity() {
                     CustomTabHandoffStore.store(
                         session = handedOffSession,
                         sessionState = sessionState,
-                        onDiscard = mediaWebExtensionInstance::releaseSession,
                     ),
                 )
             },
