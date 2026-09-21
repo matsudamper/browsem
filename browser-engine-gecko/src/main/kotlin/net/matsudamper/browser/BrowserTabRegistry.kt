@@ -2,29 +2,28 @@ package net.matsudamper.browser
 
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.referentialEqualityPolicy
+import androidx.compose.runtime.neverEqualPolicy
 import androidx.compose.runtime.setValue
 import net.matsudamper.browser.core.TabSummary
 
 internal class BrowserTabRegistry {
-    // move は要素を変えず挿入順だけを変えるが Map.equals は順序を見ないため、
-    // 既定の構造等価ポリシーでは順序変更の代入が破棄される。
-    private var tabsById: Map<String, BrowserTab> by mutableStateOf(
-        value = linkedMapOf(),
-        policy = referentialEqualityPolicy(),
-    )
+    private val tabsById = LinkedHashMap<String, BrowserTab>()
 
-    fun isEmpty(): Boolean = tabsById.isEmpty()
+    // 読み出しはコンポジション中からも行われるため、変更のたびに再コンポーズを発火させる。
+    // 同じインスタンスを入れ直して通知するので neverEqualPolicy が必要。
+    private var observableTabsById: Map<String, BrowserTab> by mutableStateOf(tabsById, neverEqualPolicy())
 
-    fun contains(tabId: String): Boolean = tabId in tabsById
+    fun isEmpty(): Boolean = observableTabsById.isEmpty()
 
-    fun find(tabId: String): BrowserTab? = tabsById[tabId]
+    fun contains(tabId: String): Boolean = tabId in observableTabsById
 
-    fun firstOrNull(): BrowserTab? = tabsById.values.firstOrNull()
+    fun find(tabId: String): BrowserTab? = observableTabsById[tabId]
 
-    fun values(): Collection<BrowserTab> = tabsById.values
+    fun firstOrNull(): BrowserTab? = observableTabsById.values.firstOrNull()
 
-    fun orderedTabs(): List<BrowserTab> = tabsById.values.toList()
+    fun values(): Collection<BrowserTab> = observableTabsById.values
+
+    fun orderedTabs(): List<BrowserTab> = observableTabsById.values.toList()
 
     fun insert(tab: BrowserTab, insertIndex: Int) {
         val orderedTabs = tabsById.values.toMutableList().apply {
@@ -32,13 +31,15 @@ internal class BrowserTabRegistry {
         }
         val targetIndex = insertIndex.coerceIn(0, orderedTabs.size)
         orderedTabs.add(targetIndex, tab)
-        replaceWith(orderedTabs)
+        tabsById.clear()
+        orderedTabs.forEach { orderedTab ->
+            tabsById[orderedTab.tabId] = orderedTab
+        }
+        notifyChanged()
     }
 
     fun remove(tabId: String): BrowserTab? {
-        val removed = tabsById[tabId] ?: return null
-        replaceWith(tabsById.values.filterNot { tab -> tab.tabId == tabId })
-        return removed
+        return tabsById.remove(tabId).also { notifyChanged() }
     }
 
     fun move(fromIndex: Int, toIndex: Int) {
@@ -47,16 +48,21 @@ internal class BrowserTabRegistry {
             return
         }
         orderedTabs.add(toIndex, orderedTabs.removeAt(fromIndex))
-        replaceWith(orderedTabs)
+        tabsById.clear()
+        orderedTabs.forEach { orderedTab ->
+            tabsById[orderedTab.tabId] = orderedTab
+        }
+        notifyChanged()
     }
 
-    fun summaries(): List<TabSummary> = tabsById.values.map(BrowserTab::toSummary)
+    fun summaries(): List<TabSummary> = observableTabsById.values.map(BrowserTab::toSummary)
 
     fun clear() {
-        tabsById = linkedMapOf()
+        tabsById.clear()
+        notifyChanged()
     }
 
-    private fun replaceWith(orderedTabs: List<BrowserTab>) {
-        tabsById = orderedTabs.associateByTo(LinkedHashMap()) { tab -> tab.tabId }
+    private fun notifyChanged() {
+        observableTabsById = tabsById
     }
 }
