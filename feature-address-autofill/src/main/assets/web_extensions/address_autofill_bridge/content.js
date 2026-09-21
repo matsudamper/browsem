@@ -98,21 +98,46 @@
     return opacity;
   }
 
-  function isEffectivelyTransparent(style) {
-    if (Number(style.opacity) < TRANSPARENT_OPACITY) return true;
-    return filterOpacity(style.filter) < TRANSPARENT_OPACITY;
+  function elementOpacity(style) {
+    const opacity = Number(style.opacity);
+    return (isNaN(opacity) ? 1 : opacity) * filterOpacity(style.filter);
   }
 
   // opacity / filter / clip は継承しないため、隠したラッパーを見抜くには祖先までたどる必要がある。
+  // 不透明度は要素ごとではなく積で見る。opacity:0.02 のラッパーを重ねた合成透明化を見抜くため。
   // clip-path / clip は入力欄の装飾にはまず使われないので、指定があれば隠されているとみなす。
   // 判定を誤っても自動入力が働かなくなるだけで、値が漏れる方向には倒れない。
   function isInsideHiddenWrapper(el) {
     let node = el;
+    let compositedOpacity = 1;
     while (node && node.nodeType === Node.ELEMENT_NODE) {
       const style = getComputedStyle(node);
-      if (isEffectivelyTransparent(style)) return true;
+      compositedOpacity *= elementOpacity(style);
+      if (compositedOpacity < TRANSPARENT_OPACITY) return true;
       if (style.clipPath && style.clipPath !== 'none') return true;
       if (style.clip && style.clip !== 'auto') return true;
+      node = composedParentElement(node);
+    }
+    return false;
+  }
+
+  function isClippingOverflow(overflow) {
+    // auto / scroll はユーザーがスクロールして到達できるため、隠されているとはみなさない。
+    return overflow === 'hidden' || overflow === 'clip';
+  }
+
+  // overflow:hidden の祖先のクリップ領域外へ絶対配置された欄は、矩形もページ座標も有効なまま見えない。
+  function isClippedByAncestor(el, rect) {
+    let node = composedParentElement(el);
+    while (node && node.nodeType === Node.ELEMENT_NODE) {
+      const style = getComputedStyle(node);
+      const clipsX = isClippingOverflow(style.overflowX);
+      const clipsY = isClippingOverflow(style.overflowY);
+      if (clipsX || clipsY) {
+        const bounds = node.getBoundingClientRect();
+        if (clipsX && (rect.right <= bounds.left || rect.left >= bounds.right)) return true;
+        if (clipsY && (rect.bottom <= bounds.top || rect.top >= bounds.bottom)) return true;
+      }
       node = composedParentElement(node);
     }
     return false;
@@ -132,6 +157,7 @@
     if (el.offsetParent === null && !isFixed) return false;
     const rect = el.getBoundingClientRect();
     if (rect.width < MIN_VISIBLE_SIZE || rect.height < MIN_VISIBLE_SIZE) return false;
+    if (isClippedByAncestor(el, rect)) return false;
     if (isFixed) {
       // 固定配置はスクロールしても位置が変わらないため、ビューポートと交差しなければ到達できない。
       const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
