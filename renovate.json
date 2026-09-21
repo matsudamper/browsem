@@ -10,13 +10,6 @@
         "org.mozilla.geckoview:**"
       ],
       "automerge": true
-    },
-    {
-      "matchUpdateTypes": [
-        "minor",
-        "patch"
-      ],
-      "automerge": true
     }
   ]
 }
