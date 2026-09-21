@@ -52,6 +52,7 @@ import net.matsudamper.browser.screen.downloads.DownloadManagementScreenViewMode
 import net.matsudamper.browser.screen.extensions.ExtensionsScreenViewModel
 import net.matsudamper.browser.screen.history.HistoryScreenViewModel
 import net.matsudamper.browser.screen.settings.SettingsScreenViewModel
+import net.matsudamper.browser.screen.settings.WebAuthnSettingsUpdateQueue
 import net.matsudamper.browser.screen.siteforminput.SiteFormInputFieldScreenViewModel
 import net.matsudamper.browser.screen.siteforminput.SiteFormInputPathScreenViewModel
 import net.matsudamper.browser.screen.siteforminput.SiteFormInputPathsScreenViewModel
@@ -88,6 +89,7 @@ val appModule = module {
     single { AddressAutofillWebExtension() }
     single { FormInputAutofillWebExtension() }
     single { WebAuthnCompatWebExtension() }
+    single { WebAuthnSettingsUpdateQueue(applicationScope = get()) }
     single { PageTranslationWebExtension(get()) }
     single { AddressAutofillCoordinator(get()) }
     factory { FormInputAutofillCoordinator(get()) }
@@ -124,9 +126,16 @@ val appModule = module {
     // eTLD+1 (基底ドメイン) の算出に使用する Public Suffix List。初回ロードを共有するため single
     single { PublicSuffixList(androidContext()) }
     factory { GeckoDownloadManager(androidContext(), get()) }
-    viewModel { BrowserViewModel(get(), get(), get(), get(), get(), get(), get(), get()) }
+    viewModel { BrowserViewModel(get(), get(), get(), get(), get(), get(), get(), get(), get()) }
     // 画面の ViewModel は生成を Koin に集約し、画面側は koinViewModel() で解決する
-    viewModel { SettingsScreenViewModel(get()) }
+    viewModel {
+        SettingsScreenViewModel(
+            settingsRepository = get(),
+            runtime = get(),
+            webAuthnCompatWebExtension = get(),
+            webAuthnSettingsUpdateQueue = get(),
+        )
+    }
     viewModel { SiteSettingsListScreenViewModel(get()) }
     viewModel { (params: SiteSettingsScreenParams) ->
         SiteSettingsScreenViewModel(
@@ -180,7 +189,7 @@ val appModule = module {
         )
     }
     viewModel { CustomTabScreenViewModel(get(), get(), get()) }
-    viewModel { WebAppBrowserViewModel(get(), get()) }
+    viewModel { WebAppBrowserViewModel(get(), get(), get()) }
     viewModel { WebAppScreenViewModel(get(), get(), get()) }
     worker { DownloadWorker(get(), get(), get()) }
 }

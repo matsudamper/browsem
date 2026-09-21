@@ -1,11 +1,10 @@
 package net.matsudamper.browser.ui.browser
 
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.util.Log
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
@@ -17,14 +16,15 @@ import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
@@ -36,81 +36,18 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import kotlin.math.roundToInt
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import net.matsudamper.browser.BrowserTab
-import net.matsudamper.browser.BrowserTabController
+import kotlinx.coroutines.withContext
 
 @Composable
 fun BrowserScreen(
     tabId: String,
-    homepageUrl: String,
     uiState: BrowserScreenUiState,
-    browserTabController: BrowserTabController,
-    previewHeaderContent: @Composable (modifier: Modifier, tab: BrowserTab, tabCount: Int?) -> Unit,
+    canGoBackInPage: Boolean,
+    previewHeaderContent: @Composable (modifier: Modifier, preview: TabPreviewContent, tabCount: Int?) -> Unit,
     browserTabContent: @Composable (
         modifier: Modifier,
-        selectedTab: BrowserTab,
-        tabCount: Int?,
-        onToolbarHorizontalDrag: (Float) -> Unit,
-        onToolbarDragEnd: () -> Unit,
-    ) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val selectedTab = browserTabController.findTab(tabId)
-    LaunchedEffect(tabId, homepageUrl, selectedTab) {
-        // closeTab で閉じたタブは再作成しない。
-        // NavDisplay の遷移アニメーション中に BrowserScreen が残っている間に
-        // selectedTab=null で再コンポーズされてもホームページタブを作らないようにする。
-        if (selectedTab == null && !browserTabController.wasTabClosed(tabId)) {
-            // プロセス死後の savedInstanceState 復元時は BrowserScreen が compose される時点で
-            // タブ復元がまだ完了していない。復元完了前に getOrCreateTab を呼ぶと、空の registry に
-            // ホームページタブが sortOrder=0 で永続化されてしまう。
-            // 復元完了を待ってから存在確認し、それでも存在しない場合のみ作成する。
-            browserTabController.restoreComplete.await()
-            if (browserTabController.findTab(tabId) == null && !browserTabController.wasTabClosed(tabId)) {
-                browserTabController.getOrCreateTab(
-                    tabId = tabId,
-                    homepageUrl = homepageUrl,
-                )
-            }
-        }
-    }
-    if (selectedTab == null) {
-        // フォアグラウンド遷移直後に findTab が空を返すケースのフレーキー解析用ログ。
-        // 該当時間帯に UrlBar が semantics tree から消えるテスト失敗との突き合わせに使う。
-        LaunchedEffect(tabId) {
-            Log.d(
-                "BrowserScreen",
-                "selectedTab=null tabId=$tabId wasClosed=${browserTabController.wasTabClosed(tabId)}",
-            )
-        }
-        Box(
-            modifier = modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center,
-        ) {
-            CircularProgressIndicator()
-        }
-    } else {
-        BrowserScreenContent(
-            tabId = tabId,
-            uiState = uiState,
-            selectedTab = selectedTab,
-            previewHeaderContent = previewHeaderContent,
-            browserTabContent = browserTabContent,
-            modifier = modifier,
-        )
-    }
-}
-
-@Composable
-private fun BrowserScreenContent(
-    tabId: String,
-    uiState: BrowserScreenUiState,
-    selectedTab: BrowserTab,
-    previewHeaderContent: @Composable (modifier: Modifier, tab: BrowserTab, tabCount: Int?) -> Unit,
-    browserTabContent: @Composable (
-        modifier: Modifier,
-        selectedTab: BrowserTab,
         tabCount: Int?,
         onToolbarHorizontalDrag: (Float) -> Unit,
         onToolbarDragEnd: () -> Unit,
@@ -138,7 +75,7 @@ private fun BrowserScreenContent(
         // リンクから開いたタブ（opener あり）で、まだページ内を遷移しておらず
         // (canGoBack=false)、前のタブが opener 本人である場合のみ予測型バックを有効化する。
         // この状態でのバックは「タブを閉じて opener へ戻る」ため、前のタブへスライドさせる。
-        val backToOpenerEnabled = backToOpenerListener != null && !selectedTab.canGoBack
+        val backToOpenerEnabled = backToOpenerListener != null && !canGoBackInPage
         PredictiveBackHandler(enabled = backToOpenerEnabled) { progress ->
             try {
                 progress.collect { backEvent ->
@@ -155,7 +92,7 @@ private fun BrowserScreenContent(
 
         prevTab?.let { preview ->
             TabPreviewPage(
-                tab = preview.tab,
+                preview = preview.content,
                 tabCount = uiState.groupTabCount,
                 previewHeaderContent = previewHeaderContent,
                 modifier = Modifier
@@ -166,7 +103,7 @@ private fun BrowserScreenContent(
 
         nextTab?.let { preview ->
             TabPreviewPage(
-                tab = preview.tab,
+                preview = preview.content,
                 tabCount = uiState.groupTabCount,
                 previewHeaderContent = previewHeaderContent,
                 modifier = Modifier
@@ -179,7 +116,6 @@ private fun BrowserScreenContent(
             Modifier
                 .fillMaxSize()
                 .offset { IntOffset(swipeOffset.value.roundToInt(), 0) },
-            selectedTab,
             uiState.groupTabCount,
             { delta ->
                 coroutineScope.launch {
@@ -219,9 +155,9 @@ private fun BrowserScreenContent(
 
 @Composable
 private fun TabPreviewPage(
-    tab: BrowserTab,
+    preview: TabPreviewContent,
     tabCount: Int?,
-    previewHeaderContent: @Composable (modifier: Modifier, tab: BrowserTab, tabCount: Int?) -> Unit,
+    previewHeaderContent: @Composable (modifier: Modifier, preview: TabPreviewContent, tabCount: Int?) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     // 上部（ステータスバー）は BrowserToolBar の背景色で塗りつぶすため除外する
@@ -230,18 +166,23 @@ private fun TabPreviewPage(
             WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal),
         ),
     ) {
-        previewHeaderContent(Modifier.fillMaxWidth(), tab, tabCount)
+        previewHeaderContent(Modifier.fillMaxWidth(), preview, tabCount)
 
         BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-            val previewBitmap = tab.previewBitmap
-            val bitmap = if (previewBitmap != null && previewBitmap.isNotEmpty()) {
-                remember(previewBitmap) {
-                    BitmapFactory.decodeByteArray(previewBitmap, 0, previewBitmap.size)
+            val previewImage = preview.previewImage
+            // 別のタブへ切り替わったときに前のタブの画像を出さないよう、画像ごとに作り直す
+            var decodedPreview: Bitmap? by remember(previewImage) { mutableStateOf(null) }
+            LaunchedEffect(previewImage) {
+                decodedPreview = if (previewImage != null && previewImage.isNotEmpty()) {
+                    withContext(Dispatchers.Default) {
+                        BitmapFactory.decodeByteArray(previewImage, 0, previewImage.size)
+                    }
+                } else {
+                    null
                 }
-            } else {
-                null
             }
 
+            val bitmap = decodedPreview
             if (bitmap != null) {
                 // 画像がコンテナより短い場合（フォルダブルで画面サイズが変わった場合）は上寄せ、
                 // 同じサイズの場合はURLバーの高さ分のズレに対応するため下寄せ
@@ -263,7 +204,7 @@ private fun TabPreviewPage(
                     modifier = Modifier
                         .align(Alignment.Center)
                         .padding(16.dp),
-                    text = tab.title.ifBlank { tab.currentUrl },
+                    text = preview.title.ifBlank { preview.currentUrl },
                     style = MaterialTheme.typography.bodyLarge,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,

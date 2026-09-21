@@ -84,6 +84,7 @@ import net.matsudamper.browser.navigation.SiteSettingsListNavContent
 import net.matsudamper.browser.navigation.SiteSettingsNavContent
 import net.matsudamper.browser.screen.browser.BrowserScreenViewModel
 import net.matsudamper.browser.screen.tab.TabsScreenViewModel
+import net.matsudamper.browser.ui.browser.BrowserContentLoadingIndicator
 import net.matsudamper.browser.ui.browser.BrowserScreen
 import net.matsudamper.browser.ui.common.BrowserTheme
 import net.matsudamper.browser.ui.tabs.TabsScreen
@@ -546,7 +547,7 @@ private fun MainBrowserContent(
                             externalTabInitialUrlsFlow = viewModel.externalTabInitialUrls,
                         )
                     }
-                    DisposableEffect(key.tabId) {
+                    DisposableEffect(browserScreenViewModel) {
                         onDispose { browserScreenViewModel.close() }
                     }
                     val browserScreenUiState by browserScreenViewModel.uiState.collectAsState()
@@ -574,130 +575,138 @@ private fun MainBrowserContent(
                             })
                         }
                     }
-                    BrowserScreen(
+                    val selectedTab = rememberSelectedBrowserTab(
                         tabId = key.tabId,
                         homepageUrl = uiState.homepageUrl,
-                        uiState = browserScreenUiState,
                         browserTabController = browserTabController,
-                        previewHeaderContent = { modifier, tab, tabCount ->
-                            BrowserToolbar(
-                                modifier = modifier,
-                                toolbarColor = tab.themeColor?.let { Color(it) },
-                                isFocused = false,
-                                onLongClickUrl = {},
-                                tabCount = tabCount,
-                                onOpenTabs = {},
-                                toolbarMenu = { _ -> },
-                                gestureState = null,
-                                updateVisibleMenu = {},
-                                canGoForward = false,
-                                onForward = {},
-                                canGoBack = false,
-                                onBack = {},
-                                onRefresh = {},
-                                onSuperRefresh = {},
-                                isPageLoading = false,
-                                onStopLoading = {},
-                                showTabButton = true,
-                                onTranslatePage = {},
-                                onLongPressHistory = {},
-                                urlInputState = UrlInputState(
-                                    value = tab.currentUrl,
-                                    onValueChange = {},
-                                    onSubmit = {},
-                                    onFocusChanged = {},
-                                    enableSuggest = false,
-                                    scrollEnabled = false,
-                                ),
-                            )
-                        },
-                        browserTabContent = { modifier, selectedTab, tabCount, onToolbarHorizontalDrag, onToolbarDragEnd ->
-                            GeckoBrowserTab(
-                                modifier = modifier,
-                                browserTab = selectedTab,
-                                homepageUrl = uiState.homepageUrl,
-                                searchTemplate = uiState.searchTemplate,
-                                translationProvider = uiState.translationProvider,
-                                geminiNanoModelKey = uiState.geminiNanoModelKey,
-                                themeColorExtension = themeColorExtension,
-                                mediaWebExtension = mediaWebExtension,
-                                tabCount = tabCount,
-                                onInstallExtensionRequest = onInstallExtensionRequest,
-                                onRequestDownloadNotificationPermission = onRequestDownloadNotificationPermission,
-                                enableTabUi = true,
-                                showInstallExtensionItem = true,
-                                customTabMode = false,
-                                webAppMode = false,
-                                webAppPinnedHost = null,
-                                onWebAppCrossDomainNavigation = null,
-                                onCloseCustomTab = null,
-                                onOpenInBrowser = null,
-                                onOpenSettings = { outerNavActions.add(AppDestination.Settings) },
-                                onOpenDownloads = {
-                                    outerNavActions.addIfAbsent(AppDestination.Downloads)
-                                },
-                                onOpenSiteSettings = { currentUrl ->
-                                    outerNavActions.openSiteSettings(currentUrl, key.tabId)
-                                },
-                                onOpenTabs = { innerBackStack.add(BrowserNavDestination.Tabs) },
-                                browserSessionLifecycleController = browserSessionLifecycleController,
-                                onOpenNewSessionRequest = { uri ->
-                                    val newTab = browserTabController.createTabForNewSession(
-                                        initialUrl = uri,
-                                        openerTabId = key.tabId,
-                                    )
-                                    scope.launch {
-                                        assignTabToOpenerGroup(newTab.tabId, key.tabId)
-                                    }
-                                    WindowOpenSessionPolicy.scheduleSelectAfterCallback(
-                                        selectTab = { selectTab(newTab.tabId, key) },
-                                        retainOpeners = {
+                    )
+                    if (selectedTab == null) {
+                        BrowserContentLoadingIndicator()
+                    } else {
+                        BrowserScreen(
+                            tabId = key.tabId,
+                            uiState = browserScreenUiState,
+                            canGoBackInPage = selectedTab.canGoBack,
+                            previewHeaderContent = { modifier, preview, tabCount ->
+                                BrowserToolbar(
+                                    modifier = modifier,
+                                    toolbarColor = preview.themeColor?.let { Color(it) },
+                                    isFocused = false,
+                                    onLongClickUrl = {},
+                                    tabCount = tabCount,
+                                    onOpenTabs = {},
+                                    toolbarMenu = { _ -> },
+                                    gestureState = null,
+                                    updateVisibleMenu = {},
+                                    canGoForward = false,
+                                    onForward = {},
+                                    canGoBack = false,
+                                    onBack = {},
+                                    onRefresh = {},
+                                    onSuperRefresh = {},
+                                    isPageLoading = false,
+                                    onStopLoading = {},
+                                    showTabButton = true,
+                                    onTranslatePage = {},
+                                    onLongPressHistory = {},
+                                    urlInputState = UrlInputState(
+                                        value = preview.currentUrl,
+                                        onValueChange = {},
+                                        onSubmit = {},
+                                        onFocusChanged = {},
+                                        enableSuggest = false,
+                                        scrollEnabled = false,
+                                    ),
+                                )
+                            },
+                            browserTabContent = { modifier, tabCount, onToolbarHorizontalDrag, onToolbarDragEnd ->
+                                GeckoBrowserTab(
+                                    modifier = modifier,
+                                    browserTab = selectedTab,
+                                    homepageUrl = uiState.homepageUrl,
+                                    searchTemplate = uiState.searchTemplate,
+                                    translationProvider = uiState.translationProvider,
+                                    geminiNanoModelKey = uiState.geminiNanoModelKey,
+                                    themeColorExtension = themeColorExtension,
+                                    mediaWebExtension = mediaWebExtension,
+                                    tabCount = tabCount,
+                                    onInstallExtensionRequest = onInstallExtensionRequest,
+                                    onRequestDownloadNotificationPermission = onRequestDownloadNotificationPermission,
+                                    enableTabUi = true,
+                                    showInstallExtensionItem = true,
+                                    customTabMode = false,
+                                    webAppMode = false,
+                                    webAppPinnedHost = null,
+                                    onWebAppCrossDomainNavigation = null,
+                                    onCloseCustomTab = null,
+                                    onOpenInBrowser = null,
+                                    onOpenSettings = { outerNavActions.add(AppDestination.Settings) },
+                                    onOpenDownloads = {
+                                        outerNavActions.addIfAbsent(AppDestination.Downloads)
+                                    },
+                                    onOpenSiteSettings = { currentUrl ->
+                                        outerNavActions.openSiteSettings(currentUrl, key.tabId)
+                                    },
+                                    onOpenTabs = { innerBackStack.add(BrowserNavDestination.Tabs) },
+                                    browserSessionLifecycleController = browserSessionLifecycleController,
+                                    onOpenNewSessionRequest = { uri ->
+                                        val newTab = browserTabController.createTabForNewSession(
+                                            initialUrl = uri,
+                                            openerTabId = key.tabId,
+                                        )
+                                        scope.launch {
+                                            assignTabToOpenerGroup(newTab.tabId, key.tabId)
+                                        }
+                                        WindowOpenSessionPolicy.scheduleSelectAfterCallback(
+                                            selectTab = { selectTab(newTab.tabId, key) },
+                                            retainOpeners = {
+                                                browserSessionLifecycleController.retainOpenersOfLivePopups(
+                                                    tabs = browserTabController.tabs,
+                                                    selectedTabId = browserTabController.selectedTabId,
+                                                )
+                                            },
+                                        )
+                                        newTab.session
+                                    },
+                                    onOpenNewTabRequest = { uri, referrerUrl ->
+                                        scope.launch {
+                                            val tabId = UUID.randomUUID().toString()
+                                            assignTabToOpenerGroup(tabId, key.tabId)
+                                            val newTab = browserTabController.createAndAppendTab(
+                                                tabId = tabId,
+                                                initialUrl = uri,
+                                                openerTabId = key.tabId,
+                                                initialReferrerUrl = referrerUrl,
+                                            )
+                                            selectTab(newTab.tabId, key)
+                                        }
+                                    },
+                                    onCloseTab = {
+                                        val targetTabId = browserTabController.closeTab(key.tabId)
+                                        if (targetTabId != null) {
+                                            selectTab(targetTabId, null)
+                                        }
+                                    },
+                                    externalDownloadDialogListener = browserScreenUiState.externalDownloadDialogListener,
+                                    externalTabInitialUrl = browserScreenUiState.externalTabInitialUrl,
+                                    onHistoryRecord = browserScreenUiState.callbacks::onHistoryRecord,
+                                    onHistoryTitleUpdate = browserScreenUiState.callbacks::onHistoryTitleUpdate,
+                                    urlBarSuggestions = browserScreenUiState.urlBarSuggestions,
+                                    onUrlInputChanged = browserScreenUiState.callbacks::onUrlInputChanged,
+                                    onReevaluateOpenerRetention = {
+                                        WindowOpenSessionPolicy.postAfterFrame {
                                             browserSessionLifecycleController.retainOpenersOfLivePopups(
                                                 tabs = browserTabController.tabs,
                                                 selectedTabId = browserTabController.selectedTabId,
                                             )
-                                        },
-                                    )
-                                    newTab.session
-                                },
-                                onOpenNewTabRequest = { uri, referrerUrl ->
-                                    scope.launch {
-                                        val tabId = UUID.randomUUID().toString()
-                                        assignTabToOpenerGroup(tabId, key.tabId)
-                                        val newTab = browserTabController.createAndAppendTab(
-                                            tabId = tabId,
-                                            initialUrl = uri,
-                                            openerTabId = key.tabId,
-                                            initialReferrerUrl = referrerUrl,
-                                        )
-                                        selectTab(newTab.tabId, key)
-                                    }
-                                },
-                                onCloseTab = {
-                                    val targetTabId = browserTabController.closeTab(key.tabId)
-                                    if (targetTabId != null) {
-                                        selectTab(targetTabId, null)
-                                    }
-                                },
-                                externalDownloadDialogListener = browserScreenUiState.externalDownloadDialogListener,
-                                externalTabInitialUrl = browserScreenUiState.externalTabInitialUrl,
-                                onHistoryRecord = browserScreenUiState.callbacks::onHistoryRecord,
-                                onHistoryTitleUpdate = browserScreenUiState.callbacks::onHistoryTitleUpdate,
-                                urlBarSuggestions = browserScreenUiState.urlBarSuggestions,
-                                onUrlInputChanged = browserScreenUiState.callbacks::onUrlInputChanged,
-                                onReevaluateOpenerRetention = {
-                                    WindowOpenSessionPolicy.postAfterFrame {
-                                        browserSessionLifecycleController.retainOpenersOfLivePopups(
-                                            tabs = browserTabController.tabs,
-                                            selectedTabId = browserTabController.selectedTabId,
-                                        )
-                                    }
-                                },
-                                onToolbarHorizontalDrag = onToolbarHorizontalDrag,
-                                onToolbarDragEnd = onToolbarDragEnd,
-                            )
-                        },
-                    )
+                                        }
+                                    },
+                                    onToolbarHorizontalDrag = onToolbarHorizontalDrag,
+                                    onToolbarDragEnd = onToolbarDragEnd,
+                                )
+                            },
+                        )
+                    }
                 }
 
                 BrowserNavDestination.Tabs -> navEntry(key) {

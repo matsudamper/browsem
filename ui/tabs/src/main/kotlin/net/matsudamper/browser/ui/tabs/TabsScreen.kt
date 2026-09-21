@@ -606,17 +606,19 @@ private fun PagerIndicator(
 ) {
     val indicatorColor = MaterialTheme.colorScheme.primary
     val trackColor = MaterialTheme.colorScheme.surfaceVariant
-    // スクロールやページ変化時に再コンポーズされるよう composable body で状態を読み取る
-    val layoutInfo = listState.layoutInfo
-    val currentPage = pagerState.currentPage
-    val offsetFraction = pagerState.currentPageOffsetFraction
-    // viewportStartOffset = -contentPadding.start のため符号反転で描画座標へのオフセット量を得る
-    val startOffsetPx = -layoutInfo.viewportStartOffset.toFloat()
-    val items = layoutInfo.visibleItemsInfo.map { IndicatorItemInfo(it.index, it.offset, it.size) }
-    val bounds = calculatePagerIndicatorBounds(items, currentPage, offsetFraction, startOffsetPx)
 
     Canvas(modifier = modifier.height(2.dp)) {
         drawRect(color = trackColor)
+        // スクロールやページ変化での無効化を描画フェーズだけに留めるため draw ラムダ内で状態を読み取る
+        val layoutInfo = listState.layoutInfo
+        val items = layoutInfo.visibleItemsInfo.map { IndicatorItemInfo(it.index, it.offset, it.size) }
+        val bounds = calculatePagerIndicatorBounds(
+            items = items,
+            currentPage = pagerState.currentPage,
+            offsetFraction = pagerState.currentPageOffsetFraction,
+            // viewportStartOffset = -contentPadding.start のため符号反転で描画座標へのオフセット量を得る
+            startOffsetPx = -layoutInfo.viewportStartOffset.toFloat(),
+        )
         if (bounds != null) {
             val (startX, width) = bounds
             drawRect(

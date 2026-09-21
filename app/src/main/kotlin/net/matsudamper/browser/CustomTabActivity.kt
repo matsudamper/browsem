@@ -43,6 +43,7 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import java.util.concurrent.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
@@ -70,6 +71,7 @@ class CustomTabActivity : ComponentActivity() {
     private val mediaWebExtensionInstance: MediaWebExtension by inject()
     private val settingsRepository: SettingsRepository by inject()
     private val tabRepository: TabRepository by inject()
+    private val applicationScope: CoroutineScope by inject()
     private val historyRepository: HistoryRepository by inject()
     private val webSuggestionRepository: WebSuggestionRepository by inject()
 
@@ -80,6 +82,7 @@ class CustomTabActivity : ComponentActivity() {
                     tabRepository = tabRepository,
                     runtime = geckoRuntimeInitializer.requireInitialized(),
                     handoffToken = intent.getStringExtra(WindowOpenHandoffStore.EXTRA_HANDOFF_TOKEN),
+                    applicationScope = applicationScope,
                 )
             }
         }
