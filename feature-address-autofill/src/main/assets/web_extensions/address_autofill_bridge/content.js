@@ -85,8 +85,11 @@
   }
 
   // filter: opacity(0) は computed opacity を 1 のままにするため、opacity とは別に見る必要がある。
+  // filter: url(#hide) のような SVG フィルターは適用後の不透明度をここでは算出できない。
+  // 入力欄やそのラッパーに描画フィルターが使われることはまず無いため、保守的に隠しているとみなす。
   function filterOpacity(filter) {
     if (!filter || filter === 'none') return 1;
+    if (filter.indexOf('url(') !== -1) return 0;
     const pattern = /opacity\(\s*([0-9.]+)(%?)\s*\)/g;
     let opacity = 1;
     let match = pattern.exec(filter);
@@ -205,15 +208,19 @@
     if (isClippedByAncestor(el, rect)) return false;
     if (isOccluded(el, rect)) return false;
     if (isFixed) {
-      // 固定配置はスクロールしても位置が変わらないため、ビューポートと交差しなければ到達できない。
+      // 固定配置はスクロールしても位置が変わらないため、ビューポートと交差する分だけが見える範囲になる。
+      // 端に 0.1px だけかかった欄を通さないよう、交差後の矩形にも最小サイズを課す。
       const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
       const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
-      return rect.right > 0 && rect.bottom > 0 &&
-        rect.left < viewportWidth && rect.top < viewportHeight;
+      const visibleWidth = Math.min(rect.right, viewportWidth) - Math.max(rect.left, 0);
+      const visibleHeight = Math.min(rect.bottom, viewportHeight) - Math.max(rect.top, 0);
+      return visibleWidth >= MIN_VISIBLE_SIZE && visibleHeight >= MIN_VISIBLE_SIZE;
     }
     // 通常フローの欄はページ座標で判定する。スクロールしないと見えない欄は正当なフォームでも
     // 普通にあるため除外せず、left:-9999px のようにページの外へ追い出された欄だけを弾く。
-    return rect.right + window.scrollX > 0 && rect.bottom + window.scrollY > 0;
+    // ページの原点より手前はスクロールで到達できないため、こちらも見える分に最小サイズを課す。
+    return rect.right + window.scrollX >= MIN_VISIBLE_SIZE &&
+      rect.bottom + window.scrollY >= MIN_VISIBLE_SIZE;
   }
 
   function isEmailField(el) {
