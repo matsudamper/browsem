@@ -369,6 +369,7 @@ internal class BrowserTabSessionDelegateHost(
     // about:blank ナビゲーション完了時に実行するクローズ処理
     // disposeSessionDelegates 後に session.close() を遅延させるために使用
     private var pendingCloseAction: (() -> Unit)? = null
+
     // Looper への依存を生成時に持ち込まないよう、遅延クローズを使うときだけ用意する。
     private val closeTimeoutHandler by lazy { Handler(Looper.getMainLooper()) }
 
