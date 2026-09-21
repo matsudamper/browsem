@@ -25,11 +25,14 @@ import net.matsudamper.browser.core.TabSelectionPolicy
 import net.matsudamper.browser.core.TabStore
 import net.matsudamper.browser.core.TabStoreState
 import net.matsudamper.browser.data.PersistedTabState
+import net.matsudamper.browser.data.ProfileId
+import net.matsudamper.browser.data.ProfileRepository
 import net.matsudamper.browser.data.TabGroupRepository
 import net.matsudamper.browser.data.TabRepository
 import org.mozilla.geckoview.GeckoSession
 
 /**
+ * @param profileRepository 新規タブを作る先のプロファイルを追従する。null なら常にデフォルトプロファイル
  * @param isSinglePage Tabに依存しない。Tabの保存機能が無効化される
  * @param persistenceScope 保存を流すスコープ。画面が終了した後も保留中の保存を流し切る必要があるため、
  * [close] で止まる controllerScope ではなくプロセス寿命のスコープを渡す
@@ -38,6 +41,7 @@ import org.mozilla.geckoview.GeckoSession
 class BrowserTabController(
     private val tabRepository: TabRepository,
     private val tabGroupRepository: TabGroupRepository?,
+    private val profileRepository: ProfileRepository?,
     private val isSinglePage: Boolean,
     persistenceScope: CoroutineScope,
 ) : TabStore {
@@ -75,6 +79,20 @@ class BrowserTabController(
         get() = _restoreComplete
 
     override val tabStoreState: StateFlow<TabStoreState> = _tabStoreState.asStateFlow()
+
+    /** 新規タブを作る先のプロファイル。タブ一覧で切り替えると追従する */
+    var activeProfileId: ProfileId = ProfileId.DEFAULT
+        private set
+
+    init {
+        if (profileRepository != null) {
+            controllerScope.launch {
+                profileRepository.observeProfiles().collectLatest { profiles ->
+                    activeProfileId = profiles.firstOrNull { it.isActive }?.id ?: ProfileId.DEFAULT
+                }
+            }
+        }
+    }
 
     var selectedTabId: String? by mutableStateOf(null)
         private set
@@ -145,7 +163,7 @@ class BrowserTabController(
                     snapshot.tabs.forEachIndexed { index, restored ->
                         val tab = createRegisteredTab(
                             tabId = restored.persistedTabState.tabId,
-                            session = GeckoSession(),
+                            session = BrowserTabFactory.createSessionForProfile(restored.persistedTabState.profileId),
                             initialUrl = restored.persistedTabState.url.ifBlank { homepageUrl },
                             sessionState = restored.persistedTabState.sessionState,
                             title = restored.persistedTabState.title,
@@ -216,6 +234,7 @@ class BrowserTabController(
         openerTabId: String? = null,
         initialReferrerUrl: String? = null,
         insertAfterSelectedTab: Boolean = true,
+        profileId: ProfileId? = null,
     ): BrowserTab {
         if (!isSinglePage && restoreState != RestoreState.COMPLETED) {
             Log.w(TAG, "タブ復元完了前に createAndAppendTab が呼ばれました (状態: $restoreState)")
@@ -229,7 +248,9 @@ class BrowserTabController(
             )
             val tab = createRegisteredTab(
                 tabId = tabId,
-                session = GeckoSession(),
+                session = BrowserTabFactory.createSessionForProfile(
+                    profileId ?: resolveProfileIdForNewTab(openerTabId),
+                ),
                 initialUrl = normalizedInitialUrl,
                 sessionState = restoredSessionState.orEmpty(),
                 title = restoredTitle,
@@ -263,7 +284,7 @@ class BrowserTabController(
         )
         val tab = createRegisteredTab(
             tabId = UUID.randomUUID().toString(),
-            session = GeckoSession(),
+            session = BrowserTabFactory.createSessionForProfile(resolveProfileIdForNewTab(openerTabId)),
             initialUrl = normalizedInitialUrl,
             sessionState = "",
             title = normalizedInitialUrl,
@@ -441,7 +462,7 @@ class BrowserTabController(
     ): BrowserTab {
         val tab = createRegisteredTab(
             tabId = UUID.randomUUID().toString(),
-            session = GeckoSession(),
+            session = BrowserTabFactory.createSessionForProfile(activeProfileId),
             initialUrl = homepageUrl,
             sessionState = "",
             title = homepageUrl,
@@ -500,6 +521,12 @@ class BrowserTabController(
         )
         tabRegistry.insert(tab = tab, insertIndex = insertIndex)
         return tab
+    }
+
+    /** opener から開いたタブは同じ Cookie を共有できるよう opener のプロファイルに揃える */
+    private fun resolveProfileIdForNewTab(openerTabId: String?): ProfileId {
+        val opener = openerTabId?.let(tabRegistry::find) ?: return activeProfileId
+        return ProfileId.fromGeckoContextId(opener.session.settings.contextId)
     }
 
     private fun onTabStateChanged() {
