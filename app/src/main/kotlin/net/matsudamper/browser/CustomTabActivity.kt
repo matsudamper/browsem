@@ -61,6 +61,7 @@ import net.matsudamper.browser.screen.browser.CustomTabScreenViewModel
 import net.matsudamper.browser.ui.common.BrowserTheme
 import org.koin.android.ext.android.inject
 import org.koin.androidx.compose.koinViewModel
+import org.koin.compose.koinInject
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoSession
 
@@ -299,12 +300,13 @@ private fun CustomTabScreen(
     val uiState by viewModel.uiState.collectAsState()
     val currentOnHandedOffPopupSessionAttached by rememberUpdatedState(onHandedOffPopupSessionAttached)
     val currentHandedOffPopupInitialUrl by rememberUpdatedState(handedOffPopupInitialUrl)
+    val customTabsWarmupStore: CustomTabsWarmupStore = koinInject()
     val prewarmedSession = remember(customTabsSessionToken, initialUrl) {
         if (handedOffPopupSession != null) {
             null
         } else {
             customTabsSessionToken?.let { token ->
-                CustomTabsWarmupStore.consumePreparedSession(
+                customTabsWarmupStore.consumePreparedSession(
                     token = token,
                     launchUrl = initialUrl,
                 )
