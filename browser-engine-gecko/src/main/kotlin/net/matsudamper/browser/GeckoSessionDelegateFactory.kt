@@ -1,5 +1,7 @@
 package net.matsudamper.browser
 
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import org.json.JSONObject
 import org.mozilla.geckoview.AllowOrDeny
@@ -368,9 +370,25 @@ internal class BrowserTabSessionDelegateHost(
     // disposeSessionDelegates 後に session.close() を遅延させるために使用
     private var pendingCloseAction: (() -> Unit)? = null
 
+    // Looper への依存を生成時に持ち込まないよう、遅延クローズを使うときだけ用意する。
+    private val closeTimeoutHandler by lazy { Handler(Looper.getMainLooper()) }
+
     fun scheduleCloseOnBlankNavigation(action: () -> Unit) {
         synchronized(lock) {
             pendingCloseAction = action
+        }
+        // コンテンツプロセスの死亡や beforeunload により about:blank へ遷移できないと
+        // セッションが開いたまま残るため、上限時間を過ぎたら強制的に閉じる。
+        closeTimeoutHandler.postDelayed(
+            { takePendingCloseAction()?.invoke() },
+            BLANK_NAVIGATION_CLOSE_TIMEOUT_MS,
+        )
+    }
+
+    /** クローズ処理は about:blank 到達とタイムアウトの早い方だけが実行する。 */
+    private fun takePendingCloseAction(): (() -> Unit)? {
+        return synchronized(lock) {
+            pendingCloseAction.also { pendingCloseAction = null }
         }
     }
 
@@ -431,10 +449,7 @@ internal class BrowserTabSessionDelegateHost(
                 // about:blank へのナビゲーション完了時にクローズ処理を実行する
                 // (拡張機能の設定ページを閉じる際に browser.storage.local 書き込みを待つため)
                 if (url == "about:blank") {
-                    val action = synchronized(lock) {
-                        pendingCloseAction.also { pendingCloseAction = null }
-                    }
-                    action?.invoke()
+                    takePendingCloseAction()?.invoke()
                 }
                 currentCallbacks()?.onLocationChange(url)
             }
@@ -780,4 +795,8 @@ internal class BrowserTabSessionDelegateHost(
         val uri: String,
         val result: GeckoResult<GeckoSession>,
     )
+
+    private companion object {
+        private const val BLANK_NAVIGATION_CLOSE_TIMEOUT_MS = 3000L
+    }
 }
