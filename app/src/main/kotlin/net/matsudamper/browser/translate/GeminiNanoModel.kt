@@ -13,22 +13,12 @@ import com.google.mlkit.genai.prompt.modelConfig
 
 /** 端末が持つ Gemini Nano のモデルを列挙・選択する */
 internal object GeminiNanoModel {
+    val CANDIDATES: List<Candidate> = Candidate.entries
 
-    class Selected(
-        val generativeModel: GenerativeModel,
-        val key: String,
-    )
-
-    /**
-     * 設定画面へ出す選択肢。
-     *
-     * 同じ表示モデル名でも世代・規模の指定ごとに挙動が変わるため、[key] は候補名と表示モデル名を連結する。
-     */
-    class Option(
-        val key: String,
-        val modelName: String,
-        val downloaded: Boolean,
-    )
+    private const val TAG = "GeminiNanoModel"
+    private const val UNKNOWN_MODEL_NAME = "unknown"
+    private const val DOWNLOADED_MODEL_PRIORITY = 0
+    private const val UNDOWNLOADED_MODEL_PRIORITY = 1
 
     /**
      * 設定画面へ出す名前。ML Kit のモデル名に付く "[Preview, CPU]" のような実行環境の注記を落とす。
@@ -112,13 +102,6 @@ internal object GeminiNanoModel {
     /** 設定へ保存するキー。候補と表示モデル名の組を一意に表す */
     fun buildKey(configName: String, modelName: String): String = "$configName/$modelName"
 
-    private class Opened(
-        val generativeModel: GenerativeModel,
-        val modelName: String,
-        val key: String,
-        val priority: Int,
-    )
-
     /** 使えない候補は閉じて null を返す */
     private suspend fun openUsable(candidate: Candidate): Opened? {
         val generativeModel = create(candidate) ?: return null
@@ -198,10 +181,26 @@ internal object GeminiNanoModel {
         }
     }
 
-    val CANDIDATES: List<Candidate> = Candidate.entries
+    /**
+     * 設定画面へ出す選択肢。
+     *
+     * 同じ表示モデル名でも世代・規模の指定ごとに挙動が変わるため、[key] は候補名と表示モデル名を連結する。
+     */
+    class Option(
+        val key: String,
+        val modelName: String,
+        val downloaded: Boolean,
+    )
 
-    private const val TAG = "GeminiNanoModel"
-    private const val UNKNOWN_MODEL_NAME = "unknown"
-    private const val DOWNLOADED_MODEL_PRIORITY = 0
-    private const val UNDOWNLOADED_MODEL_PRIORITY = 1
+    class Selected(
+        val generativeModel: GenerativeModel,
+        val key: String,
+    )
+
+    private class Opened(
+        val generativeModel: GenerativeModel,
+        val modelName: String,
+        val key: String,
+        val priority: Int,
+    )
 }
