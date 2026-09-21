@@ -31,7 +31,6 @@ data class SettingsScreenUiState(
     enum class BackupConfirmType { Export, Import }
 
     /** 翻訳プロバイダーとして並べる Gemini Nano の候補 */
-    @Stable
     data class GeminiNanoModel(
         val key: String,
         val label: String,

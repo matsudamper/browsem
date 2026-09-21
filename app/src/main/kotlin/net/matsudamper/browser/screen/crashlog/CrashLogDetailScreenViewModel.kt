@@ -38,7 +38,13 @@ internal class CrashLogDetailScreenViewModel(
                 CrashLogDetailScreenUiState(
                     callbacks = callbacks,
                     isLoading = false,
-                    entry = entry,
+                    entry = entry?.let {
+                        CrashLogDetailScreenUiState.Entry(
+                            occurredAt = it.occurredAt,
+                            title = it.title,
+                            body = it.body,
+                        )
+                    },
                 )
             }
         }
