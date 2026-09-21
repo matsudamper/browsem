@@ -7,7 +7,7 @@ import net.matsudamper.browser.data.TabGroupData
 data class TabsScreenUiState(
     val callbacks: Callbacks,
     val loadingState: LoadingState,
-    val pendingClosedTab: PendingClosedTab? = null,
+    val pendingClosedTab: PendingClosedTab?,
 ) {
     data class PendingClosedTab(
         val tabId: String,
@@ -34,7 +34,7 @@ data class TabsScreenUiState(
             val groups: List<TabGroupData>,
             val activeGroupIndex: Int,
             val selectedTabId: String?,
-            val groupHasPlayingTab: List<Boolean> = listOf(),
+            val groupHasPlayingTab: List<Boolean>,
             val newTabListener: NewTabListener,
         ) : LoadingState {
             @Stable
@@ -50,7 +50,7 @@ data class TabsScreenTabData(
     val id: String,
     val title: String,
     val previewImage: TabPreviewImage?,
-    val isPlaying: Boolean = false,
+    val isPlaying: Boolean,
     val listener: Listener,
 ) {
     @Stable
