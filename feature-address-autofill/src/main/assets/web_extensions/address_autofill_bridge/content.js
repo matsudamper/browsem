@@ -69,24 +69,40 @@
     return autocomplete === 'off' || autocomplete === 'new-password';
   }
 
+  // opacity は継承しないため、透明なラッパーで隠された欄を見抜くには祖先までたどる必要がある。
+  function isInsideTransparentElement(el) {
+    let node = el;
+    while (node && node.nodeType === Node.ELEMENT_NODE) {
+      if (Number(getComputedStyle(node).opacity) === 0) return true;
+      node = node.parentElement;
+    }
+    return false;
+  }
+
   // 画面に出ていない欄は、攻撃者が同じ form に仕込んだ収集用の隠し欄である可能性が高い。
   // ユーザーが自分で見て確認できる欄だけを埋める。
-  // 判定はページ座標で行う。スクロールしないと見えない欄は正当なフォームでも普通にあるため除外しない。
   function isVisibleField(el) {
     if (!el.isConnected) return false;
     const style = getComputedStyle(el);
     if (style.display === 'none') return false;
+    // visibility は継承するため、祖先で隠された場合もここで弾ける。
     if (style.visibility === 'hidden' || style.visibility === 'collapse') return false;
-    if (Number(style.opacity) === 0) return false;
+    if (isInsideTransparentElement(el)) return false;
+    const isFixed = style.position === 'fixed';
     // position:fixed は offsetParent が null になるため、判定から除く。
-    if (el.offsetParent === null && style.position !== 'fixed') return false;
+    if (el.offsetParent === null && !isFixed) return false;
     const rect = el.getBoundingClientRect();
     if (rect.width <= 0 || rect.height <= 0) return false;
-    if (style.position === 'fixed') return true;
-    // left:-9999px のようにページの外へ追い出された欄を弾く。
-    const pageRight = rect.right + window.scrollX;
-    const pageBottom = rect.bottom + window.scrollY;
-    return pageRight > 0 && pageBottom > 0;
+    if (isFixed) {
+      // 固定配置はスクロールしても位置が変わらないため、ビューポートと交差しなければ到達できない。
+      const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
+      const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+      return rect.right > 0 && rect.bottom > 0 &&
+        rect.left < viewportWidth && rect.top < viewportHeight;
+    }
+    // 通常フローの欄はページ座標で判定する。スクロールしないと見えない欄は正当なフォームでも
+    // 普通にあるため除外せず、left:-9999px のようにページの外へ追い出された欄だけを弾く。
+    return rect.right + window.scrollX > 0 && rect.bottom + window.scrollY > 0;
   }
 
   function isEmailField(el) {
