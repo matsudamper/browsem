@@ -31,19 +31,22 @@ import org.mozilla.geckoview.GeckoSession
 
 /**
  * @param isSinglePage Tabに依存しない。Tabの保存機能が無効化される
+ * @param persistenceScope 保存を流すスコープ。画面が終了した後も保留中の保存を流し切る必要があるため、
+ * [close] で止まる controllerScope ではなくプロセス寿命のスコープを渡す
  */
 @Stable
 class BrowserTabController(
     private val tabRepository: TabRepository,
     private val tabGroupRepository: TabGroupRepository?,
     private val isSinglePage: Boolean,
+    persistenceScope: CoroutineScope,
 ) : TabStore {
     private enum class RestoreState { NOT_STARTED, IN_PROGRESS, COMPLETED }
 
     private val controllerScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val persistenceCoordinator = BrowserTabPersistenceCoordinator(
         tabRepository = tabRepository,
-        controllerScope = controllerScope,
+        persistenceScope = persistenceScope,
         isSinglePage = isSinglePage,
     )
 
@@ -116,7 +119,8 @@ class BrowserTabController(
         }
         restoreState = RestoreState.IN_PROGRESS
         try {
-            val snapshot = withContext(Dispatchers.IO) {
+            // 旧 Controller の保留中の保存が残っていることがあるため、流し切ってから読み出す
+            val snapshot = persistenceCoordinator.withPersistenceLock {
                 val persisted = tabRepository.loadTabs()
                 RestoredTabs(
                     tabs = persisted.tabs.map { tab ->
@@ -175,8 +179,9 @@ class BrowserTabController(
         }
     }
 
-    suspend fun awaitPersistenceIdle() {
-        persistenceCoordinator.awaitIdle()
+    /** 保留中の保存と交差させたくない処理を、保存と同じロックの中で実行する。 */
+    suspend fun <T> withPersistenceLock(block: suspend () -> T): T {
+        return persistenceCoordinator.withPersistenceLock(block)
     }
 
     suspend fun getOrCreateTab(tabId: String, homepageUrl: String): BrowserTab {
@@ -411,6 +416,9 @@ class BrowserTabController(
     }
 
     fun close() {
+        // セッション破棄中の delegate callback が、作り直された Controller の復元結果を
+        // 上書きしないよう、新しい保存は受け付けない
+        persistenceCoordinator.stopAcceptingNewPersistence()
         confirmClosedTab()
         tabRegistry.values().forEach { tab ->
             disposeTab(tab, "BrowserTabController が終了しました")

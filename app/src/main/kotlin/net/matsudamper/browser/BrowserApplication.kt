@@ -29,9 +29,12 @@ class BrowserApplication : Application() {
 
     private fun cleanFilePromptsCache() {
         val dir = filePromptsCacheDir
-        val deleteFiles = dir.getChildrenRecursively()
+        // 起動後のファイル選択で作られたファイルを消さないよう、削除対象は起動時点より古いものに限る
+        val startedAt = System.currentTimeMillis()
         applicationScope.launch(Dispatchers.IO) {
-            deleteFiles.forEach { it.delete() }
+            dir.getChildrenRecursively()
+                .filter { it.lastModified() <= startedAt }
+                .forEach { it.delete() }
         }
     }
 

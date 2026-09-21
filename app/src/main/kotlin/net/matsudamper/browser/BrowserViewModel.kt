@@ -4,6 +4,8 @@ import androidx.compose.runtime.Stable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import java.util.UUID
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -75,11 +77,13 @@ internal class BrowserViewModel(
     private val tabGroupRepository: TabGroupRepository,
     private val mockLocationWebExtension: MockLocationWebExtension,
     private val siteSettingsRepository: SiteSettingsRepository,
+    private val applicationScope: CoroutineScope,
 ) : ViewModel() {
     val browserTabController = BrowserTabController(
         tabRepository = tabRepository,
         tabGroupRepository = tabGroupRepository,
         isSinglePage = false,
+        persistenceScope = applicationScope,
     )
     val browserSessionLifecycleController = BrowserSessionLifecycleController(runtime)
 
@@ -341,16 +345,14 @@ internal class BrowserViewModel(
      * Activity が閉じる直前に外部タブだけを永続化から外す。
      * 先に保留中の保存を流し切ってから DB から削除し、次回起動時に復元されないようにする。
      *
-     * 戻る操作の observer（メインスレッドのコルーチン）と onDestroy の runBlocking の両方から
-     * 呼ばれる。onDestroy はメインスレッドを塞いで完了を待つため、ここで待つ処理は
-     * メインスレッドのコルーチンが握り得るもの（[externalTabCleanupMutex] など）に依存させない。
-     * 依存させると、その保持側が再開先のメインスレッドを得られずデッドロックする。
-     * 実処理は IO のジョブに一本化し、後から来た呼び出しはそのジョブの完了だけを待つ。
+     * 戻る操作の observer と Activity の onDestroy の両方から呼ばれる。実処理は IO のジョブに
+     * 一本化し、後から来た呼び出しはそのジョブの完了だけを待つ。
      * [finishExternalDownloadTab] との競合は、メモリ上の外部タブ情報をメインスレッドで先に
      * 消すことで防ぐ（あちらは登録の有無を見て何もしない）。
      *
-     * launch だと DB 削除の失敗が viewModelScope の未捕捉例外としてプロセスを落とすため、
-     * async にして呼び出し元の await へ例外を返す。
+     * ジョブは Activity 終了後も走り切る必要があるため、viewModelScope ではなく
+     * プロセス寿命のスコープで起動する。launch だと DB 削除の失敗が未捕捉例外として
+     * プロセスを落とすため、async にして呼び出し元の await へ例外を返す。
      */
     suspend fun cleanupSelectedExternalTabOnActivityFinishIfNeeded() {
         val runningJob = externalTabFinishCleanupJob?.takeIf { it.isActive }
@@ -363,9 +365,12 @@ internal class BrowserViewModel(
         externalTabInitialUrlByTabId.remove(cleanup.tabId)
         externalTabIdsFlow.update { it - cleanup.tabId }
         externalTabInitialUrlsFlow.update { it - cleanup.tabId }
-        val job = viewModelScope.async(Dispatchers.IO) {
-            browserTabController.awaitPersistenceIdle()
-            tabRepository.closeTab(cleanup.tabId, cleanup.nextSelectedTabId)
+        // 保存キューへの登録までを呼び出し時点で済ませ、作り直された画面の復元より後ろに回らないようにする。
+        // 実処理はキューを回すコルーチン（IO）で行うため、ここで dispatcher を切り替える必要はない。
+        val job = applicationScope.async(start = CoroutineStart.UNDISPATCHED) {
+            browserTabController.withPersistenceLock {
+                tabRepository.closeTab(cleanup.tabId, cleanup.nextSelectedTabId)
+            }
         }
         externalTabFinishCleanupJob = job
         job.await()

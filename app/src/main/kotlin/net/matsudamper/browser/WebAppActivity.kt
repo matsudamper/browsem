@@ -27,6 +27,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import java.net.URI
 import java.util.concurrent.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.TabRepository
@@ -54,6 +55,7 @@ class WebAppActivity : ComponentActivity() {
     private val mediaWebExtension: MediaWebExtension by inject()
     private val settingsRepository: SettingsRepository by inject()
     private val tabRepository: TabRepository by inject()
+    private val applicationScope: CoroutineScope by inject()
     private val historyRepository: HistoryRepository by inject()
     private val webSuggestionRepository: WebSuggestionRepository by inject()
 
@@ -93,6 +95,7 @@ class WebAppActivity : ComponentActivity() {
                         WebAppBrowserViewModel(
                             tabRepository = tabRepository,
                             runtime = runtime,
+                            applicationScope = applicationScope,
                         )
                     })
                     val browserTabController = browserViewModel.browserTabController
