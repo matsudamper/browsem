@@ -14,6 +14,7 @@ import kotlinx.coroutines.test.setMain
 import io.mockk.every
 import io.mockk.mockk
 import net.matsudamper.browser.BrowserTab
+import net.matsudamper.browser.data.ProfileId
 import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.TabGroupData
 import net.matsudamper.browser.data.TabGroupId
@@ -52,10 +53,11 @@ class BrowserScreenViewModelTest {
         val assignmentsFlow = MutableStateFlow<List<TabGroupAssignment>>(emptyList())
 
         override fun observeGroups() = groupsFlow
+        override fun observeGroups(profileId: ProfileId) = groupsFlow
         override fun observeTabGroupAssignments() = assignmentsFlow
 
         override suspend fun createDefaultGroupIfEmpty(tabIds: List<String>) = TabGroupId("default")
-        override suspend fun addGroup(name: String, sortOrder: Int) = TabGroupId("new")
+        override suspend fun addGroup(name: String, sortOrder: Int, profileId: ProfileId) = TabGroupId("new")
         override suspend fun assignTabToGroup(tabId: String, groupId: TabGroupId) {}
         override suspend fun assignTabToGroupIfUnassigned(tabId: String, groupId: TabGroupId) {}
         override suspend fun removeTabFromGroup(tabId: String) {}

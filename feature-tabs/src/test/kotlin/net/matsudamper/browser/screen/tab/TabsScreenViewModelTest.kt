@@ -15,6 +15,10 @@ import net.matsudamper.browser.core.TabSelectionPolicy
 import net.matsudamper.browser.core.TabStore
 import net.matsudamper.browser.core.TabStoreState
 import net.matsudamper.browser.core.TabSummary
+import net.matsudamper.browser.data.ProfileData
+import net.matsudamper.browser.data.ProfileIcon
+import net.matsudamper.browser.data.ProfileId
+import net.matsudamper.browser.data.ProfileRepository
 import net.matsudamper.browser.data.TabGroupData
 import net.matsudamper.browser.data.TabGroupId
 import net.matsudamper.browser.data.TabGroupRepository
@@ -155,6 +159,7 @@ class TabsScreenViewModelTest {
         val assignedTabs = mutableListOf<Pair<String, TabGroupId>>()
 
         override fun observeGroups() = groupsFlow
+        override fun observeGroups(profileId: ProfileId) = groupsFlow
         override fun observeTabGroupAssignments() = assignmentsFlow
 
         override suspend fun createDefaultGroupIfEmpty(tabIds: List<String>): TabGroupId {
@@ -176,7 +181,7 @@ class TabsScreenViewModelTest {
             return id
         }
 
-        override suspend fun addGroup(name: String, sortOrder: Int): TabGroupId {
+        override suspend fun addGroup(name: String, sortOrder: Int, profileId: ProfileId): TabGroupId {
             val id = TabGroupId("group_$sortOrder")
             groupsFlow.update { it + TabGroupData(id, name) }
             return id
@@ -242,6 +247,35 @@ class TabsScreenViewModelTest {
         }
     }
 
+    /** デフォルトプロファイルだけが有効な状態を返す */
+    private class FakeProfileRepository : ProfileRepository {
+        private val profilesFlow = MutableStateFlow(
+            listOf(ProfileData(ProfileId.DEFAULT, "デフォルト", ProfileIcon.PERSON, isActive = true)),
+        )
+
+        override fun observeProfiles() = profilesFlow
+
+        override suspend fun createDefaultProfileIfEmpty() = Unit
+
+        override suspend fun addProfile(name: String, icon: ProfileIcon, sortOrder: Int): ProfileId {
+            val id = ProfileId("profile_$sortOrder")
+            profilesFlow.update { it + ProfileData(id, name, icon, isActive = false) }
+            return id
+        }
+
+        override suspend fun renameProfile(profileId: ProfileId, name: String) {
+            profilesFlow.update { profiles -> profiles.map { if (it.id == profileId) it.copy(name = name) else it } }
+        }
+
+        override suspend fun updateProfileIcon(profileId: ProfileId, icon: ProfileIcon) {
+            profilesFlow.update { profiles -> profiles.map { if (it.id == profileId) it.copy(icon = icon) else it } }
+        }
+
+        override suspend fun setActiveProfile(profileId: ProfileId) {
+            profilesFlow.update { profiles -> profiles.map { it.copy(isActive = it.id == profileId) } }
+        }
+    }
+
     // -----------------------------------------------------------------------
     // ヘルパー
     // -----------------------------------------------------------------------
@@ -254,6 +288,7 @@ class TabsScreenViewModelTest {
         return TabsScreenViewModel(
             tabStore = tabStore,
             tabGroupRepository = repo,
+            profileRepository = FakeProfileRepository(),
         )
     }
 
@@ -669,7 +704,7 @@ class TabsScreenViewModelTest {
             openedTabIds += tabId
         }
 
-        override fun openNewTab(currentGroupId: TabGroupId?) = Unit
+        override fun openNewTab(currentGroupId: TabGroupId?, profileId: ProfileId) = Unit
     }
 
     /** eventHandler に溜まったイベントをすべて recorder へ流す */
@@ -971,6 +1006,7 @@ class TabsScreenViewModelTest {
         val viewModel = TabsScreenViewModel(
             tabStore = tabStore,
             tabGroupRepository = repo,
+            profileRepository = FakeProfileRepository(),
         )
         advanceUntilIdle()
 

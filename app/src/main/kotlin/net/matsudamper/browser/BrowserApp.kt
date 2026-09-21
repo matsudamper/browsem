@@ -57,6 +57,7 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import net.matsudamper.browser.data.BackupRepository
+import net.matsudamper.browser.data.ProfileId
 import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.TabGroupId
 import net.matsudamper.browser.data.TabGroupRepository
@@ -743,7 +744,7 @@ private fun MainBrowserContent(
                                     selectTab(tabId, null)
                                 }
 
-                                override fun openNewTab(currentGroupId: TabGroupId?) {
+                                override fun openNewTab(currentGroupId: TabGroupId?, profileId: ProfileId) {
                                     scope.launch {
                                         val tabId = UUID.randomUUID().toString()
                                         if (currentGroupId != null) {
@@ -752,6 +753,7 @@ private fun MainBrowserContent(
                                         val newTab = viewModel.createTabWithHomepage(
                                             tabId = tabId,
                                             insertAfterSelectedTab = false,
+                                            profileId = profileId,
                                         )
                                         selectTab(newTab.tabId, null)
                                     }

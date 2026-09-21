@@ -26,6 +26,7 @@ internal class CustomTabBrowserViewModel(
     val browserTabController = BrowserTabController(
         tabRepository = tabRepository,
         tabGroupRepository = null,
+        profileRepository = null,
         isSinglePage = true,
         persistenceScope = applicationScope,
     )

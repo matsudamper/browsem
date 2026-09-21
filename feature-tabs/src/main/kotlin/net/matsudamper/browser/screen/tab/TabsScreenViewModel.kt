@@ -2,22 +2,32 @@ package net.matsudamper.browser.screen.tab
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import net.matsudamper.browser.core.TabSelectionPolicy
 import net.matsudamper.browser.core.TabStore
 import net.matsudamper.browser.core.TabStoreState
 import net.matsudamper.browser.core.TabSummary
+import net.matsudamper.browser.data.ProfileData
+import net.matsudamper.browser.data.ProfileIcon
+import net.matsudamper.browser.data.ProfileId
+import net.matsudamper.browser.data.ProfileRepository
 import net.matsudamper.browser.data.TabGroupData
 import net.matsudamper.browser.data.TabGroupId
 import net.matsudamper.browser.data.TabGroupRepository
 import net.matsudamper.browser.data.tab.TabGroupAssignment
+import net.matsudamper.browser.ui.tabs.ProfileSwitcherUiState
 import net.matsudamper.browser.ui.tabs.TabPreviewImage
 import net.matsudamper.browser.ui.tabs.TabsScreenTabData
 import net.matsudamper.browser.ui.tabs.TabsScreenUiState
@@ -25,6 +35,7 @@ import net.matsudamper.browser.ui.tabs.TabsScreenUiState
 class TabsScreenViewModel(
     private val tabStore: TabStore,
     private val tabGroupRepository: TabGroupRepository,
+    private val profileRepository: ProfileRepository,
     private val playingTabIds: StateFlow<Set<String>> = MutableStateFlow(setOf<String>()),
 ) : ViewModel() {
 
@@ -100,6 +111,12 @@ class TabsScreenViewModel(
         }
     }
 
+    private val profileCallbacks = object : ProfileSwitcherUiState.Callbacks {
+        override fun onAddProfile() {
+            addProfile()
+        }
+    }
+
     val uiState: StateFlow<TabsScreenUiState> = MutableStateFlow(
         TabsScreenUiState(
             callbacks = callbacks,
@@ -140,9 +157,11 @@ class TabsScreenViewModel(
                                 newTabListener = object : TabsScreenUiState.LoadingState.Loaded.NewTabListener {
                                     override fun onOpenNewTab() {
                                         val group = groups.getOrNull(state.activeGroupIndex ?: 0)
-                                        eventHandler.trySend { it.openNewTab(group?.id) }
+                                        val profileId = state.activeProfile?.id ?: ProfileId.DEFAULT
+                                        eventHandler.trySend { it.openNewTab(group?.id, profileId) }
                                     }
                                 },
+                                profileSwitcher = buildProfileSwitcher(state.profiles),
                             )
                         },
                     )
@@ -165,14 +184,27 @@ class TabsScreenViewModel(
         /** タブ一覧からタブを選択し、ブラウザ画面へ戻る */
         fun openTab(tabId: String)
 
-        /** 現在表示中のグループに新規タブを追加する */
-        fun openNewTab(currentGroupId: TabGroupId?)
+        /** 現在表示中のグループに、表示中プロファイルの contextId で新規タブを追加する */
+        fun openNewTab(currentGroupId: TabGroupId?, profileId: ProfileId)
     }
 
     init {
         viewModelScope.launch {
-            tabGroupRepository.observeGroups().collect { dbGroups ->
-                viewModelStateFlow.update { it.copy(dbGroups = dbGroups) }
+            profileRepository.observeProfiles().collect { profiles ->
+                viewModelStateFlow.update { it.copy(profiles = profiles) }
+            }
+        }
+        viewModelScope.launch {
+            observeActiveProfileGroups().collect { (profileId, dbGroups) ->
+                viewModelStateFlow.update { state ->
+                    // 別プロファイルへ切り替わった直後は旧プロファイルのローカル順序を持ち越さない
+                    val isProfileChanged = state.groupsProfileId != profileId
+                    state.copy(
+                        dbGroups = dbGroups,
+                        groupsProfileId = profileId,
+                        localGroupOrder = if (isProfileChanged) null else state.localGroupOrder,
+                    )
+                }
             }
         }
         viewModelScope.launch {
@@ -193,6 +225,7 @@ class TabsScreenViewModel(
         viewModelScope.launch {
             val initialTabs = tabStore.tabStoreState.first()
             tabGroupRepository.createDefaultGroupIfEmpty(initialTabs.tabs.map { it.id })
+            profileRepository.createDefaultProfileIfEmpty()
             // createDefaultGroupIfEmpty 完了後に監視を開始することで、グループが存在しない状態で
             // 新規タブの割り当てがスキップされる競合状態を防ぐ。
             // TabGroupDao.setTabGroup は INSERT IGNORE + UPDATE を行うため、
@@ -267,11 +300,12 @@ class TabsScreenViewModel(
     }
 
     private fun addGroup() {
+        val profileId = viewModelStateFlow.value.activeProfile?.id ?: return
         viewModelScope.launch {
             val currentGroups = viewModelStateFlow.value.groups
             val newSortOrder = currentGroups.size
             val name = "グループ ${newSortOrder + 1}"
-            val newId = tabGroupRepository.addGroup(name, newSortOrder)
+            val newId = tabGroupRepository.addGroup(name, newSortOrder, profileId)
             // Pager がアニメーション中に settledPage の中間値で activeGroupIndex を上書きしないよう
             // onGroupSelected と同様に programmaticScrollTarget を設定する
             programmaticScrollTarget = newSortOrder
@@ -457,8 +491,88 @@ class TabsScreenViewModel(
         }
     }
 
+    /** 有効プロファイルが変わるたびに、そのプロファイルのグループ一覧へ購読を切り替える */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private fun observeActiveProfileGroups() = profileRepository.observeProfiles()
+        .map { profiles -> profiles.firstOrNull { it.isActive }?.id }
+        .distinctUntilChanged()
+        .flatMapLatest { profileId ->
+            if (profileId == null) {
+                flowOf(null to listOf())
+            } else {
+                tabGroupRepository.observeGroups(profileId).map { groups -> profileId to groups }
+            }
+        }
+
+    private fun buildProfileSwitcher(profiles: List<ProfileData>): ProfileSwitcherUiState {
+        return ProfileSwitcherUiState(
+            activeProfileIcon = profiles.firstOrNull { it.isActive }?.icon ?: ProfileIcon.PERSON,
+            profiles = profiles.map { profile ->
+                ProfileSwitcherUiState.ProfileItem(
+                    name = profile.name,
+                    icon = profile.icon,
+                    isActive = profile.isActive,
+                    listener = object : ProfileSwitcherUiState.ProfileItem.Listener {
+                        override fun onSelect() {
+                            selectProfile(profile.id)
+                        }
+
+                        override fun onRename(newName: String) {
+                            viewModelScope.launch {
+                                profileRepository.renameProfile(profile.id, newName)
+                            }
+                        }
+
+                        override fun onChangeIcon(icon: ProfileIcon) {
+                            viewModelScope.launch {
+                                profileRepository.updateProfileIcon(profile.id, icon)
+                            }
+                        }
+                    },
+                )
+            },
+            callbacks = profileCallbacks,
+        )
+    }
+
+    private fun addProfile() {
+        viewModelScope.launch {
+            val profileCount = viewModelStateFlow.value.profiles.size
+            profileRepository.addProfile(
+                name = "プロファイル ${profileCount + 1}",
+                icon = ProfileIcon.PERSON,
+                sortOrder = profileCount,
+            )
+        }
+    }
+
+    /**
+     * プロファイルを切り替える。表示グループを先頭に戻し、
+     * 切り替え先にタブがあれば背後の Browser もそのタブへ差し替える。
+     */
+    private fun selectProfile(profileId: ProfileId) {
+        if (viewModelStateFlow.value.activeProfile?.id == profileId) return
+        viewModelScope.launch {
+            programmaticScrollTarget = 0
+            viewModelStateFlow.update { it.copy(activeGroupIndex = 0) }
+            profileRepository.setActiveProfile(profileId)
+            val state = viewModelStateFlow.first { it.groupsProfileId == profileId }
+            val groupIds = state.dbGroups.map { it.id.value }.toSet()
+            val assignmentMap = state.assignments.associate { it.tabId to it.groupId }
+            val firstTabId = state.tabStoreState.tabs
+                .firstOrNull { assignmentMap[it.id] in groupIds }
+                ?.id
+            if (firstTabId != null) {
+                eventHandler.trySend { it.selectTab(firstTabId) }
+            }
+        }
+    }
+
     data class ViewModelState(
         val dbGroups: List<TabGroupData> = listOf(),
+        /** dbGroups がどのプロファイルのものか。切り替え直後に旧プロファイルの一覧を出さないために持つ */
+        val groupsProfileId: ProfileId? = null,
+        val profiles: List<ProfileData> = listOf(),
         val localGroupOrder: List<TabGroupData>? = null,
         val activeGroupIndex: Int? = null,
         val tabStoreState: TabStoreState = TabStoreState(),
@@ -466,8 +580,14 @@ class TabsScreenViewModel(
         val pendingClosedTab: PendingClosedTab? = null,
         val playingTabIds: Set<String> = setOf(),
     ) {
-        /** ドラッグ中はローカル順序を優先し、DB の更新が遅れても表示が乱れないようにする。 */
-        val groups: List<TabGroupData> get() = localGroupOrder ?: dbGroups
+        val activeProfile: ProfileData? get() = profiles.firstOrNull { it.isActive }
+
+        /**
+         * ドラッグ中はローカル順序を優先し、DB の更新が遅れても表示が乱れないようにする。
+         * 有効プロファイルのグループが届く前は空にして、旧プロファイルの一覧を見せない。
+         */
+        val groups: List<TabGroupData>
+            get() = if (groupsProfileId == activeProfile?.id) localGroupOrder ?: dbGroups else listOf()
 
         /** 閉鎖済みで Undo 可能なタブの情報（Snackbar 表示と復元に使用する） */
         data class PendingClosedTab(

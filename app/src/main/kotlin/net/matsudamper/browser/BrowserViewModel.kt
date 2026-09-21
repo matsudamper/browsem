@@ -25,6 +25,8 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import net.matsudamper.browser.core.ExternalDownloadTabNavigationPolicy
+import net.matsudamper.browser.data.ProfileId
+import net.matsudamper.browser.data.ProfileRepository
 import net.matsudamper.browser.data.ResolvedBrowserSettings
 import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.SiteGeolocationState
@@ -75,6 +77,7 @@ internal class BrowserViewModel(
     private val settingsRepository: SettingsRepository,
     private val tabRepository: TabRepository,
     private val tabGroupRepository: TabGroupRepository,
+    private val profileRepository: ProfileRepository,
     private val mockLocationWebExtension: MockLocationWebExtension,
     private val siteSettingsRepository: SiteSettingsRepository,
     private val applicationScope: CoroutineScope,
@@ -82,6 +85,7 @@ internal class BrowserViewModel(
     val browserTabController = BrowserTabController(
         tabRepository = tabRepository,
         tabGroupRepository = tabGroupRepository,
+        profileRepository = profileRepository,
         isSinglePage = false,
         persistenceScope = applicationScope,
     )
@@ -184,6 +188,9 @@ internal class BrowserViewModel(
             tabGroupRepository.createDefaultGroupIfEmpty(
                 browserTabController.tabs.map { it.tabId },
             )
+            // プロファイル導入前のグループ・タブをデフォルトプロファイルへ寄せる。
+            // 直前で作ったデフォルトグループも対象になるよう、グループ作成の後に行う。
+            profileRepository.createDefaultProfileIfEmpty()
             eventHandler.trySend { it.onTabsRestored(tabId) }
         }
     }
@@ -240,11 +247,13 @@ internal class BrowserViewModel(
     suspend fun createTabWithHomepage(
         tabId: String,
         insertAfterSelectedTab: Boolean = true,
+        profileId: ProfileId? = null,
     ): BrowserTab {
         return browserTabController.createAndAppendTab(
             tabId = tabId,
             initialUrl = currentHomepageUrl(),
             insertAfterSelectedTab = insertAfterSelectedTab,
+            profileId = profileId,
         )
     }
 
