@@ -69,12 +69,25 @@
     return autocomplete === 'off' || autocomplete === 'new-password';
   }
 
-  // opacity は継承しないため、透明なラッパーで隠された欄を見抜くには祖先までたどる必要がある。
-  function isInsideTransparentElement(el) {
+  // collectFields は shadow root 内も収集するため、祖先をたどる際も ShadowRoot 境界を越える。
+  // 境界で parentElement が null になり、透明な shadow host を見落とすのを防ぐ。
+  function composedParentElement(node) {
+    if (node.parentElement) return node.parentElement;
+    const root = node.getRootNode();
+    return root && root.host ? root.host : null;
+  }
+
+  // opacity と clip は継承しないため、隠したラッパーを見抜くには祖先までたどる必要がある。
+  // clip-path / clip は入力欄の装飾にはまず使われないので、指定があれば隠されているとみなす。
+  // 判定を誤っても自動入力が働かなくなるだけで、値が漏れる方向には倒れない。
+  function isInsideHiddenWrapper(el) {
     let node = el;
     while (node && node.nodeType === Node.ELEMENT_NODE) {
-      if (Number(getComputedStyle(node).opacity) === 0) return true;
-      node = node.parentElement;
+      const style = getComputedStyle(node);
+      if (Number(style.opacity) === 0) return true;
+      if (style.clipPath && style.clipPath !== 'none') return true;
+      if (style.clip && style.clip !== 'auto') return true;
+      node = composedParentElement(node);
     }
     return false;
   }
@@ -87,7 +100,7 @@
     if (style.display === 'none') return false;
     // visibility は継承するため、祖先で隠された場合もここで弾ける。
     if (style.visibility === 'hidden' || style.visibility === 'collapse') return false;
-    if (isInsideTransparentElement(el)) return false;
+    if (isInsideHiddenWrapper(el)) return false;
     const isFixed = style.position === 'fixed';
     // position:fixed は offsetParent が null になるため、判定から除く。
     if (el.offsetParent === null && !isFixed) return false;
