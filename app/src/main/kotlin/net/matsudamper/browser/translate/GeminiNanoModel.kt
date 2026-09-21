@@ -23,8 +23,11 @@ internal object GeminiNanoModel {
     /**
      * 設定画面へ出す名前。ML Kit のモデル名に付く "[Preview, CPU]" のような実行環境の注記を落とす。
      */
-    fun toLabel(modelName: String): String =
-        modelName.substringBefore('[').trim().ifBlank { modelName }
+    fun toLabel(modelName: String): String {
+        return modelName
+            .substringBefore('[').trim()
+            .ifBlank { modelName }
+    }
 
     /**
      * 保存済みのキーが今の一覧にない場合に、翻訳時の自動選択と同じ基準で選び直す。
