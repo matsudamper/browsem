@@ -1,5 +1,6 @@
 package net.matsudamper.browser
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -66,6 +67,45 @@ class BrowserTabPoliciesTest {
                 isUrlInputFocused = true,
                 suggestionCount = 2,
                 currentPageUrl = "",
+            ),
+        )
+    }
+
+    @Test
+    fun loadingIndicatorAndClipboardUrlAreCountedTogether() {
+        assertEquals(
+            2,
+            urlBarSuggestionCount(
+                historySuggestionCount = 0,
+                webSuggestionCount = 0,
+                isLoadingWebSuggestions = true,
+                hasClipboardUrl = true,
+            ),
+        )
+    }
+
+    @Test
+    fun suggestionCountIsZeroWhenNothingToShow() {
+        assertEquals(
+            0,
+            urlBarSuggestionCount(
+                historySuggestionCount = 0,
+                webSuggestionCount = 0,
+                isLoadingWebSuggestions = false,
+                hasClipboardUrl = false,
+            ),
+        )
+    }
+
+    @Test
+    fun suggestionCountSumsAllSources() {
+        assertEquals(
+            5,
+            urlBarSuggestionCount(
+                historySuggestionCount = 2,
+                webSuggestionCount = 1,
+                isLoadingWebSuggestions = true,
+                hasClipboardUrl = true,
             ),
         )
     }
