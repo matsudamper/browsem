@@ -57,6 +57,7 @@ import net.matsudamper.browser.data.resolvedSearchTemplate
 import net.matsudamper.browser.data.websuggestion.WebSuggestionRepository
 import net.matsudamper.browser.feature.media.MediaWebExtension
 import net.matsudamper.browser.feature.themecolor.ThemeColorWebExtension
+import net.matsudamper.browser.translate.PageTranslationWebExtension
 import net.matsudamper.browser.screen.browser.CustomTabScreenViewModel
 import net.matsudamper.browser.ui.common.BrowserTheme
 import org.koin.android.ext.android.inject
@@ -68,6 +69,7 @@ class CustomTabActivity : ComponentActivity() {
     private var geckoRuntime: GeckoRuntime? by mutableStateOf(null)
     private val themeColorExtension: ThemeColorWebExtension by inject()
     private val mediaWebExtensionInstance: MediaWebExtension by inject()
+    private val pageTranslationWebExtension: PageTranslationWebExtension by inject()
     private val settingsRepository: SettingsRepository by inject()
     private val tabRepository: TabRepository by inject()
     private val applicationScope: CoroutineScope by inject()
@@ -82,6 +84,7 @@ class CustomTabActivity : ComponentActivity() {
                     runtime = geckoRuntimeInitializer.requireInitialized(),
                     handoffToken = intent.getStringExtra(WindowOpenHandoffStore.EXTRA_HANDOFF_TOKEN),
                     mediaWebExtension = mediaWebExtensionInstance,
+                    pageTranslationWebExtension = pageTranslationWebExtension,
                     applicationScope = applicationScope,
                 )
             }

@@ -37,6 +37,7 @@ import net.matsudamper.browser.data.resolvedSearchTemplate
 import net.matsudamper.browser.data.websuggestion.WebSuggestionRepository
 import net.matsudamper.browser.feature.media.MediaWebExtension
 import net.matsudamper.browser.feature.themecolor.ThemeColorWebExtension
+import net.matsudamper.browser.translate.PageTranslationWebExtension
 import net.matsudamper.browser.screen.browser.WebAppScreenViewModel
 import net.matsudamper.browser.ui.browser.BrowserContentLoadingIndicator
 import net.matsudamper.browser.ui.common.BrowserTheme
@@ -53,6 +54,7 @@ class WebAppActivity : ComponentActivity() {
     private var geckoRuntime: GeckoRuntime? by mutableStateOf(null)
     private val themeColorExtension: ThemeColorWebExtension by inject()
     private val mediaWebExtension: MediaWebExtension by inject()
+    private val pageTranslationWebExtension: PageTranslationWebExtension by inject()
     private val settingsRepository: SettingsRepository by inject()
     private val tabRepository: TabRepository by inject()
     private val applicationScope: CoroutineScope by inject()
@@ -96,6 +98,7 @@ class WebAppActivity : ComponentActivity() {
                             tabRepository = tabRepository,
                             runtime = runtime,
                             mediaWebExtension = mediaWebExtension,
+                            pageTranslationWebExtension = pageTranslationWebExtension,
                             applicationScope = applicationScope,
                         )
                     })

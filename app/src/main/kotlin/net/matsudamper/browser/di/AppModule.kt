@@ -104,6 +104,6 @@ val appModule = module {
     // eTLD+1 (基底ドメイン) の算出に使用する Public Suffix List。初回ロードを共有するため single
     single { PublicSuffixList(androidContext()) }
     factory { GeckoDownloadManager(androidContext(), get()) }
-    viewModel { BrowserViewModel(get(), get(), get(), get(), get(), get(), get(), get(), get()) }
+    viewModel { BrowserViewModel(get(), get(), get(), get(), get(), get(), get(), get(), get(), get()) }
     worker { DownloadWorker(get(), get(), get()) }
 }
