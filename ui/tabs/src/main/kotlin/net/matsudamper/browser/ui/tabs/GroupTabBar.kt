@@ -20,6 +20,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -55,6 +56,7 @@ import androidx.compose.ui.unit.round
 import androidx.compose.ui.unit.toOffset
 import androidx.compose.ui.zIndex
 import kotlin.math.abs
+import net.matsudamper.browser.data.ProfileIcon
 import net.matsudamper.browser.data.TabGroupData
 import net.matsudamper.browser.resources.R as ResourcesR
 
@@ -62,6 +64,9 @@ private val TabShape = RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp)
 
 /** グループタブバー全体の高さ。LazyRow・外側 Box 両方で共有する */
 private val GroupTabBarHeight = 48.dp
+
+/** バー右端のプロファイルボタンの幅。LazyRow の末尾余白と共有する */
+private val ProfileButtonWidth = 48.dp
 
 /** 非選択タブの最小高さ。選択タブは GroupTabBarHeight まで伸びて「浮き上がり」を表現する */
 private val GroupTabUnselectedHeight = 40.dp
@@ -91,6 +96,8 @@ internal fun GroupTabBar(
     onGroupSelected: (Int) -> Unit,
     onReorderGroups: (fromIndex: Int, toIndex: Int) -> Unit,
     onAddGroup: () -> Unit,
+    profileIcon: ProfileIcon,
+    onClickProfile: () -> Unit,
     onGroupTabBoundsChanged: (index: Int, bounds: Rect) -> Unit,
     onDraggingChanged: (isDragging: Boolean) -> Unit,
     listState: LazyListState,
@@ -142,6 +149,8 @@ internal fun GroupTabBar(
             contentPadding = PaddingValues(start = 8.dp),
             modifier = Modifier
                 .fillMaxWidth()
+                // 右端に固定表示するプロファイルボタンの下へグループタブが潜らないようにする
+                .padding(end = ProfileButtonWidth)
                 // 全アイテムが常に GroupTabBarHeight のwrapperを持つため、高さは固定で問題なし
                 .height(GroupTabBarHeight)
                 // groups.size をキーに含めないと、グループ追加後も古い groupCount が
@@ -196,6 +205,15 @@ internal fun GroupTabBar(
                 AddGroupBookmarkTab(onClick = onAddGroup)
             }
         }
+
+        ProfileButton(
+            icon = profileIcon,
+            onClick = onClickProfile,
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .width(ProfileButtonWidth)
+                .height(GroupTabBarHeight),
+        )
 
         if (dragDropState.isDragging) {
             val draggedGroup = groups.firstOrNull { it.id.value == dragDropState.draggedItemKey }
@@ -614,6 +632,26 @@ private fun GroupBookmarkTab(
                     color = if (isDropTarget) selectedTextColor else lerp(unselectedTextColor, selectedTextColor, fraction),
                 )
             }
+        }
+    }
+}
+
+/** バー右端に固定表示するプロファイル切り替えボタン */
+@Composable
+private fun ProfileButton(
+    icon: ProfileIcon,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier = modifier,
+        contentAlignment = Alignment.Center,
+    ) {
+        IconButton(
+            onClick = onClick,
+            modifier = Modifier.testTag(ProfileManagementTestTags.OpenDialogButton.testTag),
+        ) {
+            ProfileIconBadge(icon = icon, size = 32.dp)
         }
     }
 }
