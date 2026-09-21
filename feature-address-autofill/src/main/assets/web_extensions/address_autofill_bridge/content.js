@@ -98,6 +98,13 @@
     return opacity;
   }
 
+  // mask-image: linear-gradient(transparent, transparent) は描画を完全に消すが opacity は 1 のまま。
+  // 入力欄やそのラッパーに mask が使われることはまず無いため、指定があれば隠されているとみなす。
+  function isMasked(style) {
+    const maskImage = style.maskImage || style.webkitMaskImage;
+    return !!maskImage && maskImage !== 'none';
+  }
+
   function elementOpacity(style) {
     const opacity = Number(style.opacity);
     return (isNaN(opacity) ? 1 : opacity) * filterOpacity(style.filter);
@@ -116,6 +123,7 @@
       if (compositedOpacity < TRANSPARENT_OPACITY) return true;
       if (style.clipPath && style.clipPath !== 'none') return true;
       if (style.clip && style.clip !== 'auto') return true;
+      if (isMasked(style)) return true;
       node = composedParentElement(node);
     }
     return false;
@@ -143,6 +151,43 @@
     return false;
   }
 
+  /** ヒットテストの結果が [el] 自身か、その内側・shadow host 側の要素なら [el] へ到達したとみなす。 */
+  function hitReaches(el, x, y) {
+    const root = el.getRootNode();
+    const hit = typeof root.elementFromPoint === 'function'
+      ? root.elementFromPoint(x, y)
+      : document.elementFromPoint(x, y);
+    if (!hit) return false;
+    if (el.contains(hit)) return true;
+    let node = hit;
+    while (node) {
+      if (node === el) return true;
+      node = composedParentElement(node);
+    }
+    return false;
+  }
+
+  // 上に不透明な要素を重ねて隠す手口はスタイルや矩形からは見抜けないため、実際に最前面へ
+  // 出ている点があるかを調べる。ラベルやアイコンによる部分的な重なりで誤判定しないよう
+  // 複数点を見て、どれか一つでも到達できれば露出しているとみなす。
+  // ビューポート外の欄はスクロールしないと判定できないため対象外とする。
+  function isOccluded(el, rect) {
+    const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
+    const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+    const ratios = [0.5, 0.25, 0.75];
+    let sampled = false;
+    for (let i = 0; i < ratios.length; i++) {
+      for (let j = 0; j < ratios.length; j++) {
+        const x = rect.left + rect.width * ratios[i];
+        const y = rect.top + rect.height * ratios[j];
+        if (x < 0 || y < 0 || x >= viewportWidth || y >= viewportHeight) continue;
+        sampled = true;
+        if (hitReaches(el, x, y)) return false;
+      }
+    }
+    return sampled;
+  }
+
   // 画面に出ていない欄は、攻撃者が同じ form に仕込んだ収集用の隠し欄である可能性が高い。
   // ユーザーが自分で見て確認できる欄だけを埋める。
   function isVisibleField(el) {
@@ -158,6 +203,7 @@
     const rect = el.getBoundingClientRect();
     if (rect.width < MIN_VISIBLE_SIZE || rect.height < MIN_VISIBLE_SIZE) return false;
     if (isClippedByAncestor(el, rect)) return false;
+    if (isOccluded(el, rect)) return false;
     if (isFixed) {
       // 固定配置はスクロールしても位置が変わらないため、ビューポートと交差しなければ到達できない。
       const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
