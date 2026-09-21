@@ -286,14 +286,12 @@ internal fun BrowserTabOverlayLayer(
             shouldShowUrlSuggestions(
                 showFindInPage = state.findInPage.isVisible,
                 isUrlInputFocused = state.isUrlInputFocused,
-                suggestionCount = urlBarSuggestions.historySuggestions.size +
-                    urlBarSuggestions.webSuggestions.size +
-                    if (urlBarSuggestions.isLoadingWebSuggestions) {
-                        1
-                    } else {
-                        0 +
-                            if (clipboardUrl != null) 1 else 0
-                    },
+                suggestionCount = urlBarSuggestionCount(
+                    historySuggestionCount = urlBarSuggestions.historySuggestions.size,
+                    webSuggestionCount = urlBarSuggestions.webSuggestions.size,
+                    isLoadingWebSuggestions = urlBarSuggestions.isLoadingWebSuggestions,
+                    hasClipboardUrl = clipboardUrl != null,
+                ),
                 currentPageUrl = state.currentPageUrl,
             )
         ) {
