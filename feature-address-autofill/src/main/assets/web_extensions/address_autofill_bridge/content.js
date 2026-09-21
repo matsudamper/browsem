@@ -222,8 +222,8 @@
   // 正当な入力欄で文字色を透明にすることはないため、隠されているとみなす。
   function hasInvisibleText(style) {
     const textFillColor = style.webkitTextFillColor;
-    if (textFillColor && colorAlpha(textFillColor) === 0) return true;
-    return colorAlpha(style.color) === 0;
+    if (textFillColor && colorAlpha(textFillColor) < TRANSPARENT_OPACITY) return true;
+    return colorAlpha(style.color) < TRANSPARENT_OPACITY;
   }
 
   /** ヒットテストの結果が [el] 自身か、その内側・shadow host 側の要素なら [el] へ到達したとみなす。 */
@@ -242,9 +242,46 @@
     return false;
   }
 
+  // pointer-events:none の要素はヒットテストから外れるため、上に重なっていても
+  // elementFromPoint は下の欄を返す。描画としては隠れているので別途照合する。
+  // 走査は fillAddress の一回につき一度だけ行い、[hitTransparentOverlays] に持つ。
+  let hitTransparentOverlays = null;
+
+  function collectHitTransparentOverlays(root, out) {
+    const all = root.querySelectorAll('*');
+    for (let i = 0; i < all.length; i++) {
+      const node = all[i];
+      if (node.shadowRoot) {
+        collectHitTransparentOverlays(node.shadowRoot, out);
+      }
+      const style = getComputedStyle(node);
+      if (style.pointerEvents !== 'none') continue;
+      if (style.display === 'none' || style.visibility !== 'visible') continue;
+      if (elementOpacity(style) < TRANSPARENT_OPACITY) continue;
+      const rect = node.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) continue;
+      out.push({ node: node, rect: rect });
+    }
+    return out;
+  }
+
+  /** [x], [y] が、[el] と親子関係にない pointer-events:none の要素に覆われているか。 */
+  function isPointCoveredByOverlay(el, x, y) {
+    if (!hitTransparentOverlays) return false;
+    for (let i = 0; i < hitTransparentOverlays.length; i++) {
+      const overlay = hitTransparentOverlays[i];
+      const rect = overlay.rect;
+      if (x < rect.left || x >= rect.right || y < rect.top || y >= rect.bottom) continue;
+      // 欄自身の内側の装飾やその祖先は、欄を覆い隠す重ね合わせではない。
+      if (overlay.node.contains(el) || el.contains(overlay.node)) continue;
+      return true;
+    }
+    return false;
+  }
+
   // 上に不透明な要素を重ねて隠す手口はスタイルや矩形からは見抜けないため、実際に最前面へ
   // 出ている点があるかを調べる。ラベルやアイコンによる部分的な重なりで誤判定しないよう
-  // 複数点を見て、どれか一つでも到達できれば露出しているとみなす。
+  // 複数点を見て、どれか一つでも露出していれば見えているとみなす。
   // ビューポート外の欄はスクロールしないと判定できないため対象外とする。
   function isOccluded(el, rect) {
     const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
@@ -257,7 +294,7 @@
         const y = rect.top + rect.height * ratios[j];
         if (x < 0 || y < 0 || x >= viewportWidth || y >= viewportHeight) continue;
         sampled = true;
-        if (hitReaches(el, x, y)) return false;
+        if (hitReaches(el, x, y) && !isPointCoveredByOverlay(el, x, y)) return false;
       }
     }
     return sampled;
@@ -443,20 +480,25 @@
     if (!root) return 0;
     const fields = collectFillTargets(root);
     let filled = 0;
-    for (let i = 0; i < fields.length; i++) {
-      const el = fields[i];
-      if (isNonValueField(el)) continue;
-      if (!isVisibleField(el)) continue;
-      if (fillMode === 'email') {
-        if (!isEmailField(el)) continue;
-      } else {
-        if (isEmailField(el)) continue;
-        if (hasAutocompleteOff(el)) continue;
+    hitTransparentOverlays = collectHitTransparentOverlays(document, []);
+    try {
+      for (let i = 0; i < fields.length; i++) {
+        const el = fields[i];
+        if (isNonValueField(el)) continue;
+        if (!isVisibleField(el)) continue;
+        if (fillMode === 'email') {
+          if (!isEmailField(el)) continue;
+        } else {
+          if (isEmailField(el)) continue;
+          if (hasAutocompleteOff(el)) continue;
+        }
+        const value = fillMode === 'email' ? (address.email || '') : resolveValue(el, address);
+        if (!value) continue;
+        setFieldValue(el, value);
+        filled += 1;
       }
-      const value = fillMode === 'email' ? (address.email || '') : resolveValue(el, address);
-      if (!value) continue;
-      setFieldValue(el, value);
-      filled += 1;
+    } finally {
+      hitTransparentOverlays = null;
     }
     console.log('address-autofill: mode=' + fillMode + ' filled=' + filled + ' href=' + location.href);
     return filled;
