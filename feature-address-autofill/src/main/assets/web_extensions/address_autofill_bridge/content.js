@@ -138,7 +138,12 @@
   }
 
   // overflow:hidden の祖先のクリップ領域外へ絶対配置された欄は、矩形もページ座標も有効なまま見えない。
+  // クリップは重ねがけできるため交差を累積し、残った可視領域にも最小サイズを課す。
   function isClippedByAncestor(el, rect) {
+    let left = rect.left;
+    let top = rect.top;
+    let right = rect.right;
+    let bottom = rect.bottom;
     let node = composedParentElement(el);
     while (node && node.nodeType === Node.ELEMENT_NODE) {
       const style = getComputedStyle(node);
@@ -146,12 +151,37 @@
       const clipsY = isClippingOverflow(style.overflowY);
       if (clipsX || clipsY) {
         const bounds = node.getBoundingClientRect();
-        if (clipsX && (rect.right <= bounds.left || rect.left >= bounds.right)) return true;
-        if (clipsY && (rect.bottom <= bounds.top || rect.top >= bounds.bottom)) return true;
+        if (clipsX) {
+          left = Math.max(left, bounds.left);
+          right = Math.min(right, bounds.right);
+        }
+        if (clipsY) {
+          top = Math.max(top, bounds.top);
+          bottom = Math.min(bottom, bounds.bottom);
+        }
+        if (right - left < MIN_VISIBLE_SIZE || bottom - top < MIN_VISIBLE_SIZE) return true;
       }
       node = composedParentElement(node);
     }
     return false;
+  }
+
+  /** computed color のアルファ値。rgb()/rgba() のカンマ区切りとスペース区切りの両方を受ける。 */
+  function colorAlpha(color) {
+    const match = /^rgba?\(([^)]*)\)$/.exec(String(color).trim());
+    if (!match) return 1;
+    const parts = match[1].replace(/\//g, ' ').trim().split(/[\s,]+/);
+    if (parts.length < 4) return 1;
+    const alpha = Number(parts[3]);
+    return isNaN(alpha) ? 1 : alpha;
+  }
+
+  // 文字色が透明な欄は、埋めた値がユーザーに見えないままページ側の input ハンドラーへ渡る。
+  // 正当な入力欄で文字色を透明にすることはないため、隠されているとみなす。
+  function hasInvisibleText(style) {
+    const textFillColor = style.webkitTextFillColor;
+    if (textFillColor && colorAlpha(textFillColor) === 0) return true;
+    return colorAlpha(style.color) === 0;
   }
 
   /** ヒットテストの結果が [el] 自身か、その内側・shadow host 側の要素なら [el] へ到達したとみなす。 */
@@ -199,6 +229,7 @@
     if (style.display === 'none') return false;
     // visibility は継承するため、祖先で隠された場合もここで弾ける。
     if (style.visibility === 'hidden' || style.visibility === 'collapse') return false;
+    if (hasInvisibleText(style)) return false;
     if (isInsideHiddenWrapper(el)) return false;
     const isFixed = style.position === 'fixed';
     // position:fixed は offsetParent が null になるため、判定から除く。
