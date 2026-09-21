@@ -18,6 +18,9 @@ abstract class TabGroupDao {
     @Query("SELECT * FROM tab_group ORDER BY sortOrder ASC")
     abstract suspend fun getAllGroups(): List<TabGroupEntity>
 
+    @Query("SELECT * FROM tab_group WHERE profileId = :profileId ORDER BY sortOrder ASC")
+    abstract fun observeGroupsForProfile(profileId: String): Flow<List<TabGroupEntity>>
+
     @Query("DELETE FROM tab_group WHERE groupId = :groupId")
     abstract suspend fun deleteGroup(groupId: String)
 

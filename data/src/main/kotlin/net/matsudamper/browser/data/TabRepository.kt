@@ -99,6 +99,7 @@ class TabRepository(context: Context) {
                     },
                     groupId = existing?.groupId.orEmpty(),
                     pageZoomPercent = tab.pageZoomPercent,
+                    profileId = tab.profileId.value,
                 ),
             )
 
@@ -231,6 +232,7 @@ class TabRepository(context: Context) {
         openerTabId = openerTabId,
         themeColor = themeColor,
         pageZoomPercent = pageZoomPercent,
+        profileId = ProfileId.fromGeckoContextId(profileId),
     )
 }
 
@@ -247,6 +249,7 @@ data class PersistedTabState(
     val openerTabId: String = "",
     val themeColor: Int? = null,
     val pageZoomPercent: Int = 100,
+    val profileId: ProfileId = ProfileId.DEFAULT,
 )
 
 private fun TabStateEntity.isPlaceholderForPreAssignment(): Boolean {

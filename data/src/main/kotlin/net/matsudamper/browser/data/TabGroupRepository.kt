@@ -10,6 +10,9 @@ import net.matsudamper.browser.data.tab.TabGroupEntity
 interface TabGroupRepository {
     fun observeGroups(): Flow<List<TabGroupData>>
 
+    /** 指定プロファイルに属するグループのみを sortOrder 順で流す */
+    fun observeGroups(profileId: ProfileId): Flow<List<TabGroupData>>
+
     fun observeTabGroupAssignments(): Flow<List<TabGroupAssignment>>
 
     /**
@@ -19,7 +22,7 @@ interface TabGroupRepository {
      */
     suspend fun createDefaultGroupIfEmpty(tabIds: List<String>): TabGroupId
 
-    suspend fun addGroup(name: String, sortOrder: Int): TabGroupId
+    suspend fun addGroup(name: String, sortOrder: Int, profileId: ProfileId): TabGroupId
 
     suspend fun assignTabToGroup(tabId: String, groupId: TabGroupId)
 
@@ -63,6 +66,12 @@ class TabGroupRepositoryImpl(context: Context) : TabGroupRepository {
         }
     }
 
+    override fun observeGroups(profileId: ProfileId): Flow<List<TabGroupData>> {
+        return dao.observeGroupsForProfile(profileId.value).map { entities ->
+            entities.map { TabGroupData(TabGroupId(it.groupId), it.name, it.isDefault) }
+        }
+    }
+
     override fun observeTabGroupAssignments(): Flow<List<TabGroupAssignment>> {
         return dao.observeTabGroupAssignments()
     }
@@ -78,14 +87,28 @@ class TabGroupRepositoryImpl(context: Context) : TabGroupRepository {
             return firstId
         }
         val id = TabGroupId.generate()
-        dao.upsertGroup(TabGroupEntity(groupId = id.value, name = "デフォルト", sortOrder = 0))
+        dao.upsertGroup(
+            TabGroupEntity(
+                groupId = id.value,
+                name = "デフォルト",
+                sortOrder = 0,
+                profileId = ProfileId.DEFAULT.value,
+            ),
+        )
         tabIds.forEach { tabId -> dao.setTabGroup(tabId, id.value) }
         return id
     }
 
-    override suspend fun addGroup(name: String, sortOrder: Int): TabGroupId {
+    override suspend fun addGroup(name: String, sortOrder: Int, profileId: ProfileId): TabGroupId {
         val id = TabGroupId.generate()
-        dao.upsertGroup(TabGroupEntity(groupId = id.value, name = name, sortOrder = sortOrder))
+        dao.upsertGroup(
+            TabGroupEntity(
+                groupId = id.value,
+                name = name,
+                sortOrder = sortOrder,
+                profileId = profileId.value,
+            ),
+        )
         return id
     }
 

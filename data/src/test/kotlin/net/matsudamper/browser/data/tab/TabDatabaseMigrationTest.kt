@@ -181,6 +181,42 @@ class TabDatabaseMigrationTest {
         }
     }
 
+    /** v5→v6: profile テーブル追加と profileId 追加。既存グループ・タブは未所属（空文字）になる */
+    @Test
+    fun migrate5To6() {
+        helper.createDatabase(TEST_DB, 5).apply {
+            execSQL(
+                "INSERT INTO tab_group (groupId, name, sortOrder, isDefault) VALUES ('g1', 'Group', 0, 0)",
+            )
+            execSQL(
+                "INSERT INTO tab_state " +
+                    "(tabId, url, title, openerTabId, themeColor, sortOrder, isSelected, groupId, pageZoomPercent) " +
+                    "VALUES ('t1', 'https://example.com', 'Example', '', NULL, 0, 1, 'g1', 100)",
+            )
+            close()
+        }
+
+        val db = helper.runMigrationsAndValidate(
+            TEST_DB,
+            6,
+            true,
+            *TabDatabase.allMigrations(sessionStateDir()),
+        )
+
+        db.query("SELECT profileId FROM tab_group WHERE groupId = 'g1'").use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals("", cursor.getString(0))
+        }
+        db.query("SELECT profileId FROM tab_state WHERE tabId = 't1'").use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals("", cursor.getString(0))
+        }
+        db.query("SELECT count(*) FROM profile").use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals(0, cursor.getInt(0))
+        }
+    }
+
     /** v1 から最新バージョンまで全マイグレーションを連続適用できることを確認 */
     @Test
     fun migrateAllFrom1() {

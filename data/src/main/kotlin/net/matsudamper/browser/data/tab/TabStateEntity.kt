@@ -14,4 +14,5 @@ data class TabStateEntity(
     val isSelected: Int, // 1 = 選択中, 0 = 未選択
     val groupId: String, // TabGroupId.value を格納
     val pageZoomPercent: Int = 100,
+    val profileId: String = "", // ProfileId.value を格納。空はプロファイル導入前の行
 )

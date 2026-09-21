@@ -9,4 +9,5 @@ data class TabGroupEntity(
     val name: String,
     val sortOrder: Int,
     val isDefault: Boolean = false,
+    val profileId: String = "", // ProfileId.value を格納。空はプロファイル導入前の行
 )
