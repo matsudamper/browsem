@@ -23,6 +23,7 @@ import net.matsudamper.browser.data.history.HistoryRepository
 import net.matsudamper.browser.data.tab.TabGroupAssignment
 import net.matsudamper.browser.data.websuggestion.WebSuggestionRepository
 import net.matsudamper.browser.ui.browser.BrowserScreenUiState
+import net.matsudamper.browser.ui.browser.TabPreviewContent
 import net.matsudamper.browser.ui.browser.UrlBarSuggestionsUiState
 
 class BrowserScreenViewModel(
@@ -77,34 +78,16 @@ class BrowserScreenViewModel(
                     val selectedTab = state.screenTabId?.let { tabId ->
                         state.orderedBrowserTabs.firstOrNull { it.tabId == tabId }
                     }
-                    val previousTab = adjacentTabs.previousTab?.let { tab ->
-                        BrowserScreenUiState.AdjacentTabPreview(
-                            tab = tab,
-                            listener = object : BrowserScreenUiState.AdjacentTabPreview.Listener {
-                                override fun onSelect() {
-                                    eventHandler.trySend { it.selectTab(tab.tabId) }
-                                }
-                            },
-                        )
-                    }
-                    val nextTab = adjacentTabs.nextTab?.let { tab ->
-                        BrowserScreenUiState.AdjacentTabPreview(
-                            tab = tab,
-                            listener = object : BrowserScreenUiState.AdjacentTabPreview.Listener {
-                                override fun onSelect() {
-                                    eventHandler.trySend { it.selectTab(tab.tabId) }
-                                }
-                            },
-                        )
-                    }
-                    // canGoBack の判定は BrowserScreen 側で selectedTab を Compose 経由で読む。
+                    val previousTab = adjacentTabs.previousTab?.toAdjacentTabPreview()
+                    val nextTab = adjacentTabs.nextTab?.toAdjacentTabPreview()
+                    // canGoBack の判定は画面側が BrowserTab から Compose 経由で読む。
                     // ViewModelState の更新だけでは canGoBack 単体の変化を拾えないため、
                     // ここでは opener 関係のみでリスナーを生成する。
                     val backToOpenerListener: BrowserScreenUiState.SwipePreviewUiState.BackToOpenerListener? =
                         if (
                             previousTab != null &&
                             selectedTab?.openerTabId != null &&
-                            previousTab.tab.tabId == selectedTab.openerTabId
+                            adjacentTabs.previousTab.tabId == selectedTab.openerTabId
                         ) {
                             object : BrowserScreenUiState.SwipePreviewUiState.BackToOpenerListener {
                                 override fun onBackToOpener() {
@@ -180,6 +163,25 @@ class BrowserScreenViewModel(
                 viewModelStateFlow.update { it.copy(externalTabInitialUrls = externalTabInitialUrls) }
             }
         }
+    }
+
+    private fun BrowserTab.toAdjacentTabPreview(): BrowserScreenUiState.AdjacentTabPreview {
+        val tab = this
+        return BrowserScreenUiState.AdjacentTabPreview(
+            // プレビュー画像やタイトルは撮影完了後に BrowserTab 側で更新される。
+            // 値をコピーすると更新を取りこぼすため、読み出しを委譲する。
+            content = object : TabPreviewContent {
+                override val title: String get() = tab.title
+                override val currentUrl: String get() = tab.currentUrl
+                override val themeColor: Int? get() = tab.themeColor
+                override val previewImage: ByteArray? get() = tab.previewBitmap
+            },
+            listener = object : BrowserScreenUiState.AdjacentTabPreview.Listener {
+                override fun onSelect() {
+                    eventHandler.trySend { it.selectTab(tab.tabId) }
+                }
+            },
+        )
     }
 
     interface Event {
