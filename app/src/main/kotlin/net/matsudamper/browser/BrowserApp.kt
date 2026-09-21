@@ -87,6 +87,7 @@ import net.matsudamper.browser.data.forminput.FormInputRepository
 import net.matsudamper.browser.data.forminput.parseFormInputPageKey
 import net.matsudamper.browser.data.history.HistoryRepository
 import net.matsudamper.browser.data.websuggestion.WebSuggestionRepository
+import net.matsudamper.browser.feature.webauthncompat.WebAuthnCompatWebExtension
 import net.matsudamper.browser.navigation.AppDestination
 import net.matsudamper.browser.navigation.BrowserNavDestination
 import net.matsudamper.browser.navigation.NavController
@@ -100,6 +101,7 @@ import net.matsudamper.browser.screen.downloads.DownloadManagementScreenViewMode
 import net.matsudamper.browser.screen.extensions.ExtensionsScreenViewModel
 import net.matsudamper.browser.screen.history.HistoryScreenViewModel
 import net.matsudamper.browser.screen.settings.SettingsScreenViewModel
+import net.matsudamper.browser.screen.settings.WebAuthnSettingsUpdateQueue
 import net.matsudamper.browser.screen.siteforminput.SiteFormInputFieldScreenViewModel
 import net.matsudamper.browser.screen.siteforminput.SiteFormInputPathScreenViewModel
 import net.matsudamper.browser.screen.siteforminput.SiteFormInputPathsScreenViewModel
@@ -291,8 +293,16 @@ internal fun BrowserAppShell(
 
                 AppDestination.Settings -> navEntry(key) {
                     val lifecycleOwner = LocalLifecycleOwner.current
+                    val geckoRuntime: GeckoRuntime = koinInject()
+                    val webAuthnCompatWebExtension: WebAuthnCompatWebExtension = koinInject()
+                    val webAuthnSettingsUpdateQueue: WebAuthnSettingsUpdateQueue = koinInject()
                     val settingsViewModel = composeViewModel(initializer = {
-                        SettingsScreenViewModel(settingsRepository)
+                        SettingsScreenViewModel(
+                            settingsRepository = settingsRepository,
+                            runtime = geckoRuntime,
+                            webAuthnCompatWebExtension = webAuthnCompatWebExtension,
+                            webAuthnSettingsUpdateQueue = webAuthnSettingsUpdateQueue,
+                        )
                     })
                     val settingsUiState by settingsViewModel.uiState.collectAsState()
                     val requestDefaultBrowserLauncher = rememberLauncherForActivityResult(
