@@ -595,7 +595,12 @@ internal fun GeckoBrowserTab(
                     }
                     if (state.firstCompositeCount != compositeCountBeforeAttach) return@postDelayed
                     when (surfaceResumeState) {
-                        SurfaceResumeState.WAITING_STABLE -> waitForFirstComposite(null)
+                        // attach 待ち、またはオーバーレイ等の focus-only 離脱。どちらも
+                        // surface は作り直されないので監視を続ける。猶予は ACTIVE に
+                        // なってから数え直す。
+                        SurfaceResumeState.WAITING_STABLE,
+                        SurfaceResumeState.PAUSED_KEEP_SURFACE,
+                        -> waitForFirstComposite(null)
 
                         SurfaceResumeState.ACTIVE -> {
                             val since = activeSinceMs ?: SystemClock.elapsedRealtime()
@@ -624,9 +629,8 @@ internal fun GeckoBrowserTab(
                             restoreSurfaceIfNeeded(gecko, blankSurfaceRetryCount + 1)
                         }
 
-                        SurfaceResumeState.RELEASED,
-                        SurfaceResumeState.PAUSED_KEEP_SURFACE,
-                        -> Unit
+                        // release 済み。次の復帰で新しい監視が始まる。
+                        SurfaceResumeState.RELEASED -> Unit
                     }
                 },
                 BLANK_SURFACE_POLL_MS,
