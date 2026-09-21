@@ -127,6 +127,7 @@
       if (style.clipPath && style.clipPath !== 'none') return true;
       if (style.clip && style.clip !== 'auto') return true;
       if (isMasked(style)) return true;
+      if (isHiddenBackface(style)) return true;
       node = composedParentElement(node);
     }
     return false;
@@ -166,14 +167,55 @@
     return false;
   }
 
-  /** computed color のアルファ値。rgb()/rgba() のカンマ区切りとスペース区切りの両方を受ける。 */
+  /**
+   * computed color のアルファ値。rgb() / rgba() に加え、Gecko が独自形式のまま返す
+   * oklab() や color() のような CSS Color 4 の記法も扱う。
+   * これらは `<関数名>(... / <alpha>)` の形を取るため、スラッシュ以降をアルファとして読む。
+   */
   function colorAlpha(color) {
-    const match = /^rgba?\(([^)]*)\)$/.exec(String(color).trim());
+    const match = /^[a-z-]+\(([^)]*)\)$/i.exec(String(color).trim());
     if (!match) return 1;
-    const parts = match[1].replace(/\//g, ' ').trim().split(/[\s,]+/);
+    const body = match[1];
+    const slashIndex = body.lastIndexOf('/');
+    if (slashIndex !== -1) {
+      const alpha = parsePercentOrNumber(body.slice(slashIndex + 1));
+      return alpha === null ? 1 : alpha;
+    }
+    const parts = body.split(',');
     if (parts.length < 4) return 1;
-    const alpha = Number(parts[3]);
-    return isNaN(alpha) ? 1 : alpha;
+    const alpha = parsePercentOrNumber(parts[3]);
+    return alpha === null ? 1 : alpha;
+  }
+
+  function parsePercentOrNumber(text) {
+    const trimmed = String(text).trim();
+    if (trimmed === '') return null;
+    const isPercent = trimmed.charAt(trimmed.length - 1) === '%';
+    const value = Number(isPercent ? trimmed.slice(0, -1) : trimmed);
+    if (isNaN(value)) return null;
+    return isPercent ? value / 100 : value;
+  }
+
+  /** transform 行列の上位 2x2 の行列式。負なら面が裏返っており、こちらを向いていない。 */
+  function isBackFacing(transform) {
+    if (!transform || transform === 'none') return false;
+    const match = /^matrix(3d)?\(([^)]*)\)$/.exec(transform.trim());
+    if (!match) return false;
+    const values = match[2].split(',').map(function (part) { return Number(part); });
+    const is3d = match[1] === '3d';
+    const m11 = values[0];
+    const m12 = values[1];
+    const m21 = is3d ? values[4] : values[2];
+    const m22 = is3d ? values[5] : values[3];
+    if ([m11, m12, m21, m22].some(isNaN)) return false;
+    return m11 * m22 - m12 * m21 < 0;
+  }
+
+  // backface-visibility:hidden の要素を rotateY(180deg) などで裏返すと描画だけが消える。
+  // 単なる描画ヒントとしての backface-visibility:hidden で誤判定しないよう、裏返っている場合のみ弾く。
+  function isHiddenBackface(style) {
+    if (style.backfaceVisibility !== 'hidden') return false;
+    return isBackFacing(style.transform);
   }
 
   // 文字色が透明な欄は、埋めた値がユーザーに見えないままページ側の input ハンドラーへ渡る。
@@ -221,6 +263,15 @@
     return sampled;
   }
 
+  function hasFixedAncestor(el) {
+    let node = composedParentElement(el);
+    while (node && node.nodeType === Node.ELEMENT_NODE) {
+      if (getComputedStyle(node).position === 'fixed') return true;
+      node = composedParentElement(node);
+    }
+    return false;
+  }
+
   // 画面に出ていない欄は、攻撃者が同じ form に仕込んだ収集用の隠し欄である可能性が高い。
   // ユーザーが自分で見て確認できる欄だけを埋める。
   function isVisibleField(el) {
@@ -231,14 +282,15 @@
     if (style.visibility === 'hidden' || style.visibility === 'collapse') return false;
     if (hasInvisibleText(style)) return false;
     if (isInsideHiddenWrapper(el)) return false;
-    const isFixed = style.position === 'fixed';
+    // 固定配置の祖先の中にある欄も、スクロールでは動かずビューポート内に見える分だけが見える範囲になる。
+    const isViewportAnchored = style.position === 'fixed' || hasFixedAncestor(el);
     // position:fixed は offsetParent が null になるため、判定から除く。
-    if (el.offsetParent === null && !isFixed) return false;
+    if (el.offsetParent === null && style.position !== 'fixed') return false;
     const rect = el.getBoundingClientRect();
     if (rect.width < MIN_VISIBLE_SIZE || rect.height < MIN_VISIBLE_SIZE) return false;
     if (isClippedByAncestor(el, rect)) return false;
     if (isOccluded(el, rect)) return false;
-    if (isFixed) {
+    if (isViewportAnchored) {
       // 固定配置はスクロールしても位置が変わらないため、ビューポートと交差する分だけが見える範囲になる。
       // 端に 0.1px だけかかった欄を通さないよう、交差後の矩形にも最小サイズを課す。
       const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
