@@ -21,6 +21,9 @@
   const TEL_TOKENS = ['tel', 'telephone', 'phone'];
   const EMAIL_TOKENS = ['email'];
 
+  // 実質的に見えない不透明度の閾値。opacity:0.0001 のような回避も隠しているとみなす。
+  const TRANSPARENT_OPACITY = 0.01;
+
   const FIELD_MAP = [
     { tokens: FAMILY_NAME_TOKENS, key: 'familyName' },
     { tokens: GIVEN_NAME_TOKENS, key: 'givenName' },
@@ -77,14 +80,33 @@
     return root && root.host ? root.host : null;
   }
 
-  // opacity と clip は継承しないため、隠したラッパーを見抜くには祖先までたどる必要がある。
+  // filter: opacity(0) は computed opacity を 1 のままにするため、opacity とは別に見る必要がある。
+  function filterOpacity(filter) {
+    if (!filter || filter === 'none') return 1;
+    const pattern = /opacity\(\s*([0-9.]+)(%?)\s*\)/g;
+    let opacity = 1;
+    let match = pattern.exec(filter);
+    while (match) {
+      const value = Number(match[1]);
+      opacity *= match[2] === '%' ? value / 100 : value;
+      match = pattern.exec(filter);
+    }
+    return opacity;
+  }
+
+  function isEffectivelyTransparent(style) {
+    if (Number(style.opacity) < TRANSPARENT_OPACITY) return true;
+    return filterOpacity(style.filter) < TRANSPARENT_OPACITY;
+  }
+
+  // opacity / filter / clip は継承しないため、隠したラッパーを見抜くには祖先までたどる必要がある。
   // clip-path / clip は入力欄の装飾にはまず使われないので、指定があれば隠されているとみなす。
   // 判定を誤っても自動入力が働かなくなるだけで、値が漏れる方向には倒れない。
   function isInsideHiddenWrapper(el) {
     let node = el;
     while (node && node.nodeType === Node.ELEMENT_NODE) {
       const style = getComputedStyle(node);
-      if (Number(style.opacity) === 0) return true;
+      if (isEffectivelyTransparent(style)) return true;
       if (style.clipPath && style.clipPath !== 'none') return true;
       if (style.clip && style.clip !== 'auto') return true;
       node = composedParentElement(node);
