@@ -234,30 +234,31 @@ internal class BrowserToolBarGestureState(
     var onHorizontalDrag = onHorizontalDrag
     var onHorizontalDragEnd = onHorizontalDragEnd
     var onOpenTabs = onOpenTabs
-    var isFocused by mutableStateOf(false)
 
-    val modifier = Modifier
-        .pointerInput(isFocused) {
-            // 非フォーカス時のみURLバーの水平スワイプでタブ切り替え
-            // フォーカス中はテキスト入力を邪魔しないようにする
-            if (isFocused) return@pointerInput
-            detectHorizontalDragGestures(
-                onHorizontalDrag = { _, dragAmount ->
-                    this@BrowserToolBarGestureState.onHorizontalDrag(dragAmount)
-                },
-                onDragEnd = { this@BrowserToolBarGestureState.onHorizontalDragEnd() },
-                onDragCancel = { this@BrowserToolBarGestureState.onHorizontalDragEnd() },
-            )
-        }
-        .pointerInput(isFocused) {
-            if (isFocused) return@pointerInput
-            detectDownSwipe(
-                density = this,
-                onDownSwipe = {
-                    this@BrowserToolBarGestureState.onOpenTabs()
-                },
-            )
-        }
+    fun modifier(isFocused: Boolean): Modifier {
+        return Modifier
+            .pointerInput(isFocused) {
+                // 非フォーカス時のみURLバーの水平スワイプでタブ切り替え
+                // フォーカス中はテキスト入力を邪魔しないようにする
+                if (isFocused) return@pointerInput
+                detectHorizontalDragGestures(
+                    onHorizontalDrag = { _, dragAmount ->
+                        this@BrowserToolBarGestureState.onHorizontalDrag(dragAmount)
+                    },
+                    onDragEnd = { this@BrowserToolBarGestureState.onHorizontalDragEnd() },
+                    onDragCancel = { this@BrowserToolBarGestureState.onHorizontalDragEnd() },
+                )
+            }
+            .pointerInput(isFocused) {
+                if (isFocused) return@pointerInput
+                detectDownSwipe(
+                    density = this,
+                    onDownSwipe = {
+                        this@BrowserToolBarGestureState.onOpenTabs()
+                    },
+                )
+            }
+    }
 }
 
 data class UrlInputState(
@@ -310,7 +311,7 @@ internal fun BrowserToolbar(
             .semantics {
                 stateDescription = "toolbarColor|${toolbarColors.colorSource}|${toolbarColors.resolvedToolbarColor.toArgbHex()}"
             }
-            .then(gestureState?.modifier ?: Modifier),
+            .then(gestureState?.modifier(isFocused) ?: Modifier),
     ) {
         BoxWithConstraints {
             val minUrlBarWidth = 150.dp
