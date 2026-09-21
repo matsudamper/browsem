@@ -548,7 +548,9 @@ class BrowserTabController(
             // browser.storage.local の書き込みが完了する機会を確保する。
             tab.disposeSessionDelegates(CancellationException(reason))
             tab.scheduleCloseOnBlankNavigation {
-                tab.session.close()
+                if (tab.session.isOpen) {
+                    tab.session.close()
+                }
             }
             tab.session.loadUri("about:blank")
         } else {

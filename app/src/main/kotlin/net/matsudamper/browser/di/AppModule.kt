@@ -5,6 +5,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import mozilla.components.lib.publicsuffixlist.PublicSuffixList
 import net.matsudamper.browser.BrowserViewModel
+import net.matsudamper.browser.CustomTabsWarmupStore
 import net.matsudamper.browser.DownloadWorker
 import net.matsudamper.browser.ExtensionRuntimeCoordinator
 import net.matsudamper.browser.GeckoDownloadManager
@@ -106,6 +107,8 @@ val appModule = module {
             autocompleteCoroutineScope = get(),
         )
     }
+    // カスタムタブのプリウォームはプロセス生存中いつでも来るため single で持つ。
+    single { CustomTabsWarmupStore(geckoRuntimeInitializer = get(), webAuthnCompatWebExtension = get()) }
     // 初期化は GeckoRuntimeInitializer が行う。ここでは初期化済みのインスタンスを配るだけにする。
     single<GeckoRuntime> { get<GeckoRuntimeInitializer>().requireInitialized() }
     // 拡張機能はプロセスに1つの GeckoRuntime に対してインストールするため single で管理
