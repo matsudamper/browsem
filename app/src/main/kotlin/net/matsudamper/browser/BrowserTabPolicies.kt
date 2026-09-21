@@ -41,6 +41,18 @@ internal fun shouldResetToolbarColor(fromUrl: String, toUrl: String): Boolean {
     return normalizedBrowserPageKey(fromUrl) != normalizedBrowserPageKey(toUrl)
 }
 
+internal fun urlBarSuggestionCount(
+    historySuggestionCount: Int,
+    webSuggestionCount: Int,
+    isLoadingWebSuggestions: Boolean,
+    hasClipboardUrl: Boolean,
+): Int {
+    return historySuggestionCount +
+        webSuggestionCount +
+        (if (isLoadingWebSuggestions) 1 else 0) +
+        (if (hasClipboardUrl) 1 else 0)
+}
+
 internal fun shouldShowUrlSuggestions(
     showFindInPage: Boolean,
     isUrlInputFocused: Boolean,
