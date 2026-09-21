@@ -8,7 +8,6 @@ data class CrashLogDetailScreenUiState(
     val isLoading: Boolean,
     val entry: Entry?,
 ) {
-    @Stable
     data class Entry(
         val occurredAt: Long,
         val title: String,
