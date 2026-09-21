@@ -94,6 +94,9 @@ internal class BrowserViewModel(
                 selectedTabId = browserTabController.selectedTabId,
             )
         }
+        browserTabController.onTabSessionDisposed = { session ->
+            mediaWebExtension.releaseSession(session)
+        }
     }
 
     // タブ復元完了シグナル。BrowserTabController が内部で管理し、構成変更後も有効。

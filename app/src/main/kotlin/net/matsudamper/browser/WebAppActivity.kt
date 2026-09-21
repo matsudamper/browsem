@@ -95,6 +95,7 @@ class WebAppActivity : ComponentActivity() {
                         WebAppBrowserViewModel(
                             tabRepository = tabRepository,
                             runtime = runtime,
+                            mediaWebExtension = mediaWebExtension,
                             applicationScope = applicationScope,
                         )
                     })
