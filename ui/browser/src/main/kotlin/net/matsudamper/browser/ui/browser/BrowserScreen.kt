@@ -61,10 +61,6 @@ fun BrowserScreen(
     ) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val prevTab = uiState.swipePreview.previousTab
-    val nextTab = uiState.swipePreview.nextTab
-    val backToOpenerListener = uiState.swipePreview.backToOpenerListener
-
     val selectedTab = browserTabController.findTab(tabId)
     LaunchedEffect(tabId, homepageUrl, selectedTab) {
         // closeTab で閉じたタブは再作成しない。
@@ -99,8 +95,36 @@ fun BrowserScreen(
         ) {
             CircularProgressIndicator()
         }
-        return
+    } else {
+        BrowserScreenContent(
+            tabId = tabId,
+            uiState = uiState,
+            selectedTab = selectedTab,
+            previewHeaderContent = previewHeaderContent,
+            browserTabContent = browserTabContent,
+            modifier = modifier,
+        )
     }
+}
+
+@Composable
+private fun BrowserScreenContent(
+    tabId: String,
+    uiState: BrowserScreenUiState,
+    selectedTab: BrowserTab,
+    previewHeaderContent: @Composable (modifier: Modifier, tab: BrowserTab, tabCount: Int?) -> Unit,
+    browserTabContent: @Composable (
+        modifier: Modifier,
+        selectedTab: BrowserTab,
+        tabCount: Int?,
+        onToolbarHorizontalDrag: (Float) -> Unit,
+        onToolbarDragEnd: () -> Unit,
+    ) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val prevTab = uiState.swipePreview.previousTab
+    val nextTab = uiState.swipePreview.nextTab
+    val backToOpenerListener = uiState.swipePreview.backToOpenerListener
 
     val coroutineScope = rememberCoroutineScope()
     // URLバースワイプのオフセット（ピクセル単位）タブ切替時にリセット
