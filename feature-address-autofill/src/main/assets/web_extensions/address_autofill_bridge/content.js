@@ -24,6 +24,10 @@
   // 実質的に見えない不透明度の閾値。opacity:0.0001 のような回避も隠しているとみなす。
   const TRANSPARENT_OPACITY = 0.01;
 
+  // 実質的に見えない描画サイズの閾値 (CSS px)。width:1px や transform:scale(0.001) を弾く。
+  // 正当な入力欄がこれを下回ることはない。getBoundingClientRect は transform 適用後の値を返す。
+  const MIN_VISIBLE_SIZE = 4;
+
   const FIELD_MAP = [
     { tokens: FAMILY_NAME_TOKENS, key: 'familyName' },
     { tokens: GIVEN_NAME_TOKENS, key: 'givenName' },
@@ -127,7 +131,7 @@
     // position:fixed は offsetParent が null になるため、判定から除く。
     if (el.offsetParent === null && !isFixed) return false;
     const rect = el.getBoundingClientRect();
-    if (rect.width <= 0 || rect.height <= 0) return false;
+    if (rect.width < MIN_VISIBLE_SIZE || rect.height < MIN_VISIBLE_SIZE) return false;
     if (isFixed) {
       // 固定配置はスクロールしても位置が変わらないため、ビューポートと交差しなければ到達できない。
       const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
