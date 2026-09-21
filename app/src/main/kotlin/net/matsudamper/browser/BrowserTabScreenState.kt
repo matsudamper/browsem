@@ -15,6 +15,7 @@ import android.util.Log
 import android.widget.Toast
 import androidx.compose.foundation.ScrollState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -114,6 +115,11 @@ internal fun rememberBrowserTabScreenState(
             externalDownloadDialogListener = externalDownloadDialogListener,
             externalTabInitialUrl = externalTabInitialUrl,
         )
+    }
+    DisposableEffect(state) {
+        onDispose {
+            state.translation.onScreenDisposed()
+        }
     }
     state.homepageUrl = homepageUrl
     state.searchTemplate = searchTemplate
