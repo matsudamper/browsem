@@ -69,6 +69,26 @@
     return autocomplete === 'off' || autocomplete === 'new-password';
   }
 
+  // 画面に出ていない欄は、攻撃者が同じ form に仕込んだ収集用の隠し欄である可能性が高い。
+  // ユーザーが自分で見て確認できる欄だけを埋める。
+  // 判定はページ座標で行う。スクロールしないと見えない欄は正当なフォームでも普通にあるため除外しない。
+  function isVisibleField(el) {
+    if (!el.isConnected) return false;
+    const style = getComputedStyle(el);
+    if (style.display === 'none') return false;
+    if (style.visibility === 'hidden' || style.visibility === 'collapse') return false;
+    if (Number(style.opacity) === 0) return false;
+    // position:fixed は offsetParent が null になるため、判定から除く。
+    if (el.offsetParent === null && style.position !== 'fixed') return false;
+    const rect = el.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return false;
+    if (style.position === 'fixed') return true;
+    // left:-9999px のようにページの外へ追い出された欄を弾く。
+    const pageRight = rect.right + window.scrollX;
+    const pageBottom = rect.bottom + window.scrollY;
+    return pageRight > 0 && pageBottom > 0;
+  }
+
   function isEmailField(el) {
     const type = (el.getAttribute('type') || '').toLowerCase();
     if (type === 'email') return true;
@@ -209,6 +229,7 @@
     for (let i = 0; i < fields.length; i++) {
       const el = fields[i];
       if (isNonValueField(el)) continue;
+      if (!isVisibleField(el)) continue;
       if (fillMode === 'email') {
         if (!isEmailField(el)) continue;
       } else {
