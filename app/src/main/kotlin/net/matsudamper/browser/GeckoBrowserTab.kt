@@ -682,14 +682,22 @@ internal fun GeckoBrowserTab(
                                 { bitmap ->
                                     if (generation != surfaceRestoreGeneration) return@accept
                                     if (surfaceResumeState != SurfaceResumeState.ACTIVE) return@accept
-                                    if (bitmap == null || !bitmap.looksBlank()) return@accept
+                                    if (bitmap == null) {
+                                        // 画面を確認できなければ黒かどうか判断できない。監視を続ける。
+                                        waitForFirstComposite(since)
+                                        return@accept
+                                    }
+                                    if (!bitmap.looksBlank()) return@accept
                                     recreateBlankSurface(
                                         retryCount = blankSurfaceRetryCount,
                                         reason = "復帰後の画面が黒一色",
                                     )
                                 },
                                 { error ->
+                                    if (generation != surfaceRestoreGeneration) return@accept
+                                    if (surfaceResumeState != SurfaceResumeState.ACTIVE) return@accept
                                     Log.w(TAG_SURFACE_RESUME, "blank-surface: capturePixels 失敗", error)
+                                    waitForFirstComposite(since)
                                 },
                             )
                         }
