@@ -185,7 +185,11 @@ internal fun ExtensionSettingsNavContent(
         onBack = { navActions.pop() },
         onOpenExternalUrl = { url ->
             if (onNavigateToUrl != null) {
-                scope.launch { onNavigateToUrl(url) }
+                scope.launch {
+                    onNavigateToUrl(url)
+                    // 開いたタブが設定画面の裏に隠れないよう、ブラウジング画面まで戻す
+                    navActions.popToRoot()
+                }
             } else {
                 // タブを持たない WebApp / カスタムタブから開いた場合はカスタムタブで開く
                 context.startActivity(
