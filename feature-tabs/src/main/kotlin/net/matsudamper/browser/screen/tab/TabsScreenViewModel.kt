@@ -389,6 +389,8 @@ class TabsScreenViewModel(
             tabGroupAssignments = assignmentMap,
         )
         val wasSelected = storeState.selectedTabId == tabId
+        // 表示中プロファイルに候補が無いときは null のまま渡し、TabStore 側で
+        // 同じプロファイルの新規タブを作って選択させる
         val nextTabId = if (wasSelected) {
             TabSelectionPolicy.resolveNextSelectedTab(
                 closingTabId = tabId,
@@ -397,7 +399,6 @@ class TabsScreenViewModel(
         } else {
             null
         }
-        val isProfileBecomingEmpty = wasSelected && nextTabId == null
         val tab = state.tabStoreState.tabs.firstOrNull { it.id == tabId }
         val title = tab?.title.orEmpty().ifBlank { tabId }
         val groupId = state.assignments
@@ -405,14 +406,7 @@ class TabsScreenViewModel(
             ?.groupId
             ?.takeIf { it.isNotEmpty() }
         val nextSelectedTabId = tabStore.closeTabWithUndo(tabId, nextTabId)
-        if (isProfileBecomingEmpty) {
-            // TabStore は全タブから次候補へ倒すため、表示中プロファイルの新規タブで背後を差し替える
-            val activeGroup = state.groups.getOrNull(state.activeGroupIndex ?: 0)
-            val profileId = state.activeProfile?.id ?: ProfileId.DEFAULT
-            eventHandler.trySend { it.openNewTabBehind(activeGroup?.id, profileId) }
-        } else {
-            eventHandler.trySend { it.onTabClosed(tabId, nextSelectedTabId) }
-        }
+        eventHandler.trySend { it.onTabClosed(tabId, nextSelectedTabId) }
         viewModelStateFlow.update {
             it.copy(
                 pendingClosedTab = ViewModelState.PendingClosedTab(

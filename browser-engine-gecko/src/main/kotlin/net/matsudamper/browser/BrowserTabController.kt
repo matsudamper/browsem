@@ -70,6 +70,9 @@ class BrowserTabController(
     private var repositoryObservationStarted = false
     private var restoreState = RestoreState.NOT_STARTED
 
+    /** 復元時に受け取ったホームページ URL。プロファイル内の最後のタブを閉じたときの代替タブに使う */
+    private var homepageUrlForReplacementTab: String = "about:blank"
+
     // タブ復元完了を他のコルーチンから待機するためのシグナル（isSinglePage=true の場合は即完了）
     // 復元失敗後の再試行に備え、試行ごとに再生成する
     private var _restoreComplete = CompletableDeferred<Unit>().also {
@@ -118,6 +121,7 @@ class BrowserTabController(
     fun wasTabClosed(tabId: String): Boolean = tabId in closedTabIds
 
     suspend fun restoreTabs(homepageUrl: String): String {
+        homepageUrlForReplacementTab = homepageUrl
         when (restoreState) {
             RestoreState.COMPLETED -> {
                 // 構成変更後の再呼び出し。既に復元済みなので現在の選択タブIDを返す
@@ -404,27 +408,21 @@ class BrowserTabController(
      * 別のタブが Undo 待ちでも触らない。プロファイル削除で無関係なタブの Undo を巻き込まないため
      */
     override fun closeTab(tabId: String): String? {
-        val nextSelectedTabId = TabSelectionPolicy.resolveNextSelectedTab(
-            closingTabId = tabId,
-            state = _tabStoreState.value,
-        )
+        val nextSelectedTabId = resolveNextSelectedTabInSameProfile(tabId)
         val removed = tabRegistry.remove(tabId) ?: return selectedTabId
         closedTabIds.add(tabId)
         publishRuntimeState(nextSelectedTabId)
         persistenceCoordinator.persistClosedTab(tabId, nextSelectedTabId)
         disposeTab(removed, "タブを閉じました: $tabId")
         onTabListChanged?.invoke()
+        createReplacementTabIfProfileEmptied(removed, nextSelectedTabId)
         return selectedTabId
     }
 
     override fun closeTabWithUndo(tabId: String, nextSelectedTabId: String?): String? {
         // 同時に保持できる Undo 待ちタブは1つだけなので、前のタブがあれば破棄を確定する
         confirmClosedTab()
-        val resolvedNextSelectedTabId = nextSelectedTabId
-            ?: TabSelectionPolicy.resolveNextSelectedTab(
-                closingTabId = tabId,
-                state = _tabStoreState.value,
-            )
+        val resolvedNextSelectedTabId = nextSelectedTabId ?: resolveNextSelectedTabInSameProfile(tabId)
         val index = tabs.indexOfFirst { it.tabId == tabId }
         val removed = tabRegistry.remove(tabId)
         if (removed == null) {
@@ -437,7 +435,36 @@ class BrowserTabController(
         publishRuntimeState(resolvedNextSelectedTabId)
         persistenceCoordinator.persistClosedTab(tabId, resolvedNextSelectedTabId)
         onTabListChanged?.invoke()
+        createReplacementTabIfProfileEmptied(removed, resolvedNextSelectedTabId)
         return selectedTabId
+    }
+
+    /**
+     * 閉じるタブと同じプロファイルのタブから次に選ぶタブを決める。
+     * 全タブから選ぶと別プロファイルの Cookie を持つセッションが表示されてしまう。
+     * 同じプロファイルに候補が無ければ null
+     */
+    private fun resolveNextSelectedTabInSameProfile(closingTabId: String): String? {
+        val closingTab = tabRegistry.find(closingTabId)
+        val state = _tabStoreState.value
+        if (closingTab == null) {
+            return TabSelectionPolicy.resolveNextSelectedTab(closingTabId, state)
+        }
+        val profileId = ProfileId.fromGeckoContextId(closingTab.session.settings.contextId).value
+        return TabSelectionPolicy.resolveNextSelectedTab(
+            closingTabId = closingTabId,
+            state = state.copy(tabs = state.tabs.filter { it.profileId == profileId }),
+        )
+    }
+
+    /**
+     * 閉じたタブのプロファイルにタブが残らず、かつ別プロファイルにはタブが残る場合、
+     * 同じプロファイルの新規タブを作って選択する。selectedTabId が別プロファイルへ倒れるのを防ぐ
+     */
+    private fun createReplacementTabIfProfileEmptied(closedTab: BrowserTab, nextSelectedTabId: String?) {
+        if (nextSelectedTabId != null || tabRegistry.isEmpty()) return
+        val profileId = ProfileId.fromGeckoContextId(closedTab.session.settings.contextId)
+        createAndAppendInitialTab(homepageUrlForReplacementTab, profileId = profileId)
     }
 
     override fun undoCloseTab(): String? {
@@ -480,10 +507,11 @@ class BrowserTabController(
     private fun createAndAppendInitialTab(
         homepageUrl: String,
         persist: Boolean = true,
+        profileId: ProfileId = activeProfileId,
     ): BrowserTab {
         val tab = createRegisteredTab(
             tabId = UUID.randomUUID().toString(),
-            session = BrowserTabFactory.createSessionForProfile(activeProfileId),
+            session = BrowserTabFactory.createSessionForProfile(profileId),
             initialUrl = homepageUrl,
             sessionState = "",
             title = homepageUrl,
