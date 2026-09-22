@@ -759,14 +759,16 @@ private fun MainBrowserContent(
                             it(object : TabsScreenViewModel.Event {
                                 override fun onTabClosed(closedTabId: String, nextSelectedTabId: String?) {
                                     val wasCurrentBrowserTab = navController.getSelectedTab() == closedTabId
-                                    if (nextSelectedTabId == null) {
+                                    // プロファイル削除では閉じたタブごとに同じ null が届くため、
+                                    // 表示中のタブを閉じた場合だけ代替タブを作る
+                                    if (nextSelectedTabId == null && wasCurrentBrowserTab) {
                                         scope.launch {
                                             val newTab = viewModel.createTabWithHomepage(
                                                 tabId = UUID.randomUUID().toString(),
                                             )
                                             selectTab(newTab.tabId, null)
                                         }
-                                    } else if (wasCurrentBrowserTab) {
+                                    } else if (wasCurrentBrowserTab && nextSelectedTabId != null) {
                                         navController.replaceCurrentBrowserTab(nextSelectedTabId)
                                     }
                                 }
