@@ -400,29 +400,33 @@ private fun TabsScreenLoadedContent(
                         .fillMaxSize()
                         .testTag(TabsScreenTestTags.Page(page).testTag),
                 ) {
-                    GroupTabGrid(
-                        tabs = tabsForPage,
-                        selectedTabId = selectedTabId,
-                        onReorderTabs = { from, to -> onReorderTabs(page, from, to) },
-                        onTabDragStateChanged = { dragging, centerInRoot ->
-                            isTabDragging = dragging
-                            tabDragCenterInRoot = centerInRoot
-                        },
-                        onTabDropped = { tab ->
-                            val targetIndex = groupTabBounds.entries.firstOrNull { (_, bounds) ->
-                                bounds.contains(tabDragCenterInRoot)
-                            }?.key
-                            if (targetIndex != null && targetIndex != page) {
-                                tab.listener.onMoveToGroup(targetIndex)
-                            }
-                        },
-                        onTabLongPressWithoutDrag = { tab ->
-                            moveDialogOnGroupSelected = tab.listener::onMoveToGroup
-                        },
-                        floatingActionButtonBoundsInRoot = floatingActionButtonBoundsInRoot,
-                        topOverlayHeight = floatingMenuHeight,
-                        modifier = Modifier.fillMaxSize(),
-                    )
+                    // プロファイル切り替えや並び替えで同じページに別グループが入った際に、
+                    // 前のグループのスクロール位置を引き継がず選択タブへの位置合わせをやり直す
+                    key(groups.getOrNull(page)?.id) {
+                        GroupTabGrid(
+                            tabs = tabsForPage,
+                            selectedTabId = selectedTabId,
+                            onReorderTabs = { from, to -> onReorderTabs(page, from, to) },
+                            onTabDragStateChanged = { dragging, centerInRoot ->
+                                isTabDragging = dragging
+                                tabDragCenterInRoot = centerInRoot
+                            },
+                            onTabDropped = { tab ->
+                                val targetIndex = groupTabBounds.entries.firstOrNull { (_, bounds) ->
+                                    bounds.contains(tabDragCenterInRoot)
+                                }?.key
+                                if (targetIndex != null && targetIndex != page) {
+                                    tab.listener.onMoveToGroup(targetIndex)
+                                }
+                            },
+                            onTabLongPressWithoutDrag = { tab ->
+                                moveDialogOnGroupSelected = tab.listener::onMoveToGroup
+                            },
+                            floatingActionButtonBoundsInRoot = floatingActionButtonBoundsInRoot,
+                            topOverlayHeight = floatingMenuHeight,
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    }
                     TabGroupMenu(
                         modifier = Modifier
                             .fillMaxWidth()
