@@ -590,7 +590,10 @@ class TabsScreenViewModel(
     private fun selectProfile(profileId: ProfileId) {
         if (viewModelStateFlow.value.activeProfile?.id == profileId) return
         viewModelScope.launch {
-            programmaticScrollTarget = 0
+            // 既に先頭ページなら settledPage が変わらずガードが解除されないため、実際に動く場合だけ設定する
+            if ((viewModelStateFlow.value.activeGroupIndex ?: 0) != 0) {
+                programmaticScrollTarget = 0
+            }
             viewModelStateFlow.update { it.copy(activeGroupIndex = 0) }
             profileRepository.setActiveProfile(profileId)
             val state = viewModelStateFlow.first { it.groupsProfileId == profileId }
