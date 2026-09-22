@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -153,6 +154,12 @@ class BrowserTabController(
         }
         restoreState = RestoreState.IN_PROGRESS
         try {
+            // Flow の監視は非同期で遅れるため、復元完了を待つ側（外部 Intent のタブ作成など）が
+            // 古い値を見ないよう、有効プロファイルをここで同期的に確定しておく
+            if (profileRepository != null) {
+                activeProfileId = profileRepository.observeProfiles().first()
+                    .firstOrNull { it.isActive }?.id ?: ProfileId.DEFAULT
+            }
             // 旧 Controller の保留中の保存が残っていることがあるため、流し切ってから読み出す
             val snapshot = persistenceCoordinator.withPersistenceLock {
                 val persisted = tabRepository.loadTabs()
@@ -187,6 +194,7 @@ class BrowserTabController(
                             restored.persistedTabState.sessionState.takeIf { it.isNotBlank() }
                     }
                     publishRuntimeState(snapshot.selectedTabId)
+                    alignSelectedTabToActiveProfile()
                 }
             }
             if (snapshot.tabs.isEmpty()) {
@@ -220,6 +228,37 @@ class BrowserTabController(
      */
     fun createSessionForProfile(profileId: ProfileId): GeckoSession {
         return BrowserTabFactory.createSessionForProfile(profileId)
+    }
+
+    /**
+     * 復元した選択タブが有効プロファイルのものでなければ、有効プロファイルのタブへ選択を直す。
+     * 有効プロファイルと選択タブは別々に保存されるため、切り替え直後に終了すると食い違うことがある。
+     * 有効プロファイルにタブが無ければ新規タブを作る。
+     * 復元完了を待つ側が別プロファイルの選択を見ないよう、完了を通知する前に行う
+     */
+    private suspend fun alignSelectedTabToActiveProfile() {
+        val selectedTab = selectedTabId?.let(tabRegistry::find) ?: return
+        if (ProfileId.fromGeckoContextId(selectedTab.session.settings.contextId) == activeProfileId) return
+        val tabInActiveProfile = tabRegistry.values().firstOrNull { tab ->
+            ProfileId.fromGeckoContextId(tab.session.settings.contextId) == activeProfileId
+        }
+        if (tabInActiveProfile != null) {
+            publishRuntimeState(tabInActiveProfile.tabId)
+            persistenceCoordinator.persistSelection(selectedTabId)
+        } else {
+            // 復元直後にグループ初期化が DB の未割当タブを走査するため、非同期保存では
+            // このタブを取りこぼす。復元完了の前に同期保存しておく
+            val tab = createAndAppendInitialTab(
+                homepageUrlForReplacementTab,
+                persist = false,
+                profileId = activeProfileId,
+            )
+            persistenceCoordinator.persistCreatedTabNow(
+                tab = tab,
+                insertIndex = tabs.indexOf(tab).coerceAtLeast(0),
+                selected = true,
+            )
+        }
     }
 
     /** 保留中の保存と交差させたくない処理を、保存と同じロックの中で実行する。 */
