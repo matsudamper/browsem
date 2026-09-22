@@ -264,7 +264,10 @@ internal fun GeckoBrowserTab(
     val addressAutofillDelegate = remember(session, addressAutofillCoordinator) {
         AddressAutofillDelegate(coordinator = addressAutofillCoordinator)
     }
-    val resumeCoverColor = MaterialTheme.colorScheme.surface.toArgb()
+    // observer は DisposableEffect のキーが変わらない限り再生成されない。色をキーにすると
+    // テーマ変更のたびに effect が貼り直され、進行中の復元監視が世代ごと無効化されるため、
+    // キーには含めずここから最新の色を読む。
+    val currentResumeCoverColor by rememberUpdatedState(MaterialTheme.colorScheme.surface.toArgb())
     // LifecycleEventObserver は DisposableEffect のキーが変わらない限り再生成されないため、
     // ラムダ内で ON_PAUSE 時点の最新 IME 表示状態を読めるよう rememberUpdatedState で包む。
     val currentIsImeVisible by rememberUpdatedState(isImeVisible)
@@ -497,6 +500,7 @@ internal fun GeckoBrowserTab(
 
     fun scheduleStableSizeAttach(
         gecko: GeckoView,
+        generation: Int,
         recordedHeight: Int,
         stableCount: Int,
         startTimeMs: Long,
@@ -505,6 +509,9 @@ internal fun GeckoBrowserTab(
         // トリガがないと stable check が進まず復帰が数十秒遅れる。postOnAnimation は Choreographer の
         // アニメーションフレームで毎 vsync 発火するため、UI 操作がなくても安定検出を進められる。
         gecko.postOnAnimation {
+            // 前の復元サイクルが残した安定待ちは、新しいサイクルを古いサイズ記録で
+            // 判定して早すぎる attach を招くため何もしない。
+            if (generation != surfaceRestoreGeneration) return@postOnAnimation
             if (surfaceResumeState == SurfaceResumeState.ACTIVE) {
                 Log.d(TAG_SURFACE_RESUME, "stable-check skipped: already ACTIVE")
                 return@postOnAnimation
@@ -529,7 +536,7 @@ internal fun GeckoBrowserTab(
             val h = gecko.height
             if (h == 0 || gecko.width == 0) {
                 Log.d(TAG_SURFACE_RESUME, "stable-check: layout not settled, retry next frame")
-                scheduleStableSizeAttach(gecko, recordedHeight, stableCount, startTimeMs)
+                scheduleStableSizeAttach(gecko, generation, recordedHeight, stableCount, startTimeMs)
                 return@postOnAnimation
             }
             val elapsed = SystemClock.elapsedRealtime() - startTimeMs
@@ -543,7 +550,7 @@ internal fun GeckoBrowserTab(
                     )
                     attachSessionAfterStableSize(gecko)
                 } else {
-                    scheduleStableSizeAttach(gecko, h, nextCount, startTimeMs)
+                    scheduleStableSizeAttach(gecko, generation, h, nextCount, startTimeMs)
                 }
             } else {
                 if (elapsed >= STABLE_TIMEOUT_MS) {
@@ -558,7 +565,7 @@ internal fun GeckoBrowserTab(
                         TAG_SURFACE_RESUME,
                         "stable-check: size changed $recordedHeight → $h (elapsed=${elapsed}ms), reset counter",
                     )
-                    scheduleStableSizeAttach(gecko, h, 0, startTimeMs)
+                    scheduleStableSizeAttach(gecko, generation, h, 0, startTimeMs)
                 }
             }
         }
@@ -583,12 +590,13 @@ internal fun GeckoBrowserTab(
             gecko.visibility = View.VISIBLE
         }
         // stale フレームが一瞬表示されるのを防ぐため pre-draw 待ちより前に cover する。
-        gecko.coverUntilFirstPaint(resumeCoverColor)
+        gecko.coverUntilFirstPaint(currentResumeCoverColor)
         surfaceResumeState = SurfaceResumeState.WAITING_STABLE
         surfaceRestoreGeneration++
         val generation = surfaceRestoreGeneration
         scheduleStableSizeAttach(
             gecko = gecko,
+            generation = generation,
             recordedHeight = -1,
             stableCount = 0,
             startTimeMs = SystemClock.elapsedRealtime(),
@@ -687,7 +695,7 @@ internal fun GeckoBrowserTab(
         }
     }
 
-    DisposableEffect(lifecycleOwner, session, resumeCoverColor) {
+    DisposableEffect(lifecycleOwner, session) {
         val observer = LifecycleEventObserver { _, event ->
             val gv = geckoView
             Log.d(
