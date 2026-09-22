@@ -626,6 +626,9 @@ class TabsScreenViewModel(
     private fun deleteProfile(profileId: ProfileId) {
         if (profileId == ProfileId.DEFAULT) return
         viewModelScope.launch {
+            // Undo 待ちのタブは一覧にも DB にも無いため、先に確定破棄して復活の余地を無くす
+            viewModelStateFlow.update { it.copy(pendingClosedTab = null) }
+            tabStore.confirmClosedTab()
             if (viewModelStateFlow.value.activeProfile?.id == profileId) {
                 selectProfile(ProfileId.DEFAULT)
                 viewModelStateFlow.first { it.groupsProfileId == ProfileId.DEFAULT }
