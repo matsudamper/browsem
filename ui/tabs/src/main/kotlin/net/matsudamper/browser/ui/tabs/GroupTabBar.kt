@@ -71,6 +71,9 @@ private val GroupTabBarHeight = 48.dp
 /** バー右端のプロファイルボタンの幅。LazyRow の末尾余白と共有する */
 private val ProfileButtonWidth = 48.dp
 
+/** グループ追加ボタンの幅。アクティブグループへ寄せるスクロールの余裕にも使う */
+internal val AddGroupButtonWidth = 56.dp
+
 /** プロファイル領域の tonal elevation。タブ列より一段浮いた面として区別する */
 private val ProfileAreaTonalElevation = 3.dp
 
@@ -693,7 +696,7 @@ private fun AddGroupBookmarkTab(
     // GroupBookmarkTab と同じ GroupTabBarHeight 外側 Box + BottomCenter 揃えで浮きを防ぐ
     Box(
         modifier = modifier
-            .width(56.dp)
+            .width(AddGroupButtonWidth)
             .height(GroupTabBarHeight),
         contentAlignment = Alignment.BottomCenter,
     ) {
