@@ -597,6 +597,12 @@ class TabsScreenViewModel(
     private fun selectProfile(profileId: ProfileId) {
         if (viewModelStateFlow.value.activeProfile?.id == profileId) return
         viewModelScope.launch {
+            // 旧プロファイルの Undo 待ちを持ち越すと、切り替え後に「戻す」で旧プロファイルの
+            // セッションが背後に出るため、切り替え時点で確定する
+            if (viewModelStateFlow.value.pendingClosedTab != null) {
+                viewModelStateFlow.update { it.copy(pendingClosedTab = null) }
+                tabStore.confirmClosedTab()
+            }
             // 既に先頭ページなら settledPage が変わらずガードが解除されないため、実際に動く場合だけ設定する
             if ((viewModelStateFlow.value.activeGroupIndex ?: 0) != 0) {
                 programmaticScrollTarget = 0
