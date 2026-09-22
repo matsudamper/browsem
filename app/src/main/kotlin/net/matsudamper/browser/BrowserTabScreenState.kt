@@ -327,6 +327,12 @@ internal class BrowserTabScreenState(
 
     var renderReady by mutableStateOf(false)
 
+    // surface の差し替え後にコンポジタが最初のフレームを描くたびにインクリメントされる
+    // カウンター。GeckoBrowserTab が attach 前後の値を比べ、フレームが出ないまま黒い
+    // ままになった surface を検知する。
+    var firstCompositeCount by mutableIntStateOf(0)
+        private set
+
     // コンテンツプロセスのクラッシュ/kill (onCrash/onKill) を検知するたびにインクリメントされる
     // カウンター。GeckoBrowserTab がこの値を監視し、前面表示中であれば即座にセッションの
     // 復元 (open→restoreState) をトリガーする。バックグラウンド中に発生した場合は ON_START の
@@ -1001,6 +1007,11 @@ internal class BrowserTabScreenState(
     override fun onRenderReady() {
         renderReady = true
         maybeApplyPersistedPageZoomAfterRender()
+    }
+
+    override fun onFirstComposite() {
+        onRenderReady()
+        firstCompositeCount++
     }
 
     override fun onPreviewCaptureReady() {
