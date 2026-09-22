@@ -620,7 +620,12 @@ private fun PagerIndicator(
     val indicatorColor = MaterialTheme.colorScheme.primary
     val trackColor = MaterialTheme.colorScheme.surfaceVariant
 
-    Canvas(modifier = modifier.height(2.dp)) {
+    Canvas(
+        modifier = modifier
+            // グループタブバー右端のプロファイルボタンの下までインジケータが伸びないようにする
+            .padding(end = ProfileButtonWidth)
+            .height(2.dp),
+    ) {
         drawRect(color = trackColor)
         // スクロールやページ変化での無効化を描画フェーズだけに留めるため draw ラムダ内で状態を読み取る
         val layoutInfo = listState.layoutInfo

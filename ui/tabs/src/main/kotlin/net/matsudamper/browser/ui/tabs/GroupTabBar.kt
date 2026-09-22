@@ -65,8 +65,8 @@ private val TabShape = RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp)
 /** グループタブバー全体の高さ。LazyRow・外側 Box 両方で共有する */
 private val GroupTabBarHeight = 48.dp
 
-/** バー右端のプロファイルボタンの幅。LazyRow の末尾余白と共有する */
-private val ProfileButtonWidth = 48.dp
+/** バー右端のプロファイルボタンの幅。LazyRow の末尾余白・PagerIndicator の右端余白と共有する */
+internal val ProfileButtonWidth = 48.dp
 
 /** 非選択タブの最小高さ。選択タブは GroupTabBarHeight まで伸びて「浮き上がり」を表現する */
 private val GroupTabUnselectedHeight = 40.dp
