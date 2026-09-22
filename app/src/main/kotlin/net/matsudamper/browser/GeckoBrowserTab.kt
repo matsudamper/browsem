@@ -498,6 +498,9 @@ internal fun GeckoBrowserTab(
             // 別画面へ渡した子が閉じていれば、ここで opener の保持を解く
             currentOnReevaluateOpenerRetention()
         }
+        // 復旧で開き直した session は遅延初回ロードが未消費のまま残ることがある。
+        // サイズは安定しているのでここで実行する (未設定なら何もしない)。
+        browserSessionLifecycleController.performInitialLoadIfPending(browserTab)
         compositeCountAtAttach = state.firstCompositeCount
         surfaceResumeState = SurfaceResumeState.ACTIVE
     }
