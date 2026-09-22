@@ -28,16 +28,18 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import net.matsudamper.browser.CustomTabActivity
 import net.matsudamper.browser.DefaultBrowserChecker
+import net.matsudamper.browser.ExtensionSettingsScreen
 import net.matsudamper.browser.GITHUB_RELEASES_URL
-import net.matsudamper.browser.InternalInitialUrlStore
 import net.matsudamper.browser.OuterNavActions
 import net.matsudamper.browser.screen.downloads.DownloadManagementScreenViewModel
+import net.matsudamper.browser.screen.extensions.ExtensionSettingsScreenViewModel
 import net.matsudamper.browser.screen.extensions.ExtensionsScreenViewModel
 import net.matsudamper.browser.screen.settings.SettingsScreenViewModel
 import net.matsudamper.browser.ui.downloads.DownloadManagementScreen
 import net.matsudamper.browser.ui.extensions.ExtensionsScreen
 import net.matsudamper.browser.ui.settings.SettingsScreen
 import org.koin.androidx.compose.koinViewModel
+import org.koin.core.parameter.parametersOf
 
 @Composable
 internal fun SettingsNavContent(navActions: OuterNavActions) {
@@ -143,17 +145,12 @@ internal fun ExtensionsNavContent(navActions: OuterNavActions) {
     LaunchedEffect(extensionsViewModel) {
         extensionsViewModel.eventHandler.receiveAsFlow().collect {
             it(object : ExtensionsScreenViewModel.Event {
-                override fun navigateToExtensionSettings(url: String) {
-                    // moz-extension:// は他アプリから開かせないため Intent の data には載せず、
-                    // プロセス内ストア経由でトークンとして渡す。
-                    context.startActivity(
-                        Intent(context, CustomTabActivity::class.java).apply {
-                            action = Intent.ACTION_VIEW
-                            putExtra(
-                                InternalInitialUrlStore.EXTRA_INITIAL_URL_TOKEN,
-                                InternalInitialUrlStore.store(url),
-                            )
-                        },
+                override fun navigateToExtensionSettings(extensionName: String, url: String) {
+                    navActions.add(
+                        AppDestination.ExtensionSettings(
+                            extensionName = extensionName,
+                            optionsPageUrl = url,
+                        ),
                     )
                 }
 
@@ -168,6 +165,39 @@ internal fun ExtensionsNavContent(navActions: OuterNavActions) {
     ExtensionsScreen(
         uiState = extensionsUiState,
         onBack = { navActions.pop() },
+    )
+}
+
+@Composable
+internal fun ExtensionSettingsNavContent(
+    key: AppDestination.ExtensionSettings,
+    navActions: OuterNavActions,
+    onNavigateToUrl: (suspend (url: String) -> Unit)?,
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val viewModel: ExtensionSettingsScreenViewModel = koinViewModel {
+        parametersOf(key.optionsPageUrl)
+    }
+    ExtensionSettingsScreen(
+        extensionName = key.extensionName,
+        session = viewModel.session,
+        onBack = { navActions.pop() },
+        onOpenExternalUrl = { url ->
+            if (onNavigateToUrl != null) {
+                scope.launch { onNavigateToUrl(url) }
+            } else {
+                // タブを持たない WebApp / カスタムタブから開いた場合はカスタムタブで開く
+                context.startActivity(
+                    Intent(
+                        Intent.ACTION_VIEW,
+                        Uri.parse(url),
+                        context,
+                        CustomTabActivity::class.java,
+                    ),
+                )
+            }
+        },
     )
 }
 

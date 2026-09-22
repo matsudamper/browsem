@@ -55,6 +55,12 @@ sealed interface AppDestination : NavKey, JavaSerializable {
     data object Extensions : AppDestination, JavaSerializable
 
     @Serializable
+    data class ExtensionSettings(
+        val extensionName: String,
+        val optionsPageUrl: String,
+    ) : AppDestination, JavaSerializable
+
+    @Serializable
     data object History : AppDestination, JavaSerializable
 
     @Serializable

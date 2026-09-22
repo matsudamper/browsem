@@ -146,7 +146,10 @@ internal class ExtensionsScreenViewModel(
     private fun openExtensionSettings(extension: WebExtension) {
         val optionsPageUrl = extension.metaData.optionsPageUrl?.takeIf { it.isNotBlank() }
         if (optionsPageUrl != null) {
-            eventHandler.trySend { it.navigateToExtensionSettings(optionsPageUrl) }
+            val extensionName = extension.metaData.name?.takeIf { it.isNotBlank() } ?: extension.id
+            eventHandler.trySend {
+                it.navigateToExtensionSettings(extensionName = extensionName, url = optionsPageUrl)
+            }
         } else {
             viewModelStateFlow.update { it.copy(errorMessage = "この拡張機能には設定画面がありません。") }
         }
@@ -347,7 +350,7 @@ internal class ExtensionsScreenViewModel(
     }
 
     interface Event {
-        fun navigateToExtensionSettings(url: String)
+        fun navigateToExtensionSettings(extensionName: String, url: String)
 
         fun requestExtensionFilePicker()
     }

@@ -50,6 +50,7 @@ import net.matsudamper.browser.screen.browser.WebAppScreenViewModel
 import net.matsudamper.browser.screen.crashlog.CrashLogDetailScreenViewModel
 import net.matsudamper.browser.screen.crashlog.CrashLogsScreenViewModel
 import net.matsudamper.browser.screen.downloads.DownloadManagementScreenViewModel
+import net.matsudamper.browser.screen.extensions.ExtensionSettingsScreenViewModel
 import net.matsudamper.browser.screen.extensions.ExtensionsScreenViewModel
 import net.matsudamper.browser.screen.history.HistoryScreenViewModel
 import net.matsudamper.browser.screen.settings.SettingsScreenViewModel
@@ -181,6 +182,9 @@ val appModule = module {
             settingsRepository = get(),
             extensionRuntimeCoordinator = get(),
         )
+    }
+    viewModel { (optionsPageUrl: String) ->
+        ExtensionSettingsScreenViewModel(optionsPageUrl = optionsPageUrl, runtime = get())
     }
     viewModel { DownloadManagementScreenViewModel(androidApplication()) }
     viewModel { (isImport: Boolean) -> BackupProgressViewModel(isImport, get()) }
