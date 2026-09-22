@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -68,11 +69,14 @@ private val TabShape = RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp)
 /** グループタブバー全体の高さ。LazyRow・外側 Box 両方で共有する */
 private val GroupTabBarHeight = 48.dp
 
-/** バー右端のプロファイルボタンの幅。LazyRow の末尾余白・PagerIndicator の右端余白と共有する */
-internal val ProfileButtonWidth = 48.dp
+/** バー右端のプロファイルボタンの幅。LazyRow の末尾余白と共有する */
+private val ProfileButtonWidth = 48.dp
 
-/** プロファイルボタン左側で、グループタブを背景色へフェードさせるグラデーションの幅 */
-private val ProfileButtonFadeWidth = 24.dp
+/**
+ * プロファイル領域のグラデーションの幅。
+ * ボタンと同じ幅を左に足し、ボタンの手前からゆっくり色が付き始めてボタンに入る頃に不透明になるようにする
+ */
+private val ProfileAreaFadeWidth = ProfileButtonWidth * 2
 
 /** 非選択タブの最小高さ。選択タブは GroupTabBarHeight まで伸びて「浮き上がり」を表現する */
 private val GroupTabUnselectedHeight = 40.dp
@@ -145,19 +149,16 @@ internal fun GroupTabBar(
     }
 
     Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(top = 8.dp),
+        modifier = modifier.fillMaxWidth(),
     ) {
-        Column {
+        Column(modifier = Modifier.padding(top = 8.dp)) {
             LazyRow(
                 state = listState,
-                // start padding を contentPadding に移すことで、スクロール時に左端まで表示できるようにする
-                contentPadding = PaddingValues(start = 8.dp),
+                // padding を contentPadding に移すことで、スクロール中はタブが左端やプロファイルボタンの下まで
+                // 流れ、末尾までスクロールしたときだけボタンを避けて止まるようにする
+                contentPadding = PaddingValues(start = 8.dp, end = ProfileButtonWidth),
                 modifier = Modifier
                     .fillMaxWidth()
-                    // 右端に固定表示するプロファイルボタンの下へグループタブが潜らないようにする
-                    .padding(end = ProfileButtonWidth)
                     // 全アイテムが常に GroupTabBarHeight のwrapperを持つため、高さは固定で問題なし
                     .height(GroupTabBarHeight)
                     // groups.size をキーに含めないと、グループ追加後も古い groupCount が
@@ -220,15 +221,7 @@ internal fun GroupTabBar(
             )
         }
 
-        // タブ列とその直下のインジケータ行をまとめて覆い、プロファイル領域だけ下端がずれて見えないようにする
-        val profileAreaHeight = GroupTabBarHeight + PagerIndicatorHeight
-        ProfileButtonFade(
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(end = ProfileButtonWidth)
-                .width(ProfileButtonFadeWidth)
-                .height(profileAreaHeight),
-        )
+        ProfileAreaFade(modifier = Modifier.matchParentSize())
 
         ProfileButton(
             icon = profileIcon,
@@ -236,7 +229,8 @@ internal fun GroupTabBar(
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .width(ProfileButtonWidth)
-                .height(profileAreaHeight),
+                // タブ列とその直下のインジケータ行の高さに合わせ、アイコンをタブ列の中央に置く
+                .height(GroupTabBarHeight + PagerIndicatorHeight),
         )
 
         if (dragDropState.isDragging) {
@@ -662,22 +656,36 @@ private fun GroupBookmarkTab(
 
 /** バー右端に固定表示するプロファイル切り替えボタン */
 /**
- * プロファイルボタンの左側に敷く透過グラデーション。
- * LazyRow の端で硬く切れるグループタブをプロファイル領域の色へ溶け込ませ、境目を示す。
+ * バー右端のプロファイル領域を示す透過グラデーション。
+ * バーの上端から下端まで貫く 1 本のグラデーションだけで構成し、不透明な矩形を置かないことで
+ * 四角い輪郭が見えないようにする。ボタン下へ流れてきたグループタブやインジケータはこの中で消える。
  * surface と同色にするとタブが届いていないときに境目が消えるため、一段濃い surfaceContainer を使う。
  * テーマのカラースキームを参照するのでライト・ダーク両方に追従する。
  */
 @Composable
-private fun ProfileButtonFade(
+private fun ProfileAreaFade(
     modifier: Modifier = Modifier,
 ) {
-    Box(
-        modifier = modifier.background(
-            Brush.horizontalGradient(
-                colors = listOf(Color.Transparent, MaterialTheme.colorScheme.surfaceContainer),
-            ),
-        ),
-    )
+    val tint = MaterialTheme.colorScheme.surfaceContainer
+    Box(modifier = modifier) {
+        Box(
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .fillMaxHeight()
+                .width(ProfileAreaFadeWidth)
+                .background(
+                    Brush.horizontalGradient(
+                        // 左側をゆっくり立ち上げ、ボタン左端（0.5）を少し過ぎたところで不透明になるイーズイン。
+                        // ボタンの下に潜ったタブの文字がアイコンの周りに透けて残らないようにする
+                        0.0f to Color.Transparent,
+                        0.2f to tint.copy(alpha = 0.1f),
+                        0.4f to tint.copy(alpha = 0.55f),
+                        0.55f to tint,
+                        1.0f to tint,
+                    ),
+                ),
+        )
+    }
 }
 
 @Composable
@@ -687,7 +695,7 @@ private fun ProfileButton(
     modifier: Modifier = Modifier,
 ) {
     Box(
-        modifier = modifier.background(MaterialTheme.colorScheme.surfaceContainer),
+        modifier = modifier,
         contentAlignment = Alignment.Center,
     ) {
         IconButton(
