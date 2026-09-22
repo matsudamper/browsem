@@ -232,7 +232,7 @@ class TabsScreenViewModelTest {
             }
         }
 
-        override suspend fun getDefaultGroupId(): TabGroupId? {
+        override suspend fun getDefaultGroupId(profileId: ProfileId): TabGroupId? {
             return groupsFlow.value.firstOrNull { it.isDefault }?.id
         }
 
@@ -714,6 +714,7 @@ class TabsScreenViewModelTest {
         }
 
         override fun openNewTab(currentGroupId: TabGroupId?, profileId: ProfileId) = Unit
+        override fun openNewTabBehind(currentGroupId: TabGroupId?, profileId: ProfileId) = Unit
         override fun clearProfileStorage(profileId: ProfileId) = Unit
     }
 

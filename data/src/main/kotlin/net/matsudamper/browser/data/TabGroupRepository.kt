@@ -48,12 +48,12 @@ interface TabGroupRepository {
 
     /**
      * グループのデフォルト設定を変更する。
-     * isDefault = true の場合は他のグループのデフォルトをすべて解除してから設定する。
+     * isDefault = true の場合は同じプロファイル内の他のグループのデフォルトを解除してから設定する。
      */
     suspend fun setDefaultGroup(groupId: TabGroupId, isDefault: Boolean)
 
-    /** デフォルトに設定されているグループIDを返す。設定されていない場合は null。 */
-    suspend fun getDefaultGroupId(): TabGroupId?
+    /** 指定プロファイルでデフォルトに設定されているグループIDを返す。設定されていない場合は null。 */
+    suspend fun getDefaultGroupId(profileId: ProfileId): TabGroupId?
 }
 
 class TabGroupRepositoryImpl(context: Context) : TabGroupRepository {
@@ -147,8 +147,8 @@ class TabGroupRepositoryImpl(context: Context) : TabGroupRepository {
         dao.setDefaultGroup(groupId.value, isDefault)
     }
 
-    override suspend fun getDefaultGroupId(): TabGroupId? {
-        return dao.getAllGroups().firstOrNull { it.isDefault }?.let { TabGroupId(it.groupId) }
+    override suspend fun getDefaultGroupId(profileId: ProfileId): TabGroupId? {
+        return dao.getDefaultGroupId(profileId.value)?.let { TabGroupId(it) }
     }
 }
 

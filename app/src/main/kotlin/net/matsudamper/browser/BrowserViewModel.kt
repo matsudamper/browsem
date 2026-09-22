@@ -210,7 +210,7 @@ internal class BrowserViewModel(
         active: Boolean,
     ): GeckoSession {
         val tabId = UUID.randomUUID().toString()
-        val defaultGroupId = tabGroupRepository.getDefaultGroupId()
+        val defaultGroupId = tabGroupRepository.getDefaultGroupId(browserTabController.activeProfileId)
         if (defaultGroupId != null) {
             tabGroupRepository.assignTabToGroup(tabId, defaultGroupId)
         }
@@ -298,16 +298,16 @@ internal class BrowserViewModel(
             if (!externalTabPreviousTabs.containsKey(tabId)) {
                 return@withLock null
             }
-            val defaultGroupId = tabGroupRepository.getDefaultGroupId()?.value
+            val defaultGroupId = tabGroupRepository.getDefaultGroupId(browserTabController.activeProfileId)
             var targetTabId = ExternalDownloadTabNavigationPolicy.resolveTargetTabAfterClosingExternalDownload(
                 state = browserTabController.tabStoreState.value,
-                defaultGroupId = defaultGroupId,
+                defaultGroupId = defaultGroupId?.value,
                 excludingTabId = tabId,
             )
             if (targetTabId == null) {
                 val newTabId = UUID.randomUUID().toString()
-                tabGroupRepository.getDefaultGroupId()?.let { groupId ->
-                    tabGroupRepository.assignTabToGroup(newTabId, groupId)
+                if (defaultGroupId != null) {
+                    tabGroupRepository.assignTabToGroup(newTabId, defaultGroupId)
                 }
                 targetTabId = createTabWithHomepage(
                     tabId = newTabId,

@@ -65,7 +65,7 @@ class BrowserScreenViewModelTest {
         override suspend fun renameGroup(groupId: TabGroupId, name: String) {}
         override suspend fun deleteGroup(groupId: TabGroupId, fallbackGroupId: TabGroupId?) {}
         override suspend fun setDefaultGroup(groupId: TabGroupId, isDefault: Boolean) {}
-        override suspend fun getDefaultGroupId(): TabGroupId? = null
+        override suspend fun getDefaultGroupId(profileId: ProfileId): TabGroupId? = null
 
         fun setGroups(groups: List<TabGroupData>) {
             groupsFlow.value = groups

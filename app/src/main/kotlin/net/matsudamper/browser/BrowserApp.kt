@@ -128,7 +128,9 @@ internal fun BrowserApp(
                 onExternalTabRequest = { request ->
                     viewModel.setupComplete.await()
                     val tabId = UUID.randomUUID().toString()
-                    val defaultGroupId = tabGroupRepository.getDefaultGroupId()
+                    val defaultGroupId = tabGroupRepository.getDefaultGroupId(
+                        viewModel.browserTabController.activeProfileId,
+                    )
                     if (defaultGroupId != null) {
                         tabGroupRepository.assignTabToGroup(tabId, defaultGroupId)
                     }

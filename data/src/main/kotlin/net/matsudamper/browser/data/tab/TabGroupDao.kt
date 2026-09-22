@@ -21,6 +21,9 @@ abstract class TabGroupDao {
     @Query("SELECT * FROM tab_group WHERE profileId = :profileId ORDER BY sortOrder ASC")
     abstract fun observeGroupsForProfile(profileId: String): Flow<List<TabGroupEntity>>
 
+    @Query("SELECT groupId FROM tab_group WHERE profileId = :profileId AND isDefault = 1 LIMIT 1")
+    abstract suspend fun getDefaultGroupId(profileId: String): String?
+
     @Query("DELETE FROM tab_group WHERE groupId = :groupId")
     abstract suspend fun deleteGroup(groupId: String)
 
@@ -96,8 +99,12 @@ abstract class TabGroupDao {
     @Query("UPDATE tab_group SET name = :name WHERE groupId = :groupId")
     abstract suspend fun updateGroupName(groupId: String, name: String)
 
-    @Query("UPDATE tab_group SET isDefault = 0")
-    abstract suspend fun clearAllDefault()
+    /** 指定グループと同じプロファイルに属するグループのデフォルトを解除する */
+    @Query(
+        "UPDATE tab_group SET isDefault = 0 " +
+            "WHERE profileId = (SELECT profileId FROM tab_group WHERE groupId = :groupId)",
+    )
+    abstract suspend fun clearDefaultInSameProfile(groupId: String)
 
     @Query("UPDATE tab_group SET isDefault = 1 WHERE groupId = :groupId")
     abstract suspend fun setDefaultOn(groupId: String)
@@ -106,13 +113,14 @@ abstract class TabGroupDao {
     abstract suspend fun setDefaultOff(groupId: String)
 
     /**
-     * 指定グループをデフォルトに設定する（isDefault = true の場合は他をすべて解除）。
+     * 指定グループをデフォルトに設定する（isDefault = true の場合は同じプロファイル内の他をすべて解除）。
      * isDefault = false の場合は指定グループのデフォルトを解除するのみ。
+     * デフォルトはプロファイルごとに 1 つ持てる。
      */
     @Transaction
     open suspend fun setDefaultGroup(groupId: String, isDefault: Boolean) {
         if (isDefault) {
-            clearAllDefault()
+            clearDefaultInSameProfile(groupId)
             setDefaultOn(groupId)
         } else {
             setDefaultOff(groupId)
