@@ -236,12 +236,15 @@ internal class BrowserViewModel(
         active: Boolean,
     ): GeckoSession {
         val tabId = UUID.randomUUID().toString()
-        val defaultGroupId = tabGroupRepository.getDefaultGroupId(browserTabController.activeProfileId)
+        // グループ割り当てとセッション生成の間に有効プロファイルが変わっても食い違わないよう、
+        // プロファイルは一度だけ読んで両方に渡す
+        val profileId = browserTabController.activeProfileId
+        val defaultGroupId = tabGroupRepository.getDefaultGroupId(profileId)
         if (defaultGroupId != null) {
             tabGroupRepository.assignTabToGroup(tabId, defaultGroupId)
         }
         return withContext(Dispatchers.Main) {
-            val session = browserTabController.createSessionForActiveProfile()
+            val session = browserTabController.createSessionForProfile(profileId)
             val newTab = browserTabController.createAndAppendTabWithSession(
                 session = session,
                 tabId = tabId,

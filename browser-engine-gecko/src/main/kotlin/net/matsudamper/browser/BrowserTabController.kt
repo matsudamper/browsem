@@ -208,12 +208,12 @@ class BrowserTabController(
     }
 
     /**
-     * 有効プロファイルの contextId を持つ GeckoSession を作る。
+     * 指定プロファイルの contextId を持つ GeckoSession を作る。
      * 外から用意したセッションを [createAndAppendTabWithSession] へ渡す経路で、
-     * 一覧上のプロファイルと Cookie の分離を一致させるために使う。
+     * グループ割り当てと同じプロファイルを明示して Cookie の分離を一致させるために使う。
      */
-    fun createSessionForActiveProfile(): GeckoSession {
-        return BrowserTabFactory.createSessionForProfile(activeProfileId)
+    fun createSessionForProfile(profileId: ProfileId): GeckoSession {
+        return BrowserTabFactory.createSessionForProfile(profileId)
     }
 
     /** 保留中の保存と交差させたくない処理を、保存と同じロックの中で実行する。 */
