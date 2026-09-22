@@ -1,5 +1,6 @@
 package net.matsudamper.browser.ui.tabs
 
+import android.content.res.Configuration
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.layout.Arrangement
@@ -69,7 +70,9 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import net.matsudamper.browser.data.TabGroupData
 import net.matsudamper.browser.data.TabGroupId
+import net.matsudamper.browser.data.ThemeMode
 import net.matsudamper.browser.resources.R as ResourcesR
+import net.matsudamper.browser.ui.common.BrowserTheme
 import net.matsudamper.browser.ui.common.StatusBarAppearanceEffect
 
 internal object TabsLayoutDefaults {
@@ -381,12 +384,6 @@ private fun TabsScreenLoadedContent(
                 modifier = Modifier.fillMaxWidth(),
             )
 
-            PagerIndicator(
-                pagerState = pagerState,
-                listState = groupTabListState,
-                modifier = Modifier.fillMaxWidth(),
-            )
-
             HorizontalPager(
                 state = pagerState,
                 modifier = Modifier
@@ -610,13 +607,16 @@ private fun SnackbarContent(
     }
 }
 
+/** ページインジケータの高さ。GroupTabBar のプロファイル領域がこの行まで覆うために共有する */
+internal val PagerIndicatorHeight = 2.dp
+
 /**
  * HorizontalPager のスクロール進捗に連動して動くインジケータ。
- * グループタブバーの直下に表示し、LazyRow の実際のアイテム位置に合わせてスライドするバーを描画する。
+ * グループタブ列の直下に表示し、LazyRow の実際のアイテム位置に合わせてスライドするバーを描画する。
  * タブバーがスクロールされていても表示位置と同期する。
  */
 @Composable
-private fun PagerIndicator(
+internal fun PagerIndicator(
     pagerState: PagerState,
     listState: LazyListState,
     modifier: Modifier = Modifier,
@@ -624,7 +624,8 @@ private fun PagerIndicator(
     val indicatorColor = MaterialTheme.colorScheme.primary
     val trackColor = MaterialTheme.colorScheme.surfaceVariant
 
-    Canvas(modifier = modifier.height(2.dp)) {
+    // 右端のプロファイル領域へ潜った部分は GroupTabBar のグラデーションに隠れる
+    Canvas(modifier = modifier.height(PagerIndicatorHeight)) {
         drawRect(color = trackColor)
         // スクロールやページ変化での無効化を描画フェーズだけに留めるため draw ラムダ内で状態を読み取る
         val layoutInfo = listState.layoutInfo
@@ -685,6 +686,56 @@ private fun PreviewFloatingGroupMenu() {
         onDeleteGroup = {},
         onToggleDefaultGroup = {},
     )
+}
+
+/** グループタブがプロファイルボタンまで届き、右端のフェードで区切られる状態 */
+@Composable
+private fun PreviewManyGroupsContent() {
+    val groups = remember {
+        listOf(
+            TabGroupData(TabGroupId("g1"), "デフォルト"),
+            TabGroupData(TabGroupId("g2"), "開発"),
+            TabGroupData(TabGroupId("g3"), "ニュース"),
+            TabGroupData(TabGroupId("g4"), "ショッピング"),
+            TabGroupData(TabGroupId("g5"), "動画"),
+        )
+    }
+    val groupedTabs = remember {
+        listOf(
+            listOf(previewTabData(id = "1", title = "Example Domain")),
+            listOf(previewTabData(id = "2", title = "GitHub")),
+            listOf(previewTabData(id = "3", title = "News")),
+            listOf(previewTabData(id = "4", title = "Shop")),
+            listOf(previewTabData(id = "5", title = "Video")),
+        )
+    }
+    TabsScreenLoadedContent(
+        groupedTabs = groupedTabs,
+        groups = groups,
+        activeGroupIndex = 0,
+        selectedTabId = "1",
+        groupHasPlayingTab = listOf(),
+        snackbarHostState = remember { SnackbarHostState() },
+        newTabListener = PreviewNewTabListener,
+        profileSwitcher = PreviewProfileSwitcherUiState,
+        onReorderTabs = { _, _, _ -> },
+        onReorderGroups = { _, _ -> },
+        onGroupSelected = {},
+        onGroupPageChanged = {},
+        onAddGroup = {},
+        onRenameGroup = { _, _ -> },
+        onDeleteGroup = {},
+        onToggleDefaultGroup = {},
+    )
+}
+
+@Composable
+@Preview(name = "多数グループ Light")
+@Preview(name = "多数グループ Dark", uiMode = Configuration.UI_MODE_NIGHT_YES)
+private fun PreviewManyGroups() {
+    BrowserTheme(themeMode = ThemeMode.THEME_SYSTEM) {
+        PreviewManyGroupsContent()
+    }
 }
 
 /** グループが1つのみの場合 (削除メニューが disabled になる状態) */

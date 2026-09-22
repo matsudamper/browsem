@@ -5,8 +5,10 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -22,6 +24,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -67,6 +70,9 @@ private val GroupTabBarHeight = 48.dp
 
 /** バー右端のプロファイルボタンの幅。LazyRow の末尾余白と共有する */
 private val ProfileButtonWidth = 48.dp
+
+/** プロファイル領域の tonal elevation。タブ列より一段浮いた面として区別する */
+private val ProfileAreaTonalElevation = 3.dp
 
 /** 非選択タブの最小高さ。選択タブは GroupTabBarHeight まで伸びて「浮き上がり」を表現する */
 private val GroupTabUnselectedHeight = 40.dp
@@ -139,80 +145,82 @@ internal fun GroupTabBar(
     }
 
     Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(top = 8.dp),
+        modifier = modifier.fillMaxWidth(),
     ) {
-        LazyRow(
-            state = listState,
-            // start padding を contentPadding に移すことで、スクロール時に左端まで表示できるようにする
-            contentPadding = PaddingValues(start = 8.dp),
-            modifier = Modifier
-                .fillMaxWidth()
-                // 右端に固定表示するプロファイルボタンの下へグループタブが潜らないようにする
-                .padding(end = ProfileButtonWidth)
-                // 全アイテムが常に GroupTabBarHeight のwrapperを持つため、高さは固定で問題なし
-                .height(GroupTabBarHeight)
-                // groups.size をキーに含めないと、グループ追加後も古い groupCount が
-                // クロージャに残り、新規グループ（index == 旧 size）がドラッグ対象外になる
-                .pointerInput(dragDropState, groups.size) {
-                    detectDragGesturesAfterLongPress(
-                        onDragStart = { offset ->
-                            dragDropState.onDragStart(offset, groups.size)
-                        },
-                        onDrag = { change, dragAmount ->
-                            change.consume()
-                            dragDropState.onDrag(dragAmount, groups.size)
-                        },
-                        onDragEnd = { dragDropState.onDragEnd() },
-                        onDragCancel = { dragDropState.onDragEnd() },
+        Column(modifier = Modifier.padding(top = 8.dp)) {
+            LazyRow(
+                state = listState,
+                // padding を contentPadding に移すことで、スクロール中はタブが左端やプロファイルボタンの下まで
+                // 流れ、末尾までスクロールしたときだけボタンを避けて止まるようにする
+                contentPadding = PaddingValues(start = 8.dp, end = ProfileButtonWidth),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    // 全アイテムが常に GroupTabBarHeight のwrapperを持つため、高さは固定で問題なし
+                    .height(GroupTabBarHeight)
+                    // groups.size をキーに含めないと、グループ追加後も古い groupCount が
+                    // クロージャに残り、新規グループ（index == 旧 size）がドラッグ対象外になる
+                    .pointerInput(dragDropState, groups.size) {
+                        detectDragGesturesAfterLongPress(
+                            onDragStart = { offset ->
+                                dragDropState.onDragStart(offset, groups.size)
+                            },
+                            onDrag = { change, dragAmount ->
+                                change.consume()
+                                dragDropState.onDrag(dragAmount, groups.size)
+                            },
+                            onDragEnd = { dragDropState.onDragEnd() },
+                            onDragCancel = { dragDropState.onDragEnd() },
+                        )
+                    },
+            ) {
+                itemsIndexed(
+                    items = groups,
+                    key = { _, group -> group.id.value },
+                ) { index, group ->
+                    // ページスクロール進捗に応じた選択強度（0=非選択, 1=選択）
+                    val selectionFraction = when {
+                        index == currentPage -> 1f - abs(offsetFraction)
+                        index == currentPage + 1 && offsetFraction > 0f -> offsetFraction
+                        index == currentPage - 1 && offsetFraction < 0f -> -offsetFraction
+                        else -> 0f
+                    }
+                    val isDropTarget = index == highlightedDropTargetIndex
+                    val isDraggingThis = dragDropState.draggedItemKey == group.id.value
+                    GroupBookmarkTab(
+                        label = group.name,
+                        selectionFraction = selectionFraction,
+                        isDropTarget = isDropTarget,
+                        isPlaying = groupHasPlayingTab.getOrElse(index) { false },
+                        onClick = { onGroupSelected(index) },
+                        modifier = Modifier
+                            .testTag(TabsScreenTestTags.TabGroupTopButton(index).testTag)
+                            .semantics {
+                                selected = index == activeGroupIndex
+                            }
+                            .animateItem()
+                            .zIndex(if (index == activeGroupIndex) groups.size.toFloat() else index.toFloat())
+                            .then(if (isDraggingThis) Modifier.alpha(0f) else Modifier)
+                            .onGloballyPositioned { coordinates ->
+                                onGroupTabBoundsChanged(index, coordinates.boundsInRoot())
+                            },
                     )
-                },
-        ) {
-            itemsIndexed(
-                items = groups,
-                key = { _, group -> group.id.value },
-            ) { index, group ->
-                // ページスクロール進捗に応じた選択強度（0=非選択, 1=選択）
-                val selectionFraction = when {
-                    index == currentPage -> 1f - abs(offsetFraction)
-                    index == currentPage + 1 && offsetFraction > 0f -> offsetFraction
-                    index == currentPage - 1 && offsetFraction < 0f -> -offsetFraction
-                    else -> 0f
                 }
-                val isDropTarget = index == highlightedDropTargetIndex
-                val isDraggingThis = dragDropState.draggedItemKey == group.id.value
-                GroupBookmarkTab(
-                    label = group.name,
-                    selectionFraction = selectionFraction,
-                    isDropTarget = isDropTarget,
-                    isPlaying = groupHasPlayingTab.getOrElse(index) { false },
-                    onClick = { onGroupSelected(index) },
-                    modifier = Modifier
-                        .testTag(TabsScreenTestTags.TabGroupTopButton(index).testTag)
-                        .semantics {
-                            selected = index == activeGroupIndex
-                        }
-                        .animateItem()
-                        .zIndex(if (index == activeGroupIndex) groups.size.toFloat() else index.toFloat())
-                        .then(if (isDraggingThis) Modifier.alpha(0f) else Modifier)
-                        .onGloballyPositioned { coordinates ->
-                            onGroupTabBoundsChanged(index, coordinates.boundsInRoot())
-                        },
-                )
+                item(key = "add_group") {
+                    AddGroupBookmarkTab(onClick = onAddGroup)
+                }
             }
-            item(key = "add_group") {
-                AddGroupBookmarkTab(onClick = onAddGroup)
-            }
+
+            PagerIndicator(
+                pagerState = pagerState,
+                listState = listState,
+                modifier = Modifier.fillMaxWidth(),
+            )
         }
 
-        ProfileButton(
+        ProfileArea(
             icon = profileIcon,
             onClick = onClickProfile,
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .width(ProfileButtonWidth)
-                .height(GroupTabBarHeight),
+            modifier = Modifier.matchParentSize(),
         )
 
         if (dragDropState.isDragging) {
@@ -636,22 +644,40 @@ private fun GroupBookmarkTab(
     }
 }
 
-/** バー右端に固定表示するプロファイル切り替えボタン */
+/**
+ * バー右端に固定表示するプロファイル領域。
+ * tonal elevation で一段浮いた面にしてタブ列と区別する。バーの上端から下端まで覆う不透明な面なので、
+ * ボタン下へ流れてきたグループタブやインジケータはこの面の下に隠れる。
+ * 色は surface に tonal elevation を重ねたものなのでライト・ダーク両方に追従する。
+ */
 @Composable
-private fun ProfileButton(
+private fun ProfileArea(
     icon: ProfileIcon,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Box(
-        modifier = modifier,
-        contentAlignment = Alignment.Center,
-    ) {
-        IconButton(
-            onClick = onClick,
-            modifier = Modifier.testTag(ProfileManagementTestTags.OpenDialogButton.testTag),
+    Box(modifier = modifier) {
+        Surface(
+            tonalElevation = ProfileAreaTonalElevation,
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .fillMaxHeight()
+                .width(ProfileButtonWidth),
         ) {
-            ProfileIconBadge(icon = icon, size = 32.dp, isEmphasized = false)
+            Box(contentAlignment = Alignment.BottomCenter) {
+                // タブ列とその直下のインジケータ行の高さに合わせ、アイコンをタブ列の中央に置く
+                Box(
+                    modifier = Modifier.height(GroupTabBarHeight + PagerIndicatorHeight),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    IconButton(
+                        onClick = onClick,
+                        modifier = Modifier.testTag(ProfileManagementTestTags.OpenDialogButton.testTag),
+                    ) {
+                        ProfileIconBadge(icon = icon, size = 32.dp, isEmphasized = false)
+                    }
+                }
+            }
         }
     }
 }
