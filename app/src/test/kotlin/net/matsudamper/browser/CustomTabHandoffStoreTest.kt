@@ -27,7 +27,7 @@ class CustomTabHandoffStoreTest {
         val session = mockk<GeckoSession>(relaxed = true)
         every { session.isOpen } returns true
 
-        val token = CustomTabHandoffStore.store(session = session, sessionState = "state-A")
+        val token = CustomTabHandoffStore.store(session = session, sessionState = "state-A", onDiscard = {})
         val handoff = CustomTabHandoffStore.consume(token)
 
         assertNotNull(handoff)
@@ -39,7 +39,7 @@ class CustomTabHandoffStoreTest {
     fun `取り出したトークンは再利用できない`() {
         val session = mockk<GeckoSession>(relaxed = true)
         every { session.isOpen } returns true
-        val token = CustomTabHandoffStore.store(session = session, sessionState = "state-A")
+        val token = CustomTabHandoffStore.store(session = session, sessionState = "state-A", onDiscard = {})
 
         CustomTabHandoffStore.consume(token)
 
@@ -53,8 +53,8 @@ class CustomTabHandoffStoreTest {
         every { first.isOpen } returns true
         every { second.isOpen } returns true
 
-        val firstToken = CustomTabHandoffStore.store(session = first, sessionState = "state-A")
-        val secondToken = CustomTabHandoffStore.store(session = second, sessionState = "state-B")
+        val firstToken = CustomTabHandoffStore.store(session = first, sessionState = "state-A", onDiscard = {})
+        val secondToken = CustomTabHandoffStore.store(session = second, sessionState = "state-B", onDiscard = {})
 
         assertNotEquals(firstToken, secondToken)
         assertSame(second, CustomTabHandoffStore.consume(secondToken)?.session)

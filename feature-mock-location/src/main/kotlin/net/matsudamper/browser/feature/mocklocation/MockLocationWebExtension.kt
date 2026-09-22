@@ -4,6 +4,10 @@ import android.util.Log
 import java.net.URI
 import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import org.json.JSONObject
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoRuntime
@@ -25,8 +29,15 @@ class MockLocationWebExtension {
         siteModes = mapOf(),
     )
 
-    /** ページが位置情報を要求した際にホスト名を通知するコールバック */
-    @Volatile var onGeolocationRequested: ((host: String) -> Unit)? = null
+    // この拡張機能はプロセスに 1 つで、ブラウザ・カスタムタブ・ウェブアプリの各画面が同時に生存しうる。
+    // 単一代入のコールバックでは最後の代入だけが通知を受け取るため、複数購読できる Flow で配る。
+    private val _geolocationRequestedHosts = MutableSharedFlow<String>(
+        extraBufferCapacity = GEOLOCATION_REQUEST_BUFFER,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+    )
+
+    /** ページが位置情報を要求した際にホスト名を流す */
+    val geolocationRequestedHosts: SharedFlow<String> = _geolocationRequestedHosts.asSharedFlow()
 
     // セッションごとの接続ポート。iframe を含む各フレームから個別に接続されるため複数保持する
     private val sessionPorts = ConcurrentHashMap<GeckoSession, MutableSet<WebExtension.Port>>()
@@ -151,7 +162,7 @@ class MockLocationWebExtension {
                                 // 「サイトの設定」画面に位置情報の項目を表示するために記録する
                                 "geolocationRequested" -> {
                                     val host = resolveHost(session, port) ?: return
-                                    onGeolocationRequested?.invoke(host)
+                                    _geolocationRequestedHosts.tryEmit(host)
                                 }
                             }
                         }
@@ -195,6 +206,9 @@ class MockLocationWebExtension {
         private const val NATIVE_APP_ID = "mockLocationBridge"
         private const val EXTENSION_URI =
             "resource://android/assets/web_extensions/mock_location_bridge/"
+
+        // 購読側が一時的に遅れても要求を取りこぼさない程度の余裕を持たせる。
+        private const val GEOLOCATION_REQUEST_BUFFER = 16
 
         const val DEFAULT_LATITUDE = 35.685175
         const val DEFAULT_LONGITUDE = 139.752797

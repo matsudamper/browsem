@@ -53,6 +53,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -100,7 +101,6 @@ import net.matsudamper.browser.feature.themecolor.ThemeColorWebExtension
 import net.matsudamper.browser.feature.twittershare.TwitterShareWebExtension
 import net.matsudamper.browser.feature.viewportscale.ViewportScaleWebExtension
 import net.matsudamper.browser.feature.websharefiles.WebShareFilesWebExtension
-import net.matsudamper.browser.translate.PageTranslationWebExtension
 import net.matsudamper.browser.translate.TranslationPriorityLanguage
 import net.matsudamper.browser.ui.browser.BrowserScreenUiState
 import net.matsudamper.browser.ui.browser.UrlBarSuggestionsUiState
@@ -157,7 +157,6 @@ internal fun GeckoBrowserTab(
 ) {
     val context = LocalContext.current
     val findInPageWebExtension: FindInPageWebExtension = koinInject()
-    val pageTranslationWebExtension: PageTranslationWebExtension = koinInject()
     val addressRepository: AddressRepository = koinInject()
     val formInputRepository: FormInputRepository = koinInject()
     val addressAutofillCoordinator: AddressAutofillCoordinator = koinInject()
@@ -255,10 +254,21 @@ internal fun GeckoBrowserTab(
     // Surface と Session の復元状態を一元管理する state machine。
     // ON_START / ON_RESUME が重複発火しても state=ACTIVE なら即 no-op にする。
     var surfaceResumeState by remember(session) { mutableStateOf(SurfaceResumeState.ACTIVE) }
+    // 復元サイクルの世代。復元を始めるたびに更新し、前の世代が残した監視を無効化する。
+    var surfaceRestoreGeneration by remember(session) { mutableIntStateOf(0) }
+    // INVISIBLE にした surface の破棄を待っている間 true。破棄前に VISIBLE へ戻すと
+    // 破棄と生成が合流して同じ surface のまま attach し直してしまう。
+    var awaitingSurfaceDestroy by remember(session) { mutableStateOf(false) }
+    // attach した時点の firstCompositeCount。attach より前に旧 surface から遅れて届いた
+    // フレームを新しい surface の描画と取り違えないよう、ここを基準に増加を見る。
+    var compositeCountAtAttach by remember(session) { mutableIntStateOf(0) }
     val addressAutofillDelegate = remember(session, addressAutofillCoordinator) {
         AddressAutofillDelegate(coordinator = addressAutofillCoordinator)
     }
-    val resumeCoverColor = MaterialTheme.colorScheme.surface.toArgb()
+    // observer は DisposableEffect のキーが変わらない限り再生成されない。色をキーにすると
+    // テーマ変更のたびに effect が貼り直され、進行中の復元監視が世代ごと無効化されるため、
+    // キーには含めずここから最新の色を読む。
+    val currentResumeCoverColor by rememberUpdatedState(MaterialTheme.colorScheme.surface.toArgb())
     // LifecycleEventObserver は DisposableEffect のキーが変わらない限り再生成されないため、
     // ラムダ内で ON_PAUSE 時点の最新 IME 表示状態を読めるよう rememberUpdatedState で包む。
     val currentIsImeVisible by rememberUpdatedState(isImeVisible)
@@ -464,6 +474,19 @@ internal fun GeckoBrowserTab(
     //
     // local function は前方参照不可なので attach → schedule → restore の順で定義する。
     fun attachSessionAfterStableSize(gecko: GeckoView) {
+        // GeckoView.setSession は呼び出し時点の session に display を acquire し、その後
+        // session が open されても貼り直さない。バックグラウンド中に onCrash/onKill で
+        // コンテンツプロセスが失われた session を閉じたまま attach すると、新しい window に
+        // Surface が渡らずコンポジタがフレームを出さない (画面が黒いまま固まる)。
+        // 先に open→restoreState で復元してから attach する。
+        if (!session.isOpen) {
+            Log.w(
+                TAG_SURFACE_RESUME,
+                "attachSessionAfterStableSize: session closed (crash/kill) → setSession 前に restoreSession で復元" +
+                    " session=${session.logKey()}",
+            )
+            browserSessionLifecycleController.restoreSession(browserTab)
+        }
         gecko.setSession(session)
         addressAutofillDelegate.bind(session)
         if (session.isOpen) {
@@ -472,23 +495,17 @@ internal fun GeckoBrowserTab(
             browserSessionLifecycleController.notifyExtensionsActiveTab(session)
             // 別画面へ渡した子が閉じていれば、ここで opener の保持を解く
             currentOnReevaluateOpenerRetention()
-        } else {
-            // バックグラウンド中に onCrash/onKill でコンテンツプロセスが失われ、
-            // isOpen=false のまま復帰したケース。setActive するだけでは何も描画されず
-            // coverUntilFirstPaint の単色のまま固まるため、restoreSession の
-            // open→restoreState 経路で復元する。
-            Log.w(
-                TAG_SURFACE_RESUME,
-                "attachSessionAfterStableSize: session closed (crash/kill) → restoreSession で復元" +
-                    " session=${session.logKey()}",
-            )
-            browserSessionLifecycleController.restoreSession(browserTab)
         }
+        // 復旧で開き直した session は遅延初回ロードが未消費のまま残ることがある。
+        // サイズは安定しているのでここで実行する (未設定なら何もしない)。
+        browserSessionLifecycleController.performInitialLoadIfPending(browserTab)
+        compositeCountAtAttach = state.firstCompositeCount
         surfaceResumeState = SurfaceResumeState.ACTIVE
     }
 
     fun scheduleStableSizeAttach(
         gecko: GeckoView,
+        generation: Int,
         recordedHeight: Int,
         stableCount: Int,
         startTimeMs: Long,
@@ -497,6 +514,9 @@ internal fun GeckoBrowserTab(
         // トリガがないと stable check が進まず復帰が数十秒遅れる。postOnAnimation は Choreographer の
         // アニメーションフレームで毎 vsync 発火するため、UI 操作がなくても安定検出を進められる。
         gecko.postOnAnimation {
+            // 前の復元サイクルが残した安定待ちは、新しいサイクルを古いサイズ記録で
+            // 判定して早すぎる attach を招くため何もしない。
+            if (generation != surfaceRestoreGeneration) return@postOnAnimation
             if (surfaceResumeState == SurfaceResumeState.ACTIVE) {
                 Log.d(TAG_SURFACE_RESUME, "stable-check skipped: already ACTIVE")
                 return@postOnAnimation
@@ -521,7 +541,7 @@ internal fun GeckoBrowserTab(
             val h = gecko.height
             if (h == 0 || gecko.width == 0) {
                 Log.d(TAG_SURFACE_RESUME, "stable-check: layout not settled, retry next frame")
-                scheduleStableSizeAttach(gecko, recordedHeight, stableCount, startTimeMs)
+                scheduleStableSizeAttach(gecko, generation, recordedHeight, stableCount, startTimeMs)
                 return@postOnAnimation
             }
             val elapsed = SystemClock.elapsedRealtime() - startTimeMs
@@ -535,7 +555,7 @@ internal fun GeckoBrowserTab(
                     )
                     attachSessionAfterStableSize(gecko)
                 } else {
-                    scheduleStableSizeAttach(gecko, h, nextCount, startTimeMs)
+                    scheduleStableSizeAttach(gecko, generation, h, nextCount, startTimeMs)
                 }
             } else {
                 if (elapsed >= STABLE_TIMEOUT_MS) {
@@ -550,13 +570,13 @@ internal fun GeckoBrowserTab(
                         TAG_SURFACE_RESUME,
                         "stable-check: size changed $recordedHeight → $h (elapsed=${elapsed}ms), reset counter",
                     )
-                    scheduleStableSizeAttach(gecko, h, 0, startTimeMs)
+                    scheduleStableSizeAttach(gecko, generation, h, 0, startTimeMs)
                 }
             }
         }
     }
 
-    fun restoreSurfaceIfNeeded(gecko: GeckoView) {
+    fun restoreSurfaceIfNeeded(gecko: GeckoView, blankSurfaceRetryCount: Int) {
         Log.d(
             TAG_SURFACE_RESUME,
             "restoreSurfaceIfNeeded: state=$surfaceResumeState gv.size=${gecko.width}x${gecko.height}" +
@@ -564,6 +584,10 @@ internal fun GeckoBrowserTab(
                 " session=${session.logKey()}",
         )
         if (surfaceResumeState != SurfaceResumeState.RELEASED) return
+        if (awaitingSurfaceDestroy) {
+            Log.d(TAG_SURFACE_RESUME, "restoreSurfaceIfNeeded: surface の破棄待ちのため何もしない")
+            return
+        }
         // ON_PAUSE で INVISIBLE にして Surface を破棄しているので VISIBLE に戻して
         // SurfaceView 内部の Surface を新規作成させる。
         if (gecko.visibility != View.VISIBLE) {
@@ -571,14 +595,104 @@ internal fun GeckoBrowserTab(
             gecko.visibility = View.VISIBLE
         }
         // stale フレームが一瞬表示されるのを防ぐため pre-draw 待ちより前に cover する。
-        gecko.coverUntilFirstPaint(resumeCoverColor)
+        gecko.coverUntilFirstPaint(currentResumeCoverColor)
         surfaceResumeState = SurfaceResumeState.WAITING_STABLE
+        surfaceRestoreGeneration++
+        val generation = surfaceRestoreGeneration
         scheduleStableSizeAttach(
             gecko = gecko,
+            generation = generation,
             recordedHeight = -1,
             stableCount = 0,
             startTimeMs = SystemClock.elapsedRealtime(),
         )
+        // surface を張り直しただけでは Gecko のコンポジタが描画を再開しない実機がある。
+        // そこでコンテンツプロセスごと畳んで開き直す。ページの状態は restoreSession の
+        // restoreState で戻る。
+        fun recreateSessionAndSurface() {
+            Log.w(
+                TAG_SURFACE_RESUME,
+                "blank-surface: attach 後 ${BLANK_SURFACE_TIMEOUT_MS}ms で first composite が来ないため" +
+                    " session と surface を作り直す retry=${blankSurfaceRetryCount + 1}" +
+                    " session=${session.logKey()}",
+            )
+            addressAutofillDelegate.unbindBeforeViewRelease(session)
+            gecko.releaseSession()
+            // window.open の関係に参加している session は閉じない。開き直せなくなるか、
+            // opener との結び付きが失われる。
+            if (browserSessionLifecycleController.canRecreateSession(browserTab)) {
+                runCatching { session.close() }
+            }
+            gecko.visibility = View.INVISIBLE
+            surfaceResumeState = SurfaceResumeState.RELEASED
+            // surface の破棄は次の traversal で行われる。反映を待ってから
+            // VISIBLE に戻さないと同じ surface に attach し直してしまう。
+            awaitingSurfaceDestroy = true
+            gecko.postDelayed(
+                {
+                    if (generation != surfaceRestoreGeneration) return@postDelayed
+                    awaitingSurfaceDestroy = false
+                    // 待っている間に背面へ回ったら復元しない。state は RELEASED のままなので
+                    // 次の復帰イベントから復元が始まる。
+                    if (!lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
+                        return@postDelayed
+                    }
+                    restoreSurfaceIfNeeded(gecko, blankSurfaceRetryCount + 1)
+                },
+                SURFACE_DESTROY_WAIT_MS,
+            )
+        }
+
+        // attach しても Gecko 側のコンポジタが新しい surface にフレームを出さず、画面が
+        // 黒いまま固まることがある。session は open のままで状態に現れないため、
+        // onFirstComposite が届いたかどうかで判定する。
+        // 猶予は attach (ACTIVE 遷移) を起点に数える。安定待ちに掛かった時間まで猶予から
+        // 差し引くと、正常な復元を黒画面と誤判定してしまう。
+        fun waitForFirstComposite(activeSinceMs: Long?) {
+            gecko.postDelayed(
+                {
+                    // 前の復元サイクルが残した監視は、新しいサイクルの attach を
+                    // 巻き添えに作り直してしまうため何もしない。
+                    if (generation != surfaceRestoreGeneration) return@postDelayed
+                    if (!lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
+                        return@postDelayed
+                    }
+                    when (surfaceResumeState) {
+                        // attach 待ち、またはオーバーレイ等の focus-only 離脱。どちらも
+                        // surface は作り直されないので監視を続ける。猶予は ACTIVE に
+                        // なってから数え直す。
+                        SurfaceResumeState.WAITING_STABLE,
+                        SurfaceResumeState.PAUSED_KEEP_SURFACE,
+                        -> waitForFirstComposite(null)
+
+                        SurfaceResumeState.ACTIVE -> {
+                            val activeSince = activeSinceMs ?: SystemClock.elapsedRealtime()
+                            val waitedMs = SystemClock.elapsedRealtime() - activeSince
+                            when {
+                                waitedMs < BLANK_SURFACE_TIMEOUT_MS -> waitForFirstComposite(activeSince)
+
+                                state.firstCompositeCount != compositeCountAtAttach -> Unit
+
+                                blankSurfaceRetryCount >= BLANK_SURFACE_MAX_RETRY -> {
+                                    Log.w(
+                                        TAG_SURFACE_RESUME,
+                                        "blank-surface: 作り直しても描画が戻らない。復旧を諦める" +
+                                            " session=${session.logKey()}",
+                                    )
+                                }
+
+                                else -> recreateSessionAndSurface()
+                            }
+                        }
+
+                        // release 済み。次の復帰で新しい監視が始まる。
+                        SurfaceResumeState.RELEASED -> Unit
+                    }
+                },
+                BLANK_SURFACE_POLL_MS,
+            )
+        }
+        waitForFirstComposite(null)
     }
 
     // pause からの復帰処理。
@@ -589,7 +703,7 @@ internal fun GeckoBrowserTab(
     //   呼ぶとコンポジタが一瞬クリアされ単一色フラッシュが出る)。
     fun resumeFromPauseIfNeeded(gecko: GeckoView) {
         when (surfaceResumeState) {
-            SurfaceResumeState.RELEASED -> restoreSurfaceIfNeeded(gecko)
+            SurfaceResumeState.RELEASED -> restoreSurfaceIfNeeded(gecko, blankSurfaceRetryCount = 0)
 
             SurfaceResumeState.PAUSED_KEEP_SURFACE -> {
                 Log.d(
@@ -604,7 +718,7 @@ internal fun GeckoBrowserTab(
         }
     }
 
-    DisposableEffect(lifecycleOwner, session, resumeCoverColor) {
+    DisposableEffect(lifecycleOwner, session) {
         val observer = LifecycleEventObserver { _, event ->
             val gv = geckoView
             Log.d(
@@ -742,6 +856,39 @@ internal fun GeckoBrowserTab(
 
                 Lifecycle.Event.ON_START -> {
                     val gv = geckoView ?: return@LifecycleEventObserver
+                    // ON_START は ON_STOP を経た復帰。PAUSED_KEEP_SURFACE のまま来たのは
+                    // ON_STOP で release できなかったケースで、不可視の間に破棄された surface を
+                    // session が掴んだままになり、復帰後もフレームが出ず黒いままになる。
+                    // RELEASED に倒して surface 再作成からの復元経路へ合流させる。
+                    if (surfaceResumeState == SurfaceResumeState.PAUSED_KEEP_SURFACE) {
+                        Log.w(
+                            TAG_SURFACE_RESUME,
+                            "ON_START: PAUSED_KEEP_SURFACE のまま復帰したため release して作り直す" +
+                                " session=${session.logKey()}",
+                        )
+                        addressAutofillDelegate.unbindBeforeViewRelease(session)
+                        gv.releaseSession()
+                        gv.visibility = View.INVISIBLE
+                        surfaceResumeState = SurfaceResumeState.RELEASED
+                        // surface の破棄が次の traversal で反映されるのを待ってから復元する。
+                        awaitingSurfaceDestroy = true
+                        val generation = surfaceRestoreGeneration
+                        gv.postDelayed(
+                            {
+                                // 待っている間に Composable が破棄されていれば、捨てられた
+                                // View と session には触らず、状態も書き換えない。
+                                if (generation != surfaceRestoreGeneration) return@postDelayed
+                                awaitingSurfaceDestroy = false
+                                // 背面へ回っていたら復元しない。次の復帰イベントから始まる。
+                                if (!lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
+                                    return@postDelayed
+                                }
+                                resumeFromPauseIfNeeded(gv)
+                            },
+                            SURFACE_DESTROY_WAIT_MS,
+                        )
+                        return@LifecycleEventObserver
+                    }
                     resumeFromPauseIfNeeded(gv)
                 }
 
@@ -754,7 +901,11 @@ internal fun GeckoBrowserTab(
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            // 破棄後に監視が生き残って View を触らないよう世代を進めて無効化する。
+            surfaceRestoreGeneration++
+        }
     }
 
     DisposableEffect(session, state, themeColorExtension) {
@@ -792,15 +943,6 @@ internal fun GeckoBrowserTab(
         }
         onDispose {
             viewportScaleWebExtension.unregisterSession(session)
-        }
-    }
-
-    // ページ側へ接続トリガーを露出せず Native Messaging を開始できるよう、
-    // 表示中セッションには content script より先に MessageDelegate を登録する。
-    DisposableEffect(session, pageTranslationWebExtension) {
-        pageTranslationWebExtension.registerSession(session)
-        onDispose {
-            pageTranslationWebExtension.unregisterSession(session)
         }
     }
 
@@ -1622,6 +1764,24 @@ private const val STABLE_FRAMES_THRESHOLD = 3
  * setSession する。Web 入力欄の表示遅延と GPU kill 防止のトレードオフ。
  */
 private const val STABLE_TIMEOUT_MS = 1000L
+
+/**
+ * attach 後にコンポジタの最初のフレーム (onFirstComposite) を待つ時間。これを過ぎても
+ * 来なければ描画が止まっているとみなし、session と surface を作り直す。
+ */
+private const val BLANK_SURFACE_TIMEOUT_MS = 1500L
+
+/** 黒いままの session と surface を作り直す上限回数。1 回の復帰サイクルごとに数え直す。 */
+private const val BLANK_SURFACE_MAX_RETRY = 2
+
+/** first composite の到着と attach 完了を見に行く間隔。 */
+private const val BLANK_SURFACE_POLL_MS = 250L
+
+/**
+ * INVISIBLE にした SurfaceView の surface が破棄されるまでの待ち時間。破棄は次の
+ * traversal で行われるため、同じコールスタックで VISIBLE に戻すと破棄が起きない。
+ */
+private const val SURFACE_DESTROY_WAIT_MS = 100L
 
 private fun GeckoSession.logKey(): String = Integer.toHexString(System.identityHashCode(this))
 

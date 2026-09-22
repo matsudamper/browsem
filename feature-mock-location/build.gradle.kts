@@ -29,6 +29,7 @@ kotlin {
 
 dependencies {
     implementation(libs.mozilla.geckoview)
+    implementation(libs.kotlinx.coroutines.core)
 
     testImplementation(libs.junit4)
 }

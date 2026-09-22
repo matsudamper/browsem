@@ -15,6 +15,7 @@ import android.util.Log
 import android.widget.Toast
 import androidx.compose.foundation.ScrollState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -114,6 +115,11 @@ internal fun rememberBrowserTabScreenState(
             externalDownloadDialogListener = externalDownloadDialogListener,
             externalTabInitialUrl = externalTabInitialUrl,
         )
+    }
+    DisposableEffect(state) {
+        onDispose {
+            state.translation.onScreenDisposed()
+        }
     }
     state.homepageUrl = homepageUrl
     state.searchTemplate = searchTemplate
@@ -320,6 +326,12 @@ internal class BrowserTabScreenState(
     var isFullScreen by mutableStateOf(false)
 
     var renderReady by mutableStateOf(false)
+
+    // surface の差し替え後にコンポジタが最初のフレームを描くたびにインクリメントされる
+    // カウンター。GeckoBrowserTab が attach 前後の値を比べ、フレームが出ないまま黒い
+    // ままになった surface を検知する。
+    var firstCompositeCount by mutableIntStateOf(0)
+        private set
 
     // コンテンツプロセスのクラッシュ/kill (onCrash/onKill) を検知するたびにインクリメントされる
     // カウンター。GeckoBrowserTab がこの値を監視し、前面表示中であれば即座にセッションの
@@ -995,6 +1007,11 @@ internal class BrowserTabScreenState(
     override fun onRenderReady() {
         renderReady = true
         maybeApplyPersistedPageZoomAfterRender()
+    }
+
+    override fun onFirstComposite() {
+        onRenderReady()
+        firstCompositeCount++
     }
 
     override fun onPreviewCaptureReady() {

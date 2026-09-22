@@ -40,6 +40,7 @@ import net.matsudamper.browser.data.resolvedInputAutoZoomEnabled
 import net.matsudamper.browser.feature.media.MediaWebExtension
 import net.matsudamper.browser.feature.mocklocation.MockLocationWebExtension
 import net.matsudamper.browser.feature.themecolor.ThemeColorWebExtension
+import net.matsudamper.browser.translate.PageTranslationWebExtension
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoSession
 
@@ -79,6 +80,7 @@ internal class BrowserViewModel(
     private val tabGroupRepository: TabGroupRepository,
     private val profileRepository: ProfileRepository,
     private val mockLocationWebExtension: MockLocationWebExtension,
+    private val pageTranslationWebExtension: PageTranslationWebExtension,
     private val siteSettingsRepository: SiteSettingsRepository,
     private val applicationScope: CoroutineScope,
 ) : ViewModel() {
@@ -98,8 +100,14 @@ internal class BrowserViewModel(
                 selectedTabId = browserTabController.selectedTabId,
             )
         }
+        // ページ翻訳ブリッジは content script より先に MessageDelegate が要る。設定画面などで
+        // タブの Composition が外れても外さないよう、セッションの寿命に合わせて張る。
+        browserTabController.onTabSessionCreated = { session ->
+            pageTranslationWebExtension.registerSession(session)
+        }
         browserTabController.onTabSessionDisposed = { session ->
             mediaWebExtension.releaseSession(session)
+            pageTranslationWebExtension.unregisterSession(session)
         }
     }
 
@@ -172,9 +180,13 @@ internal class BrowserViewModel(
                 }
         }
         // ページが位置情報を要求したら記録し、「サイトの設定」画面に位置情報の項目を表示できるようにする
-        mockLocationWebExtension.onGeolocationRequested = { host ->
-            viewModelScope.launch {
-                siteSettingsRepository.markGeolocationRequested(host)
+        viewModelScope.launch {
+            mockLocationWebExtension.geolocationRequestedHosts.collect { host ->
+                // 記録に失敗しても収集そのものは止めない。viewModelScope の SupervisorJob 直下で
+                // 要求ごとに処理し、一件の失敗で以降の要求を取りこぼさないようにする。
+                viewModelScope.launch {
+                    siteSettingsRepository.markGeolocationRequested(host)
+                }
             }
         }
         // ViewModel 生成時にタブ復元を開始する。

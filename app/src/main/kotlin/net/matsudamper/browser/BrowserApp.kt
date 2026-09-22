@@ -86,6 +86,7 @@ import net.matsudamper.browser.navigation.SiteSettingsListNavContent
 import net.matsudamper.browser.navigation.SiteSettingsNavContent
 import net.matsudamper.browser.screen.browser.BrowserScreenViewModel
 import net.matsudamper.browser.screen.tab.TabsScreenViewModel
+import net.matsudamper.browser.translate.PageTranslationWebExtension
 import net.matsudamper.browser.ui.browser.BrowserContentLoadingIndicator
 import net.matsudamper.browser.ui.browser.BrowserScreen
 import net.matsudamper.browser.ui.common.BrowserTheme
@@ -120,6 +121,7 @@ internal fun BrowserApp(
             val selectTabRequester = remember { SelectTabRequester() }
             val tabGroupRepository: TabGroupRepository = koinInject()
             val profileRepository: ProfileRepository = koinInject()
+            val pageTranslationWebExtension: PageTranslationWebExtension = koinInject()
             BrowserAppShell(
                 browserTabController = viewModel.browserTabController,
                 browserSessionLifecycleController = viewModel.browserSessionLifecycleController,
@@ -128,46 +130,56 @@ internal fun BrowserApp(
                 onOpenDownloadsRequestConsumed = onOpenDownloadsRequestConsumed,
                 newTabUrlFlow = newTabUrlFlow,
                 onExternalTabRequest = { request ->
-                    viewModel.setupComplete.await()
-                    val tabId = UUID.randomUUID().toString()
-                    // 要求から実際に載せるまでの間にコンテンツプロセスが停止していることがある。
-                    // 閉じたセッションを載せると SessionState 経由の復元へ落ちられない。
-                    val handedOffSession = request.handedOffSession?.takeIf { it.isOpen }
-                    // 引き渡されたセッションは contextId が既に決まっているため、そのプロファイルへ載せる。
-                    // 有効プロファイルのグループへ入れると、一覧と実際の Cookie 分離が食い違う
-                    val activeProfileId = viewModel.browserTabController.activeProfileId
-                    val targetProfileId = if (handedOffSession != null) {
-                        ProfileId.fromGeckoContextId(handedOffSession.settings.contextId)
-                    } else {
-                        activeProfileId
-                    }
-                    if (targetProfileId != activeProfileId) {
-                        profileRepository.setActiveProfile(targetProfileId)
-                    }
-                    val defaultGroupId = tabGroupRepository.getDefaultGroupId(targetProfileId)
-                    if (defaultGroupId != null) {
-                        tabGroupRepository.assignTabToGroup(tabId, defaultGroupId)
-                    }
-                    val newTab = if (handedOffSession != null) {
-                        // カスタムタブから引き渡されたセッションは開いたまま載せる。open→restoreState で
-                        // 復元すると読み込みが走り、ワンタイムトークンや POST 結果のページが壊れる。
-                        viewModel.browserTabController.createAndAppendTabWithSession(
-                            session = handedOffSession,
-                            tabId = tabId,
-                            initialUrl = request.url,
-                        ).also { tab ->
-                            // 載せた直後に強制終了されてもページを復元できるよう、
-                            // 引き渡し先の delegate 経由で SessionState を保存し直す。
-                            tab.session.flushSessionState()
+                    val requestedSession = request.handedOffSession
+                    // 載せるまでに画面が終わると、このセッションはどの Controller も破棄を通知しない
+                    var handedOffSessionAttached = false
+                    val newTab = try {
+                        viewModel.setupComplete.await()
+                        val tabId = UUID.randomUUID().toString()
+                        // 要求から実際に載せるまでの間にコンテンツプロセスが停止していることがある。
+                        // 閉じたセッションを載せると SessionState 経由の復元へ落ちられない。
+                        val handedOffSession = requestedSession?.takeIf { it.isOpen }
+                        // 引き渡されたセッションは contextId が既に決まっているため、そのプロファイルへ載せる。
+                        // 有効プロファイルのグループへ入れると、一覧と実際の Cookie 分離が食い違う
+                        val activeProfileId = viewModel.browserTabController.activeProfileId
+                        val targetProfileId = if (handedOffSession != null) {
+                            ProfileId.fromGeckoContextId(handedOffSession.settings.contextId)
+                        } else {
+                            activeProfileId
                         }
-                    } else {
-                        viewModel.browserTabController.createAndAppendTab(
-                            tabId = tabId,
-                            initialUrl = request.url,
-                            restoredSessionState = request.sessionState,
-                            initialReferrerUrl = request.referrerUrl,
-                            insertAfterSelectedTab = false,
-                        )
+                        if (targetProfileId != activeProfileId) {
+                            profileRepository.setActiveProfile(targetProfileId)
+                        }
+                        val defaultGroupId = tabGroupRepository.getDefaultGroupId(targetProfileId)
+                        if (defaultGroupId != null) {
+                            tabGroupRepository.assignTabToGroup(tabId, defaultGroupId)
+                        }
+                        if (handedOffSession != null) {
+                            // カスタムタブから引き渡されたセッションは開いたまま載せる。open→restoreState で
+                            // 復元すると読み込みが走り、ワンタイムトークンや POST 結果のページが壊れる。
+                            viewModel.browserTabController.createAndAppendTabWithSession(
+                                session = handedOffSession,
+                                tabId = tabId,
+                                initialUrl = request.url,
+                            ).also { tab ->
+                                handedOffSessionAttached = true
+                                // 載せた直後に強制終了されてもページを復元できるよう、
+                                // 引き渡し先の delegate 経由で SessionState を保存し直す。
+                                tab.session.flushSessionState()
+                            }
+                        } else {
+                            viewModel.browserTabController.createAndAppendTab(
+                                tabId = tabId,
+                                initialUrl = request.url,
+                                restoredSessionState = request.sessionState,
+                                initialReferrerUrl = request.referrerUrl,
+                                insertAfterSelectedTab = false,
+                            )
+                        }
+                    } finally {
+                        if (requestedSession != null && !handedOffSessionAttached) {
+                            pageTranslationWebExtension.unregisterSession(requestedSession)
+                        }
                     }
                     viewModel.registerExternalTab(newTab.tabId, request.url)
                     selectTabRequester.request(newTab.tabId)

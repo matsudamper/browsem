@@ -110,6 +110,12 @@ class BrowserTabController(
     var onTabListChanged: (() -> Unit)? = null
 
     /**
+     * タブのセッションを作った直後に呼ぶ。画面の表示・非表示では外せない delegate を
+     * セッションの寿命に合わせて張るために使う。
+     */
+    var onTabSessionCreated: ((GeckoSession) -> Unit)? = null
+
+    /**
      * タブのセッションを破棄する直前に呼ぶ。セッションに紐づく再生状態など、
      * 画面離脱では手放せない参照を解放するために使う。
      */
@@ -587,6 +593,7 @@ class BrowserTabController(
             pageZoomPercent = pageZoomPercent,
             openerTabId = openerTabId,
         )
+        onTabSessionCreated?.invoke(tab.session)
         tabRegistry.insert(tab = tab, insertIndex = insertIndex)
         return tab
     }
