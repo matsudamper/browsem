@@ -73,7 +73,6 @@ class MainActivity : ComponentActivity() {
     private var webExtensionWarmUpCompleted = false
     private var webExtensionWarmUpInProgress = false
     private var webExtensionWarmUpRetryCount = 0
-    private var lastProcessedDeepLinkUrl: String? = null
     private val consumedOpenDownloadsRequestIds: MutableSet<String> = mutableSetOf()
     private val createNewTabChannel = Channel<NewTabRequest>(Channel.UNLIMITED)
     private val openDownloadsChannel = Channel<OpenDownloadsRequest>(Channel.CONFLATED)
@@ -132,7 +131,6 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        lastProcessedDeepLinkUrl = savedInstanceState?.getString(KEY_PROCESSED_DEEPLINK_URL)
         savedInstanceState?.getStringArray(KEY_OPEN_DOWNLOADS_CONSUMED_REQUEST_IDS)?.let { requestIds ->
             consumedOpenDownloadsRequestIds.addAll(requestIds)
         }
@@ -174,24 +172,7 @@ class MainActivity : ComponentActivity() {
             }
         }
         if (intent.action != DownloadWorker.ACTION_OPEN_DOWNLOADS) {
-            val url = ExternalInitialUrlPolicy.sanitize(intent.dataString)
-            if (url != null && url != lastProcessedDeepLinkUrl) {
-                val handoff = consumeCustomTabHandoff(intent)
-                releaseClosedHandoffSession(handoff)
-                val result = createNewTabChannel.trySend(
-                    NewTabRequest(
-                        url = url,
-                        handedOffSession = handoff?.session?.takeIf { it.isOpen },
-                        sessionState = handoff?.sessionState,
-                        referrerUrl = intent.getStringExtra(CustomTabActivity.EXTRA_NEW_TAB_REFERRER_URL),
-                    ),
-                )
-                if (result.isFailure) {
-                    Log.e("MainActivity", "URL の送信に失敗: $url, reason=${result.exceptionOrNull()}")
-                } else {
-                    lastProcessedDeepLinkUrl = url
-                }
-            }
+            dispatchDeepLinkIntent(intent)
         }
 
         // GeckoRuntime の初期化より先に UI を描画し、スプラッシュ画面でのフリーズを防ぐ。
@@ -384,24 +365,36 @@ class MainActivity : ComponentActivity() {
             dispatchOpenDownloadsIntent(intent)
             return
         }
-        val url = ExternalInitialUrlPolicy.sanitize(intent.dataString)
-        if (url != null) {
-            val handoff = consumeCustomTabHandoff(intent)
-            releaseClosedHandoffSession(handoff)
-            val result = createNewTabChannel.trySend(
-                NewTabRequest(
-                    url = url,
-                    handedOffSession = handoff?.session?.takeIf { it.isOpen },
-                    sessionState = handoff?.sessionState,
-                    referrerUrl = intent.getStringExtra(CustomTabActivity.EXTRA_NEW_TAB_REFERRER_URL),
-                ),
-            )
-            if (result.isFailure) {
-                Log.e("MainActivity", "URL の送信に失敗: $url, reason=${result.exceptionOrNull()}")
-            } else {
-                lastProcessedDeepLinkUrl = url
-            }
+        dispatchDeepLinkIntent(intent)
+    }
+
+    /**
+     * VIEW Intent の URL を新規タブ要求として流す。
+     *
+     * 処理済みかどうかは Intent 自体に印を付けて判定する。URL で判定すると、Activity が
+     * 再生成されつつ新しい Intent を受け取ったとき（プロセス終了後に同じ URL を開き直す等）に
+     * 新しい要求まで既処理と見なして取りこぼす。印は getIntent() に載せて保持し、
+     * 設定変更後の onCreate で同じ Intent を再処理しないようにする。
+     */
+    private fun dispatchDeepLinkIntent(intent: Intent) {
+        if (intent.getBooleanExtra(EXTRA_DEEP_LINK_CONSUMED, false)) return
+        val url = ExternalInitialUrlPolicy.sanitize(intent.dataString) ?: return
+        val handoff = consumeCustomTabHandoff(intent)
+        releaseClosedHandoffSession(handoff)
+        val result = createNewTabChannel.trySend(
+            NewTabRequest(
+                url = url,
+                handedOffSession = handoff?.session?.takeIf { it.isOpen },
+                sessionState = handoff?.sessionState,
+                referrerUrl = intent.getStringExtra(CustomTabActivity.EXTRA_NEW_TAB_REFERRER_URL),
+            ),
+        )
+        if (result.isFailure) {
+            Log.e("MainActivity", "URL の送信に失敗: $url, reason=${result.exceptionOrNull()}")
+            return
         }
+        intent.putExtra(EXTRA_DEEP_LINK_CONSUMED, true)
+        setIntent(intent)
     }
 
     /**
@@ -447,8 +440,6 @@ class MainActivity : ComponentActivity() {
 
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
-        // 処理済み deeplink URL を保存して設定変更後の重複タブ作成を防ぐ
-        lastProcessedDeepLinkUrl?.let { outState.putString(KEY_PROCESSED_DEEPLINK_URL, it) }
         if (consumedOpenDownloadsRequestIds.isNotEmpty()) {
             outState.putStringArray(
                 KEY_OPEN_DOWNLOADS_CONSUMED_REQUEST_IDS,
@@ -614,7 +605,9 @@ class MainActivity : ComponentActivity() {
         private const val WEBAUTHN_COMPAT_INSTALL_RETRY_DELAY_MS = 1200L
         private const val EXTRA_CUSTOM_TABS_SESSION = "android.support.customtabs.extra.SESSION"
         private const val EXTRA_CUSTOM_TABS_SESSION_ID = "androidx.browser.customtabs.extra.SESSION_ID"
-        private const val KEY_PROCESSED_DEEPLINK_URL = "processed_deeplink_url"
+
+        /** 新規タブ要求として流し終えた VIEW Intent に付ける印 */
+        private const val EXTRA_DEEP_LINK_CONSUMED = "net.matsudamper.browser.extra.DEEP_LINK_CONSUMED"
         private const val KEY_OPEN_DOWNLOADS_CONSUMED_REQUEST_IDS = "open_downloads_consumed_request_ids"
     }
 
