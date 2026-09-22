@@ -215,7 +215,7 @@ internal class BrowserViewModel(
             tabGroupRepository.assignTabToGroup(tabId, defaultGroupId)
         }
         return withContext(Dispatchers.Main) {
-            val session = GeckoSession()
+            val session = browserTabController.createSessionForActiveProfile()
             val newTab = browserTabController.createAndAppendTabWithSession(
                 session = session,
                 tabId = tabId,
