@@ -49,12 +49,12 @@ sealed interface ExtensionSettingsScreenTestTags {
  */
 @Composable
 internal fun ExtensionSettingsScreen(
-    extensionName: String,
-    session: GeckoSession,
+    uiState: ExtensionSettingsScreenUiState,
     onBack: () -> Unit,
     onOpenExternalUrl: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val session = uiState.session
     val coroutineScope = rememberCoroutineScope()
     val dialogState = remember(coroutineScope) { PromptDialogState(coroutineScope) }
 
@@ -89,7 +89,7 @@ internal fun ExtensionSettingsScreen(
     PromptDialogLayer(dialogState = dialogState)
 
     ExtensionSettingsScaffold(
-        extensionName = extensionName,
+        extensionName = uiState.extensionName,
         onBack = onBack,
         modifier = modifier,
     ) {

@@ -3,6 +3,10 @@ package net.matsudamper.browser.screen.extensions
 import android.os.Handler
 import android.os.Looper
 import androidx.lifecycle.ViewModel
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import net.matsudamper.browser.ExtensionSettingsScreenUiState
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoSession
 
@@ -12,14 +16,22 @@ import org.mozilla.geckoview.GeckoSession
  * 画面回転などの構成変更で作り直されても、入力中の設定を失わないようセッションを開いたまま維持する。
  */
 internal class ExtensionSettingsScreenViewModel(
+    extensionName: String,
     optionsPageUrl: String,
     runtime: GeckoRuntime,
 ) : ViewModel() {
 
-    val session: GeckoSession = GeckoSession().also { session ->
+    private val session: GeckoSession = GeckoSession().also { session ->
         session.open(runtime)
         session.loadUri(optionsPageUrl)
     }
+
+    val uiState: StateFlow<ExtensionSettingsScreenUiState> = MutableStateFlow(
+        ExtensionSettingsScreenUiState(
+            extensionName = extensionName,
+            session = session,
+        ),
+    ).asStateFlow()
 
     private val closeTimeoutHandler = Handler(Looper.getMainLooper())
 

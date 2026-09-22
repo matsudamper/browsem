@@ -177,11 +177,11 @@ internal fun ExtensionSettingsNavContent(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val viewModel: ExtensionSettingsScreenViewModel = koinViewModel {
-        parametersOf(key.optionsPageUrl)
+        parametersOf(key.extensionName, key.optionsPageUrl)
     }
+    val uiState by viewModel.uiState.collectAsState()
     ExtensionSettingsScreen(
-        extensionName = key.extensionName,
-        session = viewModel.session,
+        uiState = uiState,
         onBack = { navActions.pop() },
         onOpenExternalUrl = { url ->
             if (onNavigateToUrl != null) {

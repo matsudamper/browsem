@@ -183,8 +183,12 @@ val appModule = module {
             extensionRuntimeCoordinator = get(),
         )
     }
-    viewModel { (optionsPageUrl: String) ->
-        ExtensionSettingsScreenViewModel(optionsPageUrl = optionsPageUrl, runtime = get())
+    viewModel { (extensionName: String, optionsPageUrl: String) ->
+        ExtensionSettingsScreenViewModel(
+            extensionName = extensionName,
+            optionsPageUrl = optionsPageUrl,
+            runtime = get(),
+        )
     }
     viewModel { DownloadManagementScreenViewModel(androidApplication()) }
     viewModel { (isImport: Boolean) -> BackupProgressViewModel(isImport, get()) }
