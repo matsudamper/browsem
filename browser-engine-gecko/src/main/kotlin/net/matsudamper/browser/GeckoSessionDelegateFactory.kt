@@ -19,6 +19,9 @@ interface BrowserSessionStateCallbacks {
     fun onTitleChange(title: String)
     fun onContextMenu(element: GeckoSession.ContentDelegate.ContextElement)
     fun onRenderReady()
+
+    /** surface の差し替え後にコンポジタが最初のフレームを描いたときに呼ばれる */
+    fun onFirstComposite()
     fun onPreviewCaptureReady()
     fun onExternalResponse(response: WebResponse)
     fun onSessionStateChange(sessionState: GeckoSession.SessionState)
@@ -285,7 +288,7 @@ fun createGeckoSessionDelegateBundle(
             }
 
             override fun onFirstComposite(session: GeckoSession) {
-                callbacks.onRenderReady()
+                callbacks.onFirstComposite()
             }
 
             override fun onExternalResponse(session: GeckoSession, response: WebResponse) {
@@ -465,6 +468,10 @@ internal class BrowserTabSessionDelegateHost(
 
             override fun onRenderReady() {
                 currentCallbacks()?.onRenderReady()
+            }
+
+            override fun onFirstComposite() {
+                currentCallbacks()?.onFirstComposite()
             }
 
             override fun onPreviewCaptureReady() {
