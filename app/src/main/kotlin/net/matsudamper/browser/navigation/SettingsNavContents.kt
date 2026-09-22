@@ -29,6 +29,7 @@ import kotlinx.coroutines.launch
 import net.matsudamper.browser.CustomTabActivity
 import net.matsudamper.browser.DefaultBrowserChecker
 import net.matsudamper.browser.GITHUB_RELEASES_URL
+import net.matsudamper.browser.InternalInitialUrlStore
 import net.matsudamper.browser.OuterNavActions
 import net.matsudamper.browser.screen.downloads.DownloadManagementScreenViewModel
 import net.matsudamper.browser.screen.extensions.ExtensionsScreenViewModel
@@ -143,13 +144,16 @@ internal fun ExtensionsNavContent(navActions: OuterNavActions) {
         extensionsViewModel.eventHandler.receiveAsFlow().collect {
             it(object : ExtensionsScreenViewModel.Event {
                 override fun navigateToExtensionSettings(url: String) {
+                    // moz-extension:// は他アプリから開かせないため Intent の data には載せず、
+                    // プロセス内ストア経由でトークンとして渡す。
                     context.startActivity(
-                        Intent(
-                            Intent.ACTION_VIEW,
-                            Uri.parse(url),
-                            context,
-                            CustomTabActivity::class.java,
-                        ),
+                        Intent(context, CustomTabActivity::class.java).apply {
+                            action = Intent.ACTION_VIEW
+                            putExtra(
+                                InternalInitialUrlStore.EXTRA_INITIAL_URL_TOKEN,
+                                InternalInitialUrlStore.store(url),
+                            )
+                        },
                     )
                 }
 

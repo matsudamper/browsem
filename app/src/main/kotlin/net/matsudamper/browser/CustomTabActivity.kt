@@ -90,6 +90,8 @@ class CustomTabActivity : ComponentActivity() {
         }
     }
 
+    private var resolvedInitialUrl: String = ""
+
     private var pendingDownloadNotificationPermissionDeferred: CompletableDeferred<Unit>? = null
 
     private val requestDownloadNotificationPermissionLauncher = registerForActivityResult(
@@ -106,7 +108,9 @@ class CustomTabActivity : ComponentActivity() {
         // ウィンドウ背景を不透明にしておく。
         window.setBackgroundDrawable(ColorDrawable(Color.BLACK))
 
-        val initialUrl = ExternalInitialUrlPolicy.sanitize(intent.dataString).orEmpty()
+        // 構成変更や再生成では受け渡しトークンを二度消費できないため、解決済みの URL を持ち回す。
+        val initialUrl = savedInstanceState?.getString(STATE_INITIAL_URL) ?: resolveInitialUrl()
+        resolvedInitialUrl = initialUrl
         val customTabsSessionToken = CustomTabsSessionToken.getSessionTokenFromIntent(intent)
         // GeckoRuntime の生成は設定値の読み出しを伴うため、メインスレッドをブロックせずに待つ。
         // ViewModel は GeckoRuntime を必要とするため、初期化を待ってから触る。
@@ -194,6 +198,21 @@ class CustomTabActivity : ComponentActivity() {
         }
     }
 
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putString(STATE_INITIAL_URL, resolvedInitialUrl)
+    }
+
+    /**
+     * アプリ内から渡された URL はプロセス内ストアから取り出す。
+     * 他アプリが明示 Intent で投げてくる data は http / https に限定する。
+     */
+    private fun resolveInitialUrl(): String {
+        val internalUrl = intent.getStringExtra(InternalInitialUrlStore.EXTRA_INITIAL_URL_TOKEN)
+            ?.let { InternalInitialUrlStore.consume(it) }
+        return internalUrl ?: ExternalInitialUrlPolicy.sanitize(intent.dataString).orEmpty()
+    }
+
     override fun onDestroy() {
         pendingDownloadNotificationPermissionDeferred?.cancel(
             CancellationException("Activity was destroyed before download notification permission completed."),
@@ -270,6 +289,7 @@ class CustomTabActivity : ComponentActivity() {
 
     companion object {
         internal const val EXTRA_NEW_TAB_REFERRER_URL = "extra_new_tab_referrer_url"
+        private const val STATE_INITIAL_URL = "state_initial_url"
     }
 }
 
