@@ -107,6 +107,17 @@ internal class BrowserTabTranslationState(
         )
     }
 
+    /**
+     * 画面から離れて翻訳バーを失うときに呼ぶ。
+     *
+     * 継続翻訳は推論モデルを開いたままにするため、訳文は残しつつ止める。
+     */
+    fun onScreenDisposed() {
+        cancelJob()
+        stopBridgeIfActive(restoreOriginal = false)
+        activeProvider = null
+    }
+
     fun onRevert() {
         close(revertPage = true)
     }
