@@ -368,16 +368,9 @@ class MainActivity : ComponentActivity() {
         dispatchDeepLinkIntent(intent)
     }
 
-    /**
-     * VIEW Intent の URL を新規タブ要求として流す。
-     *
-     * 処理済みかどうかは Intent 自体に印を付けて判定する。URL で判定すると、Activity が
-     * 再生成されつつ新しい Intent を受け取ったとき（プロセス終了後に同じ URL を開き直す等）に
-     * 新しい要求まで既処理と見なして取りこぼす。印は getIntent() に載せて保持し、
-     * 設定変更後の onCreate で同じ Intent を再処理しないようにする。
-     */
+    /** VIEW Intent の URL を新規タブ要求として流す。重複判定は [DeepLinkIntentConsumption] に従う */
     private fun dispatchDeepLinkIntent(intent: Intent) {
-        if (intent.getBooleanExtra(EXTRA_DEEP_LINK_CONSUMED, false)) return
+        if (DeepLinkIntentConsumption.isConsumed(intent)) return
         val url = ExternalInitialUrlPolicy.sanitize(intent.dataString) ?: return
         val handoff = consumeCustomTabHandoff(intent)
         releaseClosedHandoffSession(handoff)
@@ -393,7 +386,7 @@ class MainActivity : ComponentActivity() {
             Log.e("MainActivity", "URL の送信に失敗: $url, reason=${result.exceptionOrNull()}")
             return
         }
-        intent.putExtra(EXTRA_DEEP_LINK_CONSUMED, true)
+        DeepLinkIntentConsumption.markConsumed(intent)
         setIntent(intent)
     }
 
@@ -606,8 +599,6 @@ class MainActivity : ComponentActivity() {
         private const val EXTRA_CUSTOM_TABS_SESSION = "android.support.customtabs.extra.SESSION"
         private const val EXTRA_CUSTOM_TABS_SESSION_ID = "androidx.browser.customtabs.extra.SESSION_ID"
 
-        /** 新規タブ要求として流し終えた VIEW Intent に付ける印 */
-        private const val EXTRA_DEEP_LINK_CONSUMED = "net.matsudamper.browser.extra.DEEP_LINK_CONSUMED"
         private const val KEY_OPEN_DOWNLOADS_CONSUMED_REQUEST_IDS = "open_downloads_consumed_request_ids"
     }
 
