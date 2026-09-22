@@ -84,6 +84,7 @@ import net.matsudamper.browser.navigation.SiteSettingsListNavContent
 import net.matsudamper.browser.navigation.SiteSettingsNavContent
 import net.matsudamper.browser.screen.browser.BrowserScreenViewModel
 import net.matsudamper.browser.screen.tab.TabsScreenViewModel
+import net.matsudamper.browser.translate.PageTranslationWebExtension
 import net.matsudamper.browser.ui.browser.BrowserContentLoadingIndicator
 import net.matsudamper.browser.ui.browser.BrowserScreen
 import net.matsudamper.browser.ui.common.BrowserTheme
@@ -117,6 +118,7 @@ internal fun BrowserApp(
             // MainBrowserContent がコンポジションに戻ってから消費される。
             val selectTabRequester = remember { SelectTabRequester() }
             val tabGroupRepository: TabGroupRepository = koinInject()
+            val pageTranslationWebExtension: PageTranslationWebExtension = koinInject()
             BrowserAppShell(
                 browserTabController = viewModel.browserTabController,
                 browserSessionLifecycleController = viewModel.browserSessionLifecycleController,
@@ -133,7 +135,12 @@ internal fun BrowserApp(
                     }
                     // 要求から実際に載せるまでの間にコンテンツプロセスが停止していることがある。
                     // 閉じたセッションを載せると SessionState 経由の復元へ落ちられない。
-                    val handedOffSession = request.handedOffSession?.takeIf { it.isOpen }
+                    val requestedSession = request.handedOffSession
+                    val handedOffSession = requestedSession?.takeIf { it.isOpen }
+                    if (requestedSession != null && handedOffSession == null) {
+                        // 載らなかったセッションはどの Controller も破棄を通知しないため、ここで手放す
+                        pageTranslationWebExtension.unregisterSession(requestedSession)
+                    }
                     val newTab = if (handedOffSession != null) {
                         // カスタムタブから引き渡されたセッションは開いたまま載せる。open→restoreState で
                         // 復元すると読み込みが走り、ワンタイムトークンや POST 結果のページが壊れる。
