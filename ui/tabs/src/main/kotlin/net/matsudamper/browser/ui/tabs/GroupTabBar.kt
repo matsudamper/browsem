@@ -388,7 +388,8 @@ private class GroupDragDropState(
         return calculateAutoScrollDelta(
             draggedLeft = draggedItemOffset.x.toFloat(),
             draggedWidth = draggedItemSize.width,
-            viewportWidth = listState.layoutInfo.viewportSize.width,
+            // 末尾の contentPadding にはプロファイルボタンが重なるため、見える範囲の右端を基準にする
+            viewportWidth = listState.layoutInfo.viewportSize.width - listState.layoutInfo.afterContentPadding,
             threshold = threshold,
             maxSpeed = maxSpeed,
         )
