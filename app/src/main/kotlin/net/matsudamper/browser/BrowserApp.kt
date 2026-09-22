@@ -58,6 +58,7 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import net.matsudamper.browser.data.BackupRepository
 import net.matsudamper.browser.data.ProfileId
+import net.matsudamper.browser.data.ProfileRepository
 import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.TabGroupId
 import net.matsudamper.browser.data.TabGroupRepository
@@ -118,6 +119,7 @@ internal fun BrowserApp(
             // MainBrowserContent がコンポジションに戻ってから消費される。
             val selectTabRequester = remember { SelectTabRequester() }
             val tabGroupRepository: TabGroupRepository = koinInject()
+            val profileRepository: ProfileRepository = koinInject()
             BrowserAppShell(
                 browserTabController = viewModel.browserTabController,
                 browserSessionLifecycleController = viewModel.browserSessionLifecycleController,
@@ -128,15 +130,24 @@ internal fun BrowserApp(
                 onExternalTabRequest = { request ->
                     viewModel.setupComplete.await()
                     val tabId = UUID.randomUUID().toString()
-                    val defaultGroupId = tabGroupRepository.getDefaultGroupId(
-                        viewModel.browserTabController.activeProfileId,
-                    )
-                    if (defaultGroupId != null) {
-                        tabGroupRepository.assignTabToGroup(tabId, defaultGroupId)
-                    }
                     // 要求から実際に載せるまでの間にコンテンツプロセスが停止していることがある。
                     // 閉じたセッションを載せると SessionState 経由の復元へ落ちられない。
                     val handedOffSession = request.handedOffSession?.takeIf { it.isOpen }
+                    // 引き渡されたセッションは contextId が既に決まっているため、そのプロファイルへ載せる。
+                    // 有効プロファイルのグループへ入れると、一覧と実際の Cookie 分離が食い違う
+                    val activeProfileId = viewModel.browserTabController.activeProfileId
+                    val targetProfileId = if (handedOffSession != null) {
+                        ProfileId.fromGeckoContextId(handedOffSession.settings.contextId)
+                    } else {
+                        activeProfileId
+                    }
+                    if (targetProfileId != activeProfileId) {
+                        profileRepository.setActiveProfile(targetProfileId)
+                    }
+                    val defaultGroupId = tabGroupRepository.getDefaultGroupId(targetProfileId)
+                    if (defaultGroupId != null) {
+                        tabGroupRepository.assignTabToGroup(tabId, defaultGroupId)
+                    }
                     val newTab = if (handedOffSession != null) {
                         // カスタムタブから引き渡されたセッションは開いたまま載せる。open→restoreState で
                         // 復元すると読み込みが走り、ワンタイムトークンや POST 結果のページが壊れる。
