@@ -1,5 +1,6 @@
 package net.matsudamper.browser.ui.tabs
 
+import android.content.res.Configuration
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.layout.Arrangement
@@ -69,7 +70,9 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import net.matsudamper.browser.data.TabGroupData
 import net.matsudamper.browser.data.TabGroupId
+import net.matsudamper.browser.data.ThemeMode
 import net.matsudamper.browser.resources.R as ResourcesR
+import net.matsudamper.browser.ui.common.BrowserTheme
 import net.matsudamper.browser.ui.common.StatusBarAppearanceEffect
 
 internal object TabsLayoutDefaults {
@@ -686,6 +689,56 @@ private fun PreviewFloatingGroupMenu() {
         onDeleteGroup = {},
         onToggleDefaultGroup = {},
     )
+}
+
+/** グループタブがプロファイルボタンまで届き、右端のフェードで区切られる状態 */
+@Composable
+private fun PreviewManyGroupsContent() {
+    val groups = remember {
+        listOf(
+            TabGroupData(TabGroupId("g1"), "デフォルト"),
+            TabGroupData(TabGroupId("g2"), "開発"),
+            TabGroupData(TabGroupId("g3"), "ニュース"),
+            TabGroupData(TabGroupId("g4"), "ショッピング"),
+            TabGroupData(TabGroupId("g5"), "動画"),
+        )
+    }
+    val groupedTabs = remember {
+        listOf(
+            listOf(previewTabData(id = "1", title = "Example Domain")),
+            listOf(previewTabData(id = "2", title = "GitHub")),
+            listOf(previewTabData(id = "3", title = "News")),
+            listOf(previewTabData(id = "4", title = "Shop")),
+            listOf(previewTabData(id = "5", title = "Video")),
+        )
+    }
+    TabsScreenLoadedContent(
+        groupedTabs = groupedTabs,
+        groups = groups,
+        activeGroupIndex = 0,
+        selectedTabId = "1",
+        groupHasPlayingTab = listOf(),
+        snackbarHostState = remember { SnackbarHostState() },
+        newTabListener = PreviewNewTabListener,
+        profileSwitcher = PreviewProfileSwitcherUiState,
+        onReorderTabs = { _, _, _ -> },
+        onReorderGroups = { _, _ -> },
+        onGroupSelected = {},
+        onGroupPageChanged = {},
+        onAddGroup = {},
+        onRenameGroup = { _, _ -> },
+        onDeleteGroup = {},
+        onToggleDefaultGroup = {},
+    )
+}
+
+@Composable
+@Preview(name = "多数グループ Light")
+@Preview(name = "多数グループ Dark", uiMode = Configuration.UI_MODE_NIGHT_YES)
+private fun PreviewManyGroups() {
+    BrowserTheme(themeMode = ThemeMode.THEME_SYSTEM) {
+        PreviewManyGroupsContent()
+    }
 }
 
 /** グループが1つのみの場合 (削除メニューが disabled になる状態) */

@@ -38,6 +38,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.pointer.pointerInput
@@ -67,6 +69,9 @@ private val GroupTabBarHeight = 48.dp
 
 /** バー右端のプロファイルボタンの幅。LazyRow の末尾余白・PagerIndicator の右端余白と共有する */
 internal val ProfileButtonWidth = 48.dp
+
+/** プロファイルボタン左側で、グループタブを背景色へフェードさせるグラデーションの幅 */
+private val ProfileButtonFadeWidth = 24.dp
 
 /** 非選択タブの最小高さ。選択タブは GroupTabBarHeight まで伸びて「浮き上がり」を表現する */
 private val GroupTabUnselectedHeight = 40.dp
@@ -205,6 +210,14 @@ internal fun GroupTabBar(
                 AddGroupBookmarkTab(onClick = onAddGroup)
             }
         }
+
+        ProfileButtonFade(
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(end = ProfileButtonWidth)
+                .width(ProfileButtonFadeWidth)
+                .height(GroupTabBarHeight),
+        )
 
         ProfileButton(
             icon = profileIcon,
@@ -637,6 +650,25 @@ private fun GroupBookmarkTab(
 }
 
 /** バー右端に固定表示するプロファイル切り替えボタン */
+/**
+ * プロファイルボタンの左側に敷く透過グラデーション。
+ * LazyRow の端で硬く切れるグループタブをプロファイル領域の色へ溶け込ませ、境目を示す。
+ * surface と同色にするとタブが届いていないときに境目が消えるため、一段濃い surfaceContainer を使う。
+ * テーマのカラースキームを参照するのでライト・ダーク両方に追従する。
+ */
+@Composable
+private fun ProfileButtonFade(
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier = modifier.background(
+            Brush.horizontalGradient(
+                colors = listOf(Color.Transparent, MaterialTheme.colorScheme.surfaceContainer),
+            ),
+        ),
+    )
+}
+
 @Composable
 private fun ProfileButton(
     icon: ProfileIcon,
@@ -644,7 +676,7 @@ private fun ProfileButton(
     modifier: Modifier = Modifier,
 ) {
     Box(
-        modifier = modifier,
+        modifier = modifier.background(MaterialTheme.colorScheme.surfaceContainer),
         contentAlignment = Alignment.Center,
     ) {
         IconButton(
