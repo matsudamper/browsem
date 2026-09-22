@@ -175,6 +175,7 @@ internal fun BrowserApp(
                                 restoredSessionState = request.sessionState,
                                 initialReferrerUrl = request.referrerUrl,
                                 insertAfterSelectedTab = false,
+                                profileId = targetProfileId,
                             )
                         }
                     } finally {

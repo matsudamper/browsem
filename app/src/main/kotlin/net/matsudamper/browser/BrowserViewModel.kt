@@ -333,6 +333,7 @@ internal class BrowserViewModel(
                 targetTabId = createTabWithHomepage(
                     tabId = newTabId,
                     insertAfterSelectedTab = false,
+                    profileId = activeProfileId,
                 ).tabId
             }
             externalTabPreviousTabs.remove(tabId)
