@@ -69,15 +69,27 @@ internal class ExtensionSettingsScreenViewModel(
             }
         }
         session.progressDelegate = object : GeckoSession.ProgressDelegate {
+            // 差し替え前に始まっていたロードの完了も届くため、about:blank の完了だけで閉じる
+            private var hasStartedBlankNavigation = false
+
+            override fun onPageStart(session: GeckoSession, url: String) {
+                if (url == BLANK_URL) {
+                    hasStartedBlankNavigation = true
+                }
+            }
+
             override fun onPageStop(session: GeckoSession, success: Boolean) {
-                close()
+                if (hasStartedBlankNavigation) {
+                    close()
+                }
             }
         }
         closeTimeoutHandler.postDelayed({ close() }, BLANK_NAVIGATION_CLOSE_TIMEOUT_MS)
-        session.loadUri("about:blank")
+        session.loadUri(BLANK_URL)
     }
 
     private companion object {
         const val BLANK_NAVIGATION_CLOSE_TIMEOUT_MS = 3_000L
+        const val BLANK_URL = "about:blank"
     }
 }
