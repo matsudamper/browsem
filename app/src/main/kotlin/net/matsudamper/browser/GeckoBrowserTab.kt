@@ -8,8 +8,6 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
-import android.graphics.Bitmap
-import android.graphics.Color
 import android.net.Uri
 import android.os.SystemClock
 import android.util.Log
@@ -634,9 +632,9 @@ internal fun GeckoBrowserTab(
             )
         }
 
-        // attach しても Gecko 側のコンポジタが新しい surface に描かず、画面が黒いまま
-        // 固まることがある。フレームが出たかどうか (onFirstComposite) だけでは、描いた
-        // 内容が黒一色のケースを取りこぼすため、実際のピクセルも確認する。
+        // attach しても Gecko 側のコンポジタが新しい surface にフレームを出さず、画面が
+        // 黒いまま固まることがある。session は open のままなので他に検知手段がなく、
+        // onFirstComposite が来たかどうかで判定して作り直す。
         // 猶予は attach (ACTIVE 遷移) を起点に数える。安定待ちに時間が掛かった分まで
         // 猶予から差し引くと、正常な復元を黒画面と誤判定してしまう。
         fun waitForFirstComposite(activeSinceMs: Long?) {
@@ -670,35 +668,10 @@ internal fun GeckoBrowserTab(
                                 )
                                 return@postDelayed
                             }
-                            if (state.firstCompositeCount == compositeCountAtAttach) {
-                                recreateBlankSurface(
-                                    retryCount = blankSurfaceRetryCount,
-                                    reason = "attach 後 ${BLANK_SURFACE_TIMEOUT_MS}ms で first composite が来ない",
-                                )
-                                return@postDelayed
-                            }
-                            // フレームは出ている。描いた内容が黒一色でないかを実画面で確かめる。
-                            gecko.capturePixels().accept(
-                                { bitmap ->
-                                    if (generation != surfaceRestoreGeneration) return@accept
-                                    if (surfaceResumeState != SurfaceResumeState.ACTIVE) return@accept
-                                    if (bitmap == null) {
-                                        // 画面を確認できなければ黒かどうか判断できない。監視を続ける。
-                                        waitForFirstComposite(since)
-                                        return@accept
-                                    }
-                                    if (!bitmap.looksBlank()) return@accept
-                                    recreateBlankSurface(
-                                        retryCount = blankSurfaceRetryCount,
-                                        reason = "復帰後の画面が黒一色",
-                                    )
-                                },
-                                { error ->
-                                    if (generation != surfaceRestoreGeneration) return@accept
-                                    if (surfaceResumeState != SurfaceResumeState.ACTIVE) return@accept
-                                    Log.w(TAG_SURFACE_RESUME, "blank-surface: capturePixels 失敗", error)
-                                    waitForFirstComposite(since)
-                                },
+                            if (state.firstCompositeCount != compositeCountAtAttach) return@postDelayed
+                            recreateBlankSurface(
+                                retryCount = blankSurfaceRetryCount,
+                                reason = "attach 後 ${BLANK_SURFACE_TIMEOUT_MS}ms で first composite が来ない",
                             )
                         }
 
@@ -1806,28 +1779,6 @@ private const val BLANK_SURFACE_POLL_MS = 250L
 private const val SURFACE_DESTROY_WAIT_MS = 100L
 
 private fun GeckoSession.logKey(): String = Integer.toHexString(System.identityHashCode(this))
-
-/**
- * 描画されていない画面かどうか。サンプル点がすべて黒に近ければ、コンポジタが内容を
- * 描けていないとみなす。黒背景のページを誤判定しうるが、誤判定してもページ状態を保った
- * まま作り直すだけなので実害は小さい。
- */
-private fun Bitmap.looksBlank(): Boolean {
-    if (width <= 0 || height <= 0) return true
-    val xs = listOf(width / 4, width / 2, width * 3 / 4)
-    val ys = listOf(height / 4, height / 2, height * 3 / 4)
-    return xs.all { x ->
-        ys.all { y ->
-            val pixel = getPixel(x, y)
-            Color.red(pixel) <= BLANK_PIXEL_MAX_CHANNEL &&
-                Color.green(pixel) <= BLANK_PIXEL_MAX_CHANNEL &&
-                Color.blue(pixel) <= BLANK_PIXEL_MAX_CHANNEL
-        }
-    }
-}
-
-/** 黒とみなす RGB 各チャンネルの上限。 */
-private const val BLANK_PIXEL_MAX_CHANNEL = 8
 
 private const val MENU_ID_SEARCH = 0x10001
 private const val MENU_ID_OPEN = 0x10002
