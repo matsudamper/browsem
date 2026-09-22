@@ -2,6 +2,7 @@ package net.matsudamper.browser.screen.tab
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
@@ -255,6 +256,8 @@ class TabsScreenViewModelTest {
 
         override fun observeProfiles() = profilesFlow
 
+        override fun observeTabCounts(): Flow<Map<ProfileId, Int>> = MutableStateFlow(mapOf())
+
         override suspend fun createDefaultProfileIfEmpty() = Unit
 
         override suspend fun addProfile(name: String, icon: ProfileIcon, sortOrder: Int): ProfileId {
@@ -273,6 +276,12 @@ class TabsScreenViewModelTest {
 
         override suspend fun setActiveProfile(profileId: ProfileId) {
             profilesFlow.update { profiles -> profiles.map { it.copy(isActive = it.id == profileId) } }
+        }
+
+        override suspend fun getTabIds(profileId: ProfileId): List<String> = listOf()
+
+        override suspend fun deleteProfile(profileId: ProfileId) {
+            profilesFlow.update { profiles -> profiles.filter { it.id != profileId } }
         }
     }
 
@@ -705,6 +714,7 @@ class TabsScreenViewModelTest {
         }
 
         override fun openNewTab(currentGroupId: TabGroupId?, profileId: ProfileId) = Unit
+        override fun clearProfileStorage(profileId: ProfileId) = Unit
     }
 
     /** eventHandler に溜まったイベントをすべて recorder へ流す */

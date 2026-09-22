@@ -651,7 +651,7 @@ private fun ProfileButton(
             onClick = onClick,
             modifier = Modifier.testTag(ProfileManagementTestTags.OpenDialogButton.testTag),
         ) {
-            ProfileIconBadge(icon = icon, size = 32.dp)
+            ProfileIconBadge(icon = icon, size = 32.dp, isEmphasized = false)
         }
     }
 }

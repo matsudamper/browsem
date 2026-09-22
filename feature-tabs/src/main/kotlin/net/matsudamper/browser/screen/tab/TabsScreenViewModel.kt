@@ -161,7 +161,7 @@ class TabsScreenViewModel(
                                         eventHandler.trySend { it.openNewTab(group?.id, profileId) }
                                     }
                                 },
-                                profileSwitcher = buildProfileSwitcher(state.profiles),
+                                profileSwitcher = buildProfileSwitcher(state.profiles, state.profileTabCounts),
                             )
                         },
                     )
@@ -186,12 +186,20 @@ class TabsScreenViewModel(
 
         /** 現在表示中のグループに、表示中プロファイルの contextId で新規タブを追加する */
         fun openNewTab(currentGroupId: TabGroupId?, profileId: ProfileId)
+
+        /** プロファイル削除後に、その contextId の Cookie やサイトデータを Gecko から消す */
+        fun clearProfileStorage(profileId: ProfileId)
     }
 
     init {
         viewModelScope.launch {
             profileRepository.observeProfiles().collect { profiles ->
                 viewModelStateFlow.update { it.copy(profiles = profiles) }
+            }
+        }
+        viewModelScope.launch {
+            profileRepository.observeTabCounts().collect { counts ->
+                viewModelStateFlow.update { it.copy(profileTabCounts = counts) }
             }
         }
         viewModelScope.launch {
@@ -504,14 +512,19 @@ class TabsScreenViewModel(
             }
         }
 
-    private fun buildProfileSwitcher(profiles: List<ProfileData>): ProfileSwitcherUiState {
+    private fun buildProfileSwitcher(
+        profiles: List<ProfileData>,
+        tabCounts: Map<ProfileId, Int>,
+    ): ProfileSwitcherUiState {
         return ProfileSwitcherUiState(
             activeProfileIcon = profiles.firstOrNull { it.isActive }?.icon ?: ProfileIcon.PERSON,
             profiles = profiles.map { profile ->
                 ProfileSwitcherUiState.ProfileItem(
                     name = profile.name,
                     icon = profile.icon,
+                    tabCount = tabCounts[profile.id] ?: 0,
                     isActive = profile.isActive,
+                    isDeletable = profile.id != ProfileId.DEFAULT,
                     listener = object : ProfileSwitcherUiState.ProfileItem.Listener {
                         override fun onSelect() {
                             selectProfile(profile.id)
@@ -527,6 +540,10 @@ class TabsScreenViewModel(
                             viewModelScope.launch {
                                 profileRepository.updateProfileIcon(profile.id, icon)
                             }
+                        }
+
+                        override fun onDelete() {
+                            deleteProfile(profile.id)
                         }
                     },
                 )
@@ -568,11 +585,33 @@ class TabsScreenViewModel(
         }
     }
 
+    /**
+     * プロファイルを削除する。有効プロファイルならデフォルトへ切り替えてから、
+     * 属するタブを閉じ、DB の行を消し、Gecko 側のサイトデータ削除を依頼する。
+     */
+    private fun deleteProfile(profileId: ProfileId) {
+        if (profileId == ProfileId.DEFAULT) return
+        viewModelScope.launch {
+            if (viewModelStateFlow.value.activeProfile?.id == profileId) {
+                selectProfile(ProfileId.DEFAULT)
+                viewModelStateFlow.first { it.groupsProfileId == ProfileId.DEFAULT }
+            }
+            profileRepository.getTabIds(profileId).forEach { tabId ->
+                if (tabStore.tabStoreState.value.tabs.none { it.id == tabId }) return@forEach
+                val nextSelectedTabId = tabStore.closeTab(tabId)
+                eventHandler.trySend { it.onTabClosed(tabId, nextSelectedTabId) }
+            }
+            profileRepository.deleteProfile(profileId)
+            eventHandler.trySend { it.clearProfileStorage(profileId) }
+        }
+    }
+
     data class ViewModelState(
         val dbGroups: List<TabGroupData> = listOf(),
         /** dbGroups がどのプロファイルのものか。切り替え直後に旧プロファイルの一覧を出さないために持つ */
         val groupsProfileId: ProfileId? = null,
         val profiles: List<ProfileData> = listOf(),
+        val profileTabCounts: Map<ProfileId, Int> = mapOf(),
         val localGroupOrder: List<TabGroupData>? = null,
         val activeGroupIndex: Int? = null,
         val tabStoreState: TabStoreState = TabStoreState(),

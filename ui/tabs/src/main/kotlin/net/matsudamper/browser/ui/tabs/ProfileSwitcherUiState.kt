@@ -14,7 +14,10 @@ data class ProfileSwitcherUiState(
     data class ProfileItem(
         val name: String,
         val icon: ProfileIcon,
+        val tabCount: Int,
         val isActive: Boolean,
+        /** デフォルトプロファイルは削除できないため false */
+        val isDeletable: Boolean,
         val listener: Listener,
     ) {
         @Stable
@@ -22,6 +25,7 @@ data class ProfileSwitcherUiState(
             fun onSelect()
             fun onRename(newName: String)
             fun onChangeIcon(icon: ProfileIcon)
+            fun onDelete()
         }
     }
 

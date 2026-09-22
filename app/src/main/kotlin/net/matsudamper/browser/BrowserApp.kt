@@ -758,6 +758,11 @@ private fun MainBrowserContent(
                                         selectTab(newTab.tabId, null)
                                     }
                                 }
+
+                                override fun clearProfileStorage(profileId: ProfileId) {
+                                    val contextId = profileId.geckoContextId ?: return
+                                    viewModel.runtime.storageController.clearDataForSessionContext(contextId)
+                                }
                             })
                         }
                     }
