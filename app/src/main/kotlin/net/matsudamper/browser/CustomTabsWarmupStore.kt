@@ -14,14 +14,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import net.matsudamper.browser.feature.webauthncompat.WebAuthnCompatWebExtension
-import org.koin.core.context.GlobalContext
 import org.mozilla.geckoview.GeckoRuntime
 import org.mozilla.geckoview.GeckoSession
 
-object CustomTabsWarmupStore {
-    private const val MAX_SESSION_ENTRIES = 8
-    private const val STALE_ENTRY_MS = 10 * 60 * 1000L
-
+internal class CustomTabsWarmupStore(
+    private val geckoRuntimeInitializer: GeckoRuntimeInitializer,
+    private val webAuthnCompatWebExtension: WebAuthnCompatWebExtension,
+) {
     // カスタムタブのウォームアップはプロセス生存中いつでも来るため、プロセスと同じ寿命で持つ。
     private val warmupScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
@@ -37,7 +36,7 @@ object CustomTabsWarmupStore {
     fun onWarmup() {
         // Binder スレッドから呼ばれる。GeckoRuntime の初期化はメインスレッドで行う必要がある。
         warmupScope.launch {
-            GlobalContext.get().get<GeckoRuntimeInitializer>().initialize()
+            geckoRuntimeInitializer.initialize()
         }
     }
 
@@ -72,13 +71,10 @@ object CustomTabsWarmupStore {
         // Binder スレッドから呼ばれる。GeckoRuntime の初期化と GeckoSession の操作はメインスレッドで行う。
         warmupScope.launch {
             closableSessions.forEach { it.close() }
-            val koin = GlobalContext.get()
-            val runtime = koin.get<GeckoRuntimeInitializer>().initialize()
             installWebAuthnCompatAndPrepare(
                 token = token,
                 targetUrl = targetUrl,
-                runtime = runtime,
-                webAuthnCompatWebExtension = koin.get<WebAuthnCompatWebExtension>(),
+                runtime = geckoRuntimeInitializer.initialize(),
             )
         }
     }
@@ -87,7 +83,6 @@ object CustomTabsWarmupStore {
         token: CustomTabsSessionToken,
         targetUrl: String,
         runtime: GeckoRuntime,
-        webAuthnCompatWebExtension: WebAuthnCompatWebExtension,
     ) {
         webAuthnCompatWebExtension.install(runtime).accept(
             {
@@ -268,5 +263,10 @@ object CustomTabsWarmupStore {
             "CustomTabsWarmupStore main thread operation timed out."
         }
         return result.get().getOrThrow()
+    }
+
+    private companion object {
+        private const val MAX_SESSION_ENTRIES = 8
+        private const val STALE_ENTRY_MS = 10 * 60 * 1000L
     }
 }
