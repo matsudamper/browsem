@@ -43,6 +43,7 @@ import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.resolvedExtensionsEnabled
 import net.matsudamper.browser.feature.webauthncompat.WebAuthnCompatInstallState
 import net.matsudamper.browser.feature.webauthncompat.WebAuthnCompatWebExtension
+import net.matsudamper.browser.translate.PageTranslationWebExtension
 import org.koin.android.ext.android.inject
 import org.koin.androidx.viewmodel.ext.android.viewModel
 import org.mozilla.geckoview.GeckoResult
@@ -62,6 +63,7 @@ class MainActivity : ComponentActivity() {
     private val extensionRuntimeCoordinator: ExtensionRuntimeCoordinator by inject()
     private val webExtensionActionController: WebExtensionActionController by inject()
     private val webAuthnCompatWebExtension: WebAuthnCompatWebExtension by inject()
+    private val pageTranslationWebExtension: PageTranslationWebExtension by inject()
     private val browserViewModel: BrowserViewModel by viewModel()
     private lateinit var extensionInstaller: WebExtensionInstaller
     private var pendingActivityResult: GeckoResult<Intent>? = null
@@ -175,6 +177,7 @@ class MainActivity : ComponentActivity() {
             val url = ExternalInitialUrlPolicy.sanitize(intent.dataString)
             if (url != null && url != lastProcessedDeepLinkUrl) {
                 val handoff = consumeCustomTabHandoff(intent)
+                releaseClosedHandoffSession(handoff)
                 val result = createNewTabChannel.trySend(
                     NewTabRequest(
                         url = url,
@@ -384,6 +387,7 @@ class MainActivity : ComponentActivity() {
         val url = ExternalInitialUrlPolicy.sanitize(intent.dataString)
         if (url != null) {
             val handoff = consumeCustomTabHandoff(intent)
+            releaseClosedHandoffSession(handoff)
             val result = createNewTabChannel.trySend(
                 NewTabRequest(
                     url = url,
@@ -398,6 +402,15 @@ class MainActivity : ComponentActivity() {
                 lastProcessedDeepLinkUrl = url
             }
         }
+    }
+
+    /**
+     * 閉じたセッションはタブに載らず破棄も通知されないため、拡張機能の登録だけを手放す。
+     */
+    private fun releaseClosedHandoffSession(handoff: CustomTabHandoffStore.Handoff?) {
+        val session = handoff?.session ?: return
+        if (session.isOpen) return
+        pageTranslationWebExtension.unregisterSession(session)
     }
 
     /**
