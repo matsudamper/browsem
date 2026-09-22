@@ -637,15 +637,17 @@ class TabsScreenViewModel(
                 selectProfile(ProfileId.DEFAULT)
                 viewModelStateFlow.first { it.groupsProfileId == ProfileId.DEFAULT }
             }
-            // 作成直後のタブは tab_state への保存が非同期で遅れるため、DB の行だけでなく
-            // ランタイム側の contextId でも対象を集める
-            val runtimeTabIds = tabStore.tabStoreState.value.tabs
+            // 作成直後のタブは tab_state への保存が非同期で遅れるため、DB の行ではなく
+            // ランタイム側の contextId で対象を集めて一括で閉じる。closeTab だと同プロファイルの
+            // 代替タブが作られてしまう。DB にだけ残る行は deleteProfile が消す
+            val closedTabIds = tabStore.tabStoreState.value.tabs
                 .filter { it.profileId == profileId.value }
                 .map { it.id }
-            (runtimeTabIds + profileRepository.getTabIds(profileId)).distinct().forEach { tabId ->
-                if (tabStore.tabStoreState.value.tabs.none { it.id == tabId }) return@forEach
-                val nextSelectedTabId = tabStore.closeTab(tabId)
-                eventHandler.trySend { it.onTabClosed(tabId, nextSelectedTabId) }
+            if (closedTabIds.isNotEmpty()) {
+                val nextSelectedTabId = tabStore.closeTabsOfProfile(profileId.value)
+                closedTabIds.forEach { tabId ->
+                    eventHandler.trySend { it.onTabClosed(tabId, nextSelectedTabId) }
+                }
             }
             profileRepository.deleteProfile(profileId)
             eventHandler.trySend { it.clearProfileStorage(profileId) }

@@ -59,6 +59,11 @@ class TabsScreenViewModelTest {
         val confirmedTabIds = mutableListOf<String>()
         private var detachedTab: Pair<TabSummary, Int>? = null
 
+        override fun closeTabsOfProfile(profileId: String): String? {
+            _tabStoreState.value.tabs.filter { it.profileId == profileId }.forEach { closeTab(it.id) }
+            return _tabStoreState.value.selectedTabId
+        }
+
         override fun closeTab(tabId: String): String? {
             val result = closeTabWithUndo(tabId, nextSelectedTabId = null)
             confirmClosedTab()
@@ -134,6 +139,10 @@ class TabsScreenViewModelTest {
         }
 
         override fun closeTab(tabId: String): String? {
+            return _tabStoreState.value.selectedTabId
+        }
+
+        override fun closeTabsOfProfile(profileId: String): String? {
             return _tabStoreState.value.selectedTabId
         }
 

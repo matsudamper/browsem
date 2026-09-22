@@ -419,6 +419,25 @@ class BrowserTabController(
         return selectedTabId
     }
 
+    override fun closeTabsOfProfile(profileId: String): String? {
+        val targets = tabRegistry.values().filter { tab ->
+            ProfileId.fromGeckoContextId(tab.session.settings.contextId).value == profileId
+        }
+        if (targets.isEmpty()) return selectedTabId
+        val targetIds = targets.map { it.tabId }.toSet()
+        // 削除対象外で選択中のタブがあればそれを維持し、無ければ残りから選び直す
+        val retainedSelectedTabId = selectedTabId?.takeUnless { it in targetIds }
+        targets.forEach { tab ->
+            tabRegistry.remove(tab.tabId)
+            closedTabIds.add(tab.tabId)
+            persistenceCoordinator.persistClosedTab(tab.tabId, retainedSelectedTabId)
+            disposeTab(tab, "プロファイル削除でタブを閉じました: ${tab.tabId}")
+        }
+        publishRuntimeState(retainedSelectedTabId)
+        onTabListChanged?.invoke()
+        return selectedTabId
+    }
+
     override fun closeTabWithUndo(tabId: String, nextSelectedTabId: String?): String? {
         // 同時に保持できる Undo 待ちタブは1つだけなので、前のタブがあれば破棄を確定する
         confirmClosedTab()
