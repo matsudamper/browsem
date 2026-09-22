@@ -12,4 +12,11 @@ import org.mozilla.geckoview.GeckoSession
 internal data class ExtensionSettingsScreenUiState(
     val extensionName: String,
     val session: GeckoSession,
-)
+    val listener: Listener,
+) {
+    @Stable
+    interface Listener {
+        /** セッションへ delegate を差し込み終えたことを伝える。初回ロードはここから始める */
+        fun onSessionDelegatesAttached()
+    }
+}

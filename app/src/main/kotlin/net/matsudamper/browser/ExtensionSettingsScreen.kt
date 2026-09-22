@@ -14,6 +14,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
@@ -83,6 +84,11 @@ internal fun ExtensionSettingsScreen(
         onDispose {
             session.navigationDelegate = null
         }
+    }
+
+    LaunchedEffect(uiState.listener) {
+        // delegate を差し込む前にロードを始めると、プロンプトや外部遷移の通知を取りこぼす
+        uiState.listener.onSessionDelegatesAttached()
     }
 
     FilePromptLaunchEffect(dialogState = dialogState)

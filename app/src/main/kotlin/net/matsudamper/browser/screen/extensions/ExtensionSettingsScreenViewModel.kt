@@ -23,13 +23,23 @@ internal class ExtensionSettingsScreenViewModel(
 
     private val session: GeckoSession = GeckoSession().also { session ->
         session.open(runtime)
-        session.loadUri(optionsPageUrl)
+    }
+
+    private var hasStartedInitialLoad: Boolean = false
+
+    private val listener = object : ExtensionSettingsScreenUiState.Listener {
+        override fun onSessionDelegatesAttached() {
+            if (hasStartedInitialLoad) return
+            hasStartedInitialLoad = true
+            session.loadUri(optionsPageUrl)
+        }
     }
 
     val uiState: StateFlow<ExtensionSettingsScreenUiState> = MutableStateFlow(
         ExtensionSettingsScreenUiState(
             extensionName = extensionName,
             session = session,
+            listener = listener,
         ),
     ).asStateFlow()
 
