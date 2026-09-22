@@ -3,6 +3,7 @@ package net.matsudamper.browser.data
 import android.content.Context
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import net.matsudamper.browser.data.history.BrowserDatabase
 import net.matsudamper.browser.data.tab.ProfileEntity
 import net.matsudamper.browser.data.tab.TabDatabase
 import net.matsudamper.browser.data.tab.TabGroupEntity
@@ -32,12 +33,13 @@ interface ProfileRepository {
     /** プロファイルに属するタブ ID。削除前にタブを閉じるために使う */
     suspend fun getTabIds(profileId: ProfileId): List<String>
 
-    /** プロファイルと、それに属するグループ・タブ行を削除する。デフォルトプロファイルは消せない */
+    /** プロファイルと、それに属するグループ・タブ行・閲覧履歴を削除する。デフォルトプロファイルは消せない */
     suspend fun deleteProfile(profileId: ProfileId)
 }
 
 class ProfileRepositoryImpl(context: Context) : ProfileRepository {
     private val dao = TabDatabase.getInstance(context).profileDao()
+    private val historyDao = BrowserDatabase.getInstance(context).historyDao()
 
     override fun observeProfiles(): Flow<List<ProfileData>> {
         return dao.observeProfiles().map { entities -> entities.map { it.toProfileData() } }
@@ -100,6 +102,7 @@ class ProfileRepositoryImpl(context: Context) : ProfileRepository {
     override suspend fun deleteProfile(profileId: ProfileId) {
         require(profileId != ProfileId.DEFAULT) { "デフォルトプロファイルは削除できない" }
         dao.deleteProfileWithContents(profileId.value)
+        historyDao.deleteAllOfProfile(profileId.value)
     }
 
     private fun ProfileEntity.toProfileData(): ProfileData {
