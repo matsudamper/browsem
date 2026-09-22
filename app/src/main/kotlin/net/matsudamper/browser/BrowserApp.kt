@@ -761,6 +761,22 @@ private fun MainBrowserContent(
                                     }
                                 }
 
+                                override fun openNewTabBehind(currentGroupId: TabGroupId?, profileId: ProfileId) {
+                                    scope.launch {
+                                        val tabId = UUID.randomUUID().toString()
+                                        if (currentGroupId != null) {
+                                            tabGroupRepository.assignTabToGroup(tabId, currentGroupId)
+                                        }
+                                        val newTab = viewModel.createTabWithHomepage(
+                                            tabId = tabId,
+                                            insertAfterSelectedTab = false,
+                                            profileId = profileId,
+                                        )
+                                        browserTabController.selectTab(newTab.tabId)
+                                        navController.replaceCurrentBrowserTab(newTab.tabId)
+                                    }
+                                }
+
                                 override fun clearProfileStorage(profileId: ProfileId) {
                                     val contextId = profileId.geckoContextId ?: return
                                     viewModel.runtime.storageController.clearDataForSessionContext(contextId)

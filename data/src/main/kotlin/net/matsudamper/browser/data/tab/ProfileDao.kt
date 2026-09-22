@@ -27,10 +27,18 @@ abstract class ProfileDao {
     @Query("UPDATE profile SET isActive = CASE WHEN profileId = :profileId THEN 1 ELSE 0 END")
     abstract suspend fun setActiveProfile(profileId: String)
 
-    @Query("UPDATE tab_group SET profileId = :profileId WHERE profileId = ''")
+    /** 未所属、または削除済みプロファイルを指しているグループをプロファイルへ寄せる */
+    @Query(
+        "UPDATE tab_group SET profileId = :profileId " +
+            "WHERE profileId = '' OR profileId NOT IN (SELECT profileId FROM profile)",
+    )
     abstract suspend fun assignOrphanGroupsToProfile(profileId: String)
 
-    @Query("UPDATE tab_state SET profileId = :profileId WHERE profileId = ''")
+    /** 未所属、または削除済みプロファイルを指しているタブをプロファイルへ寄せる */
+    @Query(
+        "UPDATE tab_state SET profileId = :profileId " +
+            "WHERE profileId = '' OR profileId NOT IN (SELECT profileId FROM profile)",
+    )
     abstract suspend fun assignOrphanTabsToProfile(profileId: String)
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
@@ -64,6 +72,7 @@ abstract class ProfileDao {
      * プロファイルが 1 件も無いときだけデフォルトプロファイルを作成し、
      * プロファイル未所属のグループとタブをそこへ寄せる。
      * プロファイル導入前のデータをそのまま引き継ぐための初期化で、起動のたびに呼んでよい。
+     * プロファイル削除後に遅れて保存された孤立行も、ここでデフォルトへ回収する。
      */
     @Transaction
     open suspend fun createDefaultProfileIfEmpty(defaultProfile: ProfileEntity) {

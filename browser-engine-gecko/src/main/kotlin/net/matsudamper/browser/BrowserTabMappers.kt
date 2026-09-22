@@ -22,4 +22,5 @@ internal fun BrowserTab.toSummary(): TabSummary = TabSummary(
     openerTabId = openerTabId,
     previewBitmapArray = previewBitmap,
     themeColor = themeColor,
+    profileId = ProfileId.fromGeckoContextId(session.settings.contextId).value,
 )

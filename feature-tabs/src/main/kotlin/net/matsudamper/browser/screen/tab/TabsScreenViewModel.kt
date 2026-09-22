@@ -187,6 +187,13 @@ class TabsScreenViewModel(
         /** 現在表示中のグループに、表示中プロファイルの contextId で新規タブを追加する */
         fun openNewTab(currentGroupId: TabGroupId?, profileId: ProfileId)
 
+        /**
+         * タブ一覧を開いたまま、指定プロファイルの新規タブを作って背後の Browser をそれに差し替える。
+         * 表示中プロファイルにタブが 1 つも無くなったとき、別プロファイルのセッションが
+         * 背後に残らないようにするために使う。
+         */
+        fun openNewTabBehind(currentGroupId: TabGroupId?, profileId: ProfileId)
+
         /** プロファイル削除後に、その contextId の Cookie やサイトデータを Gecko から消す */
         fun clearProfileStorage(profileId: ProfileId)
     }
@@ -365,10 +372,15 @@ class TabsScreenViewModel(
 
     private fun closeTab(tabId: String) {
         val state = viewModelStateFlow.value
+        val assignmentMap = state.assignments
+            .filter { it.groupId.isNotEmpty() }
+            .associate { it.tabId to it.groupId }
+        // 次に選ぶタブは表示中プロファイルの中から決める。全タブから選ぶと
+        // 別プロファイルの非表示タブが選ばれ、一覧に無いセッションが背後に出てしまう
+        val profileGroupIds = state.groups.map { it.id.value }.toSet()
         val storeState = state.tabStoreState.copy(
-            tabGroupAssignments = state.assignments
-                .filter { it.groupId.isNotEmpty() }
-                .associate { it.tabId to it.groupId },
+            tabs = state.tabStoreState.tabs.filter { assignmentMap[it.id] in profileGroupIds },
+            tabGroupAssignments = assignmentMap,
         )
         val wasSelected = storeState.selectedTabId == tabId
         val nextTabId = if (wasSelected) {
@@ -379,6 +391,7 @@ class TabsScreenViewModel(
         } else {
             null
         }
+        val isProfileBecomingEmpty = wasSelected && nextTabId == null
         val tab = state.tabStoreState.tabs.firstOrNull { it.id == tabId }
         val title = tab?.title.orEmpty().ifBlank { tabId }
         val groupId = state.assignments
@@ -386,7 +399,14 @@ class TabsScreenViewModel(
             ?.groupId
             ?.takeIf { it.isNotEmpty() }
         val nextSelectedTabId = tabStore.closeTabWithUndo(tabId, nextTabId)
-        eventHandler.trySend { it.onTabClosed(tabId, nextSelectedTabId) }
+        if (isProfileBecomingEmpty) {
+            // TabStore は全タブから次候補へ倒すため、表示中プロファイルの新規タブで背後を差し替える
+            val activeGroup = state.groups.getOrNull(state.activeGroupIndex ?: 0)
+            val profileId = state.activeProfile?.id ?: ProfileId.DEFAULT
+            eventHandler.trySend { it.openNewTabBehind(activeGroup?.id, profileId) }
+        } else {
+            eventHandler.trySend { it.onTabClosed(tabId, nextSelectedTabId) }
+        }
         viewModelStateFlow.update {
             it.copy(
                 pendingClosedTab = ViewModelState.PendingClosedTab(
@@ -581,6 +601,11 @@ class TabsScreenViewModel(
                 ?.id
             if (firstTabId != null) {
                 eventHandler.trySend { it.selectTab(firstTabId) }
+            } else {
+                // タブが無いプロファイルでも背後の Browser を切り替え先に揃える。
+                // 旧プロファイルのセッションが残ると、その Cookie で閲覧を続けてしまう
+                val firstGroupId = state.dbGroups.firstOrNull()?.id
+                eventHandler.trySend { it.openNewTabBehind(firstGroupId, profileId) }
             }
         }
     }
@@ -596,7 +621,12 @@ class TabsScreenViewModel(
                 selectProfile(ProfileId.DEFAULT)
                 viewModelStateFlow.first { it.groupsProfileId == ProfileId.DEFAULT }
             }
-            profileRepository.getTabIds(profileId).forEach { tabId ->
+            // 作成直後のタブは tab_state への保存が非同期で遅れるため、DB の行だけでなく
+            // ランタイム側の contextId でも対象を集める
+            val runtimeTabIds = tabStore.tabStoreState.value.tabs
+                .filter { it.profileId == profileId.value }
+                .map { it.id }
+            (runtimeTabIds + profileRepository.getTabIds(profileId)).distinct().forEach { tabId ->
                 if (tabStore.tabStoreState.value.tabs.none { it.id == tabId }) return@forEach
                 val nextSelectedTabId = tabStore.closeTab(tabId)
                 eventHandler.trySend { it.onTabClosed(tabId, nextSelectedTabId) }
