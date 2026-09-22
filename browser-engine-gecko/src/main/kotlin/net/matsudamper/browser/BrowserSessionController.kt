@@ -104,11 +104,18 @@ class BrowserSessionLifecycleController(
     fun hasPendingInitialLoad(tab: BrowserTab): Boolean = tab.pendingInitialLoad
 
     /**
-     * onNewSession 由来の初回遷移がまだ完了していないかどうかを返す。
-     * この間に session を閉じると、GeckoView 自身による自動 open は消費済みで
-     * [restoreSession] も何もしないため、二度と開けなくなる。
+     * 描画の復旧で session を閉じて開き直してよいかどうかを返す。
+     *
+     * `window.open` の関係に参加している session は閉じられない。初回遷移前なら
+     * GeckoView 自身による自動 open が消費済みで [restoreSession] も何もしないため
+     * 二度と開けず、初回遷移後でも Gecko が張った opener との結び付きが失われて
+     * `window.opener` 越しの通信や決済ウィンドウからの復帰が壊れる。
      */
-    fun isAwaitingInitialNavigation(tab: BrowserTab): Boolean = tab.pendingInitialUrl != null
+    fun canRecreateSession(tab: BrowserTab): Boolean {
+        return tab.pendingInitialUrl == null &&
+            !tab.openedViaNewSession &&
+            !tab.retainForLivePopup
+    }
 
     /**
      * restoreSession で遅延された初回ロードを実行する。
