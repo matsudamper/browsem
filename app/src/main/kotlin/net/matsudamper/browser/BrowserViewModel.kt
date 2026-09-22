@@ -203,34 +203,8 @@ internal class BrowserViewModel(
             tabGroupRepository.createDefaultGroupIfEmpty(
                 browserTabController.tabs.map { it.tabId },
             )
-            val selectedTabId = alignSelectedTabToActiveProfile(tabId)
-            eventHandler.trySend { it.onTabsRestored(selectedTabId) }
+            eventHandler.trySend { it.onTabsRestored(tabId) }
         }
-    }
-
-    /**
-     * 復元した選択タブが有効プロファイルのものでなければ、有効プロファイルのタブへ選択を直す。
-     * 有効プロファイルと選択タブは別々に保存されるため、切り替え直後に終了すると食い違うことがある。
-     * 有効プロファイルにタブが無ければ新規タブを作る。
-     */
-    private suspend fun alignSelectedTabToActiveProfile(restoredTabId: String): String {
-        val activeProfileId = profileRepository.observeProfiles().first()
-            .firstOrNull { it.isActive }?.id ?: ProfileId.DEFAULT
-        val restoredTab = browserTabController.findTab(restoredTabId) ?: return restoredTabId
-        if (ProfileId.fromGeckoContextId(restoredTab.session.settings.contextId) == activeProfileId) {
-            return restoredTabId
-        }
-        val tabInActiveProfile = browserTabController.tabs.firstOrNull { tab ->
-            ProfileId.fromGeckoContextId(tab.session.settings.contextId) == activeProfileId
-        }
-        val targetTabId = tabInActiveProfile?.tabId
-            ?: browserTabController.createAndAppendTab(
-                initialUrl = currentHomepageUrl(),
-                insertAfterSelectedTab = false,
-                profileId = activeProfileId,
-            ).tabId
-        browserTabController.selectTab(targetTabId)
-        return targetTabId
     }
 
     /**
@@ -251,9 +225,9 @@ internal class BrowserViewModel(
         // グループ割り当てとセッション生成の間に有効プロファイルが変わっても食い違わないよう、
         // プロファイルは一度だけ読んで両方に渡す
         val profileId = browserTabController.activeProfileId
-        val defaultGroupId = tabGroupRepository.getDefaultGroupId(profileId)
-        if (defaultGroupId != null) {
-            tabGroupRepository.assignTabToGroup(tabId, defaultGroupId)
+        val groupId = tabGroupRepository.getGroupIdForExternalTab(profileId)
+        if (groupId != null) {
+            tabGroupRepository.assignTabToGroup(tabId, groupId)
         }
         return withContext(Dispatchers.Main) {
             val session = browserTabController.createSessionForProfile(profileId)
@@ -352,12 +326,14 @@ internal class BrowserViewModel(
             )
             if (targetTabId == null) {
                 val newTabId = UUID.randomUUID().toString()
-                if (defaultGroupId != null) {
-                    tabGroupRepository.assignTabToGroup(newTabId, defaultGroupId)
+                val newTabGroupId = tabGroupRepository.getGroupIdForExternalTab(activeProfileId)
+                if (newTabGroupId != null) {
+                    tabGroupRepository.assignTabToGroup(newTabId, newTabGroupId)
                 }
                 targetTabId = createTabWithHomepage(
                     tabId = newTabId,
                     insertAfterSelectedTab = false,
+                    profileId = activeProfileId,
                 ).tabId
             }
             externalTabPreviousTabs.remove(tabId)

@@ -54,6 +54,12 @@ interface TabGroupRepository {
 
     /** 指定プロファイルでデフォルトに設定されているグループIDを返す。設定されていない場合は null。 */
     suspend fun getDefaultGroupId(profileId: ProfileId): TabGroupId?
+
+    /**
+     * 外部から開くタブの割り当て先グループ。デフォルト指定があればそれ、無ければプロファイルの先頭グループ。
+     * 未割当のまま作ると一覧に出るまでタブ数が表示されないため、必ずどこかへ入れる。
+     */
+    suspend fun getGroupIdForExternalTab(profileId: ProfileId): TabGroupId?
 }
 
 class TabGroupRepositoryImpl(context: Context) : TabGroupRepository {
@@ -165,6 +171,10 @@ class TabGroupRepositoryImpl(context: Context) : TabGroupRepository {
 
     override suspend fun getDefaultGroupId(profileId: ProfileId): TabGroupId? {
         return dao.getDefaultGroupId(profileId.value)?.let { TabGroupId(it) }
+    }
+
+    override suspend fun getGroupIdForExternalTab(profileId: ProfileId): TabGroupId? {
+        return dao.getDefaultOrFirstGroupId(profileId.value)?.let { TabGroupId(it) }
     }
 }
 

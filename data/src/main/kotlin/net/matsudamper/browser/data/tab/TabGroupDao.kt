@@ -24,6 +24,13 @@ abstract class TabGroupDao {
     @Query("SELECT groupId FROM tab_group WHERE profileId = :profileId AND isDefault = 1 LIMIT 1")
     abstract suspend fun getDefaultGroupId(profileId: String): String?
 
+    /** デフォルト指定があればそれ、無ければ sortOrder 先頭のグループ */
+    @Query(
+        "SELECT groupId FROM tab_group WHERE profileId = :profileId " +
+            "ORDER BY isDefault DESC, sortOrder ASC LIMIT 1",
+    )
+    abstract suspend fun getDefaultOrFirstGroupId(profileId: String): String?
+
     @Query("DELETE FROM tab_group WHERE groupId = :groupId")
     abstract suspend fun deleteGroup(groupId: String)
 
