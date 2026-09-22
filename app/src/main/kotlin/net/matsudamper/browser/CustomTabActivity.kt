@@ -57,8 +57,8 @@ import net.matsudamper.browser.data.resolvedSearchTemplate
 import net.matsudamper.browser.data.websuggestion.WebSuggestionRepository
 import net.matsudamper.browser.feature.media.MediaWebExtension
 import net.matsudamper.browser.feature.themecolor.ThemeColorWebExtension
-import net.matsudamper.browser.translate.PageTranslationWebExtension
 import net.matsudamper.browser.screen.browser.CustomTabScreenViewModel
+import net.matsudamper.browser.translate.PageTranslationWebExtension
 import net.matsudamper.browser.ui.common.BrowserTheme
 import org.koin.android.ext.android.inject
 import org.koin.androidx.compose.koinViewModel
