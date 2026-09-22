@@ -41,7 +41,7 @@ import net.matsudamper.browser.resources.R as ResourcesR
 
 /**
  * プロファイル管理ダイアログ。
- * 一覧のタップで切り替え、アイコンのタップでアイコン変更、鉛筆で名前変更、下部ボタンで追加を行う。
+ * 行のタップで切り替え、「⋮」メニューで名前変更・アイコン変更・削除、下部ボタンで追加を行う。
  */
 @Composable
 internal fun ProfileManagementDialog(
@@ -64,7 +64,7 @@ internal fun ProfileManagementDialog(
                             profile.listener.onSelect()
                             onDismiss()
                         },
-                        onClickIcon = { iconTarget = profile },
+                        onClickChangeIcon = { iconTarget = profile },
                         onClickRename = { renameTarget = profile },
                         onClickDelete = { deleteTarget = profile },
                         modifier = Modifier.testTag(ProfileManagementTestTags.ProfileItem(index).testTag),
@@ -128,7 +128,7 @@ internal fun ProfileManagementDialog(
 private fun ProfileRow(
     profile: ProfileSwitcherUiState.ProfileItem,
     onSelect: () -> Unit,
-    onClickIcon: () -> Unit,
+    onClickChangeIcon: () -> Unit,
     onClickRename: () -> Unit,
     onClickDelete: () -> Unit,
     modifier: Modifier = Modifier,
@@ -146,9 +146,13 @@ private fun ProfileRow(
             .padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        IconButton(onClick = onClickIcon) {
-            ProfileIconBadge(icon = profile.icon, size = 36.dp, isEmphasized = profile.isActive)
-        }
+        // アイコンも行タップ（切り替え）の範囲に含める。アイコン変更はメニューから行う
+        ProfileIconBadge(
+            icon = profile.icon,
+            size = 36.dp,
+            isEmphasized = profile.isActive,
+            modifier = Modifier.padding(start = 12.dp),
+        )
         Column(
             modifier = Modifier
                 .weight(1f)
@@ -188,6 +192,14 @@ private fun ProfileRow(
                         onClickRename()
                     },
                     modifier = Modifier.testTag(ProfileManagementTestTags.RenameMenuItem.testTag),
+                )
+                DropdownMenuItem(
+                    text = { Text("アイコンを変更") },
+                    onClick = {
+                        isMenuExpanded = false
+                        onClickChangeIcon()
+                    },
+                    modifier = Modifier.testTag(ProfileManagementTestTags.ChangeIconMenuItem.testTag),
                 )
                 DropdownMenuItem(
                     text = { Text("削除") },
@@ -393,6 +405,10 @@ sealed interface ProfileManagementTestTags {
 
     object RenameMenuItem : ProfileManagementTestTags {
         override val id: String = "rename_menu_item"
+    }
+
+    object ChangeIconMenuItem : ProfileManagementTestTags {
+        override val id: String = "change_icon_menu_item"
     }
 
     object DeleteMenuItem : ProfileManagementTestTags {
