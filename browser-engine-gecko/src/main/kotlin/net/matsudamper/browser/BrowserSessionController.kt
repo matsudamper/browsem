@@ -104,6 +104,13 @@ class BrowserSessionLifecycleController(
     fun hasPendingInitialLoad(tab: BrowserTab): Boolean = tab.pendingInitialLoad
 
     /**
+     * onNewSession 由来の初回遷移がまだ完了していないかどうかを返す。
+     * この間に session を閉じると、GeckoView 自身による自動 open は消費済みで
+     * [restoreSession] も何もしないため、二度と開けなくなる。
+     */
+    fun isAwaitingInitialNavigation(tab: BrowserTab): Boolean = tab.pendingInitialUrl != null
+
+    /**
      * restoreSession で遅延された初回ロードを実行する。
      * GeckoView のサイズ確定後（width/height > 0）に app 層から呼ばれることを想定。
      */

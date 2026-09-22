@@ -616,7 +616,11 @@ internal fun GeckoBrowserTab(
             )
             addressAutofillDelegate.unbindBeforeViewRelease(session)
             gecko.releaseSession()
-            runCatching { session.close() }
+            // window.open 由来のタブは初回遷移が終わるまで閉じない。閉じると
+            // GeckoView 自身による自動 open は消費済みで開き直せなくなる。
+            if (!browserSessionLifecycleController.isAwaitingInitialNavigation(browserTab)) {
+                runCatching { session.close() }
+            }
             gecko.visibility = View.INVISIBLE
             surfaceResumeState = SurfaceResumeState.RELEASED
             // surface の破棄は次の traversal で行われる。反映を待ってから
