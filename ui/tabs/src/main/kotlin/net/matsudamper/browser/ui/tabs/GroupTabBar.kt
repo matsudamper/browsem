@@ -24,6 +24,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -40,8 +41,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.pointer.pointerInput
@@ -72,11 +71,8 @@ private val GroupTabBarHeight = 48.dp
 /** バー右端のプロファイルボタンの幅。LazyRow の末尾余白と共有する */
 private val ProfileButtonWidth = 48.dp
 
-/**
- * プロファイル領域のグラデーションの幅。
- * ボタンと同じ幅を左に足し、ボタンの手前からゆっくり色が付き始めてボタンに入る頃に不透明になるようにする
- */
-private val ProfileAreaFadeWidth = ProfileButtonWidth * 2
+/** プロファイル領域の tonal elevation。タブ列より一段浮いた面として区別する */
+private val ProfileAreaTonalElevation = 3.dp
 
 /** 非選択タブの最小高さ。選択タブは GroupTabBarHeight まで伸びて「浮き上がり」を表現する */
 private val GroupTabUnselectedHeight = 40.dp
@@ -221,16 +217,10 @@ internal fun GroupTabBar(
             )
         }
 
-        ProfileAreaFade(modifier = Modifier.matchParentSize())
-
-        ProfileButton(
+        ProfileArea(
             icon = profileIcon,
             onClick = onClickProfile,
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .width(ProfileButtonWidth)
-                // タブ列とその直下のインジケータ行の高さに合わせ、アイコンをタブ列の中央に置く
-                .height(GroupTabBarHeight + PagerIndicatorHeight),
+            modifier = Modifier.matchParentSize(),
         )
 
         if (dragDropState.isDragging) {
@@ -655,54 +645,39 @@ private fun GroupBookmarkTab(
 }
 
 /**
- * バー右端のプロファイル領域を示す透過グラデーション。
- * バーの上端から下端まで貫く 1 本のグラデーションだけで構成し、不透明な矩形を置かないことで
- * 四角い輪郭が見えないようにする。ボタン下へ流れてきたグループタブやインジケータはこの中で消える。
- * surface と同色にするとタブが届いていないときに境目が消えるため、一段濃い surfaceContainer を使う。
- * テーマのカラースキームを参照するのでライト・ダーク両方に追従する。
+ * バー右端に固定表示するプロファイル領域。
+ * tonal elevation で一段浮いた面にしてタブ列と区別する。バーの上端から下端まで覆う不透明な面なので、
+ * ボタン下へ流れてきたグループタブやインジケータはこの面の下に隠れる。
+ * 色は surface に tonal elevation を重ねたものなのでライト・ダーク両方に追従する。
  */
 @Composable
-private fun ProfileAreaFade(
-    modifier: Modifier = Modifier,
-) {
-    val tint = MaterialTheme.colorScheme.surfaceContainer
-    Box(modifier = modifier) {
-        Box(
-            modifier = Modifier
-                .align(Alignment.CenterEnd)
-                .fillMaxHeight()
-                .width(ProfileAreaFadeWidth)
-                .background(
-                    Brush.horizontalGradient(
-                        // 左側をゆっくり立ち上げ、ボタン左端（0.5）を少し過ぎたところで不透明になるイーズイン。
-                        // ボタンの下に潜ったタブの文字がアイコンの周りに透けて残らないようにする
-                        0.0f to Color.Transparent,
-                        0.2f to tint.copy(alpha = 0.1f),
-                        0.4f to tint.copy(alpha = 0.55f),
-                        0.55f to tint,
-                        1.0f to tint,
-                    ),
-                ),
-        )
-    }
-}
-
-/** バー右端に固定表示するプロファイル切り替えボタン */
-@Composable
-private fun ProfileButton(
+private fun ProfileArea(
     icon: ProfileIcon,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Box(
-        modifier = modifier,
-        contentAlignment = Alignment.Center,
-    ) {
-        IconButton(
-            onClick = onClick,
-            modifier = Modifier.testTag(ProfileManagementTestTags.OpenDialogButton.testTag),
+    Box(modifier = modifier) {
+        Surface(
+            tonalElevation = ProfileAreaTonalElevation,
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .fillMaxHeight()
+                .width(ProfileButtonWidth),
         ) {
-            ProfileIconBadge(icon = icon, size = 32.dp, isEmphasized = false)
+            Box(contentAlignment = Alignment.BottomCenter) {
+                // タブ列とその直下のインジケータ行の高さに合わせ、アイコンをタブ列の中央に置く
+                Box(
+                    modifier = Modifier.height(GroupTabBarHeight + PagerIndicatorHeight),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    IconButton(
+                        onClick = onClick,
+                        modifier = Modifier.testTag(ProfileManagementTestTags.OpenDialogButton.testTag),
+                    ) {
+                        ProfileIconBadge(icon = icon, size = 32.dp, isEmphasized = false)
+                    }
+                }
+            }
         }
     }
 }
