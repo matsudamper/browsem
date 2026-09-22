@@ -15,6 +15,7 @@ import io.mockk.every
 import io.mockk.mockk
 import net.matsudamper.browser.BrowserTab
 import net.matsudamper.browser.data.ProfileId
+import net.matsudamper.browser.data.ProfileRepository
 import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.TabGroupData
 import net.matsudamper.browser.data.TabGroupId
@@ -99,19 +100,23 @@ class BrowserScreenViewModelTest {
     ): BrowserScreenViewModel {
         // HistoryRepository/SettingsRepository は Android SDK に依存しているため relaxed mock で代替
         val historyRepository = mockk<HistoryRepository>(relaxed = true) {
-            every { searchSuggestions(any(), any()) } returns emptyFlow()
-            every { getRecentSuggestions(any()) } returns emptyFlow()
+            every { searchSuggestions(any(), any(), any()) } returns emptyFlow()
+            every { getRecentSuggestions(any(), any()) } returns emptyFlow()
         }
         val settingsRepository = mockk<SettingsRepository>(relaxed = true) {
             every { settings } returns emptyFlow()
         }
         val webSuggestionRepository = mockk<WebSuggestionRepository>(relaxed = true)
+        val profileRepository = mockk<ProfileRepository>(relaxed = true) {
+            every { observeProfiles() } returns emptyFlow()
+        }
 
         return BrowserScreenViewModel(
             historyRepository = historyRepository,
             settingsRepository = settingsRepository,
             webSuggestionRepository = webSuggestionRepository,
             tabGroupRepository = tabGroupRepository,
+            profileRepository = profileRepository,
             browserTabsFlow = browserTabsFlow,
             screenTabId = screenTabId,
             externalTabIdsFlow = MutableStateFlow(emptySet()),

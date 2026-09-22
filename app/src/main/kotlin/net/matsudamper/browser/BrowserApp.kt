@@ -440,6 +440,7 @@ private fun MainBrowserContent(
     val historyRepository: HistoryRepository = koinInject()
     val webSuggestionRepository: WebSuggestionRepository = koinInject()
     val tabGroupRepository: TabGroupRepository = koinInject()
+    val profileRepository: ProfileRepository = koinInject()
 
     val innerBackStack = rememberNavBackStack(BrowserNavDestination.Setup)
     val navController = remember(innerBackStack) { NavController(backStack = innerBackStack) }
@@ -576,6 +577,7 @@ private fun MainBrowserContent(
                             settingsRepository = settingsRepository,
                             webSuggestionRepository = webSuggestionRepository,
                             tabGroupRepository = tabGroupRepository,
+                            profileRepository = profileRepository,
                             browserTabsFlow = browserTabsFlow,
                             screenTabId = key.tabId,
                             externalTabIdsFlow = viewModel.externalTabIds,

@@ -149,7 +149,7 @@ internal fun GeckoBrowserTab(
     externalTabInitialUrl: String?,
     onToolbarHorizontalDrag: (Float) -> Unit,
     onToolbarDragEnd: () -> Unit,
-    onHistoryRecord: (suspend (url: String, title: String) -> Long)?,
+    onHistoryRecord: (suspend (url: String, title: String, profileId: String) -> Long)?,
     onHistoryTitleUpdate: (suspend (id: Long, title: String) -> Unit)?,
     urlBarSuggestions: UrlBarSuggestionsUiState,
     onUrlInputChanged: ((String) -> Unit)?,

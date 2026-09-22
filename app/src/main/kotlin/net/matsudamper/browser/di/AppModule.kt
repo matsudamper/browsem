@@ -169,7 +169,7 @@ val appModule = module {
             formInputRepository = get(),
         )
     }
-    viewModel { HistoryScreenViewModel(get()) }
+    viewModel { HistoryScreenViewModel(get(), get()) }
     viewModel { AddressesScreenViewModel(get()) }
     viewModel { (addressId: Long) ->
         AddressEditScreenViewModel(addressRepository = get(), addressId = addressId)

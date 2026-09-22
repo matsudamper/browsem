@@ -13,9 +13,12 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import net.matsudamper.browser.BrowserTab
+import net.matsudamper.browser.data.ProfileId
+import net.matsudamper.browser.data.ProfileRepository
 import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.TabGroupData
 import net.matsudamper.browser.data.TabGroupRepository
@@ -31,6 +34,7 @@ class BrowserScreenViewModel(
     settingsRepository: SettingsRepository,
     webSuggestionRepository: WebSuggestionRepository,
     tabGroupRepository: TabGroupRepository,
+    profileRepository: ProfileRepository,
     browserTabsFlow: Flow<List<BrowserTab>>,
     screenTabId: String,
     externalTabIdsFlow: StateFlow<Set<String>>,
@@ -43,6 +47,9 @@ class BrowserScreenViewModel(
         historyRepository = historyRepository,
         settingsRepository = settingsRepository,
         webSuggestionRepository = webSuggestionRepository,
+        activeProfileIdFlow = profileRepository.observeProfiles().map { profiles ->
+            profiles.firstOrNull { it.isActive }?.id ?: ProfileId.DEFAULT
+        },
     )
     private val callbacks = urlBarSuggestionsStateOwner.callbacks
 
