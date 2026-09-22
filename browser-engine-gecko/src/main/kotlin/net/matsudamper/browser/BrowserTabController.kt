@@ -399,10 +399,22 @@ class BrowserTabController(
         persistenceCoordinator.persistMoveTab(fromIndex, toIndex)
     }
 
+    /**
+     * Undo なしでタブを閉じ、セッションを即座に破棄する。
+     * 別のタブが Undo 待ちでも触らない。プロファイル削除で無関係なタブの Undo を巻き込まないため
+     */
     override fun closeTab(tabId: String): String? {
-        val result = closeTabWithUndo(tabId, nextSelectedTabId = null)
-        confirmClosedTab()
-        return result
+        val nextSelectedTabId = TabSelectionPolicy.resolveNextSelectedTab(
+            closingTabId = tabId,
+            state = _tabStoreState.value,
+        )
+        val removed = tabRegistry.remove(tabId) ?: return selectedTabId
+        closedTabIds.add(tabId)
+        publishRuntimeState(nextSelectedTabId)
+        persistenceCoordinator.persistClosedTab(tabId, nextSelectedTabId)
+        disposeTab(removed, "タブを閉じました: $tabId")
+        onTabListChanged?.invoke()
+        return selectedTabId
     }
 
     override fun closeTabWithUndo(tabId: String, nextSelectedTabId: String?): String? {
