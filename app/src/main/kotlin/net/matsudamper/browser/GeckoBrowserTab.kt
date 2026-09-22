@@ -261,6 +261,9 @@ internal fun GeckoBrowserTab(
     // INVISIBLE にした surface の破棄を待っている間 true。破棄前に VISIBLE へ戻すと
     // 破棄と生成が合流して同じ surface のまま attach し直してしまう。
     var awaitingSurfaceDestroy by remember(session) { mutableStateOf(false) }
+    // attach した時点の firstCompositeCount。attach より前に旧 surface から遅れて届いた
+    // フレームを新しい surface の描画と取り違えないよう、ここを基準に増加を見る。
+    var compositeCountAtAttach by remember(session) { mutableIntStateOf(0) }
     val addressAutofillDelegate = remember(session, addressAutofillCoordinator) {
         AddressAutofillDelegate(coordinator = addressAutofillCoordinator)
     }
@@ -495,6 +498,7 @@ internal fun GeckoBrowserTab(
             // 別画面へ渡した子が閉じていれば、ここで opener の保持を解く
             currentOnReevaluateOpenerRetention()
         }
+        compositeCountAtAttach = state.firstCompositeCount
         surfaceResumeState = SurfaceResumeState.ACTIVE
     }
 
@@ -606,7 +610,6 @@ internal fun GeckoBrowserTab(
         // onFirstComposite が来たかどうかで判定して surface ごと作り直す。
         // 猶予は attach (ACTIVE 遷移) を起点に数える。安定待ちに時間が掛かった分まで
         // 猶予から差し引くと、正常な復元を黒画面と誤判定してしまう。
-        val compositeCountBeforeAttach = state.firstCompositeCount
         fun waitForFirstComposite(activeSinceMs: Long?) {
             gecko.postDelayed(
                 {
@@ -616,7 +619,6 @@ internal fun GeckoBrowserTab(
                     if (!lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
                         return@postDelayed
                     }
-                    if (state.firstCompositeCount != compositeCountBeforeAttach) return@postDelayed
                     when (surfaceResumeState) {
                         // attach 待ち、またはオーバーレイ等の focus-only 離脱。どちらも
                         // surface は作り直されないので監視を続ける。猶予は ACTIVE に
@@ -626,6 +628,7 @@ internal fun GeckoBrowserTab(
                         -> waitForFirstComposite(null)
 
                         SurfaceResumeState.ACTIVE -> {
+                            if (state.firstCompositeCount != compositeCountAtAttach) return@postDelayed
                             val since = activeSinceMs ?: SystemClock.elapsedRealtime()
                             if (SystemClock.elapsedRealtime() - since < BLANK_SURFACE_TIMEOUT_MS) {
                                 waitForFirstComposite(since)
