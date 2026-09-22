@@ -216,6 +216,15 @@ internal fun BrowserTabDialogLayer(
         )
     }
 
+    PromptDialogLayer(dialogState = dialogState)
+}
+
+/**
+ * ページの JavaScript が要求するプロンプト類のダイアログ。
+ * タブを持たない画面からも使うため、[PromptDialogState] だけで完結させる。
+ */
+@Composable
+internal fun PromptDialogLayer(dialogState: PromptDialogState) {
     dialogState.pendingAlertPrompt?.let { prompt ->
         AlertDialog(
             onDismissRequest = dialogState::dismissAlertPrompt,
