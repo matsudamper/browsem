@@ -180,6 +180,9 @@ internal class BrowserViewModel(
         // ViewModel 生成時にタブ復元を開始する。
         // バックスタックの状態に依存せず、復元は必ず実行される。
         viewModelScope.launch {
+            // プロファイル導入前や削除済みプロファイルを指すタブをデフォルトへ寄せてから復元する。
+            // 復元後に直しても、生成済み GeckoSession の contextId は変わらない
+            profileRepository.createDefaultProfileIfEmpty()
             val tabId = restoreTabs()
             // 初回起動時にタブ件数表示が空になるのを防ぐため、タブ一覧画面を開く前に
             // デフォルトグループを作成し、復元済みタブを割り当てておく。
@@ -188,9 +191,6 @@ internal class BrowserViewModel(
             tabGroupRepository.createDefaultGroupIfEmpty(
                 browserTabController.tabs.map { it.tabId },
             )
-            // プロファイル導入前のグループ・タブをデフォルトプロファイルへ寄せる。
-            // 直前で作ったデフォルトグループも対象になるよう、グループ作成の後に行う。
-            profileRepository.createDefaultProfileIfEmpty()
             val selectedTabId = alignSelectedTabToActiveProfile(tabId)
             eventHandler.trySend { it.onTabsRestored(selectedTabId) }
         }
