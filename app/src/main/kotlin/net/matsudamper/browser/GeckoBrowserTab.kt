@@ -318,73 +318,7 @@ internal fun GeckoBrowserTab(
         }
     }
 
-    // ファイルピッカー（単一ファイル選択）Google Photos を含むピッカーを表示するため ACTION_GET_CONTENT を使用
-    val singleFileLauncher = rememberLauncherForActivityResult(
-        GetContentWithMimeTypes(),
-    ) { uri ->
-        if (uri != null) {
-            dialogState.confirmFilePrompt(context, arrayOf(uri))
-        } else {
-            dialogState.dismissFilePrompt()
-        }
-    }
-
-    // ファイルピッカー（複数ファイル選択）Google Photos を含むピッカーを表示するため ACTION_GET_CONTENT を使用
-    val multipleFilesLauncher = rememberLauncherForActivityResult(
-        GetMultipleContentsWithMimeTypes(),
-    ) { uris ->
-        if (uris.isNotEmpty()) {
-            dialogState.confirmFilePrompt(context, uris.toTypedArray())
-        } else {
-            dialogState.dismissFilePrompt()
-        }
-    }
-
-    // 画像のみの要求で使うフォトピッカー（単一選択）Google フォトなどのクラウド写真も選択できる
-    val singleVisualMediaLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.PickVisualMedia(),
-    ) { uri ->
-        if (uri != null) {
-            dialogState.confirmFilePrompt(context, arrayOf(uri))
-        } else {
-            dialogState.dismissFilePrompt()
-        }
-    }
-
-    val multipleVisualMediaLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.PickMultipleVisualMedia(),
-    ) { uris ->
-        if (uris.isNotEmpty()) {
-            dialogState.confirmFilePrompt(context, uris.toTypedArray())
-        } else {
-            dialogState.dismissFilePrompt()
-        }
-    }
-
-    val pendingFilePrompt = dialogState.pendingFilePrompt
-    LaunchedEffect(pendingFilePrompt) {
-        val prompt = pendingFilePrompt ?: return@LaunchedEffect
-        val mimeTypes = prompt.mimeTypes?.takeIf { it.isNotEmpty() } ?: arrayOf("*/*")
-        val isMultiple = prompt.type == GeckoSession.PromptDelegate.FilePrompt.Type.MULTIPLE
-        // フォトピッカーには撮影機能がないため、capture 指定時は従来のピッカーでカメラを選べるようにする
-        val usesPhotoPicker = prompt.capture == GeckoSession.PromptDelegate.FilePrompt.Capture.NONE &&
-            isAnyImageRequest(mimeTypes) &&
-            ActivityResultContracts.PickVisualMedia.isPhotoPickerAvailable(context)
-        val imageOnly = ActivityResultContracts.PickVisualMedia.ImageOnly
-        when {
-            usesPhotoPicker && isMultiple ->
-                multipleVisualMediaLauncher.launch(PickVisualMediaRequest(imageOnly))
-
-            usesPhotoPicker ->
-                singleVisualMediaLauncher.launch(PickVisualMediaRequest(imageOnly))
-
-            isMultiple ->
-                multipleFilesLauncher.launch(mimeTypes)
-
-            else ->
-                singleFileLauncher.launch(mimeTypes)
-        }
-    }
+    FilePromptLaunchEffect(dialogState = dialogState)
 
     LaunchedEffect(dialogState) {
         dialogState.webShareLaunchChannel.receiveAsFlow().collect {
@@ -1877,6 +1811,82 @@ private fun applyMimeTypes(intent: Intent, mimeTypes: Array<String>) {
         else -> {
             intent.type = "*/*"
             intent.putExtra(Intent.EXTRA_MIME_TYPES, mimeTypes)
+        }
+    }
+}
+
+/**
+ * <input type="file"> の要求に応じてファイルピッカーを起動する。
+ * タブを持たない画面からも使うため、[PromptDialogState] だけで完結させる。
+ */
+@Composable
+internal fun FilePromptLaunchEffect(dialogState: PromptDialogState) {
+    val context = LocalContext.current
+    // ファイルピッカー（単一ファイル選択）Google Photos を含むピッカーを表示するため ACTION_GET_CONTENT を使用
+    val singleFileLauncher = rememberLauncherForActivityResult(
+        GetContentWithMimeTypes(),
+    ) { uri ->
+        if (uri != null) {
+            dialogState.confirmFilePrompt(context, arrayOf(uri))
+        } else {
+            dialogState.dismissFilePrompt()
+        }
+    }
+
+    // ファイルピッカー（複数ファイル選択）Google Photos を含むピッカーを表示するため ACTION_GET_CONTENT を使用
+    val multipleFilesLauncher = rememberLauncherForActivityResult(
+        GetMultipleContentsWithMimeTypes(),
+    ) { uris ->
+        if (uris.isNotEmpty()) {
+            dialogState.confirmFilePrompt(context, uris.toTypedArray())
+        } else {
+            dialogState.dismissFilePrompt()
+        }
+    }
+
+    // 画像のみの要求で使うフォトピッカー（単一選択）Google フォトなどのクラウド写真も選択できる
+    val singleVisualMediaLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickVisualMedia(),
+    ) { uri ->
+        if (uri != null) {
+            dialogState.confirmFilePrompt(context, arrayOf(uri))
+        } else {
+            dialogState.dismissFilePrompt()
+        }
+    }
+
+    val multipleVisualMediaLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickMultipleVisualMedia(),
+    ) { uris ->
+        if (uris.isNotEmpty()) {
+            dialogState.confirmFilePrompt(context, uris.toTypedArray())
+        } else {
+            dialogState.dismissFilePrompt()
+        }
+    }
+
+    val pendingFilePrompt = dialogState.pendingFilePrompt
+    LaunchedEffect(pendingFilePrompt) {
+        val prompt = pendingFilePrompt ?: return@LaunchedEffect
+        val mimeTypes = prompt.mimeTypes?.takeIf { it.isNotEmpty() } ?: arrayOf("*/*")
+        val isMultiple = prompt.type == GeckoSession.PromptDelegate.FilePrompt.Type.MULTIPLE
+        // フォトピッカーには撮影機能がないため、capture 指定時は従来のピッカーでカメラを選べるようにする
+        val usesPhotoPicker = prompt.capture == GeckoSession.PromptDelegate.FilePrompt.Capture.NONE &&
+            isAnyImageRequest(mimeTypes) &&
+            ActivityResultContracts.PickVisualMedia.isPhotoPickerAvailable(context)
+        val imageOnly = ActivityResultContracts.PickVisualMedia.ImageOnly
+        when {
+            usesPhotoPicker && isMultiple ->
+                multipleVisualMediaLauncher.launch(PickVisualMediaRequest(imageOnly))
+
+            usesPhotoPicker ->
+                singleVisualMediaLauncher.launch(PickVisualMediaRequest(imageOnly))
+
+            isMultiple ->
+                multipleFilesLauncher.launch(mimeTypes)
+
+            else ->
+                singleFileLauncher.launch(mimeTypes)
         }
     }
 }
