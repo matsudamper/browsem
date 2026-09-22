@@ -298,9 +298,14 @@ internal class BrowserViewModel(
             if (!externalTabPreviousTabs.containsKey(tabId)) {
                 return@withLock null
             }
-            val defaultGroupId = tabGroupRepository.getDefaultGroupId(browserTabController.activeProfileId)
+            val activeProfileId = browserTabController.activeProfileId
+            val defaultGroupId = tabGroupRepository.getDefaultGroupId(activeProfileId)
+            // 遷移先は有効プロファイルのタブから選ぶ。全タブへ倒すと別プロファイルの Cookie を持つ
+            // セッションが表示される
+            val storeState = browserTabController.tabStoreState.value
+            val tabsInActiveProfile = storeState.tabs.filter { it.profileId == activeProfileId.value }
             var targetTabId = ExternalDownloadTabNavigationPolicy.resolveTargetTabAfterClosingExternalDownload(
-                state = browserTabController.tabStoreState.value,
+                state = storeState.copy(tabs = tabsInActiveProfile),
                 defaultGroupId = defaultGroupId?.value,
                 excludingTabId = tabId,
             )
