@@ -384,12 +384,6 @@ private fun TabsScreenLoadedContent(
                 modifier = Modifier.fillMaxWidth(),
             )
 
-            PagerIndicator(
-                pagerState = pagerState,
-                listState = groupTabListState,
-                modifier = Modifier.fillMaxWidth(),
-            )
-
             HorizontalPager(
                 state = pagerState,
                 modifier = Modifier
@@ -609,13 +603,16 @@ private fun SnackbarContent(
     }
 }
 
+/** ページインジケータの高さ。GroupTabBar のプロファイル領域がこの行まで覆うために共有する */
+internal val PagerIndicatorHeight = 2.dp
+
 /**
  * HorizontalPager のスクロール進捗に連動して動くインジケータ。
- * グループタブバーの直下に表示し、LazyRow の実際のアイテム位置に合わせてスライドするバーを描画する。
+ * グループタブ列の直下に表示し、LazyRow の実際のアイテム位置に合わせてスライドするバーを描画する。
  * タブバーがスクロールされていても表示位置と同期する。
  */
 @Composable
-private fun PagerIndicator(
+internal fun PagerIndicator(
     pagerState: PagerState,
     listState: LazyListState,
     modifier: Modifier = Modifier,
@@ -627,7 +624,7 @@ private fun PagerIndicator(
         modifier = modifier
             // グループタブバー右端のプロファイルボタンの下までインジケータが伸びないようにする
             .padding(end = ProfileButtonWidth)
-            .height(2.dp),
+            .height(PagerIndicatorHeight),
     ) {
         drawRect(color = trackColor)
         // スクロールやページ変化での無効化を描画フェーズだけに留めるため draw ラムダ内で状態を読み取る
