@@ -420,6 +420,7 @@ class TabsScreenViewModel(
                     title = title,
                     wasSelected = wasSelected,
                     groupId = groupId,
+                    profileId = tab?.profileId,
                 ),
             )
         }
@@ -626,9 +627,12 @@ class TabsScreenViewModel(
     private fun deleteProfile(profileId: ProfileId) {
         if (profileId == ProfileId.DEFAULT) return
         viewModelScope.launch {
-            // Undo 待ちのタブは一覧にも DB にも無いため、先に確定破棄して復活の余地を無くす
-            viewModelStateFlow.update { it.copy(pendingClosedTab = null) }
-            tabStore.confirmClosedTab()
+            // 削除対象プロファイルの Undo 待ちタブは一覧にも DB にも無いため、先に確定破棄して
+            // 復活の余地を無くす。別プロファイルの Undo 待ちはそのまま残す
+            if (viewModelStateFlow.value.pendingClosedTab?.profileId == profileId.value) {
+                viewModelStateFlow.update { it.copy(pendingClosedTab = null) }
+                tabStore.confirmClosedTab()
+            }
             if (viewModelStateFlow.value.activeProfile?.id == profileId) {
                 selectProfile(ProfileId.DEFAULT)
                 viewModelStateFlow.first { it.groupsProfileId == ProfileId.DEFAULT }
@@ -678,6 +682,8 @@ class TabsScreenViewModel(
             val wasSelected: Boolean,
             /** 閉じる前に属していたグループ ID（Undo 時に割り当てを復元するための記録） */
             val groupId: String?,
+            /** 属していたプロファイル ID。そのプロファイルの削除時だけ Undo を確定破棄する */
+            val profileId: String?,
         )
     }
 }
