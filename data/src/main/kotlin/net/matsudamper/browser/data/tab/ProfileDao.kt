@@ -36,6 +36,30 @@ abstract class ProfileDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     abstract suspend fun insertGroupIfNotExists(group: TabGroupEntity)
 
+    @Query("SELECT tabId FROM tab_state WHERE profileId = :profileId")
+    abstract suspend fun getTabIds(profileId: String): List<String>
+
+    /** プロファイルごとのタブ数。グループ先行割り当てのプレースホルダ行（url が空）は数えない */
+    @Query("SELECT profileId, count(*) AS tabCount FROM tab_state WHERE url != '' GROUP BY profileId")
+    abstract fun observeTabCounts(): Flow<List<ProfileTabCount>>
+
+    @Query("DELETE FROM tab_group WHERE profileId = :profileId")
+    abstract suspend fun deleteGroupsOfProfile(profileId: String)
+
+    @Query("DELETE FROM tab_state WHERE profileId = :profileId")
+    abstract suspend fun deleteTabsOfProfile(profileId: String)
+
+    @Query("DELETE FROM profile WHERE profileId = :profileId")
+    abstract suspend fun deleteProfile(profileId: String)
+
+    /** プロファイルと、それに属するグループ・残っているタブ行をまとめて消す */
+    @Transaction
+    open suspend fun deleteProfileWithContents(profileId: String) {
+        deleteGroupsOfProfile(profileId)
+        deleteTabsOfProfile(profileId)
+        deleteProfile(profileId)
+    }
+
     /**
      * プロファイルが 1 件も無いときだけデフォルトプロファイルを作成し、
      * プロファイル未所属のグループとタブをそこへ寄せる。
@@ -57,3 +81,5 @@ abstract class ProfileDao {
         insertGroupIfNotExists(initialGroup)
     }
 }
+
+data class ProfileTabCount(val profileId: String, val tabCount: Int)

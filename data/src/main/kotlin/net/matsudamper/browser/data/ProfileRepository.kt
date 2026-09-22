@@ -11,6 +11,9 @@ interface ProfileRepository {
     /** sortOrder 順の全プロファイル。デフォルトプロファイル作成前は空 */
     fun observeProfiles(): Flow<List<ProfileData>>
 
+    /** プロファイル ID ごとのタブ数。タブが無いプロファイルは含まれない */
+    fun observeTabCounts(): Flow<Map<ProfileId, Int>>
+
     /**
      * デフォルトプロファイルが無ければ作成し、プロファイル未所属のグループ・タブを所属させる。
      * 起動時に呼ぶ。
@@ -25,6 +28,12 @@ interface ProfileRepository {
     suspend fun updateProfileIcon(profileId: ProfileId, icon: ProfileIcon)
 
     suspend fun setActiveProfile(profileId: ProfileId)
+
+    /** プロファイルに属するタブ ID。削除前にタブを閉じるために使う */
+    suspend fun getTabIds(profileId: ProfileId): List<String>
+
+    /** プロファイルと、それに属するグループ・タブ行を削除する。デフォルトプロファイルは消せない */
+    suspend fun deleteProfile(profileId: ProfileId)
 }
 
 class ProfileRepositoryImpl(context: Context) : ProfileRepository {
@@ -32,6 +41,12 @@ class ProfileRepositoryImpl(context: Context) : ProfileRepository {
 
     override fun observeProfiles(): Flow<List<ProfileData>> {
         return dao.observeProfiles().map { entities -> entities.map { it.toProfileData() } }
+    }
+
+    override fun observeTabCounts(): Flow<Map<ProfileId, Int>> {
+        return dao.observeTabCounts().map { counts ->
+            counts.associate { ProfileId(it.profileId) to it.tabCount }
+        }
     }
 
     override suspend fun createDefaultProfileIfEmpty() {
@@ -76,6 +91,15 @@ class ProfileRepositoryImpl(context: Context) : ProfileRepository {
 
     override suspend fun setActiveProfile(profileId: ProfileId) {
         dao.setActiveProfile(profileId.value)
+    }
+
+    override suspend fun getTabIds(profileId: ProfileId): List<String> {
+        return dao.getTabIds(profileId.value)
+    }
+
+    override suspend fun deleteProfile(profileId: ProfileId) {
+        require(profileId != ProfileId.DEFAULT) { "デフォルトプロファイルは削除できない" }
+        dao.deleteProfileWithContents(profileId.value)
     }
 
     private fun ProfileEntity.toProfileData(): ProfileData {
