@@ -654,7 +654,6 @@ private fun GroupBookmarkTab(
     }
 }
 
-/** バー右端に固定表示するプロファイル切り替えボタン */
 /**
  * バー右端のプロファイル領域を示す透過グラデーション。
  * バーの上端から下端まで貫く 1 本のグラデーションだけで構成し、不透明な矩形を置かないことで
@@ -688,6 +687,7 @@ private fun ProfileAreaFade(
     }
 }
 
+/** バー右端に固定表示するプロファイル切り替えボタン */
 @Composable
 private fun ProfileButton(
     icon: ProfileIcon,
