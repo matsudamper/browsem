@@ -605,9 +605,36 @@ internal fun GeckoBrowserTab(
             stableCount = 0,
             startTimeMs = SystemClock.elapsedRealtime(),
         )
+        // 復帰後の画面が黒いままだったときの作り直し。surface を破棄して張り直すだけでは
+        // 描画が戻らない実機があるため、コンテンツプロセスごと畳んで開き直す。ページの
+        // 状態は restoreSession の restoreState で戻る。
+        fun recreateBlankSurface(retryCount: Int, reason: String) {
+            Log.w(
+                TAG_SURFACE_RESUME,
+                "blank-surface: $reason のため session と surface を作り直す" +
+                    " retry=${retryCount + 1} session=${session.logKey()}",
+            )
+            addressAutofillDelegate.unbindBeforeViewRelease(session)
+            gecko.releaseSession()
+            runCatching { session.close() }
+            gecko.visibility = View.INVISIBLE
+            surfaceResumeState = SurfaceResumeState.RELEASED
+            // surface の破棄は次の traversal で行われる。反映を待ってから
+            // VISIBLE に戻さないと同じ surface に attach し直してしまう。
+            awaitingSurfaceDestroy = true
+            gecko.postDelayed(
+                {
+                    if (generation != surfaceRestoreGeneration) return@postDelayed
+                    awaitingSurfaceDestroy = false
+                    restoreSurfaceIfNeeded(gecko, retryCount + 1)
+                },
+                SURFACE_DESTROY_WAIT_MS,
+            )
+        }
+
         // attach しても Gecko 側のコンポジタが新しい surface にフレームを出さず、画面が
         // 黒いまま固まることがある。session は open のままなので他に検知手段がなく、
-        // onFirstComposite が来たかどうかで判定して surface ごと作り直す。
+        // onFirstComposite が来たかどうかで判定して作り直す。
         // 猶予は attach (ACTIVE 遷移) を起点に数える。安定待ちに時間が掛かった分まで
         // 猶予から差し引くと、正常な復元を黒画面と誤判定してしまう。
         fun waitForFirstComposite(activeSinceMs: Long?) {
@@ -628,7 +655,6 @@ internal fun GeckoBrowserTab(
                         -> waitForFirstComposite(null)
 
                         SurfaceResumeState.ACTIVE -> {
-                            if (state.firstCompositeCount != compositeCountAtAttach) return@postDelayed
                             val since = activeSinceMs ?: SystemClock.elapsedRealtime()
                             if (SystemClock.elapsedRealtime() - since < BLANK_SURFACE_TIMEOUT_MS) {
                                 waitForFirstComposite(since)
@@ -637,31 +663,15 @@ internal fun GeckoBrowserTab(
                             if (blankSurfaceRetryCount >= BLANK_SURFACE_MAX_RETRY) {
                                 Log.w(
                                     TAG_SURFACE_RESUME,
-                                    "blank-surface: 再作成しても first composite が来ない。復旧を諦める" +
+                                    "blank-surface: 作り直しても描画が戻らない。復旧を諦める" +
                                         " session=${session.logKey()}",
                                 )
                                 return@postDelayed
                             }
-                            Log.w(
-                                TAG_SURFACE_RESUME,
-                                "blank-surface: attach 後 ${BLANK_SURFACE_TIMEOUT_MS}ms で first composite が" +
-                                    " 来ないため surface を作り直す retry=${blankSurfaceRetryCount + 1}" +
-                                    " session=${session.logKey()}",
-                            )
-                            addressAutofillDelegate.unbindBeforeViewRelease(session)
-                            gecko.releaseSession()
-                            gecko.visibility = View.INVISIBLE
-                            surfaceResumeState = SurfaceResumeState.RELEASED
-                            // surface の破棄は次の traversal で行われる。反映を待ってから
-                            // VISIBLE に戻さないと同じ surface に attach し直してしまう。
-                            awaitingSurfaceDestroy = true
-                            gecko.postDelayed(
-                                {
-                                    if (generation != surfaceRestoreGeneration) return@postDelayed
-                                    awaitingSurfaceDestroy = false
-                                    restoreSurfaceIfNeeded(gecko, blankSurfaceRetryCount + 1)
-                                },
-                                SURFACE_DESTROY_WAIT_MS,
+                            if (state.firstCompositeCount != compositeCountAtAttach) return@postDelayed
+                            recreateBlankSurface(
+                                retryCount = blankSurfaceRetryCount,
+                                reason = "attach 後 ${BLANK_SURFACE_TIMEOUT_MS}ms で first composite が来ない",
                             )
                         }
 
@@ -1769,6 +1779,7 @@ private const val BLANK_SURFACE_POLL_MS = 250L
 private const val SURFACE_DESTROY_WAIT_MS = 100L
 
 private fun GeckoSession.logKey(): String = Integer.toHexString(System.identityHashCode(this))
+
 
 private const val MENU_ID_SEARCH = 0x10001
 private const val MENU_ID_OPEN = 0x10002
