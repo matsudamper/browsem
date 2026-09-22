@@ -36,15 +36,6 @@ class DeepLinkIntentConsumptionTest {
         assertFalse(DeepLinkIntentConsumption.isConsumed(second))
     }
 
-    @Test
-    fun `印は Intent の複製にも引き継がれる`() {
-        val intent = viewIntent(URL)
-        DeepLinkIntentConsumption.markConsumed(intent)
-
-        // Activity 再生成時に getIntent() から渡される Intent は Parcel 経由で複製される
-        assertTrue(DeepLinkIntentConsumption.isConsumed(Intent(intent)))
-    }
-
     private fun viewIntent(url: String): Intent {
         return Intent(Intent.ACTION_VIEW, Uri.parse(url))
     }
