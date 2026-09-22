@@ -16,6 +16,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.Until
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -101,12 +102,16 @@ class MediaNotificationSmokeTest {
         try {
             // CI は日本語メソッド名の logcat を紐付けられないため、原因切り分けに必要な情報を
             // assert メッセージへ含める。
-            assertTrue(
-                "通知タイトル \"$EXPECTED_TITLE\" が ${NOTIFICATION_CONTROL_TIMEOUT_MS}ms 以内に表示されなかった " +
-                    "(再生開始=$playbackStarted, 自動再生ダイアログ却下回数=$autoplayDialogDismissCount, " +
-                    "再生状態=$stateAfterTap)",
-                found,
-            )
+            if (!found) {
+                val diagnostics = collectNotificationDiagnostics(uiDevice)
+                Log.d(TAG, "通知未検出の診断情報: $diagnostics")
+                assertTrue(
+                    "通知タイトル \"$EXPECTED_TITLE\" が ${NOTIFICATION_CONTROL_TIMEOUT_MS}ms 以内に表示されなかった " +
+                        "(再生開始=$playbackStarted, 自動再生ダイアログ却下回数=$autoplayDialogDismissCount, " +
+                        "再生状態=$stateAfterTap) $diagnostics",
+                    found,
+                )
+            }
         } finally {
             closeNotificationShade()
         }
@@ -171,6 +176,35 @@ class MediaNotificationSmokeTest {
     }
 
     /**
+     * 通知が見つからなかったときの切り分け用に、投稿済み通知と画面上のウィンドウの要約を集める。
+     * 通知が投稿されていないのか、投稿されているのにシェードに描かれていないのかを区別する。
+     */
+    private fun collectNotificationDiagnostics(uiDevice: UiDevice): String {
+        val postedNotifications = runCatching {
+            uiDevice.executeShellCommand("dumpsys notification --noredact")
+                .lineSequence()
+                .filter { line ->
+                    line.contains(activity.packageName) || line.contains(EXPECTED_TITLE) || line.contains("NotificationRecord")
+                }
+                .joinToString("|") { it.trim() }
+                .take(DIAGNOSTICS_MAX_LENGTH)
+        }.getOrElse { "dumpsys失敗: ${it.message}" }
+        val windowSummary = runCatching {
+            val output = ByteArrayOutputStream()
+            uiDevice.dumpWindowHierarchy(output)
+            val hierarchy = output.toString(Charsets.UTF_8.name())
+            val packages = PACKAGE_ATTRIBUTE_PATTERN.findAll(hierarchy).map { it.groupValues[1] }.toSet()
+            val systemUiTexts = NODE_PATTERN.findAll(hierarchy)
+                .map { it.value }
+                .filter { it.contains("package=\"$SYSTEM_UI_PACKAGE\"") }
+                .mapNotNull { node -> TEXT_ATTRIBUTE_PATTERN.find(node)?.groupValues?.get(1)?.takeIf { it.isNotBlank() } }
+                .toList()
+            "windows=$packages systemUiTexts=$systemUiTexts".take(DIAGNOSTICS_MAX_LENGTH)
+        }.getOrElse { "階層ダンプ失敗: ${it.message}" }
+        return "[通知ダンプ: $postedNotifications] [画面: $windowSummary]"
+    }
+
+    /**
      * openNotification() で開いた通知シェードを閉じる。
      * 物理戻るキーは使わない方針だが onBackPressedDispatcher はアプリ内にしか届かず
      * システム UI のシェードは閉じられないため、statusbar サービスへ直接 collapse を指示する。
@@ -226,5 +260,9 @@ class MediaNotificationSmokeTest {
         private const val LOCAL_MEDIA_INDEX_FILE_NAME = "index.html"
         private const val EXPECTED_TITLE = "Test Video"
         private const val SYSTEM_UI_PACKAGE = "com.android.systemui"
+        private const val DIAGNOSTICS_MAX_LENGTH = 3_000
+        private val PACKAGE_ATTRIBUTE_PATTERN = Regex("package=\"([^\"]+)\"")
+        private val TEXT_ATTRIBUTE_PATTERN = Regex(" text=\"([^\"]*)\"")
+        private val NODE_PATTERN = Regex("<node [^>]*>")
     }
 }
