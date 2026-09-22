@@ -14,6 +14,8 @@ import kotlinx.coroutines.test.setMain
 import io.mockk.every
 import io.mockk.mockk
 import net.matsudamper.browser.BrowserTab
+import net.matsudamper.browser.data.ProfileId
+import net.matsudamper.browser.data.ProfileRepository
 import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.TabGroupData
 import net.matsudamper.browser.data.TabGroupId
@@ -52,10 +54,11 @@ class BrowserScreenViewModelTest {
         val assignmentsFlow = MutableStateFlow<List<TabGroupAssignment>>(emptyList())
 
         override fun observeGroups() = groupsFlow
+        override fun observeGroups(profileId: ProfileId) = groupsFlow
         override fun observeTabGroupAssignments() = assignmentsFlow
 
         override suspend fun createDefaultGroupIfEmpty(tabIds: List<String>) = TabGroupId("default")
-        override suspend fun addGroup(name: String, sortOrder: Int) = TabGroupId("new")
+        override suspend fun addGroup(name: String, sortOrder: Int, profileId: ProfileId) = TabGroupId("new")
         override suspend fun assignTabToGroup(tabId: String, groupId: TabGroupId) {}
         override suspend fun assignTabToGroupIfUnassigned(tabId: String, groupId: TabGroupId) {}
         override suspend fun removeTabFromGroup(tabId: String) {}
@@ -63,7 +66,7 @@ class BrowserScreenViewModelTest {
         override suspend fun renameGroup(groupId: TabGroupId, name: String) {}
         override suspend fun deleteGroup(groupId: TabGroupId, fallbackGroupId: TabGroupId?) {}
         override suspend fun setDefaultGroup(groupId: TabGroupId, isDefault: Boolean) {}
-        override suspend fun getDefaultGroupId(): TabGroupId? = null
+        override suspend fun getDefaultGroupId(profileId: ProfileId): TabGroupId? = null
 
         fun setGroups(groups: List<TabGroupData>) {
             groupsFlow.value = groups
@@ -97,19 +100,23 @@ class BrowserScreenViewModelTest {
     ): BrowserScreenViewModel {
         // HistoryRepository/SettingsRepository は Android SDK に依存しているため relaxed mock で代替
         val historyRepository = mockk<HistoryRepository>(relaxed = true) {
-            every { searchSuggestions(any(), any()) } returns emptyFlow()
-            every { getRecentSuggestions(any()) } returns emptyFlow()
+            every { searchSuggestions(any(), any(), any()) } returns emptyFlow()
+            every { getRecentSuggestions(any(), any()) } returns emptyFlow()
         }
         val settingsRepository = mockk<SettingsRepository>(relaxed = true) {
             every { settings } returns emptyFlow()
         }
         val webSuggestionRepository = mockk<WebSuggestionRepository>(relaxed = true)
+        val profileRepository = mockk<ProfileRepository>(relaxed = true) {
+            every { observeProfiles() } returns emptyFlow()
+        }
 
         return BrowserScreenViewModel(
             historyRepository = historyRepository,
             settingsRepository = settingsRepository,
             webSuggestionRepository = webSuggestionRepository,
             tabGroupRepository = tabGroupRepository,
+            profileRepository = profileRepository,
             browserTabsFlow = browserTabsFlow,
             screenTabId = screenTabId,
             externalTabIdsFlow = MutableStateFlow(emptySet()),

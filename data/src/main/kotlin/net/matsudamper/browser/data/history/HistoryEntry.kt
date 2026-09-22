@@ -11,6 +11,8 @@ import androidx.room.PrimaryKey
         Index(value = ["visitedAt"], name = "index_history_visitedAt"),
         // 相関サブクエリの WHERE url = h.url ORDER BY visitedAt DESC を高速化
         Index(value = ["url", "visitedAt"], name = "index_history_url_visitedAt"),
+        // プロファイルで絞った一覧・検索を高速化
+        Index(value = ["profileId", "visitedAt"], name = "index_history_profileId_visitedAt"),
     ],
 )
 data class HistoryEntry(
@@ -18,4 +20,5 @@ data class HistoryEntry(
     val url: String,
     val title: String,
     val visitedAt: Long,
+    val profileId: String, // ProfileId.value を格納
 )

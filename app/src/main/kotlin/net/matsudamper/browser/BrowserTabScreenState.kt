@@ -38,6 +38,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import net.matsudamper.browser.data.ProfileId
 import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.SiteGeolocationState
 import net.matsudamper.browser.data.SiteSettingsRepository
@@ -73,7 +74,7 @@ internal fun rememberBrowserTabScreenState(
     isSinglePageMode: Boolean = false,
     webAppPinnedHost: String? = null,
     onWebAppCrossDomainNavigation: ((String) -> Unit)? = null,
-    onHistoryRecord: (suspend (url: String, title: String) -> Long)? = null,
+    onHistoryRecord: (suspend (url: String, title: String, profileId: String) -> Long)? = null,
     onHistoryTitleUpdate: (suspend (id: Long, title: String) -> Unit)? = null,
     onRequestDownloadNotificationPermission: suspend () -> Unit = {},
     onRequestAndroidPermissions: suspend (Array<String>) -> Array<String> = { emptyArray() },
@@ -154,7 +155,7 @@ internal class BrowserTabScreenState(
     private val onRequestAndroidPermissions: suspend (Array<String>) -> Array<String> = { emptyArray() },
     var externalDownloadDialogListener: BrowserScreenUiState.ExternalDownloadDialogListener? = null,
     var externalTabInitialUrl: String? = null,
-    var onHistoryRecord: (suspend (url: String, title: String) -> Long)? = null,
+    var onHistoryRecord: (suspend (url: String, title: String, profileId: String) -> Long)? = null,
     var onHistoryTitleUpdate: (suspend (id: Long, title: String) -> Unit)? = null,
 ) : BrowserSessionStateCallbacks {
     private var currentHistoryEntryId: Long? = null
@@ -942,7 +943,7 @@ internal class BrowserTabScreenState(
             val callback = onHistoryRecord
             if (callback != null) {
                 coroutineScope.launch {
-                    val historyEntryId = callback(url, "")
+                    val historyEntryId = callback(url, "", ProfileId.fromGeckoContextId(session.settings.contextId).value)
                     if (historyRecordSequence != sequence) {
                         return@launch
                     }

@@ -171,6 +171,7 @@ fun TabsScreen(
                 groupHasPlayingTab = loadingState.groupHasPlayingTab,
                 snackbarHostState = snackbarHostState,
                 newTabListener = loadingState.newTabListener,
+                profileSwitcher = loadingState.profileSwitcher,
                 onReorderTabs = currentCallbacks::onReorderTabs,
                 onReorderGroups = currentCallbacks::onReorderGroups,
                 onGroupSelected = currentCallbacks::onGroupSelected,
@@ -194,6 +195,7 @@ private fun TabsScreenLoadedContent(
     groupHasPlayingTab: List<Boolean>,
     snackbarHostState: SnackbarHostState,
     newTabListener: TabsScreenUiState.LoadingState.Loaded.NewTabListener,
+    profileSwitcher: ProfileSwitcherUiState,
     onReorderTabs: (groupIndex: Int, fromLocalIndex: Int, toLocalIndex: Int) -> Unit,
     onReorderGroups: (fromIndex: Int, toIndex: Int) -> Unit,
     onGroupSelected: (Int) -> Unit,
@@ -304,6 +306,8 @@ private fun TabsScreenLoadedContent(
 
     var deleteDialogGroupIndex by remember { mutableStateOf<Int?>(null) }
 
+    var isProfileDialogVisible by remember { mutableStateOf(false) }
+
     var floatingActionButtonBoundsInRoot by remember { mutableStateOf<Rect?>(null) }
 
     // フローティング表示のグループ操作メニューはグリッドに重なるため、
@@ -367,6 +371,8 @@ private fun TabsScreenLoadedContent(
                 onGroupSelected = onGroupSelected,
                 onReorderGroups = onReorderGroups,
                 onAddGroup = onAddGroup,
+                profileIcon = profileSwitcher.activeProfileIcon,
+                onClickProfile = { isProfileDialogVisible = true },
                 onGroupTabBoundsChanged = { index, bounds ->
                     groupTabBounds[index] = bounds
                 },
@@ -470,6 +476,13 @@ private fun TabsScreenLoadedContent(
                 onDismiss = { renameDialogGroupIndex = null },
             )
         }
+    }
+
+    if (isProfileDialogVisible) {
+        ProfileManagementDialog(
+            uiState = profileSwitcher,
+            onDismiss = { isProfileDialogVisible = false },
+        )
     }
 
     val deleteIndex = deleteDialogGroupIndex
@@ -658,6 +671,7 @@ private fun PreviewFloatingGroupMenu() {
         groupHasPlayingTab = listOf(),
         snackbarHostState = remember { SnackbarHostState() },
         newTabListener = PreviewNewTabListener,
+        profileSwitcher = PreviewProfileSwitcherUiState,
         onReorderTabs = { _, _, _ -> },
         onReorderGroups = { _, _ -> },
         onGroupSelected = {},
@@ -694,6 +708,7 @@ private fun PreviewSingleGroup() {
         groupHasPlayingTab = listOf(),
         snackbarHostState = remember { SnackbarHostState() },
         newTabListener = PreviewNewTabListener,
+        profileSwitcher = PreviewProfileSwitcherUiState,
         onReorderTabs = { _, _, _ -> },
         onReorderGroups = { _, _ -> },
         onGroupSelected = {},
@@ -734,6 +749,7 @@ private fun PreviewWithSnackbar() {
             selectedTabId = "1",
             snackbarHostState = remember { SnackbarHostState() },
             newTabListener = PreviewNewTabListener,
+            profileSwitcher = PreviewProfileSwitcherUiState,
             onReorderTabs = { _, _, _ -> },
             onReorderGroups = { _, _ -> },
             onGroupSelected = {},

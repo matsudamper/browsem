@@ -36,6 +36,7 @@ data class TabsScreenUiState(
             val selectedTabId: String?,
             val groupHasPlayingTab: List<Boolean>,
             val newTabListener: NewTabListener,
+            val profileSwitcher: ProfileSwitcherUiState,
         ) : LoadingState {
             @Stable
             interface NewTabListener {

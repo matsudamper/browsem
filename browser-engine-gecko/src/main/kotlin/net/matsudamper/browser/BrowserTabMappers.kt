@@ -2,6 +2,7 @@ package net.matsudamper.browser
 
 import net.matsudamper.browser.core.TabSummary
 import net.matsudamper.browser.data.PersistedTabState
+import net.matsudamper.browser.data.ProfileId
 
 internal fun BrowserTab.toPersistedTabState(): PersistedTabState = PersistedTabState(
     url = currentUrl,
@@ -11,6 +12,7 @@ internal fun BrowserTab.toPersistedTabState(): PersistedTabState = PersistedTabS
     openerTabId = openerTabId.orEmpty(),
     themeColor = themeColor,
     pageZoomPercent = pageZoomPercent,
+    profileId = ProfileId.fromGeckoContextId(session.settings.contextId),
 )
 
 internal fun BrowserTab.toSummary(): TabSummary = TabSummary(
@@ -20,4 +22,5 @@ internal fun BrowserTab.toSummary(): TabSummary = TabSummary(
     openerTabId = openerTabId,
     previewBitmapArray = previewBitmap,
     themeColor = themeColor,
+    profileId = ProfileId.fromGeckoContextId(session.settings.contextId).value,
 )

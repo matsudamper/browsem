@@ -17,6 +17,7 @@ internal class WebAppBrowserViewModel(
     val browserTabController = BrowserTabController(
         tabRepository = tabRepository,
         tabGroupRepository = null,
+        profileRepository = null,
         isSinglePage = true,
         persistenceScope = applicationScope,
     )

@@ -9,17 +9,18 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import java.io.File
 
 @Database(
-    entities = [TabStateEntity::class, TabGroupEntity::class],
+    entities = [TabStateEntity::class, TabGroupEntity::class, ProfileEntity::class],
     version = TabDatabase.SCHEMA_VERSION,
     exportSchema = true,
 )
 abstract class TabDatabase : RoomDatabase() {
     abstract fun tabDao(): TabDao
     abstract fun tabGroupDao(): TabGroupDao
+    abstract fun profileDao(): ProfileDao
 
     companion object {
         /** Room の @Database version と連動。バックアップ互換性チェックでも参照する */
-        const val SCHEMA_VERSION: Int = 5
+        const val SCHEMA_VERSION: Int = 6
 
         @Volatile
         private var instance: TabDatabase? = null
@@ -112,12 +113,26 @@ abstract class TabDatabase : RoomDatabase() {
             }
         }
 
+        /** v5→v6: profile テーブル追加と tab_group / tab_state への profileId カラム追加 */
+        private val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `profile` (`profileId` TEXT NOT NULL, `name` TEXT NOT NULL, " +
+                        "`iconKey` TEXT NOT NULL, `sortOrder` INTEGER NOT NULL, `isActive` INTEGER NOT NULL, " +
+                        "PRIMARY KEY(`profileId`))",
+                )
+                db.execSQL("ALTER TABLE `tab_group` ADD COLUMN `profileId` TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE `tab_state` ADD COLUMN `profileId` TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
         /** 全マイグレーション。getInstance とマイグレーションテストで共用する */
         internal fun allMigrations(sessionStateDir: File): Array<Migration> = arrayOf(
             MIGRATION_1_2,
             MIGRATION_2_3,
             createMigration3To4(sessionStateDir),
             MIGRATION_4_5,
+            MIGRATION_5_6,
         )
 
         fun getInstance(context: Context): TabDatabase {

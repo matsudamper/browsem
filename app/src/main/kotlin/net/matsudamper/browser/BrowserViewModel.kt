@@ -25,6 +25,8 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import net.matsudamper.browser.core.ExternalDownloadTabNavigationPolicy
+import net.matsudamper.browser.data.ProfileId
+import net.matsudamper.browser.data.ProfileRepository
 import net.matsudamper.browser.data.ResolvedBrowserSettings
 import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.SiteGeolocationState
@@ -76,6 +78,7 @@ internal class BrowserViewModel(
     private val settingsRepository: SettingsRepository,
     private val tabRepository: TabRepository,
     private val tabGroupRepository: TabGroupRepository,
+    private val profileRepository: ProfileRepository,
     private val mockLocationWebExtension: MockLocationWebExtension,
     private val pageTranslationWebExtension: PageTranslationWebExtension,
     private val siteSettingsRepository: SiteSettingsRepository,
@@ -84,6 +87,7 @@ internal class BrowserViewModel(
     val browserTabController = BrowserTabController(
         tabRepository = tabRepository,
         tabGroupRepository = tabGroupRepository,
+        profileRepository = profileRepository,
         isSinglePage = false,
         persistenceScope = applicationScope,
     )
@@ -188,6 +192,9 @@ internal class BrowserViewModel(
         // ViewModel 生成時にタブ復元を開始する。
         // バックスタックの状態に依存せず、復元は必ず実行される。
         viewModelScope.launch {
+            // プロファイル導入前や削除済みプロファイルを指すタブをデフォルトへ寄せてから復元する。
+            // 復元後に直しても、生成済み GeckoSession の contextId は変わらない
+            profileRepository.createDefaultProfileIfEmpty()
             val tabId = restoreTabs()
             // 初回起動時にタブ件数表示が空になるのを防ぐため、タブ一覧画面を開く前に
             // デフォルトグループを作成し、復元済みタブを割り当てておく。
@@ -196,8 +203,34 @@ internal class BrowserViewModel(
             tabGroupRepository.createDefaultGroupIfEmpty(
                 browserTabController.tabs.map { it.tabId },
             )
-            eventHandler.trySend { it.onTabsRestored(tabId) }
+            val selectedTabId = alignSelectedTabToActiveProfile(tabId)
+            eventHandler.trySend { it.onTabsRestored(selectedTabId) }
         }
+    }
+
+    /**
+     * 復元した選択タブが有効プロファイルのものでなければ、有効プロファイルのタブへ選択を直す。
+     * 有効プロファイルと選択タブは別々に保存されるため、切り替え直後に終了すると食い違うことがある。
+     * 有効プロファイルにタブが無ければ新規タブを作る。
+     */
+    private suspend fun alignSelectedTabToActiveProfile(restoredTabId: String): String {
+        val activeProfileId = profileRepository.observeProfiles().first()
+            .firstOrNull { it.isActive }?.id ?: ProfileId.DEFAULT
+        val restoredTab = browserTabController.findTab(restoredTabId) ?: return restoredTabId
+        if (ProfileId.fromGeckoContextId(restoredTab.session.settings.contextId) == activeProfileId) {
+            return restoredTabId
+        }
+        val tabInActiveProfile = browserTabController.tabs.firstOrNull { tab ->
+            ProfileId.fromGeckoContextId(tab.session.settings.contextId) == activeProfileId
+        }
+        val targetTabId = tabInActiveProfile?.tabId
+            ?: browserTabController.createAndAppendTab(
+                initialUrl = currentHomepageUrl(),
+                insertAfterSelectedTab = false,
+                profileId = activeProfileId,
+            ).tabId
+        browserTabController.selectTab(targetTabId)
+        return targetTabId
     }
 
     /**
@@ -215,12 +248,15 @@ internal class BrowserViewModel(
         active: Boolean,
     ): GeckoSession {
         val tabId = UUID.randomUUID().toString()
-        val defaultGroupId = tabGroupRepository.getDefaultGroupId()
+        // グループ割り当てとセッション生成の間に有効プロファイルが変わっても食い違わないよう、
+        // プロファイルは一度だけ読んで両方に渡す
+        val profileId = browserTabController.activeProfileId
+        val defaultGroupId = tabGroupRepository.getDefaultGroupId(profileId)
         if (defaultGroupId != null) {
             tabGroupRepository.assignTabToGroup(tabId, defaultGroupId)
         }
         return withContext(Dispatchers.Main) {
-            val session = GeckoSession()
+            val session = browserTabController.createSessionForProfile(profileId)
             val newTab = browserTabController.createAndAppendTabWithSession(
                 session = session,
                 tabId = tabId,
@@ -252,11 +288,13 @@ internal class BrowserViewModel(
     suspend fun createTabWithHomepage(
         tabId: String,
         insertAfterSelectedTab: Boolean = true,
+        profileId: ProfileId? = null,
     ): BrowserTab {
         return browserTabController.createAndAppendTab(
             tabId = tabId,
             initialUrl = currentHomepageUrl(),
             insertAfterSelectedTab = insertAfterSelectedTab,
+            profileId = profileId,
         )
     }
 
@@ -301,16 +339,21 @@ internal class BrowserViewModel(
             if (!externalTabPreviousTabs.containsKey(tabId)) {
                 return@withLock null
             }
-            val defaultGroupId = tabGroupRepository.getDefaultGroupId()?.value
+            val activeProfileId = browserTabController.activeProfileId
+            val defaultGroupId = tabGroupRepository.getDefaultGroupId(activeProfileId)
+            // 遷移先は有効プロファイルのタブから選ぶ。全タブへ倒すと別プロファイルの Cookie を持つ
+            // セッションが表示される
+            val storeState = browserTabController.tabStoreState.value
+            val tabsInActiveProfile = storeState.tabs.filter { it.profileId == activeProfileId.value }
             var targetTabId = ExternalDownloadTabNavigationPolicy.resolveTargetTabAfterClosingExternalDownload(
-                state = browserTabController.tabStoreState.value,
-                defaultGroupId = defaultGroupId,
+                state = storeState.copy(tabs = tabsInActiveProfile),
+                defaultGroupId = defaultGroupId?.value,
                 excludingTabId = tabId,
             )
             if (targetTabId == null) {
                 val newTabId = UUID.randomUUID().toString()
-                tabGroupRepository.getDefaultGroupId()?.let { groupId ->
-                    tabGroupRepository.assignTabToGroup(newTabId, groupId)
+                if (defaultGroupId != null) {
+                    tabGroupRepository.assignTabToGroup(newTabId, defaultGroupId)
                 }
                 targetTabId = createTabWithHomepage(
                     tabId = newTabId,

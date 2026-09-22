@@ -1,7 +1,9 @@
 package net.matsudamper.browser
 
 import net.matsudamper.browser.data.PersistedTabState
+import net.matsudamper.browser.data.ProfileId
 import org.mozilla.geckoview.GeckoSession
+import org.mozilla.geckoview.GeckoSessionSettings
 
 internal class BrowserTabFactory(
     private val persistenceCoordinator: BrowserTabPersistenceCoordinator,
@@ -46,7 +48,7 @@ internal class BrowserTabFactory(
     ): BrowserTab {
         return createTab(
             tabId = persistedTabState.tabId,
-            session = GeckoSession(),
+            session = createSessionForProfile(persistedTabState.profileId),
             initialUrl = persistedTabState.url,
             sessionState = persistedTabState.sessionState,
             title = persistedTabState.title.ifBlank { persistedTabState.url },
@@ -56,6 +58,21 @@ internal class BrowserTabFactory(
             openerTabId = persistedTabState.openerTabId.ifBlank { null },
         ).also { tab ->
             tab.pendingSessionState = persistedTabState.sessionState.takeIf { it.isNotBlank() }
+        }
+    }
+
+    companion object {
+        /**
+         * プロファイルごとに Cookie やサイトデータを分けた GeckoSession を作る。
+         * contextId は open 後に変更できないため、セッション生成時にプロファイルを確定させる。
+         */
+        fun createSessionForProfile(profileId: ProfileId): GeckoSession {
+            val contextId = profileId.geckoContextId
+            return if (contextId == null) {
+                GeckoSession()
+            } else {
+                GeckoSession(GeckoSessionSettings.Builder().contextId(contextId).build())
+            }
         }
     }
 }

@@ -13,6 +13,13 @@ interface TabStore {
     fun closeTab(tabId: String): String?
 
     /**
+     * 指定プロファイルのタブをすべて Undo なしで閉じる。プロファイル削除用で、
+     * [closeTab] のように同プロファイルの代替タブは作らない。
+     * @return 閉鎖後に選択されているタブの ID。タブが残っていない場合は null
+     */
+    fun closeTabsOfProfile(profileId: String): String?
+
+    /**
      * タブを即時に閉じる（一覧・永続化から削除する）が、[undoCloseTab] で復元できるよう
      * 直前に閉じたタブを内部で保持する。既に保持中のタブがある場合は先にそれを確定（破棄）する。
      * @param nextSelectedTabId 閉鎖後に選択するタブの ID。null の場合は実装側で決定する

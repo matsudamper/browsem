@@ -54,6 +54,30 @@ class BrowserDatabaseMigrationTest {
         }
     }
 
+    /** v2→v3: profileId 追加。既存履歴はデフォルトプロファイルに属し、絞り込み用インデックスが作成される */
+    @Test
+    fun migrate2To3() {
+        helper.createDatabase(TEST_DB, 2).apply {
+            execSQL(
+                "INSERT INTO history (url, title, visitedAt) " +
+                    "VALUES ('https://example.com', 'Example', 1000)",
+            )
+            close()
+        }
+
+        val db = helper.runMigrationsAndValidate(TEST_DB, 3, true, *BrowserDatabase.ALL_MIGRATIONS)
+
+        db.query("SELECT profileId FROM history").use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals("default", cursor.getString(0))
+        }
+        db.query(
+            "SELECT name FROM sqlite_master WHERE type='index' AND name='index_history_profileId_visitedAt'",
+        ).use { cursor ->
+            assertTrue(cursor.moveToFirst())
+        }
+    }
+
     companion object {
         private const val TEST_DB = "migration-test-history"
     }

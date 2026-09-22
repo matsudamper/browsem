@@ -14,6 +14,8 @@ import net.matsudamper.browser.WebAppBrowserViewModel
 import net.matsudamper.browser.WebExtensionActionController
 import net.matsudamper.browser.core.TabStore
 import net.matsudamper.browser.data.BackupRepository
+import net.matsudamper.browser.data.ProfileRepository
+import net.matsudamper.browser.data.ProfileRepositoryImpl
 import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.SiteSettingsRepository
 import net.matsudamper.browser.data.TabGroupRepository
@@ -76,6 +78,7 @@ val dataModule = module {
     single { SiteSettingsRepository(androidContext()) }
     single { TabRepository(androidContext()) }
     single<TabGroupRepository> { TabGroupRepositoryImpl(androidContext()) }
+    single<ProfileRepository> { ProfileRepositoryImpl(androidContext()) }
     single { HistoryRepository(androidContext()) }
     single { DownloadRepository(androidContext()) }
     single { AddressRepository(androidContext()) }
@@ -130,7 +133,7 @@ val appModule = module {
     // eTLD+1 (基底ドメイン) の算出に使用する Public Suffix List。初回ロードを共有するため single
     single { PublicSuffixList(androidContext()) }
     factory { GeckoDownloadManager(androidContext(), get()) }
-    viewModel { BrowserViewModel(get(), get(), get(), get(), get(), get(), get(), get(), get(), get()) }
+    viewModel { BrowserViewModel(get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get()) }
     // 画面の ViewModel は生成を Koin に集約し、画面側は koinViewModel() で解決する
     viewModel {
         SettingsScreenViewModel(
@@ -166,7 +169,7 @@ val appModule = module {
             formInputRepository = get(),
         )
     }
-    viewModel { HistoryScreenViewModel(get()) }
+    viewModel { HistoryScreenViewModel(get(), get()) }
     viewModel { AddressesScreenViewModel(get()) }
     viewModel { (addressId: Long) ->
         AddressEditScreenViewModel(addressRepository = get(), addressId = addressId)
@@ -196,6 +199,7 @@ val appModule = module {
         TabsScreenViewModel(
             tabStore = tabStore,
             tabGroupRepository = get(),
+            profileRepository = get(),
             playingTabIds = get<MediaWebExtension>().playingTabIds,
         )
     }

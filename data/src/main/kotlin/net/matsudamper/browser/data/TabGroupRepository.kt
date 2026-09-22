@@ -10,6 +10,9 @@ import net.matsudamper.browser.data.tab.TabGroupEntity
 interface TabGroupRepository {
     fun observeGroups(): Flow<List<TabGroupData>>
 
+    /** 指定プロファイルに属するグループのみを sortOrder 順で流す */
+    fun observeGroups(profileId: ProfileId): Flow<List<TabGroupData>>
+
     fun observeTabGroupAssignments(): Flow<List<TabGroupAssignment>>
 
     /**
@@ -19,7 +22,7 @@ interface TabGroupRepository {
      */
     suspend fun createDefaultGroupIfEmpty(tabIds: List<String>): TabGroupId
 
-    suspend fun addGroup(name: String, sortOrder: Int): TabGroupId
+    suspend fun addGroup(name: String, sortOrder: Int, profileId: ProfileId): TabGroupId
 
     suspend fun assignTabToGroup(tabId: String, groupId: TabGroupId)
 
@@ -45,12 +48,12 @@ interface TabGroupRepository {
 
     /**
      * グループのデフォルト設定を変更する。
-     * isDefault = true の場合は他のグループのデフォルトをすべて解除してから設定する。
+     * isDefault = true の場合は同じプロファイル内の他のグループのデフォルトを解除してから設定する。
      */
     suspend fun setDefaultGroup(groupId: TabGroupId, isDefault: Boolean)
 
-    /** デフォルトに設定されているグループIDを返す。設定されていない場合は null。 */
-    suspend fun getDefaultGroupId(): TabGroupId?
+    /** 指定プロファイルでデフォルトに設定されているグループIDを返す。設定されていない場合は null。 */
+    suspend fun getDefaultGroupId(profileId: ProfileId): TabGroupId?
 }
 
 class TabGroupRepositoryImpl(context: Context) : TabGroupRepository {
@@ -63,6 +66,12 @@ class TabGroupRepositoryImpl(context: Context) : TabGroupRepository {
         }
     }
 
+    override fun observeGroups(profileId: ProfileId): Flow<List<TabGroupData>> {
+        return dao.observeGroupsForProfile(profileId.value).map { entities ->
+            entities.map { TabGroupData(TabGroupId(it.groupId), it.name, it.isDefault) }
+        }
+    }
+
     override fun observeTabGroupAssignments(): Flow<List<TabGroupAssignment>> {
         return dao.observeTabGroupAssignments()
     }
@@ -71,21 +80,51 @@ class TabGroupRepositoryImpl(context: Context) : TabGroupRepository {
         val existing = dao.getAllGroups()
         if (existing.isNotEmpty()) {
             val firstId = TabGroupId(existing.first().groupId)
-            // グループ未割当タブ（groupId が空）のみデフォルトグループに割り当て
+            // グループ未割当タブ（groupId が空）のみ、同じプロファイルの先頭グループに割り当てる。
+            // 別プロファイルのグループへ入れると Cookie の分離と一覧が食い違うため、
+            // そのプロファイルにグループが無ければ新しく作る。
             // 既に別グループに割り当て済みのタブは触らない
-            val unassignedTabIds = dao.getUnassignedTabIds()
-            unassignedTabIds.forEach { tabId -> dao.setTabGroup(tabId, firstId.value) }
+            val groups = existing.toMutableList()
+            dao.getUnassignedTabs().forEach { tab ->
+                val tabProfileId = tab.profileId.ifEmpty { ProfileId.DEFAULT.value }
+                val targetGroup = groups.firstOrNull { group ->
+                    group.profileId.ifEmpty { ProfileId.DEFAULT.value } == tabProfileId
+                } ?: TabGroupEntity(
+                    groupId = TabGroupId.generate().value,
+                    name = "デフォルト",
+                    sortOrder = groups.size,
+                    profileId = tabProfileId,
+                ).also { created ->
+                    dao.upsertGroup(created)
+                    groups += created
+                }
+                dao.setTabGroup(tab.tabId, targetGroup.groupId)
+            }
             return firstId
         }
         val id = TabGroupId.generate()
-        dao.upsertGroup(TabGroupEntity(groupId = id.value, name = "デフォルト", sortOrder = 0))
+        dao.upsertGroup(
+            TabGroupEntity(
+                groupId = id.value,
+                name = "デフォルト",
+                sortOrder = 0,
+                profileId = ProfileId.DEFAULT.value,
+            ),
+        )
         tabIds.forEach { tabId -> dao.setTabGroup(tabId, id.value) }
         return id
     }
 
-    override suspend fun addGroup(name: String, sortOrder: Int): TabGroupId {
+    override suspend fun addGroup(name: String, sortOrder: Int, profileId: ProfileId): TabGroupId {
         val id = TabGroupId.generate()
-        dao.upsertGroup(TabGroupEntity(groupId = id.value, name = name, sortOrder = sortOrder))
+        dao.upsertGroup(
+            TabGroupEntity(
+                groupId = id.value,
+                name = name,
+                sortOrder = sortOrder,
+                profileId = profileId.value,
+            ),
+        )
         return id
     }
 
@@ -124,8 +163,8 @@ class TabGroupRepositoryImpl(context: Context) : TabGroupRepository {
         dao.setDefaultGroup(groupId.value, isDefault)
     }
 
-    override suspend fun getDefaultGroupId(): TabGroupId? {
-        return dao.getAllGroups().firstOrNull { it.isDefault }?.let { TabGroupId(it.groupId) }
+    override suspend fun getDefaultGroupId(profileId: ProfileId): TabGroupId? {
+        return dao.getDefaultGroupId(profileId.value)?.let { TabGroupId(it) }
     }
 }
 

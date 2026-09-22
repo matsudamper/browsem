@@ -41,7 +41,8 @@ data class BrowserScreenUiState(
 
     @Stable
     interface Callbacks {
-        suspend fun onHistoryRecord(url: String, title: String): Long
+        /** @param profileId 訪問したタブのプロファイル ID。履歴はプロファイルごとに分けて記録する */
+        suspend fun onHistoryRecord(url: String, title: String, profileId: String): Long
         suspend fun onHistoryTitleUpdate(id: Long, title: String)
         fun onUrlInputChanged(query: String)
     }

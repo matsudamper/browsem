@@ -25,11 +25,14 @@ import net.matsudamper.browser.core.TabSelectionPolicy
 import net.matsudamper.browser.core.TabStore
 import net.matsudamper.browser.core.TabStoreState
 import net.matsudamper.browser.data.PersistedTabState
+import net.matsudamper.browser.data.ProfileId
+import net.matsudamper.browser.data.ProfileRepository
 import net.matsudamper.browser.data.TabGroupRepository
 import net.matsudamper.browser.data.TabRepository
 import org.mozilla.geckoview.GeckoSession
 
 /**
+ * @param profileRepository 新規タブを作る先のプロファイルを追従する。null なら常にデフォルトプロファイル
  * @param isSinglePage Tabに依存しない。Tabの保存機能が無効化される
  * @param persistenceScope 保存を流すスコープ。画面が終了した後も保留中の保存を流し切る必要があるため、
  * [close] で止まる controllerScope ではなくプロセス寿命のスコープを渡す
@@ -38,6 +41,7 @@ import org.mozilla.geckoview.GeckoSession
 class BrowserTabController(
     private val tabRepository: TabRepository,
     private val tabGroupRepository: TabGroupRepository?,
+    private val profileRepository: ProfileRepository?,
     private val isSinglePage: Boolean,
     persistenceScope: CoroutineScope,
 ) : TabStore {
@@ -66,6 +70,9 @@ class BrowserTabController(
     private var repositoryObservationStarted = false
     private var restoreState = RestoreState.NOT_STARTED
 
+    /** 復元時に受け取ったホームページ URL。プロファイル内の最後のタブを閉じたときの代替タブに使う */
+    private var homepageUrlForReplacementTab: String = "about:blank"
+
     // タブ復元完了を他のコルーチンから待機するためのシグナル（isSinglePage=true の場合は即完了）
     // 復元失敗後の再試行に備え、試行ごとに再生成する
     private var _restoreComplete = CompletableDeferred<Unit>().also {
@@ -75,6 +82,20 @@ class BrowserTabController(
         get() = _restoreComplete
 
     override val tabStoreState: StateFlow<TabStoreState> = _tabStoreState.asStateFlow()
+
+    /** 新規タブを作る先のプロファイル。タブ一覧で切り替えると追従する */
+    var activeProfileId: ProfileId = ProfileId.DEFAULT
+        private set
+
+    init {
+        if (profileRepository != null) {
+            controllerScope.launch {
+                profileRepository.observeProfiles().collectLatest { profiles ->
+                    activeProfileId = profiles.firstOrNull { it.isActive }?.id ?: ProfileId.DEFAULT
+                }
+            }
+        }
+    }
 
     var selectedTabId: String? by mutableStateOf(null)
         private set
@@ -106,6 +127,7 @@ class BrowserTabController(
     fun wasTabClosed(tabId: String): Boolean = tabId in closedTabIds
 
     suspend fun restoreTabs(homepageUrl: String): String {
+        homepageUrlForReplacementTab = homepageUrl
         when (restoreState) {
             RestoreState.COMPLETED -> {
                 // 構成変更後の再呼び出し。既に復元済みなので現在の選択タブIDを返す
@@ -151,7 +173,7 @@ class BrowserTabController(
                     snapshot.tabs.forEachIndexed { index, restored ->
                         val tab = createRegisteredTab(
                             tabId = restored.persistedTabState.tabId,
-                            session = GeckoSession(),
+                            session = BrowserTabFactory.createSessionForProfile(restored.persistedTabState.profileId),
                             initialUrl = restored.persistedTabState.url.ifBlank { homepageUrl },
                             sessionState = restored.persistedTabState.sessionState,
                             title = restored.persistedTabState.title,
@@ -191,6 +213,15 @@ class BrowserTabController(
         }
     }
 
+    /**
+     * 指定プロファイルの contextId を持つ GeckoSession を作る。
+     * 外から用意したセッションを [createAndAppendTabWithSession] へ渡す経路で、
+     * グループ割り当てと同じプロファイルを明示して Cookie の分離を一致させるために使う。
+     */
+    fun createSessionForProfile(profileId: ProfileId): GeckoSession {
+        return BrowserTabFactory.createSessionForProfile(profileId)
+    }
+
     /** 保留中の保存と交差させたくない処理を、保存と同じロックの中で実行する。 */
     suspend fun <T> withPersistenceLock(block: suspend () -> T): T {
         return persistenceCoordinator.withPersistenceLock(block)
@@ -222,6 +253,7 @@ class BrowserTabController(
         openerTabId: String? = null,
         initialReferrerUrl: String? = null,
         insertAfterSelectedTab: Boolean = true,
+        profileId: ProfileId? = null,
     ): BrowserTab {
         if (!isSinglePage && restoreState != RestoreState.COMPLETED) {
             Log.w(TAG, "タブ復元完了前に createAndAppendTab が呼ばれました (状態: $restoreState)")
@@ -235,7 +267,9 @@ class BrowserTabController(
             )
             val tab = createRegisteredTab(
                 tabId = tabId,
-                session = GeckoSession(),
+                session = BrowserTabFactory.createSessionForProfile(
+                    profileId ?: resolveProfileIdForNewTab(openerTabId),
+                ),
                 initialUrl = normalizedInitialUrl,
                 sessionState = restoredSessionState.orEmpty(),
                 title = restoredTitle,
@@ -269,7 +303,7 @@ class BrowserTabController(
         )
         val tab = createRegisteredTab(
             tabId = UUID.randomUUID().toString(),
-            session = GeckoSession(),
+            session = BrowserTabFactory.createSessionForProfile(resolveProfileIdForNewTab(openerTabId)),
             initialUrl = normalizedInitialUrl,
             sessionState = "",
             title = normalizedInitialUrl,
@@ -375,20 +409,45 @@ class BrowserTabController(
         persistenceCoordinator.persistMoveTab(fromIndex, toIndex)
     }
 
+    /**
+     * Undo なしでタブを閉じ、セッションを即座に破棄する。
+     * 別のタブが Undo 待ちでも触らない。プロファイル削除で無関係なタブの Undo を巻き込まないため
+     */
     override fun closeTab(tabId: String): String? {
-        val result = closeTabWithUndo(tabId, nextSelectedTabId = null)
-        confirmClosedTab()
-        return result
+        val nextSelectedTabId = resolveNextSelectedTabInSameProfile(tabId)
+        val removed = tabRegistry.remove(tabId) ?: return selectedTabId
+        closedTabIds.add(tabId)
+        publishRuntimeState(nextSelectedTabId)
+        persistenceCoordinator.persistClosedTab(tabId, nextSelectedTabId)
+        disposeTab(removed, "タブを閉じました: $tabId")
+        onTabListChanged?.invoke()
+        createReplacementTabIfProfileEmptied(removed, nextSelectedTabId)
+        return selectedTabId
+    }
+
+    override fun closeTabsOfProfile(profileId: String): String? {
+        val targets = tabRegistry.values().filter { tab ->
+            ProfileId.fromGeckoContextId(tab.session.settings.contextId).value == profileId
+        }
+        if (targets.isEmpty()) return selectedTabId
+        val targetIds = targets.map { it.tabId }.toSet()
+        // 削除対象外で選択中のタブがあればそれを維持し、無ければ残りから選び直す
+        val retainedSelectedTabId = selectedTabId?.takeUnless { it in targetIds }
+        targets.forEach { tab ->
+            tabRegistry.remove(tab.tabId)
+            closedTabIds.add(tab.tabId)
+            persistenceCoordinator.persistClosedTab(tab.tabId, retainedSelectedTabId)
+            disposeTab(tab, "プロファイル削除でタブを閉じました: ${tab.tabId}")
+        }
+        publishRuntimeState(retainedSelectedTabId)
+        onTabListChanged?.invoke()
+        return selectedTabId
     }
 
     override fun closeTabWithUndo(tabId: String, nextSelectedTabId: String?): String? {
         // 同時に保持できる Undo 待ちタブは1つだけなので、前のタブがあれば破棄を確定する
         confirmClosedTab()
-        val resolvedNextSelectedTabId = nextSelectedTabId
-            ?: TabSelectionPolicy.resolveNextSelectedTab(
-                closingTabId = tabId,
-                state = _tabStoreState.value,
-            )
+        val resolvedNextSelectedTabId = nextSelectedTabId ?: resolveNextSelectedTabInSameProfile(tabId)
         val index = tabs.indexOfFirst { it.tabId == tabId }
         val removed = tabRegistry.remove(tabId)
         if (removed == null) {
@@ -401,7 +460,36 @@ class BrowserTabController(
         publishRuntimeState(resolvedNextSelectedTabId)
         persistenceCoordinator.persistClosedTab(tabId, resolvedNextSelectedTabId)
         onTabListChanged?.invoke()
+        createReplacementTabIfProfileEmptied(removed, resolvedNextSelectedTabId)
         return selectedTabId
+    }
+
+    /**
+     * 閉じるタブと同じプロファイルのタブから次に選ぶタブを決める。
+     * 全タブから選ぶと別プロファイルの Cookie を持つセッションが表示されてしまう。
+     * 同じプロファイルに候補が無ければ null
+     */
+    private fun resolveNextSelectedTabInSameProfile(closingTabId: String): String? {
+        val closingTab = tabRegistry.find(closingTabId)
+        val state = _tabStoreState.value
+        if (closingTab == null) {
+            return TabSelectionPolicy.resolveNextSelectedTab(closingTabId, state)
+        }
+        val profileId = ProfileId.fromGeckoContextId(closingTab.session.settings.contextId).value
+        return TabSelectionPolicy.resolveNextSelectedTab(
+            closingTabId = closingTabId,
+            state = state.copy(tabs = state.tabs.filter { it.profileId == profileId }),
+        )
+    }
+
+    /**
+     * 閉じたタブのプロファイルにタブが残らず、かつ別プロファイルにはタブが残る場合、
+     * 同じプロファイルの新規タブを作って選択する。selectedTabId が別プロファイルへ倒れるのを防ぐ
+     */
+    private fun createReplacementTabIfProfileEmptied(closedTab: BrowserTab, nextSelectedTabId: String?) {
+        if (nextSelectedTabId != null || tabRegistry.isEmpty()) return
+        val profileId = ProfileId.fromGeckoContextId(closedTab.session.settings.contextId)
+        createAndAppendInitialTab(homepageUrlForReplacementTab, profileId = profileId)
     }
 
     override fun undoCloseTab(): String? {
@@ -444,10 +532,11 @@ class BrowserTabController(
     private fun createAndAppendInitialTab(
         homepageUrl: String,
         persist: Boolean = true,
+        profileId: ProfileId = activeProfileId,
     ): BrowserTab {
         val tab = createRegisteredTab(
             tabId = UUID.randomUUID().toString(),
-            session = GeckoSession(),
+            session = BrowserTabFactory.createSessionForProfile(profileId),
             initialUrl = homepageUrl,
             sessionState = "",
             title = homepageUrl,
@@ -507,6 +596,12 @@ class BrowserTabController(
         onTabSessionCreated?.invoke(tab.session)
         tabRegistry.insert(tab = tab, insertIndex = insertIndex)
         return tab
+    }
+
+    /** opener から開いたタブは同じ Cookie を共有できるよう opener のプロファイルに揃える */
+    private fun resolveProfileIdForNewTab(openerTabId: String?): ProfileId {
+        val opener = openerTabId?.let(tabRegistry::find) ?: return activeProfileId
+        return ProfileId.fromGeckoContextId(opener.session.settings.contextId)
     }
 
     private fun onTabStateChanged() {

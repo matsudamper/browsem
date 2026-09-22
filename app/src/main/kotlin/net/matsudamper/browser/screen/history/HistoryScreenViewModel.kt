@@ -4,22 +4,31 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import net.matsudamper.browser.data.ProfileId
+import net.matsudamper.browser.data.ProfileRepository
 import net.matsudamper.browser.data.history.HistoryEntry
 import net.matsudamper.browser.data.history.HistoryRepository
 import net.matsudamper.browser.ui.history.HistoryScreenUiState
 
 internal class HistoryScreenViewModel(
     private val historyRepository: HistoryRepository,
+    profileRepository: ProfileRepository,
 ) : ViewModel() {
+    /** 履歴は表示中プロファイルのものだけを扱う */
+    private val activeProfileIdFlow: Flow<ProfileId> = profileRepository.observeProfiles().map { profiles ->
+        profiles.firstOrNull { it.isActive }?.id ?: ProfileId.DEFAULT
+    }
 
     private val viewModelStateFlow = MutableStateFlow(ViewModelState())
     private val entryListFlow = MutableStateFlow<EntryListData?>(null)
@@ -35,7 +44,7 @@ internal class HistoryScreenViewModel(
         }
 
         override fun onConfirmDeleteAll() {
-            viewModelScope.launch { historyRepository.deleteAll() }
+            viewModelScope.launch { historyRepository.deleteAll(activeProfileIdFlow.first()) }
             viewModelStateFlow.update { it.copy(showDeleteAllDialog = false) }
         }
 
@@ -73,14 +82,15 @@ internal class HistoryScreenViewModel(
     init {
         @OptIn(ExperimentalCoroutinesApi::class)
         viewModelScope.launch {
-            viewModelStateFlow
-                .map { it.searchQuery }
-                .distinctUntilChanged()
-                .flatMapLatest { query ->
+            combine(
+                viewModelStateFlow.map { it.searchQuery }.distinctUntilChanged(),
+                activeProfileIdFlow.distinctUntilChanged(),
+            ) { query, profileId -> query to profileId }
+                .flatMapLatest { (query, profileId) ->
                     val entriesFlow = if (query.isBlank()) {
-                        historyRepository.getRecent()
+                        historyRepository.getRecent(profileId)
                     } else {
-                        historyRepository.search(query)
+                        historyRepository.search(profileId, query)
                     }
                     entriesFlow.map { entries -> EntryListData(searchQuery = query, entries = entries) }
                 }

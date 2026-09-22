@@ -3,15 +3,18 @@ package net.matsudamper.browser.screen.browser
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import net.matsudamper.browser.data.ProfileId
 import net.matsudamper.browser.data.SearchProvider
 import net.matsudamper.browser.data.SettingsRepository
 import net.matsudamper.browser.data.history.HistoryEntry
@@ -27,14 +30,16 @@ internal class UrlBarSuggestionsStateOwner(
     private val historyRepository: HistoryRepository,
     private val settingsRepository: SettingsRepository,
     private val webSuggestionRepository: WebSuggestionRepository,
+    /** サジェストに使う履歴のプロファイル。表示中プロファイルの履歴だけを候補に出す */
+    private val activeProfileIdFlow: Flow<ProfileId>,
 ) {
     private val suggestionQuery = MutableStateFlow("")
     private val viewModelStateFlow = MutableStateFlow(UrlBarSuggestionsViewModelState())
     private val webSuggestionInputFlow = MutableStateFlow(WebSuggestionInput())
 
     val callbacks = object : BrowserScreenUiState.Callbacks {
-        override suspend fun onHistoryRecord(url: String, title: String): Long {
-            return historyRepository.recordVisit(url, title)
+        override suspend fun onHistoryRecord(url: String, title: String, profileId: String): Long {
+            return historyRepository.recordVisit(ProfileId(profileId), url, title)
         }
 
         override suspend fun onHistoryTitleUpdate(id: Long, title: String) {
@@ -70,14 +75,19 @@ internal class UrlBarSuggestionsStateOwner(
 
     init {
         scope.launch {
-            suggestionQuery
-                .map(String::trim)
-                .distinctUntilChanged()
-                .flatMapLatest { query ->
+            combine(
+                suggestionQuery.map(String::trim).distinctUntilChanged(),
+                activeProfileIdFlow.distinctUntilChanged(),
+            ) { query, profileId -> query to profileId }
+                .flatMapLatest { (query, profileId) ->
                     if (query.isBlank()) {
-                        historyRepository.getRecentSuggestions(limit = HISTORY_SUGGESTION_LIMIT)
+                        historyRepository.getRecentSuggestions(
+                            profileId = profileId,
+                            limit = HISTORY_SUGGESTION_LIMIT,
+                        )
                     } else {
                         historyRepository.searchSuggestions(
+                            profileId = profileId,
                             query = query,
                             limit = HISTORY_SUGGESTION_LIMIT,
                         )
