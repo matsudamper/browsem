@@ -151,9 +151,9 @@ internal fun BrowserApp(
                         if (targetProfileId != activeProfileId) {
                             profileRepository.setActiveProfile(targetProfileId)
                         }
-                        val defaultGroupId = tabGroupRepository.getDefaultGroupId(targetProfileId)
-                        if (defaultGroupId != null) {
-                            tabGroupRepository.assignTabToGroup(tabId, defaultGroupId)
+                        val groupId = tabGroupRepository.getGroupIdForExternalTab(targetProfileId)
+                        if (groupId != null) {
+                            tabGroupRepository.assignTabToGroup(tabId, groupId)
                         }
                         if (handedOffSession != null) {
                             // カスタムタブから引き渡されたセッションは開いたまま載せる。open→restoreState で

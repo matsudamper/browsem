@@ -251,9 +251,9 @@ internal class BrowserViewModel(
         // グループ割り当てとセッション生成の間に有効プロファイルが変わっても食い違わないよう、
         // プロファイルは一度だけ読んで両方に渡す
         val profileId = browserTabController.activeProfileId
-        val defaultGroupId = tabGroupRepository.getDefaultGroupId(profileId)
-        if (defaultGroupId != null) {
-            tabGroupRepository.assignTabToGroup(tabId, defaultGroupId)
+        val groupId = tabGroupRepository.getGroupIdForExternalTab(profileId)
+        if (groupId != null) {
+            tabGroupRepository.assignTabToGroup(tabId, groupId)
         }
         return withContext(Dispatchers.Main) {
             val session = browserTabController.createSessionForProfile(profileId)
@@ -352,8 +352,9 @@ internal class BrowserViewModel(
             )
             if (targetTabId == null) {
                 val newTabId = UUID.randomUUID().toString()
-                if (defaultGroupId != null) {
-                    tabGroupRepository.assignTabToGroup(newTabId, defaultGroupId)
+                val newTabGroupId = tabGroupRepository.getGroupIdForExternalTab(activeProfileId)
+                if (newTabGroupId != null) {
+                    tabGroupRepository.assignTabToGroup(newTabId, newTabGroupId)
                 }
                 targetTabId = createTabWithHomepage(
                     tabId = newTabId,
