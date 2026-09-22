@@ -387,7 +387,6 @@ class MainActivity : ComponentActivity() {
             return
         }
         DeepLinkIntentConsumption.markConsumed(intent)
-        setIntent(intent)
     }
 
     /**

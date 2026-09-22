@@ -7,8 +7,10 @@ import android.content.Intent
  *
  * URL で判定すると、Activity が再生成されつつ新しい Intent を受け取ったとき
  * （プロセス終了後に同じ URL を開き直す等）に新しい要求まで既処理と見なして取りこぼす。
- * 印を載せた Intent を getIntent() に保持しておけば、設定変更後の onCreate で
- * 同じ Intent を再処理しない。
+ * onCreate に届く Intent は getIntent() と同じインスタンスなので、印を付ければ
+ * 設定変更後の onCreate で同じ Intent を再処理しない。onNewIntent の Intent は
+ * 再配送されないため、getIntent() へ載せ替える必要はない。載せ替えると起動時の
+ * Intent と食い違い、ActivityScenario がライフサイクル遷移を追えなくなる。
  */
 object DeepLinkIntentConsumption {
     private const val EXTRA_CONSUMED = "net.matsudamper.browser.extra.DEEP_LINK_CONSUMED"
