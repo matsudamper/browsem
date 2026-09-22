@@ -1,9 +1,12 @@
 package net.matsudamper.browser.media
 
+import android.app.Notification
+import android.app.NotificationManager
 import android.content.Intent
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.service.notification.StatusBarNotification
 import android.util.Log
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -13,10 +16,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import androidx.test.uiautomator.By
 import androidx.test.uiautomator.UiDevice
-import androidx.test.uiautomator.Until
-import java.io.ByteArrayOutputStream
 import java.io.File
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -30,6 +30,7 @@ import net.matsudamper.browser.openUrlViaViewIntent
 import net.matsudamper.browser.waitForUrlBarContains
 import org.junit.After
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.Timeout
@@ -39,7 +40,10 @@ import org.junit.runner.RunWith
  * メディア通知機能のスモークテスト。
  *
  * ローカル動画ページを開いてユーザー操作で再生を開始し、
- * 通知シェードにメディアタイトルとコントロールが表示されることを確認する。
+ * メディアタイトルとコントロールを持つ通知が NotificationManager に投稿されることを確認する。
+ *
+ * GMD の ATD イメージは SystemUI が取り除かれており通知シェードが存在しないため、
+ * UiAutomator でシェード上の表示を探すのではなく、自アプリの投稿済み通知を直接読む。
  */
 @RunWith(AndroidJUnit4::class)
 class MediaNotificationSmokeTest {
@@ -69,12 +73,11 @@ class MediaNotificationSmokeTest {
             latch.countDown()
         }
         latch.await(5, TimeUnit.SECONDS)
-        closeNotificationShade()
     }
 
     /**
      * ローカル HTTP サーバーが配信する test-media/index.html を開き、
-     * 画面タップで再生開始した後に通知シェードへメディア通知が表示されることを確認する。
+     * 画面タップで再生開始した後にメディア通知が投稿されることを確認する。
      */
     @Test
     fun ローカル動画再生でメディア通知が表示される() {
@@ -93,28 +96,24 @@ class MediaNotificationSmokeTest {
         val stateAfterTap = MediaSessionBridge.playbackState.value
         Log.d(TAG, "再生開始確認: started=$playbackStarted state=$stateAfterTap")
 
-        uiDevice.openNotification()
-        // ページ内の <video title="Test Video"> も GeckoView のアクセシビリティツリーに同じ文字列で
-        // 載るため、パッケージを絞らないとページ側の要素にマッチして通知が無くても通ってしまう。
-        val notificationTitleSelector = By.pkg(SYSTEM_UI_PACKAGE).text(EXPECTED_TITLE)
-        val found = uiDevice.wait(Until.hasObject(notificationTitleSelector), NOTIFICATION_CONTROL_TIMEOUT_MS)
-        Log.d(TAG, "通知検索完了: 発見=$found, タイトル=\"$EXPECTED_TITLE\", タイムアウト=${NOTIFICATION_CONTROL_TIMEOUT_MS}ms")
-        try {
+        val mediaNotification = waitForMediaNotification()
+        Log.d(TAG, "通知検索完了: 発見=${mediaNotification != null}, タイトル=\"$EXPECTED_TITLE\", タイムアウト=${NOTIFICATION_CONTROL_TIMEOUT_MS}ms")
+        if (mediaNotification == null) {
             // CI は日本語メソッド名の logcat を紐付けられないため、原因切り分けに必要な情報を
             // assert メッセージへ含める。
-            if (!found) {
-                val diagnostics = collectNotificationDiagnostics(uiDevice)
-                Log.d(TAG, "通知未検出の診断情報: $diagnostics")
-                assertTrue(
-                    "通知タイトル \"$EXPECTED_TITLE\" が ${NOTIFICATION_CONTROL_TIMEOUT_MS}ms 以内に表示されなかった " +
-                        "(再生開始=$playbackStarted, 自動再生ダイアログ却下回数=$autoplayDialogDismissCount, " +
-                        "再生状態=$stateAfterTap) $diagnostics",
-                    found,
-                )
-            }
-        } finally {
-            closeNotificationShade()
+            val diagnostics = collectNotificationDiagnostics(uiDevice)
+            Log.d(TAG, "通知未検出の診断情報: $diagnostics")
+            fail(
+                "通知タイトル \"$EXPECTED_TITLE\" の通知が ${NOTIFICATION_CONTROL_TIMEOUT_MS}ms 以内に投稿されなかった " +
+                    "(再生開始=$playbackStarted, 自動再生ダイアログ却下回数=$autoplayDialogDismissCount, " +
+                    "再生状態=$stateAfterTap) $diagnostics",
+            )
         }
+        val actions = mediaNotification?.notification?.actions.orEmpty()
+        assertTrue(
+            "メディア通知に再生コントロールが含まれていない (actions=${actions.map { it.title }})",
+            actions.isNotEmpty(),
+        )
     }
 
     // ================================================================
@@ -176,8 +175,26 @@ class MediaNotificationSmokeTest {
     }
 
     /**
-     * 通知が見つからなかったときの切り分け用に、投稿済み通知と画面上のウィンドウの要約を集める。
-     * 通知が投稿されていないのか、投稿されているのにシェードに描かれていないのかを区別する。
+     * 自アプリの投稿済み通知から、タイトルが [EXPECTED_TITLE] のものが現れるまで待って返す。
+     * 見つからないまま [NOTIFICATION_CONTROL_TIMEOUT_MS] を超えたら null を返す。
+     */
+    private fun waitForMediaNotification(): StatusBarNotification? {
+        val notificationManager = activity.getSystemService(NotificationManager::class.java)
+        val deadline = SystemClock.elapsedRealtime() + NOTIFICATION_CONTROL_TIMEOUT_MS
+        while (true) {
+            val found = notificationManager.activeNotifications.firstOrNull { statusBarNotification ->
+                statusBarNotification.notification.extras.getCharSequence(Notification.EXTRA_TITLE)?.toString() == EXPECTED_TITLE
+            }
+            if (found != null || SystemClock.elapsedRealtime() >= deadline) {
+                return found
+            }
+            Thread.sleep(POLL_INTERVAL_MS)
+        }
+    }
+
+    /**
+     * 通知が見つからなかったときの切り分け用に、システム側の通知レコードと自アプリの通知設定を集める。
+     * 通知が投稿されていないのか、投稿されているのにアプリ側から見えないのかを区別する。
      */
     private fun collectNotificationDiagnostics(uiDevice: UiDevice): String {
         val postedNotifications = runCatching {
@@ -189,29 +206,7 @@ class MediaNotificationSmokeTest {
                 .joinToString("|") { it.trim() }
                 .take(DIAGNOSTICS_MAX_LENGTH)
         }.getOrElse { "dumpsys失敗: ${it.message}" }
-        val windowSummary = runCatching {
-            val output = ByteArrayOutputStream()
-            uiDevice.dumpWindowHierarchy(output)
-            val hierarchy = output.toString(Charsets.UTF_8.name())
-            val packages = PACKAGE_ATTRIBUTE_PATTERN.findAll(hierarchy).map { it.groupValues[1] }.toSet()
-            val systemUiTexts = NODE_PATTERN.findAll(hierarchy)
-                .map { it.value }
-                .filter { it.contains("package=\"$SYSTEM_UI_PACKAGE\"") }
-                .mapNotNull { node -> TEXT_ATTRIBUTE_PATTERN.find(node)?.groupValues?.get(1)?.takeIf { it.isNotBlank() } }
-                .toList()
-            "windows=$packages systemUiTexts=$systemUiTexts".take(DIAGNOSTICS_MAX_LENGTH)
-        }.getOrElse { "階層ダンプ失敗: ${it.message}" }
-        return "[通知ダンプ: $postedNotifications] [画面: $windowSummary]"
-    }
-
-    /**
-     * openNotification() で開いた通知シェードを閉じる。
-     * 物理戻るキーは使わない方針だが onBackPressedDispatcher はアプリ内にしか届かず
-     * システム UI のシェードは閉じられないため、statusbar サービスへ直接 collapse を指示する。
-     */
-    private fun closeNotificationShade() {
-        UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
-            .executeShellCommand("cmd statusbar collapse")
+        return "[通知ダンプ: $postedNotifications]"
     }
 
     private fun openMediaPage(mediaPageUri: String) {
@@ -259,10 +254,6 @@ class MediaNotificationSmokeTest {
         private const val LOCAL_MEDIA_DIR_NAME = "test-media"
         private const val LOCAL_MEDIA_INDEX_FILE_NAME = "index.html"
         private const val EXPECTED_TITLE = "Test Video"
-        private const val SYSTEM_UI_PACKAGE = "com.android.systemui"
         private const val DIAGNOSTICS_MAX_LENGTH = 3_000
-        private val PACKAGE_ATTRIBUTE_PATTERN = Regex("package=\"([^\"]+)\"")
-        private val TEXT_ATTRIBUTE_PATTERN = Regex(" text=\"([^\"]*)\"")
-        private val NODE_PATTERN = Regex("<node [^>]*>")
     }
 }
