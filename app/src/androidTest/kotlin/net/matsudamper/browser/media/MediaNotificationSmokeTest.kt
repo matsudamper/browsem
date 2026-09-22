@@ -93,7 +93,10 @@ class MediaNotificationSmokeTest {
         Log.d(TAG, "再生開始確認: started=$playbackStarted state=$stateAfterTap")
 
         uiDevice.openNotification()
-        val found = uiDevice.wait(Until.hasObject(By.text(EXPECTED_TITLE)), NOTIFICATION_CONTROL_TIMEOUT_MS)
+        // ページ内の <video title="Test Video"> も GeckoView のアクセシビリティツリーに同じ文字列で
+        // 載るため、パッケージを絞らないとページ側の要素にマッチして通知が無くても通ってしまう。
+        val notificationTitleSelector = By.pkg(SYSTEM_UI_PACKAGE).text(EXPECTED_TITLE)
+        val found = uiDevice.wait(Until.hasObject(notificationTitleSelector), NOTIFICATION_CONTROL_TIMEOUT_MS)
         Log.d(TAG, "通知検索完了: 発見=$found, タイトル=\"$EXPECTED_TITLE\", タイムアウト=${NOTIFICATION_CONTROL_TIMEOUT_MS}ms")
         try {
             // CI は日本語メソッド名の logcat を紐付けられないため、原因切り分けに必要な情報を
@@ -222,5 +225,6 @@ class MediaNotificationSmokeTest {
         private const val LOCAL_MEDIA_DIR_NAME = "test-media"
         private const val LOCAL_MEDIA_INDEX_FILE_NAME = "index.html"
         private const val EXPECTED_TITLE = "Test Video"
+        private const val SYSTEM_UI_PACKAGE = "com.android.systemui"
     }
 }
