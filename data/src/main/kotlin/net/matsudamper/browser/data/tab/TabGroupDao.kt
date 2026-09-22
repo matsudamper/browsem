@@ -137,12 +137,15 @@ abstract class TabGroupDao {
      */
     @Query(
         """
-        SELECT tabId FROM tab_state
+        SELECT tabId, profileId FROM tab_state
         WHERE groupId = '' OR groupId IS NULL
         OR (groupId != '' AND groupId NOT IN (SELECT groupId FROM tab_group))
         """,
     )
-    abstract suspend fun getUnassignedTabIds(): List<String>
+    abstract suspend fun getUnassignedTabs(): List<UnassignedTab>
 }
 
 data class TabGroupAssignment(val tabId: String, val groupId: String)
+
+/** グループ未割当のタブ。起動時に同じプロファイルのグループへ回収するために profileId も持つ */
+data class UnassignedTab(val tabId: String, val profileId: String)

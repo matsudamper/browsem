@@ -114,7 +114,7 @@ class TabsScreenViewModelTest {
 
         fun addTab(id: String, title: String = id) {
             _tabStoreState.update { state ->
-                state.copy(tabs = state.tabs + TabSummary(id = id, title = title, url = "https://example.com"))
+                state.copy(tabs = state.tabs + TabSummary(id = id, title = title, url = "https://example.com", profileId = ProfileId.DEFAULT.value))
             }
         }
 
@@ -147,7 +147,7 @@ class TabsScreenViewModelTest {
 
         fun addTab(id: String, title: String = id) {
             _tabStoreState.update { state ->
-                state.copy(tabs = state.tabs + TabSummary(id = id, title = title, url = "https://example.com"))
+                state.copy(tabs = state.tabs + TabSummary(id = id, title = title, url = "https://example.com", profileId = ProfileId.DEFAULT.value))
             }
         }
     }

@@ -80,10 +80,16 @@ class TabGroupRepositoryImpl(context: Context) : TabGroupRepository {
         val existing = dao.getAllGroups()
         if (existing.isNotEmpty()) {
             val firstId = TabGroupId(existing.first().groupId)
-            // グループ未割当タブ（groupId が空）のみデフォルトグループに割り当て
+            // グループ未割当タブ（groupId が空）のみ、同じプロファイルの先頭グループに割り当てる。
+            // 別プロファイルのグループへ入れると Cookie の分離と一覧が食い違う。
             // 既に別グループに割り当て済みのタブは触らない
-            val unassignedTabIds = dao.getUnassignedTabIds()
-            unassignedTabIds.forEach { tabId -> dao.setTabGroup(tabId, firstId.value) }
+            dao.getUnassignedTabs().forEach { tab ->
+                val tabProfileId = tab.profileId.ifEmpty { ProfileId.DEFAULT.value }
+                val targetGroup = existing.firstOrNull { group ->
+                    group.profileId.ifEmpty { ProfileId.DEFAULT.value } == tabProfileId
+                } ?: existing.first()
+                dao.setTabGroup(tab.tabId, targetGroup.groupId)
+            }
             return firstId
         }
         val id = TabGroupId.generate()

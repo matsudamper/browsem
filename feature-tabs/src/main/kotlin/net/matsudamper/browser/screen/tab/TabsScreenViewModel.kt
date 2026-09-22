@@ -246,7 +246,13 @@ class TabsScreenViewModel(
             // TabGroupDao.setTabGroup は INSERT IGNORE + UPDATE を行うため、
             // TabPersistenceCoordinator が tab_state 行を作成する前でも割り当てが成功する。
             viewModelStateFlow.collect { state ->
-                val allTabIds = state.tabStoreState.tabs.map { it.id }.toSet()
+                // 表示中プロファイルのタブだけを対象にする。別プロファイルのタブを
+                // 表示中グループへ入れると Cookie の分離と一覧が食い違う
+                val activeProfileId = state.activeProfile?.id ?: return@collect
+                val allTabIds = state.tabStoreState.tabs
+                    .filter { it.profileId == activeProfileId.value }
+                    .map { it.id }
+                    .toSet()
                 val assignedTabIds = state.assignments
                     .filter { it.groupId.isNotEmpty() }
                     .map { it.tabId }
