@@ -72,6 +72,7 @@ import net.matsudamper.browser.navigation.BrowserNavDestination
 import net.matsudamper.browser.navigation.CrashLogDetailNavContent
 import net.matsudamper.browser.navigation.CrashLogsNavContent
 import net.matsudamper.browser.navigation.DownloadsNavContent
+import net.matsudamper.browser.navigation.ExtensionSettingsNavContent
 import net.matsudamper.browser.navigation.ExtensionsNavContent
 import net.matsudamper.browser.navigation.HistoryNavContent
 import net.matsudamper.browser.navigation.NavController
@@ -316,6 +317,14 @@ internal fun BrowserAppShell(
 
                 AppDestination.Extensions -> navEntry(key) {
                     ExtensionsNavContent(navActions = outerNavActions)
+                }
+
+                is AppDestination.ExtensionSettings -> navEntry(key) {
+                    ExtensionSettingsNavContent(
+                        key = key,
+                        navActions = outerNavActions,
+                        onNavigateToUrl = onNavigateToUrl,
+                    )
                 }
 
                 AppDestination.Downloads -> navEntry(key) {
