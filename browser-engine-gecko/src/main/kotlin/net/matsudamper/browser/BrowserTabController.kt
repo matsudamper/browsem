@@ -236,7 +236,7 @@ class BrowserTabController(
      * 有効プロファイルにタブが無ければ新規タブを作る。
      * 復元完了を待つ側が別プロファイルの選択を見ないよう、完了を通知する前に行う
      */
-    private fun alignSelectedTabToActiveProfile() {
+    private suspend fun alignSelectedTabToActiveProfile() {
         val selectedTab = selectedTabId?.let(tabRegistry::find) ?: return
         if (ProfileId.fromGeckoContextId(selectedTab.session.settings.contextId) == activeProfileId) return
         val tabInActiveProfile = tabRegistry.values().firstOrNull { tab ->
@@ -246,7 +246,18 @@ class BrowserTabController(
             publishRuntimeState(tabInActiveProfile.tabId)
             persistenceCoordinator.persistSelection(selectedTabId)
         } else {
-            createAndAppendInitialTab(homepageUrlForReplacementTab, profileId = activeProfileId)
+            // 復元直後にグループ初期化が DB の未割当タブを走査するため、非同期保存では
+            // このタブを取りこぼす。復元完了の前に同期保存しておく
+            val tab = createAndAppendInitialTab(
+                homepageUrlForReplacementTab,
+                persist = false,
+                profileId = activeProfileId,
+            )
+            persistenceCoordinator.persistCreatedTabNow(
+                tab = tab,
+                insertIndex = tabs.indexOf(tab).coerceAtLeast(0),
+                selected = true,
+            )
         }
     }
 
