@@ -634,6 +634,11 @@ internal fun GeckoBrowserTab(
                 {
                     if (generation != surfaceRestoreGeneration) return@postDelayed
                     awaitingSurfaceDestroy = false
+                    // 待っている間に背面へ回ったら復元しない。state は RELEASED のままなので
+                    // 次の復帰イベントから復元が始まる。
+                    if (!lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
+                        return@postDelayed
+                    }
                     restoreSurfaceIfNeeded(gecko, blankSurfaceRetryCount + 1)
                 },
                 SURFACE_DESTROY_WAIT_MS,
@@ -876,6 +881,10 @@ internal fun GeckoBrowserTab(
                                 // View と session には触らず、状態も書き換えない。
                                 if (generation != surfaceRestoreGeneration) return@postDelayed
                                 awaitingSurfaceDestroy = false
+                                // 背面へ回っていたら復元しない。次の復帰イベントから始まる。
+                                if (!lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
+                                    return@postDelayed
+                                }
                                 resumeFromPauseIfNeeded(gv)
                             },
                             SURFACE_DESTROY_WAIT_MS,
