@@ -180,6 +180,8 @@ class WebAppActivity : ComponentActivity() {
                                 urlBarSuggestions = uiState.urlBarSuggestions,
                                 onUrlInputChanged = uiState.callbacks::onUrlInputChanged,
                                 onReevaluateOpenerRetention = reevaluateOpenerRetention,
+                                profileSwitcher = null,
+                                onMoveToDefaultProfile = null,
                             )
                         }
                     }

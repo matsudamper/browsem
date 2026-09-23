@@ -20,14 +20,12 @@ import net.matsudamper.browser.core.TabStore
 import net.matsudamper.browser.core.TabStoreState
 import net.matsudamper.browser.core.TabSummary
 import net.matsudamper.browser.data.ProfileData
-import net.matsudamper.browser.data.ProfileIcon
 import net.matsudamper.browser.data.ProfileId
 import net.matsudamper.browser.data.ProfileRepository
 import net.matsudamper.browser.data.TabGroupData
 import net.matsudamper.browser.data.TabGroupId
 import net.matsudamper.browser.data.TabGroupRepository
 import net.matsudamper.browser.data.tab.TabGroupAssignment
-import net.matsudamper.browser.ui.tabs.ProfileSwitcherUiState
 import net.matsudamper.browser.ui.tabs.TabPreviewImage
 import net.matsudamper.browser.ui.tabs.TabsScreenTabData
 import net.matsudamper.browser.ui.tabs.TabsScreenUiState
@@ -111,12 +109,6 @@ class TabsScreenViewModel(
         }
     }
 
-    private val profileCallbacks = object : ProfileSwitcherUiState.Callbacks {
-        override fun onAddProfile() {
-            addProfile()
-        }
-    }
-
     val uiState: StateFlow<TabsScreenUiState> = MutableStateFlow(
         TabsScreenUiState(
             callbacks = callbacks,
@@ -161,7 +153,6 @@ class TabsScreenViewModel(
                                         eventHandler.trySend { it.openNewTab(group?.id, profileId) }
                                     }
                                 },
-                                profileSwitcher = buildProfileSwitcher(state.profiles, state.profileTabCounts),
                             )
                         },
                     )
@@ -186,27 +177,12 @@ class TabsScreenViewModel(
 
         /** 現在表示中のグループに、表示中プロファイルの contextId で新規タブを追加する */
         fun openNewTab(currentGroupId: TabGroupId?, profileId: ProfileId)
-
-        /**
-         * タブ一覧を開いたまま、指定プロファイルの新規タブを作って背後の Browser をそれに差し替える。
-         * 表示中プロファイルにタブが 1 つも無くなったとき、別プロファイルのセッションが
-         * 背後に残らないようにするために使う。
-         */
-        fun openNewTabBehind(currentGroupId: TabGroupId?, profileId: ProfileId)
-
-        /** プロファイル削除後に、その contextId の Cookie やサイトデータを Gecko から消す */
-        fun clearProfileStorage(profileId: ProfileId)
     }
 
     init {
         viewModelScope.launch {
             profileRepository.observeProfiles().collect { profiles ->
                 viewModelStateFlow.update { it.copy(profiles = profiles) }
-            }
-        }
-        viewModelScope.launch {
-            profileRepository.observeTabCounts().collect { counts ->
-                viewModelStateFlow.update { it.copy(profileTabCounts = counts) }
             }
         }
         viewModelScope.launch {
@@ -414,7 +390,6 @@ class TabsScreenViewModel(
                     title = title,
                     wasSelected = wasSelected,
                     groupId = groupId,
-                    profileId = tab?.profileId,
                 ),
             )
         }
@@ -533,133 +508,11 @@ class TabsScreenViewModel(
             }
         }
 
-    private fun buildProfileSwitcher(
-        profiles: List<ProfileData>,
-        tabCounts: Map<ProfileId, Int>,
-    ): ProfileSwitcherUiState {
-        return ProfileSwitcherUiState(
-            activeProfileIcon = profiles.firstOrNull { it.isActive }?.icon ?: ProfileIcon.PERSON,
-            profiles = profiles.map { profile ->
-                ProfileSwitcherUiState.ProfileItem(
-                    name = profile.name,
-                    icon = profile.icon,
-                    tabCount = tabCounts[profile.id] ?: 0,
-                    isActive = profile.isActive,
-                    isDeletable = profile.id != ProfileId.DEFAULT,
-                    listener = object : ProfileSwitcherUiState.ProfileItem.Listener {
-                        override fun onSelect() {
-                            selectProfile(profile.id)
-                        }
-
-                        override fun onRename(newName: String) {
-                            viewModelScope.launch {
-                                profileRepository.renameProfile(profile.id, newName)
-                            }
-                        }
-
-                        override fun onChangeIcon(icon: ProfileIcon) {
-                            viewModelScope.launch {
-                                profileRepository.updateProfileIcon(profile.id, icon)
-                            }
-                        }
-
-                        override fun onDelete() {
-                            deleteProfile(profile.id)
-                        }
-                    },
-                )
-            },
-            callbacks = profileCallbacks,
-        )
-    }
-
-    private fun addProfile() {
-        viewModelScope.launch {
-            val profileCount = viewModelStateFlow.value.profiles.size
-            profileRepository.addProfile(
-                name = "プロファイル ${profileCount + 1}",
-                icon = ProfileIcon.PERSON,
-                sortOrder = profileCount,
-            )
-        }
-    }
-
-    /**
-     * プロファイルを切り替える。表示グループを先頭に戻し、
-     * 切り替え先にタブがあれば背後の Browser もそのタブへ差し替える。
-     */
-    private fun selectProfile(profileId: ProfileId) {
-        if (viewModelStateFlow.value.activeProfile?.id == profileId) return
-        viewModelScope.launch {
-            // 旧プロファイルの Undo 待ちを持ち越すと、切り替え後に「戻す」で旧プロファイルの
-            // セッションが背後に出るため、切り替え時点で確定する
-            if (viewModelStateFlow.value.pendingClosedTab != null) {
-                viewModelStateFlow.update { it.copy(pendingClosedTab = null) }
-                tabStore.confirmClosedTab()
-            }
-            // 既に先頭ページなら settledPage が変わらずガードが解除されないため、実際に動く場合だけ設定する
-            if ((viewModelStateFlow.value.activeGroupIndex ?: 0) != 0) {
-                programmaticScrollTarget = 0
-            }
-            viewModelStateFlow.update { it.copy(activeGroupIndex = 0) }
-            profileRepository.setActiveProfile(profileId)
-            val state = viewModelStateFlow.first { it.groupsProfileId == profileId }
-            val groupIds = state.dbGroups.map { it.id.value }.toSet()
-            val assignmentMap = state.assignments.associate { it.tabId to it.groupId }
-            val firstTabId = state.tabStoreState.tabs
-                .firstOrNull { assignmentMap[it.id] in groupIds }
-                ?.id
-            if (firstTabId != null) {
-                eventHandler.trySend { it.selectTab(firstTabId) }
-            } else {
-                // タブが無いプロファイルでも背後の Browser を切り替え先に揃える。
-                // 旧プロファイルのセッションが残ると、その Cookie で閲覧を続けてしまう
-                val firstGroupId = state.dbGroups.firstOrNull()?.id
-                eventHandler.trySend { it.openNewTabBehind(firstGroupId, profileId) }
-            }
-        }
-    }
-
-    /**
-     * プロファイルを削除する。有効プロファイルならデフォルトへ切り替えてから、
-     * 属するタブを閉じ、DB の行を消し、Gecko 側のサイトデータ削除を依頼する。
-     */
-    private fun deleteProfile(profileId: ProfileId) {
-        if (profileId == ProfileId.DEFAULT) return
-        viewModelScope.launch {
-            // 削除対象プロファイルの Undo 待ちタブは一覧にも DB にも無いため、先に確定破棄して
-            // 復活の余地を無くす。別プロファイルの Undo 待ちはそのまま残す
-            if (viewModelStateFlow.value.pendingClosedTab?.profileId == profileId.value) {
-                viewModelStateFlow.update { it.copy(pendingClosedTab = null) }
-                tabStore.confirmClosedTab()
-            }
-            if (viewModelStateFlow.value.activeProfile?.id == profileId) {
-                selectProfile(ProfileId.DEFAULT)
-                viewModelStateFlow.first { it.groupsProfileId == ProfileId.DEFAULT }
-            }
-            // 作成直後のタブは tab_state への保存が非同期で遅れるため、DB の行ではなく
-            // ランタイム側の contextId で対象を集めて一括で閉じる。closeTab だと同プロファイルの
-            // 代替タブが作られてしまう。DB にだけ残る行は deleteProfile が消す
-            val closedTabIds = tabStore.tabStoreState.value.tabs
-                .filter { it.profileId == profileId.value }
-                .map { it.id }
-            if (closedTabIds.isNotEmpty()) {
-                val nextSelectedTabId = tabStore.closeTabsOfProfile(profileId.value)
-                closedTabIds.forEach { tabId ->
-                    eventHandler.trySend { it.onTabClosed(tabId, nextSelectedTabId) }
-                }
-            }
-            profileRepository.deleteProfile(profileId)
-            eventHandler.trySend { it.clearProfileStorage(profileId) }
-        }
-    }
-
     data class ViewModelState(
         val dbGroups: List<TabGroupData> = listOf(),
         /** dbGroups がどのプロファイルのものか。切り替え直後に旧プロファイルの一覧を出さないために持つ */
         val groupsProfileId: ProfileId? = null,
         val profiles: List<ProfileData> = listOf(),
-        val profileTabCounts: Map<ProfileId, Int> = mapOf(),
         val localGroupOrder: List<TabGroupData>? = null,
         val activeGroupIndex: Int? = null,
         val tabStoreState: TabStoreState = TabStoreState(),
@@ -684,8 +537,6 @@ class TabsScreenViewModel(
             val wasSelected: Boolean,
             /** 閉じる前に属していたグループ ID（Undo 時に割り当てを復元するための記録） */
             val groupId: String?,
-            /** 属していたプロファイル ID。そのプロファイルの削除時だけ Undo を確定破棄する */
-            val profileId: String?,
         )
     }
 }

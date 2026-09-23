@@ -223,6 +223,9 @@ internal fun CustomTabToolbar(
                     onOpenSiteSettings = onOpenSiteSettings,
                     onOpenDownloads = null,
                     onOpenDevTools = null,
+                    // カスタムタブ・Web アプリではプロファイル切り替えを提供しない
+                    profileSwitcher = null,
+                    onMoveToDefaultProfile = null,
                 )
             }
         }

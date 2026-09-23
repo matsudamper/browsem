@@ -44,7 +44,7 @@ import net.matsudamper.browser.resources.R as ResourcesR
  * 行のタップで切り替え、「⋮」メニューで名前変更・アイコン変更・削除、下部ボタンで追加を行う。
  */
 @Composable
-internal fun ProfileManagementDialog(
+fun ProfileManagementDialog(
     uiState: ProfileSwitcherUiState,
     onDismiss: () -> Unit,
 ) {
@@ -245,7 +245,7 @@ private fun DeleteProfileDialog(
 
 /** 丸い背景に載せたプロファイルアイコン。一覧とバー右端のボタンで共用する */
 @Composable
-internal fun ProfileIconBadge(
+fun ProfileIconBadge(
     icon: ProfileIcon,
     size: Dp,
     isEmphasized: Boolean,
@@ -374,10 +374,6 @@ sealed interface ProfileManagementTestTags {
     val id: String
 
     val testTag get() = "${ProfileManagementTestTags::class.java.name}#$id"
-
-    object OpenDialogButton : ProfileManagementTestTags {
-        override val id: String = "open_dialog_button"
-    }
 
     object AddProfileButton : ProfileManagementTestTags {
         override val id: String = "add_profile_button"

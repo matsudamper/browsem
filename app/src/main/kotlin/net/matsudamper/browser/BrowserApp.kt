@@ -120,6 +120,7 @@ internal fun BrowserApp(
             // 履歴・ダウンロード画面から URL を開く際、内側ナビのタブ選択が必要。
             // MainBrowserContent がコンポジションに戻ってから消費される。
             val selectTabRequester = remember { SelectTabRequester() }
+            val profileSwitcher by viewModel.profileSwitcher.collectAsState()
             val tabGroupRepository: TabGroupRepository = koinInject()
             val profileRepository: ProfileRepository = koinInject()
             val pageTranslationWebExtension: PageTranslationWebExtension = koinInject()
@@ -502,6 +503,10 @@ private fun MainBrowserContent(
                         selectTab(targetTabId, null)
                     }
                 }
+
+                override fun selectTab(tabId: String) {
+                    selectTab(tabId, null)
+                }
             })
         }
     }
@@ -686,6 +691,10 @@ private fun MainBrowserContent(
                                         outerNavActions.openSiteSettings(currentUrl, key.tabId)
                                     },
                                     onOpenTabs = { innerBackStack.add(BrowserNavDestination.Tabs) },
+                                    profileSwitcher = profileSwitcher,
+                                    onMoveToDefaultProfile = { tabId, url ->
+                                        viewModel.moveTabToDefaultProfileAndReload(tabId, url)
+                                    },
                                     browserSessionLifecycleController = browserSessionLifecycleController,
                                     onOpenNewSessionRequest = { uri ->
                                         val newTab = browserTabController.createTabForNewSession(
@@ -796,27 +805,6 @@ private fun MainBrowserContent(
                                         )
                                         selectTab(newTab.tabId, null)
                                     }
-                                }
-
-                                override fun openNewTabBehind(currentGroupId: TabGroupId?, profileId: ProfileId) {
-                                    scope.launch {
-                                        val tabId = UUID.randomUUID().toString()
-                                        if (currentGroupId != null) {
-                                            tabGroupRepository.assignTabToGroup(tabId, currentGroupId)
-                                        }
-                                        val newTab = viewModel.createTabWithHomepage(
-                                            tabId = tabId,
-                                            insertAfterSelectedTab = false,
-                                            profileId = profileId,
-                                        )
-                                        browserTabController.selectTab(newTab.tabId)
-                                        navController.replaceCurrentBrowserTab(newTab.tabId)
-                                    }
-                                }
-
-                                override fun clearProfileStorage(profileId: ProfileId) {
-                                    val contextId = profileId.geckoContextId ?: return
-                                    viewModel.runtime.storageController.clearDataForSessionContext(contextId)
                                 }
                             })
                         }

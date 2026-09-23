@@ -107,6 +107,7 @@ import net.matsudamper.browser.ui.browser.UrlBarSuggestionsUiState
 import net.matsudamper.browser.ui.common.StatusBarAppearanceEffect
 import net.matsudamper.browser.ui.common.findActivity
 import net.matsudamper.browser.ui.common.resolveBrowserToolbarColors
+import net.matsudamper.browser.ui.tabs.ProfileSwitcherUiState
 import org.json.JSONObject
 import org.koin.compose.koinInject
 import org.mozilla.geckoview.BasicSelectionActionDelegate
@@ -153,6 +154,8 @@ internal fun GeckoBrowserTab(
     onHistoryTitleUpdate: (suspend (id: Long, title: String) -> Unit)?,
     urlBarSuggestions: UrlBarSuggestionsUiState,
     onUrlInputChanged: ((String) -> Unit)?,
+    profileSwitcher: ProfileSwitcherUiState?,
+    onMoveToDefaultProfile: ((tabId: String, url: String) -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -1407,6 +1410,10 @@ internal fun GeckoBrowserTab(
                         onToolbarDragEnd()
                     },
                     onAddToHomeScreen = state::requestAddToHomeScreen,
+                    profileSwitcher = profileSwitcher,
+                    onMoveToDefaultProfile = onMoveToDefaultProfile?.let {
+                        { it(browserTab.tabId, state.currentPageUrl) }
+                    },
                 )
             }
             val detectedLang = state.translation.detectedPageLanguage

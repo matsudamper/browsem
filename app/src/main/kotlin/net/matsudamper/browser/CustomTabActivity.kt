@@ -422,6 +422,8 @@ private fun CustomTabScreen(
         urlBarSuggestions = uiState.urlBarSuggestions,
         onUrlInputChanged = uiState.callbacks::onUrlInputChanged,
         onReevaluateOpenerRetention = reevaluateOpenerRetention,
+        profileSwitcher = null,
+        onMoveToDefaultProfile = null,
     )
 }
 

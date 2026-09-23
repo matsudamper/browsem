@@ -727,8 +727,6 @@ class TabsScreenViewModelTest {
         }
 
         override fun openNewTab(currentGroupId: TabGroupId?, profileId: ProfileId) = Unit
-        override fun openNewTabBehind(currentGroupId: TabGroupId?, profileId: ProfileId) = Unit
-        override fun clearProfileStorage(profileId: ProfileId) = Unit
     }
 
     /** eventHandler に溜まったイベントをすべて recorder へ流す */

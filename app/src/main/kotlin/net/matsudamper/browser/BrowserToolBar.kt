@@ -85,6 +85,7 @@ import net.matsudamper.browser.resources.R as ResourcesR
 import net.matsudamper.browser.ui.common.BrowserTheme
 import net.matsudamper.browser.ui.common.resolveBrowserToolbarColors
 import net.matsudamper.browser.ui.common.toArgbHex
+import net.matsudamper.browser.ui.tabs.ProfileSwitcherUiState
 
 @Composable
 internal fun BrowserToolBar(
@@ -131,6 +132,8 @@ internal fun BrowserToolBar(
     onOpenSiteSettings: (() -> Unit)?,
     onOpenDownloads: (() -> Unit)?,
     onOpenDevTools: (() -> Unit)?,
+    profileSwitcher: ProfileSwitcherUiState?,
+    onMoveToDefaultProfile: (() -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
     var visibleMenu by remember { mutableStateOf(false) }
@@ -219,6 +222,8 @@ internal fun BrowserToolBar(
                 onOpenSiteSettings = onOpenSiteSettings,
                 onOpenDownloads = onOpenDownloads,
                 onOpenDevTools = onOpenDevTools,
+                profileSwitcher = profileSwitcher,
+                onMoveToDefaultProfile = onMoveToDefaultProfile,
             )
         },
     )
@@ -731,6 +736,8 @@ private fun BrowserToolBarPreviewContent(
         onOpenSiteSettings = null,
         onOpenDownloads = null,
         onOpenDevTools = null,
+        profileSwitcher = null,
+        onMoveToDefaultProfile = null,
     )
 }
 
