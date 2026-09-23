@@ -120,7 +120,6 @@ internal fun BrowserApp(
             // 履歴・ダウンロード画面から URL を開く際、内側ナビのタブ選択が必要。
             // MainBrowserContent がコンポジションに戻ってから消費される。
             val selectTabRequester = remember { SelectTabRequester() }
-            val profileSwitcher by viewModel.profileSwitcher.collectAsState()
             val tabGroupRepository: TabGroupRepository = koinInject()
             val profileRepository: ProfileRepository = koinInject()
             val pageTranslationWebExtension: PageTranslationWebExtension = koinInject()
@@ -437,6 +436,7 @@ private fun MainBrowserContent(
     val browserSessionLifecycleController = viewModel.browserSessionLifecycleController
     val themeColorExtension = viewModel.themeColorExtension
     val mediaWebExtension = viewModel.mediaWebExtension
+    val profileSwitcher by viewModel.profileSwitcher.collectAsState()
 
     val settingsRepository: SettingsRepository = koinInject()
     val historyRepository: HistoryRepository = koinInject()
