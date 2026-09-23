@@ -49,6 +49,8 @@ import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
@@ -508,7 +510,9 @@ private fun ToolbarMenuContent(
                 )
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     IconButton(
-                        modifier = Modifier.testTag(BrowserToolbarMenuTestTags.ProfileSwitchButton.testTag),
+                        modifier = Modifier
+                            .testTag(BrowserToolbarMenuTestTags.ProfileSwitchButton.testTag)
+                            .semantics { contentDescription = "プロファイルを管理" },
                         onClick = { isProfileDialogVisible = true },
                     ) {
                         ProfileIconBadge(icon = profileSwitcher.activeProfileIcon, size = 28.dp, isEmphasized = false)

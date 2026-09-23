@@ -391,6 +391,8 @@ internal class BrowserViewModel(
      */
     fun moveTabToDefaultProfileAndReload(tabId: String, url: String) {
         viewModelScope.launch {
+            val tab = browserTabController.tabStoreState.value.tabs.firstOrNull { it.id == tabId }
+            if (tab == null || tab.profileId == ProfileId.DEFAULT.value) return@launch
             val newTabId = UUID.randomUUID().toString()
             val groupId = tabGroupRepository.getGroupIdForExternalTab(ProfileId.DEFAULT)
             if (groupId != null) {
