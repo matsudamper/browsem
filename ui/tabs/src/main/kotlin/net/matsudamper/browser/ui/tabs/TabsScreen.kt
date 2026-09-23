@@ -256,13 +256,14 @@ private fun TabsScreenLoadedContent(
             } else {
                 val itemViewportLeft = (targetItem.offset - layoutInfo.viewportStartOffset).toFloat()
                 val itemViewportRight = itemViewportLeft + targetItem.size
-                val viewportWidth = layoutInfo.viewportSize.width.toFloat()
-                // スクロール量に ±24dp のバッファを加えて少し余裕を持たせる
-                val bufferPx = with(density) { 24.dp.toPx() }
+                // 末尾の contentPadding にはプロファイルボタンが重なるため、見える範囲から除く
+                val visibleRight = (layoutInfo.viewportSize.width - layoutInfo.afterContentPadding).toFloat()
+                // スクロール量にグループ追加ボタン 1 つ分のバッファを加えて余裕を持たせる
+                val bufferPx = with(density) { AddGroupButtonWidth.toPx() }
                 when {
-                    itemViewportRight > viewportWidth -> {
+                    itemViewportRight > visibleRight -> {
                         // 右にはみ出している: はみ出し分 + バッファ分スクロール
-                        groupTabListState.animateScrollBy(itemViewportRight - viewportWidth + bufferPx)
+                        groupTabListState.animateScrollBy(itemViewportRight - visibleRight + bufferPx)
                     }
 
                     itemViewportLeft < 0f -> {
