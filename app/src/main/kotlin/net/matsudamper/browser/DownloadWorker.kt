@@ -375,7 +375,7 @@ internal class DownloadWorker(
                 ?: (rangeStart + DownloadMetadata.parseContentLength(response.header("Content-Length")))
             val contentLength = totalFileSize
             val mimeType = DownloadMetadata.parseMimeType(response.header("Content-Type"))
-            val fileName = guessDownloadFileName(urlString, response.header("Content-Disposition"), mimeType)
+            val fileName = DownloadFileName.resolve(urlString, response.header("Content-Disposition"), mimeType)
 
             setForeground(
                 createForegroundInfo(
