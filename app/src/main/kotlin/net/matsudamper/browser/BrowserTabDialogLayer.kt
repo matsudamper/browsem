@@ -4,9 +4,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
@@ -56,6 +58,7 @@ import java.util.Locale
 import java.util.TimeZone
 import net.matsudamper.browser.data.ThemeMode
 import net.matsudamper.browser.data.download.DownloadRecordStatus
+import net.matsudamper.browser.resources.R as ResourcesR
 import net.matsudamper.browser.ui.common.BrowserTheme
 import org.mozilla.geckoview.Autocomplete
 import org.mozilla.geckoview.GeckoSession
@@ -659,7 +662,7 @@ private fun ContextMenuDialog(
         // ボタンを縦に並べたいので confirm は空にして dismissButton スロットに集約する
         confirmButton = {},
         dismissButton = {
-            // 片手で持っていても押しやすいように全幅にし、テキストを中央寄せにする
+            // 片手で持っていても押しやすいように全幅にする
             Column(modifier = Modifier.fillMaxWidth()) {
                 when (menu) {
                     is BrowserTabScreenState.ContextMenuState.Link -> {
@@ -694,39 +697,29 @@ private fun ContextMenuDialog(
                             onCopyLink = onCopyLink,
                         )
                         if (enableTabUi) {
-                            TextButton(
-                                modifier = Modifier.fillMaxWidth(),
+                            ContextMenuActionButton(
+                                text = "画像を新しいタブで開く",
+                                iconRes = ResourcesR.drawable.ic_open_in_new_24dp,
                                 onClick = { onOpenNewTab(menu.imageSrcUrl) },
-                            ) {
-                                Text(text = "画像を新しいタブで開く")
-                            }
+                            )
                         } else {
-                            TextButton(
-                                modifier = Modifier.fillMaxWidth(),
+                            ContextMenuActionButton(
+                                text = "画像を開く",
+                                iconRes = ResourcesR.drawable.ic_open_in_browser_24dp,
                                 onClick = { onOpenUrl(menu.imageSrcUrl) },
-                            ) {
-                                Text(text = "画像を開く")
-                            }
+                            )
                         }
-                        TextButton(
-                            modifier = Modifier.fillMaxWidth(),
+                        ContextMenuActionButton(
+                            text = "画像のリンクをコピー",
+                            iconRes = ResourcesR.drawable.ic_content_copy_24dp,
                             onClick = { onCopyLink(menu.imageSrcUrl) },
-                        ) {
-                            Text(text = "画像のリンクをコピー")
-                        }
-                        TextButton(
-                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        ContextMenuActionButton(
+                            text = "画像をダウンロード",
+                            iconRes = ResourcesR.drawable.ic_download_24dp,
                             onClick = { onDownloadImage(menu.imageSrcUrl) },
-                        ) {
-                            Text(text = "画像をダウンロード")
-                        }
+                        )
                     }
-                }
-                TextButton(
-                    modifier = Modifier.fillMaxWidth(),
-                    onClick = onDismiss,
-                ) {
-                    Text(text = "キャンセル")
                 }
             }
         },
@@ -744,32 +737,28 @@ private fun ImageActionButtons(
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
         if (enableTabUi) {
-            TextButton(
-                modifier = Modifier.fillMaxWidth(),
+            ContextMenuActionButton(
+                text = "新しいタブで開く",
+                iconRes = ResourcesR.drawable.ic_open_in_new_24dp,
                 onClick = { onOpenNewTab(srcUrl) },
-            ) {
-                Text(text = "新しいタブで開く")
-            }
+            )
         } else {
-            TextButton(
-                modifier = Modifier.fillMaxWidth(),
+            ContextMenuActionButton(
+                text = "開く",
+                iconRes = ResourcesR.drawable.ic_open_in_browser_24dp,
                 onClick = { onOpenUrl(srcUrl) },
-            ) {
-                Text(text = "開く")
-            }
+            )
         }
-        TextButton(
-            modifier = Modifier.fillMaxWidth(),
+        ContextMenuActionButton(
+            text = "画像のリンクをコピー",
+            iconRes = ResourcesR.drawable.ic_content_copy_24dp,
             onClick = { onCopyLink(srcUrl) },
-        ) {
-            Text(text = "画像のリンクをコピー")
-        }
-        TextButton(
-            modifier = Modifier.fillMaxWidth(),
+        )
+        ContextMenuActionButton(
+            text = "ダウンロード",
+            iconRes = ResourcesR.drawable.ic_download_24dp,
             onClick = { onDownloadImage(srcUrl) },
-        ) {
-            Text(text = "ダウンロード")
-        }
+        )
     }
 }
 
@@ -784,26 +773,47 @@ private fun LinkActionButtons(
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
         if (enableTabUi || customTabMode) {
-            TextButton(
-                modifier = Modifier.fillMaxWidth(),
+            ContextMenuActionButton(
+                text = "新しいタブで開く",
+                iconRes = ResourcesR.drawable.ic_open_in_new_24dp,
                 onClick = { onOpenNewTab(url) },
-            ) {
-                Text(text = "新しいタブで開く")
-            }
+            )
         }
         if (!enableTabUi) {
-            TextButton(
-                modifier = Modifier.fillMaxWidth(),
+            ContextMenuActionButton(
+                text = "開く",
+                iconRes = ResourcesR.drawable.ic_open_in_browser_24dp,
                 onClick = { onOpenUrl(url) },
-            ) {
-                Text(text = "開く")
-            }
+            )
         }
-        TextButton(
-            modifier = Modifier.fillMaxWidth(),
+        ContextMenuActionButton(
+            text = "URLをコピー",
+            iconRes = ResourcesR.drawable.ic_content_copy_24dp,
             onClick = { onCopyLink(url) },
+        )
+    }
+}
+
+@Composable
+private fun ContextMenuActionButton(
+    text: String,
+    iconRes: Int,
+    onClick: () -> Unit,
+) {
+    TextButton(
+        modifier = Modifier.fillMaxWidth(),
+        onClick = onClick,
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(text = "URLをコピー")
+            Icon(
+                painter = painterResource(id = iconRes),
+                contentDescription = null,
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(text = text)
         }
     }
 }
