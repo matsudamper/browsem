@@ -174,6 +174,10 @@ internal fun ToolbarMenu(
 ) {
     val menuScrollState = rememberScrollState()
     val menuMaxHeight = rememberToolbarMenuMaxHeight(menuAnchorBottomPx)
+    // DropdownMenu の中身で Dialog を出すとポップアップが入れ子になり、ダイアログ内の
+    // DropdownMenu の表示位置がずれる。メニューを閉じても残るよう DropdownMenu の外で持つ
+    var isProfileDialogVisible by remember { mutableStateOf(false) }
+    var isMoveDialogVisible by remember { mutableStateOf(false) }
     DropdownMenu(
         expanded = visibleMenu,
         onDismissRequest = { onDismissRequest() },
@@ -221,6 +225,30 @@ internal fun ToolbarMenu(
             onOpenDevTools = onOpenDevTools,
             profileSwitcher = profileSwitcher,
             onMoveTabToProfile = onMoveTabToProfile,
+            onOpenProfileDialog = {
+                onDismissRequest()
+                isProfileDialogVisible = true
+            },
+            onOpenMoveTabDialog = {
+                onDismissRequest()
+                isMoveDialogVisible = true
+            },
+        )
+    }
+    if (isProfileDialogVisible && profileSwitcher != null) {
+        ProfileManagementDialog(
+            uiState = profileSwitcher,
+            onDismiss = { isProfileDialogVisible = false },
+        )
+    }
+    if (isMoveDialogVisible && profileSwitcher != null && onMoveTabToProfile != null) {
+        MoveTabToProfileDialog(
+            profiles = profileSwitcher.profiles,
+            onSelect = { profileId ->
+                isMoveDialogVisible = false
+                onMoveTabToProfile(profileId)
+            },
+            onDismiss = { isMoveDialogVisible = false },
         )
     }
 }
@@ -266,9 +294,9 @@ private fun ToolbarMenuContent(
     onOpenDevTools: (() -> Unit)?,
     profileSwitcher: ProfileSwitcherUiState?,
     onMoveTabToProfile: ((ProfileId) -> Unit)?,
+    onOpenProfileDialog: () -> Unit,
+    onOpenMoveTabDialog: () -> Unit,
 ) {
-    var isProfileDialogVisible by remember { mutableStateOf(false) }
-    var isMoveDialogVisible by remember { mutableStateOf(false) }
     Column {
         Row(
             modifier = Modifier
@@ -516,14 +544,14 @@ private fun ToolbarMenuContent(
                         modifier = Modifier
                             .testTag(BrowserToolbarMenuTestTags.ProfileSwitchButton.testTag)
                             .semantics { contentDescription = "プロファイルを管理" },
-                        onClick = { isProfileDialogVisible = true },
+                        onClick = onOpenProfileDialog,
                     ) {
                         ProfileIconBadge(icon = profileSwitcher.activeProfileIcon, size = 28.dp, isEmphasized = false)
                     }
                     IconButton(
                         modifier = Modifier.testTag(BrowserToolbarMenuTestTags.MoveTabToProfileButton.testTag),
                         enabled = profileSwitcher.profiles.any { !it.isActive },
-                        onClick = { isMoveDialogVisible = true },
+                        onClick = onOpenMoveTabDialog,
                     ) {
                         Icon(
                             painter = painterResource(ResourcesR.drawable.ic_drive_file_move_24dp),
@@ -706,23 +734,6 @@ private fun ToolbarMenuContent(
             )
         }
     }
-    if (isProfileDialogVisible && profileSwitcher != null) {
-        ProfileManagementDialog(
-            uiState = profileSwitcher,
-            onDismiss = { isProfileDialogVisible = false },
-        )
-    }
-    if (isMoveDialogVisible && profileSwitcher != null && onMoveTabToProfile != null) {
-        MoveTabToProfileDialog(
-            profiles = profileSwitcher.profiles,
-            onSelect = { profileId ->
-                isMoveDialogVisible = false
-                onDismissRequest()
-                onMoveTabToProfile(profileId)
-            },
-            onDismiss = { isMoveDialogVisible = false },
-        )
-    }
 }
 
 /**
@@ -797,6 +808,8 @@ private fun ToolbarMenuContentPreview(
         onOpenDevTools = onOpenDevTools,
         profileSwitcher = profileSwitcher,
         onMoveTabToProfile = profileSwitcher?.let { { _ -> } },
+        onOpenProfileDialog = {},
+        onOpenMoveTabDialog = {},
     )
 }
 
